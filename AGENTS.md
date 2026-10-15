@@ -1,10 +1,10 @@
 # Rules for agents working in this repo
 
-Read [docs/technical-design.md](docs/technical-design.md) before changing code. Keep this file under a page.
+Read [docs/technical-design.md](docs/technical-design.md) before edits. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
 
 ## The four invariants
 
-No change may break these, in the core or in any extension:
+These hold in the core and every extension:
 
 1. An agent's word is never evidence. Only check results are.
 2. Nothing missing or unrun passes. It's `BLOCKED` or `INVALID`.
@@ -13,26 +13,29 @@ No change may break these, in the core or in any extension:
 
 ## Proof
 
-- Every fix starts with a test that fails for the reason you expect. Commit it before the fix, then make it pass without editing it.
-- Take expected values from the issue, never from running your change.
-- Test behavior, not implementation. Every new test must fail on a wrong program, such as the merge base or your change reverted. A test that would still pass if every function it calls returned nothing is not a test. Rewrite it or delete it.
-- Use the smallest test that sees the behavior, on real components: an end-to-end journey for anything a user sees, a fast test for logic, and a property test for parsers and numeric code. Mock only at a real boundary you don't own.
-- Never edit, skip, weaken, special-case or delete a failing test or check to finish a task, and never retry until green. If it can't pass, stop and report it as `BLOCKED`.
+- Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
+- Take expected values from the issue, never your implementation.
+- Reuse sufficient tests. Add one only for required behavior or a specific regression from this change that existing coverage misses. Prove it fails on a wrong program (merge base or reverted fix); otherwise it proves nothing.
+- Use the smallest test on real components: end-to-end for user-visible behavior, fast tests for logic, property tests for parsers/numbers. Mock only at boundaries you don't own.
+- Never edit, skip, weaken, special-case or delete failing tests/checks to finish, or retry until green. If they cannot pass, stop and report `BLOCKED`.
+- Run relevant checks once per meaningful change; rerun only affected checks after corrections. Full preflight requires task/release justification. Documentation-only edits need diff review, not code tests.
 - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
 
 ## Machine and safety
 
 - Never kill processes by name or port. Stop only processes you started, by PID.
 - Never write hooks into any repo's settings. This project installs hooks at user level only.
-- No CI runs on push or pull request. Checks run locally, and everything runs once at release through a local preflight.
+- No CI on push or pull request. Checks run locally; everything runs once at release through preflight.
 - No secrets or personal data in code, fixtures, logs or evidence. Redact.
-- Code ported from another project keeps that project's license notice in the file it lands in. Never port GPL code.
+- Ported code keeps its license notice in the receiving file. Never port GPL code.
 
 ## Scope and simplicity
 
-- Keep the core small: the record, gates, asks and adapters. A new core feature needs a reason no extension can meet.
-- One PR per issue, under about 400 lines you wrote, or the PR says why it can't be split. Anything else you notice goes in the PR's notes as a follow-up.
-- Do only what the issue asks: no option, flag, fallback, config key, dependency or export it doesn't need.
+- Keep the core to the record, gates, asks and adapters. Explain why an extension cannot meet any proposed addition.
+- One PR per issue, under about 400 handwritten lines or explain why it cannot split. Note unrelated findings separately.
+- Map changes, tests and tools to requirements or necessary regression protection for this change. Never drop or move criteria without user approval.
+- Delete your additions whose removal changes neither required behavior nor meaningful proof; revert your unrelated edits. Preserve unrelated existing code, others' work and required failing checks.
+- No option, flag, fallback, config key, dependency, export or duplicate test the task doesn't need.
 - Leave no code without a caller, and delete what your change leaves unused.
 - Add a shared abstraction only when two callers need it now.
 - Reach a module only through its public entry. No import cycles, and the core never imports an extension.
