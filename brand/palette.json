@@ -1,0 +1,77 @@
+{
+ "ink": {
+  "hex": "#151619",
+  "rgb": [
+   21,
+   22,
+   25
+  ],
+  "cmyk_approx": [
+   16,
+   12,
+   0,
+   90
+  ],
+  "use": "symbol, name, type, app-icon tile"
+ },
+ "paper": {
+  "hex": "#F6F6F4",
+  "rgb": [
+   246,
+   246,
+   244
+  ],
+  "cmyk_approx": [
+   0,
+   0,
+   1,
+   4
+  ],
+  "use": "default light ground"
+ },
+ "white": {
+  "hex": "#FFFFFF",
+  "rgb": [
+   255,
+   255,
+   255
+  ],
+  "cmyk_approx": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "use": "reversed artwork, light ground"
+ },
+ "signal": {
+  "hex": "#F2C440",
+  "rgb": [
+   242,
+   196,
+   64
+  ],
+  "cmyk_approx": [
+   0,
+   19,
+   74,
+   5
+  ],
+  "use": "the keyframe and the i's keyframe, on Ink or dark grounds only"
+ },
+ "grey": {
+  "hex": "#74767D",
+  "rgb": [
+   116,
+   118,
+   125
+  ],
+  "cmyk_approx": [
+   7,
+   6,
+   0,
+   51
+  ],
+  "use": "secondary text and rules, never the logo"
+ }
+}

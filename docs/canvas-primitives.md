@@ -1,0 +1,8833 @@
+# Canvas primitives, field by field
+
+This is the field-level companion to the tech design's "The primitives, defined": for every primitive the canvas draws with, it gives the fields with types, units and defaults, what the primitive does, what it costs, what it can never do, and the release it lands in. Read the conventions and the names first, because every table uses them. Fields are written `name: type, unit = default`, and costs are targets for each operator's micro-benchmark unless a figure says it was measured.
+
+<a id="conventions"></a>
+
+## Conventions every primitive uses
+
+### Time and the flick
+
+- **The unit.** One flick is 1/705,600,000 of a second. Time is stored as an `i64` count of flicks, which lasts about 414 years. Frames, audio samples, and physics and logic steps are all whole numbers of flicks, so a picture, a sound and a simulation can't drift apart.
+- **How documents write time.** Documents write text and store flicks:
+  - `"1.25s"`: seconds;
+  - `"195f"`: frames at the document's frame rate (frame 195 at 30 fps is 4,586,400,000 flicks);
+  - `"2:1b"`: bar 2, beat 1, through the document's tempo map;
+  - `"@marker±1.25s"`: relative to a marker, with `@marker.end` for the end of its span;
+  - `"@line.word:text#k"`: the k-th match of a word in a narration line, after the speech bake. An anchor that matches more than once without `#k` is refused.
+  - `"@line"` and `"@line.end"`: the start of a narration line's first word and the end of its last, after the speech bake.
+- **The valid-rates rule.** A rate is valid only if its frame, sample or step length is a whole number of flicks: 705,600,000 × q ÷ p for a frame rate p/q, 705,600,000 ÷ sr for a sample rate, and 705,600,000 ÷ r for a step rate.
+  - Valid: 8, 12, 15, 16, 18, 20, 24, 25, 30, 48, 50, 60, 72, 75, 90, 96, 100, 120, 144 and 240 fps and their ×1000/1001 forms (8, 12 and 16 fps, for drawings held on threes or twos and for silent-film sampling, have frames of 88,200,000, 58,800,000 and 44,100,000 flicks); every sample rate from 8 to 192 kHz, up to 352.8 kHz; the 120 Hz physics step (5,880,000 flicks), with 1 to 8, 10, 12, 14, 15 or 16 substeps.
+  - Not valid: 85, 165, 170 and 540 Hz displays, and 384 and 768 kHz. Nothing is authored at these rates. A display that runs at one samples the document, and its times round to the nearest flick. An oversampler may run at 384 kHz inside a processor, but nothing is timed there.
+  - Decimal rates read from files are normalized at probe: 29.97 becomes 30000/1001 and 23.976 becomes 24000/1001.
+- **Conversions.** Integer arithmetic only. Time to index floors: frame = ⌊t × p ÷ (705,600,000 × q)⌋. Export frame k sits exactly at start + k × Δ. Display times round to the nearest flick.
+- **Audio for each video frame.** Frame f owns samples [⌊tf × sr ÷ 705,600,000⌋, ⌊tf+1 × sr ÷ 705,600,000⌋). The spans tile with no drift even at 1,601.6 samples a frame (29.97 fps at 48 kHz); rounding each frame on its own drifts 12,000 samples over 30,000 frames.
+- **Files.** Exports write a timescale per track: the frame-rate timescale for video (24000, 30000, 60000 or 90000) and the sample rate for audio, never flicks, because a 32-bit MP4 duration overflows after 6.09 s at 705,600,000 a second. Nanoseconds can't hold a flick exactly, so frame and sample indices cross that edge instead. Azure's 100 ns speech marks convert by rounding half to even, and the rule is recorded.
+- **Which clock leads.** While sound plays, the audio device is the master, and the time shown is the flicks of the samples written minus the output latency, so the frame you see matches the sample you hear. While silent, the display leads, advanced by elapsed host time and never capped (a capped frame interval slows time down). Export uses a virtual clock that pulls frames and their audio spans in lockstep.
+
+### Units and axes
+
+- **2D** is in `u`, one logical pixel at zoom 1, or in `px` where a size must stay constant on screen: hairlines, hit margins, label padding and sheet cells. y points down and the origin is the top left.
+- **3D** is in metres, right-handed, with +Y up and the front facing +Z, as in glTF. Imports from z-up tools convert at import.
+- **Angles** are degrees in documents, including angular speeds (deg/s); the evaluator works in radians. Euler angles turn about X, then Y, then Z, in fixed axes: R = Rz·Ry·Rx. The transform order is: subtract the pivot, scale, shear, rotate, add the position, then apply the parent.
+- **Light** is in lumens for point, spot and area lights, lux for the sun, kelvin for color temperature, and EV100 for exposure. Color is linear BT.709, or a look role. Output is tagged sRGB.
+- **Sound** gains are in dB (0 dB is unity), loudness in LUFS and LU per BS.1770-5, and true peak in dBTP.
+- **Physics** is SI: kg, N, N·s, m/s. Every spring, whether on a channel, a control, a joint, a grab or a soft body, is a frequency in hertz with a damping ratio.
+- **Literals** may carry a unit, such as `"300 mm"`, `"45deg"` or `"0.6s"`, and the check converts them. Frame-relative sizes use `fw` and `fh`, a fraction of the frame's width or height at design size: `"1/300fw"` at 1920 px wide is 6.4 u. A bare number is in the field's declared unit. There is no per-document unit setting.
+
+### The path grammar
+
+- **One grammar** for patches, channels, drivers, bound values and status bindings: `items/<id>/params/<name>[/<sub>]`. It reads like a JSON Pointer, with no escapes, because IDs never contain `/`.
+- **The same shape** reaches an item's other fields, such as `items/<id>/at/rot/1` or `items/<id>/visible`, and other sections, such as `controls/<id>/value` and `data/<name>`. `<sub>` is a nested key or a list index. A channel may key `data/<name>`; drivers read it as a named value that changes over time.
+- **A sub-address after `#`** names a part of an item that isn't an item: an instancer's element (`trees#42`), a soft body's particle or cluster (`banner#r0c27`), a builder's anchor or named part (`plank.01#near`), or a mark set's row key. The item's kind says which sub-addresses exist.
+- **Compiled once.** Paths resolve at check time into an array and an offset, so a path costs nothing per frame. Expressions never contain raw paths: a driver names its variables and binds each one to a path, so every dependency is explicit.
+
+### Handles
+
+- A handle names a record object: `<scheme>:<id>[#<fragment>]`. The schemes are closed: `task:`, `ask:`, `claim:`, `verdict:`, `run:`, `req:`, `decision:`, `plan:`, `lease:`, `reading:`, `notice:`, `doc:`, `ev:`, and `session:<id>#msg<n>` for a message.
+- The id is the record's ULID, or a content hash for a definition. The fragment picks a part: a requirement (`req:<definition>#R2`), a message, or an item in a document (`doc:<id>#row.m14`).
+- Bound values and status bindings read handles, a selection reaches an agent as handles, and a view of the record is built as of an event handle (`ev:<ulid>`).
+- A document resolves a handle only within what its writer may read itself: an agent through its session's credential, a plug-in through its grant and the uses it declared. Any other handle is `ref_unresolved` for that writer, and a reply returns a value only to a caller that may read it too, so no snapshot, reading or query shows a value its receiver couldn't read.
+
+### Order keys
+
+- Collections are maps keyed by stable ID, so two writers' edits merge. A map has no order of its own.
+- Where siblings need an order, each carries `order`: a fractional index, a base-62 string. A new key falls between its neighbours, with jitter seeded from (writer, patch ID), so concurrent inserts don't collide and a replay gives the same keys. Ties break by ID.
+- 2D draws by writer-layer band, then layer order, then item `order`. 3D draws by depth: a document's writer layers share one depth and normal prepass, one light policy and the shadow maps, so their 3D items occlude, light and shadow one another, while each layer still draws into its own target and composites in its band; see-through items sort back to front within a writer layer, ties broken by ID, unless they resolve per pixel (Object: see-through order).
+
+### Scope and input classes
+
+- **Document state** is saved and recorded. **Session state** belongs to one viewer and never enters a document or the record: the selection, hover, the camera on views of the record, expanded folds, chosen variants, and popped-out windows. Nothing that chooses what a frame draws lives here: level of detail, the light cut and label placement are pure functions of the view.
+- **Every input has a `class`:**
+  - `document`: appended to the document's input track, replayed, and part of its goldens, such as a figure's throttle;
+  - `view`: a view setting the document declares with a default, such as a house's level or cutaway, a chart's pan or the Map's lens; kept in session state and pinned when a golden runs;
+  - `viewer`: navigating and pointing, such as orbit, zoom and hover; kept in session state and left out of goldens.
+- A frame is `frame(t) = eval(doc, t, inputs ≤ t, view)`. Drivers may read view and viewer values, such as `hovered(id)`, and a change there never dirties the document.
+
+### The status-color rule
+
+- Status colors come only through a status binding whose source is a verdict, a run or an open ask. A threshold, a scale, a gradient, a blend, an effect or a literal can never produce one.
+- Data colors keep a stated distance from every status color wherever status can show: in a document with a status binding (a claim's film among them), in a view of the record, and in anything shown inside a view of the record, such as on a return card or a session's page. A document shown inside another takes its host's status map, legend and status distance, so one verdict reads as one color across the screen. The look declares the distance (`status.min_distance`, by default 0.10 in OKLab), and the check refuses a data palette that comes closer, naming the data role and the status color it clashes with. There, a color that a plug-in or a terminal cell asks for inside that distance becomes the nearest allowed color. Any other document, such as an art film played or exported on its own, may use any palette; it still can't draw a status color, since status roles are reachable only through a binding.
+- A dry-merge conflict, or anything else that needs attention without a verdict behind it, uses the look's attention treatment: a dashed line in ink with a warning glyph, never a status color.
+- Status colors draw unlit, after tone mapping and effects, with an automatic legend. No mask, effect or other writer's layer can cover them.
+
+### Honest numbers
+
+- Every number on screen is either computed in the document, from `data` constants through drivers, or a bound value with its source and as-of time. A constant names its source; a story's own number (a score, a round, a clock in a film) names `source: story`, which passes only in a document that binds no status and no reading and isn't shown inside one that does.
+- Names that contain digits, such as a model or a part number, are marked as names, so the check skips them. Number words such as "one taste call" count as numbers.
+- A number shows no more precision than its source carries, uses tabular figures, and is never ellipsized: a number that doesn't fit fails the check.
+
+### The cost model
+
+- **Per-item terms.** Each operator declares nanoseconds per item evaluated, per vertex built, per glyph shaped and per draw, plus 32 to 64 bytes per instance uploaded.
+- **Per-pixel terms.** Each pass declares nanoseconds per pixel shaded, multiplied by the render scale squared, the overdraw, the lights in the pixel's cluster and its feature set, plus bytes of render targets per pixel. For reference, the castle shades at about 1.5 ns per pixel, and the prototype's 3D targets take about 83 bytes per pixel, or about 33 with transient MSAA and a 4-byte ID target (estimated from formats).
+- **Before it shows.** Coefficients come from micro-benchmarks on the reference Mac. The check sums them into CPU time, GPU time and GPU memory per frame, names the top three contributors, and refuses a document over its class. A document shown inside another draws under the stricter of its own class and its host's, cap by cap and in the operator budgets, and its cost counts in its host's estimate; one that doesn't fit shows a still of its first frame, rendered once like a sheet cell.
+- **While it runs.** The meter measures each writer layer, and the degrade ladder steps down only the costly writer's layer.
+
+| Budget class | For | Frame GPU | Frame CPU | GPU memory | Render scale while moving | Ambient cap | When hidden |
+|---|---|---|---|---|---|---|---|
+| core view | the line, Needs you, receipts, sheets | 1 ms* | 2 ms (30 lines) | 64 MB* | 1 | none: moves only on change | paused |
+| data view | charts, graphs, flat maps, terminals | 2 ms | 2 ms; layout and labels off the UI thread | 128 MB* | 1 | none | paused |
+| figure | figures and film previews in a panel | 2 ms | 4 ms | 256 MB per window | 1 | 30 fps (idle loop) | paused |
+| work product | scenes you or an agent edit, such as a house | 2 ms | 4 ms | 256 MB per window | 0.75* | 30 fps | paused |
+| showpiece | full-screen 3D, such as the castle | 10 ms at full screen | 4 ms | 256 MB per window, with transient MSAA | 0.5 | 30 fps | paused when hidden or unfocused |
+| export | headless renders | no frame cap; draft: at least 4x real time at 1080p60; delivery with every guard: at least 2x real time; on the reference Mac, from the command to the file | no cap | 300 MB per film | 1 | none | not shown |
+
+A document names its class and may only tighten it; only you raise a class's caps. Every class draws nothing while still. Numbers marked * are proposals rather than figures from a report, and the first measurement on the reference Mac may move each once, as the tech design's budget rule allows.
+
+<a id="names"></a>
+
+## One word per idea
+
+Every table below uses these words and no others for these ideas. Where a reference uses a word differently, its meaning here wins inside DeepBuild's documents.
+
+| Name | Means | Never call it | Why |
+|---|---|---|---|
+| flick | The time unit, 1/705,600,000 s, stored as `i64` | tick | "Tick" already has other meanings. Flick is the established name for this unit. |
+| writer layer | One writer's own layer of a document. "Layer" alone means only this. | layer, for anything else | References use "layer" five different ways. |
+| session state | Per-viewer state that's never saved: selection, hover, the camera on views, folds, variant choices, windows | session layer | Layer means a writer layer. |
+| bound value | A number bound to a reading, run or ask, with its source and as-of time | binding (alone) | Binding alone also suggests a connector or a widget. |
+| status binding | A color bound to a verdict, a run or an open ask | binding (alone) | It's the only path to a status color. |
+| attachment | A connector's end fixed to an item, such as an arrow on a node | binding | Keeps "binding" for values and colors. |
+| recipe | A reusable, typed asset that generates items: a house, a knob, a cloud bank | group asset, group, component, template | "Group" also means a container and a set. |
+| collection | A set of items, by list or by rule | group, groups | Same reason. |
+| assembly | A set of figure parts that move together, as in a take-apart | group | Same reason. |
+| group | A container item with a transform and no bounds of its own | none | Kept for the container sense only. |
+| named parts | The named pieces a builder returns: top, side, rim | named selections | Selection means what you selected. |
+| selection | What you selected; session state | none | One meaning. |
+| inset | 2D content set into a part's face, masked to a window cut into it | surface, recess | GPU surface means only the handoff. |
+| projected inset | An inset cast down, along an axis or from a camera onto the surfaces of named items, instead of set into one face | decal, projector | A decal names an image stamped on a surface, and this casts any 2D content, data and text included; a projector is a light. |
+| GPU surface | The compositor's handoff surface: an IOSurface, a DMA-BUF or a DXGI handle | surface, for anything else | One meaning. |
+| plate | The builder for flat or height-field sheets | surface | Same reason. |
+| surface builder | The trusted builder `surface`: a mesh sampled from (u, v) formulas (Builder `surface`: surfaces from a formula) | surface (alone), loft, parametric mesh | Surface alone means a GPU surface, and a loft is a shape swept through outlines. |
+| look | The visual asset: palette, roles, status map, lines, fills, ground, fonts, time feel | style | One asset had two names. |
+| paint | A mark's fill and stroke, and what it draws from the mark's coverage: a drop, a shade (an inner shadow among its kinds), a glow, a bevel and satin | style, layer style | Same reason, and layer means a writer layer. |
+| mask | 2D clipping by shape, alpha or luminance | clip, clipping | Clip means animation. |
+| matte | A mask whose coverage comes from another item's evaluated pixels, frame by frame | clip | Separates per-frame coverage from geometry. |
+| clip | An animation clip that drives slots | a mask, or a piece of media | One meaning. |
+| strip | A piece of media, a scene or text placed on a track | clip | Clips are animation. |
+| track | A row of strips on a timeline; also the document's one input track | lane | A lane is where a check runs. |
+| child session | Parallel work a lead session starts | lane | Same reason. |
+| columns | Typed data arrays in a mark set | fields, attributes (for data) | "Field" and "attribute" mean other things here. |
+| properties | What an encoding targets: x, y, size, opacity | channels | A channel is an animated property path. |
+| inspector | The editor panel's part that shows the selected item's fields from its kind's schema, with their units and ranges, and changes them by patch | properties panel, attribute editor | Properties are what an encoding targets, and attributes live on points, edges, faces, corners, curves and instances. |
+| shot | A segment of a film, with its camera move | scene | Scene is a document. |
+| scene | A 2D or 3D document of items | a film segment | One meaning. |
+| quantize | The stepped time feel ("on tens"), the channel modifier, and the `quantize(n)` easing | step, steps | "Step" had four meanings. |
+| stages | The control kind that steps through states | steps | Same reason. |
+| present mode | A piece shown full screen and stepped by its stages: the timeline holds at each stage while the clock and the music bed run on | pause, slideshow | The clock never stops, so a hold isn't a pause. |
+| presenter view | Present mode's view on the presenter's own display: the stage's notes, the next stage's first frame, the stage number and name, and the elapsed time (Marker: present mode) | presenter mode, speaker view, slide view | Present mode is how the piece is shown to the room; the presenter view is what only the presenter sees. |
+| step | One physics, logic or match step; one operation in a recipe; in the record, a step of a journey or a plan | a time feel, a control, a slider's increment | Kept where every reference agrees. |
+| logic | A piece's rules: sandboxed WebAssembly that the logic module steps beside physics, reading what it declares and writing its own arrays | script, behavior, game code | A script is a narration's lines, and a behavior sounds like something that acts on its own. |
+| match | Two to eight players sharing one piece through the net module, from its start to its end, with its own ID and recorded input track | session, lobby, room | A session is an agent's, or a viewer's own state, and a lobby or a room is where strangers meet, which the net module never arranges. |
+| character body | A `body@1` of kind character: one capsule that the physics backend's own character controller moves from move and jump inputs | character (alone), character controller, player, avatar | A character is a rig or a skinned asset that draws, the character controller is the backend's solver behind the body, and a player is a person who plays. |
+| navigation graph | The data asset the navigate job bakes from a world's static shapes: where a capsule of one size can stand, as grid cells or polygons, and the links between them | nav mesh, path grid, waypoints | A mesh is geometry the canvas draws, and the graph may be a grid. |
+| bot | What plays a piece in a playtest: a logic program or a scripted input policy, whose entries the input track records with the writer `bot` | agent, AI, player (for a bot) | An agent is a coding agent, and a player is a person who plays. |
+| carry record | Arrays one piece's logic hands to the next piece, by hash, read once at that piece's step 0 (Logic: carry records) | save, carried state, carryover | A save resumes the same piece, carried state is what a canvas module keeps between frames, and a carry record never enters the record. |
+| logic library | WebAssembly a logic item links by name@version and hash, merged into its program at check (Logic: linked libraries) | plug-in, module, package (for a library) | A plug-in is hub code, a module is a canvas module, and once linked the program imports nothing. |
+| state layout | Where a logic program keeps its state, described by bytes the program exports; a save binds its hash (Logic: saves across changes) | layout (alone), schema, save version | Layout alone is a frame's auto layout, a graph's, or a file's documented byte layout, such as `table.layout@1`'s. |
+| world page | One 64 KiB page of a logic item's world past its memory, moved between steps at its request (Logic: world pages) | chunk, region, tile (for this) | A chunk is one of the parts something is drawn in, such as a streamed asset or a mesh from logic, a region a look region, and a tile an atlas cell. |
+| step block | One of the fixed number of parts a logic step splits into, each reading the step's state and writing only its own slices (Logic: step blocks) | block (alone), thread, task, job | A block alone is an audio block of samples, a WebAssembly block the rewrite meters or a building block of the extension API, a thread is the host's, and a job is offline work. |
+| between-step service | First-party code that answers a logic item's requests after one step and before the next, such as physics queries (Logic: between-step services) | service (alone), callback, host call, import | A service alone is an outside service a source or a generation job reaches, and a callback or a host call would run during a step, which never happens. |
+| physics cast | A ray, sweep or overlap a logic item asks between steps through the physics module's service `physics.cast@1` (Logic: between-step services) | `physics.query` (for this) | `physics.query` is the check kind that probes a bake (Check input: `physics.query`). Both ask the backend's own queries, so prose may call either a physics query. |
+| mirror read | A logic item's whole copy of another item's array in its own memory, updated by the ranges that changed (Logic: mirror reads) | cache, shared array, view | A cache is keyed and rebuilt, nothing is shared between items, and a view is a session's. |
+| library interface | What a logic library offers, its exports, state layout and fixtures, by name@major, such as `crowd@1` (Logic: library interfaces) | API, trait, protocol (for this) | A canvas interface is what a canvas module implements, and a protocol is a wire format such as `relay@1`. |
+| data layout | The documented byte layout a data asset names by name@version, with a validator that can only refuse (Logic: data layouts) | schema, format (for this) | A schema describes a document kind's fields, and a state layout is where a program keeps its state. |
+| play interface | What a game publishes for bots and checks, `game.play@1`, declared in its brief before generation: its grid and the classes of its cells, units, turn, goals, reward counters, actions and the legal actions it lists each step | game API, observation, state schema | An API is code to call and an observation is what a model is shown; this is data under the same names on both routes. |
+| kit | A blueprint for one genre of game that names its packs, the logic libraries a piece links, its check plug-ins, a recipe and the checks its definition of done holds, such as the grid core kit | genre library, framework, engine; kit alone for a conformance kit, unless its owner is named, as in a registry's kit or the kind kit | A library is code a piece links, an engine runs a game project, and a conformance kit is called that in full unless its owner is named beside it. |
+| catalog | A game's typed content tables, such as items, recipes, creatures and scenario triggers, packed into one `table.layout@1` asset that logic, text lookups and checks read | content database, item database, data files | The check catalog keeps its full name, and a recipe header's `catalog` is where a pack lists it. |
+| increment | The amount a slider moves per key press | step | Step is physics. |
+| rate | How fast something runs against its parent: a strip, a placement, a preview; or a value's rate of change | speed, scale, playbackRate | One idea. Clock rates are always written `frame_rate`, `sample_rate` or `step_rate`. |
+| `at`, `t` | `at` is an item's transform. An instant is `t`; an interval is `start` and `span`. | `at` for a time | One field name, one meaning. |
+| relation | An item placed against another item's or the frame's box by `at.place`, `at.align` or `at.fit`, solved every frame from evaluated bounds (Item and kind: relations) | constraint, anchor, layout (for this) | A constraint is a motion rule from the closed list, an anchor is a named point, and layout alone is a frame's auto layout or a graph's. |
+| event | A record event in the kernel's log | an entry in a baked list; a moment in a film | One meaning. |
+| occurrence list | A baked, sorted list of occurrences: contacts, breaks, words, beats, onsets | event list, events | Event means a record event. |
+| moment | A checked instant in a film, such as a press or a reveal | event frame | Same reason. |
+| proof | What a requirement's line rests on: an agent's statement, a static check, a test run, a real journey or your decision | layer | Layer means a writer layer. |
+| collision group | Which bodies collide with which | layer, filter | Layer means a writer layer. |
+| contact material | Friction, restitution, density and a tag on a physics shape | material, surface | Material is the look's physically based material. |
+| force | Wind, drag, a spring to a point, buoyancy | field | A field is an expression over geometry. |
+| vector field | A `vector_field@1` item: a vector at each point from one formula, drawn as arrows or as the stream lines that follow it (Vector field `vector_field@1`) | field (alone), flow field, force | A field is an expression over position, normal, index and named attributes, and a force is physics. |
+| world | The physics world document, `physics.world@1` | a scene's sky or environment | A scene's background, ambient light and mist is its sky. |
+| sky | A scene's background, ambient light and mist | world | World is the physics document. |
+| replica | A headless copy of the app an agent drives, sees and records | driver, test app | A driver is a numeric expression on a channel. |
+| checkpoint | Saved simulation or audio-processor state | snapshot | A snapshot is a rendered image. |
+| snapshot | A rendered image from render-back | saved state; a panel's element tree | One meaning. |
+| processor | An audio effect: EQ, compressor, limiter, delay, reverb, pitch | effect | An effect is a shipped GPU effect. |
+| emitter | A sound source placed in a scene; the camera is the listener | speaker | Every audio API means a loudspeaker by "speaker". |
+| voice | A playing sound, counted against the budget | instance | Kept. A synthesized speaker is a narrator, named by its `name`. |
+| profile | A document's top-level type; also a named delivery rule set for loudness or captions | kind, for a document | Kind is an item's type. Both uses pick a closed set of rules. |
+| open captions, closed captions | Captions drawn into the frames (open), or carried only as `.srt` and `.vtt` sidecars a player can turn off (closed); an export's `captions.mode` picks open, closed or both | burned-in (for closed), subtitles, soft subs | Captions are always on, since every delivery carries them; open or closed says only where. |
+| kind | An item's type with its major version: `slab@1` | type | One meaning. |
+| outline | The polygon or curve a builder extrudes, sweeps or revolves | profile | Profile is a document type. |
+| strokes | A hand-drawn line set with per-point width and opacity | stroke layer | Layer means a writer layer. |
+| rank | A level in a layered graph layout | layer | Layer means a writer layer. |
+| frame | A 2D container with bounds. In time, say "video frame" or write `f`. | none | Kept for the container. |
+| period | The rows of a mark set that share one value of a column, such as a year, played as one moment of a data story | frame, keyframe, snapshot | A frame is a container, a snapshot is a rendered image, and a key belongs to a channel. |
+| standing | A row's place among its period's rows, ranked at check and mixed between periods | rank | A rank is a level in a layered graph layout. |
+| quote | Text kept exactly as its source holds it, as raw bytes, such as a commit's lines, a run's output or the LaTeX lines a formula was rendered from, checked against that source byte for byte and drawn through a display form mapped from those bytes | snippet, excerpt | Its digits are quotation, which honest numbers lists but never counts. |
+| light probe | A reflection cube or an irradiance grid that the core captures, or a job bakes, from the document | probe (alone), reflection capture, irradiance volume | Probe alone already means an asset's probe and a check input's probe path, and a volume is a kind of its own (Volume volume@1). |
+| breakable | A body made of pieces held by bonds that break under load | cluster | Cluster already means a soft body's particle group and a light-culling cell. |
+| bone | A joint of a skinned asset's skeleton, addressed `item#bone` | joint, for a skeleton | Joint means a physics joint, `joint@1`. |
+| morph target | One of a mesh asset's own shapes, blended in by a weight that a channel holds | blend shape, shape key | glTF's word; the other two name the same idea in other tools. |
+| spring chain | A chain of bones or rig parts that lags and settles behind the motion that carries it, solved at check into a bake | jiggle, spring bones, dynamics | Jiggle and dynamics suggest a live simulation; a spring chain is a bake that each frame reads by `t`. |
+| receivers | The items a light lights | light group, light linking, lighting channel | Group is a container item. |
+| samples | Jittered sub-samples a frame averages, with offsets from the sample index alone | film samples | Film is a document profile. |
+| mesh sequence | A mesh asset with one shape per video frame, played by t | mesh cache, geometry cache | A cache is something the core can rebuild; this is an input kept by hash. |
+| row sequence | An agent bake: a data asset in layout `rows.sequence@1` holding per-frame rows an agent computed in its own environment, played by t (Row sequence `rows.sequence@1`) | simulation, recording, cache | DeepBuild never runs the program that made it, a recording is an input track, and a cache is something the core can rebuild. |
+| cover | A terrain's materials, chosen by fields of slope, height and noise | layers | Layer means a writer layer. |
+| IES distribution | A light's angular distribution, read from an IES file | IES profile | Profile is a document type. |
+| canvas module | A first-party Rust crate compiled into the canvas core that registers kinds, arrays, operators, passes and checks through one call | plug-in, extension, package, block; module alone outside the canvas sections | Plug-ins and extensions are outside code that never runs in a frame, and module alone also means a hub TypeScript module or a naga module. |
+| seal | The end of registration, when the registry checks the whole canvas-module set; nothing registers after it | freeze, lock, finalize | A writer's session already freezes at its last good revision, freeze is a degrade-ladder rung, and lock belongs to definitions and leases. |
+| phase | One step of the core's closed lists of work in a check or a frame (latch, time, inputs, simulate, items and so on) | stage, schedule, system set, tick group | Stages is a control kind and step is physics. The phase fields on waves, motion blur and the time op keep their meaning as an offset in a cycle. |
+| read set | Everything an operator declares it reads: arrays, tables, item-relative reads, set reads, view inputs, t, document inputs, readings and assets | dependencies, query, inputs (alone) | Inputs already means the input track and a document's inputs. |
+| array | The evaluated values of one kind of data (transform, bounds, paint) for every item, with one writer | component, column, buffer | Columns are a mark set's authored data, and a buffer is GPU memory. The array modifier predates this; renaming it is a follow-up. |
+| table | Immutable lookup data built once at the seal or at check and keyed like a cache: font, arc-length and atmosphere tables | resource, LUT (for tables we build) | A resource is a mutable singleton, which the core doesn't have, and LUT images stay refused. |
+| epoch | A u32 counter that records when an item's dirty class last changed, and when a consumer last ran. It decides when to recompute and never enters a content key | tick, change tick, version | Flick replaced tick, and version means a kind's or a canvas module's semver. |
+| carried state | State a canvas module keeps between frames, declared with a key and a byte budget: a bake, a processor's tail or a checkpoint | history, cache, state (alone) | A cache can always be rebuilt, and history is what the rules forbid. |
+| frame history | The live view's window of its own recent frames on a fixed grid, reprojected for antialiasing, upscaling and denoising while the view moves; a jump renders it again, and nothing canonical reads it | history (alone), accumulation buffer, temporal buffer | History alone is what the rules forbid; frame history is display only, so it never reaches a check, a key or an export. |
+| place | A named position in the frame order where canvas modules' passes go: compute, shadows, sky, geometry, effects, bloom, tone mapping, finish, status guard, status colors and overlays | slot, node, stage | Slot means a clip slot or a GPU surface slot. |
+| seam | One interface for a platform-dependent part of the canvas (GPU backend, display timing, fonts, accessibility, input, color, codecs, audio, capture, headless rendering), with a version per platform | driver, server, HAL, platform layer | A driver is a numeric expression on a channel, and server already means the hub's socket and MCP servers. |
+| backend | An implementation behind a seam or the physics interface: Rapier, wgpu on Metal, CoreAudio | driver, plug-in, provider | Backend is already the physics row's word, and driver is taken. |
+| canvas interface | What a canvas module implements: the kinds, arrays, tables, carried state, check kinds and tool entries it registers, with a major version and a digest, such as `physics@1`; each seam is one | slot, trait, API (for this) | A slot is a clip slot or a GPU surface slot, and a trait is a Rust word for something smaller. |
+| slot | Always said with what owns it: a clip slot, a GPU surface slot, a save slot, or an instancer slot, one of the fixed entries of an instancer fed by logic that a generation number tells apart each time logic reuses it, or a page slot, one of the places in a logic item's page region where world pages load (Logic: world pages) | slot for a canvas interface, a place or a socket | Each owner keeps its own slots, so the word never stands alone across rows. |
+| action | A game command that a control of kind actions writes and a play interface lists, such as wait, open or descend | command, verb, move (for this) | In a replica's request, actions are its drive steps, such as click and type; verb is a control's camera field; move is a physics input; and a plug-in's action is the tech design's Action block. Each keeps its owner's name beside it. |
+| provider | What generates content a document names by hash: a generation job's service or model, or a `gen@1` program a pack carries, run once at check | generator (alone), backend, plug-in | A generator alone sounds like code that runs in a frame, and a backend is an implementation behind an interface. |
+| registry | A list a canvas module declares for others to fill, with its entry schema, who may fill it (canvas modules, first-party packs, any pack or plug-ins), its conformance kit and a planted wrong entry, such as `ease@1` or `control@1`; the registry and seal holds them all | slot, hook, extension point (alone) | A slot is a clip slot or a GPU surface slot, and a hook is the tech design's hook protocol. The registry alone, as in "the registry seals", is the canvas modules' whole registration, which holds every registry. |
+| closure | What a list says about itself: a registry; closed, with its reason and what would reopen it; or open, declared by each item or pack that uses it | openness, policy | Every list has one, and the local preflight reads it. A curve's `closure: deg` is its frame's mismatch at a loop's seam. |
+| pack kind | A kind a pack declares, backed by a recipe and named `<pack>.<name>@<major>` | custom kind, third-party kind, plug-in kind | It's a kind like any other: the name says only where it comes from, and only canvas modules register kinds backed by code. |
+| pack program | A whole logic program a pack carries by hash, with its fixtures, that a recipe's logic step runs as a derived logic item | script, behavior, widget code | A document holds no script, and a library is code a program links. |
+| widget | A pack kind whose recipe makes controls and marks and whose pack program gives them behavior, such as a menu, an inventory grid or a scroll list | component, gadget (inside a piece) | A component is the app toolkit's word, and a gadget lives in the app's views, never in a piece. |
+| function table | A lookup of y over x at up to 4,096 points, linear or monotone, that `table(name, x)` and a table ease read | LUT, curve, lookup texture | A LUT is the color lookup image the canvas refuses, and a curve is `curve@1`. |
+| look region | A world-space mask that gives part of a shot another look; its edge is drawn in the incoming look's own language | style mask, style region | Look is the visual asset, never "style". |
+| motif | A small looping motion a look adds to the items a scene binds to its slot | idle animation | An idle animation belongs to a character; a motif belongs to the look. |
+| film recipe | A recipe whose steps also write shots, markers, cues, strips and transitions | grammar clip, template | Clip means only an animation clip, and a template copies its steps, which a document never does with a recipe. |
+| cue list | A `cues@1` item: plays and waits written in order, which the check expands into channels, placements and markers with exact times (Cue list `cues@1`) | script, scene, construct (for this) | The script is the narration's lines and a scene is a document; a cue list compiles at check, so nothing runs in order at play. |
+| piece recipe | A film recipe that writes a whole presentation piece (its scene, shots, sound, controls and the checks it needs) from a subject and a few parameters, as piece@1's recipes do | template, wizard, preset (for a whole piece) | A preset names one kind's params, and a template copies its steps, which a document never does with a recipe. |
+| craft check | A film check from the craft@1 pack that a brief names | storyboard lint | Checks decide a verdict; nothing here only advises. |
+| rig | A character's drawing structure as data: parts, chains, views, expressions, visemes, poses and silhouette marks, as one `puppet.rig@1` item | skeleton, armature, character (alone) | Inside a rig, expressions are held face drawings and views are turnaround drawings; elsewhere the words keep their meanings (a numeric expression, a view of the record). studio@1's rigs are always lighting rigs, and the Generation job's rig kind makes a skin. |
+| silhouette mark | A part that identifies a character in every look: a helmet, an antenna ball, a number on a shirt | mark (alone), signature, logo | A mark is a 2D item in DeepBuild. |
+| model sheet | A sheet of a rig's views × expressions × key poses, rendered by the rig and asked once per rig hash | turnaround (alone), character sheet, style frame | A turnaround is only the views; a style frame is a look proof. |
+| acting object | An object with a face that acts, such as a mug that frowns; it's a rig and goes through the rig checks | prop (when it has a face), mascot | The cut left undefined where an object stops and a character starts. |
+| look proof | Three candidate looks on the same still, or a model sheet, rendered through render-back before paid work, asked once as a provisional taste ask | style frame, mood board | Look is the visual asset, never style. |
+| treatment | A film's plan in its brief: three candidate structures, the chosen one and why, logline, arc, references, shot list, cue map and sound table, drafted with the definition | storyboard, script, outline | The script is the narration's lines, and a storyboard is a sheet of cells. |
+| storyboard | 6 to 9 cells from a treatment's moments, asked as one choice only when the ask requests it | animatic, shot list | The shot list is part of the treatment. |
+| score | Music written as data: instruments by name and notes on the beat grid, as a `score.music@1` item | track, song, composition; score alone in the light policy or the flows' ratings | A track is a media lane. The light policy's score and the flows' scores are ratings; renaming the light policy's to contribution is a follow-up. |
+| stem | One instrument group of a score, rendered by `score.render@1` into an audio asset kept by hash and played as a strip | track, bus, channel, part | A track is a lane, a bus is a mixer path, a channel is an animated property, and a part is a figure's or a builder's. |
+| instrument | A named sound source in a score: sampled from a library pack, plucked, or a synth preset (Synth `synth@1`) | voice, patch, program | A voice is a playing sound, and a patch is a document change. |
+| declared onset | A note's onset that a score render publishes in its `note_on` list, exact to the sample | measured onset, hit (for a declared one) | An onset bake measures audio and holds only within a tolerance; a declared onset is data. |
+| foley preset | A (material, action) entry in foley@1: a closed sound graph rendered into variants by hash | recipe, patch, sound effect (alone) | A recipe generates items, not sounds. |
+| separation | One ink of a print look: a role printed solid or with a halftone, with its registration and order | plate, layer, channel | A plate is the builder, a layer is a writer layer, and a channel is an animated property. |
+| tooth | The height field of a paper's surface that lines and fills catch through their pressure | grain, texture (alone) | Grain is the film-grain finish. |
+| print wear | A finish of a projected print's flaws: flicker on linear luminance, gate weave, scratches, dust, hair and a rounded gate | damage, film grain, aging | Grain is its own finish, and age belongs to the paper. |
+| tone curve | A finish that maps a 2D print's tones: black, white, contrast, toe and shoulder | curve (alone), grade, LUT | curve@1 is a 3D curve, the grade is for 3D writer layers, and LUT images stay refused. |
+| screen finish | The picture as seen on a display medium: a CRT, a kinescope, a fiche reader, DV or VHS | CRT filter, retro pass, monitor | One finish with a kind, not one name per device. |
+| palette table | A table built at check from a look's roles that maps a shade to a palette index, for indexed looks | LUT, color lookup texture | LUT images stay refused; a table is data the core builds. |
+| story number | A number that belongs to a film's story (a score, a round, a REC clock), a `data` constant with `source: story` | fake number, placeholder | It passes honest numbers only where no status or reading is bound. |
+| passes | The pass operators a `group@1` runs in order on its own isolated target, at its place in the draw order: shipped ones, a pack's such as fx@1's, or composed ones | effects, effect stack, layer effects | An effect is a shipped GPU effect and `effects` already names a chain, while a group's passes may also come from a pack or be composed. |
+| backdrop | What a group's passes run on with `backdrop: below`: the pixels its own writer layer drew before it, inside the group's coverage | adjustment layer | Layer means a writer layer. |
+| path op | One entry in a path's `ops`, applied in order before tessellation: trim, round corners, offset path, zig zag, pucker, twist or repeater | shape operator, modifier (for a 2D path), effect | An operator is a GPU operator, a modifier is a step on a builder's geometry or strokes, and an effect is a shipped GPU effect. |
+| repeater | The path op that draws animated, fractional copies of a path, each through the repeater's transform applied once more | repeat (for live copies), array | `repeat` keeps a count fixed at check, on items, recipes and operators, and the array modifier works on a builder's geometry. |
+| echo | Copies of a group's children drawn at earlier times, each evaluated again at its own time | trail (for a group), motion trail, history | A trail is a ribbon behind one point, and history is what the rules forbid. |
+| warp | A group's field that carries its paths and vector outlines through a formula point by point, split again within a tolerance (Frame and group: warp) | distort, deform, transform (for this) | A distort is a raster pass, a deform is a modifier on a builder's geometry, and a transform is an item's `at`, which never holds a matrix. |
+| lag | How far back in time a value is read: a stagger's lag, an echo's lag and the driver function `lag(var, dt)`; a negative lag looks ahead | delay, time offset, `at` for a time, valueAtTime | `at` is an item's transform and never a time, and a delay is an audio processor. |
+| noise | Seeded lattice noise, the one word for wiggle: the channel modifier, the text animator's noise selector and the noise fill | wiggle, wiggly | One idea; `noise(p, seed)` is behind each, and a path's wiggle is the boil or displace modifier. |
+| spline | The step that maps x through a monotone cubic over up to 16 points, built at check into a table in the input buffer | curve (alone), curves, LUT | `curve@1` is a 3D curve, a tone curve is a print finish, and LUT images stay refused. |
+| named operator | An operator a pack names and an agent calls with params, such as `fx.levels@1` | effect, preset | An effect is a shipped GPU effect; a pack's operators are composed graphs from the public steps. |
+| occluded share | The share of a kept item's in-frame sample points that other items hide from the camera, by ray casts on evaluated data; `camera.framing` fails past `occluded_max` | occlusion (alone), visibility, coverage | Occlusion alone means ambient occlusion, light that nearby surfaces block, and coverage is film.blank's share of dark pixels. |
+| defect | One counted fault of a welded mesh in `geometry.shading`: a non-manifold edge or vertex, an inconsistent edge, a flipped face or a degenerate face | error, warning, issue (for a mesh fault) | A check returns issues, and a severity never decides; a defect is counted, its count decides, and no geometry job may add one. |
+| ID view | The picture `render.review` gets beside each snapshot: the same frame(t) drawn flat in a color per item from its ID hash, with a number at the visible centre of each item in render-back's ID table, and a kept item that doesn't show listed under a number with no mark | ID pass, object-ID target, segmentation, mask | The object-ID target is the core's picking target, and a mask is 2D clipping; the ID view is drawn only for a model to point at. |
+| observation | One entry of `render.review`'s reading: a category from its closed `observe` list and an item's number in the ID view | finding, issue, verdict | A finding is a review check's item in a send-back, and an issue is a code check's result; an observation is only ever part of a reading. |
+| perceptual oracle | The one comparison of two renderers' images: a blank guard, then FLIP pooled over the subject or at the 95th percentile, with structure, crushed-black and color guards and silhouette IoU | image diff, screenshot comparison | Every lane compares images this one way, and none gates on RMS or on a full scene's mean. |
+| B-rep | A CAD model's exact boundary: trimmed NURBS or analytic surfaces with their topology, in a STEP (ISO 10303) or B-rep file. Only the tessellate job reads one, and it never enters a document | solid (alone), CAD mesh, exact geometry | A solid is what the geometry audit tests, a mesh is what the canvas draws, and exact geometry means a mark's true shape in a hit test. |
+| typeset job | The asset job kind `typeset`: a formula's LaTeX or Typst source in, an SVG with one id per term out, run outside the canvas core (Asset job: typeset) | typesetter (alone), renderer, LaTeX (for the job) | Nothing typesets inside the canvas core, a renderer draws frames, and LaTeX is one input syntax the job takes. |
+| device class | One kind of input device's frozen entry layout, such as `pen@1` or `midi@1`, read by the input seam's backends or filled by a plug-in's bridge | device type, driver, input map | A driver is a seam's backend, and an input map is a control's keys. |
+| device bridge | A hub plug-in that reads gear the input seam doesn't and sends its entries to a piece's device controls, stamped as itself | driver, adapter, device plug-in | An adapter connects an agent, and a driver is a backend. |
+| port | A piece's declared way out to one plug-in and back: listed entries and occurrences out, readings in, open only after a person's Connect | channel, socket, output (alone) | A channel is an animated value, a socket is the hub's, and a machine's network ports keep their usual meaning. |
+| synth preset | A graph over the closed audio node list, with named params, that a `synth@1` plays live and a score's synth instrument names | patch, voice, instrument (alone), plug-in | A patch changes a document, a voice is one sounding instance, and an instrument is a score's. |
+| wrapper | A file a wrap job makes from an export's output for one target: a web zip, a desktop app, a phone's home-screen app, a store upload | package, bundle, build (for this) | A package is an extension's code, a bundle is the web player's folder, and a build is a game project's. |
+| same machine | The determinism class of GPU work that repeats bit for bit on one machine, backend, driver and pipeline, and never across machines (`same_machine`) | display only (as a class) | "Display only" also says no check reads a thing; the class needs its own name beside live only. |
+| live only | The class of what reads something canonical renders never have, such as a display's headroom or the live view's own earlier frames; it declares the fallback canonical renders draw (`live_only`) | display only, preview, interactive only | It never reaches a canonical render, an export or a check, so it can't share a name with work that may. |
+| step function | A sub-graph with typed ports that a pack names and any operator calls with `use`, inlined at check | function (alone), node group, subgraph | Function alone means one of the closed function list's. |
+| light response | The step function a material operator gives the core's light loop, called once per shaded light, which returns that light's radiance | lighting model, custom lighting, light shader | The core keeps the lights; the material only answers for each one. |
+| light function | A graph of a light's direction and t that filters its color, normalized at check so the light keeps its lumens | cookie, gobo (for the graph), projector | A gobo is one use of it, and a projector would name a kind of light. |
+| iterate | The step that runs a pass graph a fixed number of times over two targets, each run reading the last | repeat (for passes), feedback, ping-pong (alone) | Repeat is the loop inside one graph, and feedback is a frame phase. |
+| chunk | One piece of a chunk tree: bounds, a geometric error and a payload that loads and draws on its own; also one of a mesh from logic's fixed parts (Mesh from logic `mesh.logic@1`) and a streamed series' run of rows | tile (for this), node, page | A tile is an atlas cell or a terrain plate's tile. A chunk is never a voxel grid's unit, which is a brick, a world page or a part of a kit's world. |
+| residency | Which chunks a view keeps loaded and uploaded, within its byte budget | streaming (alone), cache, working set | Residency changes only how long a live view settles, never what a settled frame draws. |
+| brick | An 8 × 8 × 8 block of a voxel grid, the unit that meshes, uploads and culls on its own | chunk (for voxels), block, section | A chunk belongs to a chunk tree or a mesh from logic. |
+
+<a id="kernel"></a>
+
+## What the kernel holds
+
+The kernel holds only this contract: document shapes, kinds with versions, stable IDs, patches stamped with their writer, leases, and the events and projections the canvas reads. It never draws. Everything in later sections is the canvas core's, built on this.
+
+### Document primitives
+
+#### Document envelope
+
+**Fields**
+
+- `format: u32 = 1`
+- `id: doc ID` (minted by the hub)
+- `profile: figure | film | scene | world | view | board | sheet | chart | cells`
+- `title: string`; `description: string ≤ 400 chars` (both required)
+- `seed: u64 = hash(id)`
+- `transport: {frame_rate: rational = 60/1, start: flick = 0, span: flick = 0 (still), loop: none | wrap | ping_pong = none, reduced_motion: hold | slow = hold}`
+- `size: [f32, f32], u`; `safe: f32, u = 24` (figures, films, boards, sheets)
+- `aspect: letterbox | extend` (by default letterbox for films and 2D documents, extend for 3D scenes and figures)
+- `look: {asset: look@major, theme: auto | light | dark = auto}`
+- `camera: item ID` (what the document is viewed through when no shot is active); `locale: BCP 47 = en` (the copy table's default; a view setting can change it)
+- `budget: {class, frame_gpu_ms, frame_cpu_ms: ms, gpu_mb: MB, items, instances, vertices, insets, lights, puffs, voices: u32, effects_gpu_ms: ms, ambient_fps: Hz, build_ms, rebuild_ms: ms}` (caps that only tighten the class)
+- `requires: {core: semver, kinds: [family.name@major.minor], modules: {canvas module → semver range}} (each kind's minor is the lowest its used fields need)`; `packs: [name@version]`
+- `data: {name → number | number[] | string[] | {value, source}}`
+- `assets: {id → {sha256, license}}`
+- Maps keyed by ID: `layers, items, collections, assemblies, channels, drivers, constraints, clips, placements, transitions, shots, markers, controls, inputs, bound_values, status_bindings, variants`
+- `collections: {ID → {members: [ID] | rule: expression over kind, name, role and parent}}`
+- By profile: `card`, `audit` (figure); `script`, `record` (film); `source: {projections, as_of: ev handle, append: live | none, subject: handle | [handle]}` (view; a board or chart built from the record has one too); `worlds: {ID → doc handle}` (scene: the physics worlds its items read, keyed by ID); `brief: definition handle`; `checks`
+
+**Semantics:** Loaded, checked, then compiled into flat arrays with a static evaluation order; a failed check keeps the last good revision on screen. Anything with an ID and a kind is an item, and sections hold only the evaluation graph. The profile decides which sections and checks apply. In a panel or an export whose shape differs from `size`, `letterbox` scales the frame to fit, centred, with bars in the look's ground, and `extend` scales it to fit and widens the camera's view along the longer side, so the whole frame shows and nothing in it is cropped. A camera's field of view, lens and view width apply to the frame at `size`, and an export of another shape runs camera.framing and the layout check at its own size.
+
+**Cost:** Full check O(items + refs + fields), at most 50 ms per 10,000 items, then incremental; compile O(changed items); nothing per frame while still
+
+**It can never:** Contain code other than a piece's logic, which runs sandboxed; show before it passes its checks; refer to anything by position; be changed by its own evaluation
+
+**Lands:** R1 for the line, Needs you, receipts and sheets; R2 the full language with data views; R6 figures, films and 3D
+
+#### Item and kind
+
+**Fields**
+
+- Item:
+- `id: ID`
+- `kind: family.name@major` (such as `slab@1` or `village.house@1`)
+- `parent: ID | null = null`
+- `layer: layer ID` (stamped from the writer, never in the payload)
+- `name: string` (required when pickable, or named by a control, stage, readout, bound value or check)
+- `role: part | control | label | data | decoration = decoration`
+- `params: object` (per the kind's schema)
+- `at: {pos: vec, u or m = 0, rot: vec, deg = 0, scale: vec = 1, pivot: vec = 0, shear: deg = 0, anchor: ID#anchor | doc handle}` (with an anchor, pos offsets from that point; a `doc:` handle anchors only an agent's layer to the view it's drawn over)
+- `at` also takes `place`, `align` and `fit`, and `pivot` takes a box point (Item and kind: relations)
+- `adjust: {opacity: f32 = 1, tint: color, hue: deg = 0, saturation: f32 = 1, brightness: f32 = 1, contrast: f32 = 1, exposure: EV = 0, gamma: f32 = 1, invert: bool = false}` (color adjustments; channels animate them; Item and kind: adjust)
+- `repeat: {count | over: rows, as}` (optional; derived items `<id>.<index | key>`, owned like a recipe's; a view of the record repeats over a projection's rows)
+- `visible: bool = true`; `pickable: bool = true` (both inherited)
+- `order: fractional key`
+- `source: {ref: handle | asset, role: primary | piece | derived}` (optional)
+- Kind (registry entry):
+- `name, major, minor`; `module: canvas module name` | `pack: name@version` (a pack kind: Pack: kinds in any pack); `needs: [array]` (R2)
+- `schema: {param → {type, unit, default, min, max, soft_min, soft_max, live: bool, cost: transform | rebuild}}`
+- `dirty: {path → dirty class}`
+- `builder | recipe`; `outputs`
+- `capabilities: {pickable, hosts_insets, snap, plan}`; `children: [kind]` (the kinds it may hold)
+- `cost: {ns_per_item, vertices: expression over params}`
+- `migrate: {from_major → pure function}`
+
+**Semantics:** A missing param takes its default; outside min and max is an error, and outside the soft range a warning. An unknown kind is skipped when drawing with the notice `unknown_kind` and kept byte for byte through other writers' patches (R2); a kind whose canvas module this build lacks is refused with `module_missing`; a newer major with `kind_too_new`, and an older major is migrated. A field the kind's version doesn't define is an error (`unknown_field`), unless the document requires a newer minor of that kind, when it's skipped with a notice. An `unknown_kind` or `unknown_field` issue names up to three close names.
+
+**Cost:** O(params) to validate; kinds interned, O(1) lookup
+
+**It can never:** Change kind in place (delete and create, with lineage); carry code; hold an authored matrix; hold a time in `at`
+
+**Lands:** R1; migrations R2
+
+#### Item and kind: adjust
+
+For: everyday corrections without an operator: a dimmed series beside the selected one, a punchier photo, a negative
+
+**Fields**
+
+- `adjust` gains `contrast: f32 = 1`, `exposure: EV = 0`, `gamma: f32 = 1` and `invert: bool = false`, beside opacity, tint, hue, saturation and brightness; each is a channel, and invert a bool channel
+
+**Semantics:** Applied with the existing color adjustments in one fixed order: exposure first, then contrast, gamma, hue, saturation, brightness and tint, and invert last. Exposure scales linear light by 2^EV, contrast pivots at mid grey, gamma raises each channel to 1 ÷ gamma, and invert takes 1 − c per channel and keeps alpha. The GPU step `adjust` takes the same four. Wherever status can show, the check applies the adjustment to the roles the item uses and refuses one that comes within the status distance, as the grade check does.
+
+**Cost:** A few ALU per pixel in the existing adjust path; nothing per frame while still. Budget class: any.
+
+**It can never:** Adjust a status color or a legend; bring a role within the status distance where status can show; reach another item.
+
+**Lands:** R2
+
+#### Item and kind: relations
+
+For: a label beside a formula, a title on the frame's top edge, a brace as wide as its term, shapes lined up by their bottoms; agents that place by relation instead of measuring
+
+**Fields**
+
+- Box points, read-only on every 2D item: `#n #ne #e #se #s #sw #w #nw #c`, from its evaluated bounds at t in its parent's space. Geometry only: a stroke's width, a halo, a drop and a glow don't count.
+- `at.place: {beside: ID[#part] | [u, u], side: n | ne | e | se | s | sw | w | nw = e, gap: u = 16, align: start | center | end | baseline = center, own: #part (optional)} | {edge: n | ne | e | se | s | sw | w | nw, margin: u = safe} | {onto: ID[#part] | [u, u], point: box point = c}` (optional; one per item)
+- `at.align: [{to: ID[#part] | frame, side: n | s | e | w | cx | cy}] ≤ 2` (optional; moves along that axis only)
+- `at.fit: {to: ID[#part] | frame, dim: width | height | both, mode: scale | stretch = scale, pad: u = 0}` (optional)
+- `at.pivot` also takes a box point: `pivot: sw` scales and turns about the item's lower left corner.
+
+**Semantics:** Each relation is solved every frame from evaluated bounds at t: after its target's transform and constraints, and before this item's own constraints. So a label stays beside a formula that moves, grows or changes locale. `beside` puts the item's box side that faces back along `side` on the target's box side along `side`, `gap` farther on, and lines up the other axis by `align` (`baseline` uses each text's first baseline). A corner side puts corner to corner. `own` places the item by one of its parts, and the rest moves with it. `edge` puts the item's box side `margin` inside the frame at `size`, moving only along that edge's axis, or both for a corner. `onto` puts a box point on the target's box point or on a point. `align` lines one side up with another's. `fit` scales about the pivot until the box's width or height is the target's plus 2 × pad. `at.pos` adds after the relation, so a channel on pos still nudges a placed item. Every relation field is a channel target; `side` and `align` hold. A relation that reads an item that reads it back, through any chain of relations, anchors or constraints, is refused at check as `relation_cycle`, naming the chain. A bound number counts at its `widest`, so a counter never pushes its neighbour.
+
+**Cost:** O(1) per relation per frame once its target's bounds are evaluated, about 30 ns (estimate); nothing while still.
+
+**It can never:** Form a cycle; read an item in another writer's layer or another document; read an earlier frame; resize an item because a bound number changed.
+
+**Lands:** R2 box points, beside, edge and align; R6 fit
+
+#### ID and sub-address
+
+**Fields**
+
+- `ID`: 1 to 8 segments joined by `.`, each `[a-z0-9][a-z0-9_-]{0,47}`; never `/ # : @ ~` or spaces
+- Derived: `<instance>.<step>[.<index>]` (what a recipe instance expands into)
+- Sub-address: `<id>#<element | particle | cluster | anchor | part | row key>`
+- Import: `gltf-<sha8>.<node path>`
+- Temporary, inside one patch: `~1`, `~2`
+- Shared documents: every new ID starts with the writer's leased prefix
+
+**Semantics:** An ID is never reused after a delete, and renaming changes `name`, never `id`. A recipe instance owns every ID under it: no writer creates one there, and patches can't target them. Seeds are hashes: an item's of (doc seed, id), an element's of (instancer seed, element), and a recipe step's of (instance seed, step, index).
+
+**Cost:** Interned to `u32` handles with a generation per document session at load, so a stale handle is refused; nothing per frame
+
+**It can never:** Be minted by a client for a top-level document; collide across writers; address anything by position
+
+**Lands:** R1 item IDs; R6 derived and element IDs
+
+#### Path and handle
+
+**Fields**
+
+- `path: <section>/<id>[#<sub>]/<field>[/<sub>…]`, such as `items/<id>/params/<name>[/<sub>]`
+- `section: items | controls | channels | markers | data | inputs | assemblies`
+- `handle: <scheme>:<id>[#<fragment>]`, scheme from the closed list in the conventions
+
+**Semantics:** A path resolves once, at check, to an array and an offset; an unresolved path is `ref_unresolved`. A handle reaches the record or another document; a path never does.
+
+**Cost:** Nothing per frame
+
+**It can never:** Be parsed per frame; reach another document except through a handle; need escaping
+
+**Lands:** R1
+
+#### Writer layer
+
+**Fields**
+
+- `id`
+- `writer` (from the connection; immutable; never in a payload)
+- `title: string`
+- `role: content | annotation = content`
+- `order: fractional key` (within its band)
+- `locked: bool = false` (by its writer)
+- `lease: lease handle`
+- `file: path | sha256` (when several writers share the document)
+- `outline: bool` (on for agents)
+- `visible` (session state)
+
+**Semantics:** A document is the union of its writer layers by ID, so no layer overrides another's items, and a patch writes only its writer's layer. The one exception is a patch from you: where no live lease of another writer covers an item in that writer's layer, your patch that changes it first takes the item into your layer with its ID and values, as a break-out does; its history records the take, that writer's later patches to it are refused with `not_your_layer`, and undoing the patch that took it hands it back as it was. A patch from another writer whose only refusal is `not_your_layer` on items in your layer is filed on each of them as a suggestion: its ops on that item, its writer, reason and base. A suggestion shows with a preview on the item in the editor panel and on that writer's return card; only your gesture applies it, as one patch written as you, and any later change to the item supersedes it. It's never an ask: it never notifies you or counts in Needs you, and the writer still gets `not_your_layer`. An item may refer to another writer's item (a parent, a target or an attachment) but never holds it: that writer's delete still applies, and a reference it leaves unresolved hides only the referring item, with `ref_unresolved` sent to its writer. The core gives each layer a band from its writer's kind (section 4), and an agent's layer is outlined with its name for you to hide. Opacity and blending belong to groups, not layers. A writer layer that holds any 3D item is a 3D writer layer, fixed at check, and draws its 2D items as marks in 3D or overlays; a 2D page shows 3D through a nested scene (a strip with a rect, or a sheet cell), as 3D shows 2D through an inset. No other writer's channel, placement, driver, control, bound value or physics output may write a path of an item in your layer; it's refused with `not_your_layer`.
+
+**Cost:** Union O(items) at compile; O(layers) per frame
+
+**It can never:** Carry a claimed writer; be written, undone or reordered by another writer, except by your patch taking one of its items; draw above the shell or the question card
+
+**Lands:** R1 the agent's layer through `deep_show`; R2 several writers
+
+#### Patch
+
+**Fields**
+
+- `{patch: ULID, doc, base: rev, writer (from the connection), reason: string, gesture: serial (optional), dry_run: bool = false, coalesce_key: string (optional), ops: [op]}`
+- Ops: `create {item}`; `set {id, path, value}`; `unset {id, path}`; `delete {id, cascade = false}`; `move {id, parent, keep: world | local = world}`; `reorder {id, after | before}`; `rows {id, append | set | remove, by key}`; `break_out {instancer, element} | {instance, item}` (an instancer's element, or a recipe instance's derived item)
+- Result: `{outcome: applied | superseded | conflict | refused, rev, ids: {~n → ID}, achieved: {created: {kind: n}, updated: n, deleted: {kind: n}, unchanged: bool}, issues: [{code, ids, path, what, fix}], cost_delta: {cpu_ms, gpu_ms, vertices, lights, gpu_mb}, undo: [op]}` (`undo`: the inverse ops, for the same writer)
+- Refusal codes (closed): `not_your_layer, lease_held, derived_item, record_view, unknown_kind, kind_too_new, unknown_field, out_of_range, ref_unresolved, cycle, over_budget, stale_base, undo_conflict, gesture_required, too_large, over_quota, module_missing, pack_missing, unintended_removal, outside_selection`
+
+**Semantics:** All or nothing: validated against a simulated state, re-checked incrementally, and recorded as one `doc.patched` event (per gesture for you, per call for an agent). A stale base rebases when no ID it touches changed since; otherwise it's a conflict naming both writers. Undo is the inverse patch, by the same writer only, and is refused if another writer has touched those paths since. A panel's patch writes as you only when its `gesture` is the serial of your input that ended a gesture in that panel, from hardware input or VoiceOver, as the serial ring records it, unspent, for the document open there; a patch whose `gesture` fails this is refused with `gesture_required`, and one without a gesture writes as the panel's plug-in (Editor panel: patches as you). "Put back as before this stop", the return card's action, is one patch per document the agent's turn changed before that stop, written as you and shown first as a dry run: each item the turn changed gets back its values from the revision before the turn's first change to it, each item it deleted is created again with its ID, as an undo would, and each item it created is deleted. An item another writer changed since is left out with `undo_conflict`, and one under another writer's live lease with `lease_held`, each listed. Every item it puts back becomes yours (Writer layer): that is the trade for one step, and the agent's later patches to those items are refused, leaving suggestions.
+
+**Cost:** Apply ≤ 2 ms; dry run ≤ 20 ms; a move touches one 64-byte instance record, never a mesh
+
+**It can never:** Edit a view of the record; apply in part; take its writer from the payload; target a derived item; undo another writer's change
+
+**Lands:** R1 whole revisions through `deep_show`; R2 patches, writers, leases and merge; R6 gestures, preview, snapping and undo
+
+#### Revision
+
+**Fields**
+
+- `{doc, rev: u64, base_rev: u64, writer, patches: [patch ID], hash: sha256 of the canonical document, state: pending | current | last_good | superseded | refused}`
+- A whole revision from `deep_show` adds `removes: [ID]` (each ID it leaves out on purpose), and its reply adds `changed, unchanged, created, removed: [ID]`
+
+**Semantics:** A revision becomes current only after its check passes; a refusal keeps the last good one and returns its issues. A whole revision, as `deep_show` sends from R1, is diffed against the current one by every ID its writer's layer holds, in every map keyed by ID (items, shots, markers, channels, controls and the rest): an ID it leaves out must be in its `removes`, or it's refused with `unintended_removal`, naming each one, so an agent that lost track of its document can't drop what it forgot. At show time a revision is refused only for issues it brings that the last good one, checked by the same rules, didn't have, matched by issue code and item IDs; the others come back marked carried. A check that decides a verdict still counts every issue, so a stricter rule in a new release never blocks an unrelated fix, and never passes the work either. One revision is in flight per document session, and a newer one supersedes a pending one. A view of the record has no revisions: it's rebuilt from projections as of an event.
+
+**Cost:** O(1) to stamp; hashing O(document bytes) per commit
+
+**It can never:** Show before its check; apply in the middle of a frame; drop an ID its writer didn't name
+
+**Lands:** R1
+
+#### Lease
+
+**Fields**
+
+- `{resource: doc:<id>#<prefix>.*, holder: writer, mode: exclusive | shared, expires: time}` (at most 15 minutes ahead, renewed by its holder); a point and ask's lease names exact IDs instead, `doc:<id>#<ID>` each, and bounds its holder (Selection)
+
+**Semantics:** A writer leases an ID prefix before writing a shared document, and every ID it creates starts with that prefix. A patch outside its leases is refused with `lease_held` and routed to the holder. A lease ends when its holder has ended or its attempt was replaced, and its processes are proven gone; past `expires` it is only stale, a reading, and it moves to another writer only on that proof or your answer. Rows in a mark set merge by key, with appends ordered by (t, writer).
+
+**Cost:** O(1) per op (a prefix trie)
+
+**It can never:** Be written past by anyone but its holder; outlive its holder; move to another writer on its expiry alone
+
+**Lands:** R1 leases; R2 document ID prefixes
+
+#### Note
+
+For: telling an item's writer what's wrong with it, on the item, until a check shows it fixed
+
+**Fields**
+
+- `{note: ULID, doc, item: ID, rev: u64, t: flick (optional), region: {x, y, w, h}, u (optional), text: string}` (`rev`: the revision you saw; `t`: the frame's time; `region`: a rectangle of that frame)
+- Writer: you, from the connection, with your input's serial in the editor panel or your click on a return card
+- `state: open | detached | closed`; closed with `{by: you | check, rev, run}`
+
+**Semantics:** Your words on one item of a work product. Only you write one: in the editor panel, with the serial of your input there, as a panel's patch needs (Patch), or on a return card that shows the document. It reaches the item's writer as one structured item of a send-back, `{note, doc, item, rev, t, region, text}`, by the route a send-back takes, never inside a prompt of yours. It stays open, on the item in the editor panel and on that writer's later return cards, until a revision after it changes that item and the document's checks pass on that revision with every issue counted, or until you close it. A revision that leaves the item as it was, or whose checks find any issue, keeps it open, and the card says which; a writer saying it's fixed changes nothing. If the item is deleted, the note shows `detached` with the writer and revision that removed it, and stays open until you close it. A note never opens or answers an ask and never counts in Needs you.
+
+**Cost:** O(1) to record; O(open notes on the document) per revision
+
+**It can never:** Be written, edited or closed by an agent or a plug-in; close on a writer's word; change the document; answer an ask
+
+**Lands:** R2 on a return card; R6 in the editor panel
+
+#### Migration
+
+**Fields**
+
+- `kind.migrate: {from_major → pure function over params}` (a canvas module's kind) | `{from_major → {rename, set, drop}}` (a pack kind's, as data: Pack: migrations as data)
+- `window: N−1` (one previous major)
+- notice `migrated {kind, from, to, ids}`
+- `corpus`: fixture documents for every shipped major
+
+**Semantics:** Runs at load, before the check; the stored document changes only when its writer next patches it, and a major older than N−1 is refused with a fix. A recipe re-expands on a new minor and needs a migration for a new major. A pack kind's migration is data the core applies, so no pack code runs (Pack: migrations as data). The corpus must keep loading and drawing the same in every release: migrated at load, each corpus document gives the evaluated values and the snapshots the release that saved it recorded at its sampled times, within the parity suite's tolerances. A difference fails the release, naming the kind, the item, the field and the first time that differs, and only your decision blesses the new result, once per cause.
+
+**Cost:** O(items of migrated kinds), once per load
+
+**It can never:** Run pack code; change an ID; happen silently
+
+**Lands:** R2, before outside packs
+
+#### Requirement outcome
+
+**Fields**
+
+- Inside `verdict.made`: `requirements: [{req: req handle, outcome: PASS | FAIL | INVALID | BLOCKED | INCONCLUSIVE | pending, check, depth, oracle: code | model | person, runs: {clean: u16, needed: u16}, smallest, points_to, evidence: [sha256], proof: statement | static_check | test_run | journey | decision, ask: ask handle (optional)}]`
+
+**Semantics:** Every verdict carries one outcome per requirement, so a chip's color always has a verdict, or before the first verdict its check's run, behind it. A requirement whose oracle is you shows through its open ask, as needs you, until you answer. The claim's verdict combines its requirements in the one fixed order, with pending just above PASS: a claim with a pending requirement can't pass yet, any other verdict is made at once, and it only rises as pending requirements land.
+
+**Cost:** O(requirements) per verdict
+
+**It can never:** Be written by an agent or an extension; color a chip with nothing behind it
+
+**Lands:** R1
+
+Also decided: derived IDs join segments with dots, not slashes, because IDs never contain `/`; an unknown field is an error unless the document requires a newer minor, which keeps forward compatibility; the document's `kind` is `profile`, the films dry run's `stage` is `size` (stages is a control kind, and a page is a panel's), and there's no per-document `units` field. A writer layer has no `z` or opacity of its own: order keys and group opacity cover both. The tech design calls what a requirement's line rests on its layer; here it's `proof`, since layer means a writer layer. The tech design lands patches in R6; its own gap table already says R2 for several writers, so patches split as above.
+
+### The event catalogue
+
+The catalogue is closed. Each kind has a JSON Schema and feeds the projections named here, and a view binds only to fields fed by catalogued events. Kinds marked new are ones the views need and the tech design doesn't name yet.
+
+| Event kind | Data | Feeds | The canvas reads it for |
+|---|---|---|---|
+| `session.start` | `{agent, worktree, branch, thread}` | sessions | the Map's session tokens |
+| `session.child_started` | `{parent, child, task_ref}` | sessions | child sessions on a lead's line |
+| `session.attention` (new) | `{state: finished \| failed \| waiting_permission \| unknown}` | sessions | the Map's attention state; silence never counts as finished |
+| `worktree.created`, `worktree.removed` | `{path, branch, owner}` | sessions | the Map's worktrees |
+| `user.ask` | `{msg, text (redacted), tasks: [task_ref], from: person \| scheduled \| subagent \| session}` | tasks, returns | a row per ask on the line; which stops are answers |
+| `task.created`, `task.closed` (closed is new) | `{task_ref, thread, owner, title}`; `{by_verdict}` | tasks | the first and last stations |
+| `definition.drafted`, `definition.locked`, `definition.revised` (new) | `{definition, task_ref, requirements, hash, base_commit, budget}`; revised adds `{dispute_ask}` | definitions | chips per requirement; the defining station |
+| `tool.before`, `tool.after` | `{kind: shell \| read \| edit \| write \| search \| fetch, paths, command}` | session_files, returns | the files a session touched, on the Map; a turn's parts, on its turn view |
+| `agent.stop` | `{turn, did_work}` | claims | where a stop was judged |
+| `claim.made` | `{task_ref, attempt, commit, scope: session \| child \| task}` | claims | the says-done station |
+| `claim.sent_back`, `claim.stalled` (new) | `{claim, verdict, round, to}`; `{claim, rule}` | claims | "sent back, round n of 3"; stalled cards |
+| `delivery.outcome` (new) | `{delivery, via: steer \| interrupt \| stop_hold \| next_prompt, outcome}` | deliveries | whether a send-back or an answer arrived |
+| `run.started` (new), `run.finished` | `{run, check, claim, commit}`; `{run, outcome, tests_run, passed, runs, evidence, check, assertion, expected, actual, step, points_to, findings, environment}` | runs | "17 of 29"; running status |
+| `verdict.made`, `verdict.stale` (new) | `{verdict, claim, outcome, requirements, smallest, points_to, commit, key: {commit, doc_revisions, check_digests, environment, tools}}`; `{verdict, because}` | verdicts | every status color on a chip or station |
+| `ask.created` | `{kind, question, options, recommended, deadline, default, provisional}`; an unblock adds `{steps, where, why, unblocks, proves}` | asks | needs-you colors and cards |
+| `ask.batched`, `ask.answered`, `ask.defaulted`, `ask.escalated`, `ask.cancelled`, `ask.later` (new) | `{batch, asks: [{ask, plan_hash}]}`; `{answer, plan_hash, decision}`; `{until}` for later | asks | closing a needs-you; one answer per plan in a batch |
+| `decision.created`, `decision.applied` (new) | `{key, scope, answer, ask}`; `{decision, ask}` | decisions | past calls and what was decided for you |
+| `plan.proposed` (new) | `{ask, steps: [{does, changes, undo, public: bool, cost}], diff: sha256, hash}` | plans | authority cards |
+| `open_item.opened`, `open_item.closed` (new) | `{task_ref, text}` | open_items | "part of" and still-open lists |
+| `notice.subscribed`, `notice.sent` (new) | `{notice_kind, key, by}`; `{notice, cites}` | notices | notices you asked for, with the asking recorded |
+| `action.entered`, `action.reported` (new) | `{call, plugin, action, request, input}`; `{call, changed: [store item \| notice or send key], verified: true \| false \| unverified, checked, error}` | returns | what changed, on the return card, with a no-op, a false or unverified change or a call never reported ahead of the agent's text; whether a schedule run made a change it declared |
+| `lease.acquired`, `lease.released`, `lease.stale`, `lease.denied` (new) | `{resource, holder, mode, expires}` | leases | lease badges |
+| `merge.dry_run` (new) | `{a, b, conflicts: [path]}` | dry_merges | conflict links, in the attention treatment |
+| `reading.recorded` (new) | `{reading, value, unit, as_of, source, n}` | readings | bound values; estimates as the p50 of the last n |
+| `pr.merged` (new) | `{pr, merge_sha}` | tasks | the merge station |
+| `evidence.put` | `{sha256, kind, redaction, license, step_times}` | evidence | the evidence player; images |
+| `doc.patched` | `{doc, rev, patch, writer, achieved}` | documents, returns | an item's history and the by-writer lens; what the agent drew, on its return card |
+| `note.opened`, `note.closed` (new) | `{note, doc, item, rev, t, region, text}`; `{note, by: you \| check, rev, run}` | notes | open notes on an item, in the editor panel and on return cards |
+| `suggestion.filed`, `suggestion.settled` (new) | `{suggestion, doc, item, writer, patch, base, ops}`; `{suggestion, outcome: accepted \| superseded, rev}` | suggestions | suggestions on your items, in the editor panel and on return cards |
+
+The films dry run wrote `verdict.created` and `sendback.delivered`; the scenes dry run wrote `verdict.made`, `claim.sent_back` and `delivery.outcome`. This keeps the scenes forms, matching `claim.made`. `claim.point` folds into `claim.made` as its `scope`.
+
+### Projections the canvas reads
+
+| Projection | Columns | Read by |
+|---|---|---|
+| sessions, claims, definitions, attempts, checks, runs, verdicts, asks, decisions, leases, evidence, commits | As in the tech design's data model | every core view |
+| tasks (new) | `{task_ref, thread, state, owner, round, next_step: {owner: you \| agent \| job \| check \| nobody, action}}` | the line's rows and stations |
+| open_items (new) | `{task_ref, text, opened, closed}` | the line; receipts |
+| notices (new) | `{kind, key, subscribed_by, sent, cites}` | Needs you (never counted in it) |
+| readings (new) | `{reading, value, unit, as_of, source, fresh_for}` | bound values |
+| plans (new) | `{ask, steps, hash, answered_hash}` | authority cards |
+| deliveries (new) | `{delivery, to, via, outcome}` | the line |
+| dry_merges (new) | `{a, b, conflicts, as_of}` | the Map |
+| session_files (new) | `{session, path, kind, last}` | the Map |
+| documents | `{doc, rev, writer, hash}` | provenance lenses |
+| notes (new) | `{note, doc, item, to: writer, rev, t, region, text, state: open \| detached \| closed, opened, closed, by}` | the return card; the editor panel |
+| suggestions (new) | `{suggestion, doc, item, writer, ops, base, filed, outcome}` | the return card; the editor panel |
+| returns (new) | `{return, session, prompt: msg handle, at: ev handle, kind, claim, verdict, asks: [ask], summary, parts: [{path, kind: changed \| read \| fetched}], proof: [evidence], drawn: [document rev], text: transcript ref}` | the return card and its turn view; the box's thread (R2) |
+
+A view is built as of an event (`source.as_of: ev:<ulid>`) and appends live, so scrubbing a view replays the record up to any event. It appends from the `log_pos` its read reflects, so no event appended between the read and the stream is missed. A return row's `drawn` comes from each `doc.patched` whose subject is that claim, ask or prompt; `deep_show` sets that subject, and only to a claim, an ask or a prompt of the calling session. A return row's `summary` also lists each plug-in action the session called before the stop, from `action.entered` and `action.reported`: a no-op reads "no change", and a false or unverified change, or a call with no `action.reported`, says so. A return's kind comes from the record, never from the agent's words: `answers` is a stop that ended normally after a `user.ask` from a person that opened no task, with no edit or write `tool.after` and no `ask.created` in its turn. A return row's `parts` are the paths of its turn's `tool.after` events: changed for an edit or a write, read for a read or a search, and fetched, by host only, for a fetch. Every return has a turn view, a `view` document the record writer builds with `source: {projections: [returns, checks, runs, verdicts, asks, tasks], subject: the return's prompt, as_of: its at, append: none}`, in the core view class and still. It shows the parts, changed ones first and read or fetched ones only while fewer than nine changed, at most nine by salience@1 with the rest folded into a count, laid out by layout@1 in boxes by the Map's top-level parts and ordered by path, each with status-bound chips for the checks whose paths cover it and a changed part no check covers marked as a gap; and under them a timeline from the record over the same span, fit to the card's width, which a folded return keeps at line height. It reads no transcript text, an agent's patch to it is refused with `not_your_layer`, and record replay holds it to the projections.
+
+### Closed enums
+
+| Enum | Values | Used by |
+|---|---|---|
+| Ask-task state | `queued \| defining \| working \| says_done \| checking \| sent_back(round) \| blocked \| needs_you \| proven \| part_of \| closed` | tasks; the line's stations |
+| Ask kind | `authority \| unblock \| taste \| exception \| choice \| definition` | asks |
+| Ask outcome | `answered \| decided_for_you \| escalated \| defaulted \| unanswerable \| cancelled \| superseded \| moot \| unanswered` | asks |
+| Verdict outcome | `PASS \| FAIL \| INVALID \| BLOCKED \| INCONCLUSIVE` | verdicts; status bindings |
+| Requirement outcome | the five verdict outcomes, plus `pending` | requirement outcomes; chips |
+| Run outcome | `passed \| failed \| ran_nothing \| missing \| overran \| stopped \| uncounted` | runs; `run.finished` |
+| Delivery outcome | `delivered \| stalled \| timed_out \| replaced` | deliveries |
+| Oracle | `code \| model \| person` | checks; requirement outcomes |
+| Redaction | `complete \| incomplete \| unknown` | evidence; assets; captures |
+| Lease mode | `exclusive \| shared` | leases |
+| Decision state | `active \| frozen \| revoked` | decisions |
+| Next-step owner | `you \| agent \| job \| check \| nobody` | tasks |
+| Attention state | `finished \| failed \| waiting_permission \| unknown` | sessions |
+| Return kind | says_done \| asks \| answers \| stopped \| interrupted | returns; the return card |
+| Writer kind | `you \| shell \| record \| agent \| plugin` | writer connections; bands |
+| Document profile | `figure \| film \| scene \| world \| view \| board \| sheet \| chart \| cells` | documents |
+| Input class | `document \| view \| viewer` | controls; inputs |
+| Budget class | `core_view \| data_view \| figure \| work_product \| showpiece \| export` | documents; the meter |
+| Status source | `verdict \| run \| ask` | status bindings |
+| Status state | `pass \| fail \| invalid \| blocked \| inconclusive \| running \| needs_you \| stale \| idle` | the look's status map |
+
+The tech design's kernel row lists five ask kinds and its asks table six; this keeps six, with `definition`.
+
+<a id="runtime"></a>
+
+## The trusted compositor
+
+The canvas core is a trusted-ring compositor nested in an OS window. Its model for trust: one owner of the screen and input, focus that only your input moves, and privileged surfaces. Its model for drawing: clients send descriptions, never pixels, and the core draws for everyone. All arrays are sized when a document session is checked, so frames don't allocate.
+
+#### Writer connection
+
+**Fields**
+
+- `conn: u64`
+- `writer: {kind: you | shell | record | agent | plugin, id, person}`
+- `role` (from the credential or the owning runtime)
+- `transport: hub socket | panel runtime | panel host process`
+- `grant_hash: sha256`
+- `quota: {docs: u16, items: u32, msg_bytes: u32, patches_per_s: u16, gpu_mb: u32}`
+- `serial_ring: 128 ranges`
+- `liveness: {ping_seq, last_pong}`
+
+**Semantics:** Identity comes from the connection, never the payload, and each writer has one quota. Your gestures in the app, and the CLI where the peer check shows it outside every agent's process tree, write as you; a `deep` command inside one writes as that agent, as an MCP session does, and an extension writes as a plugin, except that a panel's patch carrying the serial of your input in that panel writes as you (Patch). An agent writes as its session's thread, so an ID that `/clear` or `/compact` rotates keeps its layer, while a fork or a new attempt is a writer of its own, and a replaced attempt's layer is settled like its worktree: merged, kept or released. A protocol error closes only this connection; its sessions freeze at the last good revision with a badge, and their documents stay in the record.
+
+**Cost:** O(1) to stamp; about 2 KB per writer
+
+**It can never:** Claim a writer its connection doesn't prove; share or raise its quota; outlive its grant
+
+**Lands:** R1 stamping; R2 quotas
+
+#### Document session
+
+**Fields**
+
+- `session: u64`; `doc`; `profile`; `writer`
+- `mode: view_of_record | work_product` (a document with a `source` is a view of the record, whatever its profile; any other is a work product)
+- `target: {panel, band, window} | offscreen`
+- `current_rev, pending_rev, last_good_rev: u64`
+- `state: checking | live | refused | frozen | hidden | closed`
+- `valid_until: flick`
+- `readings: [handle]`
+- `budget_class`
+- `arrays` (structure of arrays, sized at check)
+
+**Semantics:** Binds one document to one place for one writer. A revision becomes current only after its check passes; a refusal keeps the last good one. A hidden session is neither evaluated nor called back.
+
+**Cost:** Memory Σ kind bytes × items; check off the UI thread, ≤ 50 ms per 10,000 items; nothing while idle
+
+**It can never:** Show an unchecked revision; draw outside its target; be evaluated while hidden
+
+**Lands:** R1 the line and `deep_show`; R2 every profile
+
+#### Admission and latch
+
+**Fields**
+
+- `msg_bytes_max: u32` (from the quota)
+- `patches_per_s: u16` (from the quota)
+- `in_flight: 0 | 1`
+- `pending: rev` (the newest wins)
+- `coalesce: {key → latest value}`
+- `latch_lead: ns`
+- Replies: `rev | superseded_by | conflict(ids) | refused(issues)`; `deep_show → presented | refused | not_presented(hidden | timeout)` within 2 s
+
+**Semantics:** Admits a message by size and rate, checks it off the UI thread with fairness between writers, and stages it as pending. At the latch, vsync minus the lead, each session takes its newest checked revision, and a coalesce key keeps only the latest value. A flood is rate-limited, coalesced, then frozen.
+
+**Cost:** Apply O(ops); re-check only dirty items and their dependents
+
+**It can never:** Apply in the middle of a frame; let one writer's flood delay another's; block `deep_show` on a hidden panel
+
+**Lands:** R1 whole revisions and the `deep_show` reply; R2 coalescing and quotas
+
+#### Frame clock and scheduler
+
+**Fields**
+
+- Per display: `{uuid, refresh_ns, next_vsync, latch_lead_ns}`
+- Per window: `{pacing_display, state: idle | armed | drawing, frame_seq, caps: {inactive: 30 Hz, thermal: 60 Hz, hidden: 0}}`
+- Per session: `{valid_until: flick, wants_frame: bool}`
+
+**Semantics:** Arms a frame only on a commit, a changed reading, input, a finished GPU frame or a `valid_until`, and stops the display link when idle. At the latch it evaluates every session at the predicted presentation time through the frame phases (Phase), composes once and presents. Each window is paced by its own display (the faster one if it spans two), and quantized motion sleeps on a timer.
+
+**Cost:** Idle: 0 frames and 0 wakeups as the target, with wakeups reported; canvas work on the UI thread ≤ 2 ms per 120 Hz frame
+
+**It can never:** Draw unasked; evaluate a hidden session; block the UI thread on the GPU; give a writer more callbacks than presented frames
+
+**Lands:** R1 frames on demand; R2 several displays and presentation time
+
+#### Invalidation and damage
+
+**Fields**
+
+- `changed_at: u32 epoch per item and dirty class; last_run: u32 epoch per consumer (nothing is cleared per frame)`
+- `content_key: [item]`
+- `layer: {output_key, cache, stable_frames}`
+- Limits: cache a layer after 3 stable frames; at most 3 new layer caches per frame
+
+**Semantics:** Damage is tracked by item, then by layer, never by pixel, because GPUI redraws the whole window on every present and a moving camera changes every pixel. A changed item rebuilds and re-uploads only itself, an unchanged layer re-composites from its cache, and a changed reading always invalidates.
+
+**Cost:** CPU O(dirty); upload 32 to 64 B per dirty item; new caches count in the budget
+
+**It can never:** Rebuild an unchanged item; re-render an unchanged layer; miss a reading change
+
+**Lands:** R1
+
+#### Frame callback and presentation feedback
+
+**Fields**
+
+- `{session, rev, frame_seq, presented_at_ns | discarded, refresh_ns, flags: zero_copy | copy | degraded(rung)}`
+- `credit: 0 | 1` per writer
+
+**Semantics:** One callback per presented frame, only while visible. A writer sends its next update after its callback. `deep_show` reports presented, or not presented (hidden, refused or timed out) within 2 s.
+
+**Cost:** About 40 B per callback; nothing while idle
+
+**It can never:** Report a frame that wasn't shown; reach a hidden session; queue more than one update
+
+**Lands:** R1 for `deep_show`; R2 plug-in credits
+
+#### Band
+
+**Fields**
+
+- `{layer, owner: writer, band: record | work | agent | plugin_overlay | shell | card, order: fractional key, mask: panel rect, hit: accepts | passes, badge}`
+
+**Semantics:** The core gives each writer layer a band from its writer's kind, and bands compose in that order with the card always last. Every layer is masked to its panel, and an agent's layer is outlined with its name. An agent's layer on a view of the record, such as the Map, is a document of its own drawn in the agent band over that view; its items anchor to the view's items through `doc:` handles, resolved again whenever the view rebuilds, and an anchor that no longer resolves hides only its item, with `ref_unresolved` sent to its writer. A layer catches input only where it visibly draws.
+
+**Cost:** One scissor and one composite per layer, about 0.02 ms per GPU quad
+
+**It can never:** Pick its own band; draw outside its panel; sit above the shell or the card; catch clicks through transparent pixels
+
+**Lands:** R1 agent layers; R2 plug-in overlays
+
+#### Question card
+
+**Fields**
+
+- `{card, ask, plan_hash, display: the one with your latest input, rect, state: hidden | presented(seq, t) | armed | answered | expired, arm_after: ms ≈ 500, rearm_on: content | move | resize | occluded | display | activation, answer: {option, decision: allow | deny | none, serial, plan_hash}}`
+
+**Semantics:** Drawn only by the shell, opaque and on top; it counts as shown only once presented, and its deadline starts then. It arms after the interval while still and unobscured, any change re-arms it, and only a serial delivered to the card answers it. Toasts hide while it shows, and if the shell dies, no default applies early. While present mode shows a piece on a display, the card, toasts and the line under the menu bar never draw there: the card opens on another display, and with one display an ask waits unpresented, its deadline not started, counted only in the menu bar's count, until present mode ends. The shell copies the chosen option's `decision` into the answer. A URL in the ask's text draws as plain text with its host, never as a link or a button; where a step needs a sign-in, the card offers only where the trusted path says to go.
+
+**Cost:** Under 0.1 ms; nothing while hidden
+
+**It can never:** Be drawn or moved by a client; be covered, even partly; be answered by an agent, a synthetic input or before it arms; be imitated inside a panel; draw on a display that present mode is showing a piece on; draw a URL from an ask's text as a link or a button
+
+**Lands:** R1
+
+#### Input router, focus and gesture serial
+
+**Fields**
+
+- `{seat, kb_focus, ptr_focus: (layer, id[#sub]), input: {serial, t, kind, source: hid | synthetic(pid) | accessibility, target}, serial_ring[writer], token: {serial, writer, kind, expires ≤ 30 s}, escape_chord, reserved_chords}`
+
+**Semantics:** The core hit-tests its own geometry, keys go only to the focused panel, and every delivered input gets a serial for that writer. Focus moves only by your input, or by a token from a recent serial. Focus, pop-outs, sound, clipboard writes, sheet preselects, raw input, toasts and, from R6, a panel's patches written as you all need a serial, and agents never hold one. A plug-in's words into an agent session (a steer, a follow-up or a new prompt) need one too, one send per serial; without one they wait as a draft in the session's box, marked with the plug-in's name and never over text you typed, and only your send sends them.
+
+**Cost:** Hit test O(log n), ≤ 0.1 ms per move at 10,000 items
+
+**It can never:** Feed an unfocused panel; accept another writer's serial; move focus on a timer; let an agent type; let a panel block the escape chord
+
+**Lands:** R1 focus and the card; R2 serials and raw input
+
+#### Spatial index
+
+**Fields**
+
+- `{view, rtree: [(id[#row], bounds)]}`
+- Serves: culling, hit tests, route obstacles, label occupancy
+- `tiles: 512 × 512 u`, with a cache per tile, for large static content
+
+**Semantics:** Every 2D view keeps an R-tree, updated in time proportional to what changed: the changed items plus their descendants, ancestors and attached partners. Visible tiles render first, nearest the centre first, under a per-frame time budget. 3D picking uses the object-ID target instead.
+
+**Cost:** Update O(k log n) for k changed items; query O(log n + hits)
+
+**It can never:** Rebuild the whole tree for one change; serve stale bounds after a patch
+
+**Lands:** R1
+
+#### GPU surface
+
+**Fields**
+
+- `{surface, device: one per app, size_px, scale, internal_scale: 0.5 to 1 = 1, format: BGRA8 premultiplied, color_space: sRGB (tagged), slots: 2 or 3 × {handle, state: free | rendering | ready | on_screen, gpu_done: fence, released: fence}, msaa: transient, path: zero_copy | copy}`
+- `upscale: edge_adaptive | bilinear | temporal = edge_adaptive` (temporal: frame history's upscale, R6); `sharpen: 0..1 = 0.2` (live views below `internal_scale` 1)
+
+**Semantics:** Renders into a free slot and signals completion with a fence, never a CPU wait; with no free slot, the frame is skipped. Shows the newest ready slot and holds it until GPUI's command buffer completes, then releases it. Resizes allocate lazily, device loss rebuilds every canvas module's declared GPU resources from documents and assets by hash, proved by a forced device-loss test, and the copy path is declared and capped at 30 fps at a render scale of 0.5. Below internal_scale 1, a live view returns to full size through an edge-adaptive spatial upscale and a contrast-adaptive sharpen, two passes that read only this frame, instead of a bilinear stretch; canonical renders run at scale 1 and never use it.
+
+**Cost:** Slots × w × h × 4 B plus targets (about 148 MB at 1936×1584 after the memory fix, estimated); 0.7 to 0.9 ms zero copy against 6.6 to 6.8 ms by copy, as measured in the spike; ≤ 0.1 ms on the UI thread; the upscale's two passes about 0.15 to 0.3 ms at 1080p (estimate), only while the scale is below 1
+
+**It can never:** Be reached by a client; block the UI thread; be written while it's read; show an unchecked frame; upscale a canonical render, or read a frame from outside the live view's window to upscale
+
+**Lands:** R1 on macOS (the spike); R2 fences, release and the upscale; R3 Linux and Windows
+
+#### GPU surface: HDR output
+
+For: lamps, fire, sun glints and night cities on an XDR display; product shots with bright highlights
+
+**Fields**
+
+- `hdr: auto | off = auto` (session state per view; auto: on for a live 3D view on a display whose headroom is above 1)
+- `headroom: f32` (read from the display: its EDR headroom, at start and whenever it changes)
+- `surface: {format: RGBA16Float, color_space: extended linear sRGB, edr: true}` (wgpu 30's surface color space on Metal)
+
+**Semantics:** On a display whose EDR headroom is above 1, a live view whose 3D writer layer draws first and opaque presents through a surface of its own in extended linear sRGB with EDR on, through wgpu 30's surface color space, and the look's tone map rolls off to the headroom instead of to 1: agx and neutral keep their curves below 0.18 and end their shoulders at the headroom, none clips at it, and filmic stays SDR. So a lamp or a glint shows brighter than paper white while mid-tones keep their SDR values. The headroom is read from the display when the view opens and whenever it changes (brightness, another display, battery), and the next frame follows it. On macOS GPUI owns the window's layer, so the HDR surface is a layer of its own beneath GPUI's, which the GPUI patch leaves clear over the view; the shell, the card, overlays, text and status colors still draw above it at their exact SDR colors. A view that draws 3D over 2D, such as a shadow catcher on paper, stays SDR. Checks, goldens, render-back and exports render SDR and never read the HDR surface, every comparison of a settled live frame with a snapshot runs with hdr off, and HDR video export comes later.
+
+**Cost:** 8 B per pixel in the HDR surface's slots instead of 4; the roll-off a few ALU per pixel in the existing tone-mapping pass; nothing on the CPU per frame (estimates)
+
+**It can never:** Reach a check, a golden, render-back or an export; draw a status color, text, an overlay or the card above paper white; cover the shell or the card; take its headroom from anywhere but the display
+
+**Lands:** R6
+
+#### Render worker
+
+**Fields**
+
+- `{thread, queue_depth: 2, in: latched revisions and frame time, out: per-layer recordings into a slot, timers: {eval_ns, encode_ns, gpu_ns}}`
+
+**Semantics:** GPU-layer evaluation and encoding run off the UI thread, which only latches and composes. Independent writer layers and passes encode on worker threads in the order prepare, specialize, queue, sort, write, encode, and command buffers are submitted in frame order by index, never by completion. Uploads past the class's upload_bytes_per_frame continue in later frames while the frame reports settling. A full queue means no new latch for that layer. Writer layers drawn as vectors still paint on the UI thread, under their own budget.
+
+**Cost:** UI thread ≤ 2 ms for vector canvases; worker ≤ 4 ms CPU and ≤ 2 ms GPU per frame
+
+**It can never:** Run client code; share mutable state with clients
+
+**Lands:** R2
+
+#### Panel runtime and panel host
+
+**Fields**
+
+- `{panel, origin: shipped | agent_built | plugin, runtime: in_process (shipped only) | panel_host (a process), thread: the UI thread in process (a gpui-shell VM is main-thread only) | the host's main thread, policy: empty plus DeepBuild's modules, update_budget: ms ≤ 4*, limits: {interrupt, heap: 256 MiB, stack: 1 MiB, microtasks: 100,000, pending: 1,024}, output: element tree per invalidation, jit: off for agent-built panels}`
+
+**Semantics:** Agent-built and plug-in panels run in an out-of-process panel host that sends element trees; shipped panels may run in process, on the UI thread, since gpui-shell runs script only there, under the per-update budget. No other panel code runs in the app's process. Trees are checked against the component registry's schemas and materialized natively each frame, and list rows come from data, never from script run per frame.
+
+**Cost:** About 1.4 ms to build a 443-node tree per invalidation, 0.7 ms to materialize per frame, and no script entry on a cached repaint (estimates); the host's IPC cost isn't measured yet
+
+**It can never:** Reach a GPU API, the network or a program; move focus without a fresh serial; draw outside its panel or over the card; run in the app's process unless it shipped with the app
+
+**Lands:** R1 shipped panels; the panel host before the first agent-built panel (R2)
+
+#### Window and display placement
+
+**Fields**
+
+- `{window, kind: main | popped(view) | full_screen, display: {uuid, scale, refresh, color_space}, saved_positions, opened_by: serial | restore, surfaces}`
+
+**Semantics:** Only the shell places windows, and a pop-out needs a serial. Displays are remembered by UUID, each window is paced by its own display, and the card goes to the display with your latest input, unless present mode is showing a piece there (Question card). Scale changes reallocate lazily, and one device and one cache serve every window under one app-wide GPU budget.
+
+**Cost:** A pop-out in under 300 ms
+
+**It can never:** Open, move or resize itself; take the card off your screen
+
+**Lands:** R2
+
+#### Meter and degrade ladder
+
+**Fields**
+
+- `{scope: writer | session | layer | window | app, limits (from the class), estimate, measured: 120-frame ring, ladder: refuse → effects off → LOD down → internal_scale down → 30 Hz → freeze → placeholder, hysteresis: down after 30 frames, up after 120}`
+- `climb: render scale while moving → 1, then 4 samples while moving, then full-resolution effects, then shadow maps at twice their size` (rungs above the class's base)
+
+**Semantics:** Refuses at check time; at run time it steps down only the costly writer's layer and tells that writer why at every rung. On a machine with headroom it also climbs above the class's base, rung by rung with the same hysteresis, from coefficients measured on this machine at setup and again after a GPU or driver change, so a stronger GPU shows a sharper live view; the check still estimates on the reference Mac. Each rung records why it holds (initial, headroom, frame health, battery or you), and the meter shows it. A rung's pipelines compile off-screen before the swap, so a change never stalls a frame, and the old rung's are released after it. On battery below 30% the ladder stops climbing and steps down one rung, and a rung dropped for frame health isn't climbed again until the view changes or you raise it. Canonical renders (exports, render-back snapshots, checks and goldens) never step down or climb: they run at their class's fixed quality. It never touches numbers, bound values, status colors, the shell or the card. Per-writer memory caps are hard, and the app cap evicts the least recently visible sessions.
+
+**Cost:** Pass timestamp writes per pass per frame (under 1%); where the adapter has none, CPU encode time, reported as a fallback
+
+**It can never:** Let one writer degrade another; approximate a number or a status color; drop a document silently
+
+**Lands:** R1 refusal and the line's budget; R2 the ladder; R6 the climb
+
+#### Liveness and recovery
+
+**Fields**
+
+- `{ping_seq, last_pong, timeout: s = 5, interrupts, heap, device_epoch, crash_count}`
+
+**Semantics:** An unresponsive out-of-process writer freezes with a badge, and a runaway in-process call is interrupted. On GPU device loss, every canvas module's declared resources rebuild from documents. An operator's error becomes an issue naming its canvas module, operator and item; a panic is caught at the phase boundary and freezes only that session at its last good revision. After a crash, documents and asks survive and the card returns.
+
+**Cost:** A ping every 2 s; recovery O(visible documents)
+
+**It can never:** Lose a document in a crash; apply an ask's default because the UI died; show a frozen layer as live
+
+**Lands:** R1 the card; R2 the rest
+
+#### Render-back
+
+**Fields**
+
+- Request: `{doc, rev, t: time | sheet, size, camera, include: issues | audit | timing | pixels, actions}`
+- Reply: `{issues, audit, timing, presented | not_presented(reason), degraded, snapshots: [{sha256, w, h}]}`
+
+**Semantics:** Tells a writer what happened to its document, with results kept as evidence by hash. Snapshots render in a headless canvas worker on the same core, so they work with the app closed, and 2D snapshots render with Vello CPU; a 2D document whose writer layer uses an operator also returns a GPU snapshot from this machine, labelled `display_only`, so an agent sees a print look's grain and halftone (R6). Actions such as click, hover and type run on an offscreen copy and mint no serials. A snapshot at a declared flick is taken only once the frame is settled (no fallback pipelines, an empty rebuild queue, decoded assets); past its timeout the reply is not presented with the reason, and a check that needed it is BLOCKED. Each reply carries a table of visible item IDs with screen boxes, at most 200 rows sorted by ID.
+
+**Cost:** One offscreen frame plus readback, about 4 ms at 1936×1584; issues O(items)
+
+**It can never:** Read other writers' layers, the card, other apps or your screen; count as proof; touch the live session
+
+**Lands:** R1 issues and snapshots; R2 timing
+
+#### Replica `deep_drive`
+
+An agent drives a headless copy of the app, sees it and records it
+
+**Fields**
+
+- `launch: {from: fixture handle | record_copy | empty = fixture, size: [px, px] = [1440, 900], scale: 1 | 2 = 2, theme: light | dark, reduced_motion: bool = false, locale, clock: virtual | real = virtual, packs: [name@version]}` (a record copy is read-only and redacted)
+- `locate: {role, name} | {item: ID[#sub]} | {handle} | {text} | {label}` (strict: exactly one match, or an issue naming the matches)
+- `act: click | double_click | type {text} | press {keys} | drag {to: locator | [px, px]} | scroll {dx, dy} | hover | set {control, value}`, each waiting until its target is visible, enabled and stable for two frames
+- `wait_for: {locator, state: visible | hidden | enabled | text | value | settled} | {event: kind} | {t: flick}`; `timeout: ms = 5,000`
+- `see: {scope: window | panel | locator, include: roles | names | values | bounds | items}` → a text tree of roles, names, values and bounds, with canvas items by ID and their evaluated values
+- `screenshot: {target: window | panel | locator, highlight: [locator], mask: [locator]}` → sha256 (highlights drawn in a strip outside the frame)
+- `record: {fps: 30, marks: per_action}` → video by hash with each action's time; `trace`: every action with its snapshot before and after, the app's log and timings
+- `record` also takes `mask: [locator] = []` and `mask_kind: fill | blur = fill`, and returns the occurrence list `<asset>.actions: [{t, kind, point: [px, px], box: [x, y, w, h], locator}]`
+- `expect: {locator, assert: visible | text | value | count | state}` (assertions make it a journey check)
+
+**Semantics:** A separate app process with its own copy of the hub, rendering headless with the same core and on a virtual clock, so a run is repeatable. The agent locates by role and name or by canvas item, acts, waits for the app to settle, and sees through text snapshots and screenshots by handle; every action, snapshot and frame is evidence by hash. Actions are synthetic and mint no gesture serials, so they can't answer asks in your record, start sound or write the clipboard, and a screenshot alone never proves anything: only a run with assertions is a check. A recording draws each masked locator filled with the look's ink role, or blurred, in every frame at its bounds in that frame, so a private field never reaches the recording, and the trace lists the masked boxes. Its actions list gives each action's time, point and target box, which a film reads with `last(list).field` and `next(list).field`, so a cursor eases between the points where actions happened and a ring pulses at each click. A journey's recording can be a film's source too, with its steps as the actions list, but nothing masks it at capture, so it stays marked as needing your approval before it leaves the machine.
+
+**Cost:** Launch ≤ 2 s; an action's round trip ≤ 50 ms plus its wait; a snapshot of 2,000 nodes ≤ 20 ms; recording at 30 fps on the hardware encoder ≤ 1 ms per frame; ≤ 500 MB per replica, at most 2 per machine under a lease
+
+**It can never:** Drive your live app or another app; answer an ask in your record; mint a serial; type into a session's terminal; send, post or reach the network beyond its grant; leave the machine with incomplete redaction; count a screenshot as proof
+
+**Lands:** R1 headless screenshots and text snapshots of a replica, for DeepBuild's own app checks; R2 the full driver for agents building panels and figures, with recording and traces, masks and the actions list
+
+#### Canvas module
+
+For: every case; a build with 2D only; a canvas without physics or 3D
+
+**Fields**
+
+- `name: string ([a-z0-9.]+, unique)`
+- `version: semver`
+- `core: semver range`
+- `depends_on: {canvas module → semver range}`
+- `feature: Cargo feature`
+- `license: SPDX`
+- `registers: {kinds, arrays, tables, operators, carried, passes, steps, checks, tool_entries, cost_terms, fixtures}`
+- `declares: {registries}` (Registry and seal: registries)
+- `digest: d1 digest` (of its registered shapes: its interface's digest)
+- `implements: interface@major`; `implementation: {name, version, pins, equivalence, state}` (Canvas module: interface and implementation)
+
+**Semantics:** A first-party Rust crate, compiled into the app, that registers its parts through one call before the registry seals. It writes only the arrays it owns and reads only what it declares. A build without it refuses documents that need it with `module_missing`, and a check that needs it is BLOCKED. It implements one canvas interface, and a build seals one implementation of each (Canvas module: interface and implementation). It may also declare registries, lists that canvas modules, packs or plug-ins fill, each with its kit (Registry and seal: registries).
+
+**Cost:** Registration once at startup, O(parts); nothing per frame by itself.
+
+**It can never:** Be installed at run time or by a third party; write another canvas module's array; add a phase, a place or a tool; touch the question card, bands, input routing, status colors or the meter.
+
+**Lands:** R2 the registry and seal; R6 the 3D, physics, logic, net and media canvas modules
+
+#### Canvas module: interface and implementation
+
+For: replacing a physics backend, a shaper or a seam's backend with another first-party one, with proof, and never running two at once
+
+**Fields**
+
+- `implements: interface@major` (such as `physics@1`, `text@1` or `seam.network@1`)
+- `interface: {name@major, digest: d1 digest, reference: implementation name, kit: [part], behavior: kit part | none}` (the digest covers the kinds, arrays, tables, carried state, check kinds and tool entries it registers)
+- `implementation: {name, version: semver, pins: {crate → {version, features}}, equivalence: bit | measured, state: canonical | backend_bytes}`
+- Trial: `{candidate: implementation, corpus: bool = true, fixtures: the interface's parity fixtures, tracks: [track hash]}` → `[{input, result: equal | within {fixture, tolerance} | differs {item, step, field}}]`
+
+**Semantics:** A canvas module is one implementation of one canvas interface. The interface is what documents, checks and other canvas modules see: the kinds, arrays, tables, carried state, check kinds and tool entries, hashed into its digest; the implementation is the crate behind it, with the crates it pins. Every shipped canvas module is its interface's reference implementation, and each seam is an interface whose backends implement it (Seam and backend). An implementation whose registered shapes hash to anything but its interface's digest is refused at the seal, naming the interface and the first shape that differs. The seal accepts one implementation of each interface, chosen at build time by its Cargo feature, as a seam's backend is; two of one interface in a build are refused, naming the interface and both, and a document never names an implementation, only kinds. Each interface owns its conformance kit: every part of the conformance kit every canvas module passes, and, for an interface whose implementations may differ in results, a behavior part of fixtures with analytic answers and tolerances that the interface holds, never the implementation (Physics: behavior kit). An implementation declared `bit` must give the reference implementation's hashes on every fixture of that conformance kit; one declared `measured` must land within the behavior part's tolerances; and an interface with no behavior part accepts only its reference and `bit` implementations. Its state is `canonical` when its carried state is a documented layout any implementation of the interface reads, as logic's memory and globals are, and `backend_bytes` when its checkpoints are its crate's own bytes, as the physics backend's are, which no other implementation or version loads. A release build refuses an implementation that hasn't passed its interface's conformance kit. Before a build switches, a trial runs a replica of a build that chose the candidate (Replica `deep_drive`) beside one with the implementation in use: both replay the migration corpus, the interface's parity fixtures and the recorded input tracks you choose, and the trial reports each as equal, within a fixture's tolerance, or the first item, step and field that differ. Only your decision switches, keeps the one in use, or drops the candidate, and the goldens and corpus snapshots a switch changes move with that decision, once per cause (Migration). Implementations are first-party ring code compiled into the app, so nothing here lets a third party add one. An interface's digest also covers each registry its module declares, with the entry schema and the entries filled at the seal, so a second implementation declares the same registries (Registry and seal: registries).
+
+**Cost:** The seal's interface checks are O(interfaces) once at startup; a trial is two replica runs of the corpus, the fixtures and the tracks, minutes for one module's fixtures (estimate); nothing per frame.
+
+**It can never:** Seal beside another implementation of its interface; register a shape its interface's digest doesn't hold; carry its own tolerances or conformance kit; be chosen by a document, at run time or by a third party; load another implementation's backend bytes; switch without your decision
+
+**Lands:** R6, before any interface has a second implementation
+
+#### Registry and seal
+
+For: refusing an ambiguous or incomplete canvas-module set before the first document opens
+
+**Fields**
+
+- `modules: [canvas module]` (sorted by name)
+- `arrays: {name → {owner, type, domain, class, phase}}`
+- `plan: {phase → [operator]}`
+- `profile: core | r1 | r2 | full`
+- `set_digest: d1 digest`
+- `runtime_digest: d1 digest` (Registry and seal: runtime digest)
+- `registries: {name@major → registry}` (Registry and seal: registries)
+- `state: registering | sealed | ready`
+
+**Semantics:** Registers every canvas module in name order, then checks the whole set: dependency ranges, one owner per array, every read resolved, no read of a later phase, no cycle, legal places and check machine classes, and digests. Any failure refuses startup and fails the build's tests; there's no warning level and no accept list. It takes one implementation of each canvas interface, whose shapes must hash to its interface's digest (Canvas module: interface and implementation), and computes the runtime digest beside the module-set digest (Registry and seal: runtime digest). The sealed plan is published as `deep://schedule/<core version>` and compared with a committed snapshot. The seal also checks every registry the canvas modules declare and every entry a canvas module fills, runs each registry's kit, and publishes them at `deep://registries/<core version>` (Registry and seal: registries).
+
+**Cost:** O(canvas modules + arrays + operators) once at startup, under 50 ms (estimate); nothing per frame.
+
+**It can never:** Change after sealing; accept an ambiguity by listing it; order anything by registration order; load a canvas module whose dependency is missing; seal a registry whose kit admits one of its planted wrong entries.
+
+**Lands:** R2
+
+#### Registry and seal: runtime digest
+
+For: keeping saves, matches, goldens and receipts from two physics backends apart, while a change that alters no result moves nothing
+
+**Fields**
+
+- `runtime_digest: d1 digest` over `[{interface@major, implementation, version, pins}]`, sorted by interface, for every implementation in the sealed set whose `state` is `backend_bytes` or whose `equivalence` is `measured`, except a seam's backends, whose results reach no step or carried state and whose names already enter every content key and result they feed (Seam and backend)
+- Carried by: saves (Logic: saves), the start of a match and its record (Net `net@1`), goldens (Golden), export receipts, and the plan published at `deep://schedule/<core version>`
+
+**Semantics:** The module-set digest names the shapes a build registers; the runtime digest names the implementations whose state or results differ from one to another, so it says which backends made a result. The seal computes it once. A change to an implementation that is `bit` and `canonical`, such as a new patch version of the logic module's engine whose conformance kit gives the same hashes, leaves it as it was, while a new physics backend, a new version of one or a changed pin moves it. A save carries it, and Logic: saves says what happens when it differs. Two copies whose runtime digests differ can't start a match together, naming the implementation that differs. A golden records it and is never compared under another, its report naming both digests, so a golden never passes or fails across backends. An export's receipt names it, so evidence from two backends never mixes. Today's shipped set names the physics implementation and its pins in it, since the physics backend is measured and keeps backend bytes, and every other shipped canvas module is the bit, canonical reference of its interface.
+
+**Cost:** One hash at the seal; 32 B in each save, match record, golden and receipt
+
+**It can never:** Leave out an implementation that is measured or keeps backend bytes; change after the seal; let a save, a match or a golden cross two values unnoticed; move when only a bit-equal, canonical implementation changes
+
+**Lands:** R6, with the physics module
+
+#### Registry and seal: registries
+
+For: adding an extension point later without a redesign: a canvas module declares a list others fill, and says who may fill it and what every entry must pass
+
+**Fields**
+
+- `registry: {name@major, owner: canvas module, entry: schema, fill: [module | first_party_pack | pack | plugin], resolve: seal | check, binds: all | author = all, kit: [fixture], planted: [entry], since: release, digest: d1 digest}`
+- Entry: `{name@version, registry, origin: first_party | pack | plugin | agent, value: data | program (an asset ID under the logic subset), since, digest}`
+- Closure, on every list the canvas documents: `registry name@major` | `closed {reason: ring | record | determinism | card | budget | interval_forms | draw_path, reopens_if: string}` (record: the record and the kernel's document contract; draw_path: a shape the core draws as a path) | `open {declared_by: item | pack}` (a list each item or pack declares for itself, such as a logic item's occurrence kinds)
+- Published: `deep://registries/<core version>`, every registry with its entries, their origins and their kit results
+
+**Semantics:** A canvas module declares a registry in its register call, as it registers kinds. An entry is data or a program under the logic subset, never Rust from outside the module set, so a registry opens a list without opening the ring. `fill` says who may add entries: canvas modules, first-party packs, any pack, or a hub plug-in through its manifest. Entries a canvas module fills are checked at the seal and join the declaring module's interface digest (Canvas module: interface and implementation). Entries a pack or a plug-in fills resolve per document through the pinned pack or the installed plug-in, as a pack's kinds do, and the document's `requires` names where each came from. Every entry passes the registry's kit before it's admitted: at the seal, at pack check or at install. The seal also runs the kit on each planted wrong entry and refuses a registry whose kit admits one, naming the registry and the entry, so a kit that can't fail never ships. An entry from a pack or a plug-in carries its name, as `<pack>.<name>`, so it never takes a first-party name, and two entries of one name are refused. With `binds: author`, an entry the working agent wrote binds only its own claims, as its own checks do. A registry is a contract entry, with `since`, a frozen digest of its entry schema and, once replaced, `replaced_by`; a changed entry schema takes a new major. To open a closed list, its owning module declares a registry whose first entries are the list's values, each keeping its `since` and digest, so no document, content key or golden changes. The closure rule: every list the canvas documents, and every enum in its schemas, is a registry or closed with its reason and what would reopen it, or open, declared by each item or pack that uses it (Registries and closed lists). The local preflight fails an enum with no closure, and a registry declared without a kit, a planted wrong entry or `since`, naming it. `deep_kinds` lists every registry and its entries in one shape.
+
+**Cost:** Entries a canvas module fills: O(entries) at the seal, inside its 50 ms (estimate); a pack's entries O(entries) once per pack version at pack check, plus their kits; a lookup O(1) by interned name; nothing per frame
+
+**It can never:** Hold Rust from outside the module set; admit an entry that fails its kit; ship a kit that admits its own planted wrong entry; let a pack or a plug-in take a first-party name; change an entry's digest without a new version; open a ring list (bands, the question card, status colors, phases); change after the seal
+
+**Lands:** R2, with the registry and seal; pack entries with outside packs, and plug-in entries with the plug-in blocks
+
+#### Phase
+
+For: one order for every canvas module's work, in a check and in a frame
+
+**Fields**
+
+- Check: `load | expand | resolve | validate | plan | build | estimate | check`
+- Frame: `latch | time | inputs | simulate | items | views | sources | extract | render | compose | feedback`
+- Audio: `block` (media processors only)
+
+**Semantics:** Closed lists owned by the core: canvas modules register operators and passes into phases and can't add, remove or reorder one. In simulate, logic and physics steps run in time order, and steps at one time in canvas-module name order, so a logic step comes first; it reads the arrays it declares as earlier steps left them, so logic reads physics only from earlier steps. Each physics step first evaluates, at that step's time, the channels, drivers and logic arrays physics reads (a kinematic body's follow target, a motor's target, a kinematic solve's drivers, the inputs a logic item fires), then steps the world; transforms that read physics poses or logic arrays evaluate after it, in items. A channel physics reads that depends on a physics pose is a cycle, refused at check. In a match, the inputs phase also takes peers' entries, and when one is stamped at a step already run, simulate first restores every checkpoint at that step and runs its steps again up to the frame's time, as a seek does (Net: rollback). Inside a phase an edge exists exactly when one operator writes an array another reads; inside items the plan is a graph of (item, operator) nodes. Ties break by canvas module name then operator name, and items by dependency depth, order key, then ID, through Kahn's algorithm.
+
+**Cost:** The plan compiles in O(items × operators) at check; per frame only nodes whose read set changed run.
+
+**It can never:** Depend on registration order or thread timing; hold a mutable singleton; run a hook, an observer or a message handler.
+
+**Lands:** R2 (the order of one evaluation exists from R1)
+
+#### Operator and read set
+
+For: caches keyed by everything they read: cascades, probe captures, writer-layer caches, shaped text
+
+**Fields**
+
+- `{phase, name, canvas module, reads: [array | table | self | parent | children | siblings | refs | set(collection | lights | sky | bounds) | view(camera | viewport | pixel_scale | match.me) | t | input | reading | asset], writes: [own array], per: item | element | document, cost: {ns_per: term, bench}, machines: any | same = any, parallel: none | fixed_blocks = none}`
+
+**Semantics:** The core builds an operator's inputs from its reads, so nothing undeclared is reachable, and computes its content key and change test from the same list. Set reads resolve at compile, so a probe capture's key holds every item it sees plus the lights and the sky, and a cascade's key holds its snapped projection. Each canvas module's fixtures prove clean-rebuild equality, read-set perturbation and legal-order shuffles. With `parallel: fixed_blocks` the core splits an operator's elements into a block count its canvas module registers, never one taken from the machine; each block writes only its own range, and a reduction runs in block order, so a frame gives the same bits on one thread or several, as the logic module's step blocks do (Logic: step blocks).
+
+**Cost:** Key O(reads) per change; nothing per frame for an unchanged read set.
+
+**It can never:** Read what it didn't declare; write an array it doesn't own; read a later phase's array; keep a previous value; read a clock or a thread RNG.
+
+**Lands:** R2 (R1's 2D caches prove clean-rebuild equality from R1)
+
+#### Array and table
+
+For: one owner for every evaluated value; immutable lookup data such as font, arc-length and atmosphere tables
+
+**Fields**
+
+- Array: `{name: module.x, type, domain: item | row | element | document, class: dirty class, phase, owner, contributes_to: array}` (contributes_to on a contribution only)
+- Per item: `changed_at: u32` epoch per dirty class
+- Per consumer: `last_run: u32` epoch
+- Table: `{name, build: seal | check, reads, key: 128 bits}`
+
+**Semantics:** An array has one writer, its owner; a canvas module that must change another's result writes its own array and names the owner's array in `contributes_to`, and the owner's next operator reads every array registered for it, in phase then canvas-module-name order, each applied as its own row says (transform composes `at` with motion channels and physics poses; constraints write `motion.constrained`). So the owner never names a contributor, a canvas module that works in 2D and 3D contributes to whichever of marks2d and scene3d the build has and depends on neither, and a build that leaves a canvas module out has no contribution from it. Epochs record when each class last changed and each consumer keeps the epoch it last ran at, so a hidden session or a render-back of a past revision misses nothing. A table is immutable once built and keyed like any cache.
+
+**Cost:** 4 B per item per class for epochs; tables shared by key.
+
+**It can never:** Have two writers; be read in a hash map's iteration order; carry a value between frames.
+
+**Lands:** R2
+
+#### Carried state
+
+For: physics labs and films with sound: checkpoints, processor tails and bakes
+
+**Fields**
+
+- `{kind: bake | tail | checkpoint, owner: canvas module, key: 128 bits, byte_budget: u32, restore: nearest_checkpoint | preroll_tail}`
+- `kind: pages` (content-addressed world pages with a page map and a move queue in each checkpoint; only the logic module declares one: Logic: world pages)
+
+**Semantics:** A canvas module declares any state that outlives a frame, with a key and a byte budget. Seeking restores the nearest checkpoint or pre-rolls the tail and steps forward, so seeking equals playing. Nothing else survives a frame, except the live view's frame history, which is display only and rebuilt on a jump, and a view's chunk residency, which changes only how long a live view settles (Level of detail: chunks streamed by view).
+
+**Cost:** Within its byte budget; a restore is O(steps since the checkpoint).
+
+**It can never:** Exceed its budget; be read by another canvas module except through a declared array; hold session history.
+
+**Lands:** R6
+
+#### Seam and backend
+
+For: every case on every platform: macOS first, then Linux and Windows without a redesign
+
+**Fields**
+
+- `seams: {gpu, surface, display, fonts, accessibility, input, color, codecs, audio, capture, cpu, headless, network}`
+- Per platform: `{seam → backend: {name, version}}`
+- `conformance: {seam → suite}`
+
+**Semantics:** Each platform-dependent part of the canvas sits behind one seam, and a backend is a canvas module that implements it for one platform, chosen at build time. The backend's name and version enter every content key and result it feeds, so results from two backends never mix. A platform ships a seam only when its backend passes the seam's conformance suite; until then documents that need it are refused with `module_missing`. The web is a platform too: its backends are wgpu on WebGPU, the page's canvas and frame callback, bundled fonts, the page's pointer and keys, an sRGB canvas and the browser's audio output, on wasm32 with one thread and no codecs or capture, and its own suite needs the app's evaluated data and step hashes. The network seam, which only the net module uses, carries a match's messages over https to the relay a piece declares, or directly between copies where both platforms allow, and its suite needs every message delivered once and in order through a test relay that delays, drops, duplicates and reorders, with nothing sent before Join or to another host. Each seam is a canvas interface and each backend one implementation of it, so the seal's one-implementation rule and the replica trial cover backends as they cover every canvas module, while the runtime digest leaves them out, since their names already enter every content key and result they feed (Canvas module: interface and implementation). The network seam's backends and relays speak `relay@1` (Net: relay protocol `relay@1`), and its suite has an interop part: the app's backend and the web player's play one match through the relay DeepBuild ships, behind the test relay's delays, drops, duplicates and reorders, and must pass `net.rollback` together. The input seam also declares the device classes its backends read beside keys, the pointer and pads (Seam and backend: device classes).
+
+**Cost:** Nothing per frame beyond the backend's own work; one conformance suite per seam in the local preflight.
+
+**It can never:** Fall back silently to a backend that changes results; let a document name a platform; reach a system font.
+
+**Lands:** R2 the seams and macOS backends as their features land; Linux R3; Windows after version 0; the web R6, with the web player; the network R6, with the net module
+
+#### Seam and backend: device classes
+
+For: a drawing toy that feels a pen's pressure, a tablet piece played with two fingers, a pad aimed by tilting it, a music toy played from a MIDI keyboard
+
+**Fields**
+
+- `device.class@1`, a registry the input seam declares (Registry and seal: registries), filled by canvas modules, with backends, and by a plug-in only with its own classes, `ext.<plug-in>.<name>@major` of at most 256 B, which have no backend, pass the class kit at install and arrive only through its bridge (Control: device bridges); an entry: `{name@major, fields: {name → u8 | i8 | u16 | i16 | u32 | i32}, bytes: ≤ 128 (≤ 256 for a plug-in's class), quantize: {field → rule}, max_per_step: u8 ≤ 16, class: document | viewer, backends: {platform → backend} (none for a plug-in's class), fixture: recorded input}`, its digest over the fields, bytes and rules
+- `pen@1 {pressure: u16 (0 to 65,535), tilt_x, tilt_y: i8 (degrees, −90 to 90), twist: u16 (hundredths of a degree), tool: u8 (0 pen, 1 eraser)}`, carried on the pointer's samples
+- `touches@1 {count: u8, contacts: [{id: u8, phase: u8 (down, move, up, cancel), x, y: i32 (1/64 px in the control's view), pressure: u16}] ≤ 10}`
+- `motion@1 {gyro: [i16 × 3] (tenths of a degree a second), accel: [i16 × 3] (1/4,096 g)}`
+- `midi@1 {port: u8, status: u8, data1: u8, data2: u8}` (channel voice messages only)
+- Backends: on macOS, pen and touches from tablet and trackpad input through GPUI, motion from the platform's game controller framework, MIDI from CoreMIDI; on the web, the page's pointer with pressure and tilt, touch input, gamepads and device motion where the browser offers them, and the browser's MIDI access after its own prompt; on Linux and Windows, candidates: libinput's tablet and touch input and the sound system's MIDI, the platform's pointer messages for pen and touch and its MIDI service
+
+**Semantics:** The input seam declares the device classes its backends read beside keys, the pointer and pads, as a registry canvas modules fill, and a plug-in only with its own `ext.` classes. Each class is a frozen layout, at most 128 B for a canvas module's, which touches@1's ten contacts need (1 + 10 × 12 = 121 B), and 256 B for a plug-in's, a rule that quantizes each field once, at the gesture, and a cap on entries a step. A backend that reads a class on a platform passes the class's part of the input suite before a build can choose it: its recorded fixture, played into a replica at 30, 60 and 120 fps, must give one input track by hash, and a value outside a field's range fails, naming the field. That is the class kit: a plug-in's class, which has no backend, passes it at install, with a fixture recorded from its bridge, before any bridge may send it. A class's entries come only from hardware, with gesture serials, as keys do, so an agent or a synthetic input can't make one as you, and an agent writes a device control's entries only through the parameter tool, stamped as itself (Control: device); a plug-in reaches the same controls only through a bridge, stamped as itself (Control: device bridges). `pen@1` rides on the pointer's samples, so a point control's drag and a gesture's polyline carry pressure, tilt and twist when a pen makes them. A value a class marks viewer, such as a pen's hover or a pad's tilt that no control of class document reads, stays session state and never reaches the input track. A document whose control reads a first-party class this build has no backend for is refused with `module_missing`, naming the class, as a missing seam is; a control that reads a plug-in's class names that plug-in in `from` and takes nothing until its bridge sends, so a document never fails for a plug-in that isn't installed. A new class is a new entry with its fixture, and a changed layout is a new major, so no document's entries change meaning.
+
+**Cost:** Nothing until a control reads a class; an entry is at most 128 B, or 256 B for a plug-in's class, plus about 16 B on the track; a MIDI keyboard played fast writes about 40 entries a second, under 4 KB a second (estimate). Budget class: as the control.
+
+**It can never:** Take an entry from an agent, a synthetic input or a plug-in with a serial; quantize a value again on replay; change a layout under its major; be filled by a pack, or by a plug-in outside its own `ext.` classes; carry more than 128 B in a canvas module's entry or 256 B in a plug-in's; give a plug-in's class a backend
+
+**Lands:** R6, with the input seam's backends; pen and touches first
+
+Also decided: the base, content, annotation and agent bands become a layer's role inside its band. The panel host's output is called an element tree, since a snapshot is a rendered image. The 4 ms per-update budget for in-process panels is a proposal.
+
+### Registries and closed lists
+
+Every list the canvas documents is a registry, which names who may fill it, its conformance kit and a planted wrong entry; closed, with its reason and what would reopen it; or open, declared by each item or pack that uses it (Registry and seal: registries). The local preflight holds the schemas to it. The main lists:
+
+| List | Where | Closure | Why, or its kit |
+|---|---|---|---|
+| Ask, verdict, run, delivery and return enums; oracle; redaction; status source and state | Closed enums | closed: record | What a verdict and the record mean. Reopens: never |
+| Writer kind, bands | Closed enums; Band | closed: ring | Who draws where, with the question card last. Reopens: never |
+| Document profile | Closed enums | closed: record | A profile decides which checks must run. Reopens if a profile needs checks no existing one runs |
+| Input class, input-track writers | Closed enums; Input track | closed: determinism | Replay and goldens rest on them. Reopens: never |
+| Budget class | Closed enums | closed: budget | Only you raise a class's caps, and the meter is ring. Reopens if a case fits no class |
+| Handle schemes, the event catalogue, projections | Handles; The event catalogue | closed: record | Plug-ins keep their own data in their store. Reopens: a release of the record's schema |
+| Patch ops and refusal codes | Patch | closed: record | One patch path, and agents branch on its codes. Reopens: a core release |
+| Phases, places in the frame, chains | Phase; Place in the frame | closed: determinism | One order, and the status guard after every operator. Reopens if a case needs composition they can't express |
+| Read-set terms, carried-state kinds | Operator and read set; Carried state | closed: determinism | Content keys, and seeking equal to playing. Reopens: never |
+| Canvas modules and their implementations | Canvas module | closed: ring | First-party code, each proved by its interface's kit. Reopens: never |
+| Seams and device classes | Seam and backend | registry, filled by canvas modules; device classes, `device.class@1`, also by a plug-in under its own `ext.` names | Each seam's suite, with recorded fixtures for each device class: the class kit, which a plug-in's class passes at install |
+| Kinds | Item and kind; Pack: kinds in any pack | registry `kind@1`, filled by canvas modules (code) and packs (recipes) | Module fixtures; for a pack kind, the kind kit with a planted twin per rule |
+| Item roles, kind capabilities, dirty classes | Item and kind; Dirty classes | closed: determinism | Core features and cache invalidation. Reopens if a kind needs a capability the core lacks |
+| Relation kinds (`at.place`: beside, edge, onto) and box points | Item and kind: relations | closed: determinism | Solved every frame in one dependency order, with `relation_cycle`. Reopens if a placement needs a relation the three can't express |
+| Mark primitives, a mark set's marks, grid shapes, builders, modifiers | Marks; Mark set; Builder; Modifier | registry, filled by canvas modules | Draw-path parity and code-backed geometry; composites come as pack kinds, static meshes and odd tilings as providers |
+| Path end shapes | Path `path@1` | closed: draw path | Each head is a path the core draws. Reopens when a case needs a head the list lacks |
+| Annotation shapes for `around` | Path `path@1`: around and angle | closed: draw path | Each is a path rebuilt from its targets' bounds. Reopens when a case needs a shape the list lacks |
+| Warp maps (`map`, `linear`, `complex`) | Frame and group: warp | closed: interval forms | Each splits its curves by a certain bound. Reopens with a map whose image an interval form bounds |
+| Graph layout algorithms | Graph and layout memory | closed: determinism | Each computed at check from the seed with a fixed iteration count. Reopens with a seeded algorithm that a kit proves deterministic |
+| Recipe step ops | Recipe | closed: record | One op per map a document holds, plus `logic`. Reopens when a module adds a map |
+| The closed function list | The closed function list | closed: interval forms | Each function needs pinned math and a certain bound; `table` opens it to data. Reopens with a form that bounds a new function |
+| Eases | Channel and key: table eases | registry `ease@1`, filled by canvas modules and packs | 0 at 0 and 1 at 1, and monotone or within a declared overshoot |
+| Cue verbs | Cue list `cues@1` | registry `cue.kind@1`, filled by canvas modules and packs | Each verb's fixture and a planted twin |
+| Key interpolations, channel types and channel modifiers | Channel and key | closed: interval forms | Range checks in closed form. Reopens with a closed form for a new one |
+| Control kinds | Control: kinds as a registry | registry `control@1`, filled by canvas modules | Replay, the read region, a keyboard path and no agent input; the input router is ring |
+| Occurrence kinds from physics and media | Occurrence list | closed: determinism | Fixed by their interfaces and behavior kits. Reopens with a new interface major |
+| Occurrence kinds from logic | Logic: occurrences | open: declared per logic item | Rows carry numbers only |
+| Logic subset, rewrite, trap kinds, value types | Logic: sandbox | closed: determinism | The same steps in the app, on another machine and in a browser. Reopens: never |
+| Pack programs | Pack: programs | open: declared per pack | Each program's fixtures run at pack check |
+| Library interfaces | Logic: library interfaces | registry `lib.interface@1`, filled by first-party packs and packs | Each interface's fixtures, which its planted library must fail |
+| Data layouts | Logic: data layouts | registry `data.layout@1`, filled by canvas modules, first-party packs and packs | Each layout's validator must refuse its twins; `rows.sequence@1` (Row sequence `rows.sequence@1`) is one |
+| Between-step services | Logic: between-step services | registry `logic.service@1`, filled by canvas modules | Each service's fixtures against its check kind's answers; native code, so no pack or plug-in adds one |
+| Provider outputs | Provider `gen@1` | closed: determinism | Each has a validator; data layouts are a registry of their own. Reopens with a new provider major |
+| Public GPU steps | Every public step | registry `gpu.step@1`, filled by canvas modules | Op weights, exactness and the core's WGSL writer; packs add graphs and step functions, never steps |
+| Operator outputs | Operator output | registry `gpu.output@1`, filled by canvas modules | Each output typed against what consumes it; scene3d fills `vertex_offset`, `light` and `ambient` |
+| Step functions | Shipped operators and composed graphs: pack graphs and step functions | registry `gpu.function@1`, filled by canvas modules and packs | The whole operator check, inlined in every caller, with exactness from the body |
+| Internal steps, determinism classes | Shipped operators; Determinism class | closed: determinism | No shader text, and only the core decides what feeds a check or an export. Internal steps reopen never; the classes reopen only if WGSL guarantees more about float evaluation |
+| Document check kinds | Check input | registry, filled by canvas modules | A code catalogue with a planted twin per code |
+| Plug-in check kinds | Check input: plug-in reads | registry, filled by plug-ins | The same catalogue rule; data read through `deep.canvas` |
+| Job kinds and tools | Asset job | registry, filled by plug-ins | Each kind's qualification; the typeset job (Asset job: typeset) is one kind, with `typst-mitex` its first tool |
+| Loudness and caption profiles | Loudness and caption profiles | registries `profile.loudness@1` and `profile.caption@1`, filled by first-party packs and packs | Every value with its dated source |
+| Synth presets; audio nodes | Synth `synth@1` | registry `synth.preset@1`, filled by first-party packs and packs; the node list closed: determinism | Every node in the list, no cycle but through a delay, and a cost within its estimate. The nodes reopen if a preset needs one the list lacks, as a first-party node with its fixtures |
+| Pack dependencies | Pack: dependencies | open: declared per pack | Exact versions and no cycle |
+
+### A frame through these primitives
+
+1. A writer submits a revision or a patch.
+2. Admission checks its size and rate.
+3. The document check runs off the UI thread.
+4. The revision is staged as pending.
+5. The latch fires at vsync minus the lead.
+6. Each session is evaluated at the predicted presentation time.
+7. Only dirty items are built.
+8. The render worker encodes and draws.
+9. The frame is handed off with a fence, and the composer takes the newest finished one.
+10. Layers compose by band, with the card last.
+11. The window presents.
+12. Each writer hears presented or discarded.
+13. Render-back answers whoever asked.
+
+<a id="editor"></a>
+
+### The editor panel
+
+Not ring code: a first-party plug-in panel the app ships, replaceable like any shipped panel, so you can fine-tune what agents make. It changes a document only by patch, written as you through the path agents use, so it can't skip a check or write what a patch couldn't. Agents still author.
+
+#### Editor panel
+
+For: nudging a key, moving a marker, retiming a shot or setting a light's power by hand in what an agent made
+
+**Fields**
+
+- `panel: editor` (a shipped plug-in, registered through `deep.registerView`; a tab in any panel, or popped out)
+- `doc: doc handle` (one work product, opened by you)
+- Session state: `selection: [ID[#sub] | key | marker | shot]`, `playhead: flick`, `zoom: flicks per px`, `units: seconds | frames | beats = seconds`, `snap: bool = true`
+- Timeline rows: shots (each from `start` to `end`, with its `join`), markers by kind (each with its `span`), and channels under their items (a row per `target` path, its keys as points with their `interp`)
+- Inspector: the selected item's `params` from its kind's schema (type, unit, default, min, max, soft range), its `name`, `at`, `adjust` and `visible`; a key's `t`, `value` and `interp`; a marker's `t`, `span`, `kind` and `name`; a shot's `start`, `end`, `move`, `by` and `join`; and the item's history by writer, from `doc.patched`; its open notes and the suggestions left on it (Note; Writer layer)
+
+**Semantics:** Opened on one work product, it shows the document's shots, markers and channels with their keys on the one clock, in rows under a playhead. The playhead is session state: moving it seeks the transport as any viewer does, so a jump gives the same frame as playing to it, and nothing the panel shows enters the document. The inspector shows the selection's fields from its kind's schema, in their units, with their defaults and ranges, and the item's history by writer. Each gesture is one patch (Editor panel: patches as you): dragging keys, a marker or a shot's edge in time; adding or deleting a key or a marker; and setting a field, a key's value or its interpolation. A gesture on several selected things is one patch. Snapping, on by default, takes frames at the transport's rate, beats on the tempo map, markers, shot edges and other keys, each shown as a guide, and a time set relative to a marker keeps its offset when the marker moves. Changing an item another writer made takes it into your layer, where no live lease of that writer covers it (Writer layer), so that writer's later patches can't undo your change. What a patch from you can't write shows read-only with the reason: a derived item, with Break out where its recipe instance is yours; a generated marker; a baked channel; a view of the record; or an item under another writer's live lease, which you can select and ask that writer about by its stable name. A value outside a field's soft range warns, and one outside its hard range is refused with `out_of_range`, as for any writer. It runs in the app under the shipped panels' per-update budget; your replacement runs in the panel host with the shipped one a click away, and swapping them changes no document or history, since both write only patches as you. On the selected item you can leave a note, which takes the playhead's time as its `t` (Note), and the inspector shows the item's open notes and the suggestions other writers' refused patches left on it, each with its preview, applied only by your gesture as one patch. A point and ask from the panel takes the playhead's time too, and its preview or options show in the panel until you accept one (Selection).
+
+**Cost:** One element tree per change of selection or document, its rows drawn as a data view; while you drag, at most one dry run a frame, coalesced to the latest, each ≤ 20 ms (Patch); nothing per frame while still or closed
+
+**It can never:** Write a document except by patch; edit a check, a brief, a definition, a verdict, a decision, the record or a view of the record; show an edit the check refused; draw outside its panel or over the question card; reach the network or run a program
+
+**Lands:** R6
+
+#### Editor panel: patches as you
+
+For: every change the panel makes: checked like an agent's, undone by writer, never without your hand
+
+**Fields**
+
+- Each move while you drag: `{dry_run: true, coalesce_key, ops}` (one key per gesture), at most one a frame
+- Each commit: `{patch, doc, base: rev, gesture: serial, reason, ops}`, with the writer stamped by the core
+- Listed issues: `{edit, code, ids, path, what, fix}` (from the patch result and the document check)
+- Undo: your last applied patch's `undo` ops, sent as your next patch
+
+**Semantics:** Every change goes through the canvas core's one patch path, the one agents' patches take. While a gesture runs, each move is a dry run, coalesced to the latest, and the preview, kept as session state, shows the last state whose dry run passed, with what refuses the rest listed, so a kind rule's issue shows while you drag and nothing in the record changes. At release the panel commits once. The core stamps the commit as you only when its `gesture` is the serial of your input that ended the gesture in that panel, from hardware input or VoiceOver, unspent, for the document open there (Patch); otherwise it's refused with `gesture_required`, so the panel's own script, a timer, an agent's computer use or a replica's synthetic input can't edit as you. The commit then takes the same admission, document check and latch as an agent's patch: a refused one never shows, the last good revision stays, and the panel lists the edit with its issue's code and fix. An applied one is one `doc.patched` event with writer you, and one undo step. Undo in the panel sends its inverse ops as your next patch, so it removes only your change. Your layer merges by ID with what agents write, and an agent sees your patches in its next render-back and in the history `deep_query` reads, with writer you.
+
+**Cost:** A dry run ≤ 20 ms and a commit ≤ 2 ms (Patch); checking the serial O(1)
+
+**It can never:** Write as you without your input in that panel; commit past the document check; write as the panel or as anyone but you; target a derived item; undo another writer's change
+
+**Lands:** R6
+
+<a id="twod"></a>
+
+## Marks, data and diagrams
+
+- **What R1 can draw.** R1 marks stay within what GPUI's own paths draw: rectangle masks, solid fills and two-stop linear gradients. Masks by shape, isolated group opacity, multi-stop gradients and multi-color SVG move to Vello GPU in R2 if its spike passes (section 13). Goldens and snapshots render with Vello CPU either way.
+- **Text.** One shaper on every platform, with bundled fonts. Bound numbers use tabular figures, the fit check uses the widest string, and numbers are never ellipsized.
+- **Data.** Many rows are one item: a mark set holds typed columns with a key column, so a 10,000-node graph or a year of candles is one item, not thousands of JSON objects.
+
+#### Text `text@1`
+
+**Fields**
+
+- `text: string` (NFC, ≤ 4,096 chars; display text, which a code item derives from its raw bytes, held to the code's own cap on those bytes instead of this one), or a bound value, or `counter {source, format, tabular: true}`
+- `copy: key` (into `data.copy[locale]`, for localized copy)
+- `text: {copy: <table>[<array path>], args: [path]}` (copy a logic array picks by key: Text `text@1`: keyed copy)
+- `font: role = body` (bundled)
+- `size: f32, u = 13`; `weight: u16 = 400`
+- `line_height: f32 = 1.3 × size`, rounded to whole px
+- `box: {w, h}, u | auto`
+- `autosize: none | width | height = width`
+- `max_lines: u16 = none`
+- `overflow: mask | ellipsis = ellipsis` (never for numbers)
+- `align: start | center | end = start`; `valign: top | middle | baseline | bottom = top`
+- `baseline: alphabetic | rule:n` (a ruled-paper line)
+- `numerals: tabular | proportional` (tabular when bound)
+- `dir: auto | ltr | rtl = auto`; `lang: BCP 47`
+- `fallback: [font name] = the look's fallback list` (a grapheme the run's font lacks is set in the first face that has it)
+- `list: {marker: bullet | number | none = none, indent: u = 1.2 × size, gap: u = 0}` (each line after `\n` an item; `#line:n` anchors as code's)
+- `widest: string | the bound value's range`
+- `paint`; `on_curve: path ID` (optional)
+- `runs: [{from, to: grapheme index, role, font: role, weight: u16, style: normal | italic, size: u, tracking: u, shift: sub | super | u, underline: bool, strike: bool}] ≤ 1,024 = []` (styled spans; what a run doesn't set stays the item's)
+- `template: string` (optional, in place of `text`: each `{path}` shows the evaluated value at that path, such as `{data/k}` or `{items/race#period/by}`, at its own precision)
+- `reveal: {mode: fade | write, order: reading | seeded, progress: channel 0..1, emits: bool = false}` (optional; with `emits`, each unit's reveal time compiles at check into the occurrence list `<item>.reveal`)
+
+**Semantics:** Shaped once per (text, font hash, size, features, width) by the one shaper, with lines broken by UAX #14, bidi by UAX #9 and graphemes by UAX #29. The shaped run is the only source for layout, hit tests, fit checks and drawing: where GPUI draws a 2D writer layer, the run's glyphs come from the core's atlas, rasterized by Vello CPU from their outlines, never from GPUI's own text system, whose macOS rasterizer thickens strokes by the text's color and the user's font-smoothing setting. The fit check uses `widest` and the line limit the longest copy across locales, and a number that doesn't fit fails rather than being cut. Runs style spans of the one shaped run, so a run changes its glyphs' font, weight, size, role or baseline without breaking kerning, line breaks or the fit check; sub and super use the font's own metrics where it has them. A template reshapes only when a value it shows changes, and each number it shows traces to its path's source. At check, every grapheme a text can show (every key in every locale for copy) must be drawable by its font or a fallback, or the text is refused with `text.glyph_missing {item, grapheme}`. In write mode each unit (a grapheme, or a formula's term) first draws its outline along its path in its stroke paint, or its fill's paint when it has no stroke, over the first half of its span, then its fill comes in while the outline turns into its own stroke. Units overlap by `lag: ratio = min(4 ÷ n, 0.2)`, and the progress runs linear unless keyed otherwise. A reveal publishes the anchor `<item>#head`: the caret position after the last unit whose reveal passed 0.5, on that line's baseline.
+
+**Cost:** Shaping O(chars) on change, about 0.2 µs per char (10,000 chars under 2 ms, the bar the R1 spike measures and the shaper decision reopens on); O(visible glyphs) per frame (50,000 glyphs under 1 ms of CPU); 1 MB per atlas page; glyphs above about 64 px draw as paths
+
+**It can never:** Use a system font; be measured by one engine and drawn by another; ellipsize or wrap a number; show a number with a unit that isn't bound or computed; shape per frame
+
+**Lands:** R1 labels and readouts; R2 the rest; R6 reveal and copy tables, runs and code; R6 fallback, `text.glyph_missing` and lists
+
+#### Text `text@1`: halo
+
+For: captions over 3D films and video; labels over busy 3D scenes; the transit map's station names
+
+**Fields**
+
+- `halo: [{width: px = 2, role, opacity: f32 = 1, offset: [px, px] = [0, 0], blur: px = 0}]` (≤ 4 outlines; on `text@1` and `mark.text`)
+
+**Semantics:** Outlines draw under the glyphs from the outside in, each the shaped run's outline widened by width, shifted by offset and softened by blur. Roles come from the look, so a halo can't take a status color. The fit check counts the widest halo in the text's bounds.
+
+**Cost:** One extra MTSDF sample or one stroked path per outline per glyph. Budget class: any.
+
+**It can never:** Use a status role or a literal color; move the shaped run; bring text under render.contrast's minimum (checked).
+
+**Lands:** R6, with captions
+
+#### Text `text@1`: code
+
+For: an agent's change shown as code: a function before and after, the lines it points at, a diff that moves, a run's output quoted
+
+**Fields**
+
+- `code: {language: name, tokens: [{from, to, class}] ≤ 65,536 = [], numbers: bool = true, first_line: u32 = 1, tab: u8 = 4, gutter: [{line, mark: added | removed | changed}] = [], highlight: [{lines: [a, b], treatment: dim_others | band | box = dim_others}] = []}` (on `text@1`; a token's class is one of keyword, type, function, variable, string, number, comment, operator, punctuation and plain)
+- `raw: string | asset sha256` (the code's bytes exactly as its source holds them, with their encoding, line ends, tabs and decomposed letters; an asset when they aren't UTF-8; a token's `from` and `to` are byte offsets into it; at most 256 KiB (262,144 bytes), inline or as an asset, which holds a 2,000-line file averaging up to 131 bytes a line, and past it the item is refused, naming it, its size and the cap, with quoting only the lines a film shows as the fix)
+- `quote: {source: ev handle | asset sha256, path, lines: [a, b]}` (optional)
+- Read-only anchors: `#line:n` (a line's box) and `#tok:k` (a token's box)
+
+**Semantics:** A code item keeps two forms: `raw`, the bytes as its source holds them, and its text, a display form mapped from raw by fixed steps: decode UTF-8, showing a byte that isn't as U+FFFD; split lines at LF, CRLF or CR and drop the ends; expand tabs at `tab` columns; then NFC. Each display grapheme keeps the raw byte range it came from, so tokens, anchors and highlights resolve to raw bytes and land on their glyphs. Tokens come from the agent's own highlighter, run in its repo; each becomes a run in the look's code role for its class (Look `look@1`), in the look's monospace font role, so code needs no colors of its own, and with no tokens it draws in plain. Lines number from `first_line` in a gutter that also marks added, removed and changed lines in the look's diff roles, and a highlight dims the other lines to 40% opacity, or bands or boxes its own. Each line is the anchor `#line:n` and each token `#tok:k`, which connectors, labels, shots and a puppet's reach read. A `text_diff` between two code items aligns them line by line by a longest common subsequence, then token by token inside changed lines, comparing lines and tokens by their raw bytes, ties to the earlier position, so kept tokens move to their new places, an inserted line opens its space as the lines below slide down, a deleted line closes, and a changed token cross-fades. A quote compares raw bytes, never the display text: at check its raw must equal its source's bytes for its lines, line ends included, or it fails `quote_mismatch` naming the first line and byte that differ, so a quote that draws the same but holds other bytes still fails; its digits are quotation, which honest numbers lists and never counts, while an unquoted code item's digits count as numbers.
+
+**Cost:** Tokens O(chars) once per content key; shaping as text; a diff O((n + m) × d) at check per pair of items, cached by both content keys; per frame as text, plus one transform per moving glyph run. Budget class: any class with text.
+
+**It can never:** Run a highlighter or a parser in the core; use a literal color or a status role; show a quote that differs from its source; change its raw bytes, by normalizing them or otherwise; take a token class outside the list.
+
+**Lands:** R6, with films
+
+#### Text `text@1`: keyed copy
+
+For: words a piece's rules choose: an item's name, a log line, a line of dialogue, "You found 12 gold coins", in every locale
+
+**Fields**
+
+- `text: {copy: <table>[<array path>], args: [path | {path, widest: string}] ≤ 4}` (in place of a string; inside a `template` as `{copy: …}`)
+- On a mark set, a text column `{copy: <table>, key: column, args: [column]}`
+- A copy table: `data.copy[locale][table]: {key: i32 → string | {zero, one, two, few, many, other: string}}` (`other` required in a plural entry), with `missing: string = ""` per table
+- Placeholders `{0}` to `{3}`, one per argument; plural rules: CLDR's cardinal rules at a pinned release, a table built at the seal
+- Issue: `copy.missing {table, key, array, step}`
+
+**Semantics:** The rules write only numbers and pick a key; the strings stay document data, in every locale. At t the lookup reads the array path as the logic module gives it at t, finds that key in the named table in the view's locale (the document's `locale` by default), and shows its string with each placeholder replaced by its argument: a number path, formatted as a template formats it, or a nested lookup `{copy: <table>[<array path>]}` with no arguments of its own, one level deep. A plural entry picks its form by the locale's cardinal rule applied to argument {0} as shown, and falls back to `other`. Keys are looked up by value, never by position, so sorting a table again changes nothing. A key the table lacks in that locale shows the table's `missing` string, never another key's, and raises `copy.missing`, naming the table, the key, the array and the step. A mark set's text column looks up each row's key column the same way, row by row. Text shapes again only when the key, an argument or the locale changes, and each number it shows traces to its path, as a template's do. The fit check runs over every key the table holds, in every locale the document carries, with each argument at its `widest`, so even a key no step has picked yet is checked: a string that shows an argument and doesn't fit fails, naming the key and the locale, since a number is never cut, and one with no argument may ellipsize as the item's `overflow` says; a number argument with no `widest`, and no range its source declares (a control's, a bound value's), is refused at check, naming it.
+
+**Cost:** A lookup O(log keys) on a change; shaping as any text; the fit check shapes keys × locales strings at check, about 0.2 µs a char (estimate). Budget class: as the text.
+
+**It can never:** Take a string from logic; look a key up by position; show another key's string for a missing one; nest lookups past one level; leave a key or a locale out of the fit check
+
+**Lands:** R6, with the logic module
+
+#### Rect `rect@1`
+
+**Fields**
+
+- `box: [x, y, w, h], u`
+- `radius: u | [tl, tr, br, bl], u = 0`
+- `paint`
+- `status: status binding` (optional)
+- `name`
+
+**Semantics:** An axis-aligned rect draws as one GPU quad with an analytic edge. Rotated or rounded, it becomes a path with the same paint. Hit tests use its exact shape plus the margin.
+
+**Cost:** One instance (about 48 B); O(covered px)
+
+**It can never:** Carry a literal or status color except through a status binding; draw a hairline under 1 device px
+
+**Lands:** R1
+
+#### Circle `circle@1`
+
+**Fields**
+
+- `center: [f32, f32], u`
+- `r: f32, u`
+- `inner_r: f32, u = 0` (a ring)
+- `arc: {from, to: deg}` (optional)
+- `paint`; `status` (optional)
+
+**Semantics:** A solid unrotated circle or ring draws as one analytic quad (a signed distance). Arcs and dashed circles become paths. A filled arc closes through the centre, as a sector, or along `inner_r` when it's above 0, as a ring sector; with no fill, its stroke runs along the arc alone.
+
+**Cost:** One instance; O(covered px)
+
+**It can never:** Carry a status color except through a status binding
+
+**Lands:** R1 dots and rings on the line; R6 arcs in films
+
+#### Path `path@1`
+
+**Fields**
+
+- `verbs: u8 column` (M, L, Q, C, Z)
+- `pts: f32 column, u` (x, y interleaved)
+- `d: SVG path string` (import only, converted at check)
+- `fill_rule: nonzero | evenodd = nonzero`
+- `smooth: none | catmull_rom = none` (a curve through the points, turned into cubic verbs at check)
+- `transform: 2×3 = identity`
+- Per point (optional): `width: f32 column, u`; `opacity: f32 column` (hand-drawn strokes)
+- `build: {progress: channel 0..1, order: index | seeded, emits: bool = false, fill: after | with | none = after}` (optional; with `emits`, each stroke's build span compiles at check into `<item>.build`)
+- `attach: {start, end: ID[#anchor]}` (optional; an attachment)
+- `ends: {start, end: none | arrow | open | stealth | dot | ring | square | diamond | bar = none, size: f32 = 4, width: f32 = size}` (size and width in stroke widths; `open` and `ring` are outlined)
+- `bend: deg = 0` (on a two-point path: an arc through this angle between its ends, re-solved when an attached end moves)
+- `attach` also takes `at: edge | center | outline = edge` and `gap: px = 4`, and an end may name a mark set's row (`ID#row key`) or a text's line (`ID#line:n`)
+- Read-only anchors on every path-like item: `#at:<f>` (the point a fraction f of the way by arc length, with its tangent angle) and `#length` (u), which drivers, labels, attachments and `at.anchor` read
+- `ops: [path op] ≤ 8` (optional; Path: ops)
+- `paint`; `name`
+
+**Semantics:** Geometry only; a paint draws it. Flattened at 0.1 device px per zoom bucket (2× steps), and its tessellation is cached by (content key, bucket), so moving, rotating or uniformly scaling within a bucket reuses it. An attachment re-solves its ends when the attached item moves. An end that names an anchor lands on it; one that names an item, a row or a line stops where the line toward the other end meets that target's bounds (a placed label's box for a label), less its gap, or at its centre with `at: center`, or with `at: outline` where the line meets the target's true shape, as hit tests use. Ends draw after the path's ops, at its first and last points along the tangent there, in the stroke's paint, so a path drawn on by a trim carries its arrow at the trim's end. A head is at most a quarter of the path's length; past that it scales down whole.
+
+**Cost:** O(segments) on change, about 9 B per segment; O(visible segments) per frame; at most 50,000 segments per path and 500,000 per document
+
+**It can never:** Carry script, outside references or pixels; contain NaN or infinity; be hand-placed geometry in a view of the record
+
+**Lands:** R1 lines and arrows; R2 the rest; R6 build and hand-drawn strokes, ends and edge attachments
+
+#### Path `path@1`: ops
+
+For: kinetic shapes, loaders, line-art reveals, radial bursts, badges
+
+**Fields**
+
+- `ops: [path op] ≤ 8 = []` (on `path@1`; a `rect@1`, `circle@1` or `star@1` with ops becomes a path), applied in order before tessellation, every field a channel target:
+- `trim {start: 0..1 = 0, end: 0..1 = 1, offset: deg = 0, each: bool = false}`
+- `round_corners {radius: u = 10}`
+- `offset_path {amount: u = 10, join: miter | round | bevel = miter, miter_limit: f32 = 4, copies: u8 = 1 (≤ 16), copy_offset: u = 0}`
+- `zigzag {size: u = 10, ridges: u16 = 5 (≤ 256 a segment), points: corner | smooth = corner}`
+- `pucker {amount: −1..1 = 0}` (below 0 puckers, above 0 bloats)
+- `twist {angle: deg = 0, center: [u, u] = [0, 0]}`
+- `repeater {copies: f32 = 3 (≤ 64), offset: f32 = 0, at: {pos, rot, scale, pivot}, opacity: [f32, f32] = [1, 1], composite: below | above = below}`
+
+**Semantics:** Pure in their params and t. A trim's offset moves its window round a closed path, and with each, every sub-path is trimmed on its own rather than all as one. A repeater's copy k takes its transform applied k + offset times and an opacity between the first and the last, and a fractional count draws its last copy at the fraction's opacity. Output segment counts are computable from params (zigzag: (ridges + 1) × segments, since its ridges split each segment, as Lottie's zig zag draws them; repeater: ⌈copies⌉ × segments; offset_path: at most 5 × copies × segments, since each segment splits at up to two inflections and each join adds up to two), so the budget check refuses before building. Tessellation is cached by content key, plus t only when an op's field is animated. A path's wiggle stays the boil and displace modifiers, and merge stays out: 2D booleans aren't taken, and mask combine gives the same coverage.
+
+**Cost:** O(segments × ops) per change, within 50,000 segments a path and 500,000 a document; nothing per frame while still. Budget class: any class with 2D marks.
+
+**It can never:** Run a boolean; read the clock; build more segments than it declared; reseed with playback.
+
+**Lands:** R6, with films
+
+#### Path `path@1`: function
+
+For: a curve plotted from a formula whose parameters a slider moves; a point that rides it with its readout and its tangent
+
+**Fields**
+
+- `fn: {y: expression over x | x, y: expressions over s, over: [a, b] = the x scale's domain, vars: {name → path | control | channel}, scales: {x, y: scale ID} = none, samples: adaptive | u16 = adaptive}` (on `path@1`, in place of `verbs` and `pts`; with no scales, x and y are in u; adaptive: within 0.5 px of the curve everywhere, by its interval form, at most 2,000 points; a and b in `over` may be expressions over `vars`; each expression at most 512 nodes after sums expand)
+- `fn` also takes an implicit form, `{zero: expression over x and y, over_x: [a, b], over_y: [c, d] (default the scales' domains), max_cells: u32 = 16,384, vars, scales}`, and a grid, `{grid: {x: [a, b, step], y: [a, b, step]}, scales}` (a plane's lines as one item's sub-paths, for a warp: Frame and group: warp)
+- `probes: {name → {at: channel}} ≤ 8` (optional; the first also as `#probe`) → each a read-only anchor `#<name>` with `x`, `y`, `slope` and `foot` (the point on the x axis below it)
+- `fill: {to: axis | path ID (another fn), over: [channel, channel]}` (optional): the region between the curve and the axis or the other curve, bounded within 0.5 px as the curve is, drawn in the paint's fill; read-only `#area` with `value`, its integral by Gauss-Kronrod with an interval bound
+- `color: {by: x | y, ramp: [role] ≤ 8, domain}` (optional): the stroke takes the ramp's color at each point's value
+- `derivative_of: path ID` (optional): the check `fn.derivative` compares this curve with the other's central-difference slope at 256 seeded x and fails, naming the first x where they differ by more than 0.5 px
+
+**Semantics:** Pure in its vars and t: the expression comes from the closed function list, in pinned f64 math, and the path is sampled at check and again in the frame a var changes, splitting each segment until the expression's interval form shows the curve within 0.5 px of the segment's chord at every x (at every s, for x and y over s), so the drawn line holds within 0.5 px of the curve everywhere, not only at its samples, and a slider reshapes the curve in the frame it moves. A segment whose bound lies wholly outside the area the plot shows draws nothing, so a curve with a pole, such as 1/x at 0, still holds within 0.5 px wherever it shows. A non-finite sample, or a jump the bound pins within 0.5 px (floor, round, mod, sign, a comparison or a choice), breaks the curve rather than drawing a wall. A stretch the bound can't settle within 2,000 points, such as sin(1/x) near 0, draws from its samples as an estimate, with a notice naming its x range, and a check that needs the curve's bound there is refused, naming the item and the range. Through its scales the curve sits on a chart's axes. Each probe evaluates `fn` at `at`, with its slope by a central difference at 1e-6 of the span; counters, drivers, labels and attachments read it, so a point that rides the curve and its readout come from the one formula. An `over` end that follows a var moves the curve's end, so a curve or the area under it grows with a value. An implicit fn is traced on an interval quadtree: a cell whose bound excludes 0 is dropped, any other cell is split until it is under 0.5 px or the cap is reached, and the curve runs through the kept cells by marching squares, its crossings placed by a secant between corner samples, each piece a sub-path. A cell whose corners share a sign but whose bound holds 0 is split, not dropped, so a loop smaller than a cell is found. Past `max_cells` the rest draws from samples as an estimate, with a notice naming the box.
+
+**Cost:** O(segments) per change, about 400 ns a segment with its interval bound: 2,000 segments in 0.8 ms (estimate); nothing per frame while its vars rest. Budget class: any class with 2D marks.
+
+**It can never:** Loop; sample past 2,000 points; draw across a non-finite sample; read the clock; pass an estimate off as a bound; draw a branch through a cell its bound excluded; trace past `max_cells`.
+
+**Lands:** R6, with figures
+
+#### Path `path@1`: around and angle
+
+For: a brace under a term with its label, a box around a result, a cross through a wrong step, the mark of an angle between two lines
+
+**Fields**
+
+- `around: {target: ID[#part] | [ID[#part]] ≤ 16, shape: brace | box | underline | cross | bracket, side: down | up | left | right | deg = down, gap: u = 6, sharpness: f32 = 2, radius: u = 0, label: text ID (optional), label_gap: u = 4}` (on `path@1`, in place of `verbs` and `pts`)
+- `angle: {a, b: path ID, quadrant: [±1, ±1] = [1, 1], other: bool = false, radius: u = auto, mark: arc | elbow = arc, dot: bool = false}` (on `path@1`, in place of `verbs` and `pts`)
+
+**Semantics:** Built each frame a target moves from the targets' evaluated bounds at t (their union), so a brace spans the term it names while the formula moves, and a label sits `label_gap` beyond the brace's tip. A brace's curls narrow with `sharpness`; a box takes `radius`; a cross runs corner to corner. An angle mark is an arc of `radius` about where a and b cross, counterclockwise from a to b, or the rest of the turn with `other`; `elbow` draws two segments meeting square; auto radius is 24 u, or two thirds of the distance to the nearer line end when that is shorter.
+
+**Cost:** O(1) per target per change. Budget class: any class with 2D marks.
+
+**It can never:** Read a target's earlier frame; span more than 16 targets; mark lines that don't cross (refused, naming both).
+
+**Lands:** R6, with films
+
+#### Vector field `vector_field@1`
+
+For: a vector field drawn as arrows or as the lines that follow it, a dot the flow carries, an ODE's trajectory
+
+**Fields**
+
+- `fn: {x, y: expressions over x, y} | {x, y, z: expressions over x, y, z}`
+- `vars: {name → path | control | channel}`
+- `scales: {x, y: scale ID} | axes: axes3d ID` (optional)
+- `arrows: {grid: {x, y, z: [a, b, step]}, length: {by: sigmoid | linear | constant = sigmoid, max: u = 0.45 × step}, color: {by: magnitude | expression, ramp: [role] ≤ 8, domain: [f64, f64] = [0, 2]}}` (optional; at most 4,096 arrows)
+- `streams: {starts: grid {x, y, z, step} | points [vec3] ≤ 4,096, jitter: f64 = 0, seed, step: f64 = 0.05, time: f64 = 3, method: rk4, pad: f64 = 3, max_points: u16 = 512 (≤ 16,384 when starts ≤ 8)}` (optional)
+- `flow: {speed: f32 = 1, flash: 0..1 = 0.3, phase: hashed | zero = hashed, warm_up: bool = true}` (optional)
+- Read-only: each stream as `<id>#s<i>`, and all of them as `<id>#streams`
+
+**Semantics:** Streams are integrated by RK4 at a fixed step in pinned f64 at check, and again when a var changes, off the frame thread, showing the last lines while it settles; each is a sub-path `<id>#s<i>`, stopping where it leaves the grid's box widened by `pad` or meets a non-finite vector. Its stroke takes the ramp's color at each point's magnitude. The flow is a trim window in closed form: stream i shows [p, p + flash] of its length with p = fract(t × speed ÷ time + phase_i), so seeking equals playing. Arrows are evaluated per frame from the fn. A constraint `follow_stream` carries a dot along it (Constraint), a group's warp may flow along it (Frame and group: warp), and particles may move along its streams (Particles `particles@1`: space and paths).
+
+**Cost:** An integration O(starts × time ÷ step × 4 evaluations), about 25 ms for 1,000 streams of 60 steps (estimate); arrows about 50 ns each per changed frame.
+
+**It can never:** Integrate between frames; keep state; exceed 4,096 starts or arrows; change its step count during a run.
+
+**Lands:** R6
+
+#### Star `star@1`
+
+For: badges, bursts, ratings, polygon symbols
+
+**Fields**
+
+- `center: [f32, f32], u`; `points: f32 = 5` (3 to 100)
+- `outer_r, inner_r: f32, u`; `outer_round, inner_round: 0..1 = 0`
+- `polygon: bool = false` (a regular polygon of `points` corners; inner_r and inner_round are then refused)
+- `paint`; `ops`; `status` (optional)
+
+**Semantics:** A closed path of ⌈points⌉ × 2 vertices, or ⌈points⌉ for a polygon, starting straight up from the centre; a fractional count closes on a partial spike. Roundness turns each vertex into a cubic whose handles grow with it. It's a path in every other way, so paint, masks, build and ops apply, and its item transform turns it.
+
+**Cost:** As a path: O(vertices) on change and one tessellation per content key. Budget class: any class with 2D marks.
+
+**It can never:** Exceed 200 vertices; carry a status color except through a status binding.
+
+**Lands:** R2
+
+#### Paint (fill and stroke)
+
+**Fields**
+
+- Fill, one of: `role`; `gradient {kind: linear | radial | sweep, stops: [{at: 0..1, role}] ≤ 8, extend: pad | repeat | reflect = pad}`; `hatch {angle: deg = 45, gap: = 4 × stroke width, width: px = 1, jitter: [f32, f32] = [1, 1], cross: bool = false}`; `dither {stops, matrix, by, anchor}` (Paint: dither fill); `noise {…}` (Paint: noise fill); or `fill: a named fill from the look`. Plus `opacity: f32 = 1`, and optionally `shade`, `drop`, `glow`, `bevel` and `satin` (Paint: shade; Paint: drop; Paint: glow, bevel and satin)
+- Stroke: `role`; `width: f32, px = 1` (u in figures); `join: miter | round | bevel = miter`; `miter_limit: f32 = 4`; `cap: butt | round | square = butt`; `dash: [u] = []`; `dash_offset: u = 0`; `gradient`, `taper` and `wave` (Paint: stroke gradients, taper and wave); `scales_with_zoom: bool` (false in data views, true in figures); `line: a named line from the look` (exact, pencil and so on)
+- A gradient also takes `from, to: box point | [f32, f32] = w, e` (fractions of the box) and `span: item | parent | ID = item` (one gradient over a group's parts); a stop takes `opacity: f32 = 1`; on a stroke, `kind` also takes `along` (stops by arc length from the path's start)
+- The stroke takes `opacity: f32 = 1`, and the paint's `opacity` multiplies both
+- `scale_stroke: bool = false` (with false, an item's or a parent's scale leaves stroke widths as written; with true, widths scale by √|sx × sy|)
+- The dash takes `count: u16` (optional; each sub-path holds exactly that many dashes, the gaps share the rest, and a closed sub-path has as many gaps as dashes)
+- Fill may also be `steps {over: children | collection ID, stops: [{at, role}] ≤ 8, by: order | x | y | distance {from: [u, u], radius: u}}`: each member one solid color mixed from the stops by its rank or position
+
+**Semantics:** Roles resolve through the look, the theme is part of every cache key, and gradients interpolate in OKLab over premultiplied colors, and writer layers composite in sRGB-encoded space, as GPUI does. The core hands Vello each OKLab ramp as sRGB-encoded stops within 0.001 ΔEOK, since Vello's own approximation stops at 0.01, about three code values at mid grey, and GPUI draws two-stop gradients through the exact mode of the patch that adds its BGRA surface: no dither, the sRGB curve and premultiplied stops, where GPUI's own OKLab option dithers by up to two code values and uses a 2.2 power curve; a 2D writer layer moved to the GPU layer keeps the same blending. Defaults follow SVG, not kurbo, and hand-drawn lines come from the look, seeded by the document seed and the item's ID. Strokes are centred; inside and outside strokes are built with a mask.
+
+**Cost:** Fill O(covered px); stroke O(segments × (1 + dashes)), at most 10,000 dashes per path; gradient ramps cached
+
+**It can never:** Name a status role or a literal color; use more than 8 stops; draw a hairline under 1 device px (a thinner line or profile point draws at 1 px with its alpha scaled by its width)
+
+**Lands:** R1 solid fills, two-stop linear gradients, strokes and dashes; R2 multi-stop gradients and hatches; R6 hand-drawn lines
+
+#### Paint: shade
+
+For: cel and cartoon characters shaded by one hard light; props with a darker form-shadow band; an inner shadow on a title or a button
+
+**Fields**
+
+- `shade: {kind: step | crescent | inner = crescent, role, offset: px = 6, light: look | deg = look, blur: px = 0, choke: 0..1 = 0, opacity: f32 = 1, mode: normal | multiply = normal, highlight: {role, offset: px} (optional), rim: {role, width: px} (optional)}` (on Paint, beside the fill)
+
+**Semantics:** Draws a darker flat of the shape, offset away from the light and clipped to the shape, so a crescent of shade sits on the far side. The light is the look's light direction, or an angle. A highlight is the same construction toward the light. With `kind: inner` it's an inner shadow: the shape's outside, offset away from the light, spread by choke, softened by blur and clipped to the shape, so the shade lines the edge nearer the light, as a cut-out's would. It's computed from the shape's evaluated geometry at t, so it moves with the part.
+
+**Cost:** One extra clipped fill (two with a highlight); inner adds one blurred pass over the item's bounds; O(segments). Budget class: any class with 2D marks.
+
+**It can never:** Use a status role or a literal color; read an earlier frame; shade a 3D item, which its lights shade.
+
+**Lands:** R6, with puppet@1; inner with Paint: glow, bevel and satin
+
+#### Paint: drop
+
+For: cartoon titles with a hard offset shadow, game-show cards, paper shadows, a lifted object's shadow; text drawn twice in two roles
+
+**Fields**
+
+- `drop: {offset: [px, px] = [6, 6], role, opacity: f32 = 1, blur: px = 0, mode: normal | multiply = normal}` (on Paint; on text it draws the same shaped run once more)
+
+**Semantics:** Draws the mark's coverage once more under it, offset and in the role, with an optional blur by the shipped blur. The copy is part of the item's bounds and of the fit check. On text the copy reuses the shaped run, so two-plate text needs no duplicate item.
+
+**Cost:** One extra fill or glyph run; a blur adds one pass over the item's bounds. Budget class: any class with 2D marks.
+
+**It can never:** Use a status role or a literal color; move or reshape the shaped run; cover another writer's item outside its own bounds.
+
+**Lands:** R6
+
+#### Paint: glow, bevel and satin
+
+For: glowing titles, embossed buttons and badges, a satin sheen on type
+
+**Fields**
+
+- Beside `drop` and `shade` on Paint:
+- `glow: {where: outer | inner = outer, role, size: px = 10, spread: 0..1 = 0, opacity: f32 = 0.75, source: edge | center = edge, mode: normal | screen | add = screen}`
+- `bevel: {shape: inner | outer | emboss | pillow = inner, technique: smooth | chisel = smooth, depth: f32 = 1, size: px = 5, soften: px = 0, light: look | {angle, altitude: deg} = look, highlight: {role, opacity: f32 = 0.75}, shadow: {role, opacity: f32 = 0.75}}`
+- `satin: {role, offset: px = 10, size: px = 14, angle: deg = 19, invert: bool = true, opacity: f32 = 0.5, mode: normal | multiply = multiply}`
+
+**Semantics:** Each is built from the mark's coverage at t (the shaped run on text) with the shipped blur and dilation passes, so it moves with the mark. A glow blurs the coverage grown by spread, outside it or, inner, inside it from the edge or the centre. A bevel lights a height field made from the coverage's distance to its edge, by the look's light or an angle and altitude, as a highlight and a shadow in their roles. Satin draws the coverage offset both ways along angle, blurred and differenced, inside the shape. Interior ones clip to the coverage; outer ones join the item's bounds and the fit check. Cached by content key, so a still item costs nothing.
+
+**Cost:** One coverage target per item that uses them and one blurred pass each, about 0.1 ms per item at 1080p (estimate); nothing per frame while still. Budget class: any class with 2D marks.
+
+**It can never:** Use a status role or a literal color; read an earlier frame; cover another writer's item outside its own bounds; bevel a 3D item, which takes Modifier: bevel and its lights.
+
+**Lands:** R6
+
+#### Paint: dither fill
+
+For: pixel looks and 16-bit stories, two-tone print shading, retro screens
+
+**Fields**
+
+- Fill kind `dither {stops: [role] ≤ 4, matrix: 4 | 8 = 4, by: gradient | tone = gradient, anchor: world | frame = world}`
+
+**Semantics:** An ordered (Bayer) dither between adjacent stops: each pixel compares its gradient or tone value with the matrix entry at its index in world or frame space. It's integer work, so it's exact on every GPU, and it never changes with time.
+
+**Cost:** About 4 ALU per covered pixel. Budget class: any class with 2D marks.
+
+**It can never:** Use a status role; vary with time or frame; follow the screen during a camera move unless the anchor is frame.
+
+**Lands:** R6
+
+#### Paint: noise fill
+
+For: textured backgrounds, smoke and cloud plates, energy fields, loopable motion textures
+
+**Fields**
+
+- Fill kind `noise {kind: fractal | turbulent | cells | value = fractal, scale: u = 100, aspect: f32 = 1, octaves: u8 = 6 (≤ 8), roughness: 0..1 = 0.5, contrast: f32 = 1, brightness: f32 = 0, offset: [u, u] = [0, 0], rotation: deg = 0, evolution: deg = 0, cycle: u16 | none = none, stops: [{at: 0..1, role}] ≤ 8, anchor: world | frame = world, seed}`
+
+**Semantics:** Noise from the public fbm and cells steps: fractal sums octaves of gradient noise, turbulent sums their absolute values, cells reads the distance to the nearest cell, and value interpolates lattice values. Evolution is a phase through a 4D lattice, so the fill loops when cycle names the turns, and the result maps through a ramp of look roles in OKLab, so colors stay roles and seeking equals playing. Anchored to the world like paper, so a camera move doesn't swim it, or to the frame.
+
+**Cost:** About 16 units per octave per covered pixel, from the step weights; one fill pass per item, and nothing per frame while the item and its channels are still. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Use a status role; reseed with playback; take a LUT image; follow the screen during a camera move unless its anchor is frame.
+
+**Lands:** R6, with drawn fills
+
+#### Paint: stroke gradients, taper and wave
+
+For: neon strokes, brush-like line art, gradient rings, a series line colored along its length
+
+**Fields**
+
+- Stroke gains `gradient {kind: linear | radial | sweep, stops: [{at: 0..1, role}] ≤ 8, extend}` (as fills), `taper {start, end: u | fraction = 0, start_width, end_width: 0..1 = 1, ease: 0..1 = 0}` and `wave {amount: 0..1 = 0, wavelength: u = 20, phase: deg = 0}`
+- A radial gradient, on a fill or a stroke, gains `focal {length: −1..1 = 0, angle: deg = 0}`
+
+**Semantics:** A gradient stroke colors the stroke's coverage as a fill gradient colors a fill, interpolated in OKLab from roles only. Taper narrows the first start and the last end of the stroke's length to their widths along an ease, and wave varies the width by amount along the length; both set widths from arc length at tessellation, as line profiles do. A focal point moves the gradient's centre toward its edge by length along angle, a two-point radial gradient as SVG draws one.
+
+**Cost:** As a stroke, plus O(points) for widths; gradient ramps cached. Budget class: any class with 2D marks.
+
+**It can never:** Name a status role or a literal color; use more than 8 stops; draw under 1 device px (a thinner point draws at 1 px with its alpha scaled by its width, as now).
+
+**Lands:** R2 gradient strokes and focal points, with Vello GPU; R6 taper and wave
+
+#### Image `image@1`
+
+**Fields**
+
+- `asset: sha256` (license and redaction live on the asset)
+- `box: [x, y, w, h], u`
+- `fit: contain | cover | fill | none = contain`
+- `crop: [x, y, w, h], image px` (optional)
+- `sampling: linear | nearest | cubic = linear`
+- `opacity: f32 = 1`
+- `anchors: {name → [x, y]}` (fractions of the image, 0..1)
+- `alt: string` (required)
+
+**Semantics:** Decoded once off the UI thread and uploaded once, mipmapped when drawn below half size, drawn as one quad. Evidence images never upscale past 1:1 device px.
+
+**Cost:** Decode O(px) once; GPU w × h × 4 B (× 1.33 with mipmaps); one quad per frame; at most 64 MB decoded per document
+
+**It can never:** Load from a URL or a path (by hash only); leave the machine with incomplete redaction; carry a status color
+
+**Lands:** R1 (evidence screenshots)
+
+#### Image `image@1`: video frames
+
+For: a screen recording zoomed and panned under callouts; before-and-after recordings side by side under a wipe; footage behind a title
+
+**Fields**
+
+- On an `image@1` whose asset is a video: `frames: {start: time = 0, in: flick = 0, rate: rational = 1, loop: bool = false, hold: first | last = last}`
+- A time remap may target the item, as it targets a placement
+
+**Semantics:** At t the item shows the source frame at source time in + (t − start) × rate, floored to the stream's own frames from its time base, decoded in the decode worker and drawn as a texture. Before start it shows the first frame, and after the source ends the frame `hold` names, unless `loop` wraps it. A seek decodes from the previous key frame or a short-GOP proxy, and an export decodes in order. It's an item, so `at`, `crop` (a channel), masks, mattes, passes, the camera and shots reach it, and marks laid over it stay registered while the camera moves. Its sound, if it has any, stays a strip placed with the same start, in and rate. The frame shown at t is fixed by the asset's hash, the decoder's version and t, so seeking equals playing.
+
+**Cost:** One decode per new source frame on the hardware decoder and one upload (about 1.5 B a pixel for 4:2:0), with a ring of 8 decoded frames; a seek O(GOP). Budget class: figure, showpiece, export.
+
+**It can never:** Play sound; take its frame from the decoder's timing rather than t; be read by a check as evidence of what it shows; leave the machine with incomplete redaction.
+
+**Lands:** R6, with the media module
+
+#### Vector and formula `vector@1`
+
+**Fields**
+
+- `src: sha256` (SVG, ≤ 512 KB*)
+- `size: [f32, f32], u`
+- `colors: {SVG color → role}`
+- `lines: {SVG stroke color | class → look line}` (optional)
+- `hotspot: [u, u]` (optional)
+- `alt: string` (a formula's source text)
+- `numbers: {text → source path}` (optional; a number in `alt` traced to its source for Honest numbers)
+- `write_on: {progress: channel 0..1, order: term}` (optional)
+- `parts: [class] = []` (classes whose elements become parts, beside every element with an `id`)
+- Read-only per part: `{id, source, box}` (from the SVG, or the typeset job's probe)
+- Channel targets per part: `items/<id>/parts/<part>/role`, `/opacity` and `/at` (an offset from where the import placed it)
+
+**Semantics:** Imported once into path and paint marks, with no script and no outside references, and every color mapped to a role. Strokes can map to the look's lines, so one licensed vector puppet draws in each look's line kind (crayon, brush, pencil). Formulas arrive as SVG and write on term by term, with the source text as the accessible name. A formula usually comes from the typeset job (Asset job: typeset), which writes one id per term from the term's own source; otherwise from the agent's own renderer. Internal `<use>` and `<defs>` resolve at import; `currentColor` maps through `colors` like any other color. write_on draws each term as text's write mode does (Text `text@1`): its outline first, then its fill, terms overlapping by min(4 ÷ n, 0.2). Each SVG element with an `id`, or with a class named in `parts`, becomes a part addressed `<item>#<id>`, which match_morph pairs across two imports and connectors and labels read; write_on's terms are the parts in reading order. A `<text>` element is refused with a fix (convert it to outlines), since the import never reaches a system font, and filters and embedded rasters come back as issues naming the element, never dropped silently.
+
+**Cost:** Import O(elements) once; then the cost of its paths
+
+**It can never:** Run script; load from the network; keep a color that isn't mapped to a role; draw a part outside its item's draw order
+
+**Lands:** R2; R6 lines
+
+#### Vector and formula `vector@1`: quote
+
+For: a formula shown as a paper wrote it, a source card that says where a formula came from
+
+**Fields**
+
+- `quote: {source: ev handle | asset sha256, path, lines: [a, b]}` (optional, on a formula)
+
+**Semantics:** A formula may name the LaTeX lines it was rendered from, such as a paper's source kept as evidence. At check its `alt` must equal those lines' bytes, line ends included, or it fails `quote_mismatch` naming the first line and byte that differ, as a code quote does (Text `text@1`: code). The check proves the source text, not the SVG made from it. A formula without a quote reads as the agent's own.
+
+**Cost:** One byte comparison at check, cached by both content keys; nothing per frame
+
+**It can never:** Pass with an `alt` that differs from its source; quote a source that isn't evidence or an asset
+
+**Lands:** R6, with films
+
+#### Mask `mask@1`
+
+**Fields**
+
+- `shape: rect | rounded rect | path ID`
+- `mode: shape | alpha | luminance = shape` (alpha and luminance take coverage from the mask's own paint, such as a gradient)
+- `combine: add | subtract | intersect | difference = add`
+- `feather: f32, u = 0`; `expand: f32, u = 0`
+- `invert: bool = false`
+- `applies_to: the frame's children | a collection`
+
+**Semantics:** A rect mask is a scissor, and any other shape renders through one offscreen pass. A mask is geometry, so channels can animate it, and masks nest at most 4 deep. Luminance is taken in linear light, and masks apply before tone mapping and before status colors.
+
+**Cost:** Rect about 0; shape +1 offscreen pass (O(mask px) plus the path); alpha or luminance +2 passes
+
+**It can never:** Hide a status color, a legend, another writer's items or the question card; nest deeper than 4
+
+**Lands:** R1 rect; R2 shape and soft masks
+
+#### Frame and group `frame@1`, `group@1`
+
+**Fields**
+
+- Group: `transform`; `opacity: f32 = 1`; `isolate: bool = false`; `blend: normal | multiply | screen | … = normal` (25 more modes: Frame and group: blend modes); `passes`, `backdrop`, `echo` and `warp` (Frame and group: passes; backdrop; echo; warp); `visible`; `name`; `order`; `outline` (Frame and group: union outline); on a child, `draw_order` (Frame and group: draw order)
+- A frame adds: `box: [x, y, w, h], u` or auto-layout sizing; `overflow: mask | show = mask`; `paint` (background and border); `radius: u = 0`; `padding: u = 0`; `layout` (auto layout); `title: string`; `role: card | pane | cell | region`
+
+**Semantics:** A group composes transforms and has no bounds of its own; with `isolate`, or opacity below 1 over overlapping children, it renders through one offscreen pass, which GPUI's per-primitive opacity can't do. A frame adds bounds, a background, a mask on overflow, auto layout and a hit area. Frames are what salience counts.
+
+**Cost:** O(children) for transforms; isolation +1 offscreen; a frame's rect mask is a scissor
+
+**It can never:** Form a cycle; resize because a live number changed; isolate more than 32 groups in a frame
+
+**Lands:** R1 groups and rect-masked frames; R2 isolation and rounded masks
+
+#### Frame and group: flip
+
+For: the hand-drawn explainer, a 2D film with drawings held on twos; viseme bakes that swap 2D mouths
+
+**Fields**
+
+- `flip: {keys: [{t: time, show: child ID | none}]}` (on `group@1`)
+- or `flip: {from: occurrence list, map: {value → child ID}}` (a viseme or beat bake picks the child)
+- or `flip: {array: <logic>.<name>[index], map: {value → child ID}}` (a logic i32 array picks the child)
+
+**Semantics:** At t exactly one child shows: the one named by the last key at or before t, held until the next key. Children evaluate as usual, so a swap changes only presence and rebuilds nothing. The look's quantize applies to the keys like any channel. With an array, the child shown at t is the one its value maps to, as the logic module gives the array at t; a value the map lacks shows no child, never the last one shown, and raises `flip.unmapped`, naming the value, the array and the step. The children stay authored, so the rules only choose.
+
+**Cost:** O(log K) per frame; a swap is a presence change. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Interpolate between drawings (use path channels or a match morph); show two children at once; read the clock.
+
+**Lands:** R6, with films; the array form with the logic module
+
+#### Frame and group: y sort
+
+For: the isometric 2.5D sorting-line film; the 16-bit pixel story; 2D motion graphics where figures walk past each other
+
+**Fields**
+
+- `sort: order | y = order` (on `group@1`)
+- `sort_anchor: [f32, f32] = [0.5, 1]` (the fraction of each child's bounds whose y is compared: its foot)
+
+**Semantics:** Children draw in order of their sort anchor's evaluated y at t, ties broken by order key then ID, so the order is a pure function of t. A child that is a group sorts as one unit. Writer layers still compose first; sorting happens only inside the group.
+
+**Cost:** O(n log n) per frame for a group whose children move; nothing while still. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Sort across groups or writer layers; slide a status badge under another item; depend on an earlier frame's order.
+
+**Lands:** R6, with films
+
+#### Frame and group: parallax
+
+For: side-scrolling explainers; the timeline the camera travels along; the old-map route film
+
+**Fields**
+
+- `parallax: {rate: [f32, f32] = [1, 1], repeat: [u, u] | none = none, repeat_count: u8 = 1, drift: [u/s, u/s] = [0, 0], origin: [u, u] = [0, 0]}` (on `group@1`; rate 1 moves with the scene, 0 stays with the camera; repeat_count ≤ 8 per axis)
+
+**Semantics:** The group's offset is origin plus the camera's position times (1 − rate) plus drift times t, wrapped by repeat with a floored modulo, so it's closed form in the camera pose and t. With repeat set, the core replays the group's cached recording in as many copies per axis as cover the view, up to repeat_count.
+
+**Cost:** One transform per frame plus the repeated replays. Budget class: figure, showpiece, export.
+
+**It can never:** Integrate drift frame by frame; read the wall clock; repeat a status color or a needs-you item (refused at check).
+
+**Lands:** R6, with films
+
+#### Frame and group: union outline
+
+For: cartoon and pixel characters drawn as one silhouette; a glove that reads as one shape; paper cut-outs
+
+**Fields**
+
+- `outline: {kind: union, width: px = 3, role, offset: px = 0, edge: hard | soft = hard, slits: [child ID]}` (on `group@1`)
+
+**Semantics:** The group's children draw into one coverage target, a shipped pass dilates it by width, and the ring outside the union draws in the role under the children, so overlapping parts read as one shape. A slit child keeps its own line inside the union, such as a joint. Coverage comes from the evaluated children at t, so the outline never lags.
+
+**Cost:** One coverage target per outlined group and one shipped dilation pass (16 angles × 3 rings, past a composed pass's 32 fetches); about 0.1 ms per outlined group at 1080p (estimate). Budget class: figure, showpiece, export.
+
+**It can never:** Use a status role; outline across writer layers; read an earlier frame; be composed by a pack.
+
+**Lands:** R6, with puppet@1
+
+#### Frame and group: draw order
+
+For: an arm that passes in front of the body in one pose and behind it in the next; a mug's handle turning away
+
+**Fields**
+
+- `draw_order: back | body | front | auto = auto` (an enum channel on a child of a group; auto keeps its order key)
+- `z: f32 = 0` (a channel on any 2D item)
+
+**Semantics:** Children draw in the bands back, body and front, then by order key and ID inside each band, evaluated at t like any channel. An enum channel holds its value until its next key, so a swap lands on a key, never between two. Writer layers still compose first. Inside a writer layer, items draw by z, then by the tree's order. A group that renders isolated (isolate, opacity below 1 over overlap, a blend or passes) draws as one unit at its own z, and its children's z orders only inside it; a child whose z would lift it out raises the notice `z_inside_isolated`.
+
+**Cost:** O(children log children) per frame for a group whose bands change; nothing while still. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Move a child into another group or writer layer; slide a status badge under another item; depend on an earlier frame; order by z across writer layers; lift an item over a status color or the question card.
+
+**Lands:** R6, with puppet@1
+
+#### Frame and group: blend modes
+
+For: light leaks and glows that add or screen over a scene, duotones, motion-graphics composites, overlapping series that multiply
+
+**Fields**
+
+- `blend: normal | multiply | screen | overlay | darken | lighten | color_dodge | color_burn | hard_light | soft_light | difference | exclusion | hue | saturation | color | luminosity | add | subtract | divide | linear_burn | linear_dodge | linear_light | vivid_light | pin_light | hard_mix | darker_color | lighter_color | dissolve = normal` (on `group@1`: 25 modes beside the three it had)
+- `dancing: bool = false` (with dissolve: a dancing dissolve)
+- The step `blend(mode)` takes the same modes, dissolve aside (Every public step: Color)
+
+**Semantics:** A group whose blend isn't normal renders isolated, as `isolate` does, and blends with what its own writer layer drew before it, in the space 2D composites in (sRGB-encoded, as decided), or in linear light inside a 3D writer layer. The 16 W3C modes follow the W3C Compositing and Blending formulas, and add is Porter and Duff's plus, which W3C calls lighter; a golden's expected value applies the formula in f64 to the same 8-bit premultiplied inputs the renderer composites, since color dodge and color burn turn half a code of input into several near their poles; the other eleven are formulas shipped as WGSL and reviewed with the app, so a 2D writer layer with one of them moves to the GPU layer, as the draw-path rule says. Dissolve keeps a pixel where hash(document seed, item ID, pixel) is under the group's opacity, and dancing adds the video frame index ⌊t × frame_rate⌋ to the hash, so seeking equals playing. Wherever status can show, the status guard runs over blended pixels, and status colors still draw after. Stencil and silhouette stay Matte's job; classic color burn, classic color dodge, classic difference, alpha add and luminescent premul stay out as legacy.
+
+**Cost:** +1 offscreen per blended group, as isolation costs, counted among the frame's 32 isolated groups; about 5 to 40 ALU per pixel by mode (estimate). Budget class: any class with 2D marks.
+
+**It can never:** Blend across writer layers, with the shell or with the card; produce, blend or cover a status color; depend on playback.
+
+**Lands:** R2 the W3C modes and add, through Vello GPU on the same condition as isolation; R6 the other eleven, on the GPU layer
+
+#### Frame and group: passes
+
+For: a blur, glow, grade or distortion on one item, at its place in the draw order
+
+**Fields**
+
+- `passes: [{op: name@major | gpu.pass@1 ID, params: {name → value | channel}, grow: u = 0}] ≤ 8 = []` (on `group@1`; op names a shipped pass operator, a pack's such as `fx.levels@1`, or a composed pass in the document)
+
+**Semantics:** The group's children draw into its isolated target; the passes run in order on that target, each on the result of the one before, within the group's bounds grown by grow; the result composites at the group's draw order with its blend and opacity. An item drawn after the group stays untouched, and nothing drawn before it reaches a pass. Each pass goes through the operator check like any other. Passes, a backdrop's among them, see the group's target in the space its writer layer composites in, as blend modes do: sRGB-encoded in a 2D writer layer and linear light in a 3D one, and they write back in that space. A 2D writer layer with passes moves to the GPU layer, as the draw-path rule says, and its 2D goldens stay Vello CPU, so the passes are display only there.
+
+**Cost:** Each pass's declared cost × the group's pixels at its resolution; the offscreen is shared with blend. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Read another writer's layer, the card or an earlier frame; run outside its bounds plus grow; hold more than 8 passes; recolor or cover a status color.
+
+**Lands:** R6, with composed graphs
+
+#### Frame and group: backdrop
+
+For: one grade, blur or distortion over everything beneath it inside a region
+
+**Fields**
+
+- `backdrop: none | below = none` (on a `group@1` with passes)
+
+**Semantics:** With below, the passes run on what the group's own writer layer drew before it, inside the group's coverage, and the result replaces those pixels. The children only shape that coverage and aren't drawn; a group with no children covers the frame it sits in.
+
+**Cost:** +1 copy of the writer layer's target at the group's bounds, plus its passes. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Read below its own writer layer, another writer's layer, status colors or the card; run without passes.
+
+**Lands:** R6, with composed graphs
+
+#### Frame and group: echo
+
+For: speed trails on type, motion echoes, a time-difference reveal
+
+**Fields**
+
+- `echo: {copies: u8 = 0 (≤ 16), lag: flick = "1f", decay: 0..1 = 0.5, mode: over | add | max | screen | difference = over, newest: top | bottom = top}` (on `group@1`; a negative lag looks ahead)
+
+**Semantics:** Copy k draws the group's children evaluated at t − k × lag through the same pure evaluation as the frame, as a trail does, at decay^k of the group's opacity, composited by mode. Nothing is kept between frames, so a scrub draws it exactly. A look-ahead is refused when the children read the input track, a control or a view input, since inputs after t don't exist yet. Children with a status binding, a bound value or a number draw once, at t.
+
+**Cost:** copies × the children's evaluation and draw, declared and summed at check. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Keep a history buffer; read a live simulation (a bake is fine); exceed 16 copies; copy a status color, a bound value or a number.
+
+**Lands:** R6, with films
+
+#### Frame and group: warp
+
+For: a plane bent by z², a shear shown as 3Blue1Brown shows it, a wave through a word, a line that ripples
+
+**Fields**
+
+- `warp: {map: {x: expr, y: expr} | linear {matrix: [[a, b], [c, d]]} | complex {f: expr}, vars: {name → path | channel | control | time}, mix: channel 0..1 = 1, plane: {origin: [u, u] = [0, 0], unit: u = 100, y: up | down = up}, tolerance: px = 0.5, max_points: u32 = 200,000, ends: redraw | warp = redraw, flow: {vector_field: ID, time: f32} (optional)}` (on `group@1`, 2D writer layers)
+- `complex` reads z as x + iy in the plane and takes the closed list's complex functions (The closed function list: Complex, as vec2)
+
+**Semantics:** Every path and vector outline under the group maps point by point to p' = mix(p, f(p), mix), in the group's space read through `plane`: a point's coordinates are its offset from `origin` in units of `unit`, with y up unless `y: down`, so a map whose coefficients aren't all real, such as times i or e^(iθ)z, turns on screen the way the formula says. `map` and `complex` may read t through `vars`, so a homotopy is one warp. Each cubic maps to the cubic through the images of its ends along the images of its tangents, each sampled 1% along its handle. Where that strays from the true image at a third or two thirds of the way by more than `tolerance`, by the map's interval form, every cubic of the path is cut into 2, 4, 8 … equal pieces, the same count for all, up to 256. The same count for every cubic keeps the path's points aligned with a key written before the warp, so a path channel and the warp's mix move the same points; straight lines bend smoothly, and a linear map keeps them straight. Strokes are drawn after mapping, so widths stay as authored. `linear` mixes the matrix itself, (1 − u)I + uM, so a quarter turn passes through the half-size 45° matrix; it's a deformation, so items' `at` still never holds a matrix. With `ends: redraw`, path ends (arrows, dots) draw at the mapped end along the mapped tangent at their own size. A text item moves by its anchor and keeps its glyphs, since the core draws them from its atlas; a formula or a word drawn as vector@1 bends with its parts' ids kept. `flow` carries each split point along the vector field for `time`, by RK4 at the vector field's step, baked at check by the group's content key, so seeking equals playing.
+
+**Cost:** O(mapped points) per frame the warp's inputs change, about 40 ns a point with its bound (estimate); nothing while still; a flow bake O(points × steps) at check.
+
+**It can never:** Read an earlier frame; warp a status color, a bound value or a number (they draw unwarped at their mapped anchor); pass `max_points` (refused at check, naming the group); run code.
+
+**Lands:** R6, with films
+
+#### Mark set and columns `marks@1`
+
+**Fields**
+
+- `mark: point | rule | rect | bar | path | area | symbol | text | image`
+- `n: u32` (rows)
+- `columns: {name → {dtype: f32 | f64 | i32 | u32 | u16 | i64 | u8 | bool | role | str, len: u32, data: base64 | sidecar sha256} | {const: value}}`
+- Common columns: `x, y, x2, y2` (u); `size` (u or px); `angle` (deg); `role`; `opacity`; `text` (≤ 512 chars a row); `key`
+- `key: column name` (unique and stable; a row without one can't be selected)
+- `encode` (properties to columns, through scales)
+- A column may read a table: `{from: table asset ID, column: name}` (Asset: tables)
+- A column may read a logic array: `{array: <logic>.<name>, as: dtype}` (Mark set: logic columns)
+- A computed column: `columns: {name → {expr: expression over i, n and vars, vars}}` (`i` from 0 to n − 1; n may be a var with a declared max ≤ 4,096)
+- `rows_of: mark set ID` (optional: this set draws another set's rows after that set's transforms, so bars, labels and icons share one race)
+- `paint`; `parent`; `order`
+- `rows: {from: occurrence list + filter, columns: {name → payload field | control | expression} = its flick and payload fields}` (optional; in place of `n` and data columns)
+
+**Semantics:** One item with N rows, drawn as one instanced batch per paint state, with constant columns as uniforms. Columns map through scales in one vectorized pass, only for changed columns or row ranges, and rows are culled by bounds (with a per-row R-tree above 1,000 rows). Picking returns `<id>#<key>`, and patches append rows or set and remove them by key. A set whose transforms include periods or a reveal also exposes the read-only anchors `#period` (the period at or before `at`, with its `by` value) and `#head` (the revealed end), which labels, counters, templates, drivers and attachments read. Rows from an occurrence list are one per match at or before t, keyed by its index and appearing at its flick, and a control column reads that control at the match's flick, so a chart of a lab's launches gains a point as each lands and a seek draws the same rows. Columns may also read a piece's logic arrays (Mark set: logic columns), and a pick control can turn a click on a row into an input entry (Control: picks on rows and grid focus). A computed column is evaluated through the closed list in the frame a var changes, so a Riemann sum's bars, a function's sample dots and a field's arrows come from the formula they show; a `role` column takes an index into the set's roles, so a bar below the axis can take another color.
+
+**Cost:** O(changed rows) per change; one draw per (set, paint state); memory Σ dtype × n; 100,000 rows mapped in under 1 ms; at most 300 batches per frame
+
+**It can never:** Run an accessor or code per row; exceed 1M rows per set or 16M per document; mix mark types; take a row from an occurrence after t; compute a column from another set's rows or a row after t
+
+**Lands:** R1 point, rule and text for the line; R2 the rest; R6 `rows_of` and the period anchors; R6 rows from occurrence lists; R6 computed columns
+
+#### Mark set: atlas tiles
+
+For: the 16-bit pixel story film; pixel-art motion graphics; flat tiled maps in explainers
+
+**Fields**
+
+- `atlas: {asset: sha256, cell: [px, px], margin: [px, px] = [0, 0], separation: [px, px] = [0, 0], padding: px = 1}` (on `marks@1` with mark: image)
+- `grid: {shape: square | isometric = square, cell: [u, u]}`
+- `grid.shape` also takes `hex` (Mark set: hex grid); `grid.size: [cols: u16, rows: u16]` (optional) lays a tile array out by index (Mark set: logic columns)
+- `place: cell | free = cell` (free: columns `x, y: f32, u`, the tile's center, in place of `cx, cy`); on either, columns `angle: f32, deg = 0` and `scale: f32 = 1` (optional)
+- Columns: `cx, cy: i32; tile: u16; flip: u8` (bits h, v, transpose); `frames: u8 = 1; frame_rate: rational; phase: none | hashed = none`
+- Recipe `tiles.terrain@1 {cells: [[cx, cy, terrain]], rules: corners_and_sides | corners | sides, seed}` (on a hex grid, `rules: edges_6, precedence: [terrain]`: Mark set: hex grid)
+
+**Semantics:** Each row draws one atlas cell at its grid position as an instanced quad; an animated row shows frame ⌊t × frame_rate + phase × frames⌋ mod frames, with phase = hash(document seed, row key) when hashed. The terrain recipe expands at check: each cell takes the tile whose corner and side labels match its neighbours, and among equal candidates picks by hash(seed, cell key), so adding a cell never reseeds the others. A free row draws its cell centered at (x, y), turned by its angle and scaled about its center, in the same instanced batch, and the padding still keeps every sample inside its cell; free rows aren't grid cells, so the terrain recipe and grid focus skip them, and a hit meets the turned quad. The mark set never picks a tile itself: a `tile` or `flip` column may read a logic array (Mark set: logic columns), and only the terrain recipe's own choice is fixed at check.
+
+**Cost:** One instanced draw per atlas per paint state; O(changed rows) per patch; terrain expansion O(cells × candidates) at check. Budget class: data view, figure, export.
+
+**It can never:** Pick a tile itself: a tile column may read a logic array, and only the terrain recipe's own choice is fixed at check, by a seeded hash, never at run time or from an unseeded generator; sample across cell borders (padding is required); hold collision or navigation data.
+
+**Lands:** R6, with films; free rows R6, with the logic module
+
+#### Mark set: logic columns
+
+For: games and simulations whose state lives in a piece's logic: a factory floor's buildings, a dungeon's tiles and actors, a board's units, a flock drawn as marks
+
+**Fields**
+
+- `{array: <logic>.<name>, as: dtype, part: x | y | z | w, range: [min, max]}` (a column source, beside data, const and table columns, on any `marks@1` set, atlas tile sets among them; `part` for a vec2, vec3 or quat array; `range` optional)
+- `as`: from an i32 array `i32 | u32 | u16 | u8 | bool`; from an f64 or a vector's part `f64 | f32`; from a bool `bool | u8`
+- `n`: the array's count, in place of a written `n`
+- `alive: {array: <logic>.<name>, as: bool}` (optional)
+- `seen: {array: <logic>.<name>, as: i32}` (optional, here and on an instancer fed by logic: bit i set where player i + 1 sees the row, read through `match.me`: Net: this copy's player)
+- `key`: a column that reads an array, else the row's index; on a grid with `size`, the cell `(cx, cy)`
+- `grid.size: [cols: u16, rows: u16]` (on an atlas tile set: row i sits at cx = i mod cols, cy = ⌊i ÷ cols⌋)
+- Issue: `column.out_of_range {set, column, row, value, step}`
+
+**Semantics:** A column that reads a logic array is a pure function of that array: a frame at t reads it as the logic module gives the array at t (Logic `logic@1`), so seeking equals playing. The set's row count is the array's count, fixed at check from the logic item's `writes`, or from its `preview.writes` for a preview array `<logic>.preview.<name>`, whose rows remap in full each time the preview runs (Logic: preview). A set whose array columns differ in count, a column whose array no logic item in the document writes, and an `as` the array can't narrow to (a vector array without `part` among them) are refused at check, naming the column. Narrowing is checked per row: a value outside `as`'s range or the column's `range`, a NaN, an infinity or an f64 past f32's range hides that row for as long as it lasts (it doesn't draw, isn't hit and isn't announced) and raises `column.out_of_range` at its first step, naming the set, the column, the row, the value and the step; it never wraps, clamps or rounds a value into range, and f64 to f32 rounds to nearest, ties to even. A row whose `alive` is false doesn't draw, leaves the set's bounds and the spatial index, and is never hit, focused, selected or announced, so a fixed pool of rows can hold what logic hasn't spawned yet. A row whose `seen` value lacks the bit of this copy's `match.me` is hidden on this copy as a row whose `alive` is false is, and with `match.me` none every row is seen; the array is the same on every copy. After each step the logic module compares each array the step wrote with its value after the step before and hands every reader the changed index ranges, at most 64 a step, with any more merged into their span; the data module remaps only those rows, and, for an array written with `interpolate: linear`, the rows in the last two steps' ranges every frame while they blend (Logic: interpolated writes), so a 9,216-row layer where one cell changes remaps one row. A seek, a restore, an opened save or a new reader remaps every row, and a frame is the same whether its rows were remapped in part or in full. On an atlas tile set a `tile` or `flip` column may read an array this way, so the mark set never picks a tile itself. The arrays join the set's read set, so the scheduler runs the set after the logic step that writes them. An instancer, the cell grid, keyed copy and a flip read arrays the same way (Instance `instance@1`: logic columns; Cell grid `cells@1`: logic grid; Text `text@1`: keyed copy; Frame and group: flip).
+
+**Cost:** Comparing written arrays O(bytes written) a step, about 10 µs per 100 KB (estimate); remapping O(changed rows), 100,000 rows in under 1 ms; a full remap after a seek O(rows). Budget class: as the set.
+
+**It can never:** Wrap, clamp or round a value into range; read an array other than as the logic module gives it at t; write to logic; run code per row; draw, hit or announce a row whose `alive` is false or whose value is out of range; read an array no logic item in the document writes
+
+**Lands:** R6, with the logic module
+
+#### Mark set: hex grid
+
+For: hex boards: a tactics map, a strategy board, a hex puzzle, a board game explained
+
+**Fields**
+
+- `grid: {shape: hex, cell: [w, h: u], hex: {orient: flat | pointy = pointy, offset: odd | even = odd}}` (on an atlas tile set, beside square and isometric)
+- Columns: `cx, cy: i32`, offset coordinates (pointy hexes shift every other row, flat ones every other column), or `grid.size` for a tile array
+- Recipe `tiles.terrain@1 {cells: [[cx, cy, terrain]], rules: edges_6, precedence: [terrain], seed}`; each tile the recipe may choose declares `{terrain, edges: [label] × 6}`
+
+**Semantics:** A hex grid is a layout function and nothing more. With cell w × h, the center of cell (cx, cy) is, for pointy hexes, x = w × (cx + s ÷ 2), y = 0.75 × h × cy, and for flat hexes, x = 0.75 × w × cx, y = h × (cy + s ÷ 2), where s is 1 on a shifted row (pointy) or column (flat) and 0 otherwise: with offset odd the odd ones shift, with even the even ones, taking cy mod 2 or cx mod 2 as 0 or 1 for negative coordinates too. Each tile draws its atlas cell as a w × h quad centered there, in order of center y, then center x, so overlapping tile art stacks the same way every frame. A cell's six neighbours are the cells at distance 1 in cube coordinates, converted from its offset coordinates by the grid's convention, and its edges count 0 to 5 counterclockwise on screen, from the one facing +x (pointy) or the one between +x and −y (flat). A point lies in the cell whose hexagon holds it, found by converting the point to fractional cube coordinates and rounding, so a hit or a pick never meets a neighbour's quad corner; a point on an edge or a vertex goes to the cell with the smaller (cy, cx). With `rules: edges_6` the terrain recipe expands at check: for a cell of terrain T, edge i expects the neighbour's terrain N where N comes before T in `precedence`, and T otherwise, an edge with no neighbouring cell expecting T; the cell takes a tile whose terrain is T and whose six edge labels equal those, and among equal candidates picks by hash(seed, cell key), so adding a cell never reseeds the others. A hex cell no tile matches is refused at check, naming the cell and the six labels it wanted, and square rules (corners_and_sides, corners or sides) on a hex grid are refused, naming the rule.
+
+**Cost:** As atlas tiles: one instanced draw per atlas per paint state, one quad a cell; a hit O(1) after the spatial index; expansion O(cells × candidates) at check. Budget class: data view, figure, export.
+
+**It can never:** Take square rules on a hex grid; pick a tile itself; take a neighbour or a hit from the quads' overlap; hold collision or navigation data
+
+**Lands:** R6, with the logic module
+
+#### Bound value
+
+**Fields**
+
+- `target: ID + path`
+- `source: reading: | run: | ask: | verdict: | task: | req: handle`
+- `select: value | p50 | p95 | count | a named query = value`
+- `format: {unit, unit_at: after | super = after, precision (no more than the reading's), notation: fixed | compact | percent | duration, sign: auto | always = auto, group: none | locale = locale, ellipsis: bool = false}`
+- `as_of: now | record | time = now` (in a replayed film, the mapped record time)
+- `show: {source: bool, as_of: bool}`
+- `stale_after: duration` (the reading's freshness)
+- `missing: dash | hide = dash`
+- Read-only: the as-of time and the source's name
+
+**Semantics:** Resolved from a record state pinned to the frame, with its as-of time, so a replay shows the same value. Shows the value and unit, with the as-of time on hover, and a stale value greys out and shows its age. Updates coalesce to once per frame, and numeric targets go through scales. `super` raises the unit to the number's top, as a degree sign sits.
+
+**Cost:** O(1) per bound value per reading change, never per frame; about 64 B each; 10,000 refreshed in under 1 ms
+
+**It can never:** Show a number nothing measured; show a stale value as live; be typed over; join across a gap without marking it
+
+**Lands:** R1 on the canvas; R2 in panels; R6 unit_at, sign, group and ellipsis
+
+#### Status binding
+
+**Fields**
+
+- `target: ID + paint slot (fill | stroke | badge)`
+- `source: verdict: | run: | ask: handle` (an open ask means needs you; `verdict:<id>#<req>` takes that requirement's outcome, and `pending` draws as running, or as needs you while the requirement's ask is open)
+- `as_of: now | record | time = now` (as a bound value's: in a replayed film, the mapped record time)
+- `legend: auto` (can't be turned off)
+
+**Semantics:** Maps the source's state (pass, fail, invalid, blocked, inconclusive, running, needs you, stale, idle) through the look's status map; a verdict on an older commit draws as stale. Draws unlit after tone mapping and effects, so the color is exact. A 3D object has a material, not a paint, so a status binding on one takes its stroke slot, drawn as an outline around the object, or its badge; a fill slot there is refused, since a material never carries a status color. A mark's `status` field holds a status binding whose target is that mark, and it joins `status_bindings` at load, so every rule that asks whether a document has a status binding sees it. A legend entry appears whenever a status color is on screen, and a click opens the evidence.
+
+**Cost:** O(1) per state change
+
+**It can never:** Come from a threshold, a scale, a gradient, a blend, an effect or a literal; be covered by another writer's layer, a mask or an effect; appear without a legend
+
+**Lands:** R1
+
+#### Scale and encode `scale@1`, `axis@1`, `legend@1`
+
+**Fields**
+
+- Scale: `type: linear | log | symlog | time | band | point | ordinal | quantize = linear`; `domain: [min, max] | column | categories` (from the column by default); `range: x | y | z | [u, u] | palette roles`; `nice: bool = true`; `zero: bool = false` (always true for bars and areas); `clamp: bool = false`; `padding: f32 = 0.1`; `reverse: bool = false`; `ticks = auto`; `format`; `breaks` (a calendar's closed hours)
+- Encode, on a mark set: properties `x, y, x2, y2, size, opacity, shape, angle, text, order, key, role`, each `{column, scale}` or a constant (`role` through a scale whose range is palette roles; a quantize scale gives one role per band, which colors a heatmap by value)
+- Axis: `{scale, side, grid: bool = false, title}`; legends are automatic
+- Panes: `{stack, share: x, resolve: shared | independent}`
+- Transforms (closed): bucket (M4 or OHLC), window, stack, bin, and for data that changes with time:
+- `periods {by: column, key: column = the set's key, at: channel, mix: linear | hold = linear}` (rows that share a `by` value, such as a year, are one period; `at` is a position in by's units)
+- `standing {by: column, desc: bool = true, top: u16 = 10, into: column = standing}`
+- `reveal {by: column, to: channel}`
+- `emphasis {keys: [key], others: f32 = 0.3, mix: channel 0..1 = 1}` (others: the opacity of the rows not named)
+- Scale `domain` may be `periods` (the rows' domain at `at`, mixed like them); Axis `side` may be `zero` (through the other scale's zero, clamped to the pane)
+
+**Semantics:** One vectorized pass when inputs change; a domain is recomputed only when its column changes. Ticks fall on 1, 2 and 5 × 10k, or on calendar units for time. A linear, log or symlog scale whose range is palette roles interpolates between them in OKLab, as a colormap; quantize keeps bands. Guides are generated, never drawn by hand, and axis labels thin by parity, keeping the first and last. Periods make data that changes with time: at t, each key's row is its row in the period at or before `at`, mixed with its row in the next period by the fraction between them (hold keeps the earlier), so a race or a reveal is a pure function of `at` and seeking equals playing. A key missing from a period enters or leaves from its neighbouring period's value at opacity 0. Standing ranks each period's rows at check, ties by key, and is then mixed like any column, so bars glide past each other; rows past `top` slide to `top` + 1 and fade. Reveal shows rows up to `to`, the last segment ending at the point mixed at `to`. A mixed number shows no more precision than its column's source, and where `at` rests on a period every row equals that period's row exactly. Ticks enter and leave by opacity as their values enter and leave the domain. Where a scale maps categories to palette roles, or a legend tells series apart by color alone, two roles closer than the look's `data_distance`, as seen or under simulated protanopia, deuteranopia or tritanopia (Machado, Oliveira and Fernandes 2009, at full severity), are refused, naming the pair, unless their marks also differ by shape, dash or a direct label.
+
+**Cost:** O(rows) per change; O(ticks) for guides; 4 B per row per property; periods: standing O(periods × keys log keys) at check, then O(keys) per frame for the two periods around `at`; the color-vision check O(roles²) at check
+
+**It can never:** Map a column to a status role; start a bar anywhere but zero; put values ≤ 0 on a log scale (refused, naming the rows); compute new numbers such as a regression or a density; mix a number from anything but two periods of one key; tell categories apart by roles color-blind viewers can't separate
+
+**Lands:** R1 a time scale and one axis for the line; R2 the rest; R6 periods, standing, reveal and emphasis; R6 the z range and continuous color ramps
+
+#### Series and decimation `series@1`
+
+**Fields**
+
+- `source: reading or stream handle`
+- Or `source: physics output ID`: a row every `sample` steps of its bake up to t, the last `keep` of them
+- `t: i64 column, flick` (strictly increasing)
+- Values: `v: f32 column`, or `o, h, l, c`
+- `append: {source, rule}` (such as candles from quotes: open first, high max, low min, close last)
+- `chunk: rows = 65,536` (immutable once full)
+- `capacity: rows = 1,000,000` (a ring)
+- `gap: duration` (breaks the line)
+- `calendar: {tz, sessions}`
+- View: `window: [t0, t1] | last n`; `decimate: m4 | ohlc | minmax | none` (m4 for lines, ohlc for candles); `bucket: 1 px column | duration`; window columns `{mean | std | min | max | sum | ema, length}`; marks `line | area | candle | band | bar | rule | tag`; `candle: {up, down: role}` (data roles, kept the stated distance from the status colors wherever status can show); `crosshair: {snap: nearest row, readout: bound value}`
+
+**Semantics:** Append-only: rows out of order are refused, and only the tail chunk re-uploads. M4 keeps the first, min, max and last value per pixel column, so the picture equals the full data's pixel for pixel for a line drawn without antialiasing, and with it differs only in its edge pixels' coverage; OHLC is the same operator per bucket, and a 2× min-max pyramid per chunk makes zooming O(columns × log n). The crosshair reads the raw row, never a decimated vertex. A physics output source appends a row every `sample` steps of its bake up to t and keeps the last `keep` of them, so a lab's plot grows as it plays and a seek draws the same rows.
+
+**Cost:** Append O(1) amortized; first decimation O(rows in window), then O(px × log n); 12 to 24 B per row plus a pyramid no larger; 1M rows into 3,000 columns in under 2 ms
+
+**It can never:** Be built point by point by a script; draw across a gap; show a decimated vertex as a reading; exceed 4 vertices per column
+
+**Lands:** R2; R6 a physics output as source
+
+#### Graph and layout memory `graph@1`, `layout@1`
+
+**Fields**
+
+- Nodes (columns): `id, kind, w, h (u), group, pin: none | rank | order | xy = none, priority: i16 = 0, rank_hint`
+- Edges (columns): `id, a, b, kind, weight: f32 = 1, min_len: u16 = 1, a_side, b_side: n | e | s | w | auto = auto`
+- `aggregate: group → portal stubs`; `focus`; `query` (by name, reach or path); `compare` (by stable ID)
+- Nodes (columns, optional): `item: ID` (a frame, card, icon or recipe instance that draws the node)
+- `groups: box | none = box` (the nodes of one `group` lay out inside one box titled by the group)
+- Nodes (columns, optional): `appear: channel 0..1` (a node and its edges enter and leave by it)
+- Layout: `algo: layered | tree | treemap | grid | pinned | circular | shell {rings: [[node]]} | spiral | force {iterations: u16 = 300 (≤ 3,000)} | stress | spectral | bipartite`; `mix: {from: layout ID, to: layout ID, at: channel 0..1}` (optional); `direction: down | right = down`; `seed: u64` (required, non-zero); `spacing: {node = 24, rank = 48, edge = 12}, u`; `memory: {id → (rank, order, x, y)}` (in the view's cache, by content key); `budget: ms = 50`
+
+**Semantics:** Diffs by ID: kept nodes keep their rank and order as hard constraints, and their x and y unless their rank's width changed, while new nodes take their neighbours' barycenter slot and only changed ranks are re-placed. If the constraints can't hold, it returns `layout.relayout_needed`, offers a full relayout as a previewed patch, and keeps the old picture. It runs off the UI thread, and the same graph, memory and seed give the same bytes. A node that names an item takes that item's measured bounds as its w and h, and the layout writes the item's place as a contribution to its transform, so any card draws as a node and moves when the layout does. With `groups: box`, the nodes of one group lay out contiguous in every rank inside a frame the layout sizes around them, with the group's title on top, which routes avoid, and `aggregate` folds that box into its portal. Circular, shell, spiral, force, stress, spectral and bipartite layouts are computed at check from the seed with a fixed iteration count, with radial and octilinear later. A spectral layout fixes each axis's order and sign by node order, so what an eigensolver returns never moves a node. A `mix` glides every node from one layout to another, with routes re-run each frame in straight or spline mode, so a film can re-lay a graph.
+
+**Cost:** Full O((V + E) log V × sweeps); local O(affected ranks × rank size); about 100 B per node and 64 B per edge; 10,000 nodes in under 50 ms per local change and under 100 MB
+
+**It can never:** Move a pinned or unchanged node without a relayout you saw; take its seed from the clock; lay out more than a level shows (aggregate first)
+
+**Lands:** R1 basic layered, with the memory format; R2 the memory rules and the rest; R3 the map beyond code; R6 the circular, shell, spiral, force, stress, spectral and bipartite layouts, `mix` and `appear`
+
+#### Route `route@1`
+
+**Fields**
+
+- `edges = all`
+- `mode: orthogonal | polyline | spline | straight` (orthogonal for layered)
+- `avoid = nodes, node labels and frame titles`
+- `clearance: f32, u = 8`
+- `bend_cost = 1 × length`
+- `ports: spread | center = spread`
+- `corner_radius: f32, u = 6`
+- `ends: {start: none, end: arrow}` (as Path `path@1` takes them)
+- `paint: {edge kind → paint} = the look's line for every kind` (so an asynchronous kind can draw dashed)
+- `crossing: plain | hop = plain`
+
+**Semantics:** Runs after layout and before edge labels; in a layered layout, segments get slots in the channels between ranks. Elsewhere, A* searches a sparse grid made from obstacle box edges inside the corridor, with a bend penalty and no doubling back, taking obstacles from the spatial index. Routes are cached by (endpoints, corridor obstacles).
+
+**Cost:** Channels O(E log E); A* O(G log G) per edge; a cache hit O(1)
+
+**It can never:** Pass through a node, a node label or a frame title; run along another edge for more than one segment; reroute an edge whose corridor didn't change; keep hand-set bends in a view of the record
+
+**Lands:** R1 orthogonal routing between ranks; R2 obstacle routing
+
+#### Labels `label@1`, `labels@1`
+
+**Fields**
+
+- Label: `target: ID[#row] | edge`; `text`; `priority: i16 = 0`; `anchors` (8 compass points and middle for nodes; center, head, tail and inline for edges); `offset: px = 4`; `padding: px = 2`; `fold: dot | count | hide = dot`; `zoom: [min, max]`
+- Placement: `labels = all in the view`; `order = priority, then ID`; `cell: px = 2`; `avoid = marks, routes, frame titles`; `keep_previous: bool = true`; `recompute: per √2 zoom bucket and on data change`
+
+**Semantics:** Deterministic, on the CPU: sorted by order, each label tries its spot in the next coarser bucket, then its anchors; the chain starts at the document's base zoom, so a bucket's placement is the same whether the view zoomed in, zoomed out or got there by a seek. Each label is placed against an occupancy bitmap (rows of 32-bit words) that includes padding. A label that can't be placed folds to a dot, joins its frame's count, or hides, and stays reachable by keyboard and screen reader. Nothing is recomputed while the camera moves; labels fade between buckets by zoom within a margin, never by time.
+
+**Cost:** O(L log L + L × A × area ÷ (32 × cell²)); bitmap W × H ÷ cell² ÷ 8 B (about 206 KB at 3024×2180); 2,000 labels in under 2 ms per bucket; a seek computes the chain from the base zoom once, cached per bucket
+
+**It can never:** Overlap another label or a status color; leave its frame; move while the camera moves; drop a needs-you label silently (those place first)
+
+**Lands:** R1 for the line; R2
+
+#### Auto layout
+
+**Fields**
+
+- On a frame: `layout: none | row | column | grid = none`; `wrap: bool = false`; `padding: u = 0`; `gap: u | [u, u] = 0`; `align_main: start | center | end | between = start`; `align_cross: start | center | end | stretch | baseline = start`; `grid: {rows, cols: [u | fr | hug], flow: row | column = row, reverse: none | x | y = none, align_rows: [start | center | end | baseline], align_cols: [start | center | end]}`
+- On a child: `width, height: fixed | hug | fill = hug`; `min, max`; `position: flow | absolute = flow`; `resize: {h, v: start | end | both | center | scale} = start`
+
+**Semantics:** Computed by Taffy (flexbox, grid and block), the engine GPUI already uses, with text leaves measured by the canvas shaper and only dirty subtrees re-run. Positions snap to device pixels when drawn, and overflow is masked and counted, never overlapped. A child sized by a live value uses its `widest`. A frame's layout fields are channel targets. A key that changes them mixes each flow child's position and size from the layout before to the layout after over the key's segment, both solved at check, so a row glides into a grid.
+
+**Cost:** O(dirty subtree) per change, never per frame; a 500-node tree in under 1 ms
+
+**It can never:** Depend on its own result; resize because a bound number changed; let flow children overlap
+
+**Lands:** R1 where cards are gpui-kit components; R2 on the canvas
+
+#### Salience `salience@1`
+
+**Fields**
+
+- `level: frame ID`
+- `show: u8 = 9` (lowered to what fits at the minimum readable size)
+- `rank = [needs you, sent back, failing, lacks proof, touched by this work, changed since you last looked, priority]`
+- `tiebreak = ID`
+- `fold: {count item, sentence template over facts}`
+- `hold`: the set changes only when the level opens, or on a needs-you or verdict change
+- `files`: at the evidence level only
+- Computed per item: `{rank: u16, reasons: [key]}`
+
+**Semantics:** Ranks by record facts, with no model, shows the top `show`, and folds the rest into a count with a sentence built from counts, such as "14 more: 2 lack proof, 12 unchanged". Arrivals that would reorder the set wait as "N new" until the next hold. When more items need you than `show` allows, all of them show and every other item folds. It also sets each item's minimum level of detail and label priority; expanding a fold is session state.
+
+**Cost:** O(n log k) per level change; O(1) per record event; nothing per frame
+
+**It can never:** Show a laundry list; fold or hide a needs-you item; reorder on every reading; rank by a model
+
+**Lands:** R1
+
+#### Selection (session state)
+
+**Fields**
+
+- `ids: [ID[#row]]`; `focus`; `anchor`; `hover`
+- `selectable` per item (true for parts and keyed rows)
+- `hit: {margin: px = 3, coarse: px = 4, test: geometry | box = geometry}`
+- `mode: point | toggle | brush | nearest`
+- Point and ask sends `{handles: [doc handle], t: flick, doc_rev: u64, precision: id | geometry | region, region: {x, y, w, h}, u (optional), quote: string (optional)}` beside your words (`t` absent for a still)
+
+**Semantics:** Never stored in a document or the record; when you point and ask, it reaches the agent as handles. In 2D it's a spatial-index lookup, then exact geometry within the margin, topmost first; in 3D, the object-ID target; data rows select by key, and `nearest` picks within 24 px. Tab follows reading order, and the highlight is an outline, never a fill. When you point and ask, the handles go with the frame's time `t`, the revision you saw, `doc_rev`, and how exactly the pointer hit: `id` when it names items or rows, `geometry` when it names an item but you meant a place on it, given as `region`, and `region` alone when no ID is under it, as on an HTML deliverable or a captured screen. The text of a text item under the pointer goes as `quote`, exactly as the document holds it and apart from your words, so the agent reads it as data, never as something you said. A frame is a function of `t`, so render-back at `t` and `doc_rev` shows the agent what you saw, with nothing frozen. Each handle resolves when the agent reads it: one whose item is gone comes back `detached`, with its last name and the writer and revision that removed it, and the ask-task stays open. On a work product, a point and ask opens a shared lease for its ask-task on exactly the selected IDs and the items derived from them. While it's live, the agent's patches to that document must stay inside it: one that writes outside is refused with `outside_selection`, naming the items, and the agent patches again inside it or asks you to widen it with a choice ask; a `region` alone selects no ID, so it can be asked about but never patched. Inside it, the change shows only as a preview, or as up to three options side by side (Variant), until you accept one with your gesture: that ends the lease and applies it as one patch written as you, one commit and one undo step, so the agent's items it changes become yours (Writer layer). A click on a row that a pick control names is that control's input entry instead, and selects nothing; a row or element that doesn't draw (its alive or live false, hidden, or at opacity 0) is never selected, hovered or announced (Control: picks on rows and grid focus); and a selected element of an instancer fed by logic leaves the selection once its slot's generation changes or it stops being live.
+
+**Cost:** 2D pointer move O(log n); 3D a one-pixel readback, a frame late; brush O(log n + k)
+
+**It can never:** Be set by an agent; persist into a document; answer an ask; change a view of the record
+
+**Lands:** R1 click to select; R2 point and ask everywhere; R6 the selection's lease, its preview and options
+
+#### Sheet `sheet@1`
+
+**Fields**
+
+- `cells: [{id, show: doc handle | ask option | time | variant, size: [w, h], device px, treatment: none | mono | reversed | blur | mirror = none, label, names_option: option ID (optional), highlights}]`
+- `columns = auto`
+- `gap: px = 8`
+- `preselect: option ID` (session state)
+
+**Semantics:** Each cell renders at exact device pixels, never scaled, into a texture cached by (content key, size, treatment, look), with highlights beside it, never on it. A click preselects; only the question card answers. A contact sheet is a sheet of times, and a variant sheet shows a document's variants side by side. When a variant sheet shows a taste call's candidates, it adds none of these, which sends the work back with your note, and two candidates whose stills, at the cell's size and rendered on one machine, differ by an OKLab ΔE under 0.1 at the 90th percentile of their pixels count as one: the later is dropped before the ask and named in its record. A model sheet shows a rig's views × expressions × key poses, rendered by the rig, and a moment strip shows times at moment + k × 0.2 s for k = −2..3 (R6).
+
+**Cost:** Each cell renders once and is cached; then one quad per cell per frame
+
+**It can never:** Answer an ask; scale a cell; mix looks without saying so
+
+**Lands:** R1; R6 model sheets and moment strips
+
+#### Cell grid `cells@1`
+
+**Fields**
+
+- `size: {cols, rows: u16, cell: [px, px]}`
+- `font: {family: font role, size: px, fallback: [font role], ligatures: bool = false}`
+- `palette: {fg, bg: role, ansi: [role] (16), truecolor: bool = true}`
+- `frame: {revision: u64, base: u64 | null, cells: {g: grapheme, fg, bg: color, attrs: u16 bits, link: ID} (columns, row-major), attrs: [name], cursor: {x, y: u16, shape: block | bar | underline, visible, blink: bool}, scroll: {history: rows, offset: rows}, links: {ID → url}, images: [sha256], modes: {alt_screen, bracketed_paste, app_cursor, focus_events: bool, mouse: none | x10 | sgr}}`
+- `patch: {revision, base: u64, rows: [{y, x: u16, cells}], cursor: {x, y}}`
+- `title`; `cwd`; `progress: 0..1`; `bell: u32` (from the terminal's escapes)
+- `play: {asset: terminal recording, start: time, in: flick = 0, rate: rational = 1}` (optional, in place of `frame` and `patch`)
+
+**Semantics:** A terminal's screen as typed columns, sent as a frame and row patches against a revision, and drawn as one instanced glyph batch through the one shaper. Wherever status can show, as in a session's page, a cell color inside the status distance becomes the nearest allowed color, clipboard writes are shown and reads refused, and a bell becomes a badge. Selection and copy belong to the app, as session state. A grid that plays a recording shows, at t, the keyframe at or before its source time plus the patches up to it, so seeking equals playing, and it quotes the recording, so honest numbers lists its digits as quotation. A grid may instead show what a piece's logic writes, one value a cell (Cell grid `cells@1`: logic grid).
+
+**Cost:** A 120 × 36 frame is 4,320 cells, about 52 KB; a patch re-uploads only its rows; one draw per atlas page; under 5% of a core per terminal at 60 patches a second
+
+**It can never:** Draw a status color; read the clipboard; hold a selection; count as evidence of an agent's state
+
+**Lands:** R2; R6 recordings played in films
+
+#### Cell grid `cells@1`: logic grid
+
+For: text-mode games and simulations: a dungeon drawn in glyphs, a survival map in a terminal's look, a cellular automaton
+
+**Fields**
+
+- `grid: {array: <logic>.<name>, size: [cols, rows: u16], glyphs: [grapheme] ≤ 4,096, roles: [role] ≤ 16}` (in place of `frame`, `patch` and `play`)
+- Each i32 value: bits 0 to 11 a glyph index, 12 to 15 a foreground role index, 16 to 19 a background role index, 20 to 27 the grid's attribute bits in the order of its `attrs`, 28 to 31 zero
+- Issue: `grid.out_of_range {array, cell: [x, y], value, step}`
+
+**Semantics:** The grid shows a logic item's i32 array of cols × rows values in row-major order, as the logic module gives it at t, so seeking equals playing; an array whose count isn't cols × rows is refused at check, naming both. Each value unpacks into a glyph from `glyphs`, its foreground and background roles from `roles` and its attribute bits, and the cell draws through the one shaper as any cell does. A value whose glyph or role index passes its list, or whose top four bits aren't zero, draws a blank cell in the grid's own background and raises `grid.out_of_range`, naming the array, the cell, the value and the step; it never wraps into the lists. At check, every grapheme in `glyphs` must be drawable by the grid's font or its fallbacks, or the grid is refused, naming the grapheme. Only rows a step changed upload again (Mark set: logic columns). Wherever status can show, the status distance applies as to any cell color, and a logic grid has no cursor, scroll, clipboard or bell.
+
+**Cost:** 4 B a cell in logic memory; a changed row uploads cols cells; a 96 × 96 grid is 9,216 cells, about 110 KB on the GPU (estimate). Budget class: as the cell grid.
+
+**It can never:** Wrap an index into its lists; draw a status color; hold a cursor, a selection or the clipboard; draw a glyph its fonts lack
+
+**Lands:** R6, with the logic module
+
+#### Look `look@1`
+
+**Fields**
+
+- `id`; `format: u32 = 1`; `basis: physical | drawing | indexed` (indexed: Look look@1: indexed basis); `license`; `description: string ≤ 400 chars`
+- `palette: {name → color}`; `roles: {role → palette name | font | {mix: [role, role, 0..1]} | {lighter: role, by: 0..1} | {darker: role, by: 0..1} | {invert: role}}` (derived roles resolved at check in OKLab)
+- `themes: {light, dark}` (may override palette and roles only)
+- `status: {pass, fail, invalid, blocked, inconclusive, running, needs_you, stale, idle → color}`; `status_treatment: {core_min_px = 4, outline}`; `min_distance: OKLab ΔE = 0.10` (wherever status can show; see the status-color rule); `attention_treatment: {line: dashed, role: ink, glyph: warning}`; `legend: auto`
+- `data_distance: OKLab ΔE = 0.06*` (between data roles a chart tells apart by color alone, as seen and under simulated color-vision deficiency: Scale and encode)
+- `code: {class → role}`; `diff: {added, removed, changed → role}` (every shipped look defines both, so code needs no colors of its own: Text text@1: code)
+- `lines: {name → {kind: exact | wobble | pencil | marker | brush | chalk | crayon, from: line name, passes, opacity, spread, width: px, wobble_px, segment_px, weight, cap, dash: [px]}}`
+- `fills: {name → {kind: flat | gradient | hatch | paper | halftone | ink | wash | spatter, …, offset, seed: document | item}}` (Look look@1: drawn fills)
+- `ground: {kind: paper | flat | grid, params, anchors (rule:n)}`, with paper's params `paper {role, rules: {pitch, first, width: px, role, opacity}, margin: {x, width: px, role, opacity}, spine: {kind: spiral | none, x, pitch, hole, wire: px}, fibres: {count, length: [px, px], role, opacity, light_every}, specks: {count, radius: [px, px], opacity}, edge_shade: {role, opacity, band}, grid: px | null, seed: document | item}` (tooth, age and anchor: Look look@1: paper)
+- `light`, `separations` and `captions` (the rows below)
+- `fonts: {name → {family, file, license, embed: bool, single_line: bool}}`
+- `roles` include `math`, a math face such as New Computer Modern Math (OFL), so a lone symbol set as text@1 (a θ beside an angle) matches the typeset formulas beside it
+- `fallback: [font name]` (bundled faces in order, such as Noto Sans for each script, Noto Sans CJK and an emoji face, each with a licence that allows embedding)
+- `time: {quantize_hz, smooth: [what stays smooth], boil: {hz, amount_px, scope, while: drawing | moving | always, cycle: u8 = 0, seed}}` (with `cycle: n`, the boil's seed is ⌊t × hz⌋ mod n, so n drawings repeat)
+- `tone_map: none | filmic`; `exposure: EV100`; `finish: [effect]` (grain, vignette, tint, the grade, deband, print wear, the tone curve and the screen run as one shipped pass with identity defaults: Look look@1: print finishes; ao moves to Look look@1: ao); `transition: {kind, span}`
+
+**Semantics:** One look per shot, the document's by default, and switching it never changes data; the status map and legend stay the document's in every shot. Sizes are px at design size, and the theme is part of every cache key. The boil is defined here only, as a function of time and IDs, never of playback, and hatch fills never reseed between frames. The status distance and the status guard apply wherever status can show (the status-color rule); any other document, such as an art film played on its own, may use any palette.
+
+**Cost:** One pipeline per feature set, at most 32 per look; a theme switch re-resolves roles in O(items)
+
+**It can never:** Recolor status without a legend; use a font that can't ship; let a theme change anything but palette and roles
+
+**Lands:** R1 roles, status map and fonts; R6 drawn looks, ground, finish, light, paper, separations, captions and the indexed basis; R2 the data distance; R6 code and diff roles; R6 derived roles, the math role and the fallback list
+
+#### Look `look@1`: tone mapping
+
+For: the castle at night (`agx`); figures, the house and 3D charts (`neutral`)
+
+**Fields**
+
+- `tone_map: none | filmic | agx {white: f32 = 16.29, contrast: f32 = 1.25} | neutral = none (agx as an analytic curve between the AgX inset and outset matrices, per channel: below 0.18, x^c ÷ (x^c + a) with a = (1 ÷ 0.18 − 1) × 0.18^c; above it, 0.18 + k·d·(1 + d ÷ w) ÷ (1 + k·d ÷ 0.82) with d = x − 0.18, k the toe's slope at 0.18 and w = k × (white − 0.18)² ÷ 0.82, so contrast c and white are its only parameters; neutral after Khronos's reference; both analytic: no LUT asset)`
+- `filmic` names the ACES fit the prototype uses
+
+**Semantics:** `agx` rolls bright lamps off without the hue shift and over-saturation a filmic curve gives. `neutral` keeps base colors, and so the look's roles, recognizable up to bright highlights. Status colors still draw after tone mapping, so no curve can change one.
+
+**Cost:** The same one full-screen pass as now
+
+**It can never:** Be a custom curve; apply to status colors or overlays
+
+**Lands:** R6
+
+#### Look `look@1`: grade
+
+For: films that set a mood per shot (dawn, night, flashback), the castle at night, product renders; 3D writer layers only
+
+**Fields**
+
+- `grade: {white_balance: {temperature: K = 6500, tint: f32 = 0}}` (a Bradford adaptation in linear light)
+- `grade: {slope, offset, power: linear RGB = [1, 1, 1], [0, 0, 0], [1, 1, 1]; saturation: f32 = 1}` (ASC CDL, after the tone curve)
+
+**Semantics:** Applied inside the existing tone-mapping pass, and channels can key it per shot. The check applies the grade to every palette role a 3D writer layer uses and refuses one that moves a data color within the look's status distance wherever status can show. Status colors, legends and 2D marks with roles draw after it and are never graded.
+
+**Cost:** About 20 ALU per pixel inside the tone-mapping pass. Budget class: any class with a physical look.
+
+**It can never:** Grade a status color, a legend or a 2D mark; take a LUT image; vary with the camera's position.
+
+**Lands:** R6
+
+#### Look `look@1`: bloom
+
+For: the castle's lamps and windows at night, emissive parts in figures (an exhaust, an arc), films
+
+**Fields**
+
+- `bloom: {intensity: f32 = 0.04, radius: f32 = 0.85, threshold: EV100 | none = none, tint: color = [1, 1, 1]} | none` (radius is the share of the mip chain used)
+
+**Semantics:** Fields on the shipped glow: a mip chain (13-tap downsample, tent upsample) mixed into scene color before tone mapping. With no threshold it conserves energy, so only very bright pixels visibly bloom and the result follows exposure.
+
+**Cost:** About 0.2 to 0.4 ms at 1080p for six mips (estimate). Budget class: figure, work product, showpiece, export.
+
+**It can never:** Bloom a status color; read an earlier frame; exceed the class's effects time.
+
+**Lands:** R6, as fields on R2's shipped glow
+
+#### Look `look@1`: ao
+
+For: the house, the castle, the city, figures in the physical look
+
+**Fields**
+
+- `ao: {radius: m = 0.5, strength: f32 = 1, samples: 8 | 16 = 8, resolution: half | full = half, multi_bounce: bool = true, specular: bool = true} | none = none` (on `look@1`; no longer in the finish)
+
+**Semantics:** Occlusion comes from a depth and normal prepass, drawn only when ao is on, with a fixed Hilbert R2 pattern and one edge-aware blur, and it scales only the ambient, irradiance-probe and environment terms in shading. multi_bounce brightens it by the surface's albedo (Jimenez) and specular derives specular occlusion from the same visibility; direct light and emission are never darkened. It keeps no history, so a still frame is the same however it was reached.
+
+**Cost:** The prepass plus 16 to 32 fetches per pixel at half resolution, roughly 0.4 to 0.8 ms at 1080p on the reference Mac (estimate). Budget class: figure, work product, showpiece, export.
+
+**It can never:** Darken direct light, emission, status colors or 2D marks; accumulate over frames; run without its prepass counted in the cost.
+
+**Lands:** R6
+
+#### Look `look@1`: deband
+
+For: night skies, sunsets and dark gradients in films and the castle, which band in 8-bit output and exports
+
+**Fields**
+
+- `deband: none | spatial = spatial` (physical looks; drawings default to none)
+- `deband_lsb: f32 = 1` (amplitude in 8-bit steps, ≤ 2)
+
+**Semantics:** A triangular dither of deband_lsb steps from an integer hash of the pixel coordinate is added just before quantizing to 8 bits, in the finish before the status guard. It never changes with time or frame, and status colors draw after it, exactly.
+
+**Cost:** About 5 ALU per pixel inside the finish pass. Budget class: any class with a physical look.
+
+**It can never:** Vary by frame or time; touch status colors, legends or 2D marks with roles; exceed 2 steps.
+
+**Lands:** R6
+
+#### Look `look@1`: ground grid in 3D
+
+For: the Map in 3D (T52's shipped grid); figures on a grid floor; physics labs whose balls bounce on a measured floor; 3D data views that need a reading of height
+
+**Fields**
+
+- `ground_3d: {kind: none | grid = none, height: m = 0, spacing: m = 1, major_every: u8 = 10, width: px = 1, fade: m | auto = auto, roles: {minor, major, axis}}` (auto fades at the view's bounds)
+
+**Semantics:** Draws the plane y = height as a full-screen ray-plane pass after the sky, writing depth so items hide it, with lines anti-aliased by screen-space derivatives and faded by distance and grazing angle so the horizon doesn't alias. It's a pure function of the view, and its colors come from roles.
+
+**Cost:** One full-screen pass, about 0.1 ms at 1080p. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Carry a status color; be picked; feed a check; draw below a writer's own ground.
+
+**Lands:** R2, with the first shipped effects
+
+#### Look `look@1`: samples
+
+For: films' exports, hero stills, render-back stills of the castle, the house and product shots
+
+**Fields**
+
+- `samples: {live: u16 = 1, export: u16 = 16 (≤ 256), at_rest: none | settle = none}`
+- `filter: box | blackman_harris = blackman_harris`; `filter_px: f32 = 1.5`
+- `vary: [pixel | lens | light | time] = [pixel]` (sub-pixel offsets, lens positions for depth of field, points on each light for area shadows, shutter times for motion blur)
+- `sequence: r2 = r2` (offsets come from the sample index alone)
+
+**Semantics:** A frame is the mean in linear light of N sub-samples whose offsets come from the sample index alone, so it is a pure function of the document, t and N. Export and render-back render all N; live classes draw one while moving and, with settle, add samples at rest while the frame reports settling, so the settled frame equals the export. Nothing comes from an earlier frame, and the export class's real-time floor applies per sample.
+
+**Cost:** N × the frame's cost: at 64 samples a 2 ms showpiece frame takes about 128 ms, so a 10 s film at 60 fps exports in about 77 s (estimate). Budget class: export and render-back; showpiece only at rest.
+
+**It can never:** Reproject or reuse an earlier frame; jitter by frame number; count a settling frame as final; blur a status color or text during a reading hold.
+
+**Lands:** R6, with exports and render-back stills
+
+#### Look `look@1`: frame history
+
+For: orbiting and flying through showpieces (the castle, the city at night, product shots), films previewed while they play, and ray-traced light in the live view
+
+**Fields**
+
+- `history: {mode: none | antialias | upscale = antialias, window: u8 = 8 (2 to 16), step: frame_rate = 60/1}` (live views of 3D writer layers only)
+- `scale: 0.5 to 1 = 0.67` (with upscale: the render scale the window rebuilds from)
+- `reject: {depth: bool = true, clamp: neighborhood | none = neighborhood, reactive: auto | [ID] = auto}` (auto: parts whose emission, color or flipbook a channel changes at t, particles and see-through parts)
+
+**Semantics:** Display only, while the live view moves. A moving frame at t is its own render, jittered by an offset that comes from its own time alone, resolved with the window's frames at the grid steps before t, each jittered the same way. Each window frame is reprojected to t through the poses, bones and deformations the core evaluates at both times, never through vectors kept from an earlier frame, then rejected where it can't be trusted: by depth where something was uncovered, by a clamp to the current frame's neighborhood in YCoCg, and by the reactive mask, where the current frame alone counts. Nothing older than the window reaches t. With upscale, frames render at scale and the resolve rebuilds the display resolution from the window's jittered frames, in place of the spatial upscale. Playing reuses the grid frames it drew; a jump (a seek, a cut, a marker's jump, a loop's wrap or a change of ladder rung) or a missed grid frame renders the window before t shows, so the frame at t is the same whether you seek or play, by pixel hash on one machine. While you scrub, frames draw without history, and the frame you let go on renders its window. A view your hand moves fills the window as it goes, so those frames depend on the path and are never compared; once the view rests, history drops and the frame settles as samples per frame settles (frame history turns settle on), so the frame you stop on equals the export. Status colors, text and overlays draw after the resolve, and exports, render-back, goldens, checks and content keys never read the window.
+
+**Cost:** About 12 B per pixel per window frame at render resolution (color in half floats, and depth): about 90 MB for 8 frames at a 1080p display at scale 0.67; the resolve about 0.5 to 1 ms at 1080p for 8 frames; a jump renders the whole window once (estimates). Budget class: work product, showpiece; never export or render-back.
+
+**It can never:** Reach an export, render-back, a golden, a check or a content key; use a frame from outside its window; jitter by the frame count or the clock; keep its window across a jump without rendering it again; touch status colors, text or overlays.
+
+**Lands:** R6
+
+#### Look `look@1`: regions and edges
+
+For: a long scroll where a walker crosses from one world into the next; a speedrun that changes looks inside a shot
+
+**Fields**
+
+- `shot.look: name` (one look per shot; the document's by default)
+- `regions: [{mask: ID (a world-space shape), look: name, edge: straight | torn | pixel | brush (the incoming look's by default), width: px, seed}]`
+
+**Semantics:** A region's look draws everything inside its mask. An item that crosses the edge draws in both looks, each clipped to its side, so coverage sums to one at every pixel. The edge is drawn in the incoming look's own language, seeded from the region's ID. The status map and legend are the document's in every look and region, so a status color reads the same everywhere. At most two looks draw in one frame, outside a transition window.
+
+**Cost:** About 2× the frame while an edge is in view: each look renders its side offscreen, then one composite pass. Budget class: showpiece, export.
+
+**It can never:** Draw three looks in one frame outside a transition window (the check refuses it, naming the shot and time); let a look change the status map or legend; move an edge by playback history
+
+**Lands:** R6, with art@1
+
+#### Look `look@1`: motifs
+
+For: a painting that stays alive: a sky that swirls, lamps whose halos pulse, leaves that sway, water that shimmers
+
+**Fields**
+
+- `motifs: {slot → {motion: drift | swirl | pulse | sway | shimmer | flicker | boil, amount, hz | rate: {beats: f32}, phase: free | alternate = free, hold_on: [marker kind], desync: bool = true, seed: document | item}}`
+- On the scene: `motif_slots: {slot → collection}`
+
+**Semantics:** A motif is a small motion the look adds to the items a scene binds to its slot, as a modifier that reads time, periodic or seeded from item IDs, so seeking equals playing and the document never changes. An unbound slot does nothing. A motif with a rate in beats reads the tempo map, so it stays on the beat when the tempo changes; alternate phases swing neighbours in turn, and hold_on freezes it inside markers of a kind, such as a band's stop. With desync, each item's cycle starts at an offset seeded from its ID. Motifs hold still under reduced motion and never move text during a reading hold.
+
+**Cost:** O(bound items) per frame, as a modifier; a swirl or shimmer on a fill is one field pass. Budget class: as the items.
+
+**It can never:** Change document data; read playback history; move text during a hold; touch items the scene didn't bind
+
+**Lands:** R6, with art@1
+
+#### Look `look@1`: strokes on surfaces
+
+For: brush, dab and dot looks on a 3D scene you orbit, without strokes swimming over the surface
+
+**Fields**
+
+- `strokes: {on: all | collection, density: strokes per px² at design size, size: [px, px], orient: field (a surface direction or a flow field), palette: {region → [palette name]}, layers: u8 ≤ 3, seed: item}`
+
+**Semantics:** Strokes are laid on surfaces, not on the screen: points laid out on faces from stable IDs, oriented by a field, sized in pixels and drawn as instanced quads by the look's GPU operator. A stroke shows when its hash is under the density its surface needs at its projected size, so strokes come and go at fixed sizes, never by history, and an orbit never makes them swim. In 2D, strokes are laid on the page in u, not on the screen, and chosen the same way, so a push or a roll never makes them swim. Export draws every stroke; a live view may draw half while moving and settle at rest.
+
+**Cost:** Candidate strokes are laid out at check, about 1 µs per 1,000; GPU cost is measured per look at 1080p and stated in art@1. Budget class: showpiece, export.
+
+**It can never:** Place strokes in screen space on a 3D scene or a moving 2D page; reseed between frames; choose strokes by the previous frame
+
+**Lands:** R6, with art@1
+
+#### Look `look@1`: light
+
+For: drawings lit from one side: rims toward a lamp, contours heavier away from the light, cast shadows, a backlit shadow-play screen
+
+**Fields**
+
+- `light: {dir: deg = 135, elevation: deg = 45, rim: {role, width: px, toward: light | ID, on: collection}, cast: {role, length: u, softness: px}, weight: f32 = 0, relief: {from: tooth | height | mask, strength}, back: {lamps: [ID], transmission: {collection → 0..1}}}` (on a look with `basis: drawing`)
+
+**Semantics:** Evaluated in linear light before the look's tone curve. Rims and cast shadows are drawn from evaluated geometry and the light's direction; line weight by light scales each point's width by 1 + weight × max(0, −n·l), from the path's normal at check; relief shades a height field; and a backlit screen lights each collection by its transmission from lamps that are items with channels. A physical look takes its light from Light items and refuses this field.
+
+**Cost:** Rims and cast shadows are extra fills per lit item, O(segments); relief and backlight one pass each, about 0.1 ms at 1080p (estimate). Budget class: figure, showpiece, export.
+
+**It can never:** Light a status color; read an earlier frame; be used with `basis: physical`.
+
+**Lands:** R6, with films
+
+#### Look `look@1`: paper
+
+For: watercolor, crayon, ink and print looks whose paper stays on the page through a push, a dolly or a 5× zoom
+
+**Fields**
+
+- `ground.paper` gains `tooth: {kind: cold_press | laid | wove | canvas | linen | silk | stone | wood, scale: px, depth: 0..1, from: image sha256 (optional), seed}`, `age: {folds, creases, stains: {count, size: px, role}, foxing, plate_mark: {inset: px, depth}, craquelure: {scale: px, amount}, tarnish: {ramp: [role], width: px}, tape: [rect], seed: document}`, `anchor: page | sheet | world | frame = world` and `zoom: crossfade_octaves | fade_fine = crossfade_octaves`
+- `lines` and `fills` gain `pressure: 0..1`
+
+**Semantics:** Paper is a field anchored to the world, or to the page, the sheet or the frame when declared, so it stays on the page as the camera moves; as zoom changes, its octaves crossfade, so detail neither swims nor pops. Lines and fills read the tooth: coverage = smoothstep(tooth − (1 − pressure)), so a light stroke catches only the peaks. Age is seeded from the document and drawn under the ink. Other passes read the field as an operator input.
+
+**Cost:** One field pass per frame, about 0.2 ms at 1080p (estimate); a tooth read adds one fetch per covered pixel. Budget class: figure, showpiece, export.
+
+**It can never:** Follow the screen during a camera move unless anchored to the frame; reseed with playback; cover status colors.
+
+**Lands:** R6, with films
+
+#### Look `look@1`: line profiles
+
+For: ink, brush, pencil and engraved lines whose width follows pressure: tapers, swells, breaks and dry tails
+
+**Fields**
+
+- `lines: {name → {…, profile: {taper_in, taper_out: 0..1, swell: f32, flick: px, overshoot: px, breaks: {every: px, gap: px}, double: {offset: px, opacity}, dry_tail: 0..1, seed}, dry: 0..1, pressure: 0..1}}`
+- `strokes` gains `dry: 0..1`
+
+**Semantics:** A profile applies to every stroke that names the line: width and opacity per point come from arc length at check, so a stroke tapers, swells and breaks the same way every frame. Dry breaks coverage by the paper's tooth. A profile point under 1 device px draws at 1 px with its alpha scaled by its width, so a taper fades instead of vanishing.
+
+**Cost:** O(points) at check per stroke; nothing extra per frame beyond the stroke. Budget class: any class with 2D marks.
+
+**It can never:** Reseed with playback; draw a status role; drop a stroke that tapers under 1 device px.
+
+**Lands:** R6, with films
+
+#### Look `look@1`: separations
+
+For: prints: a stencil duplicator's misregistered inks, a screen print's flat colors, a halftone comic, an engraving's one ink
+
+**Fields**
+
+- `separations: [{role, halftone: solid | {angle: deg, pitch: px | fw, spot: round | line | square}, offset: [px, px] | {jitter: px, hz, seed}, order: u8, overprint: multiply | knockout = multiply, anchor: frame | sheet | plate = plate}]`
+
+**Semantics:** The finish prints the frame as ink separations: each role's coverage is screened by its halftone, shifted by its registration and laid in order, overprinting by multiply. A halftone anchors to the plate (dots that move and zoom with the picture), the sheet, or the frame (a duplicator's screen) as declared. Registration jitter is drawn from hash(⌊t × hz⌋, seed), never from playback. Status colors draw after the separations, exact.
+
+**Cost:** One pass for all separations, about 0.2 ms at 1080p for four inks (estimate). Budget class: figure, showpiece, export.
+
+**It can never:** Screen a status color; follow playback; take an ink outside the look's roles.
+
+**Lands:** R6, with print@1
+
+#### Look `look@1`: drawn fills
+
+For: fills that look like their medium: printed ink, watercolor wash, spatter, color slid off its line, hatching that follows form
+
+**Fields**
+
+- `fills: {name → {kind: … | ink | wash | spatter, …, offset, seed}}`
+- `ink {coverage, starve: {scale: px, amount}, pinholes, streaks: {angle, density}, spread: px, edge: clean | squeezed | ragged}`
+- `wash {pool, granulation, blooms: {count, size: px}, bleed: px, wet_in_wet: bool, oversize: 0..0.5, resist: {by: collection}}`
+- `spatter {dot: [px, px], density, angle, where: shadow | all}`
+- Any fill: `offset: {dx, dy: px | fw, oversize: 0..0.5, seed}`
+- `hatch` gains `follow: none | outline | field`, `by_tone: [{below: 0..1, passes: u8, cross: bool}]`, `stipple: {dot: px, density}` and `min_width: px`
+
+**Semantics:** Fills are computed from the item's geometry, the paper field and seeds from item IDs. A wash's bleed calls the shipped blur as a step, since a composed pass stops at 32 fetches. Hatching takes its tone from the look's light or a field, so it follows form. An offset fill slides off its own line by a seeded amount. None reseeds between frames except by quantized time.
+
+**Cost:** A fill pass per filled item, about 0.1 to 0.3 ms at 1080p per look (estimate); a bleed adds one shipped blur. Budget class: figure, showpiece, export.
+
+**It can never:** Fill with a status role; reseed with playback; read another writer's layer.
+
+**Lands:** R6, with films
+
+#### Look `look@1`: print finishes
+
+For: a silent-era print that flickers and weaves, a 2D print's tone curve, a CRT, a microfiche reader, a camcorder's tape
+
+**Fields**
+
+- `finish` gains `print_wear: {flicker: ±% of linear luminance, weave: px, scratches: {count: [min, max], width: px, life: frames}, dust: {density, size: px}, hair: chance, gate: {corner_radius: px, softness: px}, rate: frame_rate, reduced_motion: hold}`, `tone_curve: {black: level | role, white: level, contrast, toe, shoulder}` and `screen: {kind: crt | kinescope | fiche | dv | vhs, scanlines, mask: aperture | shadow | slot, curvature, convergence: px, bleed, noise, rate}`
+- `grain: {amount: ±%, size: fw, tone: midtones | flat, rate}`; `vignette: {color: role, shape: round | hood, inner, outer}`
+
+**Semantics:** Each is a shipped pixel-wise pass fused into the one finish pass. Every value is drawn from hash(the frame index at its rate, the document seed), so seeking equals playing. Flicker is a gain on linear luminance, so ±5% of Y peaks at 0.1 and passes the flicker check. A CRT's afterglow is drawn by the text animator from each unit's reveal time, never from an earlier frame. Under reduced motion, wear holds still. Status colors draw after the finish.
+
+**Cost:** Fused into the finish pass: about 0.1 to 0.3 ms at 1080p together (estimate). Budget class: figure, showpiece, export.
+
+**It can never:** Read an earlier frame; touch status colors; flicker outside the flicker check; take a LUT image.
+
+**Lands:** R6, with films
+
+#### Look `look@1`: indexed basis
+
+For: the 16-bit pixel story, pixel motion graphics and a game's look drawn on a palette, exact on every GPU
+
+**Fields**
+
+- `basis: … | indexed {size: [px, px] = [320, 180], scale: u8, palette: [role] ≤ 256, tables: {name → palette table}, protected: [role], snap: integer}`
+
+**Semantics:** The look draws natively into a low-resolution index target: each mark writes a palette index, shading picks indices through palette tables the core builds at check from the roles, protected indices never remap, and the camera snaps to whole target pixels; the target upscales by nearest at the end. It's integer work, so it's exact across GPUs. It's never a pixelation finish over a full-color frame.
+
+**Cost:** One index target (128 KB at 320 × 180 for 16-bit indices) and one upscale pass. Budget class: any.
+
+**It can never:** Take a LUT image; pixelate a full-color frame; remap a protected index; interpolate between indices.
+
+**Lands:** R6, with films
+
+#### Look `look@1`: captions
+
+For: captions that belong to the world: a terminal log typed word by word, a map label whose border draws first, a card that unfolds, an intertitle
+
+**Fields**
+
+- `captions: {plate: strip | card | note_box | banderole | terminal_line | figure_caption | map_label | toast | pill | hud_plate | row_box, entrance: unfold | slide | write | type_by_word | rise_by_word, text_after: 0..1, anchor: safe-area point (per shot), stage: before_finish | after_finish = after_finish}` (on `look@1`)
+
+**Semantics:** The look designs how captions look and enter; the caption profile still sets their timing and line limits, and render.contrast and the film audit still check them. A caption whose words already show on screen points at that text with `shown_by` instead of drawing twice, and the .srt still carries it. Captions draw after the finish unless the look says before_finish, and always before status colors. Always on means every delivery carries them: drawn into the frames (open), or only as the `.srt` and `.vtt` sidecars (closed). With the export's `captions.mode: closed` the look draws no caption plate, and the caption checks still run.
+
+**Cost:** As the plate's marks; nothing beyond the caption's own text. Budget class: as the film.
+
+**It can never:** Turn captions off; deliver a film with neither open captions nor sidecars; change a caption profile's timing; use a status role; hide a caption behind another item.
+
+**Lands:** R6, with films
+
+Also decided: decimation is M4 per pixel column, not one point per pixel; salience ranks failing above lacks proof and touched by this work; layouts in R2 are layered, tree, treemap, grid and pinned, and from R6 also circular, shell, spiral, force, stress, spectral or bipartite, computed at check from the seed with a fixed iteration count, with radial and octilinear later; a frame's `clip` field is `overflow: mask`; text items allow 4,096 chars, rows in a mark set 512. The tech design lands graph layout "R1 basic, R3 the map"; R2 adds the memory rules. The look lands in R1 for roles, the status map and fonts, as the tech design says; drawn looks come with films in R6.
+
+<a id="scene"></a>
+
+## Builders, recipes, looks and cameras
+
+- **Evaluation.** A scene is a document of typed items, evaluated at a time into a copy that never writes back. Work is scheduled per component (params, builder, modifiers, local transform, parent, constraints, world), compiled once per change into a flat order, so a driver that reads back across items is not a false cycle.
+- **Trusted builders.** Nine trusted builders make geometry. Building kinds (walls, openings, slabs, roofs, stairs) are a first-party pack of trusted builders that declare what they read. Recipes compose builders and stay loop-free.
+- **Units.** Metres, degrees and flicks throughout; lumens, lux, kelvin and EV100 for light.
+
+#### Object
+
+**Fields**
+
+- An item with a transform over shared data:
+- `at` (the item transform, in m and deg)
+- `data: ID | inline params` (a builder, curve, text, points, light or camera)
+- `modifiers: [modifier]` (ordered)
+- `materials: {named part | slot → material}`; `material: material ID` (every part not named in materials)
+- `constraints: [constraint ID]`
+- `cast_shadow: bool = true`; `receive_shadow: bool = true`
+- `adjust` (Item and kind: adjust) reaches 3D shading: 4 bytes of the instance record's flags index the frame's adjust table, 0 for none
+- `lod` (optional)
+- In figures: `tone: faint | lo | mid | hi | lit` (one lit per figure); `halo: bool`; `relations: {seated_on, joined_to, fixed_to: [ID]}` (contacts the audit allows)
+
+**Semantics:** world = parent world × T·R·S, then constraints by influence. Data is built once per content key, and each object adds one instance record (a 3×4 world matrix, material slots, a `u32` pick ID, flags) to the batch for its (mesh key, material). A shared `data` ID is an explicit link (edit once and all change), while equal inline data is shared by content key, so an edit never aliases. A 3D item takes its adjust in shading: exposure, contrast, gamma, hue, saturation, brightness, tint and invert apply to its lit color before fog. With opacity below 1 it draws see-through after a depth pass of its own, so only its nearest surface shows over what's behind it, in see-through order, unless it resolves per pixel (Object: see-through order). Status outlines and badges are never adjusted.
+
+**Cost:** About 50 to 100 ns per moved object plus its descendants (estimated); 64 B of GPU per instance; one mesh build per unique key. A move touches 64 B, never a mesh. An adjusted item adds about 10 ALU per pixel, and one below full opacity a depth pass of its own triangles.
+
+**It can never:** Have two parents or a cycle; hold an authored matrix; move without a channel, constraint, patch or your input; adjust or fade a status outline or badge
+
+**Lands:** R2 2D transforms; R6 3D
+
+#### Object: see-through order
+
+For: cutaway explainers with nested translucent shells; glass behind glass in the house, such as a vitrine before a window
+
+**Fields**
+
+- `sort_bias: m = 0` (see-through items only; added to the view depth that orders them back to front)
+- `resolve: sorted | per_pixel = sorted`; `max_fragments: u32 = 8,388,608` (per view)
+
+**Semantics:** Shifts a see-through item's sort depth along the view axis, so an inner shell that shares its centre with an outer one draws first. The order stays total within a writer layer: depth plus sort_bias, then ID; across writer layers, see-through items composite in band order. It changes draw order only, never depth testing or geometry. With `per_pixel`, the item's fragments join per-pixel lists in its writer layer and composite by depth per pixel, so a surface that crosses itself or another per-pixel item layers correctly, back faces included. Past `max_fragments` the view draws again with more room, up to the class's GPU memory, then falls back to `sorted` with the notice `fragments_capped`.
+
+**Cost:** Nothing per frame beyond the sort key. With `per_pixel`, 16 B per fragment; a 1080p view averaging 4 layers keeps about 130 MB. Budget class: any 3D class.
+
+**It can never:** Move geometry or its depth; apply to opaque items; reorder status colors or overlays; drop a fragment without the notice.
+
+**Lands:** R6
+
+#### Object: lightmap
+
+For: the house's interiors in hero films and stills, where bounce light should hug corners more closely than a 1 m irradiance grid
+
+**Fields**
+
+- `lightmap: {bake: job ID, rect: [f32, f32, f32, f32] = [0, 0, 1, 1], sampling: bilinear | bicubic = bilinear, exposure: EV = 0}` (read through uv1; the bake is a light job in lightmap mode)
+- On lights: `baked_in: [job ID]` (a light already inside a bake skips the baked items' diffuse)
+
+**Semantics:** A static item takes its diffuse indirect light from a baked lightmap in its atlas rectangle, in place of an irradiance light probe. A light listed as baked in skips that item's diffuse so light isn't counted twice; its specular stays live. Until the bake is ready the item uses light probes and the frame reports settling.
+
+**Cost:** One filtered fetch per pixel, four with bicubic; the atlas counts against the class's GPU memory. Budget class: work product, showpiece, export.
+
+**It can never:** Move or change per frame; be used by a moving item; feed a check; show a partial bake as final.
+
+**Lands:** R6, after the light job, only if the house needs it (adopt later)
+
+#### Assembly
+
+**Fields**
+
+- `parent: assembly ID | null = null`
+- `at: transform`
+- `motion: {kind: slide | turn | path, axis: vec3, pivot: vec3, m, range: [min, max], path: ID}` (optional)
+- `value: f32 = 0` (m for a slide, deg for a turn; set by a driver or a channel)
+- `apart: vec3, m` (its offset when the figure is taken apart); `order: u16 = 0` (its place in the take-apart)
+- `repeat: {count, as}` (optional)
+
+**Semantics:** A set of figure parts that move together: items join by naming the assembly as their parent, and its transform composes before theirs. `value` moves it along its motion, and a take-apart moves each assembly by `apart` in `order`, timed by the follow's stagger. A repeat copies its members as derived items `<id>.<index>`, and drivers read the index as `i`.
+
+**Cost:** O(members) when value changes: each member's 64 B instance record re-uploads, never a mesh
+
+**It can never:** Have two parents or a cycle; move except through value, apart or a constraint; nest more than 4 deep
+
+**Lands:** R6
+
+#### Builder
+
+**Fields**
+
+- `build(kind@v, params, reads, seed) → {positions, normals, uv0, indices, attributes: {name → (domain, type, array)}, parts: {name → (domain, indices)}, anchors: {name → frame}, values: {name → number}, true_shape: [analytic or convex pieces], bounds}`
+- `representations: mesh | plan | export`
+- The nine trusted builders:
+- `slab {outline: polygon, m | size: vec3, m; thickness: m; radius: m = 0; bevel: m = 0; groove: {depth, width} (optional); along: path + range (optional)}`
+- `lathe {outline: [[r, y, smooth]], m; axis = y; segments: u16 = 32; sweep: deg = 360; caps: none | flat | cut = flat; closed: bool = false; ribs: {count, depth, span} (optional); bands: [{y0, y1, material}] (optional); thread: {pitch, depth: m} (optional); rim: polygon, m (optional; each ring follows this plan instead of a circle)}`
+- `extrude {outline; holes = []; depth: m | {from, to, up}; bevel: m = 0; twist: deg = 0}`
+- `tube {path: points | curve ID; radius: m; segments: u16 = 16; twist: minimum | z_up = minimum; bend: m = 0; caps: none | flat | round}`
+- `ball {radius: m; segments: u16 = 32}`
+- `coil {radius, pitch, wire: m; turns: f32}`
+- `plate {outline | grid: [u16, u16] with size: [m, m]; height: field, m (optional); two_sided: bool = false}`
+- `surface {fn: {x, y, z: expressions over u, v}, u: [f64, f64], v: [f64, f64], vars: {name → path | control | channel}, axes: axes3d ID (optional; x, y, z then read as the axes' coordinates), tolerance: m = 0.002, max: [u16, u16] = [256, 256], closed: {u, v: auto | bool} = auto, two_sided: bool = true, color: {by: u | v | x | y | z | expression, ramp: [role] ≤ 8, domain: [f64, f64]} | checker {roles: [role] ≤ 4, cells: [u16, u16]} (optional)}` (Builder `surface`: surfaces from a formula)
+- `display {size: [m, m]; bezel: m; screen: inset ID}`
+- Plus `mesh.asset {sha256 (glTF), node}`
+- Every param declares type, unit, default, hard range, `live`, and a cost class (transform or rebuild).
+
+**Semantics:** Pure and deterministic, with a vertex count computable from params, so an over-budget build is refused before it runs; output is immutable, shared by content key and uploaded once. Rebuilds drain from a queue under a per-frame CPU slice, and the old geometry stays until its replacement is ready while the frame reports settling. A 2D plan is a second representation of the same data.
+
+**Cost:** O(output vertices) per unique key at a declared ns per vertex; at most 262,144 vertices per build and 32 B per vertex
+
+**It can never:** Read the clock, the network or an undeclared item; exceed its declared vertex count; emit non-finite positions; run per frame unless a param is bound to time
+
+**Lands:** R6
+
+#### Builder `ball`: tessellation
+
+For: figures' 3D molecules, physics labs with many balls, the familiar-names pack's polyhedra
+
+**Fields**
+
+- `tessellation: uv | geodesic = uv`
+- `base: tetra | octa | icosa | dodeca = icosa` (geodesic)
+- `detail: u8 = 0` (≤ 5; each face split into (detail + 1)² triangles)
+
+**Semantics:** A geodesic ball spreads vertices evenly, so small spheres look round with fewer vertices, and detail 0 gives the four Platonic solids with flat faces. The vertex count stays computable from params: 3 × faces × (detail + 1)².
+
+**Cost:** For an icosahedron at detail 2, 540 vertices, against 561 for a 32 × 16 UV ball
+
+**It can never:** Exceed its declared vertex count; subdivide recursively
+
+**Lands:** R6
+
+#### Builder: shading
+
+For: low-poly and faceted assets
+
+**Fields**
+
+- `shade: smooth | flat = smooth` (on every builder; under smooth, a lathe's per-point flags still apply)
+
+**Semantics:** flat gives each face its own normal, which is the faceted low-poly look, by splitting vertices per face. The vertex count stays computable from params: at most three per triangle.
+
+**Cost:** Up to three times the vertices of the smooth build.
+
+**It can never:** Change a part's true shape or the geometry audit.
+
+**Lands:** R6
+
+#### Builder: uv
+
+For: textured materials on builder output: wood, stone and brick in the house and the castle
+
+**Fields**
+
+- `uv0: natural | box {size: m = 1} | planar {axis} | cylinder {axis} | sphere = natural` (on every builder)
+- `uv_scale: m = 1` (one UV unit is this many metres)
+
+**Semantics:** Every builder emits uv0 in metres, so a pattern or a texture map keeps one texel density across parts of different sizes. box picks each face's dominant axis; natural keeps the builder's own layout, around a lathe or along an extrusion. uv1 for bakes still comes from the unwrap job.
+
+**Cost:** O(corners) at build. Budget class: any 3D class.
+
+**It can never:** Replace uv1 for bakes; check uv0 for overlaps (tiling is allowed).
+
+**Lands:** R6
+
+#### Builder plate: terrain
+
+For: the castle on its hill, the city's edge, physics labs with slopes
+
+**Fields**
+
+- `terrain: {height: field | heightmap {sha256 (16-bit PNG), range: [m, m]}, size: [m, m] ≤ 4,096, spacing: m = 1, tile: m = 64, lod_levels: u8 ≤ 6}`
+- `heights: chunks@1 asset ID` (in place of `height`, past the plate's size cap, a chunk tree of height tiles: Level of detail: chunks streamed by view; such a plate draws and has no collision)
+- `cover: [{material, where: field over slope, height and noise, blend: m}] ≤ 4`
+
+**Semantics:** A large height field split into tiles whose level of detail follows the camera's distance and morphs between levels as a pure function of that distance, so no frame depends on an earlier one. Cover blends materials by fields of slope, height and noise rather than by painting. Collision uses the physics height-field shape on the same samples. Up to two overlays tint its cover from a piece's logic grids each frame, with no rebuild (Builder plate: terrain overlays).
+
+**Cost:** As a plate per visible vertex, with LOD holding visible triangles near a fixed count; build O(samples) per content key. Budget class: work product, showpiece, export.
+
+**It can never:** Be painted or sculpted; read a heightmap from a URL; exceed 4,097 × 4,097 samples in one plate, or in one height tile of a chunk tree.
+
+**Lands:** R6, after the modeling rows
+
+#### Builder plate: terrain overlays
+
+For: games and labs on terrain: fog over ground not yet explored, a placement grid, territory, a heat map the rules keep
+
+**Fields**
+
+- `overlays: [{grid: <logic>.<name>, size: [cols, rows: u16], origin: [m, m] = the plate's corner, cell: m = the plate's spacing, roles: [role | none] ≤ 16, opacity: 0..1 = 1}] ≤ 2` (on a terrain plate)
+- Issue: `terrain.overlay_range {array, cell: [x, z], value, step}`
+
+**Semantics:** Each overlay reads a logic item's i32 array of cols × rows values in row-major order, as the logic module gives it at t; an array whose count isn't cols × rows is refused at check, naming both. A ground point (x, z) lies in cell (⌊(x − origin.x) ÷ cell⌋, ⌊(z − origin.z) ÷ cell⌋), and there the cover's base color mixes toward the color of the role its value indexes in `roles` by `opacity`, so light and shadow still fall on it; a value indexing `none`, or a point outside the overlay, leaves the cover as it is. The values upload as a cols × rows texture read at the nearest cell, never filtered, so a cell's edge stays sharp under any camera, and only rows a step changed upload (Mark set: logic columns). The two overlays apply in order. A value past `roles` tints nothing and raises `terrain.overlay_range`, naming the array, the cell, the value and the step. The plate's heights, cover, collision, tiles and content key never change with an overlay's array, so a change rebuilds nothing, and seeking equals playing. Roles come from the look and are never a status color.
+
+**Cost:** One texture of cols × rows bytes an overlay, 64 KiB at 256 × 256; an upload O(changed rows × cols); one texture read per overlay per shaded pixel. Budget class: as the plate.
+
+**It can never:** Change the plate's heights, cover, collision or content key; filter across cells; keep a grid from an earlier step; draw a status color; hold more than two overlays
+
+**Lands:** R6, after the modeling rows, with the logic module
+
+#### Builder `surface`: surfaces from a formula
+
+For: a sphere, a torus, a Möbius strip or a helicoid written as formulas in (u, v); a family of surfaces that bends as a slider moves; a surface colored by its height
+
+**Fields**
+
+- `surface {fn, u, v, vars, axes, tolerance, max, closed, two_sided, color | checker}` (a trusted builder: Builder)
+- Issue: `surface.nonfinite {item, u, v}` (the (u, v) range it dropped)
+
+**Semantics:** Pure in its vars and t. Sampled at check, and again in the frame a var changes, on a (u, v) grid split until the expressions' interval forms hold each cell within `tolerance` of its bilinear patch, up to `max`. Where the ends of u or v meet within 1e-6 m the surface closes and welds, so shading runs smooth across the seam. A non-finite sample drops its cells and raises `surface.nonfinite`, naming the (u, v) range. `color` maps a value through the ramp in OKLab per vertex; `checker` colors cell (i, j) by role (i + j) mod count, sharp at cell edges. uv0 is (u, v) scaled to 0..1. With `axes`, the surface sits at its numbers wherever the axes are placed (Marks in 3D: axes `axes3d@1`).
+
+**Cost:** About 20 ns a vertex per build (estimate), 65,536 vertices in about 1.3 ms; within the 262,144-vertex builder cap.
+
+**It can never:** Sample past `max`; draw across a non-finite cell; keep an earlier build; refine by camera distance.
+
+**Lands:** R6
+
+#### Voxels `voxels@1`
+
+For: a voxel sandbox whose rules carve and build, a cave a lab digs, a science volume shown as blocks, a fort that crumbles
+
+**Fields**
+
+- `grid: {size: [u16, u16, u16], voxel: m = 0.25, origin: [m, m, m] = [0, 0, 0]}`
+- `from`, exactly one: an asset in layout `voxels.grid@1`, a data layout scene3d registers with its validator and a malformed twin (Logic: data layouts); `{gen: <pack>.<name>, params}` (a provider); `{array: <logic>.<name>}`; `{chunks: asset ID}` with voxel brick payloads
+- From an array: an i32 array of ⌈x × y × z ÷ 4⌉ values, four u8 palette indices to each, low byte first, x fastest, then y, then z; size ≤ [256, 256, 256]
+- `palette: [material ID] ≤ 255` (index 0 is empty; index i draws palette[i − 1])
+- `brick: 8` (voxels a side: the unit that meshes, uploads and culls)
+- `corner_shade: bool = true`
+- Issue: `voxels.out_of_range {item, voxel: [x, y, z], value, step}`
+
+**Semantics:** A voxel grid is evaluated data: its values at t are the asset's, the provider's output, or the logic array as the logic module gives it at t (Logic `logic@1`), so seeking equals playing; a logic item writes the numbers and never draws by itself, and the core draws what it wrote. The scene3d module meshes each brick on the CPU in pinned integer code: a face for each side between a filled voxel and an empty one or the grid's edge, merged greedily in a fixed order into rectangles of one palette index and one corner shade, with corner shade counted from the three neighbours at each corner. A brick's mesh is a pure function of its own voxels and a one-voxel border, so checks read it as they read a builder's output, and a pick names `<item>#<x>.<y>.<z>`. Only bricks whose voxels or border changed mesh again: the logic module hands over changed ranges as it does for logic columns. A value past the palette leaves its voxel empty and raises `voxels.out_of_range` at its first step, never wrapping. Far bricks draw coarser by projected error, as levels by error are chosen, each coarse voxel taking the most common non-empty index of the eight it covers, ties to the lower index.
+
+**Cost:** Meshing a changed brick about 10 to 20 µs on the render worker, so 100 changed bricks in a step about 1.5 ms (estimates); GPU as its faces; 1 B a voxel on the CPU. Budget class: work product, showpiece, export.
+
+**It can never:** Mesh on the GPU, or per frame without a change; read a grid from an earlier step; wrap an index past its palette; take more than 256³ voxels from a logic array; draw a status color; draw anything a logic item hasn't written into its grid
+
+**Lands:** R6, with the logic module
+
+#### Curve `curve@1`
+
+For: the city's streets and rails, the castle's walls and paths, films' camera and object paths, tubes and sweeps
+
+**Fields**
+
+- `points: vec3 column, m`; `ids: u32 column` (stable; a point is addressed `curve#p<id>`)
+- `fn: {x, y, z: expressions over s, over: [a, b], vars, axes, tolerance: m = 0.001}` (in place of `points`; adaptive by interval forms, at most 4,096 points), so a helix, a torus knot or a Lissajous curve in space is a formula that tube, mark.curve and follow_path read
+- `mode: linear | bezier | catmull_rom | auto = auto` (auto: tangents from the neighbours, clamped so no span overshoots its end values)
+- `handles: {in, out: vec3 column, m}` (bezier only, relative to the point)
+- `alpha: f32 = 0.5` (catmull_rom: 0 uniform, 0.5 centripetal, 1 chordal)
+- `closed: bool = false`; `roll: f32 column, deg = 0`; `frames: rmf | up = rmf`; `up: vec3 = (0, 1, 0)`
+- `samples: u16 = 16` (per span, for the arc-length table)
+- Outputs: `length: m`; anchors `start`, `end`; `at(u)` (u is a fraction of arc length, 0..1)
+- `visible: bool = false` (`mark.curve` draws a curve; on its own a curve is path data)
+
+**Semantics:** The one path that tube, follow_path, curve_deform, repeat along, shots and mark.curve read, so the rows that say "curve ID" name a defined primitive. Arc length is tabulated at check per span by Gauss-Legendre quadrature, and a query takes a fixed two Newton steps, so u means the same fraction of length everywhere. Frames are rotation-minimizing by double reflection unless up is chosen, so tubes and rails don't twist.
+
+**Cost:** Build O(points × samples) per content key, about 512 B per span; a query O(log spans) plus two Newton steps; nothing per frame unless a point is animated. Budget class: every 3D class.
+
+**It can never:** Hold NaN or two coincident consecutive points (refused); iterate without a fixed count; reorder points silently (ids keep identity).
+
+**Lands:** R6; 2D paths stay `path@1` (R1 and R2)
+
+#### Curve `curve@1`: bspline mode
+
+For: the castle flythrough's camera rail and other long camera paths in films, where Catmull-Rom's C1 joins show as jerks at the points
+
+**Fields**
+
+- `mode: linear | bezier | catmull_rom | auto | bspline = auto` (bspline is new: uniform cubic, approximating)
+
+**Semantics:** A uniform cubic B-spline is C2, so a camera on it never jumps in acceleration; it passes near its points, not through them, and an open curve repeats its end points three times so it still starts and ends on them. Arc length, at(u), frames and roll use the same tables as the other modes. Moving one point changes only the four spans it touches.
+
+**Cost:** As catmull_rom: build O(points × samples) per content key; a query O(log spans) plus two Newton steps. Budget class: every 3D class.
+
+**It can never:** Pass through its interior points (use catmull_rom); hold NaN or coincident consecutive points; iterate without a fixed count.
+
+**Lands:** R6, with curve@1
+
+#### Curve `curve@1`: closed frames
+
+For: the city's ring rail and loop roads, the castle's wall walk, closed tubes in figures
+
+**Fields**
+
+- `closed: bool = false` (existing; frames now meet at the seam)
+- Output: `closure: deg` (read-only: the rotation-minimizing frame's mismatch at the seam before it's spread)
+
+**Semantics:** On a closed curve, the angle between the frame carried around the loop and the starting frame is measured once at check and spread over the loop in proportion to arc length, so the frame at u = 1 equals the frame at u = 0. Roll adds on top as before. A check or a tube can read closure to judge how much twist the shape forces.
+
+**Cost:** O(spans) once per content key; nothing per frame. Budget class: every 3D class.
+
+**It can never:** Leave a seam twist on a closed curve; change an open curve's frames; vary by frame.
+
+**Lands:** R6, with curve@1
+
+#### Mesh sequence `mesh.sequence@1`
+
+For: films (a baked flag, tablecloth or splash), the house (curtains in a breeze), anything a simulate job made; a flock's wingbeat that many particles share
+
+**Fields**
+
+- `asset: sha256` (per-frame positions for one topology, or per-frame meshes)
+- `source: job | asset | agent` (agent: positions an agent computed in its own environment, as a row sequence's are: Row sequence `rows.sequence@1`)
+- `rows: {sequence: rows.sequence ID, positions: column (vec3, optional: else the asset's fixed positions), colors: column (color, optional), indices: sha256 (u32 triangles, fixed for the sequence)}` (with `source: agent`: row i of a frame is vertex i)
+- `from_clip: {asset, animation, frames: u16 = 16 (≤ 64)}` (in place of asset: a skinned asset's looping clip, baked at check)
+- `frame_rate: rational`; `start: time`; `loop: none | wrap = none`
+- `interpolate: none | linear = linear` (same topology only)
+- `material`; `bounds: [vec3, vec3]` (from the probe)
+
+**Semantics:** Frame f is the floor of (t − start) × frame_rate, mixed with the next frame when the topology holds, so the picture at t is a pure function of t and seeking equals playing. A sequence comes from an asset job, a licensed asset or an agent, as `source` says, and is probed once in the decode worker. With `source: agent`, frame f's vertices are the row sequence's frame f rows in order, mixed with the next as the sequence mixes, over one index buffer, so seeking equals playing; an index at or past n is refused at probe, naming it. With `from_clip`, the core evaluates a skinned asset's looping clip at check, through skinned playback's CPU path, into per-frame positions and normals kept as a table by content key, so a licensed or generated bird's wingbeat or a walker's cycle becomes one loop many particles share; changing the clip rebakes it.
+
+**Cost:** One upload of the frame's positions per frame (12 B per vertex: 1.2 MB for 100,000 vertices), or all frames resident when they fit the class's memory. Budget class: showpiece, export.
+
+**It can never:** Simulate; change per frame except by t; load from a URL; feed a physics check.
+
+**Lands:** R6, with the simulate job; from_clip with skinned playback
+
+#### Row sequence `rows.sequence@1`
+
+For: a film's simulated swarm, flock, particle cloud or trajectory that the agent computed in its own environment: fireflies' phases, points flowing into a word, smoke carried by two rings
+
+**Fields**
+
+- `asset: sha256` (a data asset in layout `rows.sequence@1`, ≤ 512 MiB: `n: u32 ≤ 100,000`, `frames: u32 ≤ 36,000`, `frame_rate: rational`, `columns: {name → f32 | vec2 | vec3 | quat | color}`, then frames × n rows, little endian)
+- `start: time = 0`
+- `interpolate: none | linear = linear` (quat by slerp)
+- `loop: none | wrap = none`
+- `made_by: {tool, version, script: sha256}` (the agent's program by hash; DeepBuild never runs it)
+- Read as `{sequence: <ID>.<column>}` by instance@1, marks@1 and mesh.sequence@1 columns, and by curve@1 and mark.line points as `{sequence, column, rows: [from, to] | all}` (a frame's rows in order: a curve whose shape changes by t, such as ψ(x, t) or a grid line a network carries), or `{sequence, row, frames: [from, to | t]}` (one row's trajectory drawn up to t)
+
+**Semantics:** Frame f is floor((t − start) × frame_rate), mixed with the next, so seeking equals playing. It is probed once in the decode worker, where finite values and counts are checked. Its values are story numbers (Honest numbers). A readout from it passes only where the document binds no status and no reading.
+
+**Cost:** One upload of the frame's rows per frame, or all frames resident when they fit the class's memory. Budget class: showpiece, export.
+
+**It can never:** Run code; be computed by DeepBuild; feed a physics check, a status binding or a reading; change except by t; pass 100,000 rows or 512 MiB.
+
+**Lands:** R6
+
+#### Building pack
+
+**Fields**
+
+- `arch.wall {a, b: [m, m]; thickness, height: m; justify: center | left | right; outside: left | right | none; cut_height: m}`
+- `arch.opening {wall; type: door | window; at_along: m; width, height, sill: m; swing; hinge; open: 0..1}`
+- `arch.slab {outline; holes: [polygon | ref]; thickness: m}`
+- `arch.roof {type: gable | hip | shed | flat | mansard | gambrel | dutch | conical; size: [m, m]; pitch: deg; overhang: m; parapet: m (optional)}`
+- `arch.stair {type: straight | l | u | spiral; rise, width: m; turn; split: u16 (risers in the first flight); rails}`
+- `arch.zone {outline; holes; name; floor}`; `arch.level {elevation, height: m}`; `arch.guard_rail {around: ref; except; skip_along_walls: bool}`
+- Each declares `reads: siblings | children | refs`
+- Outputs: a zone's `area`; a stair's `risers` and `well` outline; a wall's mitres
+
+**Semantics:** Trusted builders like the nine, shipped as a first-party pack, each declaring what it reads: a wall reads its neighbours for mitres and its child openings for holes, and a slab can read a stair's well. The content key covers what each reads, so a change rebuilds only what depends on it. Kind rules check that an opening clears its wall by 0.05 m and crosses no junction, risers are at most 0.18 m, and rooms close.
+
+**Cost:** Mitres computed once per level in a batch; in the prototype, switching to cutaway rebuilt 10 of 91 nodes
+
+**It can never:** Read an item it didn't declare; use runtime boolean geometry; be extended by a plug-in
+
+**Lands:** R6
+
+#### Recipe
+
+**Fields**
+
+- Header: `{id: pack.name, version: major.minor, title: string, catalog, tags, license: SPDX, author, description, preview: sha256}`
+- `inputs: {name → {type: number | integer | bool | choice | vec3 | range | material | ID | text | asset | records | handle (a record handle), unit, default, min, max, soft_min, soft_max, options: [string] (choice), live: bool, about}}`
+- `let: {name → expression}`
+- `steps: {step ID → step}`, a step being `{op: builder | recipe | mark | light | emitter | item | modifier | group | shot | marker | cue | strip | transition | placement | driver | bound_value | variant | line | control | logic, kind: family.name@major, params: {k → literal | expression}, at: transform | {anchor}, material, modifiers: [modifier], when: expression, repeat, let, channels, steps (for a group)}` (item makes one item of any other kind the document's profile holds: puffs, particles and effects in a scene, or bodies, joints, soft bodies and breakables in a world, as studio@1's effect and lab recipes do; placement, driver, bound_value and variant each write an entry of the document's map of that name, and line writes a narration line, as piece@1's recipes do)
+- `repeat: {count, as} | {over: list, as} | {on: part, mode: grid | random, spacing, margin, rows, row_start, row_spacing, count, band, seed, avoid: [part | span]} | {along: curve, spacing, ends: include | exclude | centered} | {pack: {from, to, rows, width: range, spacing, gap: range, gap_chance}, as}` (pack lays seeded widths along a span until it's full)
+- `outputs: {anchors, parts, values, lights, pick}`
+- Used as an item: `kind: <pack>.<name>@<major>`, with its inputs as params
+- `broken_out: [derived ID]` (on an instance in a writer's layer: the derived items, at any depth of its expansion, that a patch broke out and the instance no longer writes)
+
+**Semantics:** Expanded at check time, never per frame, into derived items `<instance>.<step>[.<index>]`, keyed by hash(recipe@version, inputs) and shared, so equal expansions draw instanced; the lights and emitters it makes count against the document's budget. Loop-free: repeats have counts fixed at check, nesting stops at 4, nothing recurses, and seeds come from (instance, step, index). A document names `recipe@version` and never copies its steps, and patches change an instance's inputs, never its derived items. To change one derived item past what the inputs reach, a patch breaks it out first (Patch: `break_out {instance, item}`): it becomes the writer's own item with the same ID and the values it was expanded with, the instance in the writer's layer adds it to `broken_out`, which joins the instance's key, and stops writing it, and a later change of inputs re-expands everything else. The recipe's checks still hold it, and undoing the break-out hands it back as expanded. A film recipe is a recipe whose steps also write shots, markers, cues, strips and transitions, from inputs such as `records` (a list of typed rows, like cues with a time, a kind, words and data); it expands at check like any recipe, so a cue list becomes a timeline before anything plays. A `control` step writes an entry of the document's controls, as piece@1's and gridcore.game's recipes do. A `logic` step makes a derived logic item that runs a program the recipe's pack carries, its reads bound to the instance's derived controls and items (Pack: programs), so the recipe still runs no code itself.
+
+**Cost:** O(steps × repeats) per unique key, estimated at check; counts against the item budget at its expanded size; at most 1,024 per repeat
+
+**It can never:** Run code itself, since a program runs only in the derived logic item a logic step makes; add a builder; recurse or nest past 4; be copied into a document
+
+**Lands:** R6
+
+#### Recipe: repeat over elements
+
+For: the city (one building recipe per lot face of a district plate), the diorama (a post per outline point)
+
+**Fields**
+
+- `repeat: {each: {part: named part, domain: face | point | curve}, as}` (beside count, over, on, along and pack)
+- Per element: `i`, `center: vec3, m`, `normal: vec3`, `area: m²`, `size: [m, m]` and the part's attributes
+
+**Semantics:** Expands at check into one derived step per element of a builder's named part, in index order, with element values available to let expressions. The part's element count is computable from its params, so the count is fixed at check. Seeds come from (instance, step, element index), so adding a face never reseeds the others.
+
+**Cost:** O(elements × steps) at check, at most 1,024 per repeat; counts against the item budget at its expanded size. Budget class: any.
+
+**It can never:** Read another document; nest past 4; depend on a count known only after an uncomputable build; run per frame.
+
+**Lands:** R6
+
+#### Pack
+
+**Fields**
+
+- `name: string`; `version: semver`; `license: SPDX`; `description: string`
+- `requires: {core: semver range, modules: {canvas module → semver range}}`; `requires.packs: [name@version]` (Pack: dependencies)
+- `recipes: {kind → file | sha256}`
+- `kinds: {<pack>.<name>@<major> → pack kind}` (backed by a recipe, in any pack; its fields: Pack: kinds in any pack)
+- `materials: [material name] | {name → material}` (names the look must define, or materials the pack defines)
+- `assets: [{path, url, sha256, size, license, upstream}]` (fetched on first use: Pack: assets fetched on first use)
+- `operators: {name → operator graph}` (material, pass or compute, composed from the public steps; Pack: fx@1 named operators; Shipped operators and composed graphs: pack graphs and step functions)
+- `libs: {name@version → {asset: sha256, exports: [name], fixtures: [asset ID]}}` (WebAssembly modules in the logic subset, kept as data until a logic item links them; a library may add `needs` and `implements`: Logic: linked libraries)
+- `interfaces: {name@major → {exports, layout, fixtures, planted, digest}}` (Logic: library interfaces)
+- `layouts: {name@version → {validator, max_bytes, twins, doc}}` (Logic: data layouts)
+- A provider entry may add `links`, `mesh_in` and `library` (Provider `gen@1`: links, meshes and the library form)
+- `providers: {name → {program: sha256, params, out}}` (programs in the logic subset that run once at check: Provider `gen@1`)
+- `programs: {name@version → program}` (whole logic programs that run only as derived logic items: Pack: programs)
+- `tables: {name → function table | sha256}` (Driver: tables)
+- `functions: {name@major → step function}` (Shipped operators and composed graphs: pack graphs and step functions)
+- `presets: {name@major → synth preset}` (Synth `synth@1`)
+- `profiles: {name → loudness or caption row}` (Loudness and caption profiles)
+- `corpus: {major → [sha256]}` (Pack: migrations as data)
+
+**Semantics:** What a document's `packs` entry names: a versioned set of recipes and named operators and, in any pack, recipe-backed kinds such as puppet.rig@1 (Pack: kinds in any pack), which resolve through the pack at check and never enter the sealed set; code-backed kinds, the building pack's trusted builders among them, come only from canvas modules before the seal. It's checked once per version, and a published version never changes. A document names `pack@version` and never copies a recipe's steps. A build without that version keeps the pack's instances byte for byte and skips them when drawing with `pack_missing`, naming the pack and the version, and never draws them with another version; a check that needs it is BLOCKED (Pack: retired and missing). A pack may carry libraries as data: WebAssembly modules that only a logic item runs, by linking them by hash (Logic `logic@1`), so they run inside that item's sandbox and under its budgets. A pack never runs one, and checking a pack's version checks each library against the logic subset and runs its fixtures, so outside packs may carry them too. A kit names packs, libraries and check plug-ins (the tech design's Blueprints); a pack is never a canvas module. A pack may also carry whole logic programs, which run only as derived logic items a recipe's logic step makes (Pack: programs), and function tables (Driver: tables). An agent writes a pack through Add anything, and you try a new version on your own documents before you take it (the tech design's Add anything).
+
+**Cost:** Checked once per version, O(recipes + kinds), plus each library's subset check and fixtures, each kind's kit and each program's fixtures; recipes expand at check, never per frame
+
+**It can never:** Carry code that runs outside a logic item that links or runs it, a provider run once at check or a data layout's validator, or a shader the GPU runs as written; add a builder; change a published version; name a pack, look, recipe or preset after a living artist, a studio, a trademark or a trademarked character
+
+**Lands:** R6; outside packs after migrations (R2)
+
+#### Pack: kinds in any pack
+
+For: a third party's own item kinds, such as a diagram vocabulary, a configurator's parts or a genre kit's widgets, each with a schema, versions and a kit
+
+**Fields**
+
+- `kinds: {<pack>.<name>@<major> → {minor, recipe, children: [kind], capabilities: {pickable, snap}, rules, migrate, examples: [sha256], cost: {class, at_defaults: {cpu_ms, gpu_ms, items}}}}` (on any pack; the recipe's inputs are the kind's schema)
+- Registry: `kind@1` (Registry and seal: registries), filled by canvas modules with kinds backed by code and by packs with kinds backed by recipes
+
+**Semantics:** Any pack may declare kinds backed by a recipe; only canvas modules register kinds backed by code, the trusted builders among them. A pack kind is an entry of `kind@1` that resolves per document through the pinned pack, so it never enters the sealed set. It's an item kind like any other. An item names `<pack>.<name>@<major>`; its params are the recipe's inputs, validated as any kind's are (defaults, hard and soft ranges, `unknown_field`); it expands at check into kinds that exist; and its children and capabilities say what it may hold and whether it's pickable or snaps. It can't declare a builder, a plan, insets, arrays or operators. Its dirty classes come from what its expansion reads, and its cost from what it expands into, so the cost model and the class budgets hold. Its name carries its pack's, so it never takes a first-party name, and a document's `requires.kinds` and `packs` name it. Each kind passes its kit at pack check (Pack: kind rules and the kind kit). A kind the working agent wrote binds only its own claims until you approve its pack (the tech design's Add anything). `deep_kinds` lists each kind with its schema, an example, its kit result and its cost at defaults.
+
+**Cost:** O(params) to validate an item; expansion as its recipe's; nothing per frame beyond the items it makes
+
+**It can never:** Be backed by code; declare a builder, a plan, arrays or operators; take a first-party name or another pack's; enter the sealed set; change in a published version
+
+**Lands:** R6, with recipes; outside packs' kinds after migrations as data
+
+#### Pack: kind rules and the kind kit
+
+For: a pack kind that must hold something, such as a door that clears its wall, proved by planted examples that must fail
+
+**Fields**
+
+- `rules: [{code: <pack>.<rule>, expr, at: rest | [time] | sweep, fix: string}]` (on a pack kind; `expr` from the closed function list over its params, its outputs and its derived items' evaluated values; true means the rule holds)
+- Kind kit, run at pack check: `{defaults, determinism, cost, rules, migration}`
+- Planted twin, one per rule: `{example: sha256, expect: code}`
+
+**Semantics:** The core's `kind_rules` check evaluates each rule on every instance at the times it names, and reads evaluated values only. An instance whose expression is false gets the issue named by the rule's code, with the item, the time and the fix; a sweep takes its bounds from the interval forms, as Control sweep does. Checking a pack version runs each kind's kit: every example validates at its defaults; each expands to the same bytes twice; its cost at defaults fits its declared class and lies within 25% of the estimate the check computes, or it fails `cost_understated`, as an operator does; every clean example passes every rule, and each rule's planted twin fails with that rule's code; and a kind that raises its major passes Pack: migrations as data. A kind whose kit fails is refused, naming the kind and the part. A rule is its pack's statement of what the kind must hold: rules from a pack the working agent wrote bind only its own claims, as its libraries do, and a requirement never passes on them alone.
+
+**Cost:** Each rule at most 64 ops, as a driver; O(rules × instances × times) per check; the kit once per pack version (estimate)
+
+**It can never:** Read a picture; run code; let a planted twin pass; let the working agent's own rule pass its claim alone
+
+**Lands:** R6, with pack kinds
+
+#### Pack: migrations as data
+
+For: a pack kind's new major that still opens every document saved with the old one
+
+**Fields**
+
+- `migrate: {from_major → {rename: {old → new}, set: {param → expression}, drop: [param]}}` (on a pack kind; expressions from the closed function list over the old params, written `old.<param>`)
+- `corpus: {major → [sha256]}` (on the pack: fixture documents for each major in the window)
+
+**Semantics:** A pack kind's migration is data, so Migration's rule that no pack code runs holds. At load, before the check, the core applies it in a fixed order: rename, then set, then drop, and a param the new major declares and the migration doesn't set takes its default. It runs as any migration does: one previous major, the `migrated` notice, and the stored document changing only when its writer next patches it. Checking a pack version that raises a kind's major migrates each corpus document of the previous major and expands it, and the values must equal those recorded for it, or the pack is refused, naming the item and the first field that differs. An expression outside the closed function list, a param the old major doesn't declare, or a result outside the new range refuses the pack, naming the param.
+
+**Cost:** O(params) per migrated item, once per load; the corpus once per pack version (estimate)
+
+**It can never:** Run code; read another item; reach past one major; happen silently
+
+**Lands:** R2, with outside packs
+
+#### Pack: programs
+
+For: widgets that carry their own behavior, such as a menu, an inventory grid, a scroll list or a skill tree, with no logic the working agent writes
+
+**Fields**
+
+- `programs: {name@version → {asset: sha256, links: [{name@version, asset}], reads: {name → control | array}, writes: {name → {type, count}}, emits, budget, fixtures: [asset ID]}}` (on a pack; whole WebAssembly programs under the one subset)
+- Recipe step: `{op: logic, program: <pack>.<name>@<version>, reads: {name → a derived control or item}, step_rate, clock}` → a derived logic item `<instance>.<step>`
+
+**Semantics:** A program is a whole logic module that a pack carries as data, with the reads and writes it expects declared by name. Checking a pack version admits each program as the logic module admits any: it links the program's libraries, checks the subset and rewrites it (Logic: sandbox), then runs its fixtures, each a logic item that runs only that program with an input track and its expected arrays and full-state hashes. A program with a fixture that fails, or with none, fails the pack, naming it. A recipe's `logic` step makes a derived logic item that runs the program by hash, its reads bound to the instance's derived controls and items, so the recipe's controls feed it and its marks read its arrays as columns, as `<instance>.<step>.<name>`. The derived item is the logic module's like any other: the sandbox, its budgets and the class's step ceiling, checkpoints, the bake and saves. `deep_query` lists it with the program's name, version and hash, and a patch can't target it (`derived_item`). A widget is a pack kind whose recipe writes controls, marks and a logic step. A piece's own rules stay a logic item the document holds, which a piece recipe only names. A program from a pack the working agent wrote binds only its own claims.
+
+**Cost:** Admission once per pack version: the link, the subset check, the rewrite and the fixtures, O(bytes) plus the fixture runs; per step as any logic item; a menu's step well under 10,000 fuel (estimate)
+
+**It can never:** Run outside a logic item; take a read the instance didn't bind; run with its fixtures unrun; write another item's arrays; draw; be the piece's rules item
+
+**Lands:** R6, with the logic module
+
+#### Pack: dependencies
+
+For: a kit or a pack that builds on another pack's recipes, kinds or programs
+
+**Fields**
+
+- `requires.packs: [name@version]` (on a pack; exact versions)
+
+**Semantics:** A pack names the packs its recipes, kinds and programs use, each by exact version, and a document that names the pack resolves them as if it listed them. A step that names a recipe, a kind or a program from a pack outside the list is refused at pack check, naming it. The pack graph joins the composition graph (the tech design's Composition): a cycle is refused, naming it, and two versions of one pack in one document's packs are refused, naming both. Since a document names each version, a new version of a pack reopens nothing until a patch names it. A library's own dependencies are the logic module's (Logic: linked libraries).
+
+**Cost:** O(packs + edges) per document check, once per pack set (estimate)
+
+**It can never:** Follow a version range; load two versions of one pack in one document; let a pack use a pack it didn't declare
+
+**Lands:** R2, with outside packs
+
+#### Pack: retired and missing
+
+For: a document that outlives the pack it names: uninstalled here, or never installed on this machine
+
+**Fields**
+
+- Pack version in the store: `{state: installed | retired, named_by: u32}` (the documents, saves and bakes that name it)
+- Notice `pack_missing {pack, version, ids}`
+
+**Semantics:** The store keeps a pack version, with its programs, libraries and tables, while any document, save or bake names it. Uninstalling retires a pack: it takes no new instance, `deep_kinds` marks it retired, and every document that names it still loads, checks and draws as before. When a version's bytes are gone, as in a document from another machine, the document still opens: each instance of that pack is kept byte for byte through other writers' patches, as an unknown kind is, and skipped when drawing with `pack_missing`, naming the pack and the version. A patch that creates an instance of it is refused with `pack_missing`, and a check that touches one is BLOCKED, naming the pack. Nothing draws an instance with another version. A baked logic run of a pack program plays from its bake without the program, while a save needs it (Logic: saves).
+
+**Cost:** A count per pack version, O(1) per save, bake or delete; nothing per frame
+
+**It can never:** Delete a version something names; draw an instance with another version; pass a check that touches a skipped instance
+
+**Lands:** R2, with outside packs
+
+#### Pack: assets fetched on first use
+
+For: sample libraries (1.4 GB), speech weights and a transcriber's weights: anything too big to ship in the app
+
+**Fields**
+
+- `assets: [{path, url, sha256, size: bytes, license: {id, terms, shareable, credit}, upstream: {url, version, modified}}]` (on Pack)
+
+**Semantics:** The hub fetches a pack's assets on first use through the Source block (quota, resume, and at least 2.2× the size free on disk) into a content-addressed store, checks each sha256, and reads its licence file before anything uses it. The first fetch is a networked job: one authority ask with the plan (sizes, sources, licences), or a standing rule. Offline, it's BLOCKED with an unblock ask. A document names `pack@version`, so a re-export uses the same bytes.
+
+**Cost:** The download once; nothing per frame. Budget class: none (a runner job).
+
+**It can never:** Fetch without an ask or a standing rule; change a pinned asset; bundle a CC BY-SA, NC or GPL asset; follow a moving branch.
+
+**Lands:** R6
+
+#### Pack: studio@1 quality defaults
+
+For: one-shot quality in every 3D case: an agent names a lighting rig, a material, a look, a lens and a preset instead of tuning numbers
+
+**Fields**
+
+- `recipes`: lighting rigs `studio.three_point`, `studio.sun_and_sky`, `studio.overcast`, `studio.interior_day`, `studio.interior_night`, `studio.night_street`, `studio.turntable` (each takes `key_azimuth, key_elevation: deg`; `ratio: f32` (key to fill); `warmth: K`; `time_of_day`; `scale: auto` (from the scene's bounds)); effects `studio.sparks`, `studio.smoke`, `studio.dust`, `studio.fire`, `studio.splash`; labs `studio.stack`, `studio.drape`, `studio.dummy`
+- `materials: {name → material}` (about 40 measured presets: metals, glass, plastics, rubber, ceramic, wood, concrete, brick, marble, fabric, leather, car paint with coat), each value with its source
+- Presets that use the newer lobes: `velvet` and `cotton` (sheen), `brushed_aluminium`, `brushed_steel` and `turned_steel` (anisotropy), and `skin`, `wax` and `leaf` (translucency)
+- `looks: {name → look}` (new on Pack): `physical_neutral` (neutral: the default for product, toy and paper scenes), `physical_film` and `physical_night` (agx, with bloom and AO: night, lamps and fire), `drawing_ink` (none)
+- `presets: {kind → {name → params}}` (new on Pack): lenses `wide_24`, `normal_50`, `portrait_85`, `product_100`; framings `center`, `thirds_left`, `thirds_right`; macro lenses `macro_60`, `macro_100` (millimetre-scale near planes); sound `narration` (high-pass at 80 Hz; compressor at −24 dB, 3:1, a 6 dB knee, 5 ms attack, 120 ms release, auto makeup; a de-esser as a keyed compressor on a 5 to 10 kHz band bus), `music_bed`, `foley`
+- `sizes: {kind | role → [m, m]}` (new on Pack; what `scene.scale` reads, such as a door 1.9 to 2.4 m and a seat 0.40 to 0.50 m)
+
+**Semantics:** A first-party pack, checked once per version like any pack; a lighting rig expands at check into lights, an atmosphere, an exposure and, indoors, a light probe per zone, all scaled to the scene's bounds. An interior rig given `time_of_day` as a span, `{from, to}` in clock time over the document's `[start, end]`, moves its sun and lamps across it and gives each zone's probe a time at each end, so bounce light follows the change. Effect and lab presets derive counts, springs and sizes from physical inputs with hard ranges: springs stay under (step rate × substeps) ÷ 4 Hz, counts are capped by the class, and each preset states its cost at its defaults. Physical looks default to Neutral for product, toy and paper scenes and to AgX for night, lamps and fire, and drawings to no tone map, so 2D colors stay exact. Sound presets name processor chains, so a narrated film never inherits the compressor's limiter-like defaults.
+
+**Cost:** None beyond what it expands into; lights count against the light policy and particles against the class (sparks at 0.5 intensity are 1,024 particles, about 0.05 ms, estimate). Budget class: each preset states the class it fits.
+
+**It can never:** Carry code or shaders; change a published version; hide what it expands into; clamp an input silently (outside a soft range it warns, outside a hard range it's refused).
+
+**Lands:** R6, as a first-party pack
+
+#### Pack: explain@1 film recipes
+
+For: explainer films an agent writes as a cue list: a proof, a product walkthrough, a chart's story, an evidence board, kinetic type on the beat
+
+**Fields**
+
+- `recipes`: `explain.dark_math`, `explain.keynote_ui`, `explain.chart_story`, `explain.infographic`, `explain.evidence_board`, `explain.whiteboard`, `explain.storytime`, `explain.kinetic_type`, `explain.presenter`, `explain.linear_map` (each takes `cues: records {at: time, kind, text, sub, data}`, `stage: 2d | 3d`, a look and a palette)
+- A cue's `kind` is a `cue.kind@1` entry or one of the recipe's own kinds; the recipe expands its cues through `cues@1` (Cue list `cues@1`)
+- `explain.linear_map {plane: {x, y: range, background: bool = true, coordinates: bool = false}, basis: bool = true, vectors: records {id, coords: vec2, role, label} ≤ 8, square: bool = false, ghosts: bool = false, cues: records {at, kind: apply {matrix} | inverse | transpose | warp {x, y} | add_vector {id} | write_coordinates {id} | to_coordinates {id} | label {id, text}}}`: a still grey plane under a moving plane in a group warp (Frame and group: warp), î and ĵ as arrows whose ends follow M·e, labels that ride their tips, a unit square whose area readout is |det M| computed by a driver, and ghosts held at the old tips. 2D stage only; the 3D stage is refused, naming the recipe.
+- Examples: one cue list per recipe, each under 1.2 KB
+
+**Semantics:** Each recipe writes shots, items, channels, camera keys, transitions and sound cues from its cues, and carries its grammar's rules as checks: one entrance at a time, a main word at least three times the size of its sub-line, landings on the beat grid or a spoken word, text still once landed, exits faster than entrances, and a section of at most 8 s. A cue list that breaks a rule is refused, naming the cue and the rule. The same cues render on a 2D or a 3D stage. People come as puppet@1 rigs, as licensed or generated assets, or as your own video.
+
+**Cost:** Expands at check, never per frame: under 20 ms for the largest example; then as the items it makes
+
+**It can never:** Carry code or shaders; read the clock; change a published version; draw a person outside a puppet@1 rig
+
+**Lands:** R6, as a first-party pack
+
+#### Pack: math@1 math-film words
+
+For: math explainers an agent writes in the math-film words it already knows: shapes, layout, style, plots, planes, fields, tables, animations and rate functions
+
+**Fields**
+
+- Objects, layout and style: `Circle`, `Square`, `Rectangle`, `Dot`, `Line`, `Arrow`, `Polygon`, `VGroup` with `arrange` and `arrange_in_grid`, `next_to`, `to_edge`, `to_corner`, `align_to`, `move_to` with `aligned_edge`, `scale`, `rotate`, `flip`, `set_color`, `set_fill`, `set_stroke` and `set_z_index`, with the buffs and directions as named constants, and `PALETTE` (`BLUE_A` to `BLUE_E` and the rest) as the look `math`'s palette
+- Animations and scenes: Create, Write, FadeIn (shift, scale), Transform, ReplacementTransform, TransformMatchingTex, LaggedStart (lag_ratio), Indicate, Circumscribe, ValueTracker, Axes.plot, MathTex, next_section and ThreeDScene's orientation map to path builds, write_on, placements, match_morph, staggers, `cue.kind@1` verbs, named values, path@1 fn on axis@1, vector@1 from the typeset job, and stage markers
+- Recipes: `math.number_line {x_range, length, include_tip, include_numbers, numbers_with_elongated_ticks, numbers_to_exclude, labels: {value → vector ID}}`, `math.axes {x_range, y_range, x_length, y_length, tips, axis_config}`, `math.number_plane {faded_line_ratio, background_line_style}`, `math.polar_plane {radius_max, radius_step, azimuth_step, azimuth_units: pi | tau | degrees | gradians, azimuth_offset, azimuth_direction}`, `math.complex_plane`, `math.plot {f, x_range}`, `math.area`, `math.riemann {dx, input_sample_type, show_signed_area}`, `math.secant {x, dx}`, `math.t_label`, `math.bar_chart {values, bar_names, changes: [[values]]}`, `math.vector_field`, `math.stream_lines`, `math.surface`, `math.axes3d`, `math.arrow3d {start, end, thickness, tip}`, `math.matrix {entries: vector ID per entry, brackets, h_buff, v_buff}`, `math.table {rows, row_labels, col_labels, lines: inner | outer | both}`, `math.sample_space {divisions}`
+- Rate functions: Its rate functions are `ease@1` entries with their usual equations, mapped as smooth → sigmoid(10); slow_into → out_circ; rush_into → rush_in(10); exponential_decay → exp_decay(0.1); rush_from, double_smooth and running_start → rush_out, double_sigmoid and running_start; there_and_back → `pulse`; there_and_back_with_pause → `pulse` pause; wiggle → `pulse` wiggle, while the animation Wiggle maps to the cue verb `wiggle`; lingering → keys at 0 and 0.8 of the span, then hold; squish_rate_func(f, a, b) → keys at a and b; not_quite_there(f, p) → key value p
+- Conversions, stated: a math@1 unit is the frame's short side ÷ 8 in u, so the frame is 14.22 × 8 math@1 units at 16:9; y flips and the origin moves to the centre; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units
+
+**Semantics:** Each name takes its usual parameter names and defaults, with the stated conversions, and expands to primitives at check; a parameter the primitives can't honour is refused with a fix, never dropped. next_to, to_edge and arrange expand to relations (Item and kind: relations) and frame layout, never to numbers computed at expansion, and `group[i]` expands to the ID of that part at check. number_line, axes and number_plane expand to a path per axis with its ends, a rule mark set of ticks from computed columns, path fn `grid` items for the lines and faded lines, and vector@1 labels placed onto tick rows; polar_plane to circle@1 rings, path rays and labels; matrix and table to a frame grid (Auto layout) with `around` brackets or rules between tracks. deep_kinds answers a math@1 word with its mapping, noting a renamed or older spelling; an updater with no closed form answers `no_match`, naming the driver and bake routes. Labels, ticks and matrix entries are vector@1 items, from the typeset job or the agent's own renderer.
+
+**Cost:** Expands at check, never per frame; then as the items it makes
+
+**It can never:** Carry code; hide what it expands into; typeset in the canvas core; drop a parameter it can't honour
+
+**Lands:** R6, as a first-party pack
+
+#### Pack: piece@1 piece recipes
+
+For: an agent asked for a whole piece, such as a product reveal, a physics lab, a walkthrough, a data story or a film of its own change, that should come out well on the first try from a subject and a few parameters, with the primitives only to change one thing
+
+**Fields**
+
+- `recipes`: `piece.product_reveal`, `piece.physics_lab`, `piece.machine`, `piece.walkthrough`, `piece.flyover`, `piece.data_story`, `piece.code_change`, `piece.diagram_city`, `piece.cad_part`, `piece.ui_walkthrough`, `piece.branching`, `piece.presenter` (a kinetic title and a math explainer stay explain@1's `explain.kinetic_type` and `explain.dark_math`)
+- Inputs every one takes: `subject` (required; typed by the recipe: an asset, an item's ID, a world the document lists, a record handle or records); `points: records {text, sub, at, data} ≤ 12` (required, except where the subject's rows are the points: the points to make, in order; `text` is a template over the subject's values, and `at` names what a point is about: an item or a part, an asset, a value or a time); `look: name` (the recipe's by default); `length: s = 45` (soft 30 to 60, hard 10 to 180); `interactive: bool` (the recipe's by default); `narration: bool = true`
+- `piece.product_reveal {subject: asset | ID (a mesh with named parts), variants: {part: named part = the largest, materials: [material] ≤ 4} (optional), explode: bool = true}`: studio.turntable on a dark stage with light shafts; an orbit, then a push to each point's part, whose callout keeps its leader on the part; each variant and the take-apart in turn; interactive by default, adding an explode toggle and a variant choice. Checks: camera.framing at each callout, geometry.audit at rest and apart, render.exposure under each variant
+- `piece.physics_lab {subject: ID (a world the document lists), controls: {name → {label, kind: slider | press = slider, range, unit, default}} ≤ 4, measures: {label → expression over the world's outputs and occurrence lists} ≤ 4, replay: bool = true, rules: ID (a logic item the document lists) | none = none}`: studio.three_point around the world's bounds; a slider or a press per control, named `<instance>.<name>`, which the world's inputs read; the traces of the last three launches; a readout and a point chart per measure; a quarter-speed replay of each measured occurrence; hits heard through foley@1; with rules, a readout per array its logic writes and the world inputs it fires; interactive by default. Checks: physics.determinism, logic.determinism with rules, physics.query for each measure the brief gives a value, honest_numbers
+- `piece.machine {subject: ID (the machine's root assembly), drive: {path, rate}, section: plane | none = auto}` (drive: the value that runs it and its rate, such as a crank's angle at 360 deg/s): studio.three_point; the machine running through a speed control from 0 to 2 times the rate; a cutaway along the section, with a lit cap and the casing ghosted; a take-apart; labels whose leaders stay on moving parts; interactive by default. Checks: geometry.audit at rest, apart and through a sweep of the speed, camera.framing through the cutaway, document.layout at each label's times
+- `piece.walkthrough {subject: ID (a building or a collection of rooms), stops: [ID] = its rooms in plan order, dusk: bool = false}`: studio.interior_day, and with dusk the sun setting into studio.interior_night while lamps rise and the light probes move between their states; eye height 1.6 m through wide_24; a glide from stop to stop; a hotspot on each point's item that opens its card; looking around a stop without moving; interactive by default. Checks: camera.framing with its clearance along every glide, render.exposure in each room, every hotspot reachable by Tab
+- `piece.flyover {subject: ID (a terrain plate), cover: [vegetation | water | clouds | rain | flock] = [vegetation, clouds], drape: asset (a table of x, z and a value) | none = none, sun: [time of day, time of day] = [10:00, 18:00]}`: studio.sun_and_sky, with the sun crossing between the two times; vegetation scattered by slope, swaying in a wind that rolls across it; a lake whose waves are closed form; clouds lit by the sun; rain; a flock that flaps; the table draped over the terrain with its legend; a camera path above the ground. Checks: camera.framing with its clearance above the terrain, honest_numbers for the drape, render.exposure at each point
+- `piece.data_story {subject: asset (a table with its source), form: race | line | bars | map = by its columns}` (a time column with a category column makes a race, a time column alone a line, a place column a map, and anything else bars): explain.chart_story's grammar; standings that glide, a line revealed to its head, an arrow from each point's note to its value, flows along a map's paths; interactive by default, a stage per point, with the bed looping while a stage waits. Checks: honest_numbers for every label and tick, the color-blind check, film.audit
+- `piece.code_change {subject: handle (the claim it explains, never proves), presenter: ID (a puppet.rig@1) | none = none}`: each point's `at` names a file's lines, a diff, a terminal recording, before-and-after screens or the claim's runs; code with token roles quoted from its source, diffs that move, the run replayed on the film's clock, screens under a wipe, a chart of results bound to the runs; with a presenter, explain.presenter's grammar and a mouth that follows the narration. Checks: each quote equals its source, honest_numbers, rig.lipsync with a presenter
+- `piece.diagram_city {subject: ID (a graph@1 item), expand: [node key] ≤ 3, lift: bool = true}`: a layered layout with nodes drawn as cards and groups as boxes; packets along the edges; each expanded node opening into its inside; then the flat diagram lifting into the city, each node a building by its kind. Checks: document.layout, honest_numbers on the cards, camera.framing
+- `piece.cad_part {subject: asset (a tessellated part with its assembly and measures), dimensions: [measure name] = all, section: plane | none = auto}`: studio.turntable; parts placed as in the file, an assembly sequence and a take-apart; dimensions from measure@1; a section with a lit cap. Checks: every dimension a measure from the part's probe, geometry.audit apart, camera.framing
+- `piece.ui_walkthrough {subject: asset (a replica recording with its actions), zoom: per_action | none = per_action}`: explain.keynote_ui's grammar; the recording as an image that plays its frames, pushed in on each action's box; a cursor that eases between action points, with a ring at each click; callouts on the UI. Checks: camera.framing's limit on magnifying the recording, film.audit's cursor path, and an export that waits for your approval when its recording wasn't masked at capture
+- `piece.branching {subject: records {stage, text, options: [{label, then: stage, right: bool}]} ≤ 16, score: bool = true, rules: ID (a logic item the document lists) | none = none}` (its rows are its points): explain.keynote_ui's cards; a stage per row that waits for its choice and goes on where the option leads; a narration line that starts as each stage opens; the bed looping while a stage waits; with right answers, their count as a story number; with rules, its logic orders the stages and keeps the score, reading the choices from the input track; always interactive. Checks: every path reaches the end, film.audit on each path (at most 16), honest_numbers
+- `piece.presenter {subject: asset (a skinned character) | ID (a puppet.rig@1), beside: ID | none = none, mark: anchor = the stage's centre}`: explain.presenter's grammar; studio.three_point and portrait_85; a walk on that stops on the mark; a gesture toward `beside` at each point; a face and a mouth that follow the narration; glances at the camera; hair and loose clothing as the spring chains its rig declares; cuts between a wide and a medium shot. Checks: rig.lipsync, animation.contacts at the mark, craft@1's camera_grammar
+- Examples: one per recipe, a document of one item with a fixture subject and the one-line ask it answers, under 1.5 KB, each with its golden
+
+**Semantics:** A first-party pack, checked once per version like any pack. A piece is a document that holds one piece recipe item, with its inputs as params, and names piece@1 in `packs`; a lab's document also lists its world. A piece recipe is a film recipe that writes a whole piece. It expands at check, never per frame, into derived items, its shots, stages, controls, narration, captions and sound among them. `deep_show` takes the piece and returns the expanded document's issues, audit and snapshots, as for any document, and `deep_query` lists every derived item with the step that made it, so nothing is hidden. Pacing: an opening that frames the whole subject, a section per point in order, and a close. The opening and the close each take 10% of the length, at least 3 s, and the sections share the rest in proportion to their texts' reading holds. Each section is cut into shots within craft@1's shot lengths, so a long one takes two, and a length too short for its points' holds is refused, naming the length that fits. With interactive on, each section is a stage that waits, with a default, so an export plays the default path. Defaults: the lighting rig each recipe names, from studio@1, scaled to the subject's bounds; physical_neutral for products, labs, machines, CAD parts and presenters, physical_film for walkthroughs and flyovers, and the clean look for 2D pieces; camera moves with stated amounts; a narration line per point; a music bed written as a score, whose bars the sections start on, ducked under the narration with studio@1's sound presets; and captions by the locale's profile. Each recipe calls at most one explain@1 recipe, so a piece keeps within craft@1's limit of two film recipes. Each carries the checks its kind of piece needs, as explain@1's recipes carry their grammars' rules. When a brief's treatment chooses a piece recipe, the definition job adds them to the brief, so the working agent can't drop one by patching or by leaving the recipe. A piece adds no ask of its own: its look proof and its final film are the brief's two taste calls. An agent changes a piece through its inputs first; to change one thing no input reaches, a patch breaks out that one derived item (Recipe) and sets it, and the rest stays the recipe's. Each recipe declares the kinds, canvas modules and packs that each input value needs. A piece that asks for one this build lacks, such as rain on a build without particles, is refused with `module_missing`, or keeps a missing pack's instances and skips them with `pack_missing` (Pack: retired and missing), naming it, and a check that needs it is BLOCKED; no part is quietly left out. An example's golden is its expanded document's hash and its contact sheet's pixel hash on the reference Mac. `deep_kinds` lists piece@1's recipes first, with an installed kit's recipe beside them, such as the grid core kit's `gridcore.game` for a game on a grid (Pack: gridcore@1 grid game kit), then explain@1's, each with its example, before kinds and the other primitives, and the generated skill names them as where to start.
+
+**Cost:** Expands at check, never per frame: under 50 ms for the largest example (estimate); a change of inputs re-expands the instance, and only the items whose values changed rebuild. Then as the items it makes. Each recipe states its example's measured frame time and the class it fits: showpiece for 3D pieces, figure for 2D ones.
+
+**It can never:** Carry code or shaders of its own, since a piece's logic is a logic item the document holds, which a recipe only names; read the clock; hide what it expands into; pass a check by itself or turn one off; leave out a part an input asks for; call more than one explain@1 recipe; draw a person outside a puppet@1 rig, a licensed or generated asset or your own video.
+
+**Lands:** R6, as a first-party pack, after explain@1 and studio@1
+
+#### Pack: gridcore@1 grid game kit
+
+For: games on a grid of cells: a dungeon crawler, a survival map, a factory floor, a board of turns
+
+**Fields**
+
+- `libs` (Pack): `gridcore.queue` (actors by time, then priority, then ID), `gridcore.rng` (streams keyed by the run's seed and an action's number, and by its draw where the piece reads `net.draws`, with a salt that is 0 in play), `gridcore.gen` (rooms and corridors, with a cap on tries and a fuel slice a step), `gridcore.fov` (symmetric shadowcasting), `gridcore.search` (breadth-first distance maps and flow fields within a fuel share a step), `gridcore.pool` (slots with generations), `gridcore.items` (containers and stacks that conserve what they hold), `gridcore.save` (all run state in one region, with its layout), each with its exports and fixtures
+- `recipes`: `gridcore.game {rules: ID (a logic item the document lists, which links the libraries), play: game.play@1, size: [u16, u16] ≤ 256 × 256, tiles: asset ID (an atlas from pixel@1's jobs), catalog: asset ID (optional), hud: [name] ≤ 8, log: copy table (optional), save: bool = true}`
+- Checks it adds to a brief: playtest with the legal bot, the explorer and the descender, `rules.legal`, `grid.reach`, `rng.timing`, `board.agree`, `logic.determinism` and `logic.budget`
+- Example: one crawler floor, the second qualification's (the tech design's Blueprints)
+
+**Semantics:** The first kit's pack, which the grid core kit (a blueprint: the tech design's Blueprints) names beside pixel@1, the playtest and catalog plug-ins and its own check plug-in (Check input: grid core kinds). Its libraries are data until a piece's logic item links them, so they run only inside that item's sandbox, under its fuel, memory and stack, and the program's hash covers them. Work that can outgrow a step is sliced: the generator and a search spend at most their fuel share a step (a quarter of the item's fuel by default) and go on at the next, so a bigger floor takes more steps, never a fuel trap, and the generator's tries are capped, falling back to a plain layout, so no seed loops. Rolls come from `gridcore.rng`'s streams, keyed by the run's seed and the action's number, and by its draw where the piece reads `net.draws`, never by the step, so the step a click lands on can't change a roll (`rng.timing`), and only `forecast.agree`'s throwaway copies set its salt. The queue breaks ties by actor ID, so the order never depends on insertion. A pool's IDs carry their slot's generation, so an order naming a unit that died is refused as stale. `gridcore.game` expands at check, like any piece recipe, into atlas tile layers for terrain and fog read from the rules' arrays, a unit layer, readouts for the HUD's names, controls for the play interface's actions, a save slot and a log, and the definition job adds its checks to the brief, so the working agent can't drop one; it names the rules item and never carries its program. `deep_kinds` lists it beside piece@1's recipes, with its example, once the kit is installed.
+
+**Cost:** What the program spends: a 32 × 32 floor's generation, and a turn of 30 actors' searches, each well under 1,000,000 fuel over their slices (estimate). Expansion under 50 ms (estimate). Budget class: figure, for 2D pieces.
+
+**It can never:** Run outside a logic item that links it; carry a shader; roll from the step's seed; loop a generator past its cap; carry the rules item's program
+
+**Lands:** R6, as the first kit, after the playtest and catalog plug-ins
+
+#### Pack: art@1 painterly looks
+
+For: films and stills in a painter's manner, in 2D and in 3D; speedruns and long scrolls through many looks
+
+**Fields**
+
+- `looks`: `art.flow_brush`, `art.dab`, `art.dot`, `art.wash`, `art.ink_wash`, `art.halftone_pop`, `art.neon_tape`, `art.cel_light`, `art.chiaroscuro`, `art.cut_paper`, `art.mosaic`, `art.gold_leaf`
+- Each with motifs, a signature transition and edge style, a preview of one shared test scene in 2D and 3D, its measured cost and its known limits
+
+**Semantics:** Looks named by technique, never by a living artist, a studio, a trademark or a trademarked character. Each is a look asset whose finish is a GPU operator composed from the closed step list, and whose lines, fills, paper and light use the drawn-look fields, so art.wash, art.ink_wash, art.halftone_pop and art.cut_paper have fields and the pack stays data. Looks for any subject ship here; period sets for tributes, such as cave painting, tomb painting, a black-figure vase or an illuminated page, come later as their own pack.
+
+**Cost:** Each look states its GPU ms at 1080p in 2D and 3D, measured on the reference Mac, and fits the showpiece class
+
+**It can never:** Carry code or shaders; recolor status; name a living artist, a studio, a trademark or a trademarked character
+
+**Lands:** R6, as a first-party pack
+
+#### Pack: puppet@1 characters as data
+
+For: films with characters drawn in the film's own look: a picture book's girl, a cut-paper fable, a rubber-hose mug; rigid 3D puppets built from builders
+
+**Fields**
+
+- `kinds: puppet.rig@1`
+- `checks: rig.pop, rig.inbetween, rig.shoulder_order, rig.props_between_palms, rig.expressions, rig.reach, rig.contacts_2d, rig.views, rig.marks`
+- `sheet: model` (views × expressions × key poses)
+- Examples: one 2D rig, one rigid 3D puppet and a faceless pictogram, each with its model sheet and a walk
+
+**Semantics:** A first-party pack, checked once per version. A rig is a document item its recipe expands at check into kinds that exist; nothing runs per frame and nothing is code. Parts draw in the shot's look, so boil, paper, line profiles and separations apply to them as to any mark. Each new rig is shown once as a model sheet in one taste ask keyed by the rig's hash, or, in a film, inside the look proof's one ask (Film brief: defaults, treatment and asks); a yes also records that the character resembles no known one, and a shot that shows an unanswered rig is BLOCKED. An object with a face that acts is a rig. Organic 3D characters stay licensed or generated assets with skinned playback.
+
+**Cost:** Expands at check, under 5 ms for a 40-part rig (estimate); then as the groups, paths and constraints it makes. The model sheet renders once per rig hash. Budget class: as the items it makes.
+
+**It can never:** Carry code or shaders; draw a character outside a rig; show a rig before its model sheet is answered; name or copy a living artist's, a studio's or a trademarked character.
+
+**Lands:** R6, as a first-party pack
+
+#### Rig `puppet.rig@1`
+
+For: a character or an acting object drawn in the shot's look, in 2D or as a rigid 3D puppet
+
+**Fields**
+
+- `height: u | m`
+- `parts: {name → {draw: path ID | inset ID | flip: [drawing] | builder item (3D), pivot: [u, u] | vec3, parent: part | root, draw_order: back | body | front | auto = auto, sockets: {name → [u, u]}}}`
+- `chains: {name → {upper, lower, end: part, lengths: [u, u], bend: 1 | −1 (2D) | pole: anchor (3D), stretch: none | cartoon = none, shoulder: {order: [abduct, flex], girdle: {raise, forward}}}}`
+- `views: [name]` (a drawing per part per view, picked by a turn channel)
+- `expressions: {name → {brows: {l, r: [inner_dy, outer_dy, arch]}, lids: f32, mouth: drawing, class: neutral | happy | sad | worried | angry | surprised}}`
+- `visemes: {set: A to H and X, map: {viseme → mouth drawing}}`
+- `poses: {name → {joints: {part → deg}, targets: {chain → [u, u] | anchor}}}` (placed as clips)
+- `silhouette_marks: [part]`
+- `springs: {name → {parts: [part], hz: Hz = 2, damping_ratio: f32 = 0.5}}` (optional: follow-through for a ponytail, ears, a tie or an antenna)
+
+**Semantics:** Expanded at check into a group per part with its pivot and parent, flip groups for views, expressions and mouths, a reach2 constraint per chain, a draw_order channel per part, and pose clips placed like any clip. Each of `springs` expands into a spring chain over its parts. Expressions and views are held drawings: a flip shows one until the next key, never a blend. A chain solves in closed form each frame from its bend sign or pole; with `stretch: cartoon`, both bones scale by max(1, d ÷ (l1 + l2)) instead of reporting reach_short. Mouths follow a visemes or envelope bake through a flip. X shows the current expression's mouth, so the expression returns between words and lines, and the visemes hold the mouth only while it speaks. Parts step at the look's quantize rate while the camera stays smooth. Seeds come from (rig, part), so the look's boil and paper move with the part.
+
+**Cost:** Per frame one transform per part, O(1) per chain and a lookup per held group: a 40-part rig about 10 µs of CPU (estimate). Budget class: figure, work product, showpiece, export.
+
+**It can never:** Iterate a solve or keep a bend side from an earlier frame; blend two expression drawings; hold code; exceed 64 parts or 8 chains (proposed caps).
+
+**Lands:** R6, with puppet@1
+
+#### Pack: print@1 print and photo looks
+
+For: films and stills in a print or photographic process: a woodcut fable, an engraved field guide, a duplicator zine, a daguerreotype portrait, a silent-era newsreel
+
+**Fields**
+
+- `looks`: `print.relief_cut`, `print.engraving`, `print.litho`, `print.screen_print`, `print.duplicator`, `print.letterpress`, `print.block`, `print.spray_stencil`, `print.linen_card`, `print.albumen`, `print.daguerreotype`, `print.silver_gelatin`, `print.instant`, `print.silent_film`
+- Each with separations, paper tooth and age, line profiles, drawn fills, print wear and a tone curve, a preview of one shared test scene in 2D and 3D, its measured cost and its known limits
+
+**Semantics:** Looks named by technique, never by a living artist, a studio, a trademark or a trademarked character: a stencil duplicator, not its brand; an instant print, not its maker. Each is a look asset built from the drawn-look fields, so the pack stays data. Photographic processes join print@1 because they use the same machinery (paper or plate, age, print wear and a tone curve) and none is a tribute; period sets for tributes stay the later pack art@1 defers, and a CRT, a kinescope, fiche or DV is the screen finish.
+
+**Cost:** Each look states its GPU ms at 1080p in 2D and 3D, measured on the reference Mac, and fits the showpiece class.
+
+**It can never:** Carry code or shaders; recolor status; name a living artist, a studio, a trademark or a trademarked character.
+
+**Lands:** R6, as a first-party pack
+
+#### Pack: fx@1 named operators
+
+For: an agent that names levels or turbulent displace instead of writing a graph
+
+**Fields**
+
+- A first-party pack whose `operators` are composed pass graphs, about 70, each with `params {name → {type, unit, range, default}}`, a measured `cost` and a `grow`:
+- color: `levels, curves, brightness_contrast, exposure, gamma_pedestal_gain, channel_mixer, black_white, tint, tritone, gradient_map, selective_color, vibrance, invert, leave_color`
+- blur: `directional, radial, channel, bilateral, compound, sharpen, unsharp`
+- distort: `bulge, twirl, ripple, wave_warp, polar, spherize, mirror, offset, corner_pin, displacement_map, turbulent_displace, lens_distort, magnify, bend, page_turn`
+- stylize: `find_edges, emboss, mosaic, posterize, threshold, scatter, roughen_edges, motion_tile, kaleida, glass, cartoon`
+- generate: `four_color_gradient, cell_pattern, checkerboard, light_rays, light_sweep, light_burst`
+- noise: `noise, dust_scratches`; channel: `set_channels, arithmetic, minimax`
+- keying: `linear_color_key, color_difference_key, luma_key, spill_suppressor, key_light`; matte: `choker`
+- transitions: `gradient_wipe, radial_wipe, block_dissolve, venetian_blinds, light_wipe`
+
+**Semantics:** An agent names `fx.levels@1` with params in a group's passes, a backdrop or a transition's operator. Each graph uses public steps only, the three new ones among them (spline for levels and curves, homography for corner pin, the HSL pair for hue ranges), calls the shipped blur for large blurs, passes the full operator check (32 fetches a pixel, repeats of at most 64), takes channels as params, is same machine at best and sits under the status guard.
+
+**Cost:** Each operator states its measured ms per megapixel at 1080p, summed into the class's operator budget. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Carry shader text; take a LUT image; read an earlier frame; use an internal step; take a shipped operator's name.
+
+**Lands:** R6, as a first-party pack, after the cost model is calibrated
+
+#### Attribute and field
+
+**Fields**
+
+- Attribute: `{name, domain: point | edge | face | corner | curve | instance, type: bool | i32 | u32 | f32 | vec2 | vec3 | vec4 | quat | color}`; built-ins, read-only: `position, normal, uv0, id, index`
+- Field: an expression in the closed grammar (section 7) over `position, normal, index, id, t` (only when live), attributes and recipe inputs; at most 256 nodes; f32; a required `fallback` wherever `/`, `log`, `sqrt` or `pow` appear
+- `distribute {on: part, mode: grid | random | poisson, spacing: m, margin: m, rows (optional), row_start, row_spacing: m, avoid: [part | span], seed}` → points with normal and index
+
+**Semantics:** Compiled once at check into a register program and evaluated in batches over the domain's arrays, with shared sub-expressions deduplicated by hash. It depends on time exactly when it reads `t`. A non-finite result takes the fallback and raises `nonfinite`; it never keeps a previous value.
+
+**Cost:** O(elements × nodes), about 1 ns per element per node (estimated), estimated at check
+
+**It can never:** Loop; recurse; allocate without bound; read the clock, the network or another document; produce a status color
+
+**Lands:** R6
+
+#### Attribute and field: distribute
+
+For: the city's trees, lamps and benches; the castle's rocks and grass; the house's garden; physics labs' scattered bodies
+
+**Fields**
+
+- `mode: grid | random | poisson | elimination` (poisson and elimination are new)
+- `min_distance: m`; `density: field (0..1)`
+- `prune: none | larger_first | smaller_first | equal = none` (by prototype bounds)
+- `avoid: [part | span | collection]` (collections are new)
+- `project: {to: ID | collection, axis = (0, −1, 0), align: none | normal}`
+- `scale: [f32, f32] = [1, 1]`; `yaw: [deg, deg] = [0, 360]`; `tilt: deg = 0`; `max: u32 ≤ 100,000`
+
+**Semantics:** Points come from a seeded Poisson-disk or sample-elimination sampler over the part's area, thinned by the density field, pruned so no two prototype bounds overlap, and projected onto the named surfaces. Every per-element choice is a hash of the instancer's seed and the element's id, and elements are processed in id order, so the result is the same on every machine. It runs at check and feeds an instance item.
+
+**Cost:** O(n log n) per unique key with a spatial grid; at most 100,000 elements; nothing per frame. Budget class: any 3D class.
+
+**It can never:** Depend on thread order or the clock; leave overlaps when prune is set (the audit checks); exceed max.
+
+**Lands:** R6
+
+#### Attribute and field: geometry measures
+
+For: edge wear on the generated sword and crate, moss on the castle's upward faces
+
+**Fields**
+
+- `convexity: f32` (point, −1 to 1, from discrete mean curvature)
+- `edge_angle: deg` (edge); `face_area: m²` and `island: u32` (face)
+- `occlusion: f32` (point, 0 to 1, baked at build from 32 fixed directions)
+
+**Semantics:** Read-only built-ins computed once per content key from the built mesh, so any material number or field can read them like attributes. occlusion casts a fixed, hash-seeded direction table against the part's own BVH, so the same params give the same values on every machine. A typical use mixes base_color toward an edge color where convexity is high.
+
+**Cost:** O(corners) for convexity, angle and area; occlusion O(points × 32 × log faces) at build, about 10 ms per 10,000 points (estimate). Budget class: any 3D class.
+
+**It can never:** Be written by an agent; read the clock or another item; be recomputed per frame.
+
+**Lands:** R6
+
+#### Modifier
+
+**Fields**
+
+- `kind: mod.<name>@v`; `params`; `enabled: bool = true`; `on: named part = all`; `while: always | drawing | moving = always` (for stroke modifiers); class from the kind: `deform | generate`; `gpu` (a kind property)
+- Deform: `displace {amount: m, field, seed}`; `simple_deform {mode: twist | bend | taper | stretch, amount}`; `curve_deform {path: ID, axis}`; `boil {amount: px, hz}`; on the GPU from per-instance params: `bob, sway, wave, spin`
+- `sway {amount: m = 0.1, weight: height | attribute name = height, wind: {direction: deg = 0, speed: m/s = 3, gust: {scale: m = 20, strength: 0..1 = 0.5}}, hz: f32 = 0.4, seed}` (the GPU sway's fields)
+- Generate: `array {count ≤ 1,024 | fit, offset, along: curve (optional), around: {axis, pivot: m, angle: deg = 360} (optional)}`; `mirror {axes}`; `subdivide {levels ≤ 3}`; `bevel {width: m, segments ≤ 8}`; `solidify {thickness: m}`; `build {from, to: 0..1, order: index | seeded}`; `dash {dash, gap}`; `outline {width}`
+
+**Semantics:** Runs top to bottom, caching each prefix's result by content key, plus t when it depends on time; whether it reads time is computed from its bound params, never declared. GPU deforms add per-instance params and never rebuild. Sway bends each vertex along the wind by amount × its weight (its height above the item's base, or a stored attribute such as a wind weight): a slow sway at hz, phased per instance by its seed, plus gusts from noise over world position less the wind's velocity × t, seeded by the document, so gusts roll across a field and neighbours lean together. Nothing integrates, and bounds grow by amount. A suspicious order is flagged (`order_cost`), never changed.
+
+**Cost:** Deform O(V); generate O(output), computable from params (array: count × V; subdivide: 4levels × faces), estimated before it runs; a sway costs about 20 ALU per vertex of a swaying item
+
+**It can never:** Be reordered silently; read an undeclared item; carry state between frames; exceed its declared output
+
+**Lands:** R6
+
+#### Modifier: store
+
+For: per-vertex data an engine reads, such as wind weights and masks
+
+**Fields**
+
+- `store {name, domain: point | face | corner, type: f32 | vec2 | vec3 | vec4 | color, field, fallback: number}` (deform class: it writes a named attribute and moves nothing)
+
+**Semantics:** Evaluates a field over the part and keeps it as a named attribute, which the export writes where the attributes map says, such as wind into `COLOR_0.r`. The fallback is required wherever the field divides or takes a log, root or power, as for any field.
+
+**Cost:** O(elements × nodes), as any field.
+
+**It can never:** Overwrite a built-in attribute; read the clock or another document.
+
+**Lands:** R6
+
+#### Modifier: bevel
+
+For: the generated hard-surface assets (crate, sword, chair), the diorama's props, the house's furniture, the castle's stone edges, figures' machined parts
+
+**Fields**
+
+- `bevel: {width: m, segments ≤ 8, shape: 0..1 = 0.5, limit: angle | parts | all = angle, angle: deg = 30, parts: [part], clamp: bool = true, harden: bool = true}` (shape 0.5 is round and 1 square)
+
+**Semantics:** Bevel rounds only edges sharper than the angle, or the named parts' edges, and stops before neighbouring bevels overlap when clamp is on. harden sets the bevel faces' corner normals so the large faces beside them stay flat-shaded. It runs at build on the half-edge view and is cached by content key.
+
+**Cost:** O(edges × segments), adding at most 2 × segments × edges vertices, so the count stays computable from params. Budget class: any 3D class, counted in vertices.
+
+**It can never:** Change true shapes beyond the audit's tolerance; exceed its declared vertex count; be reordered silently; run per frame.
+
+**Lands:** R6
+
+#### Modifier: subdivide
+
+For: the generated rock set and creature previews, figures' organic forms, castle ornaments, the diorama's soft-hard props
+
+**Fields**
+
+- `subdivide: {levels ≤ 3, scheme: catmull_clark | loop | simple = catmull_clark, creases: {named part | edge set → 0..1}, crease_angle: deg (optional), boundary: smooth | sharp_corners = sharp_corners, uv: linear | keep_corners | smooth = keep_corners}`
+
+**Semantics:** Uniform refinement at build, with semi-sharp creases that stay sharp for the first levels and soften after, so a creased cube rounds only where it should. loop serves triangle meshes such as generated assets, and boundaries and UVs follow the chosen rules. Counts are exact before the build: Catmull-Clark turns a face of n sides into n quads at the first level and each quad into four after, so faces = C × 4^(levels − 1), where C is the sum of face sizes, and each level gives V′ = V + E + F and E′ = 2E + C; loop gives F × 4^levels on triangles.
+
+**Cost:** O(output) per content key. Budget class: any 3D class, counted in vertices.
+
+**It can never:** Subdivide by camera distance or per frame (level of detail does that); exceed 3 levels; tessellate adaptively on the GPU.
+
+**Lands:** R6
+
+#### Modifier: normals
+
+For: the hard-surface look on every built prop, figure and piece of furniture
+
+**Fields**
+
+- `normals: {mode: weighted | by_angle = weighted, angle: deg = 30, weight: area | angle | both = area, keep_sharp: bool = true}` (deform class: rewrites corner normals only)
+- On every builder (extends Builder: shading): `shade: smooth | flat | by_angle {angle: deg = 30} = smooth`
+
+**Semantics:** weighted writes corner normals by face-area or corner-angle weighting, so large faces stay flat while small bevels round; by_angle splits normals at edges sharper than the angle. Neither moves a vertex, so true shapes and the audit are unchanged. Both run at build and are cached by content key.
+
+**Cost:** O(corners) per content key; by_angle adds at most the vertices of a flat build. Budget class: any 3D class.
+
+**It can never:** Move vertices; run per frame; change a part's true shape.
+
+**Lands:** R6
+
+#### Instance `instance@1`
+
+**Fields**
+
+- `of: [ID | recipe] ≤ 64 prototypes` (a prototype may be a mesh sequence: Instance `instance@1`: cycles)
+- `proto: u16 column`; `ids: u32 column` (stable)
+- `pos: vec3 column, m`
+- `rot: quat column | yaw: f32 column, deg`
+- `scale: vec3 | f32 column = 1`
+- `attrs: {name → column}`
+- `hidden: u32 column` (by ID)
+- or `from: distribute(…)`
+- Caps: `count ≤ 100,000`; nesting ≤ 4
+
+**Semantics:** Element world = instancer world × TRSk; an element is addressed `<instancer>#<id>`, seeded by hash(seed, id), and turned into an item by `break_out` to change it beyond its row. One instanced draw per (prototype mesh key, material). Elements are frustum-culled one by one above 256, and bounds recompute whenever the arrays change. An instance whose world transform has a negative determinant flips its front-face winding through a flag bit in its record. Opaque batches sort by content key and instances inside a batch by stable ID. Its columns may read a piece's logic arrays, with `live` and `gen` columns over a fixed slot count (Instance `instance@1`: logic columns).
+
+**Cost:** 48 to 64 B of GPU per element; upload O(changed range); culling about 5 ns per element (estimated)
+
+**It can never:** Override an element's prototype geometry; nest past the cap; reuse an element ID
+
+**Lands:** R6; instanced 2D marks come through mark sets
+
+#### Instance `instance@1`: logic columns
+
+For: games and simulations in 3D: units, buildings and projectiles a piece's logic spawns and removes
+
+**Fields**
+
+- `pos | rot | yaw | scale | proto | attrs.<name>: {array: <logic>.<name>, as, part}` (as on mark sets; `pos` reads a vec3 array, or a vec2 as x and z at `y: m = 0`)
+- `hidden: {array: <logic>.<name>, as: bool}` (one value a slot, in place of its ID list)
+- `live: {array: <logic>.<name>, as: bool}`; `gen: {array: <logic>.<name>, as: u32}` (both required once any column reads an array)
+- Slots: the arrays' count, ≤ 100,000; an element is `<instancer>#<slot>.<gen>`
+
+**Semantics:** An instancer whose columns read logic arrays has one slot per array element, as many as the arrays' count, fixed at check. A slot whose `live` is false doesn't draw, cast a shadow, enter culling or bounds, or get hit, selected or announced, so logic keeps a fixed pool and nothing is allocated during a run. The element in a live slot is `<instancer>#<slot>.<gen>`, seeded by hash(seed, slot, gen): when logic reuses a slot it writes a new `gen`, and the reused slot is a new element with its own seed, so an element ID is never reused. A selection or a pick that named the old generation goes stale: the selection drops it at the first frame its slot's gen or live changes, and an input entry keeps the old gen, which the piece's logic refuses as its rules say. Narrowing, values out of range, changed ranges and seeks work as on mark sets (Mark set: logic columns): a value out of range hides its element and raises `column.out_of_range`, and only changed slots upload. An instancer fed by logic takes neither `from: distribute(…)` nor a written `ids` column, refused at check, naming both.
+
+**Cost:** 48 to 64 B of GPU a slot, live or not; upload O(changed slots); culling only live slots. Budget class: as the instancer.
+
+**It can never:** Address an element by its slot alone; allocate or free slots during a run; draw, hit or announce a slot that isn't live; reuse an element ID
+
+**Lands:** R6, with the logic module
+
+#### Mesh from logic `mesh.logic@1`
+
+For: voxel worlds a library meshes during play, a fluid's surface, fracture pieces cut during play, terrain made as the player walks
+
+**Fields**
+
+- `mesh.logic@1 {logic: logic ID, chunks: u16 ≤ 1,024, max_vertices: u32 ≤ 65,536 a chunk, max_indices: u32 ≤ 196,608 a chunk, positions: array name (vec3), normals: array name (vec3, optional), uv0: array name (vec2, optional), colors: array name (vec4, optional), indices: array name (i32), counts: array name (i32), material: material ID | {by_chunk: array name (i32), of: [material ID] ≤ 16}, at: transform}`
+- Counts: each vertex array chunks × `max_vertices`, indices chunks × `max_indices`, `counts` chunks × 2 (vertices, then indices), all fixed at check
+- Issue: `mesh.out_of_range {item, chunk, index, value, step}`
+
+**Semantics:** A logic item writes numbers and the core draws them: a mesh from logic is a scene3d item whose geometry is a pure function of the arrays the logic module gives at t (Logic `logic@1`), as an instancer fed by logic is (Instance `instance@1`: logic columns), so the logic item never draws by itself and seeking equals playing. Chunk c draws `counts`[2c] vertices from c × `max_vertices` and `counts`[2c + 1] indices from c × `max_indices` as triangles; without normals the core computes smooth ones. A chunk whose count passes its cap, whose index points past its vertex count, or whose value is NaN or infinite doesn't draw, isn't hit and raises `mesh.out_of_range` at its first step, naming the chunk, the value and the step; it never clamps or wraps. Only chunks whose arrays changed in a step rebuild and upload, from the changed ranges the logic module passes, and only their bounds recompute. A mesh draws each step's values held, and an array it names that declares `interpolate: linear` is refused at check. It takes the scene's materials and look, casts and receives shadows, and is picked as `<item>#<chunk>`; it never becomes a physics shape, so collision against what logic built stays logic's own. The geometry audit and `geometry.shading` read it at the times a check samples, as evaluated data. Arrays whose counts don't match the caps, or that no logic item in the document writes, are refused at check, naming them.
+
+**Cost:** Per changed chunk, its vertex and index ranges upload (about 32 B a vertex and 4 B an index) with a bounds pass: a chunk meshed from 32 × 32 × 32 voxels, about 12,000 vertices, in about 0.1 ms; nothing for unchanged chunks; GPU memory chunks × caps, reserved at check (estimate). Budget class: as the scene.
+
+**It can never:** Draw anything a logic item didn't write; allocate during a run; change its caps, chunk count or materials during a run; become a physics shape; draw a chunk whose values are out of range; carry a shader or a look
+
+**Lands:** R6, with the logic module and scene3d
+
+#### Mesh from logic: skins
+
+For: a cape or a flag a cloth library steps in logic, a rope or a soft blob whose particles a logic item moves
+
+**Fields**
+
+- `skin: {logic: logic ID, positions: array name (vec3), item: ID = auto, material}`
+- Lattice: a plate with nu × nv vertices for an array of count nu × nv, row-major; a tube whose path takes the array's points in order; a geodesic ball whose detail gives the array's count
+
+**Semantics:** A skin from logic draws a logic item's vec3 array of particle positions on an item built on its own lattice, exactly as a physics output skin draws a soft body's (Physics output): each frame it writes the positions as the item's vertices, by row and column, and recomputes smooth normals, while the item's UVs, materials and insets stay its own. With `auto` the core builds the plate, tube or ball as it does for a physics skin. With `interpolate: linear` on the array it draws the blend drawing reads (Logic: interpolated writes), else each step's values held. A value that is NaN, infinite or more than 10 km from the item's origin hides the skin for that step and raises `mesh.out_of_range`, naming the particle. An array whose count doesn't match the lattice is refused at check, naming both.
+
+**Cost:** As a physics skin: a vertex buffer rewrite, about 24 B per vertex, on each step that changed it
+
+**It can never:** Change the item's topology; skin an item built on another lattice; write back into logic
+
+**Lands:** R6, with the logic module and scene3d
+
+#### Instance `instance@1`: cycles
+
+For: a crowd of 100,000 walkers out of step, a flock flapping at its own pace, machines on a factory floor running at their own speeds, units that walk, run or idle as the rules say
+
+**Fields**
+
+- A prototype in `of` may be a `mesh.sequence@1` item
+- `cycle: {phase: column | hashed = hashed, rate: column | [f32, f32] = [1, 1]}` (on `instance@1`; a column may read a logic array: Instance `instance@1`: logic columns)
+- Phase in [0, 1); rate in (0, 8]
+
+**Semantics:** An element whose prototype is a mesh sequence draws the sequence at the fraction (t × rate ÷ span + phase) mod 1 of its span, mixed with the next frame as Mesh sequence says, in the prototype's material. A hashed phase is rand(hash(seed, element)), and a rate range draws each element's rate by the same hash, so a flock flaps out of step with nothing stored. A piece's logic can set phase and rate per slot and choose walk, run or idle through `proto`, so a unit that starts walking at a step writes the phase that starts its cycle there. A column value outside its range hides the element and raises `column.out_of_range`, as logic columns do. Every element of one sequence draws in one instanced draw, its frame and mix weight computed on the GPU from t, phase and rate, so the frame at t is a pure function of t, the columns at t and the seed, and seeking equals playing. Elements keep their level of detail bands, and a proxy band may name a sequence of fewer vertices.
+
+**Cost:** One vertex fetch more per vertex for the mix; the sequence's frames resident (a 600-vertex walker of 16 frames about 230 KB, an estimate); 4 B more per element. Budget class: as the instancer.
+
+**It can never:** Integrate between frames; keep a history per element; give an element a sequence other than its prototype's; let a check read an animated pose, since checks read the arrays
+
+**Lands:** R6, with the logic module and mesh sequences
+
+#### Material
+
+**Fields**
+
+- `from: material name` (optional; starts from a named material, and the fields given override it)
+- `base_color: color = [0.8, 0.8, 0.8, 1] | role`
+- `metallic: f32 = 0`; `roughness: f32 = 0.5`; `specular_level: f32 = 0.5`
+- `alpha: f32 = 1`; `alpha_mode: opaque | mask | blend = opaque (under MSAA, mask writes alpha to coverage with a sharpened edge)`
+- `emission: color = 0`; `emission_strength: f32 = 1`
+- `coat: f32 = 0`; `coat_roughness: f32 = 0.03`
+- `sheen: {weight: 0..1 = 0, color: color | base = base, roughness: f32 = 0.5}` (a soft lobe that rises at grazing angles, for cloth: velvet, felt, cotton)
+- `anisotropy: {strength: −1..1 = 0, rotation: deg = 0}` (the highlight stretched along uv0's u direction: around a lathe, along an extrusion, along a hair card's strands)
+- `translucency: {kind: thin | wrap = thin, amount: 0..1 = 0, color: color | base = base, wrap: 0..1 = 0.5}` (thin: light on a thin part's back comes through its front, for leaves, curtains, lampshades and paper; wrap: diffuse light reaches past the shadow line, for skin, wax, jade and marble)
+- `transmission: f32 = 0`; `ior: f32 = 1.5`
+- `normal_map: sha256` (optional)
+- `pattern: none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt = none`; `pattern_scale: m = 1`; `pattern_seed`
+- `ink: {role, weight: px = 1}`
+- `mirror` (Material: mirror)
+- `unlit: bool = false`; `double_sided: bool = false`
+- `shadow: auto | cast | none = auto` (what the part writes into shadow maps; auto: nothing for a see-through part, its shape for the rest)
+- Any number may be `{attr, map: [a, b] → [c, d]}`
+
+**Semantics:** Materials are content-keyed assets. One pipeline per feature set (pattern, alpha mode, transmission, unlit, ink) is compiled once; values live in a material buffer indexed per instance, so changing a value never recompiles. Defaults differ from glTF's, and a glTF import maps glTF's metallic 1 and roughness 1. A material is an item of kind `material@1`, so a channel or a driver keys any of its numbers at `items/<id>/params/<name>`, as for any item, and the change touches only the material buffer. Sheen, anisotropy and translucency are features, as transmission is, so only parts that use one pay for it, and each is off until its weight, strength or amount leaves 0. Sheen adds a soft lobe that rises toward grazing angles and lowers the base lobes by what it reflects, so the sum never reflects more than it receives. Anisotropy stretches the specular lobe along the part's tangent, turned by rotation, and bends the environment lookup with it. Thin translucency lights a part's front from the light that reaches its back, by amount and color, with no blur; wrap lets diffuse light reach past the shadow line by `wrap`, tinted by color. They map to KHR_materials_sheen, KHR_materials_anisotropy and KHR_materials_diffuse_transmission on import and export; wrap has no glTF form, so an export lists it. Under `shadow: auto`, a part with transmission above 0 or alpha_mode blend writes nothing into shadow maps, so sunlight and lamplight pass through glass and light shafts fall through a glazed window; `cast` keeps such a part's shadow, `none` drops any part's, and a mask part casts by its cutoff. The shadow mode joins the material's feature key, so changing it invalidates every map it reaches.
+
+**Cost:** One compile per feature set, at most 32 per look; per-pixel cost by feature (transmission needs a scene-color copy); 64 to 128 B per material; sheen, anisotropy and translucency add about 15 to 30 ALU per pixel per light each, and anisotropy one more environment lookup, only on parts that use them; anisotropy takes its tangent from the asset's tangents or builds it per pixel from uv0's derivatives
+
+**It can never:** Carry a status color; bring shader code; load a texture from the network; keep light between frames to fake scattering, or spread light past a subsurface part (Material: subsurface)
+
+**Lands:** R6; look roles R1
+
+#### Material: texture maps
+
+For: films and scenes that place licensed glTF assets (`mesh.asset`)
+
+**Fields**
+
+- `maps: {base_color, metallic_roughness, emission, occlusion: sha256}` (beside `normal_map`)
+- `uv: uv0 | uv1 = uv0, on each map (glTF's texCoord per texture)`
+- `transform: {offset: [f32, f32] = [0, 0], scale: [f32, f32] = [1, 1], rotation: deg = 0}`
+- `wrap: repeat | clamp | mirror = repeat`
+- `alpha_cutoff: f32 = 0.5` (for `alpha_mode: mask`)
+
+**Semantics:** An imported glTF keeps its textures, mapped to the same physically based model, instead of losing them on import. A map is an asset by hash, decoded once off the UI thread, and a map's presence is a feature, so values never recompile. An import multiplies base color by the mesh's COLOR_0, as glTF requires, and maps each material extension the material holds (emissive strength, IOR, clearcoat, transmission, sheen, anisotropy, diffuse transmission, texture transforms and variants) to its field. Anything else a file uses, such as iridescence, dispersion, a specular color, volume, or a texture beyond the maps above, is listed per material in the probe's `dropped` and as a warning on the item, never dropped silently.
+
+**Cost:** One filtered fetch per map per pixel; w × h × 4 B × 1.33 per map, within the document's 64 MB decoded-image cap
+
+**It can never:** Load from a URL or a path; carry a status color; be added to a built material, where patterns stay procedural
+
+**Lands:** R6, with `mesh.asset`
+
+#### Material: flipbook
+
+For: films (fire and smoke cards baked by the 2D smoke job), the castle (a hearth fire), `particles@1` puffs
+
+**Fields**
+
+- `flipbook: {asset: sha256 (a frame atlas with its license), cols, rows: u16, frames: u16, frame_rate: rational | over_life: bool = false, blend: nearest | linear = linear, loop: bool = true}`
+- On: material maps base_color and emission, and `particles@1` draw puff
+
+**Semantics:** The frame at t is the floor of (t − start) × frame_rate, or the particle's normalized age, mixed with the next frame when blend is linear, so it's a pure function of t. Atlases decode once off the UI thread like any map.
+
+**Cost:** Two filtered fetches per pixel with blending; w × h × 4 B × 1.33 per atlas within the decoded-image cap. Budget class: figure, showpiece, export.
+
+**It can never:** Load from a URL; advance by the wall clock; carry a status color.
+
+**Lands:** R6
+
+#### Material: shadow catcher
+
+For: a 3D figure standing on the notebook look's 2D paper with its contact shadow; product shots exported with alpha over 2D slides and films
+
+**Fields**
+
+- `catch: none | shadow | shadow_and_ao = none`
+- `catch_strength: f32 = 1` (both on Material)
+
+**Semantics:** The surface draws no color of its own: it writes black with alpha equal to the share of light its shadows (and, with shadow_and_ao, its ambient occlusion) remove, in linear light, so the writer layer composites over the 2D content below like a real shadow. It uses the same lights and shadow maps as everything else.
+
+**Cost:** As an unlit surface plus the shadow lookups it already pays. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Darken a status color (they draw after, on top); occlude items behind it; count as a solid in the geometry audit.
+
+**Lands:** R6
+
+#### Material: mirror
+
+For: a black gloss floor under a product, a lake under a castle, a shop window
+
+**Fields**
+
+- `mirror: {strength: f32 = 1, blur: px = 0, plane: named part}` (on the material of a planar part; at most one per view)
+
+**Semantics:** One extra pass renders the scene from the camera mirrored in the plane at t, clipped at the plane, and the part samples it, blurred by its roughness or by blur. It keeps no history, so seeking equals playing.
+
+**Cost:** One extra scene pass at half resolution plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. Budget class: work product, showpiece, export.
+
+**It can never:** Recurse (a mirror inside a mirror draws its fallback); read an earlier frame; mirror status colors or overlays.
+
+**Lands:** R6
+
+#### Material: water
+
+For: a lake in a nature flyover, a harbour or a moat in a film, rain falling on a pond
+
+**Fields**
+
+- `water: {waves: wind {speed: m/s = 3, direction: deg = 0} | [{direction: deg, length: m, amplitude: m, steepness: 0..1}] ≤ 4 = wind, ripples: {scale: m = 0.5, strength: 0..1 = 0.3}, rain: f32, drops per m² per s = 0, absorption: {color = [0.12, 0.42, 0.40], depth: m = 3}, distort: px = 16, foam: {threshold: 0..1 = 1}, wake: {item: ID, span: s = 8} | none = none}` (on the material of a plate's part; `water: {}` alone gives a lake in a light breeze; a foam threshold of 1 is off)
+
+**Semantics:** Waves are a sum of up to four trochoidal waves in closed form of position and t; given a wind, a fixed table picks four from its speed and direction. They move the plate's vertices in the vertex stage and bend its normal per pixel. Ripples add seeded noise that drifts with the wind, and rain adds rings at places and times hashed from the seed, each ring a closed form of its age. Foam whitens the water where the waves' steepness at that point, from their closed form, passes `threshold`. A wake follows a named moving item: foam and ripples along the path it took over the last `span` s, read from its position at a fixed set of earlier times, never from earlier frames. Both are closed form of t. A water material reflects through its own mirror on that part (Material: mirror, at strength 1) unless it names one, and the mirror's lookup moves along the bent normal by up to `distort` px. Under the reflection the water shows the bed behind it, whose share falls as exp(−d ÷ depth) over the distance d to the bed, read from the depth target, with the absorption color filling the rest, so shallows show the bed and deep water takes the water's color. All of it is a function of t, so seeking equals playing. A floating body takes the physics module's buoyancy, never the drawn waves.
+
+**Cost:** About 40 ALU per vertex for four waves; about 60 ALU per pixel plus a scene-color and a depth fetch, as transmission pays, and the mirror's pass; about 0.3 ms at 1080p for a lake filling half the frame (estimate). Foam adds about 10 ALU per pixel, and a wake about 20 ALU per pixel near its path (estimate). Budget class: work product, showpiece, export.
+
+**It can never:** Simulate, integrate or read an earlier frame; feed a check or the physics module; move a vertex further than its waves' summed amplitude.
+
+**Lands:** R6
+
+#### Material: subsurface
+
+For: a presenter's face in a close shot, candles and wax, jade, marble and soap in product shots, milk in a glass
+
+**Fields**
+
+- `subsurface: {weight: 0..1 = 0, color: color | base = base, radius: [m, m, m] = [0.0036, 0.0014, 0.0007], thin: bool = true}` (radius: the mean free path in red, green and blue, skin's by default; thin: light through thin parts)
+
+**Semantics:** A lobe for light that enters a part and leaves it nearby. The part's lit diffuse is spread by Christensen and Burley's diffusion profile for radius, sampled in screen space at 16 fixed taps rotated by a pixel hash and scaled by depth, only over pixels of a part with the same material, so light never bleeds onto another part. With thin on, light through thin parts such as ears and fingers comes from the thickness the light's shadow map measures, as exp(−d ÷ radius). The lobe takes its share from the diffuse, so the material never reflects more than it receives. In path-traced finals it's a random walk through the mesh with the same mean free path. It keeps no history, so seeking equals playing. Where the pass is off (the class or the ladder), wrap translucency stands in with the same color and the fallback is reported; a glTF export lists the lobe, as it lists wrap.
+
+**Cost:** One pass over subsurface pixels at 16 taps each: about 0.5 ms for a face that fills half a 1080p frame; thin light one shadow fetch per light per pixel (estimates). Budget class: work product, showpiece, export.
+
+**It can never:** Spread light onto another part or another material; keep light between frames; add energy; carry a status color.
+
+**Lands:** R6
+
+#### Material: hair
+
+For: a licensed character's hair in a close shot, a presenter in a film, fur on a mascot
+
+**Fields**
+
+- `hair: {melanin: 0..1 = 0.3, redness: 0..1 = 0, roughness: 0..1 = 0.3, azimuthal_roughness: 0..1 = 0.3, tilt: deg = 2, ior: f32 = 1.55}` (on the material of a hair part)
+- On `mesh.asset`: `strands: {from: line primitives, root: named part, width: m = 0.00008}` (at most 100,000 strands of up to 32 points each)
+
+**Semantics:** A fiber lobe: the published model of light scattered by a hair fiber, with Marschner's reflection (R), transmission (TT) and second reflection (TRT) lobes, their color from melanin and redness and their spread from the two roughnesses, the reflection shifted from the mirror direction by twice the tilt. It shades a character's hair cards along uv0's u direction, as anisotropy reads a card, and its strands. Strands come from the asset's own line primitives: each root binds at import to a triangle of the named part by barycentric coordinates and moves at t with that triangle's skinned pose (Asset: skinned playback), the strand rigid in its root's frame, so hair rides a turning head and seeking equals playing. Strands draw as ribbons that face the camera at their width, with coverage, under MSAA; the live view's frame history smooths their thin edges, and exports take samples per frame. In path-traced finals the lobe is traced as published. Where it's off, cards take the anisotropic highlight, and the fallback is reported.
+
+**Cost:** About 60 ALU per pixel per light for the three lobes; strands two triangles a segment: 50,000 strands of 16 points are 1.5 million triangles, about 2 to 3 ms at 1080p with 4× MSAA (estimates). Budget class: work product, showpiece, export.
+
+**It can never:** Simulate or integrate a strand; leave its root's triangle; pass its counts; carry a status color.
+
+**Lands:** R6
+
+#### Light and the light policy
+
+**Fields**
+
+- Light: `kind: light.point | light.spot | light.sun | light.area@1` (closed: new light shapes stay first-party, since raster light, rays, probes, the light job and path-traced finals share one light model; it reopens if a case needs a shape these four can't stand in for. A light function filters the ones there are: Light: light function); `color: linear RGB = [1, 1, 1] | temperature: K = 6500`; `power: lm = 800` (point, spot, area) or `illuminance: lx = 10,000` (sun); `range: m = auto` (√(power ÷ (4π × threshold)), threshold 0.05 lx by default: about 36 m at 800 lm); `radius: m = 0.05`; spot `inner: deg = 0, outer: deg = 45` (a spot's `power` counts the whole sphere, as a point light's does: lm = 4π × cd); area `shape: rect | disk, size: [m, m] = [0.5, 0.5]`; `shadow: bool = false` (true for the key sun); `priority: i8 = 0`; `flicker: channel` (optional)
+- Policy, per view: `shaded ≤ 32`; `shadowed: 1 sun (≤ 4 cascades) + 2 spots`; `margin = 10%` (lights near the cut dim by score); notice `lights_over_budget`
+
+**Semantics:** Recomputed only when a light or the camera changes: each light is scored by its estimated illuminance at the view (power ÷ max(d², r²) inside its range, times its range's overlap with the frustum), plus a priority bonus. The top N go into a fixed-size array ordered by (score bucket, ID), as a pure function of the view: a light within the margin of the cut is shaded at a weight that ramps with its score, so it dims smoothly as the view moves and the set at a view is the same however the view got there, with no session hysteresis and no fade in wall-clock time. Lights left out are reported once per change, by ID. Above 8 lights, culling is by screen tile and depth slice. Shadowed lights near the shadow cap lose their shadow by score, blended across a score margin, before any light dims; each dropped shadow is reported by ID. Each cluster's list is ordered by score bucket, then light ID, after any GPU fill, and the grid's far plane comes from this frame's lights and view only.
+
+**Cost:** GPU per pixel grows with the lights in its cluster; each shadowed light is one depth pass per cascade; static shadow maps are cached by everything they read; CPU O(lights) per change
+
+**It can never:** Be dropped silently; exceed the shadow budget; recompile when the count changes; show a status color
+
+**Lands:** R6
+
+#### Light policy: cascades
+
+For: the city and the castle (large extents with near detail)
+
+**Fields**
+
+- `cascades: 1 to 4 = 3` (the key sun)
+- `split: f32 = 0.5` (0 uniform, 1 logarithmic)
+- `shadow_far: m = auto` (from the view's bounds)
+- `fade: bool = true` (blend across cascade edges)
+
+**Semantics:** Splits are computed from the current camera pose in closed form, so a seek gives the same shadows as playing. Each split takes a bounding-sphere fit, texel snapping and, when soft is on, an expansion by the penumbra's reach (tan of the light's angle × the depth range); depth clamps through wgpu's unclipped-depth feature, with a pancaked near plane where it's missing. A cascade's static map is cached by everything it reads: the sun's direction, the cascade's light-space projection after texel snapping (which follows the camera), and the content keys and transforms of the casters inside it. A camera move that changes the snapped projection re-renders that cascade, and a cached map always equals a clean render.
+
+**Cost:** One depth pass per cascade, as now; a fade adds a second lookup in the overlap
+
+**It can never:** Exceed four cascades; depend on earlier frames; reuse a map after anything it read changed
+
+**Lands:** R6
+
+#### Light policy: soft shadows
+
+For: figures and product shots on a table, the castle at golden hour, the diorama, physics labs with balls on a floor, the house by day
+
+**Fields**
+
+- `soft: {method: pcf | pcss = pcss (pcf is Castaño's 9-tap filter), blocker_taps: u8 = 16, filter_taps: 16 | 32 = 16, max_penumbra: px = 32}` (on the policy)
+- `angle: deg = 0.53` (on `light.sun`: the sun's apparent diameter; point, spot and area lights use their radius or size)
+- `contact: {length: m = 0.3, samples: u8 = 16} | none = none` (screen-space contact shadows for the key light)
+
+**Semantics:** PCSS: a blocker search, then a filter disk sized by the penumbra the light's size gives, so shadows harden where objects touch. The disk is a fixed Vogel pattern rotated by an integer hash of the pixel, the same every frame, so a still frame is identical however it was reached; under samples per frame the point on the light moves with the sample index instead, which gives true area shadows. Contact shadows march the depth target toward the key light for a short world-space length with a fixed step pattern.
+
+**Cost:** About 32 to 48 extra shadow-map fetches per pixel per shadowed light, roughly 0.5 to 1 ms at 1080p for the sun; contact shadows about 16 depth fetches per pixel, 0.2 to 0.4 ms (estimates). Budget class: figure, work product, showpiece, export.
+
+**It can never:** Jitter by frame number or accumulate; darken a status color; exceed the shadow budget or the class's effects time.
+
+**Lands:** R6
+
+#### Light policy: local shadows
+
+For: the house at night, the castle's lanterns, interiors in films, a physics lab lit by a desk lamp
+
+**Fields**
+
+- `shadowed: {sun: 1 (≤ 4 cascades), spots: u8 = 2, points: u8 = 0 (≤ 4)}` (points are new)
+- `local_map: px = 512` (a spot's map and each cube face of a point light)
+- `cache: static | none = static` (reuse while the light and the casters in its range don't move)
+- Rect and disk area lights with `shadow` on take `points` slots
+
+**Semantics:** The policy's top-ranked shadowed point lights render a cube of six faces and spots a single map. A map is keyed by the light's pose, range and shadow settings and by the content keys, transforms and material feature keys of every item whose bounds meet its range, plus t when a caster's material makes coverage or displacement depend on t; a dirty map is never deferred: over budget, the policy drops that shadow by score and reports it, so an item that enters the range invalidates it, a still interior costs no shadow passes at all, and a cached map always equals a clean render. A light that loses its shadow at the cut is reported once by ID, like a dropped light, by the same rule. A rect or disk area light with shadow on takes a point light's slot: its map is the five cube faces in front of it, and its soft shadows widen with its size, so a softbox leaves a soft shadow under a product. It's keyed and cached as a point light's map is.
+
+**Cost:** Six depth passes over the casters in range per point light when its map is invalid; 3 MB per point light at 512 px with 16-bit depth; five depth passes per area light when its map is invalid; one filtered cube lookup per shadowed light per pixel. Budget class: work product, showpiece, export.
+
+**It can never:** Exceed the class's shadowed-light caps; drop a shadow silently; reuse a map whose casters changed.
+
+**Lands:** R6
+
+#### Light: receivers
+
+For: the house at night, where a room's lamps stop at its walls; the city, where a sign lights only its shopfront; figures with one lit accent
+
+**Fields**
+
+- `receivers: collection | [collection] | all = all` (on every light kind; the sun usually keeps all)
+- `budget.receiver_sets: u8 ≤ 32` (distinct receiver sets per document)
+
+**Semantics:** At check, each distinct set becomes a bit, every instance gets 32 bits marking the sets it belongs to, and every light gets its set's bit. The light loop skips a light whose bit isn't set in the pixel's instance bits, so an unshadowed lamp never lights the next room's floor through a wall. Shadow casters are unchanged; only receiving is filtered.
+
+**Cost:** One AND per light in the cluster loop; 4 bytes per instance inside the existing record's flags; masks recompute only when a collection or a light's receivers change. Budget class: any 3D class.
+
+**It can never:** Exceed 32 sets; hide or recolor a status color; change a true shape or the geometry audit.
+
+**Lands:** R6
+
+#### Light: casters
+
+For: the house at night (a lamp inside its shade, a bulb in its fixture); the city's signs inside their housings
+
+**Fields**
+
+- `casters: collection | [collection] | all = all` (on every light kind, beside receivers)
+- `budget.caster_sets: u8 ≤ 32`
+
+**Semantics:** A light's shadow maps draw only the casters in its sets; receiving and everything else is unchanged. Sets compile at check with the receiver sets, and shadow passes cull by them on the CPU.
+
+**Cost:** None per pixel; CPU culling only. Budget class: any 3D class.
+
+**It can never:** Hide an item from view or from another light's shadows; exceed 32 sets.
+
+**Lands:** R6
+
+#### Light: IES distribution
+
+For: the house's downlights and wall washers, the city's street lamps, interiors in films
+
+**Fields**
+
+- `distribution: sha256` (an IES LM-63-2002 file with its license; on point, spot and area lights)
+- `distribution_rotation: deg = 0` (about the light's axis)
+- `power: lm | from_file` (from_file takes the lumens the file states)
+- `budget.distributions: u8 ≤ 16`
+
+**Semantics:** At check the file is parsed into an angular table normalized to integrate to one over the sphere, or over the cone for a spot, so power stays the lamp's flux and the distribution only shapes where it goes. Tables pack into one atlas, and shading looks up the light's direction to the pixel in its table. A spot clips the table to its outer cone, and the check reports the share of flux clipped.
+
+**Cost:** One 2D fetch per light with a distribution per pixel; 256 × 128 half floats per distribution (64 KB); parsing O(file) once per hash. Budget class: any 3D class.
+
+**It can never:** Change a light's flux silently; load from a URL or a path; exceed 16 distributions.
+
+**Lands:** R6
+
+#### Light: light function
+
+For: a stage spot through a gobo, window light through blinds, a lamp's patterned shade, a sweep of light across a wall
+
+**Fields**
+
+- `function: operator ID | <pack>.<name>@major` (on point, spot and area lights; a material-kind graph whose one output is `filter: vec3`)
+- Inputs, from the core: `dir: vec3` (from the light to the shaded point, in the light's space); `uv: vec2` (dir on the spot's cone or the area light's rectangle, 0..1); `t`; the light's `seed`; and the operator's own inputs
+- `normalize: flux | none = flux`
+- At check: `mean: vec3` (the filter's mean over the light's directions on a 64 × 64 grid, in f64, at t = 0 and at each key of a channel it reads)
+- Issue: `light_function.unstable {light, spread}`
+
+**Semantics:** The light's radiance toward a point is multiplied by the filter the function returns for that direction, before shadow and receivers apply, in raster light, in rays and in probe captures, which all run the same graph. With `normalize: flux` the core divides the filter by its mean luminance at check, so the light still emits its declared lumens, as an IES distribution does. A function that reads t is normalized at every sampled time and refused with `light_function.unstable` when its mean luminance varies by more than 1% across them, since a light's brightness over time belongs in its `flicker` channel. A function that samples an image casts it, as a gobo does. Its class is same machine at best, and status colors draw unlit after lighting, so a filter never reaches one.
+
+**Cost:** The function's steps per shaded pixel per light that has one (a gobo is one filtered fetch, an estimate); normalization O(64 × 64 × steps) per sampled time, once per content key at check. Budget class: work product, showpiece, export.
+
+**It can never:** Change a light's flux under `normalize: flux`; read another light or an earlier frame; cast or move a shadow; apply to the sun; reach a status color
+
+**Lands:** R6
+
+#### Light: area emission
+
+For: a television or monitor lighting the house at night; a screen lighting a presenter's face in a film; the display builder's screen glowing on its desk
+
+**Fields**
+
+- `emission: inset ID | sha256 | none = none; emission_size: px = 64` (on `light.area@1` with shape rect; an atlas page with mips)
+
+**Semantics:** The light shades by linearly transformed cosines over its rectangle and takes color from the emission source's mip chosen by the lobe's footprint, so a screen's picture tints the room. Power stays the light's lumens, distributed by the source's luminance. An inset source re-renders its atlas page only when its content key changes.
+
+**Cost:** 2 to 4 filtered fetches per pixel per textured area light in the cluster loop; one 64 px page with mips per source. Budget class: work product, showpiece, export.
+
+**It can never:** Change the light's flux; read a writer layer other than its own; act as a status color source.
+
+**Lands:** R6
+
+#### Light: ray traced
+
+For: glossy floors in the castle's hall, a product on a reflective stand, interiors where lamps move, contact shadows under furniture in the house at night
+
+**Fields**
+
+- `rays: auto | off = auto` (on the light policy; auto: on where the GPU has ray queries, the class allows them and the spike showed that GPU within budget)
+- `effects: [shadows | reflections | ao | gi] = all four`
+- `reflections: {max_roughness: f32 = 0.6}`; `ao: {length: m = 1}`; `gi: {bounces: 1 | 2 = 1}`
+- `per_sample: {shadow, reflection, ao, gi: u8 = 1}` (rays per pixel for each of the look's samples)
+- Key and receipt add `light: rays | without_history`
+
+**Semantics:** Ray queries through wgpu 30: on Metal from macOS 15, and on Vulkan and Direct3D 12 later through the same seam; ray tracing pipelines aren't used. Each mesh has a bottom-level structure keyed by its content key and built once; a skinned or deforming mesh refits its own rest structure at t, never an earlier frame's; and the top level is rebuilt from the instances at t in any frame where something moved, so the structures at t are the same however t was reached. Shadows: rays from each pixel toward points on the light's disk, rect or sphere, chosen by the pixel hash and the sample index, take the place of a shadowed light's map, so its size makes the penumbra. Reflections: one ray along a sample of the GGX lobe, its hit shaded by the same lights, probes and environment; surfaces rougher than max_roughness take the probes and the environment. Ambient occlusion: cosine rays out to length, applied where Look look@1: ao applies. Global illumination: the document's irradiance probes, traced whole on the GPU at t whenever their key changes (any item, light or sky they see), so bounce light follows a lamp you move or a door that opens and a still scene traces nothing; each pixel gathers one bounce through them. In the live view a moving frame's rays are denoised by its frame history (Look look@1: frame history) and one fixed-tap edge-aware filter; at rest, in render-back and in exports each of the look's samples traces its own rays, so many samples per frame stand in for a denoiser and nothing carries between frames. Where the GPU or backend has no ray queries, macOS is older than 15, the class disallows rays or the ladder turns effects off, the frame draws with the light above (soft and local shadows, probes, the atmosphere, samples per frame), and the frame's key and receipt name which light drew it, so a check compares only frames of one light. Status colors, text and overlays draw after it. A part whose material has a light response (Operator output: light response) takes its `shadow` input from rays where rays draw shadows, and reflections and bounce light that land on it shade it with `core.light@1` and `core.ambient@1`, which the receipt lists under `light_response: default_lobe`.
+
+**Cost:** The spike, on an M1 with no ray-tracing hardware and an M3 with it, measures each effect at 1080p at one ray per pixel for the castle and the house, and sets the class budgets. Proposals: shadows, reflections and ambient occlusion under 4 ms together on the reference Mac, a 16³ probe grid traced whole under 2 ms, a top-level rebuild under 0.3 ms per 1,000 instances; bottom-level structures about 64 B per triangle (estimates). Budget class: work product, showpiece, export; figures and data views draw without rays.
+
+**It can never:** Refit a structure from an earlier frame; seed a ray by the frame count or the clock; carry light between frames outside the live view's window; trace or light a status color, text or an overlay; let a check compare a frame drawn with rays and one drawn without.
+
+**Lands:** R6, behind a spike on an M1 and an M3
+
+#### Sky `sky@1`
+
+**Fields**
+
+- `top: color`; `low: color` (a gradient)
+- `ambient_top, ambient_low: linear RGB`
+- `fog: color`; `fog_density: 1/m = 0`
+- `stars: 0..1 = 0`
+- `moon: {azimuth, elevation, radius: deg}` (optional)
+- `sun: light ID` (optional; its direction)
+- `exposure: EV100` (from the look unless set)
+
+**Semantics:** One per scene, drawn first in the pass chain. Fog applies to every lit surface by distance. Day and night are look variants over the same sky fields.
+
+**Cost:** One full-screen pass, O(px); fog adds a few instructions per pixel
+
+**It can never:** Carry a status color; change a light count
+
+**Lands:** R6
+
+#### Sky `sky@1`: atmosphere
+
+For: the castle at sunrise, sunset and night; the city's day-to-night film; outdoor figures, the diorama and terrain in 3D data views
+
+**Fields**
+
+- `atmosphere: none | physical = none` (physical replaces the top and low gradient)
+- `planet: {ground_radius: m = 6,360,000, ground_albedo: color = [0.3, 0.3, 0.3]}` (a literal such as "6360 km" converts)
+- `top: m = 60,000` (the atmosphere's height)
+- `rayleigh: {scattering: linear RGB per m = [5.80e-6, 13.56e-6, 33.1e-6], scale_height: m = 8,000}`
+- `mie: {scattering: per m = 3.996e-6, absorption: per m = 4.40e-6, g: f32 = 0.8, scale_height: m = 1,200}`
+- `ozone: {absorption: linear RGB per m = [0.650e-6, 1.881e-6, 0.085e-6], center: m = 25,000, width: m = 30,000}` (a tent profile)
+- `multi_scattering: f32 = 1`; `aerial_perspective: {scale: f32 = 1, start: m = 0}`
+- `sun_disk: bool = true` (drawn at the sun's angle, from Light policy: soft shadows)
+- On environment: `sun_from: {threshold: f32 = 10, angle: deg = 0.53} | none = none` (for an HDR asset)
+
+**Semantics:** Hillaire's method: a transmittance table and a multiple-scattering table rebuilt only when these fields change, then a sky-view table and an aerial-perspective volume rebuilt when the sun or the camera moves, with the key sun tinted by transmittance so sky and sunlight agree at every elevation. For an HDR environment, sun_from turns the region brighter than the threshold into the key sun's direction, color and illuminance once per asset and rotation, so an HDRI casts real shadows. Everything is a function of the fields, the sun's direction and the camera at t, so a seek gives the same sky as playing.
+
+**Cost:** Transmittance 256 × 64 and multiple scattering 32 × 32 on change, under 0.5 ms; sky view 192 × 104 and aerial perspective 32 × 32 × 16 per sun or camera change, about 0.1 to 0.3 ms; one fetch per sky pixel and one 3D fetch per lit pixel; sun extraction O(px) once per asset (estimates). Budget class: figure, work product, showpiece, export.
+
+**It can never:** Accumulate over frames; change a light count; carry a status color; read the clock.
+
+**Lands:** R6, with the sky
+
+#### Sky `sky@1`: environment
+
+For: the castle, the city's glass, the house's windows, figures in the physical look
+
+**Fields**
+
+- `environment: {from: sky | studio | sha256 (an equirectangular HDR with its license), intensity: f32 = 1, rotation: deg = 0, size: px = 256}`
+- `background: auto | sky | environment = auto` (auto: an HDR asset draws behind the scene; `sky` and `studio` light and reflect while the sky's own fields draw the background)
+
+**Semantics:** Image-based lighting: the core prefilters the environment into a cube with roughness per mip and nine irradiance coefficients whenever its key changes (the sky's fields, the atmosphere's tables, the key sun, the environment asset and rotation, and the camera position where aerial perspective reaches it): by GGX with bounded VNDF sampling when the key holds still, and by the fixed-cost fast filter when it depends on t; never spread over frames, and every physically based material reflects it. `from: sky` renders the document's own sky, so no asset is needed, and `studio` is a shipped neutral room. Day and night are look variants, so switching re-prefilters once. The background is the sky's own fields, its gradient or its atmosphere, unless background says environment, so a studio environment lights a product on a dark stage; an HDR asset draws behind the scene by default, at its intensity and rotation.
+
+**Cost:** Prefilter once per change, a few ms on the GPU (estimate); about 4 MB at 256 px (half floats, 6 faces, mips); per pixel one filtered fetch and nine multiply-adds
+
+**It can never:** Be rebuilt per frame or from a moving camera; load from a URL; carry a status color
+
+**Lands:** R6
+
+#### Light probe `light.probe@1`
+
+For: the house's interiors (bounced daylight, lamps, local reflections), the castle's halls and courtyards, the city's glass, the diorama, interiors in films
+
+**Fields**
+
+- `type: reflection | irradiance`
+- `at` (the item transform: the probe's centre and orientation); `size: vec3, m = [4, 3, 4]`; `shape: box | ellipsoid = box`; `falloff: f32 = 0.2`; `priority: i8 = 0`
+- `reflection: {parallax: box | none = box, resolution: px = 128, capture_at: time = transport start, include: collection | all = all}`
+- `irradiance: {spacing: m = 1, bounces: 1 | 2 | 3 = 2, rays: 64 | 128 | 256 = 128, include: collection = static items, bake: job ID (Asset job kind light), bias: {normal: m = 0.05}, validity: f32 = 0.4}`
+- `times: [time | marker] ≤ 3 = [capture_at]` (each captured, or baked by its own light job, at its time); `mix: by_time | channel = by_time`
+- `budget.probes: {reflection ≤ 8, irradiance ≤ 4}` per document
+
+**Semantics:** A reflection probe is captured by the core: six views of the document at capture_at, prefiltered like the sky's environment, keyed by everything the capture sees: the content keys and transforms of every item within its capture range, inside its influence volume or not, the lights that reach them, and the sky and environment. It's recaptured when that key changes, never per frame or from the camera, and a cached capture always equals a clean capture. An irradiance probe reads a grid of irradiance (spherical harmonics with a visibility term) that a light job bakes whole and stores by hash whenever its inputs' content key changes (every item within its range, the lights and the sky), so no frame depends on how many probes updated before it. Shading blends reflection probes by influence and priority, falls back to the sky's environment and adds the irradiance; until a bake is ready the scene uses the environment and reports settling. A probe with several times captures, or bakes, the document at each, each keyed as a single capture is. At t, by_time mixes the two captures whose times bracket t, linearly in t, and holds the first before its time and the last after; with channel, a channel from 0 to the last time's index picks the mix. So a room's bounce light and reflections move from daylight to lamplight over a dusk, and no frame depends on another; a capture that isn't ready shows the environment in its place, and the frame reports settling.
+
+**Cost:** A reflection capture is 6 renders at 128 px (about 2 ms, estimate), then 1 or 2 fetches per pixel and about 0.5 MB; irradiance is 8 fetches per pixel (about 0.2 ms) and a 32³ grid is about 0.8 MB; a bake of 16,000 probes × 128 rays takes 0.2 to 1 s in the job (estimates). Each extra time adds its capture or grid to memory, and inside a mix the probe's fetches double. Budget class: work product, showpiece, export; figures and data views refuse probes.
+
+**It can never:** Be captured per frame or from the moving camera; update a share of itself per frame; include moving items' bounce, except through ray-traced light (Light: ray traced); show a partial bake as complete; mix more than two captures at a pixel; feed a check; carry a status color.
+
+**Lands:** R6: reflection captures as a shipped operator; irradiance through the light job in the asset-tools plug-in
+
+#### Light probe `light.probe@1`: capture set
+
+For: the house's interiors; the castle's halls; the city's glass
+
+**Fields**
+
+- `far: m = 4 × the largest size axis; shadows: bool = false; receivers: collection | all = all` (on type reflection)
+
+**Semantics:** The capture renders what include holds within far of the probe's centre, with shadows only if asked. Its key covers every item it sees within far (content key, transform, presence), the lights that reach them, the sky and the environment, so a cached capture equals a clean recapture. All six faces render in one frame; a frame drawn before it lands reports settling and is never canonical.
+
+**Cost:** Unchanged per capture; fewer recaptures from a smaller seen set. Budget class: work product, showpiece, export.
+
+**It can never:** Capture beyond far or outside include; be keyed by less than it sees; update over several frames.
+
+**Lands:** R6
+
+#### Sky `sky@1`: height fog
+
+For: the castle above the clouds, the city at night
+
+**Fields**
+
+- `fog_height: {top: m, density: 1/m = 0}` (0 is off)
+- `fog_curve: exp | exp2 = exp2` (states the curve of `fog_density`, which the sky row leaves unnamed)
+
+**Semantics:** Mist that thickens below `top`, added to the distance fog, so a castle can stand above a cloud floor and a city's streets can haze. Fog applies to lit surfaces before tone mapping, as now.
+
+**Cost:** A few ALU per pixel in the existing fog step
+
+**It can never:** Change a light count; carry a status color
+
+**Lands:** R6
+
+#### Sky `sky@1`: light shafts
+
+For: sunbeams through a hall's windows, a spotlit product reveal, beams between a city's towers at dusk
+
+**Fields**
+
+- `shafts: {lights: key | [light ID] = key, steps: u8 = 24, resolution: half | full = half, phase: f32 = 0.3}` (phase: how strongly the fog scatters forward)
+
+**Semantics:** Light falling through the sky's fog. Per pixel, a march from the camera to the surface at a fixed step count samples the fog's density, the light's shadow map and the phase, and adds the scattered light before tone mapping, so beams fall through windows and between pillars. The march starts at an offset from a hash of the pixel, never of the frame, and a depth-aware upsample from half resolution smooths it, so it's a pure function of the frame and seeking equals playing. It needs fog, a density above 0, and lights that cast shadows: a named light without shadows is refused, naming it. Display only, so no check reads it.
+
+**Cost:** steps × the pixels at its resolution: 24 steps at half resolution at 1080p is about 12 million shadow lookups, about 1 ms on an M-series GPU (estimate). Budget class: work product, showpiece, export; it's among the effects the ladder turns off first.
+
+**It can never:** Keep history between frames; light a status color or text; feed a check.
+
+**Lands:** R6, with light without history
+
+#### Puff `puff@1`
+
+**Fields**
+
+- `at` (only `pos` is used, in m); `radius: m`; `aspect: f32 = 1.6`; `density: 0..1`; `bright: f32 = 1`; `seed`
+- Document cap: `budget.puffs = 512`
+- `light: {sun: key | none = key, ambient: sky | none = sky, phase: f32 = 0.5, shade: 0..1 = 0.6}`; `near_fade: m | auto = auto` (auto: the puff's radius)
+
+**Semantics:** A soft cloud sprite, drawn as a depth-sorted soft particle, at half resolution when the class says so. Recipes emit puffs in groups, such as a cloud bank; drift is a closed-form rotation of their group in time. A puff is lit by the key sun's color as it reaches the puff through the atmosphere's transmittance, brighter toward the sun by a forward-scattering phase, and by the sky's ambient; shade darkens its side away from the sun across its radius, so a cloud bank goes gold at sunset and grey beneath. Inside near_fade of the camera it fades out, so a flight passes through a puff without a pop. Particles drawn as puffs take the same light. Both are functions of the sun, the sky and the camera at t, and bright still scales the result.
+
+**Cost:** O(puffs) to sort when the camera moves; per pixel, overdraw dominates; light adds a few ALU per pixel and one transmittance fetch per puff
+
+**It can never:** Exceed the declared cap (refused, naming the count); carry state between frames
+
+**Lands:** R6
+
+#### Volume `volume@1`
+
+For: fog that fills a hall and takes the light from its windows, a cloud layer under the castle at sunset, smoke from a chimney or a launch, dust in a beam
+
+**Fields**
+
+- `kind: fog | cloud | smoke`
+- fog: `{shape: box | ellipsoid | world, size: vec3 m, density: 1/m, albedo: color = [1, 1, 1], emission: color = 0, edge: m = 0.5, noise: {scale: m, amount: 0..1, drift: m/s} (optional)}`
+- cloud: `{bottom: m, top: m, coverage: 0..1 = 0.5, density: 1/m = 0.02, noise: {scale: m = 2000, seed, drift: m/s = 5}, steps: u8 = 48}`
+- smoke: `{grid: sha256 (a density grid sequence from a smoke_3d bake), size: vec3 m, density: f32 = 1, emission: {from: temperature, ramp: [color]} (optional), steps: u8 = 64}`
+- `fallback: puffs ID | flipbook ID | none = none` (what draws where volumes are off)
+- On the sky: `froxels: {cells: [160, 90], slices: u8 = 64, range: m = 100}`; document cap `budget.volumes = 16`
+
+**Semantics:** Fog: the view's frustum is a grid of cells, sliced by depth out to range, and each cell takes its density, albedo and emission from the sky's fog, its height fog and every fog volume at t, then the light it scatters, by a phase, from the key light through its shadow map and the atmosphere's transmittance, from local lights through theirs, and from the sky's ambient; one pass integrates the grid front to back, and every lit surface, see-through part and the sky reads its in-scatter and transmittance from it. Each cell samples at an offset from a hash of the cell, varied by the sample index under samples per frame and never by the frame, so a frame is a function of t. With the grid on, light shafts come from it and the per-pixel shaft march is off, so nothing scatters twice. Clouds: a layer between two heights, raymarched at half resolution at a fixed step count from a pixel-hashed offset, its density from seeded noise that drifts as a closed form of t, lit by the key sun through a few steps toward it and the atmosphere's transmittance, so it goes gold at sunset and grey beneath, under the aerial perspective. Smoke: a density grid sequence from a smoke_3d bake (Asset job: modeling, simulation and render kinds), played by t as a mesh sequence is, raymarched with a few steps toward the key light for its own shadow and lit by local lights, with emission from its temperature when asked. Where volumes are off (the class, the ladder or a GPU over budget), fog and height fog draw as today's mist, each volume draws its fallback (a cloud layer its puffs, smoke its flipbook card), and the frame's key names which drew.
+
+**Cost:** The grid at 160 × 90 × 64 is about 0.9 million cells: lighting them with the sun's shadow and 8 local lights takes about 0.5 to 1 ms and integrating about 0.1 ms; a cloud layer at half resolution about 1 to 2 ms at 1080p for 48 steps; smoke about 1 ms for 64 steps over a quarter of a 1080p frame; a 96³ grid sequence at 8 bits for 240 frames is about 210 MB, streamed by t (estimates). Budget class: work product, showpiece, export; figures and data views refuse volumes.
+
+**It can never:** Reproject the grid from an earlier frame; jitter by the frame count; simulate while drawing (smoke plays its bake); light a status color or text; feed a check; pass its document cap (refused, naming the count).
+
+**Lands:** R6
+
+#### Camera `camera@1`
+
+**Fields**
+
+- `projection: perspective | orthographic | isometric = perspective`
+- `target: [m, m, m]`, with `position` or `orbit {azimuth: deg = 45, elevation: deg = 30, distance: m}`
+- `roll: deg = 0`
+- `view_width: m` (the width of the plane through the target; works in both projections) or `fov: deg = 40` (across the wider side), or both (the distance then follows from them, and `fov` may reach 0, the orthographic view of that width)
+- `near, far: m = auto` (from bounds)
+- `shift: [f32, f32] = [0, 0]` (a fraction of the view)
+- `dof: {focus: ID | m, f_stop = 5.6, blades = 0}` (optional)
+- `exposure: EV100` (from the look)
+- `fit: {keep: [ID], pad: f32 = 0.08, avoid: overlay | none}`
+- `user: {turn, tilt: deg per px, pitch: [min, max] deg, zoom: [min, max], zoom_rate: per px}` (viewer class)
+- `user.pivot: target | eye = target` (eye turns the view about the camera's own position and zooms by narrowing the field of view); `user.yaw: [min, max] deg = [−180, 180]` (from the shot's azimuth); `user.pan: {bounds: content | none = content, margin: f32 = 0.1}`; `user.zoom_at: pointer | center = pointer`
+- `user.pan.edge: {margin, rate} | none = none` and the verb `camera.goto` (Camera `camera@1`: goto and edge pan)
+- `yield: {resume_after: s = 4, ease_back: s = 1.2, ease}`
+- `reduced_motion: hold`
+
+**Semantics:** The pose at t is closed form: the active shot plus your offsets, which are viewer input held in session state, never on the input track. Easing back after you let go is a closed-form eased move from the pose at release, never smoothing by frame history. Outside a shot, only navigation reframes (the breadcrumb, a double-click), never a stray click. In a 2D document the camera is orthographic, its `target` and `view_width` are in u with y down, and `roll` turns the page. Given both `view_width` and `fov`, the distance follows from them, distance = view_width ÷ (2·tan(fov ÷ 2)), and a channel may take `fov` down to 0, the orthographic view of that width; points project relative to the plane through the target, so no distance grows without bound, and a flat board opening into perspective, or a dolly zoom, is one continuous channel. You turn the camera about its target, or about its own position with `user.pivot: eye`, which never moves it, so in a room your input can't take it through a wall; a pan moves the target in the view plane and stays inside its bounds, in 2D with a plain drag; a pinch or a scroll zooms toward the pointer. A stage change or `camera.reset` eases your offsets out over `yield.ease_back`, on the session's clock. A jump to a point and a pan at the view's edge are your input too (Camera `camera@1`: goto and edge pan).
+
+**Cost:** O(1) per frame; framing O(kept items) per shot change
+
+**It can never:** Move without a shot, navigation or your input; integrate; imitate the app's chrome; frame onto the question card; change its position under your input while `user.pivot` is eye; pan past its bounds
+
+**Lands:** R2 flat, isometric and orbit; R6 the camera rig
+
+#### Camera `camera@1`: lens
+
+For: films that speak in lenses (35 mm at f/2.8, a 180° shutter), the castle's hero shots, product shots
+
+**Fields**
+
+- `lens: {focal_length: mm, sensor: [mm, mm] = [36, 24], fit: horizontal | vertical | wider = wider}` (derives fov; giving both lens and fov is an error)
+- `aperture: {f_stop: f32 = 5.6, blades: u8 = 0}` (the same values dof reads)
+- `shutter: {angle: deg = 180}` (shared with motion blur)
+- `iso: f32 = 100`
+- `exposure: EV100 | from_lens` (from_lens: EV100 = log2(N² ÷ t) − log2(ISO ÷ 100), with t = angle ÷ (360 × frame rate))
+
+**Semantics:** Field of view and exposure follow from the lens in closed form, and every field can be keyed by channels, so a rack focus or a zoom is a channel. Sensor offsets map onto the existing shift. Focus keeps dof.focus (an item or a distance) and never smooths by frame history. Keys on `dof.focus` may name items as well as distances: between two keys the focus distance moves from the first key's distance to the second's, each item's taken at t to its evaluated centre or anchor, by the key's interpolation (in_out_cubic when it names none), so a focus pull on a cue keeps both ends sharp while they and the camera move.
+
+**Cost:** O(1) per frame. Budget class: any class with a camera.
+
+**It can never:** Smooth focus or exposure by frame history; contradict an explicit fov; adapt exposure automatically.
+
+**Lands:** R6, with the rig
+
+#### Camera `camera@1`: framing
+
+For: films and figures that leave room for a card or a caption, the castle's hero shots, product shots
+
+**Fields**
+
+- `fit.place: [f32, f32] = [0.5, 0.5] | thirds_left | thirds_right` (where the kept items' center lands, as fractions of the safe frame)
+- `fit.fill: f32 = 0.6` (the share of the shorter side the kept items span)
+- `fit.keep` and a shot's `frame.keep` also take `item#bone`, `item#anchor` and named parts, by their evaluated bounds
+
+**Semantics:** Solved once per shot in closed form from the kept items' bounds and the projection: the distance or view width that makes the bounds span fill, then the target offset that puts their center at place. The camera.framing check and the film audit read the same solution. The bounds are the kept items' union over the shot's span, bounded at check by the interval forms of their channels, clips, drivers and bakes over time (The closed function list), with the span split until the bound is within 1% of the largest extent a sampled time reaches, so parts that fly apart stay in frame at every instant, not only at sampled frames, and a shot's `frame.place` and `frame.fill` override the camera's `fit`.
+
+**Cost:** O(kept items) per shot change. Budget class: any class with a camera.
+
+**It can never:** Reframe per frame from screen feedback; push the subject out of the safe area or under an overlay.
+
+**Lands:** R6
+
+#### Camera `camera@1`: goto and edge pan
+
+For: games and boards bigger than the view: jump to a spot on the minimap or back to the base, or pan by resting the pointer at the edge
+
+**Fields**
+
+- `verb: camera.goto` (on a control of class viewer) with `goto: {to: point control ID | array path (a vec3, or a vec2 in 2D), map: {origin: [m, m], cell: m} (optional: a grid cell to a ground point), ease: s = 0.4}`
+- `user.pan.edge: {margin: px = 8, rate: f32 = 0.5} | none = none` (rate in view widths a second)
+- In a 2D document, m reads as u
+
+**Semantics:** Both are viewer input, held in session state like your other offsets and never on the input track, so goldens and exports never see them. `camera.goto` moves the view's target to a point: when you make a new entry on the named point control, to its ground point or, with `map`, to its cell's center, origin + (cx + 0.5, cy + 0.5) × cell, at the ground's height there; or, when you press the control's key or button, to the point the array holds as the logic module gives it now. The move is a closed-form eased move from the pose shown, over `ease` on the session's clock; it keeps the orbit's angles and distance, stops inside the pan bounds, and cuts with reduced motion. With `user.pan.edge`, while the pointer rests within `margin` of the view's edge, the window has focus and no button is held, the target pans toward that edge (diagonally in a corner) at `rate` × the view's width a second, on the session's clock and inside the pan bounds, and stops when the pointer leaves the margin or the window loses focus.
+
+**Cost:** O(1) a frame. Budget class: as the camera.
+
+**It can never:** Record a jump or an edge pan on the input track; move past the pan bounds; pan while the window lacks focus or a button is held; move for an agent
+
+**Lands:** R6, with the camera rig
+
+#### Shot
+
+**Fields**
+
+- `{id, start, end: time | marker, camera: ID, move: hold | push | pan | pull | orbit | follow(path) | follow_forward(item) | slam | shake | log_zoom, ease = in_out_cubic, look: name, frame: {keep: [ID], pad: f32 = 0.08, avoid: overlay | none}, view_width, zoom, target: [m, m, m], orbit: {azimuth, elevation: deg, distance: m}}` (a pose, where framing from kept items won't do)
+- `by: f32` (how far the move goes; by default push and pull 0.15 of the distance (of the view width in an orthographic view), pan 15° (0.25 of the view width in an orthographic view), orbit 30°, slam 1.7 times the distance, shake 0.5°; log_zoom starts from a fit of the first kept item)
+- `hz: Hz = 2` (shake)
+- `join: cut | glide {span: flick = 0.8s} = cut` (glide by default for a stage's shot)
+- `keyed: bool = false` (the camera's own channels and constraints write its pose in this shot; move and frame don't apply)
+- `frame.place`, `frame.fill` (as Camera `camera@1`: framing defines them; by default the camera's `fit`)
+- Event shots, in a timeline from the record: `{on: event kind, where: expression, first: bool, move, to: path | frame: [path], zoom, ease, span}`
+- `essential: bool = false` (the move is the content, such as a zoom onto a detail, so it plays under reduced motion: Transport)
+
+**Semantics:** A segment of a film with its camera move, bounded by markers of kind `shot`; a cut between shots is a transition. Framing is solved once per shot from the kept items' bounds. Event shots turn record events into shots. `follow_forward` tracks an item and never moves back: the running maximum of its position along the shot's axis, plus a lead, smoothed by a Gaussian; it's baked at check into the shot's channel, so seeking equals playing. A shot's `look` defaults to the document's. Each shot has one framed pose: its explicit pose, or a fit of its kept items at `frame.place` and `frame.fill`, sized to the union of their evaluated bounds over the shot, bounded over the whole span as Camera `camera@1`: framing bounds it (a follow move takes the fit's centre from the move). The move runs over the shot with u = ease((t − start) ÷ span) and lands on or passes through the framed pose. `hold` keeps it. `push` comes in from (1 + `by`) times the framed distance, or view width in an orthographic view, and `pull` goes the other way, out from the framed pose. `pan` turns the aim through `by` degrees onto the framed aim, or slides the target through `by` view widths in an orthographic view. `orbit` sweeps the azimuth about the target from `by` ÷ 2 before to `by` ÷ 2 after the framed one; it's refused in 2D. `slam` comes in from `by` times the framed distance along 1 − e^(−10s)·cos(2π·2.2s), with s in seconds from the shot's start. `log_zoom` moves in log space from a fit of the first kept item, or from `by` times the framed view width, to the framed pose. `shake` holds the framed pose and adds noise of `by` degrees at `hz` to the aim, seeded by the shot's ID. `follow(path)` rides the path by arc length from its start to its end, aimed at the framed target. With `join: glide`, the shot's first span mixes the pose shown at its start (the previous shot's at its end, or for a stage's shot the pose at the stage's entry) into its own move by the same ease, with positions and targets in a line, roll the shortest way, and distance, view width and field of view in log space; no transition joins it. While a shot is active it alone writes its camera's target, position or orbit, view width and roll, so a channel on one of them is refused at check, naming both, unless the shot is `keyed`; constraints on the camera still apply after it, as on any item. Under reduced motion, moves and glides follow Transport.
+
+**Cost:** O(1) per frame; O(kept items) per shot change; at check, framing bounds the kept items over the shot's span by their interval forms, about 0.5 ms for 10 items over 6 s (estimate). Budget class: any class with a camera.
+
+**It can never:** Overlap another shot, on any camera, outside a transition that joins them; hide a cut a check needs; share its camera's pose with a channel unless keyed
+
+**Lands:** R6
+
+#### Overlay
+
+**Fields**
+
+- `kind: overlay.text@1 | overlay.controls@1`
+- `anchor: corner | edge | {item, point}`; `offset: [px, px]`; `margin: px = safe`; `below: ID` (optional)
+- `role: eyebrow | title | caption | readout | hint`
+- `font: role`; `template: string over bound values and drivers`; `runs: [{text, role}]`; `max_width: px`; `show: expression`
+- `controls: [control ID]`
+- `leader: {to: ID[#anchor], line: role = ink, width: px = 1.5, dash: bool = false, end: dot | arrow | none = dot, elbow: none | horizontal = horizontal, gap: px = 4}` (optional: a callout's line to the part it names)
+- `hide: off_frame | never = off_frame` (with a leader, or on an overlay anchored to an item's point)
+- A figure's card is a fixed overlay set: `card {fig, title, hint, readout, legend: [{tone, label, role}], caption}`
+- `overlay.frame@1 {frame: ID}` (a kind beside text and controls: a 2D frame and its children, such as a card's background, title, text, image and close button)
+- `overlay.view@1 {camera: ID, include: [collection], exclude, size: [f32, f32] = [0.3, 0.3], border: role = ink}` (a kind beside text and controls: this document from another camera, bottom right unless anchored elsewhere)
+
+**Semantics:** Anchored type and controls in the safe area, laid out by auto layout and the shaper. Templates fill only from bound values and drivers, so a readout and the parts it describes come from one model. Framing keeps the subject clear of overlays. An overlay anchored to an item's point in a 3D writer layer draws in screen pixels at that point's projection at t plus its offset, in closed form from the camera and the item's evaluated pose, on top of the scene as any overlay is, so a part in front never hides it; it hides while the point is behind the camera. A frame's controls join the Tab order like any others. A view overlay draws the same document at t from its own camera through the whole frame chain, its shot's look, the status guard and status colors included, into its rect, at most one level deep as a view inset is; then it composites like any overlay. Two at half the frame's width, on opposite edges, make a split screen. A leader draws each frame from the overlay's nearest edge, less `gap`, to its target's anchor projected through the shot's camera at t, so it stays on a part that moves, opens or flies apart, and on a camera that orbits; with `elbow: horizontal` it leaves the label level and turns once toward the part. With `hide: off_frame`, the overlay and its leader hide at every t where the anchor's projection falls outside the safe frame. A leader takes a role, never a literal or a status color, and is display only.
+
+**Cost:** Shaping on change; one batch per frame; a view overlay adds one camera pass at its rect's pixels, counted in the class; a leader adds one projection (about 50 ns) and one line draw per frame
+
+**It can never:** Mimic the app's chrome or the question card; show a number that isn't bound or computed; leave the safe area; nest a view in a view, or show another document in one; draw a leader across the question card or a status color
+
+**Lands:** R6
+
+#### Marks in 3D
+
+**Fields**
+
+- `mark.point {size: px | m = 4 px; shape: dot | square | diamond | icon}`
+- `mark.line {points; width: px | m = 1.5 px; dash; cap; join}`
+- `mark.curve {points; mode: bezier | catmull_rom; draw: [0..1, 0..1]}`
+- `mark.arc {radius: m; from, to: deg}`; `mark.tube {path; radius: m}`
+- `mark.area {outline; holes; raise: m = 0}`
+- `mark.box | mark.cylinder | mark.sphere {size: m}` (wrappers over builders)
+- `mark.text`, `mark.image` (as in 2D); `mark.mesh {sha256 (glTF), node}`
+- Common: `size_space: screen | world = screen`; `paint`; `status` (optional)
+
+**Semantics:** The 2D marks, placed in world space. Each family evaluates into its own instance arrays and draws instanced per (family, paint); screen-space sizes stay constant on screen. Text is shaped once per string. mark.text draws from the core's glyph atlas over the one shaper (parley, with outlines read by skrifa), with raster sizes quantized in steps of about 12% and pages evicted least recently used (R2); text that scales or carries a halo samples MTSDF pages built at check from the same outlines (R6). No second shaper.
+
+**Cost:** 32 to 64 B per mark; one quad per glyph; curves tessellated once per content key
+
+**It can never:** Show a status color except through a status binding; use a system font; show a number nothing measured
+
+**Lands:** R2 on the Map; R6
+
+#### Marks in 3D: lines
+
+For: the transit map's routes, the city's streets, figures' wires and leader lines, physics labs' trajectories
+
+**Fields**
+
+- On `mark.line`: `mode: strip | segments | loop = strip`
+- `width: f32 column, px | m` (optional, per point)
+- `dash` in the line's size space
+- `ends: {start, end: none | arrow | dot | bar = none, size: f32 = 4}`, as Path `path@1` takes them (size in line widths; R6)
+- An entry of `points` may be `ID[#anchor]` (the item's evaluated anchor at t, so a wire or a leader stays on the parts it joins)
+
+**Semantics:** Many disjoint segments in one item (a whole route network), closed loops, and widths that vary along a line. Each segment draws as one instanced quad with joins and caps in the fragment, constant in px or scaled in m. A point given as an anchor is evaluated at t through the same pure evaluation as a trail's source, so seeking equals playing.
+
+**Cost:** One instance per segment, 32 to 48 B; O(segments) on change; nothing per frame while still; an anchored point re-reads its item's evaluated transform when that item moves
+
+**It can never:** Draw thinner than one device px (a thinner request draws at one px with its alpha scaled by its width); carry a status color except through a status binding
+
+**Lands:** R2 on the Map; R6
+
+#### Marks in 3D: facing
+
+For: the transit map's station names, the city's lot labels
+
+**Fields**
+
+- `facing: camera | upright | fixed = camera` (text, image and point marks)
+
+**Semantics:** `camera` turns a mark to face the viewer, `upright` turns it about +Y only so text stays level, and `fixed` keeps the item's own rotation, so labels read from any orbit.
+
+**Cost:** None extra: done per vertex
+
+**It can never:** Draw over the shell or the card; change its size space
+
+**Lands:** R2 on the Map
+
+#### Marks in 3D: trail
+
+For: a plane's contrail and a comet in films; a thrown ball's arc in a physics lab; streaks behind marks in 2D motion graphics; a lab's launches kept side by side
+
+**Fields**
+
+- `trail: {of: ID[#anchor], span: s = 0.5, segments: u8 = 16, width: px | m = 2 px, taper: f32 = 1, fade: f32 = 1, space: world | local = world}` (on `mark.line`, and on `path@1` in a writer layer on the GPU layer; segments ≤ 64)
+- `window: span | since {on: occurrence list + filter | control, until: occurrence list + filter, keep: u8 = 3} | whole {from: time | marker = start} = span` (keep ≤ 8; until optional)
+- `rate: Hz = 60`; `max_points: u32 = 36,000` (with `whole`)
+
+**Semantics:** The core evaluates the source's world position at t − i × span ÷ segments for each i through the same pure evaluation as the frame (channels, drivers, constraints, or a physics bake's outputs) and draws a ribbon through the points. Nothing is recorded between frames, so a scrub draws the trail exactly. The source's transform chain is costed at check. With `since`, the trail draws the source's path from each matching start to t, or to its end once that has passed: its `until` match, or else the next start. It keeps the last `keep` starts, with `segments` spread over each drawn span, and a newer start drops the oldest trace; a control's start counts from the step its derived inputs apply. It evaluates the same chain at earlier times only, so a scrub draws the same traces and nothing is recorded. With `whole`, the check samples the source at from + k ÷ rate up to the transport's end, through the same pure evaluation or a bake's outputs, and keeps the polyline as a bake keyed by the source chain's content keys. A frame draws the samples before t and a last segment that ends at the source's position at t, so the trace is the same at every frame rate. `span` still trims it to the last span seconds. A source that reads the input track re-bakes from the fork, as a world does.
+
+**Cost:** Segments × one evaluation of the source's chain (about 100 ns each) plus one strip draw. With `since`, keep × segments evaluations. Budget class: figure, showpiece, export.
+
+**It can never:** Keep a history buffer; read a live simulation; trail an item whose chain cost wasn't counted; draw a time after t; keep more than 8 traces; keep more than `max_points` (refused at check, naming the trail).
+
+**Lands:** R6; `since` over an occurrence list lands with the physics module
+
+#### Marks in 3D: axes `axes3d@1`
+
+For: a surface, a space curve or a vector field read in its own coordinates; a saddle on axes with a riding point
+
+**Fields**
+
+- `x, y, z: scale ID` (linear or log)
+- `lengths: [m, m, m]`
+- `up: z | y = z` (z: the math z maps to world +Y and math y to world −Z, as a reader of z = f(x, y) expects)
+- `ticks: {size: m = 0.05, labels: camera | upright = camera}`
+- `tips: bool = true`
+- `titles: {x, y, z: text | vector ID}`
+- `planes: [xy | yz | xz] = []` (grid planes, roles from the look)
+
+**Semantics:** A point mark, a line, a surface, a curve fn or a vector field that names the axes reads its coordinates through the three scales, so it sits at its numbers wherever the axes are placed. Ticks fall on 1, 2 and 5 × 10^k, and labels face the camera, so an orbit never mirrors them.
+
+**Cost:** As its ticks, labels and planes, drawn as marks in 3D; a mark that names it maps through three scales per change. Budget class: every 3D class.
+
+**It can never:** Take values ≤ 0 on a log scale; carry a status color; mirror a label.
+
+**Lands:** R6
+
+#### Inset
+
+**Fields**
+
+- `face: named part | anchor`
+- `size: [m, m]`
+- `px_per_unit: px per m | proxy: auto`
+- `recess: {depth: m, bezel: m}`
+- `content: {ID → {kind (a 2D document or mark), order}}`, or `view: {camera: ID, include: [collection], exclude, depth ≤ 1}`
+- `overflow: mask` (always)
+
+**Semantics:** 2D content (real fonts, paths, a cell grid, images, vectors) rendered into a texture at the declared density and drawn on the face, masked to the window cut into the part. A view inset shows the same document from a second camera, at most one level deep. See-through insets sort back to front.
+
+**Cost:** One offscreen render per changed inset, O(content); texture w × h × 4 B; a view inset costs a second camera pass
+
+**It can never:** Draw outside its window; nest views deeper than one; shrink text below the look's minimum
+
+**Lands:** R6
+
+#### Inset: projected
+
+For: a temperature map draped on terrain in a science flyover; a route laid on a hillside; a mark printed on a product's curved lid
+
+**Fields**
+
+- `project: {onto: ID | collection | [ID] = parent, from: down | axis | camera ID = down, depth: m | auto = auto, fade: {edge: m = 0.5, angle: deg = 75}, shading: lit | unlit | auto = auto, opacity: f32 = 1}` (on an inset with `content`, in place of `face` and `recess`: its `at` places the box, its `size` spans it, and auto depth reaches through everything `onto` names along the axis)
+- At most 8 projected insets in one view (refused at check, naming them)
+
+**Semantics:** An inset can fall over surfaces instead of sitting in one face. Its 2D content is cast down, along an axis, or from a camera as a slide projector casts, onto the items `onto` names: by default the inset's parent, or everything in the box when it has none. So it follows the shape it lands on: a heatmap lies on the hills and the valleys, and a mark wraps a lid's curve. A receiving pixel takes its world position into the box and samples the inset's texture, fading over `fade.edge` at the box's sides and where the surface turns more than `fade.angle` from the projection. The box is the inset's window, so nothing it casts lands outside it. Lit, the content replaces the surface's base color in shading, under the scene's lights. Unlit, it draws after tone mapping and the grade, as overlays do, on the pixels whose depth and object ID belong to `onto`, so a data layer shows exactly its legend's colors whatever the light. Auto is unlit when the content holds an item with role `data`, and lit otherwise. Status colors draw after it. The inset renders again only when its content key changes, and the projection is a pure function of its transform at t, so a moving projector sweeps a layer across a landscape and seeking equals playing.
+
+**Cost:** Lit: one transform and one filtered fetch per receiving pixel inside the box. Unlit: one pass over the box's footprint on screen, with a depth, an object-ID and an inset fetch per pixel. The inset's own texture as now; at most 8 per view in a fixed array, so a count change never recompiles. Budget class: figure, work product, showpiece, export.
+
+**It can never:** Draw on an item outside `onto` or outside its box; carry a status color; change geometry, a true shape or the geometry audit; feed a check; read an earlier frame.
+
+**Lands:** R6, with insets
+
+#### Effect
+
+**Fields**
+
+- `kind: glow | ink | dof | flare | wave_field | plume | arc | airflow | sparks | blur | particles` (dof and flare fields: Effect: dof; Effect: flare)
+- `anchor: ID[#anchor]`; `axis`; `seed: item | u64 = item`
+- `params` (per kind, each with a range), such as `plume {radius, reach, heat, shock_cells, turbulence, seed, haze {strength: px, scale: m}}`, `airflow {paths, around: {axis, copies, span: [deg, deg]}, count, speed, length, fade: {in, out}}` and `glow {mask, intensity, radius, palette (blackbody allowed)}`
+- `envelope: {attack, decay: s}`
+- `mask | occluders: [ID]`
+- `theme: {light, dark}`
+- `light: {casts: bool, radius: m, max: lm}`
+- `resolution: full | half | quarter = half`
+- `cost: measured ms per megapixel`
+
+**Semantics:** A shipped GPU effect with parameters, driven by channels and drivers. An effect that casts light adds a light to the light policy. Drawn before tone mapping and before status colors. A plume's `haze` may bend what's behind it: a display-only displace of the color target inside the plume's screen footprint, by up to `strength` px, from seeded noise of feature size `scale` in closed form of t, so seeking equals playing; it never feeds a check.
+
+**Cost:** Measured per kind in ms per megapixel at its resolution; the check sums effects against `budget.effects_gpu_ms`
+
+**It can never:** Feed a check; be a plug-in shader; recolor or cover a status color
+
+**Lands:** R6
+
+#### Effect: dof
+
+For: tilt-shift miniatures, macro product shots, a 2.5D diorama, paper pop-ups
+
+**Fields**
+
+- `dof: {focus: ID | m, coc: physical, max_coc: px = 24, taps: 64 | 96 | 128 = 64, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px} (optional)}`
+
+**Semantics:** A gather over a signed circle of confusion from the lens's f-stop, focal length and sensor: far samples never spread over a sharper nearer pixel, and taps sit on a golden-angle spiral rotated by a pixel hash, so it's a pure function of the frame. Orthographic cameras take the CoC from the distance to the focus plane times ortho_coc. A tilt band adds blur by screen distance from the band, folded into the same signed CoC so occlusion holds.
+
+**Cost:** taps fetches per pixel at half resolution: 64 taps about 0.6 ms at 1080p (estimate). Budget class: figure, showpiece, export.
+
+**It can never:** Read an earlier frame; blur status colors, or text during a reading hold; spread far over near.
+
+**Lands:** R6
+
+#### Effect: flare
+
+For: night streets, neon signs, stage lights, a sunrise
+
+**Fields**
+
+- `flare: {from: lights | emissive ≥ EV100, ghosts: u8 ≤ 8, streak: {count: 0 | 2 | 4 | 6, length: ratio, anamorphic: bool}, halo: f32, starburst: {blades: u8}, intensity: f32, tint: role}`
+
+**Semantics:** Built each frame from the evaluated lights and the brightest emissive pixels in view (one reduction), drawn before tone mapping: ghosts along the line through the frame's centre, streaks and a halo. It reads nothing from an earlier frame, so seeking equals playing.
+
+**Cost:** One reduction and one pass at quarter resolution, about 0.3 ms at 1080p (estimate). Budget class: showpiece, export.
+
+**It can never:** Read an earlier frame; flare a status color; draw over the question card.
+
+**Lands:** R6
+
+#### Effect and GPU operator: target inputs
+
+For: films (transitions and depth-aware glow), figures (ink edges, selection outline), the castle (fog and AO)
+
+**Fields**
+
+- On Effect: `reads: [color | depth | normal | object_id | inset ID]`
+- On an operator input: `texture: target {op: ID | core | collection: ID, output}` (see the GPU operator rows; a collection's own targets: the next row)
+
+**Semantics:** An effect or operator declares which of the core's targets it reads, so the core builds only the targets someone reads and counts their bytes. The prototype's normal and object-ID pass becomes something effects declare rather than assume.
+
+**Cost:** A normal target adds about 8 B per pixel and an ID target 4 B; skipping unread targets saves both
+
+**It can never:** Read a target after status colors; read another writer's layer or the card
+
+**Lands:** R6
+
+#### Effect and GPU operator: collection targets
+
+For: looks whose medium lives in a layer's data: crayon pressure against paper tooth, wet ink spreading, paint height lit from the side, separations printed in order
+
+**Fields**
+
+- On an operator input: `texture: target {collection: ID, output: color | coverage | pressure | height, resolution, mips: bool}`
+
+**Semantics:** The core draws a collection's items into their own targets before the look's passes, with color, coverage, pressure (from per-point opacity or the line's pressure) and height (from a profile's swell or a relief field), so a pass composites a medium per layer. A collection stays inside one writer's layer, and the read set names it, so keys and change tests follow it.
+
+**Cost:** A target per output per collection at its resolution: about 4 MB for rgba16float at half 1080p. Budget class: figure, showpiece, export.
+
+**It can never:** Read another writer's layer or the card; read a target after status colors; read an earlier frame.
+
+**Lands:** R6
+
+#### Cutaway `cutaway@1`
+
+For: the house, figures, a part from a CAD case
+
+**Fields**
+
+- `planes: [{normal: vec3, offset: f32, m}] ≤ 4`
+- `mode: union | intersect = union`
+- `applies_to: collection | all = all`
+- `cap: none | role = none` (fills the cut face)
+- `class: view | document = view` (document when a film animates it)
+- `offset` may be a channel
+- `shadows: cut | whole = cut` (whether removed geometry still casts)
+- `cap_light: auto | lit | flat = auto` (auto: lit in a physical look, flat in a drawing look)
+
+**Semantics:** Hides geometry on one side of up to four planes, the general form of the house's wall cutaway, so a figure can show what's inside a part without a rebuild. As a view input it lives in session state and is pinned when a golden runs; a film that sweeps a section declares it as a document input. A part with a status binding keeps its outline and badge where it's cut. The planes apply in every pass that draws the cut items, shadow maps and reflection captures included, so light falls into an opened part; whole keeps the uncut part's shadows. Every shadow map's and reflection capture's key includes the planes that reach its casters, and an irradiance bake sees a cutaway only when its class is document. A lit cap shades its role as a matte surface facing along the plane's normal.
+
+**Cost:** One dot product per plane per vertex through WebGPU's `clip_distances` outputs (none per pixel); a cap adds one stencil pass; a plane count change never recompiles (a fixed array of 4 and a count); the clip distances run in the shadow passes too, at no extra cost
+
+**It can never:** Change true shapes or the geometry audit; hide a status color, a needs-you item or its legend; enter the document as an edit while it's a view input
+
+**Lands:** R6
+
+#### Particles `particles@1`
+
+For: films (sparks, plume, airflow), the castle (chimney smoke, embers)
+
+**Fields**
+
+- `count: u32 ≤ 65,536`
+- `emit: {anchor: ID[#anchor], shape: point | disk | sphere | along(curve ID), rate: per s, span: s}`
+- `life: s | [min, max]`
+- `motion: ballistic {v0: [min, max], m/s; gravity: vec3, m/s²; drag: 1/s} | along {curve ID, speed: m/s} | orbit {axis, rate: deg/s} | drift {amplitude: m, frequency: Hz}`
+- `size, opacity: channels over life`; `color`: look roles over life (mixed in OKLab)
+- `draw: puff | spark | dot | streak = dot`
+- `seed`; `resolution: full | half = half` (puffs)
+
+**Semantics:** Particle i's state at t is a closed-form function of its age, its index and the seed, computed each frame by a shipped compute operator into instance columns. Nothing is integrated or carried between frames, so seeking equals playing and a film scrubs exactly. The effects library's sparks, plume and airflow become presets of it.
+
+**Cost:** About 2 to 5 ns per particle on the GPU plus one instanced draw (estimate); 32 B per particle of scratch, rebuilt each frame from t
+
+**It can never:** Integrate from frame to frame; collide (use the physics module); exceed its count; spawn from the wall clock; feed a check
+
+**Lands:** R6
+
+#### Particles `particles@1`: emit regions
+
+For: fireworks that burst on a sphere's surface; embers rising from the castle hearth's box; sparks thrown from a ring
+
+**Fields**
+
+- `emit.shape: point | disk | sphere | along(curve ID) | box {size: vec3, m} | ring {r, inner_r: m} | cylinder {r, h: m} | capsule {r, h: m}` (box, ring, cylinder and capsule are new)
+- `emit.on: volume | surface = volume`
+
+**Semantics:** Particle i's birth point maps hash(seed, i) to a uniform point inside the shape or on its surface in closed form: square roots for disks and rings, cube roots for balls, and area- or volume-weighted choices among a capsule's or a cylinder's parts. Seeking equals playing, and adding a particle moves no other.
+
+**Cost:** A few ALU per particle at birth in the existing compute operator; no memory. Budget class: as the particles item.
+
+**It can never:** Draw from a random stream; emit outside the declared shape; feed a check.
+
+**Lands:** R6, with particles@1
+
+#### Particles `particles@1`: occurrence bursts
+
+For: physics labs (sparks where a ball strikes a plate), films (dust where debris lands, a puff at each break, fireworks that burst at each shell's death)
+
+**Fields**
+
+- `emit.on: {list: occurrence list, kinds: [kind], where: expression over the payload (speed, impulse, tags), count: expression = 12 (≤ 256), max_bursts: u16 = 256, cooldown: flick = 30 ms (per pair a, b)}`
+- `emit.on: {particles: ID, at: birth | death, count, max_bursts}` (bursts at another item's particles)
+- `emit.bursts: [{t: time, count: u16}]`
+- `inherit: {normal: f32 = 0, velocity: f32 = 0}` (scales on the occurrence's normal times speed, or the parent particle's velocity)
+
+**Semantics:** Each matching occurrence becomes a burst born at its flick and point, and particle i of burst b is a closed-form function of its age, i, b and the seed, so seeking equals playing. Bursts come from the baked list in its sorted order, and a parent particle's death time and place are closed form too, so nothing reads live physics.
+
+**Cost:** Per frame O(active bursts × count) on the GPU, with active bursts found by binary search; a burst table of 32 B per burst uploads once per bake. Budget class: figure, showpiece, export.
+
+**It can never:** Read live physics or a callback; spawn from an unbaked event; exceed count (refused, naming the peak).
+
+**Lands:** R6, with the physics module
+
+#### Particles `particles@1`: bounce and kill
+
+For: films and physics labs (sparks skipping off a floor), the castle (embers settling on a roof)
+
+**Fields**
+
+- `motion: ballistic + bounce {planes: [{normal: vec3, offset: m}] ≤ 2, restitution: f32 = 0.4, friction: f32 = 0.2, max: u8 = 3 (≤ 4), then: rest | die = die}`
+- `kill: {box: [vec3, vec3], m | plane, keep: inside | outside = inside}`
+
+**Semantics:** Each bounce time is solved per particle in closed form (a quadratic root without drag, a fixed eight Newton steps with drag), and motion restarts from the reflected velocity, so the position at t stays a pure function. A killed particle hides from its exit time on.
+
+**Cost:** About 20 to 40 extra ALU per bounce per particle (estimate); no memory. Budget class: as the particles item.
+
+**It can never:** Collide with anything but declared planes; read the depth buffer or the camera; integrate between frames.
+
+**Lands:** R6
+
+#### Particles `particles@1`: turbulence
+
+For: films (smoke that wanders, a plume, the turbofan's exhaust), the castle (chimney smoke and embers)
+
+**Fields**
+
+- `turbulence: {strength: m = 0.5, frequency: 1/m = 1, paths: u16 = 32 (≤ 64), steps: u16 = 64 (≤ 128), travel: s = 4, seed}`
+
+**Semantics:** At check the core integrates the paths through seeded curl noise with a fixed-step integrator in pinned math and stores them as a table keyed by content. Each particle picks a path by hash(seed, i) and adds its offset at the particle's age, scaled by strength, so seeking equals playing and every machine builds the same table.
+
+**Cost:** About 24 KB per table (32 paths of 64 steps), built once in well under 1 ms on a CPU (estimate); two table reads per particle per frame. Budget class: as the particles item.
+
+**It can never:** Advect by a live velocity field; differ between machines; change between frames.
+
+**Lands:** R6
+
+#### Particles `particles@1`: trails and mesh draws
+
+For: films (spark trails, confetti and debris chunks), physics labs (tails on trajectories), motion graphics (streaks)
+
+**Fields**
+
+- `draw: ribbon {segments: u8 = 8 (≤ 16), length: s = 0.2, width: px | m = 2 px, taper: f32 = 1, fade: f32 = 1}`
+- `draw: mesh {of: [ID] ≤ 8, pick: hash | index = hash, orient: velocity | tumble | fixed = tumble, tumble: {rate: [deg/s, deg/s]}, scale: channel over life}`
+- `cycle: {sequence: mesh.sequence ID, rate: [f32, f32] = [0.9, 1.1], phase: hashed | zero = hashed}` (on a mesh draw, optional: each particle loops a shared shape, such as a wingbeat; rate is a multiple of the sequence's own speed)
+
+**Semantics:** A ribbon evaluates the same particle's closed-form position at earlier ages, back along its length in equal segments, so a trail needs no history and a scrub draws it exactly. A mesh draw writes pos, rot and scale columns through the compute operator's instances output, with tumble as a closed-form rotation about a hashed axis. With `cycle`, particle i draws the sequence at the fraction (age × rate_i ÷ span + phase_i) mod 1 of its span, with rate_i and phase_i from hash(seed, i), mixed with the next frame as Mesh sequence says, so a flock flaps out of step and seeking equals playing. `orient: velocity` takes the particle's world velocity in closed form, a moving anchor's included.
+
+**Cost:** Ribbons draw segments × count quads (8 × 4,096 is 32,768 quads, under 0.3 ms, estimate); meshes cost 48 to 64 B per instance plus one instanced draw per prototype. A cycled mesh adds one vertex fetch per vertex for the frame mix: a flock of 300 birds of 600 vertices is one instanced draw (estimate). Budget class: figure, showpiece, export.
+
+**It can never:** Keep a history buffer; join particles of two items into one ribbon; draw more than count × segments quads.
+
+**Lands:** R6
+
+#### Particles `particles@1`: space and paths
+
+For: films with moving emitters (a grinder's sparks, a plane's exhaust), 3D data views (requests flowing along routes), figures and motion graphics in flat views
+
+**Fields**
+
+- `space: local | world = local`
+- `dimensions: 3 | 2 = 3` (2: positions in u, y down, drawn on the GPU layer)
+- `motion: along {curves: [ID] | collection, pick: hash | weights: [f32], lateral: m = 0, speed: [min, max], m/s}`
+- In 2D, `along.curves` also takes `path@1` items and a graph's routed edges as `<graph>#<edge key>`; `per_edge: column` (optional) emits along each edge at that column's value per second
+- `along.curves` may name a vector field's streams, `<vector_field>#streams` (Vector field `vector_field@1`)
+
+**Semantics:** In world space a particle born at flick tb uses the anchor's world pose at tb, which the core evaluates from the anchor's channels for each birth bucket still alive, so nothing is stored between frames. Along many paths, each particle picks a curve by hash and moves by arc length at a seeded speed with a seeded sideways offset, which serves a crowd of simple agents without simulating it. A routed edge is its route as laid out, so traffic follows an edge where it's drawn, around its corners, and moves with it when the layout changes. A 2D item draws in its writer layer, which moves to the GPU layer as the draw-path rule says.
+
+**Cost:** World space adds one anchor pose per live birth bucket (120 for a 2 s life at 60 fps); a 2D writer layer pays a GPU-surface handoff of 0.7 to 0.9 ms at 1936×1584 (measured in the spike). Budget class: data view (flows), figure, showpiece, export.
+
+**It can never:** Store poses between frames; avoid one another (crowds that react need a bake); move a core view's layer off GPUI.
+
+**Lands:** R6; never R1 or R2
+
+#### Variant
+
+**Fields**
+
+- `variants: {set → {default: name (optional), options: [{name, label, patch: [op]}]}}`; the choice lives in session state, on the input track through a document-class choice, or in a taste call's answer
+
+**Semantics:** A named patch applied at compile on top of the writer layers; with no choice, nothing applies. It isn't an edit until someone accepts it, and acceptance is a patch by that writer. A sheet shows the options side by side. In a live piece the viewer picks through a choice control that names the set (Control, `variant`).
+
+**Cost:** An incremental recompile of the affected items on a switch
+
+**It can never:** Change the work product before it's chosen; answer an ask by itself
+
+**Lands:** R6; sheets that show options R1
+
+#### Level of detail
+
+**Fields**
+
+- `lod: {bands: [{below_px: f32, show: full | proxy | box | dot | label_only | none, params}], margin: f32 = 0.1}`
+- `open: {at_px: f32, doc: doc handle}` (optional)
+
+**Semantics:** A band is a pure function of projected size in device pixels. Within the margin of a threshold the item draws both bands, blended by an integer blend level the CPU computes from the canonical view in f64; the GPU compares it with complementary masks keyed by pixel hash and item ID (never by frame), the same in the color, depth, shadow and object-ID passes, so coverage stays whole and the discard stays exact, so a band change neither pops nor depends on how the view got there. Salience can pin a minimum band. `open` loads a deeper document by reference, off the frame loop; until it's ready the item keeps its band and shows a loading notice.
+
+**Cost:** O(visible candidates) per camera change; nothing while the camera rests; an item inside a margin draws twice
+
+**It can never:** Change saved data; drop a needs-you item below a dot with its label; move a pinned position
+
+**Lands:** R2 zoom levels and children by reference; R6 3D bands
+
+#### Level of detail: levels by error
+
+For: the city's 100,000 instances, the castle's stones, the generated assets' LOD chains in the glTF export
+
+**Fields**
+
+- On the simplify job: `levels: [{ratio, max_triangles}] | auto = auto`, `auto: {growth: f32 = 1.5, min_gain: f32 = 0.25, max_error: f32 = 1}`
+- Probe output: `lod_errors: [f32]` (each level's object-space error as a fraction of the bounds; index-only levels over one vertex buffer)
+- `lod_px: f32, device px = 1` (on each budget class; a document may only lower it)
+
+**Semantics:** Inside the full and proxy bands, the item draws the coarsest level whose error, projected at its distance through the view, is at most lod_px; shadow passes choose by the light's projection but keep the camera's band. Selection is a pure function of the view at t, and levels never blend, since a switch moves the silhouette by under a pixel. auto halves the triangles per level, requires each level's error to grow by at least growth, and stops when a level saves less than min_gain or passes max_error; the bands keep their hand-set below_px and margin.
+
+**Cost:** O(levels) per item per camera change on the CPU; index-only levels add 4 to 12 B per kept triangle; one meshoptimizer pass per level in the job. Budget class: work product, showpiece, export.
+
+**It can never:** Be chosen by time or by an earlier frame; replace an item a check reads at full detail; emit a level whose error is lower than the level before.
+
+**Lands:** R6, with the asset jobs
+
+#### Level of detail: proxies
+
+For: game assets, the city and the castle
+
+**Fields**
+
+- `lod: {bands: [{params: {ratio: f32, error: f32, impostor: {views: u8, size: px}, drop: [part]}}]}` (a band whose show is proxy)
+
+**Semantics:** A proxy is made offline by the simplify job from the item's evaluated mesh at its content key, or an impostor by the bake, and stored by hash, so the canvas draws it and an export writes it as a lower LOD. ratio is the share of triangles kept and error the allowed deviation as a fraction of the bounds.
+
+**Cost:** One simplify job per content key; a proxy draws at its own vertex count.
+
+**It can never:** Be computed per frame; change saved data; replace an item a check reads at full detail.
+
+**Lands:** R6, with the asset jobs
+
+#### Level of detail: collection proxies
+
+For: the city seen whole; the castle's outer wall at distance
+
+**Fields**
+
+- On a collection: `lod: {below_px: f32, proxy: job ID (merge | simplify | approximate), margin: f32 = 0.1}` (blended by size within the margin, as in Level of detail)
+
+**Semantics:** When the collection's projected bounds fall below below_px, its members stop drawing and one proxy mesh, made offline by an asset job (merged, simplified, or approximated with baked maps), draws instead. The proxy is keyed by its members' content keys, so an edit marks it stale and the members keep drawing until the job reruns. The proxy and its members blend as one pair at one blend level.
+
+**Cost:** One draw per proxy; the job takes seconds at authoring time. Budget class: work product, showpiece.
+
+**It can never:** Hide a needs-you item or a status color; feed a check at proxy detail; be computed per frame.
+
+**Lands:** R6, with the asset jobs
+
+#### Level of detail: chunks streamed by view
+
+For: a 64 km terrain under a flyover, a city scan of 50M points, a campus of buildings at street level, a static voxel world too big for memory
+
+**Fields**
+
+- Asset layout `chunks@1`: `{payload: mesh | height_tile | points | voxel_bricks, root: chunk}`, a chunk being `{id: u32, bounds: [vec3, vec3], error: f32, m, payload: sha256 | none, children: [chunk] ≤ 8}`
+- `chunks: asset ID` (on what reads one: a mesh item, a terrain plate's `heights`, a 3D `mark.point` set, `voxels@1`)
+- `residency: {bytes: u32}` (session; at most the class's GPU memory share)
+- Payloads: a mesh in the builder's output shape; a height tile of ≤ 4,097 × 4,097 samples with its cover; point rows of position, color and size, ≤ 65,536 a chunk; voxel bricks (Voxels `voxels@1`)
+- Issues: `chunks.order {chunk}`, `chunks.bounds {chunk}`, `chunks.error {chunk, declared, measured}`, `chunk_missing {chunk}`
+
+**Semantics:** A chunk tree is one asset whose children refine their parent. A chunk's error is its largest deviation from full detail in metres; the probe refuses a child whose error isn't below its parent's, or a payload outside its chunk's bounds, naming the chunk. It measures each chunk's error with the simplify job's measure between the chunk's payload and its children's, and refuses a chunk that declares less with `chunks.error`, naming the chunk and both errors, so a tree's own word never chooses what a canonical render or a check reads. A view selects top down: it draws a chunk whose error, projected at the chunk's nearest point, is at most `lod_px`, or that has no children, and otherwise its children, a pure function of the view at t computed on the CPU in f64; as with levels by error, nothing blends. Residency loads the selected chunks from the content store, decodes them in the decode worker and uploads them nearest first within its bytes, keeping each parent until its children arrive; a live frame whose selection isn't all resident draws the nearest resident ancestors and reports settling. So residency decides only how long a live view settles, never what a settled frame draws: canonical renders, render-back, exports and checks wait for every selected chunk, and one whose payload is missing makes them BLOCKED with `chunk_missing`, never drawn coarser. The tree's hash covers every payload's, so it keys as any asset does. Jobs and providers make trees by hash; the first-party asset job `chunks.build` splits a mesh, a heightmap or a point file into one, with errors from the simplify job's measure. A chunk tree draws: it never feeds physics or navigation, which keep their own capped shapes.
+
+**Cost:** Selection O(visible chunks) per camera change, nothing while still; residency within its bytes (a 64 km terrain at 1 px about 150 MB resident at 1080p, an estimate); drawn chunks as their payloads. Budget class: work product, showpiece, export.
+
+**It can never:** Choose a chunk by load order, an earlier frame or time spent; draw a coarser chunk in a canonical render, an export or a check; fetch a chunk from the network while a piece plays; exceed its bytes
+
+**Lands:** R6, with the asset jobs
+
+#### Dirty classes
+
+**Fields**
+
+- Per item and class over `transform | geometry | shading | presence | text | reading | time`, a change epoch (`changed_at: u32`); per consumer, `last_run: u32`
+- Per kind: `dirty: {path → class}`, from its schema
+- Per array: a change epoch, `u32`
+
+**Semantics:** A patch's paths decide its classes, for 2D marks as for 3D. Transform re-uploads one instance record and propagates to descendants; geometry rebuilds by content key; shading touches only a material or paint buffer; presence (shown, created, deleted) changes batch membership; text reshapes; reading means a reading changed and always invalidates; time means a node's `valid_until` passed. A moved leaf marks its ancestors, so propagation skips clean subtrees.
+
+**Cost:** CPU O(dirty) per frame; upload 32 to 64 B per dirty instance; arrays with an unchanged epoch are skipped
+
+**It can never:** Rebuild an unchanged item; miss a reading change; schedule by whole items
+
+**Lands:** R1 for 2D; R2 per-component scheduling; R6 for 3D
+
+#### Content key
+
+**Fields**
+
+- `key = hash@1(operator@canvas module version, kind@version, canonical params, the content keys of the read set (a read with no key enters by a hash of its values), view inputs, look tokens used, seed)`, 128 bits, over length-prefixed canonical fields
+
+**Semantics:** Computed from declared inputs, never opted into per kind, so a builder that reads its neighbours includes their keys. Epochs decide only when to recompute and never enter a key, so the same content reached through another edit history gets the same key. Equal keys share one immutable result: a mesh, a tessellation, a shaped run or a layer cache. A document shown inside another enters its host's keys and checks by its current revision's hash, as an asset enters by its sha256, so a new revision misses the host's caches and reruns the host's check. Evaluated arrays are immutable and pass untouched through steps that don't change them.
+
+**Cost:** O(params) to hash per change; O(1) cache lookup
+
+**It can never:** Be set by hand; leave out a declared read; include time unless a param is bound to time; include an epoch or any other change counter
+
+**Lands:** R1 for 2D tessellation and text; R6 for 3D
+
+Also decided: the tech design lists two modifier sets (array, mirror, subdivide, bevel, solidify, displace, simple deform, curve deform, build; and array, mirror, displace, build, boil, dash, outline); this keeps one list with both. A modifier's time dependence is computed, not declared. The light budget ranks by contribution instead of keeping the 32 nearest. Lights use `range` (glTF), not the scenes dry run's `reach`, with `power` in lumens and `illuminance` in lux, never watts. The `surface` builder is `plate` and its `profile` param is `outline`. There's no layer attribute domain, since layer means a writer layer. Cameras land in R2 for flat, isometric and orbit views, earlier than the tech design's R6 for the whole row, because the data views and the Map need them.
+
+<a id="time"></a>
+
+## One clock, pure evaluation
+
+Every frame is the document evaluated at a flick with its input track and view: how the playhead got there never changes the frame. There's no state machine primitive: controls, the input track, `start_on` and `switch` cover every case the dry runs wrote.
+
+### The order of one evaluation
+
+These steps run inside the frame phases (section 4, Phase): each writer's newest checked revision in latch; placements and time remaps in time; controls and the input track's entries, recorded readings among them, in inputs; logic and physics steps in time order, each after the channels and drivers it reads, in simulate; channels, drivers, transforms, constraints, builders, time modifiers and text in items; each view's camera, visibility and level of detail in views; masks and mattes in sources; the evaluated items copied into the GPU layer's buffers in extract; each shot's passes (effects, ambient occlusion, bloom, light and the samples of motion blur) in render; each shot's tone mapping, grade and finish, then transitions and the status guard, in compose; presentation feedback and the meter in feedback.
+
+1. Placements and time remaps.
+2. Controls, from the input track.
+3. Physics, one step at a time up to t: at each step, the channels and drivers physics reads, evaluated at that step's time, then the step. Items that read physics poses evaluate after it.
+4. Per item, in compiled order: channels, drivers, the transform and parent, constraints, the builder when its content key changed, time modifiers, then text. A path takes one writer: the placements on it, which mix as Placement says, or one channel, control, bound value or physics output; then at most one driver and the item's constraints apply, each by its influence. A second writer on a path, or any writer on a paint slot a status binding owns, is refused at check naming both, as rest_on refuses an item a channel drives.
+5. Mask and matte sources.
+6. The compositor: each shot as render drew it through its own look's passes (effects, ambient occlusion, bloom and the samples of motion blur), then its tone mapping, grade and finish, then transitions, which blend the finished sides, then the status guard and status colors.
+7. The frame's `valid_until`, the earliest time anything visible changes next.
+
+#### Transport
+
+**Fields**
+
+- In the document: `frame_rate: rational = 60/1`; `start: flick = 0`; `span: flick | auto | open` (open: only for live play of a piece with logic or a world); `loop: none | wrap | ping_pong = none`; `reduced_motion: hold | slow = hold`
+- At run time: `t: flick`; `range: [flick, flick) = the whole span` (a work area); `rate: rational = 1` (preview only; sound plays only at 1); `master: auto | display | audio | virtual = auto` (derived); `latency: flick` (read from the device)
+
+**Semantics:** `frame(t) = eval(doc, t, inputs ≤ t, view)`, with export frame k exactly at start + k × Δ. In present mode, and wherever a marker waits or jumps, t is the clock: the frame is `eval(doc, p(t), inputs ≤ t, view)`, where p(t) is the timeline's position (Marker: present mode). Display times round to the nearest flick, and under the audio master t is the audio position minus the output latency. Each frame returns `valid_until`, and the app sleeps until then. Under reduced motion a film still plays its timeline, with its large motion replaced in closed form. With `hold`, a camera move, or a glide between shots, cuts to its final framing at the move's midpoint with a 200 ms dissolve, unless its shot marks the move `essential` (a zoom that is the content), which plays; shake and slam are dropped; parallax drift, motifs and print wear hold; echoes and motion blur draw nothing; a text animator keeps only opacity, so units fade in place; a transition other than a cut, a cross-fade or a dip becomes a cross-fade of the same span; and data motion that carries the story, such as a moving point, a race or a reveal, plays. With `slow`, moves keep their paths, shakes and slams are dropped, and every spring's damping ratio is at least 1. The film audit and goldens run both renditions, and an export can render either. With `span: open` a piece played live has no end: t runs on while the viewer plays, a seek reaches only what has been played, `loop` must be none, and its bakes grow only with what changed (Logic: checkpoints and bake); an export, a golden or a check takes a finite range from its own fields or from the recorded input track's last entry, and one that would need the open span itself is refused, naming it.
+
+**Cost:** O(1) per frame plus a next-change heap, O(log C) per change; a still frame does no GPU work
+
+**It can never:** Run while nothing changes; let the rate, the display rate or the seek path change a frame; hold time in f32 seconds
+
+**Lands:** R1 the core; R6 the audio master, latency and ping-pong, and reduced motion in films
+
+#### Transport: film viewer
+
+For: you and reviewers watching a film in the app's panel or in the web player
+
+**Fields**
+
+- Keys: Space or K play and pause; ← and → 5 s; J and L 10 s; `,` and `.` one frame while paused; Home and End; 0 to 9 a tenth of the span; ⌥← and ⌥→ the previous and next section marker; M mute; ↑ and ↓ volume in 10% steps; F full screen; ? the list
+- Rate 0.25 to 2, the transport's run-time `rate`, silent away from 1
+
+**Semantics:** The same keys in the app and the web player. They move only the run-time transport, so a frame step from frame 100 shows the frame export frame 101 shows, and a section key lands on that marker's first frame.
+
+**Cost:** One seek or one rate change per key; nothing while paused.
+
+**It can never:** Bind a key present mode or a control already holds without the keymap check naming it.
+
+**Lands:** R6, with the media module
+
+#### Clip
+
+**Fields**
+
+- `slots: {name → {type, required: bool}}`
+- `channels` on `slot:<name>/<param>`
+- `span: flick | auto`
+- `markers` (local)
+- `grid: frame_rate | none`
+
+**Semantics:** Reusable animation data, pure in its own local time. A placement binds its slots to items.
+
+**Cost:** Its channels × placements × targets
+
+**It can never:** Name an item directly; hold state; contain media
+
+**Lands:** R6
+
+#### Placement
+
+**Fields**
+
+- `clip | recipe`
+- `slots: {slot → ID}`
+- `start: time`, or `after: placement ID` with `offset: flick = 0` (negative overlaps)
+- `in: flick = 0`; `span: flick | auto`
+- `rate: rational = 1` (constant)
+- `repeat: {count, mode: wrap | ping_pong} = 1`
+- `hold_at: flick | none`
+- `quantize: frame_rate | none`
+- `extend: {before, after: none | hold} = none`
+- `blend: replace | add | multiply | mix = replace`; `influence: channel = 1` (mix: Placement: order-free mix; masks: Placement: only)
+- `add_from: first | bind | t: time = first` (with add: the clip's reference pose)
+- `fade_in, fade_out: flick = 0`
+- `stagger: {lag: ratio | flick, order: index | reverse | seeded, reverse_on_close: bool}`
+- `start_on: input rule` (optional)
+
+**Semantics:** Active on [start, start + span), with local time = in + (t − start) × rate in exact flicks, floored, then mapped by a time remap that targets it, before repeat, hold and quantize apply. Nesting composes outer to inner, so the look's quantize steps the document's time first and a channel's quantize modifier steps last; mix placements combine first in canonical order by placement ID, then the other blends follow writer layer then order; at a wrap flick local time is 0, right-continuous like keys, except after the final repeat, where hold or extend applies, and ping_pong turns on the end value; and `after` starts at the other placement's end plus the offset. A stagger starts target i at i × lag × d, for a total of d × ((n − 1) × lag + 1). An add placement contributes each channel's change from the clip's reference pose (`add_from`: its first key, the bind pose, or its pose at a time): v + w (v_clip − v_ref) for numbers and vectors, and q · slerp(identity, q_ref⁻¹ · q_clip, w) for rotations, in the bone's parent space, with w its influence. So a nod or a breath authored from an idle rides on a walk, and a clip that sits at its reference changes nothing, bit for bit.
+
+**Cost:** O(log P + A) to find active placements (a cursor during playback) plus their channels; an inactive placement costs nothing
+
+**It can never:** Animate its rate (use a time remap); hide a cut a check needs; be reordered silently; name anything by position
+
+**Lands:** R1 start, span, series and stagger for the line; R6 the rest
+
+#### Placement: order-free mix
+
+For: films with characters (a walk and a wave mixed by a control's weight), figures where a slider blends two poses, and two writers placing clips on one item
+
+**Fields**
+
+- `blend: replace | add | multiply | mix = replace` (mix is new)
+- `influence: channel = 1` (the mix weight; never normalized)
+- Base (derived, not a field): the item's authored param, or the bind pose for a bone channel
+
+**Semantics:** Mix placements contribute base + Σ wᵢ (vᵢ − base), summed in canonical order by placement ID; a channel missing from a placement counts as the base, and rotations mix as the normalized sum of quaternions sign-aligned to the base. All mix placements combine before replace, add and multiply placements apply, so neither placement order nor writer order changes the result, bit for bit. With every weight at 0 the result is exactly the base.
+
+**Cost:** As replace: O(active placements × channels), no memory. Budget class: any.
+
+**It can never:** Normalize weights; depend on placement or writer order; read an earlier frame's result.
+
+**Lands:** R6, with placements and skinned playback
+
+#### Placement: only
+
+For: films with a presenter who walks from one clip and waves or points from another; the generated character previews that put a gesture over an idle
+
+**Fields**
+
+- On a placement of an asset clip: `only: [bone | chain] = all` (bones are item#bone sub-addresses; chains come from the bone_map profile, such as arm_l, arm_r, leg_l, leg_r, spine and head)
+- `except: [bone | chain] = []`
+- `with_descendants: bool = true`
+- On an asset with morph targets, `only` and `except` also take target names and `mouth` (the targets the viseme map names)
+
+**Semantics:** At check, only and except compile to one bit per bone of the skin, and the placement writes only the bones whose bit is set; every other bone keeps what earlier placements gave it. A chain name resolves through the bone_map profile, and a name that matches no bone is refused with its code. Bone channels and bone constraints are unaffected, since they already name their bones. Target names mask a clip's weights the same way, one bit per target, so a talking clip can leave the mouth to the narration's visemes.
+
+**Cost:** One bit test per bone per placement at evaluation; masks rebuild only on change, O(bones). Budget class: as the skinned item.
+
+**It can never:** Change over time (fade the placement with influence instead); pick bones by index or position; reach a bone outside the item's skin.
+
+**Lands:** R6, with skinned playback
+
+#### Placement: root motion
+
+For: films with a character walking along a path, then stopping on its mark
+
+**Fields**
+
+- On a placement of an asset clip: `root: in_place | keep {start: at | continue = continue} | along {curve: ID, speed: m/s | from_clip = from_clip, start: u | continue = continue} = keep`
+- `root_bone: sub-address = the skin's root`
+
+**Semantics:** in_place removes the clip's horizontal root travel; keep adds the clip's root delta once per cycle, in closed form; along moves the item by arc length on a curve. Given a speed, it sets the rate to that speed ÷ the clip's root speed, so feet don't slide; with `from_clip`, the default, the arc length is the clip's own horizontal root travel at its local time, summed over repeats, so a start or a stop moves the item exactly as its feet do, and the rate stays as written. keep also carries the root's yaw, so a turn in place turns the item. `start: continue`, the default, begins where the item's latest earlier root-moving placement left the root at this placement's start flick, evaluated there by the same pure evaluation, so a walk, a stop, a turn and an idle chain on one item without a jump; with no earlier placement it begins at the item's `at`, or at u = 0 on the curve. Past the curve's end the item holds there, and a clip that still travels raises `path_end`. animation.contacts then reports any slide above its tolerance.
+
+**Cost:** O(1) per frame plus one curve query. continue adds one evaluation of the earlier placement's root at the start flick, cached per change. Budget class: as the skinned item.
+
+**It can never:** Integrate velocity frame to frame; change the clip's local poses; skip the contact check in an export.
+
+**Lands:** R6, with skinned playback
+
+#### Marker
+
+**Fields**
+
+- `t: time | first {expr, vars, after: time, before: time}`; `span: flick = 0`
+- `kind: cue | shot | section | stage | hold | beat | word | moment | record`
+- `name`; `payload`; `tags: [string]`
+- `not_before: time` (optional)
+- `events: [ev handle]` (on record markers)
+
+**Semantics:** Resolved at check, in dependency order, and a relative time keeps its offset when its marker moves. Stage markers hold the timeline in present mode (Marker: present mode), the film audit checks holds, sections become export chapters, and beat markers come from the tempo map or a beats bake, word markers only from a bake. Markers of each kind also compile at check into an exact occurrence list, `markers.<kind>`, filtered by tags, so authored moments drive Spawn. Generated markers get stable names: `<kind>.<n>` and `<line>.word:<text>#k`. A `first` time is solved at check: the first flick in [after, before] where expr ≥ 0, found by bisection on the expression's interval form to one flick. One the forms can't settle, or that reads the input track, is refused, naming the marker.
+
+**Cost:** O(M log M) per change; O(1) per frame
+
+**It can never:** Be found by position; be inferred without a bake or the tempo map; hold state
+
+**Lands:** R1 cue, shot, section and record; R6 the rest
+
+#### Marker: present mode
+
+For: a walkthrough the viewer steps through, branches and answers; a data story shown stage by stage; any piece presented to a room
+
+**Fields**
+
+- On stage markers: `waits_for: control ID` (optional: the timeline holds here until that control gets an entry)
+- `then: {option → marker}` (optional, with `waits_for`: where each option goes on; an option it leaves out plays on)
+- On any marker: `goto: marker` (optional: the timeline goes on from that later marker)
+- On stage markers: `notes: string ≤ 2,000 = ""` (shown only in the presenter view, and in a `pdf` export only with `notes: true`)
+- On stage markers: `hold: still | loop {from: marker} = still` (while the stage holds, the span from `from` replays on the clock)
+- Keys: `B` blanks the presented display; a stage number then Enter goes to that stage; `Shift+P` opens the presenter view
+
+**Semantics:** Present mode shows a piece full screen and steps it by its stages until Esc; a piece with stage markers or a stages control enters it when it goes full screen. While a piece plays, two times run: the clock, which stamps every input entry, and the timeline's position, which the document reads (Transport). The position follows the clock except where it holds or jumps. In present mode it holds at each stage marker until you advance, by →, Space or Page Down, which a presenter's remote sends. While present mode runs these keys win over a control's own `keys`, and the keymap check names each control key they shadow. Presented or not, it holds at a marker with `waits_for` until that control gets an entry, or until you advance while the control has a value (an earlier entry or its default), and goes on at the marker that value's option names under `then`. At a marker with `goto` it goes on from the marker named. ← or Page Up goes back to the previous stage on the path taken and holds there. Each advance and back is an input-track entry (`present`), so the position is a fold over the clock and the entries, with checkpoints, as `start_on` is, and seeking equals playing. What an entry starts, such as a `start_on` run or a stage's glide, counts from the entry on the clock, so it plays while the timeline holds; a physics world steps up to the position, so it holds with the timeline. With a tempo map, a hold lasts a whole number of bars at the marker's tempo, the fewest, at least one, that reach past the entry that ends it, so what follows keeps the beat of the music that played on. Strips marked `at_stage: play`, by default those that loop, run on the clock through a hold or a jump; other strips hold with the timeline, falling silent with the minimum fade while processor tails ring out on the clock, and stop and start with the minimum fade at a jump (Strip and track). In a piece with no stage markers, advance and back step its stages control, in the order of its stages' `order` keys, as in any ordered map. A film whose markers wait or branch exports, over `range: whole`, one path: at each waiting marker it takes the last entry made there, or the control's default, or the export is refused, naming the marker; the hold there lasts what the film audit's hold rule asks for the text it shows, rounded up to whole bars with a tempo map, and beds play on. The check refuses, naming each, a `then` or `goto` target at or before its marker, a waiting control that isn't of class document, and a stage marker inside a narration line. Paths only go forward, so there's still no state machine; the film audit runs on every path, and a film with more than 64 paths is refused. A stage with `hold: loop` replays the span from `from` to the stage marker on the clock while it holds, so seeking equals playing, and an advance goes on from the stage marker, as from a still hold. A blank and a jump to a stage by number are each a `present` entry, as advance and back are. The presenter view goes on the other display. It shows the stage's notes, the next stage's first frame, the stage number and name, and the elapsed time. It never shows an ask.
+
+**Cost:** O(log E) per frame to find the position, as `start_on` does; a seek costs O(entries since the last checkpoint). Budget class: any class with a timeline.
+
+**It can never:** Jump to an earlier marker except by back; hold a strip marked `at_stage: play`; pick a path at random or by the wall clock; stamp an entry with the position instead of the clock; cut an export's hold short of the film audit's; show notes or an ask on the presented display
+
+**Lands:** R6, with controls and stages
+
+#### Channel and key
+
+**Fields**
+
+- Channel: `target: path`; `type: f32 | vec2 | vec3 | quat | color | angle | enum | bool | string | path`; `space` by type (f32: linear, log or area; vec: per component; quat: slerp; color: OKLab or OKLCh; angle: shortest or absolute; enum, bool and string: hold only; path: equal point counts, or unequal ones matched at check); `mode: keyed | follow = keyed`; `keys: {ID → key}`; `extrapolate: {before, after: hold | linear | cycle | ping_pong} = hold`; `modifiers: [noise {amplitude, frequency: Hz, seed} | quantize {hz} | wave {amplitude, period, phase, offset} | cycles | limits {min, max} | pulse {at: time, span: flick, amount: value, shape: there_and_back | pause {share: 0..1 = 1/3} | wiggle {count: f32 = 2}, ease = sigmoid(10)}]`, each with an `influence`; `range: [min, max]` (hard)
+- `morph: match | strict = match` (path channels: keys whose paths differ in point or sub-path counts are matched once at check; strict refuses them)
+- Key: `t: time`; `value`; `interp` (owns the segment to the next key): `hold | linear | bezier {x1, y1, x2, y2} | ease {name, params} | quantize(n) | spring {freq_hz, damping_ratio} | catmull_rom` (through the neighbouring keys); Bézier x in [0, 1], y free; eases from the `ease@1` registry: first-party, the Penner families (with a renormalized expo), smoothstep, smootherstep, sigmoid(k), rush_in(k) (the first half of sigmoid(k) stretched over the segment), rush_out(k), double_sigmoid(k) (two sigmoids, half the way each), running_start(pull = −0.5) (the six-degree Bernstein curve with control values 0, 0, pull, pull, 1, 1, 1) and exp_decay(tau = 0.1) ((1 − e^(−x/tau)) ÷ (1 − e^(−1/tau))); and from packs, function tables (Channel and key: table eases)
+- Key: `travel: straight | arc {angle: deg, axis: vec3 = (0, 0, 1), centers: none | [u, u] | per_point = none} | spiral {angle: deg} = straight` (on vec2, vec3 and path channels)
+- A path key's value may be `{of: ID[#part]}`: that item's evaluated path at the key's time, in this item's space, resolved at check
+
+**Semantics:** The left key owns its segment, found by binary search or a cursor, with x computed in f64 and values mixed in the channel's space; two keys on one flick make a right-continuous jump. Path keys that differ in point or sub-path counts are matched once at check: sub-paths pair by area and centroid, each pair is resampled by arc length to the larger point count, its start point turns to the rotation with the least summed squared distance, and a sub-path with no partner grows from or shrinks to its centroid; the match is cached by both keys' contents, so the segment mixes as equal counts do and seeking equals playing. A Bézier uses an 11-sample table and Newton iterations in f64 with a fixed count and no early exit, falling back to bisection when |dx/dt| < 1e-6 or a step leaves [0, 1], with handles clamped so time never runs backwards, and only the output is quantized. Color adjustments (tint, hue, saturation, brightness, contrast, exposure, gamma, opacity) are channels too, and invert a bool channel. With `travel: arc`, each point travels on the circular arc that subtends `angle` between its two values, turning counterclockwise on screen for a positive angle; a path key moves each of its matched points on its own arc. A spiral puts each point at start + u × R((u − 1) × angle)(end − start); `centers` turns each point about a centre while it moves; an arc or spiral under 0.57° (0.01 rad) is straight. A pulse adds amount × shape(u) for u across its span and is exactly 0 at both ends, so an indicate or a wiggle returns to the base bit for bit. math@1's there_and_back, there_and_back_with_pause and wiggle end at 0, not 1, so they map to a pulse rather than an ease (Pack: math@1 math-film words).
+
+**Cost:** ≤ 100 ns per channel, so 10,000 channels take about 1 ms; no allocation
+
+**It can never:** Integrate between frames; blend in gamma sRGB; interpolate an enum; read the clock; leave its hard range (Bézier extremes and spring peaks are checked in closed form); accept a bare `ease` or `smooth`
+
+**Lands:** R1 linear, hold, Bézier and the follow spring for the line; R6 the rest
+
+#### Channel and key: quantize jump
+
+For: 2D motion graphics animated on twos, the 16-bit pixel story, counters that advance in whole numbers
+
+**Fields**
+
+- `interp: … | quantize(n, jump: start | end | none | both = end)`
+- Channel modifier: `quantize {hz, jump: start | end | none | both = end}`
+
+**Semantics:** For progress u in a segment of n steps, end gives ⌊n·u⌋ ÷ n, start gives (⌊n·u⌋ + 1) ÷ n, none gives ⌊n·u⌋ ÷ (n − 1) and both gives (⌊n·u⌋ + 1) ÷ (n + 1), each clamped to [0, 1], as CSS steps() defines. Progress comes from exact flicks, so a step lands on the same flick at every display rate. The modifier steps time on its hz grid by the same rule.
+
+**Cost:** O(1) per sample, as quantize(n) now. Budget class: any.
+
+**It can never:** Step on a time that isn't a whole flick; depend on the display rate; take n < 1, or n < 2 with none (refused).
+
+**Lands:** R6
+
+#### Channel and key: auto tangents and cycle offset
+
+For: films and figures where an agent writes only key times and values
+
+**Fields**
+
+- `interp: … | auto {clamp: bool = true, smoothness: 0..1 = 0.33}`
+- `extrapolate: … | cycle_offset` (each cycle adds the last key minus the first, for loops that travel)
+
+**Semantics:** The handles are computed at check from the neighbouring keys, so the curve passes through every key smoothly. With clamp, a key that is a local extreme gets flat tangents and no span overshoots its end values, so hard ranges hold without a search. Changing one key recomputes only its neighbours' handles.
+
+**Cost:** As bezier at run time; O(1) per changed key at check. Budget class: any.
+
+**It can never:** Overshoot a key's value while clamped; depend on evaluation order.
+
+**Lands:** R6 (the line's R1 keys stay linear, hold, Bézier and the follow spring)
+
+#### Channel and key: table eases
+
+For: a motion designer's own ease, such as an anticipation or a stepped settle, shipped in a pack and bounded as surely as a named one
+
+**Fields**
+
+- `interp: ease {table: name}` (beside `ease {name, params}`; the name `<pack>.<name>`, an entry of `ease@1`)
+- `ease@1` registry (Registry and seal: registries): first-party entries, the named eases; pack entries, function tables over [0, 1]
+- On an ease table: `overshoot: none | [min, max] = none`
+
+**Semantics:** An ease table is a function table (Driver: tables) over [0, 1] whose value is 0 at 0 and 1 at 1, each within 1e-9, checked once per hash. With `overshoot: none` its knots never decrease, so the segment stays between its keys' values, as a monotone named ease does. With `overshoot: [min, max]` every knot lies inside it, and the hard-range check takes the segment's extremes from the knots, which bound it exactly, as it takes a spring's peaks in closed form. A table that breaks either is refused, naming the knot. `ease(name, x)` in a driver reads the same entries. It's a pure function of the segment's x, so seeking equals playing.
+
+**Cost:** As `table(name, x)`: one binary search per segment evaluation, inside the 100 ns per channel (estimate)
+
+**It can never:** Miss 0 at 0 or 1 at 1; dip while declared monotone; pass its declared overshoot; take a first-party ease's name
+
+**Lands:** R6
+
+#### Follow
+
+**Fields**
+
+- `follow: {source: path | keys, model, outputs: [value, rate, integral] = [value], stagger: {targets: [ID], lag: ratio | flick, order: index | reverse | seeded, reverse_on_close: bool}}` (target i starts i × lag later, as in a placement's stagger)
+- `model: first_order {tau: s, tau_up: s, tau_down: s} | spring {freq_hz: Hz = 2, damping_ratio = 1} | rate_limit {max: per s}`
+- Spring aliases: `{duration, bounce}` gives ω0 = 2π ÷ duration and ζ = 1 − bounce; `{mass, stiffness, damping}` gives ω0 = √(k ÷ m) and ζ = c ÷ (2√(km))
+
+**Semantics:** The source must hold constant between input entries (a control, a keyed target or a data constant); one that varies continuously is refused. Each segment between source changes is solved in closed form, in all three damping regimes, from the state at its start, cached, keyed by the input track, and rebuilt from the fork when a new entry after a seek forks the track, never by a seek alone. `rate` is the derivative and `integral` the running integral, such as a fan's angle from its speed, both in closed form.
+
+**Cost:** O(1) per frame after an O(log S) segment lookup; about 24 B per segment
+
+**It can never:** Integrate frame by frame; follow a continuously varying source; depend on the frame rate
+
+**Lands:** R1 the follow spring; R6 first order, rate limit, rate and integral
+
+#### Driver
+
+**Fields**
+
+- `target: path`
+- `expr: string` (numeric, loop-free, from the closed function list below)
+- `vars: {name → path | time | control | channel (.value, .rate, .integral) | bound value | occurrence list | an item's evaluated value}`
+- A var may also read an asset's probe, `probe: <asset>#<path>`, such as `exact.volume` or a tessellate job's `measures.<name>.value`: a measured source, whose text shows no more precision than its accuracy
+- `influence: f32 = 1`; `range: [min, max]`
+- `fallback: number` (required where `/`, `log`, `sqrt` or `pow` appear)
+- An occurrence list var takes a filter: `{list, kinds, a, b, tags, where}` (each optional, as Spawn's `on` takes; with none, every occurrence in the list)
+
+**Semantics:** Compiled to bytecode per change, it runs after its item's channels and before its transform, scheduled per component, and cycles are refused. A non-finite result takes the fallback and raises `nonfinite`. Writing a param that isn't `live` costs a rebuild every frame, and the check flags it.
+
+**Cost:** ≤ 64 ops, ≤ 300 ns
+
+**It can never:** Loop or allocate; call plug-in code; read the clock or the network; read physics while physics reads it; use unseeded randomness
+
+**Lands:** R6
+
+#### Driver: time offsets
+
+For: a follower that trails its leader by a beat, a smoothed readout of a jittery channel, a value's echo
+
+**Fields**
+
+- Two functions join the closed function list for drivers: `lag(var, dt)`, the var's value at t − dt, with dt a literal time within ±10 s (a negative dt looks ahead), and `smooth(var, width: s, samples: u8 ≤ 16)`, the mean of lag at samples evenly spaced across a window of width centred on t
+
+**Semantics:** The scheduler evaluates the var's chain again at those times through the same pure evaluation as the frame, as a trail does, so nothing is kept between frames and a scrub gives the same value; the cost is counted at check like a trail's. A cycle across times is refused. A look-ahead whose chain reads the input track, a control or a view input is refused, since inputs after t don't exist yet, and a bound value has no value at another time, so lag refuses one.
+
+**Cost:** One chain evaluation per sample, declared at check; about 100 ns per evaluation of a typical chain (estimate). Budget class: any class that runs drivers.
+
+**It can never:** Take a time computed at run time; reach past ±10 s; keep a history; read a live simulation at another time (a bake is fine).
+
+**Lands:** R6
+
+#### Driver: tables
+
+For: a value that follows a measured or designed curve, such as a drag coefficient by speed, a gamma ramp or a level's difficulty by depth, without a new function in the closed list
+
+**Fields**
+
+- `table(name, x)` (Tables, in the closed function list)
+- Function table: `{x: [f64], y: [f64], mode: linear | monotone = linear}`, 2 to 4,096 points, x strictly increasing, every value finite
+- From: a pack's `tables`, as `<pack>.<name>`; a data asset by hash in the document's `assets`; or a provider's output in the first-party layout `fn.table@1`
+
+**Semantics:** `linear` interpolates between neighbouring knots, and `monotone` takes Fritsch and Carlson's piecewise cubic, which keeps each segment between its two knots' values. Below the first x or past the last, it holds the end value. It evaluates in f64 through the ops module, as every function does. Its interval form over [a, b] is the smallest and largest of the values at a and b and at every knot between them, widened by the error bound, which is exact since each segment stays between its knots; so framing, control sweeps and range checks bound a table as surely as any closed function. A table is checked once per hash: x that doesn't strictly increase, a NaN, an infinity or more than 4,096 points is refused, naming the index. A table is data: one the working agent wrote shapes motion freely, and a number it shows is a story number (Honest numbers).
+
+**Cost:** O(log n) per evaluation by binary search, under 50 ns at 4,096 points; its interval form O(knots in range) (estimate)
+
+**It can never:** Hold more than 4,096 points; extrapolate past its ends; be read by a GPU step (a graph takes a spline or a texture input); change once its hash is named
+
+**Lands:** R6
+
+#### Constraint
+
+**Fields**
+
+- `kind: child_of {parent, inverse_at} | follow_path {path, fraction (by arc length), orient, up, offset} | look_at {target, axis, up} | copy {what: location | rotation | scale, target} | limit {what, per-axis bounds} | reach2 {chain, pole | bend: 1 | −1 (2D), stretch: none | cartoon = none} | follow_tip {item, offset, rotate} | distance {target, min, max} | follow_stream {vector_field: ID, from: vec3, speed: f32 = 1, time_offset: s = 0}`
+- `influence: channel = 1`
+- `space: world | parent | local` (for owner and target)
+- `targets: [{of, start, end}]` (a target that switches over time)
+- `kind: … | spring_chain` (follow-through baked at check: Constraint: spring chain)
+
+**Semantics:** Runs after the transform and parent, in list order, scheduled per component. `follow_path` uses an arc-length table built on change. Nothing iterates: two-bone reach is solved analytically, its side fixed by a pole in 3D or a bend sign in 2D; with `stretch: cartoon`, both bones scale by max(1, d ÷ (l1 + l2)) instead of reporting reach_short. `follow_stream` puts the item on the stream integrated from `from` at field time (t − time_offset) × speed, read from a table built at check, so a dot rides the flow and seeking equals playing (Vector field `vector_field@1`).
+
+**Cost:** O(1), or O(log S) for follow_path
+
+**It can never:** Run before what it depends on; form a cycle; iterate at run time
+
+**Lands:** R1 child_of (parenting); R6 the rest
+
+#### Constraint: bones
+
+For: films with characters: a head that looks at the subject, a hand that reaches or points, a prop held in a hand
+
+**Fields**
+
+- Owner and targets may be `item#bone` (beside item IDs)
+- `look_at {target, axis, up, limits: {yaw, pitch: [deg, deg]}}`
+- `reach2 {chain: [upper, lower, end] | arm_l | arm_r | leg_l | leg_r, target, pole, stretch: none}` (named chains need a bone_map)
+- `limit {rot: per axis [deg, deg]}`; `child_of {parent: item#bone}` (a prop that follows a hand, as a socket does)
+- `influence: channel = 1` (as every constraint)
+- A `look_at` target may be `camera`: the camera drawing the frame
+
+**Semantics:** Bone constraints run after clips and bone channels, parents before children. reach2 solves the two-bone chain analytically with the pole fixing the bend plane, and look_at turns the bone within its limits. A look_at at `camera` aims at the active shot's camera, or in a transition at each side's own, so a glance at the lens follows a cut. An item parented to a bone follows its evaluated world transform.
+
+**Cost:** O(1) per constraint per frame, plus re-composing the chain's descendants. Budget class: as the skinned item.
+
+**It can never:** Iterate (no CCD, FABRIK or full-body solve); keep a bend side from an earlier frame (reach2 requires a pole); reach past the chain's length (it straightens and reports reach_short).
+
+**Lands:** R6, with skinned playback
+
+#### Constraint: spring chain
+
+For: a presenter's hair, a tie, a scarf or a jacket's hem that lag and settle as the character moves; a 2D puppet's ponytail, ears or antenna; a sign that swings on a moving cart
+
+**Fields**
+
+- `spring_chain {bones: [item#bone | rig part] | {from: item#bone}, hz: Hz = 2, damping_ratio: f32 = 0.5, gravity: f32 = 0, colliders: auto | [{of: item#bone | ID, shape: sphere {r: m} | capsule {r, half_height: m} | plane}] = auto, max_swing: deg = 60}` (bones root first, at most 8; from: a bone and its descendants down one branch; gravity: a share of g along −Y)
+- `influence: channel = 1`; `space` as every constraint
+- Bake (derived, read-only): `{key, step_rate: Hz = 120, store_rate: Hz = the document's frame rate, rotations per bone per stored time, decimation_error: deg, bytes, checkpoints}`
+
+**Semantics:** At check the core runs each chain at the 120 Hz physics step in pinned f64 math. Each bone's swing away from its animated rotation (what clips, bone channels and earlier constraints give it) is a damped angular spring in hertz with a damping ratio, as every spring here is: its parent's evaluated acceleration and gravity force it, and it is solved exactly over each step, root to tip, with no iteration. A swing that would carry a bone's tip into a collider stops short of it along the step's own slerp, judged by a conservative sweep: interval arithmetic over the step bounds the tip's path and the collider's motion, and the swing shortens until the two bounds can't meet. No swing passes `max_swing`. `colliders: auto` fits capsules to the bone boxes of the head, neck, chest and upper arms on a skin with a bone_map, and is empty elsewhere. The rotations are kept as a bake keyed by the chain's fields and the content keys of everything its bones read; the bake stores rotations at `store_rate`, and a frame reads it at t and slerps between stored times, so seeking equals playing and every machine reads the same bones. Storing keeps every 120 Hz step in a span where the slerp between stored times would leave a dropped step more than 0.5° from the solve, or where the same sweep finds that slerp could meet a collider, so playback can't pass through a collider between stored poses; the bake records its decimation error, the largest angle left at a dropped step, and its bytes. A chain whose bones read the input track or a control re-bakes from the checkpoint at or before a fork, taken every 0.5 s within its byte budget, as a physics world does. The constraint applies after the item's other constraints, parents before children, by its influence. A rig's `springs` expand into it.
+
+**Cost:** At check, per step, one evaluation of the driving bones plus O(bones × colliders): a 100-bone presenter with 13 chained bones over 60 s bakes in about 0.2 s off the UI thread (estimate). Per frame O(bones) to read and slerp. Stored at `store_rate`, 16 B per bone per stored time, before checkpoints: 748,800 B for 13 bones over 60 s at 60 fps, and 1,497,600 B if every 120 Hz step is kept. The sweep adds one interval bound per bone, collider and stored span at check. Budget class: as the skinned item or the rig.
+
+**It can never:** Integrate while a frame draws; show a pose it didn't bake; pass through a collider between stored poses; collide with anything but its colliders; read or feed a physics world; use a position-based solver; pass `max_swing`.
+
+**Lands:** R6, with skinned playback and puppet@1
+
+#### Constraint: rest_on
+
+For: one-shot composition: furniture on floors, props on tables, trees and rocks on terrain, physics-lab bodies at rest
+
+**Fields**
+
+- `rest_on {on: ID | collection | ground, axis: vec3 = (0, −1, 0), align: none | normal = none, offset: m = 0, contact: bounds | true_shape = true_shape, max_drop: m = 10}`
+
+**Semantics:** Moves the item along the axis until its true shape touches the first surface of on, and optionally tilts it to that surface's normal. A static item resolves at check, cached by both content keys, and re-solves per frame only when either side moves. The geometry audit then confirms the contact, so nothing floats or sinks.
+
+**Cost:** One shape cast through a BVH per item, O(log n); nothing per frame while still. Budget class: any 3D class.
+
+**It can never:** Settle physically (piles use a physics bake); move an item a channel drives (refused as a conflict); drop past max_drop (it reports no_support).
+
+**Lands:** R6
+
+#### Control
+
+**Fields**
+
+- `kind: slider | toggle | choice | stages | transport | drag_along | turn | press | text | hover | scroll` (entries of the `control@1` registry: Control: kinds as a registry; scroll: Control: scroll)
+- `class: document | view | viewer`
+- `label`; `role` (an ARIA role)
+- `binds: [path]`; `range: [min, max]`; `default`; `increment`; `options`
+- `keys: {key → value | delta | toggle}`
+- `handle: {item, along: path | axis, travel, drag: along | free}` (optional)
+- `verb: camera.turn | camera.zoom | camera.reset | pick | canvas.full_screen` (optional)
+- `verb` also takes `camera.pan` (keys move the camera's target by an increment, inside its pan bounds)
+- `kind` also takes `point` (Control: point) and `actions` (Control: actions, key repeat and gamepads); `verb: pick` also takes `rows` (Control: picks on rows and grid focus); a `text` control takes `text: {max_bytes, lines}` (Control: text); `kind` also takes `device`, which reads one device class (Control: device); `verb` also takes `camera.goto` (Camera `camera@1`: goto and edge pan)
+- `targets: {option or stage ID → item ID | collection}` (optional: what the `pick` verb picks in the scene)
+- `variant: variant set` (optional, on a choice: its options are the set's, and its class is view unless set)
+- `enabled: expression`; `smoothing: none | follow spring`
+- `value_text: template`; `announce: {on, quiet: s}`; `gate: device` (sound)
+- Stages: `stages: {ID → {label, keys, shot, lit, set: {path → value}, readout}}`
+
+**Semantics:** The value is the last input-track entry at or before t (with smoothing, a closed-form follow), and one gesture is one entry carrying its polyline. A stage jumps to its own shot and highlight and sets its values, while view and viewer controls change session state only. A stage's shot starts at the stage's entry and, unless it says `join: cut`, glides there over 0.8 s from the pose shown, so a hotspot or a step flies the camera. Readouts are announced when they change, after a quiet interval. A click or tap on a target, or Enter while it has focus, picks that option or stage, as one entry when the control's class is document, and never selects the item or opens its panel. Targets join the Tab order after the control's own UI, in reading order, each announced as a button named by its option's label. A choice with a `variant` set applies the option picked: in class view as the viewer's session choice, which never edits the document, and in class document from the input track, so a film can show each option in turn. In an expression, a choice reads as the index of its option in `options`, from 0: its default's before any entry, or −1 with no default, so a driver can check an answer and count a score. A pick on mark-set rows writes the row's key, and no control hits, focuses, picks or announces a row or element that doesn't draw.
+
+**Cost:** O(log N) per lookup
+
+**It can never:** Act without your gesture, except a device control taking a bridge's entries, stamped as its plug-in (Control: device bridges); answer an ask; be moved by an agent except through the parameter tool, stamped as that writer
+
+**Lands:** R6; camera verbs for core and data views come with the camera in R2
+
+#### Control: picks on rows and grid focus
+
+For: games and boards: a click on a hex, a tile, a card or a unit that the rules take as a move, and the same moves from the keyboard
+
+**Fields**
+
+- `rows: [mark set ID | instancer ID] ≤ 8` (on a control with `verb: pick`, in place of `targets`)
+- Value: `{set: u8, key: [i64, i64]}` (the set's index in `rows`; the key: an integer key column's value and 0, a grid's `(cx, cy)`, or a logic-fed instancer's `(slot, gen)`)
+- `focus: {start: key = the first drawn row, label: template | {copy: …} = the key}` (optional: the rows as one Tab stop)
+- In a logic item's read region: `u32 set, 4 zero bytes, i64 key[0], i64 key[1]` (24 B)
+
+**Semantics:** A click or a tap on a row of a named set, or Enter or Space on the focused row, writes one entry with the row's key, at the gesture, when the control's class is document; a replay, a seek and every peer read the entry and never resolve the row again. The core's hit test is reused unchanged: in 2D the spatial index, then each row's exact geometry (a hex cell's hexagon among them), topmost first; in 3D, the object-ID target. Among the named sets, the topmost drawn row under the pointer wins. A row or element that doesn't draw (its `alive` or `live` false, its value out of range, hidden, or at opacity 0) is never hit, focused, picked or announced, so fog drawn by hiding rows never leaks through the pointer or a screen reader. A pick changes no selection, which stays session state. A named set whose key is a string column is refused at check when a logic item reads the control, naming the set. With `focus`, the rows are one Tab stop, and arrow keys move a roving focus over the drawn rows, viewer state that writes no entry. On a grid, Left and Right move to the nearest drawn cell that way on the focused cell's row; Up and Down to the nearest row that way holding a drawn cell, at the drawn cell whose center's x is nearest the focused one's, ties to the smaller cx; with none that way, focus stays. Off a grid, the arrows follow reading order by center y, then x. Home and End go to the first and last drawn rows. The focused row draws an outline, never a fill, and is announced by its `label`. When the focused row stops drawing, focus moves to the nearest drawn row by center distance, ties to the smaller key, and announces it. A point control on a grid set takes the same focus (Control: point).
+
+**Cost:** A hit as the input router's, at most 0.1 ms at 10,000 rows; a focus move O(log rows) through the spatial index; an entry about 48 B on the track. Budget class: as the control.
+
+**It can never:** Hit, focus, pick or announce a row that doesn't draw; resolve a pick again on replay; change the selection; give logic a string key; add a Tab stop per row
+
+**Lands:** R6, with the logic module
+
+#### Control: point
+
+For: games that take a place, not an option: click to place a building, drag a belt, box-select units, order a move to a spot on the ground
+
+**Fields**
+
+- `kind: point` (beside slider, toggle and the rest; class document)
+- `on: mark set ID (on a grid) | terrain plate ID | {plane: {y: m = 0}}`
+- `buttons: [primary | secondary | middle] = [primary]`
+- `drag: none | path | box = none`; `spacing: m = 0.25` (a path's samples on the ground)
+- `targets: [mark set ID | instancer ID] = []` (rows or elements an entry names when one is under the pointer)
+- Value: `{phase: press | move | release, button, mods: {shift, ctrl, alt, meta}, cell: [i32, i32] | ground: [f64, f64, f64] | none, hit: {set, key} | none, corners: [[f64, f64, f64] | none] × 4}` (corners only on a box's release)
+- `<control>.hover`: the cell or ground point under the pointer (viewer class)
+- In a logic item's read region, 152 B: `u8 phase, u8 button, u8 mods, u8 flags` (which of cell, ground, hit and corners it holds), 4 zero bytes, `f64 x, y, z` (a cell as cx, cy, 0), `u32 set`, 4 zero bytes, `i64 key[0], key[1]`, then twelve `f64` for the corners
+
+**Semantics:** A press of one of its buttons over its view writes a press entry, and its release writes a release entry. With `drag: path`, each cell the pointer enters writes one move entry, in the order entered, the cells between two pointer samples being those the straight segment between them crosses (on a hex grid, the hex line between their cells), and on the ground each `spacing` the point moves writes one; with `drag: box`, the release carries `corners`. Each entry is computed once, at the gesture's flick, in pinned f64 math (the closed function list's ops module), and stored: a replay, a seek, an export and every peer read it and never compute it again, so turning the camera afterwards changes nothing. On a 2D grid set the pointer's position maps through the inverse of the 2D camera into the set's space, and the cell is the one whose area holds it: a square's by the floor of the position over the cell, an isometric cell's diamond, or a hex cell's hexagon (Mark set: hex grid); outside `grid.size` it's none. In 3D the ray from the camera's pose at that frame through the pointer meets the plane, or the terrain plate's height samples as the two triangles per sample quad that its height-field collision uses, at its nearest hit, rounded to 1/1024 m; a ray that meets nothing gives none. A box's four corners are the rays through the screen rectangle's corners, in order from the press corner clockwise on screen, each met the same way. `hit` names the topmost drawn row or element of `targets` under the pointer at the press, by the core's hit test, skipping any that doesn't draw (Control: picks on rows and grid focus). A drag that starts with one of the control's buttons over its view belongs to the control, so the camera's plain-drag pan moves to keys, the middle button or the edge (Camera `camera@1`: goto and edge pan). `hover` is the cell or ground point under the pointer, computed the same way as it moves: a viewer-class value that drivers may read to place a ghost, that a logic item's steps may not read (refused at check, naming the read), though its preview may (Logic: preview), and that goldens, exports and checks evaluate as none. On a grid set the control takes the rows' keyboard focus, and Enter writes a press and a release at the focused cell.
+
+**Cost:** A 2D cell O(1); a ray against a plane O(1), against a terrain plate O(sample cells it crosses), under 0.1 ms on a 4,097² plate (estimate); an entry 152 B on the track. Budget class: as the control.
+
+**It can never:** Compute a point again on replay; put hover on the input track or in a logic step; hit a row or element that doesn't draw; compute a ground point on the GPU
+
+**Lands:** R6, with the logic module
+
+#### Control: actions, key repeat and gamepads
+
+For: games with many commands: walk, wait, open, fire, an inventory, menus that change what keys mean, and play from a gamepad
+
+**Fields**
+
+- `kind: actions` (beside the others; class document)
+- `actions: {name → {keys: [key chord], pad: [button], key_repeat: {delay: s = 0.4, rate: Hz = 10} | none = none}} ≤ 256`
+- `contexts: {name → [action name]} ≤ 32` (numbered from 0 in declaration order)
+- `context: <logic>.<name> | none = none` (an i32 array of count 1 that picks the context; with none, context 0)
+- `sticks: {left | right → {dead_zone: 0..1 = 0.2}}` (optional)
+- Pad buttons: `south | east | west | north | l1 | r1 | l2 | r2 | select | start | l3 | r3 | up | down | left | right`
+- Values: an action's index in `actions` with `repeat: u16` (0 for the press); a stick's `{stick, x, y}`, each from −64 to 64
+- In a logic item's read region, 16 B: `u32 tag` (0 an action, 1 a stick), `u32` the action's index or the stick (0 left, 1 right), `i32` the repeat or x, `i32` 0 or y
+- Issue: `actions.context {value, step}`
+
+**Semantics:** A press of a key chord or a pad button that an action in the current context holds writes one entry with that action's index, at the gesture. The current context is the one the `context` array names as the logic module gives it at the gesture's flick, resolved once there and recorded as the action, so a replay reads the action and never resolves it again; a value naming no context resolves nothing and raises `actions.context`, naming the value and the step. A press no action in the context holds writes nothing, and two actions in one context holding the same chord or button are refused at check, naming both. With `key_repeat`, a key or button held past `delay` writes one more entry, with repeat k, for each time the press's flick + delay + (k − 1) ÷ rate that comes before its release, each stamped at the first logic step at or after that time; the times come from the press's flick alone, never from frames or the wall clock, so a hold of one length writes the same entries at any frame rate, and each is an ordinary recorded entry. Pad buttons and sticks arrive through the input seam (Seam and backend), whose backends read the platform's game controllers, and on the web the page's gamepads, as input from you with gesture serials, like keys, so an agent or a synthetic event can't send one. A stick maps each axis outside `dead_zone` to round(64 × its value) and inside it to 0, and writes an entry when that pair changes, at most one a step.
+
+**Cost:** A lookup O(1) a press; a repeat O(1); an entry about 32 B on the track. Budget class: as the control.
+
+**It can never:** Stamp a repeat by frames or the wall clock; resolve an action again on replay; take a pad input from an agent; let two actions in one context hold one key
+
+**Lands:** R6, with the logic module; pads with the input seam's backends
+
+#### Control: text
+
+For: words and code a player types into a piece's rules: a unit's name, a processor's program, a line of chat in a match
+
+**Fields**
+
+- `text: {max_bytes: u32 ≤ 16,384 = 256, lines: one | many = one}` (on a control of kind text; class document)
+- Value: the field's UTF-8 bytes
+- In a logic item's read region: `u32` length, the bytes, then zero bytes to the next multiple of 8 from the length's start
+
+**Semantics:** A text control carries what you type to a piece's logic as bytes. It writes one entry when you commit: Enter with `lines: one`; with `lines: many`, Cmd+Enter (Ctrl+Enter off macOS) or leaving the field, where Enter adds a line. The entry holds the field's whole content as UTF-8 bytes exactly as typed, never normalized, with line ends as LF: a pasted CR LF or CR becomes LF, and with `lines: one` a pasted line end is refused. Typing stops at `max_bytes`, and a paste that would pass it is refused whole with a notice naming the cap, never cut. Keys and input-method text reach it only through the input router with your serial, and an agent writes it only through the parameter tool, stamped as that writer. At most one commit of a control is stamped a step, and a second waits for the next step, so a logic item that reads it reserves 4 + max_bytes, rounded up to a multiple of 8, in its read region. Its bytes are on the input track, so saves, replays, rollback and peers carry them like any entry.
+
+**Cost:** An entry is its bytes plus about 32 B on the track, at most about 16 KiB; filling the read region O(bytes). Budget class: as the control.
+
+**It can never:** Normalize, cut or re-encode the bytes; take more than `max_bytes`; be typed by an agent except through the parameter tool; run what it carries anywhere but in the piece's logic
+
+**Lands:** R6, with the logic module
+
+#### Control: kinds as a registry
+
+For: adding a control kind only with proof that it replays, reaches the keyboard and takes no agent input, while packs build widgets from the kinds that exist
+
+**Fields**
+
+- `control@1` registry (Registry and seal: registries): `{owner: motion, fill: [module], resolve: seal}`
+- Entry: `{name, classes: [document | view | viewer], sources: [pointer | keys | wheel | pad | a device class], value: {fields}, read_region: {bytes, layout digest}, role: ARIA role, keyboard: path | fallback (device)}`
+- Kit: `{replay, read_region, keyboard, input}`, with a planted wrong entry for each part
+
+**Semantics:** The motion module declares `control@1`, and every control kind is an entry: slider, toggle, choice, stages, transport, drag_along, turn, press, text, hover, point, actions, scroll and device. Only canvas modules fill it, at the seal, since every entry rides the input router, which is ring; a pack or a plug-in builds widgets from these kinds (Pack: programs) and never adds one. Each entry passes the kit at the seal. Replay: its entries are computed once, at the gesture, and stored, so a replay, a seek and every peer read them and never compute them again, and a fixture recorded at 30, 60 and 120 frames a second gives one track hash. Read region: its layout's digest matches what logic reads. Keyboard: it has a role and a keyboard path, so it works without a pointer; a device control's path is its `fallback`, and the kit checks that each one names a control a keyboard can operate. Input: it takes no entry without your gesture serial, except an agent's through the parameter tool, stamped as that writer, and a device control's from a bridge, which the kit checks are stamped `plugin` with no gesture serial while its hardware entries carry their serial (Control: device bridges). A kind that fails a part is refused at the seal, naming the kind and the part, and each of the kit's planted wrong entries, such as a kind whose value is computed again from the camera on replay, or a device kind that gives a bridge's entries a serial, must fail.
+
+**Cost:** The kit at the seal and in the local preflight, a few seconds of recorded fixtures (estimate); nothing per frame
+
+**It can never:** Take a kind from a pack or a plug-in; skip a kit part; compute an entry again on replay; take input from an agent except through the parameter tool
+
+**Lands:** R6, with the logic module
+
+#### Control: scroll
+
+For: a list longer than its frame, such as an inventory, a log, a shop or a scoreboard, scrolled by the wheel, a trackpad or keys
+
+**Fields**
+
+- `kind: scroll` (class view by default, or document)
+- `scroll: {axis: x | y = y, step: u = 24, range: [i32, i32], page: steps = 10, area: item ID}`
+- Value: an `i32` position in steps; in a logic item's read region, 8 B: `i32 position, i32 delta`
+
+**Semantics:** While the pointer is over its area, wheel and trackpad deltas scroll it instead of zooming the camera; elsewhere the camera keeps the wheel. Deltas become whole steps once, at the gesture: a wheel line is one step, and pixel deltas count one step for each `step` they cover on screen, the rest carried until the gesture ends and then dropped. Each change writes one entry with the new position, clamped to its range, so a replay reads the entries and never quantizes again. With focus, the arrows move a step, Page Up and Page Down a page, and Home and End go to the ends, and the position is announced by its `value_text`. In class view it's session state, never on the input track, and goldens, exports and checks read its default; in class document it's on the track like any entry. A mark set, a group's offset or a logic item reads the position, so a list draws the rows from there to its visible count; with smoothing, the drawn offset follows in closed form.
+
+**Cost:** O(1) per delta; an entry about 24 B on the track (estimate)
+
+**It can never:** Quantize again on replay; take the wheel outside its area; scroll by frames or the wall clock; pass its range
+
+**Lands:** R6, with the logic module
+
+#### Control: device
+
+For: a piece played with a device keys and the pointer don't cover: a pen's pressure in a drawing toy, two-finger turns on a tablet, a pad's tilt, notes from a MIDI keyboard
+
+**Fields**
+
+- `kind: device` (beside the others: an entry of the motion module's control kinds registry)
+- `device: {class: name@major, filter: {field → [min, max]} (optional, such as a note range), from: input | plug-in ID = input}`
+- `class: document | viewer` (document puts its entries on the input track; by default the device class's own)
+- `fallback: control ID` (required: a control in the document a keyboard can operate, which the piece reads for the same job, such as a slider for a pen's pressure or actions for notes)
+- Value: one entry in the class's layout
+- In a logic item's read region: a `u32` count and 4 zero bytes, then each entry as a `u32` player, 4 zero bytes and the class's bytes padded to a multiple of 8, at most the class's `max_per_step` a step
+
+**Semantics:** A device control reads one device class (Seam and backend: device classes). With class document, each input the class's backend delivers that passes the filter writes one entry at the gesture, stamped at the first step not yet run, or, while sound plays, at the first sample not yet written, as a key's entry is; past `max_per_step` the rest wait for the next step, in order. A replay, a seek and every peer read the entry and never read the device again. With class viewer, its latest value is session state that drivers may read, as hover is, and a logic step may not (refused at check, naming the read). With `from` naming a plug-in, the control reads the entries that plug-in's bridge sends for the class instead (Control: device bridges). Like any control it has a role and a label that names the device; its keyboard path is its `fallback`, and one whose fallback is missing or names a control no keyboard can operate is refused at check, naming both; and an agent writes its entries only through the parameter tool, stamped as itself.
+
+**Cost:** A lookup O(1) per input; an entry its class's bytes plus about 16 B on the track. Budget class: as the control.
+
+**It can never:** Read the device again on replay; put a viewer-class value on the input track or in a logic step; take an agent's entry except through the parameter tool; count a bridge's entry as yours; play without a fallback a keyboard can operate
+
+**Lands:** R6, with the input seam's device classes
+
+#### Control: device bridges
+
+For: gear the input seam doesn't read: a phone used as a tilt controller, an eye tracker, a lighting desk's faders, a sensor on a lab bench
+
+**Fields**
+
+- Plug-in side: `deep.registerDevice(class, bridge)` (the tech design's Extension API); `class`: a registered device class, or the plug-in's own `ext.<plug-in>.<name>@major` with a fixed layout of at most 256 B, an entry of `device.class@1` with no backend that passes the class kit at install (Seam and backend: device classes)
+- Access word in the manifest: `device:<class>`, approved once
+- Entry, as the core stamps it: `{t: flick, seq, writer: plugin, plugin: ID, class, value}`
+- Waiting: at most the class's `max_per_step` a step, up to 64 waiting; past that, dropped and counted
+- Issue: `device.dropped {plugin, class, count}`
+
+**Semantics:** A bridge is a hub plug-in that reads gear itself, in its own process under its grant, and streams entries for one class into the canvas. The core stamps each entry on arrival, at the first step not yet run (in a match, `delay` match steps later, as a key's entry is), with the writer `plugin` and the plug-in's ID taken from its connection, never from the entry, and checks its bytes against the class's layout, refusing one that doesn't fit and naming the class. It delivers entries only to device controls whose `from` names that plug-in, on the piece you focused or the one present mode shows; entries for any other piece are dropped and counted. A bridge never mints a gesture serial, so its entries can't move focus, start sound, open a port, answer an ask or reach a panel. They're recorded like any entry, so a replay, a seek and a peer read them without the plug-in, and a requirement about what you did never counts them as yours. A class a plug-in declares is listed with the registries, named as that plug-in's, and binds only claims that name it.
+
+**Cost:** One stream per bridge, outside the hub's event loop once approved; each entry checked on arrival in O(bytes) (estimate). Budget class: as the control.
+
+**It can never:** Mint or carry a gesture serial; stamp its own time or step; write as you or as another plug-in; reach a piece you haven't focused, or a panel; send to a control that doesn't name it
+
+**Lands:** R6, with the extension host's streams
+
+#### Input track
+
+**Fields**
+
+- `entries: [{t: flick, seq: u32, control | physics input | reading, value, samples: polyline (optional), writer: you | tour | agent | bot | peer | net}]`
+- `writer` also takes `plugin`: a device bridge's entries, with the plug-in's ID (Control: device bridges)
+- `fork_at: flick`
+- `checkpoint_every: s = 0.5`
+- Present mode's keys write entries too: `{t, seq, present: advance | back, writer}` (Marker: present mode)
+
+**Semantics:** A frame reads only entries at or before its flick, and physics inputs are entries too. A seek or a scrub only moves the playhead: what it shows comes from the recorded entries up to its flick, restored from the nearest checkpoint and replayed, and every later entry stays, so the track's hash is unchanged and playing on plays the recorded future. A new entry where later entries exist, as after a seek back, forks the track at its flick: the later entries are dropped, `fork_at` records the flick, and the track's hash changes. An agent writes entries only through the parameter tool, stamped as itself. While sound plays, a live gesture's entry takes the flick of the first sample not yet written, or, when it moves a world, of the first step that world hasn't run, so what it starts sounds and shows at the same flick live and on replay, one output latency after the gesture. A reading a logic item reads is an entry too, with its source and as-of time, stamped at the first step not yet run for each value its source delivers (Logic: readings), so a replay reads what the run read. Each entry also carries its player, 1 for a piece played alone and 1 to 8 in a match, where a peer's entries carry the writer `peer`. A peer's entry that arrives late is no fork: it joins the track at its step, never at its arrival, ordered there by step, player and seq, and drops nothing, so the track a match records is the one every entry would have made on time (Net). In a playtest, a replica's copy also takes a bot's entries, with the writer `bot`, at the steps they're stamped for, and records them like any other, so the run replays from its track alone; no other copy takes them (Check input: playtest).
+
+**Cost:** O(log N) lookup; O(1) append; about 32 B per entry; a seek costs O(entries since the last checkpoint)
+
+**It can never:** Be rewritten except by a fork; change on a seek or a scrub alone; carry wall-clock times; hold view or viewer inputs
+
+**Lands:** R6
+
+#### Port
+
+For: a piece that drives gear or a service while you play: notes to a synthesizer, cues to stage lights, moves to your own game server, a pulse on a plug-in's controller
+
+**Fields**
+
+- `ports: {name → {plugin: plug-in ID, out: [control ID | occurrence list] (optional), in: [reading ID] (optional), sound: bool = false}} ≤ 8` (on the document)
+- Connect prompt: `{port, plugin, hosts: [host] (its grant's), out, in, sound}` (the app's own, never the piece's)
+- Out: `{port, step, t: flick, entries: [entry] | rows: [occurrence row]}`
+- Plug-in side: `deep.registerPort(name, port)` (the tech design's Extension API): the entries and rows it takes, and the sources it provides for `in`
+- `state: closed | open | stopped`
+
+**Semantics:** A port is a piece's declared way out to one plug-in and back. Nothing flows until a person clicks Connect on a prompt the app draws, never the piece, naming the plug-in, the hosts its grant names and what goes out and comes in; it needs a gesture serial from hardware input, so a tour, a piece's logic, an agent's tool, a bridge or a replica can't open one. While it's open, each entry of a listed control and each row of a listed occurrence list goes to the plug-in once, in step order, as the piece plays live and forward; in a match, only once its step is confirmed, so a step a rollback replaced never goes out. A seek, a scrub, a replay, a render-back, a check and an export send nothing, and nothing a port sends feeds back into a frame, so seeking still equals playing. What comes in is readings from the plug-in's sources, which the piece reads like any reading and the input track records with their as-of times (Logic: readings), so a replay needs no plug-in; in a match, only the copy of the player the piece names in `readings_from` takes them in, and they travel as its entries. A port with `sound: true`, or whose plug-in's port says its gear makes sound, drives gear that makes sound, so its plug-in is a device gate owner whatever the document says: Connect needs a gesture in the piece's panel, and a mute or quiet hours stop the out side and tell the plug-in to fall silent. A port carries only what the document lists: never state, pixels, sound or anything about the viewer. It closes when the piece closes, when you close it or when its plug-in stops, and each Connect asks again. The web player's bundle carries no port: its export drops each one, naming it in the receipt's `refused`.
+
+**Cost:** Out: about 32 B plus each entry's or row's bytes, once per step that has any; in: as readings; nothing per frame. Budget class: as the controls it lists.
+
+**It can never:** Open without a person's Connect; send on a seek, a scrub, a replay, a check or an export; send a step a match hasn't confirmed; carry state, pixels, sound or anything about the viewer; reach a plug-in the document doesn't name
+
+**Lands:** R6, with the extension host's streams
+
+#### Tour
+
+**Fields**
+
+- `tour: {keys: {control → [[t, value, interp]]}, idle_after: s = 1.4, resume_after: s = 3.6, loop: bool = true}`
+
+**Semantics:** Replays as input entries from the writer `tour` while you're idle. It yields at your first gesture and resumes after `resume_after` of quiet. Its entries derive from the track and your idle times, so a replay and a golden match.
+
+**Cost:** That of its entries
+
+**It can never:** Override your input; run under reduced motion; count as your gesture
+
+**Lands:** R6
+
+#### `start_on` and `switch`
+
+**Fields**
+
+- `start_on: {control, each: entry | change, policy: restart | overlap | ignore}`, or `start_on: {on: <logic ID>.occurrences + filter, policy}` (a logic item's occurrences: Logic: occurrences)
+- `switch: {span: flick, ease | spring, sync: none | next_loop_phase}`
+
+**Semantics:** `start_on` starts a placement run at each matching entry's flick, or at the time of each matching occurrence of a logic item, read from its bake, so a seek starts it where playing does. `switch` cross-fades when a choice changes: mix = ease((t − tc) ÷ span). If a case ever needs guards on a current mode, a mode machine would be a fold over the input track with checkpoints and at most 8 changes per flick.
+
+**Cost:** O(log E) per frame; a seek costs O(entries since the last checkpoint)
+
+**It can never:** Pick at random; integrate a mix with dt; exceed 8 changes per flick
+
+**Lands:** R6
+
+#### Transition
+
+**Fields**
+
+- `from, to: adjacent placements, shots or strips` (a `match_morph` may also name two items in one shot)
+- `kind: cut | cross_fade | dip | wipe | push | iris | zoom_through | match_morph | text_diff | operator` (operator, iris and dip fields: the next row)
+- `match_morph {pairs: {part → part}, unpaired: fade | morph | cross_fade | split = fade}`
+- `span: flick`; `align: start | center | end | reveal = center`
+- `overlap: bool` (false: an overlay at the cut)
+- `progress` (from the look's time feel)
+- `carry: [ID]` (items carried across)
+- `wipe {angle: deg = 0, feather: px = 0}`; `push {angle: deg = 0}`; `zoom_through {center: ID[#anchor] | [f32, f32] = [0.5, 0.5]}` (angle 0 moves from the left edge to the right, 90 from the top down)
+
+**Semantics:** Both sides evaluate at their own local times inside the window, draw offscreen, then blend. Status colors never blend: inside the window they draw once, after the blend, from the outgoing side until the reveal and from the incoming side from then on. `match_morph` pairs items by ID, or by shape hash. It also pairs a mark set's or a graph's rows by key and a vector's parts by id, then what's left by shape hash in reading order; paired paths morph with their points matched at check (Channel and key), paired transforms and paints mix as channels do, and anything unpaired fades. `pairs` pairs the parts it names before any other pairing, and `unpaired` says what the rest does: fade, morph, cross-fade, or split into faded copies, so one part can become several. `text_diff` moves kept tokens and fades inserted and deleted ones, so a film about a change can show the diff moving. Its tokens are words, or a code item's own tokens, aligned line by line (Text text@1: code). On a track, at most two strips overlap, and each overlap carries exactly one transition. `reveal` puts the frame where the incoming side first covers half the picture (for a push, 90% of its travel) on the cut's time, so the reveal lands on the beat.
+
+**Cost:** About 2× the frame inside the window
+
+**It can never:** Span more than either neighbour; hide a cut a check needs; contain a reading hold or a checked moment; use a plug-in shader; recolor status
+
+**Lands:** R1 cut; R6 the rest
+
+#### Transition: operator, iris and dip
+
+For: transitions made of the medium: a page turn, an ink bloom, a dot wipe, a mosaic; an iris that closes on a character; a dip to paper
+
+**Fields**
+
+- `kind: operator {op: gpu.pass@1 ID (from a pack), reads: [outgoing, incoming, progress]}`
+- `iris: {center: ID[#anchor] | [f32, f32], radius: channel, hold_at: f32}`
+- `dip: {color: role = ink}`
+
+**Semantics:** An operator transition is a composed pass over the outgoing and incoming color targets, each finished in its own look and display-referred, and the transition's progress, checked and budgeted like any operator; both sides still evaluate at their own local times, and align: reveal measures coverage from the operator's output. An iris centres on an evaluated item, so it follows a character. A dip takes a role, never a literal or a status color.
+
+**Cost:** About 2× the frame inside the window, plus the operator's declared cost. Budget class: as the film.
+
+**It can never:** Carry shader text; read an earlier frame; contain a reading hold or a checked moment; recolor status.
+
+**Lands:** R6
+
+#### Time remap
+
+**Fields**
+
+- `target: placement | recipe instance`
+- `map: channel (parent flick → child flick)`, or a preset: `reverse | hold_at | ramp | scrub {control}`
+- Preset `replay {on: occurrence list + filter | control, before: flick = 2 s, after: flick = 0.5 s, rate: rational = 1/4}` (rate ≤ 1), whose target may also be `document`
+- `clamp: bool = true`
+
+**Semantics:** Applied after the offset and rate, and floored to a flick. Physics children read their bake at child time. A remap whose child time can pass its parent's, such as reverse, scrub or a map that runs ahead, is refused at check when its target reads the input track, a control, a view input or a world that takes inputs, as a look-ahead is, since inputs after t don't exist yet. Audio is muted unless the rate is constant. A replay starts at each matching flick tc that comes while none runs: its target shows child time tc − before + (t − tc) × rate until child time reaches tc + after, then parent time again. Its child time never passes its parent's, so a replay is allowed beside a world that takes inputs. The world keeps stepping to parent time, so a replay's end shows the live state without a stall, and a document-class entry during a replay ends it. Drivers read `<remap ID>.active` and `.progress`, for a tag that says it's a replay.
+
+**Cost:** One channel plus the child's cost; a replay changes no world step
+
+**It can never:** Remap the input track; remap audio non-linearly; give a check a remapped time; start a replay inside a running one, or run one faster than its parent
+
+**Lands:** R6
+
+#### Matte
+
+**Fields**
+
+- `source: ID` (a hidden item that still evaluates)
+- `mode: alpha | alpha_inverted | luma | luma_inverted`
+- `luma: linear | encoded = linear` (encoded: Rec. 709 weights on sRGB-encoded values, as Lottie players take it)
+- `resolution: full | half = full`
+- `applies_to: ID | collection`
+
+**Semantics:** A mask whose coverage comes from another item's evaluated pixels, frame by frame. Luma is taken in linear light, or on sRGB-encoded values with luma: encoded, so an imported Lottie matte keeps its coverage: a mid-grey matte covers 0.214 in linear light and 0.5 encoded. It applies before tone mapping and before status colors.
+
+**Cost:** The source's draw plus one composite
+
+**It can never:** Hide or recolor a status color; read outside the document; be a plug-in shader
+
+**Lands:** R6
+
+#### Text animator and counter
+
+**Fields**
+
+- Animator: `units: grapheme | word | line`; `range: {from, to, falloff, offset}`; `shape: square | ramp | smooth`; `mode: add | subtract | multiply | min | max | difference`; `clamp: bool`; `strength: channel`; `props: {opacity, x, y, rotate, scale, color (OKLab), tracking, axis (a variable-font axis)}` and more, with `selectors` (Text animator and counter: selectors and properties); `order: index | reverse | seeded`
+- Counter: `text: counter {source: bound value | driver, format, tabular: true}`
+
+**Semantics:** Shaping runs only when the content key changes, with units by UAX #29. Coverage is taken at each unit's centre and mapped to glyph instance transforms. A counter reformats only when its string changes.
+
+**Cost:** Shaping about 0.2 µs per char on change; 10 to 20 ns per glyph per frame
+
+**It can never:** Shape per frame; split a grapheme; typeset LaTeX; show a number without a source
+
+**Lands:** R1 counters (formatted bound values); R6 the animator
+
+#### Text animator and counter: selectors and properties
+
+For: kinetic type, decode and glitch titles, staggered word builds, letters that turn in 3D
+
+**Fields**
+
+- `props` gains `pivot: [u, u]`, `shear: deg`, `shear_axis: deg`, `blur: px`, `stroke: {role, width: px}`, `hue: deg`, `saturation` and `brightness` (as `adjust` defines them), `line_height: u`, `tracking_anchor: 0..1`, `glyph_shift: {set: digits | upper | lower | symbols | [string], by: i32}`, and on 3D marks `rotate: [deg, deg, deg]` and `z: m`
+- The range gains `basis: fraction | index = fraction`, `units: … | grapheme_no_space`, `shape: … | ramp_down | triangle | round` (ramp stays the ramp up), `ease: {high, low: −1..1 = 0}`, and `strength` from −1 to 1
+- `selectors: [range | noise | field] ≤ 4`, each with `mode`; `noise {min: −1..1 = −1, max: −1..1 = 1, frequency: Hz = 2, correlation: 0..1 = 0.5, phase, spatial_phase: deg = 0, lock: bool = false, seed}`; `field {expr, fallback}` over `i, n, u, t, value` from the closed function list
+
+**Semantics:** The animator's own range, shape, order and mode become its first selector, and the rest combine top to bottom by each one's mode. A noise selector draws lattice noise of (unit index, t, seed), shared across units by correlation, so seeking equals playing. A field selector is a numeric expression. Shaping stays once per content key, and selection runs per unit per frame. glyph_shift swaps a grapheme for one in its set, shaped once at check, keeping the original advance, so layout never moves. A 3D rotate turns each unit about its pivot, R = Rz·Ry·Rx.
+
+**Cost:** 10 to 20 ns per glyph per selector per frame; blur adds MTSDF softness or one blur per glyph; glyph_shift's set shapes once at check. Budget class: any class with text.
+
+**It can never:** Run JavaScript; shape per frame; split a grapheme; read the clock; shift a glyph in a number, a counter or a bound value.
+
+**Lands:** R6, with the animator
+
+#### Motion blur
+
+**Fields**
+
+- `scope: declared moves`
+- `shutter_angle: deg = 180`; `phase: centred`
+- `samples: u8 = 8`; `adaptive: bool = true` (skips under 0.5 px of travel)
+- `exclude: [ID]`
+- `preview_cap: u8` (labelled when used)
+
+**Semantics:** An exposure window centred on t, with fixed stratified samples of the pure evaluation, averaged in linear light. Export equals seek. A preview may cap the samples, and says so.
+
+**Cost:** Samples × the moving items' draw cost
+
+**It can never:** Use an accumulation buffer; blur a status color or text during a reading hold; feed a check
+
+**Lands:** R6
+
+#### Motion blur: velocity
+
+For: real-time previews of showpieces (the castle flythrough), physics labs with fast balls, film previews
+
+**Fields**
+
+- `method: samples | velocity = samples` (one method for live and export alike)
+- `velocity: {taps: u8 = 16, max: px = 32, tile: px = 20}`
+
+**Semantics:** Velocities come from the pure evaluation at t − s/2 and t + s/2, where s is the shutter, so no earlier frame is read. A tile-max and neighbor-max reconstruction filter with fixed taps, offset by a pixel hash, blurs along them. A samples document may preview with velocity under preview_cap, labelled, as samples previews are now.
+
+**Cost:** Two extra transform evaluations of moving items (about 100 ns each), a 4-byte velocity target per pixel, about 0.5 ms at 1080p (estimate). Budget class: showpiece, export previews.
+
+**It can never:** Read the previous frame's transforms or pixels; blur a status color or text during a reading hold; feed a check.
+
+**Lands:** R6
+
+#### Tempo map and cue alignment
+
+**Fields**
+
+- Tempo map: `segments: [{at: "bar:beat" | time (first segment only), bpm, meter, span: beats (rational, so 2.5 is allowed), ramp: none | {to_bpm, shape: linear_in_beats}}]`
+- Cue: `{cue: strip | marker, anchor: word | onset | peak | beat | occurrence | moment | marker, offset: flick, move: picture | sound, snap: bool, tolerance: flick, land: frame | sample = frame}` (land applies to move: sound)
+
+**Semantics:** Segments chain: each starts where the previous one ends. Beat to time is closed form, t = t0 + 60·N ÷ (b1 − b0) · ln(bpm(x) ÷ b0) for a ramp linear in beats (60·x ÷ b0 without one), in pinned math rounded to flicks; a segment given an explicit time more than 1 flick from its chained start is refused, naming both. Cues resolve from the tempo map and bakes at check, and a rebake reports moved cues as a diff. Declared onsets (a score's `note_on` lists, strips placed with align) land on their moment's flick within one sample; measured onsets (an onset bake) land within a stated tolerance (±2 ms proposed for percussive presets), and an attack longer than 30 ms cues with `anchor: peak` or a pre-roll. With `land: frame`, the default for move: sound, the onset lands on ⌈moment ÷ Δ⌉ · Δ at the export rate, the first frame that shows the moment. A cue whose moment or anchor doesn't resolve is BLOCKED and named. A literal time in a film with a tempo map raises the notice `literal_time_with_tempo_map`, offering the bar:beat or @marker form. Audio is the master in playback; in export the A/V offset is measured on raw frames and PCM.
+
+**Cost:** O(C log W) per change; nothing per frame
+
+**It can never:** Analyze live where a bake would do; use device clocks in export; move a cue silently; land a sound before the frame that shows its moment
+
+**Lands:** R6
+
+#### Timeline from the record
+
+**Fields**
+
+- `record: {subject: handle, read: [event kind], as_of: ev handle, map: line@1, compress: {merge_within: s = 2, run_merge_within: s = 60, min_dwell: s = 0.36, dwell: {verdict: 1.2, send_back: 0.8, ask: 0.8, merge: 0.6} s, max_gap: s = 1.1, gap_labels: over 2 min}, captions_hold: bool = true, fit_to: duration, lead_in: s, hold_end: s = 1.2, live: bool}`
+- The agent writes only event shots, the title and the narration script.
+- One station model: lifecycle stations from the ask-task states (task, defining, working, says done, checks, needs you, proven or closed), with one chip per requirement at the checks station
+
+**Semantics:** Builds keys and markers from catalogued events and appends live; `fit_to` rescales gaps, never the order, and every generated marker carries its event IDs. Anchored captions set each beat's minimum dwell, so a script too long for the fit lengthens the film or fails the audit. The record-replay check (section 10) holds it to the projections.
+
+**Cost:** O(events) to build; O(1) per append; 30 lines under 2 ms per frame
+
+**It can never:** Show a state the projections don't; reorder events; color a station except through a status binding
+
+**Lands:** R1
+
+#### Cue list `cues@1`
+
+For: a film or figure an agent writes as plays and waits in order, the way a scene script reads, without computing key times
+
+**Fields**
+
+- `cues: [cue] ≤ 512` (in order)
+- Cue: `{id, when: after | with | at: time = after, gap: flick = 0, span: flick = "1s", ease: name = sigmoid(10), lag: ratio | flick = 0, order: index | reverse | seeded = index, targets: [ID | collection], set: {path → value}, kind: cue.kind@1 entry, params}`; a cue with only `span` is a wait
+- `cue.kind@1` registry (Registry and seal: registries), first-party entries: enter `create`, `write`, `draw_then_fill`, `fade_in {shift: vec, from: ID | point, scale: f32 = 1}`, `grow {from: point | center | edge: dir | start}`, `spin_in {angle: deg = 90}`, `spiral_in {scale: f32 = 8, fade: 0..1 = 0.3}`, `by_letter`, `by_word`, `type {cursor: ID}`, `in_turn`; exit `uncreate`, `unwrite`, `fade_out {shift, to, scale}`, `shrink`; emphasis `indicate {scale: f32 = 1.2, role = accent}`, `flash {lines: u8 = 12, radius: u}`, `circumscribe {shape: rect | circle = rect, buff: u = 10}`, `passing_flash {width: 0..1 = 0.1}`, `wiggle {scale: f32 = 1.1, angle: deg = 3.6, count: u8 = 6}`, `blink {count: u8 = 1}`, `focus {opacity: f32 = 0.2}`, `broadcast {copies: u8 = 5}`; move `move_along {path: ID}`, `rotate {angle: deg, about: ID#anchor | point}`, `swap {with: ID}`, `cycle`; change `morph {to: ID}`, `match {to: ID, by: id | shape}`, `count_to {value}`, `warp {warp: ID}`
+
+**Semantics:** Expanded at check, never per frame, into channels, placements and markers the cue list owns, with exact flicks. `after` starts a cue at the previous cue's end plus `gap`, `with` at the previous cue's start, and `at` at a time or a marker. Each cue's from-values are what its targets hold at its start, by the same pure evaluation, so a move written after a turn starts where the turn left off. A cue over several targets staggers them by `lag`, for a span of d × ((n − 1) × lag + 1). Each cue also writes a marker `cues.<id>`, so narration, sound and later cues can anchor to it. A verb is a closed recipe over the existing primitives (path build, trim, repeater, echo, text animator, constraints, pulse); `circumscribe` reads its target's evaluated bounds over the cue's span. The verbs' math@1 names (Create, FadeIn, Indicate, Circumscribe and the rest) come from math@1's mapping table (Pack: math@1 math-film words). Two cues that write one path at once are refused naming both, unless the second is a `pulse` or an add placement, which add.
+
+**Cost:** O(cues × targets) at check, under 10 ms for 512 cues (estimate); then as the channels it writes.
+
+**It can never:** Run code; loop or branch; reorder cues silently; read the clock; write a path another item's channel owns.
+
+**Lands:** R6
+
+Also decided: springs had three conventions (Hz and ζ in physics, stiffness 64 and damping 16 in the figure kit, none on channels); all use Hz and a damping ratio, and the kit's spring is 1.27 Hz at ζ 1. The keyed follow and the films dry run's follow models are one `follow`. Time fields are `t`, never `at`. The marker kind `scene` is `shot`, and `event` splits into `moment` (a checked instant) and `record` (from record events). The R1 line needs markers and placement start, span, series and stagger, so those land in R1, earlier than the tech design's R6 for the whole row; `child_of` lands with parenting in R1 for the same reason. One station model resolves the line's per-requirement stations against the claim film's lifecycle stations.
+
+### The closed function list
+
+Drivers and fields share these functions and nothing else. Each is pure Rust in f64 with pinned math (the `libm` crate, through one ops module), so results match across machines; a lint refuses std transcendental methods, clocks, thread RNG and glam's SIMD types in every crate whose output a check reads. Each function also has an interval form in the same pinned math, widened by its implementation's error bound, which returns a range certain to hold the function's value over a range of its inputs, and so do the eases, the key interpolations and the samplers that read clips and bakes. The certainty is interval arithmetic's: each form bounds its function by its monotone pieces and known extrema, such as sin's peaks at π/2 + 2kπ, widens that by the error bound and rounds its lower end down and its upper end up, so it holds every value the function takes over the range, and an expression evaluated through the forms holds every value the expression takes. Seeded and property tests only search for counterexamples; they never prove that a form holds. A check that needs a bound over x, a span of time, a step or a control's range takes it from these forms, never from samples alone (Path `path@1`: function, Camera `camera@1`: framing, Check input: loop kinds: camera paths, Constraint: spring chain, Control sweep), and a value the forms can't settle within the check's budget is an estimate, which never decides a check: a check that needs the bound there is refused, naming the item and the range, never passed on its samples.
+
+| Group | Functions |
+|---|---|
+| Arithmetic and logic | `+ - * / % ^`, `== != < <= > >= && \|\| !`, `c ? a : b`, `min max clamp abs sign floor ceil fract round mod` |
+| Powers and angles | `sqrt pow exp log sin cos tan asin acos atan atan2 deg rad`; constants `pi tau` |
+| Hyperbolic and special | `sinh cosh tanh asinh acosh atanh`, `log2 log10 log1p expm1 hypot cbrt`, `sinc(x)` (sin x ÷ x, 1 at 0), `erf erfc`, `gamma lgamma`, `factorial(n)` (n an integer, 0 to 170), `binom(n, k)` |
+| Interpolation | `mix smoothstep remap(x, a, b, c, d) ease(name, x)`, with names from the `ease@1` registry (Channel and key: table eases) |
+| Vectors | `vec2 vec3 vec4`, swizzles, `length distance dot cross normalize angle(a, b)` |
+| Complex, as vec2 | `cmul cdiv cexp clog cpow csqrt csin ccos conj cabs carg`, over vec2 read as x + yi; `clog` and `carg` take the principal branch |
+| Bounded sums | `sum(k, a, b, term)`, `prod(k, a, b, term)`: k runs over the integers a to b; each bound is a literal or a var with a declared max; at most 256 terms |
+| Seeded | `hash(…) → [0, 1)`, a fixed 32-bit integer hash; `noise(p, seed)`, gradient noise on the integer lattice hash; `rand(key[, lo, hi])` = hash(the item's seed, key) mapped to [lo, hi), never a stream, so adding one call never shifts another |
+| Occurrence lists | `since(list) last(list) next(list) rank(list) count(list, a, b) inside(list)`. Over a list a var binds with an optional filter (kinds, `a`, `b`, tags and `where`, as Spawn's `on` takes), each reads the matches at or before t and takes the driver's fallback when none matches: `count(list)` the matches so far, and `count(list, a, b)` those between the stable IDs a and b, in either order; `last(list)` the latest match's flick, and `since(list)` t minus it; `next(list)` the next match's flick, refused as a look-ahead is when inputs feed the list; `rank(list)` the latest match's index, from 0; `inside(list)` 1 while t lies inside a match's span, else 0. A payload field reads as `last(list).field` or `next(list).field`, such as `last(landings).point.x`, `speed` or `impulse` |
+| Input track | `since_change(control) held(control) follow(control, span, ease)` |
+| View | `hovered(id)` (viewer class; never saved) |
+| Time offsets (drivers only) | `lag(var, dt)`, the var's value at t − dt, with dt a literal within ±10 s; `smooth(var, width, samples)`, the mean of lag over a window centred on t, at most 16 samples (Driver: time offsets) |
+| Tables | `table(name, x)`: a function table's value at x, linear or monotone between its knots and held at its ends, with an interval form exact from its knots (Driver: tables) |
+
+`rand` exists only as a keyed hash. `step` is left out, since step means a physics step; `x >= edge ? 1 : 0` does the same.
+
+A removable singularity is a function of its own: sinc's interval form holds 1 at 0, so sin(x)/x written as sinc(x) plots through 0 without a break. A sum's interval form is the sum of its terms' forms, and a term past a var bound's value adds exactly 0, so a slider that changes N never breaks a curve. A sum counts its term's nodes times its count against the expression's cap: 64 ops for a driver, 256 nodes for a field, 512 for a path function. Complex forms bound boxes, not discs. A sum can never loop past 256 terms, take a bound with no declared max or recurse, and factorial never takes a non-integer.
+
+<a id="physics"></a>
+
+## A timeline as data over a pinned backend
+
+- **The timeline.** The physics module keeps a timeline, as data, over Rapier pinned to an exact version: every input recorded, a cheap state hash each step, replay that names the first diverging step and field, a checkpoint ring with a byte budget, and baked playback that never re-simulates.
+- **Declared choices.** Documents declare combine rules and defaults, because engines disagree on them, and swapping backends must not change results silently.
+- **Conventions.** State is f32. IDs are stable document IDs, never engine handles, and order is canonical by (priority, ID).
+
+#### World and backend `physics.world@1`
+
+**Fields**
+
+- `dimensions: 2 | 3 = 3`
+- `step_rate: Hz = 120` (under the valid-rates rule)
+- `substeps: 1 to 8 | 10 | 12 | 14 | 15 | 16 = 4`
+- `span: flick = 60 s` (at most 10 min; on disk past 1 min)
+- `gravity: vec, m/s² = (0, −9.81, 0)`
+- `seed: u64 = the document's seed`
+- `mode: dynamic | kinematic = dynamic`
+- `capacity: {bodies, shapes, joints, contacts, particles: u32}` (required)
+- `solver: {contact_hz: Hz = 30, contact_damping = 10, max_speed: m/s = 400, restitution_threshold: m/s = 0, hit_threshold: m/s = 1, sleep: {on: bool = true, speed: m/s = 0.05, time: s = 0.5}, ccd: bool = true}`
+- `combine: {friction: geometric | average | min | max | multiply = geometric, restitution: the same set = max}`
+- `defaults: {friction = 0.5, restitution = 0, damping = 0}`
+- `contact_materials: {ID → contact material}`
+- `checkpoint: {every: steps = 60, budget: bytes = 16 MiB}`
+- `budget: {step_p95: ms = 2, memory: MB = 50, bake_10s: ms = 1,000}`
+- `backend: {name: rapier2d | rapier3d, version: =0.36.1, features: [enhanced-determinism, serde-serialize], excluded: [simd8, parallel], threads: 1, libm: pure Rust, target, target_features: baseline, rustc}`
+- Backend interface: `id() caps() build(doc) step(inputs) occurrences() read(state) hash() checkpoint() restore()`
+
+**Semantics:** Building a world creates everything in canonical order or returns issues. A world runs inside each scene that lists it: its outputs' item paths and its bodies' follow channels resolve in that scene, its inputs are entries on that scene's one input track, and its occurrence list is named `<world ID>.occurrences` there. Each step: apply the inputs stamped for it, ordered by kind then target ID; set kinematic targets from channels at t(k+1); move each character body through the backend's character controller, which sets its kinematic target (Body `body@1`: character); add forces from the state at t(k); run the backend step, whose substeps are the solver's iterations, not repeated steps; read and sort occurrences; write state into a two-step ring; take the cheap hash. `caps()` decides what the document check refuses. The interface absorbs 0.36's API break: its step takes the soft-body set with the rigid ones, and a snapshot from before 0.36 doesn't load, so no checkpoint or bake crosses that version and no world document sees it. Rapier 0.36.1 has no `simd` or `fast-math` feature: its four-wide SIMD solver always runs and is part of its cross-platform promise, `simd8` breaks that promise, and enhanced determinism forces scalar math through libm. The crate builds for the target's baseline features, never `target-cpu=native` or `+fma`, as Rapier's own cross-architecture goldens do. Rapier caps each body's speed at `max_speed` and its turn at 45° a step, and a body it caps writes `fault {kind: speed_cap}` naming it, so no cap is silent. It has no restitution threshold: a new contact with restitution bounces at any approach speed, and one that persists into the next step rests, so `caps()` refuses a `restitution_threshold` other than 0. While sound plays, a live world steps until its time is at least one audio block past the timeline position of the first sample not yet written, before that block renders, so it holds while the timeline holds (Marker: present mode), so a spawn starts each of its occurrences on its own sample; a step that isn't ready in time counts an underrun in the device gate's stats and never moves a voice. The exception is restitution 1 or more: such a contact never rests, so a cradle of touching balls passes momentum along. Rapier is the reference implementation of the physics interface, `physics@1`, declared `measured` with `backend_bytes` state (Canvas module: interface and implementation), and any backend, Rapier included, passes the world's behavior fixtures within their tolerances before a build can choose it (Physics: behavior kit).
+
+**Cost:** Per step ≈ a × awake bodies + b × contacts × substeps + c × joints × substeps + d × bodies × forces; 2D joints about 56 ns per joint-substep (estimate); a deep checkpoint about 4 KB per body
+
+**It can never:** Run code per step; read the wall clock; run on the GPU when it feeds a check; grow past its capacity; build with fast math or features that change results
+
+**Lands:** R6
+
+#### Shape
+
+**Fields**
+
+- `kind: sphere {radius: m} | box {half: vec3, m} | capsule {half_height, radius: m} | cylinder {half_height, radius: m} | convex {points ≤ 64 (≤ 8 in 2D), radius: m = 0} | plane {normal} | mesh {vertices, triangles} | heightfield {cols, rows, heights, scale} | compound {children: [{shape, pose}]}`
+- 2D: `circle | segment {a, b} | polygon (≤ 8) | chain {points, loop: bool}`
+- Each use on a body: `{shape, offset: pose, contact_material, collision_group, sensor: bool = false, sensor_test: center | overlap = overlap}`
+
+**Semantics:** Built once at load and shared by ID. Convex hulls and decompositions are computed at load and cached under the bake key. Mesh, heightfield, plane and chain shapes are static only.
+
+**Cost:** Narrow phase per pair: sphere and capsule are cheapest, then box, then convex(n), then mesh; a mesh takes about 24 B per triangle plus its BVH
+
+**It can never:** Be a dynamic mesh, heightfield, plane or chain; change shape mid-run
+
+**Lands:** R6
+
+#### Body `body@1`
+
+**Fields**
+
+- `kind: static | kinematic | dynamic | character` (character: Body `body@1`: character)
+- `shapes: [shape use]`
+- `pose: {pos: m, rot: quat | deg}`
+- `velocity: {linear: m/s = 0, angular: deg/s = 0}`
+- `mass: kg` (else density × volume); `inertia` (optional)
+- `damping: {linear: 1/s = 0, angular: 1/s = 0}`
+- `gravity_scale: f32 = 1`; `ccd: bool = false`; `sleep: bool = true`
+- `locks: {linear, angular: [bool; 3]}`
+- `follow: channel path` (kinematic only)
+- `active: bool = true`
+- `anchors: {name → local point, m}`
+- `priority: i32 = 0`
+
+**Semantics:** A dynamic body is integrated by the backend. A kinematic body moves to its `follow` target at t(k+1) over the step; that channel is evaluated at t(k+1) inside the step, before the solve. An inactive body is skipped until an `activate` input; a body that appears mid-run is declared inactive and activated.
+
+**Cost:** O(1) per awake body per substep; about 0 while asleep
+
+**It can never:** Be created mid-run; be moved except by its channel or a recorded input
+
+**Lands:** R6
+
+#### Body `body@1`: character
+
+For: bounded games and labs with someone who walks: a platformer's hero, a guard on patrol, a visitor who tours a house
+
+**Fields**
+
+- `kind: character` (on `body@1`, whose `shapes` then hold one capsule, with no `follow`)
+- `character: {slope_limit: deg = 45, step: {height: m = 0.3, width: m = the capsule's radius}, snap: m = 0.2, offset: m = 0.01, jump: {height: m = 1}}`
+- Inputs: `move {velocity: vec, m/s}` (the walk it wants, held until its next move); `jump {height: m}` (optional; else its own)
+- Outputs: `read: grounded | sliding | velocity | pose`
+- State: `{wants: vec, vertical: m/s, grounded: bool, sliding: bool}` (in every checkpoint and hash)
+
+**Semantics:** A kinematic capsule that the backend's character controller moves, behind the backend interface, so no backend type reaches a document. The behavior below is the physics interface's, not a backend's: every backend's controller, Rapier's first, must show it in the behavior kit's character fixtures before a build can choose that backend (Physics: behavior kit). Its up is against the world's gravity, or +Y in a world with none. Each step, after the step's inputs apply and before forces and the backend step, each character body moves in canonical (priority, ID) order against the world as the last step left it. With g the size of the world's gravity, off the ground its vertical speed first falls by g × gravity_scale × the step's length; on the ground it's 0, and a jump on a grounded step sets it to √(2 × g × gravity_scale × height) instead, while a jump off the ground does nothing. The controller then moves the capsule by (wants + up × vertical) × the step's length, sliding along what it meets and keeping `offset` from it: a slope steeper than `slope_limit` stops its climb and slides it down, a step no higher than `step.height` with `step.width` free on top lifts it, and moving down from the ground it snaps to ground within `snap`. Its new pose is its kinematic target for the backend step. Dynamic bodies stop it as static shapes do, and it pushes none. Each shape its controller touches in a step that it didn't touch the step before writes `contact_begin` naming it, and each it leaves writes `contact_end`, sorted with the rest. Outputs read `grounded`, `sliding`, its pose and `velocity`, the move it made over the step's length, so logic reads them as earlier steps left them and items draw from them. Its state joins every checkpoint beside the backend's, and the cheap and canonical hashes after the bodies', so a seek restores it and steps forward, and seeking equals playing. A rig or a skinned asset draws on it through its pose; the body only moves. `caps()` says whether the backend has a character controller, and a world with a character body on one that doesn't is refused, naming the body and the backend.
+
+**Cost:** A few shape casts a step per character body: about 20 to 60 µs at 120 Hz in a level of a few hundred static shapes (estimate); its state about 32 B in each checkpoint. Budget class: as the world.
+
+**It can never:** Move except by its inputs, its controller and gravity; climb a slope steeper than its limit or a step higher than its step height; pass into a static shape; push a dynamic body; hold a shape other than one capsule
+
+**Lands:** R6, after the physics module
+
+#### Breakable `breakable@1`
+
+For: physics labs (a tower of blocks that shatters, a beam that snaps at its weakest bond), films (a wall that crumbles under a wrecking ball)
+
+**Fields**
+
+- `pieces: asset ID` (a fracture asset: pieces, hulls, bonds and the source mesh, from Asset job kind fracture)
+- `at: transform`; `contact_material`; `collision_group`
+- `strength: {per_level: [N] | from: contact_material}` (bond strength)
+- `anchored: {region: box | plane, m} | [piece]` (optional; pieces held static)
+- `release: {inherit: velocity, spin: bool = true}`
+- `max_active: u16 = 512` (the pool of piece bodies declared at build)
+
+**Semantics:** A breakable starts as one compound body; after each step, under the default contact loading, the wrapper adds each contact's impulse to the bonds it loads, in canonical order, and a bond past its strength breaks and writes a break occurrence. Stress loading spreads gravity and impulses through the whole bond graph instead (Breakable: stress loading). Pieces cut off from the rest become bodies from the pool declared at build, moving with the parent's velocity at their centroids, so no body appears mid-run. Checkpoints hold the active set and bond loads, so a seek restores the nearest one and steps forward. While no bond has broken, the breakable draws the fracture asset's source mesh in one draw; from the step of its first break it draws its pieces. The choice reads only the active set, so cut seams never show on an intact wall and seeking still equals playing.
+
+**Cost:** Per step O(bonds that contacts load) plus released pieces as bodies; a 300-piece wall is about 0.5 to 2 ms per 120 Hz step while breaking (estimate); checkpoints grow about 4 KB per active piece. Budget class: work product (labs), export (films).
+
+**It can never:** Create a body mid-run; break through a callback; draw randomness that isn't keyed to IDs.
+
+**Lands:** R6, after the physics module
+
+#### Breakable: stress loading
+
+For: physics labs (a beam that snaps at its weakest bond, a tower that gives way where it's weakest), films (a wall whose base is shot out falls apart before it lands)
+
+**Fields**
+
+- `load: contact | stress = contact` (on `breakable@1`)
+- `stress: {iterations: u8 = 12 (≤ 64), gravity: bool = true}`
+
+**Semantics:** Under stress loading, gravity and contact impulses spread through the bond graph every awake step. Nodes are the pieces in canonical order, with mass from density × volume; anchored pieces are fixed nodes, and each contact impulse enters at the nearest piece's centroid. The solve runs exactly `iterations` per step, warm-started from the previous step's bond forces, which the checkpoint holds, and never tests for convergence, so a step stays bounded and the same on every machine. A bond breaks when its tension, compression or shear passes that mode's strength (Contact material: strength; a per-level strength in N applies to all three) and writes the existing break occurrence; released pieces split off by union-find in bond order. A sleeping breakable runs no pass. The math is scalar, through the one ops module, with no callbacks.
+
+**Cost:** O(iterations × bonds) per awake step: about 900 bonds at 12 iterations is 0.2 to 1 ms per 120 Hz step on one core (estimate); checkpoints grow about 12 B per bond. Budget class: as the world.
+
+**It can never:** Iterate to convergence or change its iteration count during a run; keep a bond's health or damage between steps; run through a callback or on the GPU; run while the breakable sleeps.
+
+**Lands:** R6, with `breakable@1`
+
+#### Contact material
+
+**Fields**
+
+- `friction: f32 = 0.5`
+- `restitution: f32 = 0`
+- `density: kg/m³` (kg/m² in 2D; required unless the body sets its mass)
+- `rolling_resistance: f32 = 0`
+- `tangent_speed: m/s = 0`
+- `tag: string` (such as "wood")
+
+**Semantics:** The two sides of a contact combine by the world's combine rule. Sounds map from tags in the media module's spawn rules, never from the material. Rapier has no rolling resistance or tangent speed, so on it `caps()` refuses `rolling_resistance` and `tangent_speed` other than 0, naming the field; a ball that should roll to rest takes angular damping (Body).
+
+**Cost:** O(1) per contact
+
+**It can never:** Carry a sound or code; combine through a callback
+
+**Lands:** R6
+
+#### Contact material: strength
+
+For: breakable bonds that take their strength from the material (stone breaks before steel)
+
+**Fields**
+
+- `strength: N/m² | {tension, compression, shear: N/m²}` (optional; the stress at which a bond breaks; one number sets all three modes)
+
+**Semantics:** Under contact loading, a bond between two pieces breaks when its accumulated impulse, divided by the step time and its contact area, passes the smallest strength on either side. Under stress loading (Breakable: stress loading), it breaks when its tension, compression or shear stress passes that mode's strength, the lower of its two sides'.
+
+**Cost:** None beyond `breakable@1`'s per-step bond update. Budget class: as the world.
+
+**It can never:** Carry code; depend on the run.
+
+**Lands:** R6
+
+#### Collision group
+
+**Fields**
+
+- World: `collision_groups: [name]` (at most 32)
+- Each shape use: `member: [name]`, `collides: [name]`
+- Each joint: `collide_connected: bool = false`
+
+**Semantics:** Two shapes interact when each one's `member` meets the other's `collides`. A sensor reports overlaps and never responds.
+
+**Cost:** One bit test per broad-phase pair
+
+**It can never:** Be decided by code (no filter callbacks); exceed 32 groups
+
+**Lands:** R6
+
+#### Joint `joint@1`
+
+**Fields**
+
+- `kind: fixed | ball | hinge | slider | distance | rope | gear | rack | pulley | path`
+- `a, b: body ID[#anchor] | soft ID#cluster | world`
+- `frame_a, frame_b: {anchor: m, axis}`
+- `limits: {min, max}` (deg or m; a hinge's range under 360°)
+- `spring: {hz, damping_ratio = 1, rest}`
+- `motor: {mode: velocity | position, target: number | channel path, max_force: N | max_torque: N·m, hz, damping_ratio}`
+- `breaks_at: {force: N, torque: N·m, over_steps: u8 = 1}`
+- `ratio: f32` (gear, rack, pulley); `of: [joint ID]` (gear: two hinges; rack: a hinge and a slider)
+- `pulley: {ground_a, ground_b: m, length_min, length_max: m}`
+- `path: {curve: ID, rotation: free | tangent | fixed}`
+- `active: bool = true`
+
+**Semantics:** Motor targets read their channels at t(k+1). After each step, force = the impulse of the joint's locks and limits ÷ the length of the substep it came from, never its motor's, which only `max_force` or `max_torque` bounds; `joint_force` reads the same force, and past `breaks_at` for `over_steps` steps the joint is disabled at the start of the next step and a `break` occurrence is written. A hinge's `joint_coordinate` counts whole turns: it is the angle between its bodies, which wraps at ±180°, plus 360° for each turn, counted when a step's shortest signed change crosses the wrap, and the turn count is the joint's state, kept in checkpoints and the state hash. A step whose relative angular speed would turn a hinge 180° or more writes `fault {kind: speed_cap}`, since its turn can't be told from a wrap. Gear, rack, pulley and path run only in kinematic mode, because Rapier lacks them (it couples gears only inside one articulated chain, which no field declares), so `caps()` refuses them in dynamic mode, naming the joint. A spring above (step rate × substeps) ÷ 4 Hz is refused. Rapier writes back a joint's impulses from its last substep, while a contact's reported impulse sums every substep, so a joint's load at rest reads its full weight.
+
+**Cost:** About 50 to 250 ns per joint-substep; motors and limits add rows
+
+**It can never:** Hide a break; be added mid-run; use a spring the step can't resolve
+
+**Lands:** R6
+
+#### Joint `joint@1`: swing, twist and pose motor
+
+For: physics labs (a jointed dummy of capsules tumbling down stairs, a chain with realistic limits), films (a puppet falling)
+
+**Fields**
+
+- On ball joints: `swing: [deg, deg]` (cone half-angles about the two other axes); `twist: [min, max], deg`
+- `motor: {target: quat | channel path, hz, damping_ratio = 1, max_torque: N·m}` (an orientation target for the existing motor)
+
+**Semantics:** Swing limits keep the child axis inside an elliptical cone and twist limits bound its spin; a backend that can only limit axes one at a time says so in caps(), and the check refuses a cone it can't hold. Rapier holds a circular cone by putting both swing axes under one limit, so on Rapier the two swing angles must be equal. The motor is a spring toward a target orientation read at t(k+1).
+
+**Cost:** About three more rows per joint-substep (100 to 300 ns per joint-substep in total, estimate). Budget class: as the world.
+
+**It can never:** Use a motor stiffer than the step resolves (refused like any spring); approximate a limit silently.
+
+**Lands:** R6
+
+#### Force
+
+**Fields**
+
+- `kind: uniform {accel: m/s²} | drag {linear: 1/s, quadratic: kg/m, medium: m/s | channel} | wind {velocity: expression of t and p, m/s, gust: {amplitude, scale: m, speed: m/s}, coupling: {kind: aero_triangles, coefficient}, seed} | spring_to_point {point | channel, hz, damping_ratio, max_force: N} | buoyancy {fluid_plane: plane, fluid_density: kg/m³ = 1,000, linear_drag, angular_drag, flow: m/s}`
+- `region: box | sphere` (optional)
+- `applies_to: [collision group | ID]`
+- `strength: number | input` (settable)
+
+**Semantics:** Computed once per step from the state at t(k), in canonical body order, and held over the substeps. Wind noise uses the integer lattice hash, with no platform sin, cos or exp. Buoyancy is exact for spheres, boxes and capsules, and says so when it approximates.
+
+**Cost:** O(bodies in region × forces) per step
+
+**It can never:** Be code; use unpinned math; read the clock
+
+**Lands:** R6
+
+#### `soft@1`
+
+**Fields**
+
+- `shape: rope | cloth | balloon`
+- Rope: `positions: [m] | {from, to, particles: u16}`; cloth: `{origin, du, dv: m, nu, nv: u16}`; balloon: `{center, radius, subdivisions, inflate: ratio = 1}` (its target volume over its rest volume)
+- `edges: chain | grid | list`
+- `address: pattern` (such as `r{row}c{col}`; ropes use the index)
+- `masses: {default: kg, by: {selector → kg}}`
+- `pins: [address]`; `pinned_to: {address → body ID[#anchor] | world}`
+- `clusters: {name → [address]}`
+- `stretch, shear, bend: {hz, damping_ratio}`
+- `tension_only: bool = false`; `particle_radius: m = 0`; `self_contacts: bool = false`; `damping: 1/s = 0`
+- `tear: {strain, force: N, smoothing: s}` (optional)
+- `contact_material`; `collision_group`
+
+**Semantics:** Particles have stable addresses (`banner#r0c27`), never array positions, and their positions bind to a plate's or an inset's vertices as outputs (Physics output: a skin). It runs live on Rapier's soft bodies, added in 0.36, which step it with the world's rigid bodies, contacts and joints; heavier cloth bakes through the simulate job instead and plays back as a mesh sequence (Asset job: modeling, simulation and render kinds). A balloon's volume constraint holds `inflate` times its rest volume at `stretch`'s stiffness, since the backend takes no pressure. A tear writes a `tear` occurrence.
+
+**Cost:** Per particle-substep plus per constraint: a 280-particle banner at 8 substeps takes about 0.2 to 0.5 ms (estimated); its bake about 3.4 KB per step
+
+**It can never:** Mix two solvers in one world; bypass the golden; address a particle by position
+
+**Lands:** R6
+
+#### Input track entries
+
+**Fields**
+
+- `{step: u32, kind, target: ID[#address], data}`
+- Declared by the world: `inputs: {ID → {kind, targets: [ID | pattern], and the kind's defaults}}`
+- Kinds: `grab {point: local m, pick_radius: m, hz = 2, damping_ratio = 0.6, max_accel: m/s² = 140}`; `move {to}` (a grab's target; on a character body, `move {velocity: vec, m/s}`, the walk it wants until its next move); `release {keeps_velocity: bool}`; `poke {point | address, impulse: N·s | push: m/s, radius: m, falloff}`; `set {path, value}`; `launch {linear, angular}`; `activate`; `deactivate`; `blast {at, radius, falloff, impulse_per_length}`; `jump {height: m}` (a character body's; optional, else its own)
+- On a declared input: `on: {control: ID, each: entry | change = entry} | {logic: ID}` (optional; derives the input from that control's entries, or takes each entry that logic item fires) and `data: {field → expression}` (optional; else the input's own defaults)
+- `launch` also takes `from: pose | body ID#anchor` (optional; where the body starts); `grab` also takes `plane: view | ground | {normal: vec3} = view` (the plane a drag moves on)
+
+**Semantics:** Entries on the document's one input track, applied at the start of their step and ordered by (kind, target ID); a second `set` on the same step replaces the first. A grab is a spring force the wrapper adds each step, not a joint. A character body's move is the walk it wants until its next move, and its jump applies only on a step where it's grounded (Body `body@1`: character). A new input after a scrub forks the track. An input with `on` is derived: each matching entry of that control adds it, to each of its targets, at the first step at or after the entry's flick, and each `data` field is an expression from the closed function list over controls and constants, read at that flick. Derived inputs aren't stored: they follow from the track, so a replay, a tour and a golden give the same steps, and a fork of the track forks them. A launch with `from` first places its body there, and outputs hold the body there rather than interpolating across the jump. A grab pulls its body toward the point where the pointer's ray meets its plane: `view` faces the camera through the grab point, and `ground` is level through it. In a match, entries on one step from several players apply in (kind, target ID, player, seq) order, never by arrival, so every copy applies them alike (Net).
+
+**Cost:** O(inputs that step); about 32 B each; deriving is O(entries of the named controls), once per fork
+
+**It can never:** Come from an agent at run time; create a body; read a control after its entry's flick; derive data from physics outputs or occurrence lists, except through a logic item, which reads them only from earlier steps
+
+**Lands:** R6
+
+#### Occurrence list
+
+**Fields**
+
+- Columns: `step: u32`; `kind: u8`; `a, b: u32` (stable IDs); a payload by kind
+- Physics kinds: `contact_begin {point, normal}`; `contact_end`; `hit {point, normal, speed: m/s, impulse: N·s, tags}`; `force {total, max: N, started: bool}`; `sensor_enter`; `sensor_exit`; `break {force, torque}`; `tear {edges}`; `rest`; `wake`; `crossing {t: flick, output, level, direction: ±1}`; `fault {kind: nan | capacity | speed_cap | penetration}`
+- Media kinds: `word {text, line}`; `beat`; `onset`; `viseme` `{shape: A to H | X, line}`
+- Logic kinds: the kinds a logic item declares in `emits`, each with its declared fields, in `<logic ID>.occurrences` (Logic: occurrences)
+
+**Semantics:** Read after each step, mapped from engine handles to IDs, and sorted by (step, kind, a, b). A logic item's are copied from its emit region after each step, with the `a` and `b` its program writes and ties in the order it wrote them. `hit.speed` is the normal approach speed before the solve, and `impulse` the step's total. A crossing's time is interpolated linearly between steps and floored to a flick. Drivers and spawns read lists through since, last, next, rank and count. The closed function list defines them, and a payload field reads as `last(list).field`, such as where a ball landed.
+
+**Cost:** Sort O(E log E) per step; 32 to 48 B per entry
+
+**It can never:** Reach plug-in code as a callback; be unsorted; carry engine handles; be called events
+
+**Lands:** R6
+
+#### Physics output
+
+**Fields**
+
+- `from: ID[#address | #pins]`
+- `read: pose | position | angle | velocity | joint_coordinate | joint_force | contact_count | energy | particle_positions | grounded | sliding` (grounded and sliding: a character body's)
+- `to: item path | readout`
+- `to: skin {item: ID = auto, material}` (with `particle_positions`: draws a soft body)
+- `interpolate: linear | hold = linear`
+- `reduce: sum | mean | max`; `average: steps`; `sample: every n steps`; `keep: duration`
+- `expr` (over named reads); `unit`
+
+**Semantics:** For a frame at t, k = ⌊t ÷ step⌋ and α = (t − t(k)) ÷ step, exact from flicks; positions lerp and rotations nlerp between the two buffered steps. A frame past what's been simulated waits, or shows the last state marked stale. `sample` defaults to every step and `keep` to the world's span; a series that takes the output reads them. A skin draws a soft body on an item built on its own lattice: a plate whose grid has a cloth's nu × nv vertices, a tube whose path takes a rope's particles in index order, or a geodesic ball whose detail equals a balloon's subdivisions. With `auto` the core builds that item itself (a two-sided plate, a tube as thick as the particle radius and at least 1 cm, or a ball) in the given material or the look's default. Each frame it writes the interpolated particle positions as the item's vertices, by the address pattern's row and column, and recomputes smooth normals from them; the item's UVs, materials and insets stay its own, so a print on a banner moves with the cloth. Any other pairing is refused at check, naming both.
+
+**Cost:** O(bound outputs) per frame; a skin rewrites its vertex buffer, about 24 B per vertex, and never rebuilds its mesh
+
+**It can never:** Write back into physics; show an unsimulated step as current; skin an item built on another lattice, or change its topology
+
+**Lands:** R6
+
+#### Checkpoint ring
+
+**Fields**
+
+- `every: steps = 60`
+- `budget: bytes = 16 MiB`
+- Each entry: `{step, deep_hash: u64, state: bytes}` (the backend's whole-world state: bodies, colliders, joints, soft bodies, islands and both collision phases with their warm-start impulses)
+- `hash: canonical` (in order: each body's pose and velocity, each character body's own state, each joint's state, each particle's position and velocity)
+
+**Semantics:** A deep checkpoint every `every` steps; when the ring passes its budget, the spacing doubles. A seek restores the nearest checkpoint at or before t and steps forward. A seek across a checkpoint followed by play equals a straight run, by per-step hash. A state rebuilt from poses and velocities alone loses the warm-start impulses and the contact graph and diverges, so it is never a checkpoint.
+
+**Cost:** About 4 KB per body per checkpoint (a 200-body world every 0.5 s for a minute would take about 96 MB without the budget); restore O(state)
+
+**It can never:** Exceed its byte budget; mix checkpoints across backend versions; be called a snapshot
+
+**Lands:** R6
+
+#### Bake
+
+**Fields**
+
+- `key = sha256(canonical world document + the scene channels and drivers it reads + the scene's input track + backend name, version and features + target triple + rustc version + solver + capacity)`
+- `step_hashes: [u64]` (poses and velocities by stable ID)
+- `checkpoints: [{step, deep_hash, state}]`
+- `occurrences` (columns)
+- `outputs` (sampled at the document's frame rate, f32)
+- `counters: {contacts, awake, step_p50, step_p95}`
+- `store: evidence`
+
+**Semantics:** Produced by a run from step 0, or from the latest valid checkpoint, to the span, and stored as evidence. Playback and seeks of a baked run read `outputs` and never simulate; only a fork re-simulates, from the nearest checkpoint.
+
+**Cost:** Cheap hash about 52 B per body per step (200 bodies: about 10 KB, about 10 µs); outputs about 28 B per body per frame (200 bodies at 60 fps: about 20 MB a minute)
+
+**It can never:** Be reused under another key; mix state across backend versions
+
+**Lands:** R6
+
+#### Golden
+
+**Fields**
+
+- `{bake_key, runtime_digest, machine: {os, arch, cpu}, step_hashes, checkpoint_hashes, occurrences_hash, record_on, verify_on: [target]}`
+- Report: `{first_step, field: {id, field, values: [a, b], ulp_distance}}`
+
+**Semantics:** Replays on a second machine and, at the first differing step k, restores the checkpoint at or before k, steps to k, and diffs the canonical state field by field. FAIL names the step and the field; a golden is pending while its second machine is due to run it, and one with no machine to run it is BLOCKED with one unblock ask naming the target. Golden runs assert the floating-point control register at each step's start. A golden recorded under another runtime digest is recorded again under the new one, and its expected values move only by your decision, once per cause (Registry and seal: runtime digest).
+
+**Cost:** One full replay, plus a bisect on a mismatch
+
+**It can never:** Compare engine checkpoint bytes across versions; pass under a different key; run on the GPU
+
+**Lands:** R6; runs across machines use the hosts block (R3)
+
+#### Physics: behavior kit
+
+For: a second physics backend that must behave like the documented world, not merely repeat itself
+
+**Fields**
+
+- `fixtures: [{name, world: document, measure: output path | occurrence, answer: number, tolerance: relative | m | deg | steps, caps: [cap]}]` (held by the physics interface's conformance kit, never by a backend)
+- Fixtures, with g = 9.81 m/s² at 120 Hz and 4 substeps:
+- free fall from rest: the drop after 1 s, ½gt² = 4.905 m, within 1%
+- projectile at 10 m/s and 45° over flat ground: the range back at launch height, v² sin 2θ ÷ g = 10.19 m, within 1%
+- pendulum, a ball on a 1 m ball joint released from 10°: the period, 2π√(L/g) × (1 + θ²/16) = 2.010 s, within 1%
+- restitution 0.5 against 0.9, dropped 1 m, under each combine rule: the first bounce's height e²h (max 0.81 m, min 0.25 m, average 0.49 m, geometric 0.45 m, multiply 0.2025 m), within 3%
+- friction 0.2 against 0.8, a box sliding from 5 m/s on flat ground, under each combine rule: the distance v² ÷ 2μg (geometric 3.186 m, average 2.548 m, min 6.371 m, max 1.593 m, multiply 7.964 m), within 3%
+- a box on a 30° slope: friction 0.6 holds it within 1 mm for 2 s, and 0.5 slides it g(sin θ − μ cos θ)t²/2 = 1.314 m in 2 s, within 3%
+- joints: a hinge limited to ±30° under gravity never past 30.5°; a slider limited to 0.5 m never past 0.505 m; a hinge motor set to 90°/s with torque to spare within 1% of it after 0.5 s
+- occurrences: a ball whose lowest point falls 1 m writes its first contact at √(2h/g) = 0.4515 s, within one step, with a speed of √(2gh) = 4.429 m/s, within 2%; a sensor 0.5 m below it writes its entry at 0.3193 s, within one step
+- sleep: a box that settles writes `rest` and sleeps within the world's sleep time plus 2 steps of its speed falling under the sleep speed, and with sleep off it never does
+- character body: the slope (with a 45° limit a 30° ramp is climbed and a 50° one isn't; with 25° the 30° ramp stops it), the step (with a 0.35 m step height a 0.3 m step is climbed and a 0.4 m one isn't), the snap (grounded at every step down a 20° ramp at 3 m/s with snap 0.2 m, airborne at least once with snap 0) and the jump (a 1 m jump at 120 Hz peaks 1.0185 m up, within 1 mm)
+- Result: `{backend, fixture, measured, answer, tolerance, pass | fail | excluded_by_caps}`
+
+**Semantics:** The physics interface's behavior part (Canvas module: interface and implementation): fixtures that every physics backend runs, for what its `caps()` allow, before a build can choose it. Goldens prove that one backend repeats itself; these fixtures prove that backends agree with the documented world, and so with each other. Each is a world document with a measure, an answer worked out from the world's own laws and a tolerance, all data in the interface's conformance kit, so a backend can't loosen one. The measure is read from the bake: an output at a time, a distance or a height at the step it's reached, or an occurrence's time and fields. A fail names the backend, the fixture, the measure, the answer and the tolerance. A fixture its `caps()` exclude reads `excluded_by_caps`, never a pass, and a world that needs it is refused on that backend, as `caps()` already decides. The character body's fixtures define its controller's behavior in the interface, so a second backend's controller climbs, steps, snaps and jumps as the first's does. The behavior kit runs in the local preflight for every physics implementation a build can choose, on each target the build ships for, the web player's wasm32 included.
+
+**Cost:** About 30 short worlds of at most 5 s each, under a minute per backend and target (estimate); nothing at run time. Budget class: checks, off the UI thread.
+
+**It can never:** Take its answers or tolerances from a backend; compare one backend's bytes with another's; pass a fixture its caps() exclude; run in a frame
+
+**Lands:** R6, with the physics module, before a second backend
+
+#### Kinematic solve
+
+**Fields**
+
+- `drivers: [joint coordinate ← channel]`
+- `iterations: u8 = 20`
+- `tolerance: m = 1e-5`
+
+**Semantics:** In kinematic mode, each step solves positions for the driven coordinates, warm-started from the last step, with a fixed iteration cap. Residuals, jams and branch flips go to the audit.
+
+**Cost:** O(iterations × rows²) for small systems
+
+**It can never:** Report a jam as success; flip a branch silently
+
+**Lands:** R6
+
+Friction combines by the geometric mean by default (Rapier averages), and every world declares it. Substeps default to 4; the prototype runs 8 to 10, and 9 is now invalid because it doesn't divide the step. Angular velocity is in deg/s, following the angle convention. The world lists its collision groups as `collision_groups`, since groups is a retired word. The tech design's world budget of 50 MB holds only with the checkpoint ring's byte budget and baked playback.
+
+<a id="logic"></a>
+
+### Logic beside physics
+
+- **Rules as code, in a sandbox.** A piece's game rules, simulations and quizzes are WebAssembly an agent writes. The logic module runs each at a fixed step in the simulate phase beside physics, reading only what it declares and writing only its own arrays, so a frame stays a function of the document, the time and the input track, and seeking equals playing, proved by full-state hashes and continuation probes.
+- **One subset everywhere.** Every program keeps to what a browser runs the same way and to what a checkpoint holds whole, and the logic module rewrites it once at check, so fuel, stack and NaNs behave the same in the app, on another machine and in the web player.
+
+#### Logic `logic@1`
+
+For: a piece with rules: a game's score and rounds, a quiz that shuffles and scores, a simulation of a flock, traffic or an epidemic, a lab that relaunches a ball after each landing
+
+**Fields**
+
+- `program: asset ID` (a WebAssembly module by hash, which the agent builds in its repo or a runner job; in a derived logic item, a program its pack carries: Pack: programs)
+- `step_rate: Hz = 60` (under the valid-rates rule)
+- `reads: [control ID | reading ID | array path | net.draws]`
+- `writes: {name → {type: bool | i32 | f64 | vec2 | vec3 | quat, count: u32 = 1, interpolate: linear | hold = hold}}` (interpolate: Logic: interpolated writes; its own arrays, read as `<logic ID>.<name>`)
+- `fires: {world ID → [input ID]}` (optional; the world's declared inputs it may fire)
+- `assets: [asset ID]` (optional; data assets by hash, such as a navigation graph, copied into its memory before it starts)
+- `links: [{name@version, asset: asset ID}]` (optional; logic libraries merged into the program at check: Logic: linked libraries)
+- `clock: fixed | on_input = fixed`; `due: array name` (optional, with on_input: Logic: turn clock)
+- `emits: {kind → {fields: {name → bool | i32 | f64 | vec2 | vec3}, max_per_step: u16 = 16}}` (optional: Logic: occurrences)
+- `preview: {reads: [control ID], writes: {name → {type, count}}}` (optional: Logic: preview)
+- `pages: {max, slots, moves, lead, init, written_max, web_max}` (optional: Logic: world pages)
+- `parallel: {blocks, out, scratch, fuel}` (optional: Logic: step blocks)
+- `services: {name@major → {max_per_step}}` (optional: Logic: between-step services)
+- `mirrors: [{array, at}]` (optional: Logic: mirror reads)
+- `budget: {fuel: per step = 1,000,000, memory: MiB = 4, stack: KiB = 64}` (at most 10,000,000, 64 MiB and 256 KiB)
+- `checkpoint: {every: steps = 60, budget: bytes = 64 MiB}`
+- Exports: `memory`, `init(seed: i64)`, `step(k: i64)`, and the immutable globals `reads_at`, `writes_at` and, with assets, `assets_at`; with emits, `emits_at`; optionally `layout_at` (Logic: saves across changes) and, with preview, `preview(k: i64)` and `preview_at`; with pages, `pages_at`; with parallel, `block(k: i64, b: i32)` and optionally `join(k: i64)`; with services, `services_at`; with mirrors, each mirror's global; imports: none once its libraries are linked
+
+**Semantics:** Step k runs at k times the step length, on the one clock, unless the item declares `clock: on_input`, which runs only the steps Logic: turn clock names. Before it, the logic module fills the program's read region in declaration order: the entries of each read control stamped since the last step (for each control a u32 count and 4 zero bytes, then each entry as a u32 player, 4 zero bytes and its value as the control's own row lays it out, at most 16 entries a control a step, any more waiting for the next step in order, as a text control's second commit does), each read reading's values with their as-of times, as Logic: readings lays them out, each read array as the steps before left it (a channel or a driver it reads is evaluated at the step's time, as physics reads them, and one that reads this item's arrays is a cycle, refused at check), and the step's seed, hash(the document's seed, the logic ID, k); `init` gets step 0's seed. A game's rolls, such as a hit, a drop or where a monster appears, draw from streams the program keys by the seed `init` gets and the action, such as hash(that seed, the action's number, the purpose), and by the action's draw when its control is in the net item's `draw_after` (Net: random draws after commit), never from the step's seed, so the step a click lands on can't change a roll; the kit check `rng.timing` holds a game to it. Before the start function runs, the logic module copies each asset the item names, in order, into memory from `assets_at`, each after a u32 of its length; a set that would pass the end of memory, or overlap the read or write region or an active data segment, is refused at check. The copies are then memory, so its checkpoints, saves and full-state hashes hold them, a restore or an opened save copies nothing, and the item's bake key covers their hashes. It calls `step(k)`, then copies the write region into the item's arrays and the world inputs it fired, and its emit region into its occurrence list (Logic: occurrences). Nothing else crosses, and each copy is checked against the end of memory: a write region that would pass it is refused at check, and a read region that would pass it traps with kind `bounds`, naming the region. A frame at t reads the arrays as the last step at or before t left them, unless a write declares `interpolate: linear` (Logic: interpolated writes). Drivers and readouts read them by path, a mark set or an instancer can take one as a column (Mark set: logic columns), and a world applies each input it fired at the world's first step at or after the logic step, ordered as its own inputs are. Each value a reading's source delivers is recorded on the input track (Logic: readings), so a replay reads what the run read. A trap stops only that item: its arrays keep the last step's values, it's marked failed with `logic.trap`, and everything else plays on, except in a match, which a trap ends as faulted on every copy (Net: desync and replay). Each entry in the read region carries its player, 1 for a piece played alone, so in a match a peer's entries reach the program like the viewer's own, and a late one makes the net module restore this item's checkpoint at its step and run its steps again (Net: rollback). An item may also keep a world past its memory in pages it asks for between steps (Logic: world pages), split a step into step blocks the logic module may run on several threads with the same bits (Logic: step blocks), ask first-party services such as physics queries between steps (Logic: between-step services), and keep mirrors of other items' arrays updated by the ranges that changed (Logic: mirror reads).
+
+**Cost:** Per step, filling and copying its regions, O(bytes read and written), plus the program's own work within its fuel; a 100-boid flock about 0.2 ms a step (estimate)
+
+**It can never:** Write checks, verdicts, the record, status colors, the question card or another canvas module's array; draw by itself (the core draws what it writes: Mark set: logic columns, Instance `instance@1`: logic columns, Mesh from logic `mesh.logic@1`, Mesh from logic: skins, Voxels `voxels@1`), or carry a look, a character or a shader; read an array a later step writes; touch anything it didn't declare
+
+**Lands:** R6
+
+#### Logic: occurrences
+
+For: a game whose shots, hits, doors and deaths make sounds, bursts and clips happen at their steps; a simulation that marks each crossing
+
+**Fields**
+
+- `emits: {kind → {fields: {name → bool | i32 | f64 | vec2 | vec3}, max_per_step: u16 = 16}}` (on the logic item; at most 64 kinds, 8 fields each, `max_per_step` ≤ 1,024)
+- Emit region, at the immutable global `emits_at`: for each kind in declaration order, a u32 count, then `max_per_step` rows of `{a: u32, b: u32, its fields in declaration order}`, little-endian, each field at its type's size
+- List: `<logic ID>.occurrences` (an Occurrence list whose kinds are the declared names and whose payload is the declared fields)
+
+**Semantics:** Before `step(k)` the logic module zeroes every count. After it, it checks each count against its kind's `max_per_step` and copies that many rows into the item's occurrence list at step k, at the step's time, sorted by (step, kind, a, b) with ties in the order the program wrote them. A count over `max_per_step` traps with kind `occurrences`, naming the kind and the count, as any trap does, so no row is ever dropped. A step's rows join its step hash and the bake, so logic.determinism compares them as it compares arrays, a seek reads them from the bake as play does, and a rollback drops the rows of the steps it replaces, as it drops a world's (Net: rollback). Spawn, particle bursts, `start_on`, mark-set rows and expressions read the list like any occurrence list, through since, last, next, rank and count, and a payload field reads as `last(list).field`. On a turn clock only the steps that run emit. Rows carry numbers only: a sound, a burst or a line picks what it shows from a kind or a field, and strings stay document data.
+
+**Cost:** Per step, O(rows copied); a row 12 B plus its fields; sorting O(E log E) (estimate)
+
+**It can never:** Carry a string or an engine handle; be written outside a step; drop a row; reach plug-in code as a callback; be called events
+
+**Lands:** R6, with the logic module
+
+#### Logic: readings
+
+For: a piece that plays on live data: a lab that follows a sensor, a ticker game on prices, a dashboard scene, a match whose weather comes from one player's feed
+
+**Fields**
+
+- On a source (the tech design's Source block): `shape: scalar | vec {n: ≤ 16} | layout {name@version (a data layout: Logic: data layouts), bytes: ≤ 256} = scalar`; `delivery: latest | each {max_per_step: ≤ 16} = latest`
+- In a logic item's read region, per reading: a `u32` count and 4 zero bytes, then each value as its shape lays it out (an `f64` each for scalar and vec; the layout's bytes padded to 8) followed by its as-of time as an `i64` of microseconds; `latest` holds at most one, `each` every value since the step before, oldest first
+- On `net@1`: `readings_from: player | none = none`
+- Issue: `reading.overflow {reading, step, dropped}`
+
+**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with `reading.overflow`, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key.
+
+**Cost:** Per reading per step, O(bytes); an `each` reading of 16 values of 8 numbers fills about 1.2 KB of read region (estimate). Budget class: as the logic item.
+
+**It can never:** Cut a burst to its last value silently; take a reading's time from the piece; let any copy but the named player's fetch a source in a match; record a value whose shape its source didn't declare
+
+**Lands:** R6, with the logic module and the Source block
+
+#### Logic: turn clock
+
+For: turn games that wait on the player: a roguelike, a survival game, a hex tactics game, a quiz between answers
+
+**Fields**
+
+- `clock: fixed | on_input = fixed` (on the logic item)
+- `due: array name` (optional, with on_input: one of its own i32 arrays of count 1, the next step the program asks to run whatever arrives; a value at or before the step that wrote it asks for none)
+
+**Semantics:** With `fixed`, step k runs at k times the step length, as Logic `logic@1` says. With `on_input`, step 0 runs, and after it step k runs only when there's something for it: an entry of a control the item reads, or one that completes a draw it reads (Net: random draws after commit), stamped after step k − 1's time and at or before step k's; a reading the item reads, recorded at step k; or the step its `due` array names. A step that doesn't run costs nothing: it writes no array, emits no occurrence, takes no step hash and adds nothing to the bake, and the arrays stay as the last step that ran left them. Steps keep their numbers, so a step that runs gets the same seed, hash(the document's seed, the logic ID, k), and the same entries as on a fixed clock, with every entry stamped since the last step that ran. Which steps run follows only from the input track and the item's own state, so a seek, a replay, a rollback and a save's re-derivation run the same steps. Checkpoints come every `checkpoint.every` steps that ran. A still piece's frame is valid until the step `due` names, or until an entry arrives, so the app sleeps between turns (Transport). Arrays of other canvas modules it reads are read as ever when a step runs, and a change in them alone runs no step.
+
+**Cost:** An idle item: nothing per frame and nothing in its bake; whether a step runs is found as each entry is stamped, O(1)
+
+**It can never:** Run a step that no entry, reading or `due` calls for; skip one that one does; renumber a step or change its seed; let wall time or the frame rate decide which steps run
+
+**Lands:** R6, with the logic module
+
+#### Logic: interpolated writes
+
+For: a strategy or factory game simulated at 10 to 20 Hz that should still draw its units smoothly
+
+**Fields**
+
+- `interpolate: linear | hold = hold` (on each of `writes`; linear only for f64, vec2, vec3 and quat arrays)
+
+**Semantics:** With `hold`, a frame at t reads an array as the last step at or before t left it. With `linear` it draws one step late, so it never waits for a step whose inputs haven't come: with k the last step at or before t and α = (t − t(k)) ÷ the step length, exact from flicks, a frame reads the value step k − 1 left blended toward the value step k left by α, f64 and vectors by lerp and quats by nlerp, so at t(k) it shows step k − 1's value and reaches step k's one step length later. A 10 Hz simulation thus draws smoothly at 60 frames a second, and since the blend reads only steps at or before t, seeking equals playing; a physics output, which blends toward the next step, differs here on purpose. Only drawing reads the blend: drivers, readouts and the items that draw an array; a driver evaluated for a step, as a logic item or a world reads it, reads the stored values. Other logic items, worlds, step hashes, full-state hashes, saves, the bake and every check read the values the steps stored. On a turn clock, step k − 1's value is the array as it stood before step k ran. A value that jumps glides across one step length like any other change, except where the same step changed the row's `alive` or the slot's `gen` or `live` (Mark set: logic columns; Instance `instance@1`: logic columns): there the step's value shows with no blend, so a pooled unit placed again never glides from where the last one died.
+
+**Cost:** Per frame, one blend per element of a linear write that something draws; the module keeps the step before's values of each linear write, twice its bytes, and each checkpoint keeps them too, so a seek that restores one blends from them as play does
+
+**It can never:** Blend a bool or an i32; read a step after t; reach a step, a hash, a save, the bake or a check
+
+**Lands:** R6, with the logic module
+
+#### Logic: work across steps
+
+For: an AI's turn, a search over a large grid, a level generator, catching up after the player sleeps in the game
+
+**Fields**
+
+- Step ceiling: `{budget class → {app: fuel, web: fuel}}` per step rate, published by `deep_kinds`: ⌊the class's frame CPU × 3/4 ÷ ⌈step_rate ÷ 60⌉ ÷ the host's ns per fuel unit⌋, with the ns per fuel unit measured on the reference Mac, in the app and in headless Chrome
+- At 60 Hz in the figure, work product and showpiece classes (4 ms of frame CPU): about 3,000,000 fuel in the app and 1,500,000 in a browser (estimate, at about 1 and 2 ns per fuel unit)
+
+**Semantics:** The fuel budget caps one step at 10,000,000, but no live class can run such a step within a frame: the step ceiling binds first, and logic.budget fails a step past it on each host it names (Check input: logic kinds). So a program splits work that doesn't fit into shares: it keeps its progress in memory, does a share each step under the ceiling, and shows the work as pending in its arrays until it ends; on a turn clock it asks for its next step through `due`. Since the progress is memory, checkpoints, saves and seeks hold it, so seeking into the middle of an AI's turn equals playing. A step run off the live frame, in a check or an export, is held to the same ceiling, so a bake never holds a step the live piece couldn't run. The logic module's guide, which `deep_kinds` serves, says so, with a search split across steps and rolls keyed by action as its examples. With step blocks, a step's fuel against the ceiling is its critical path on the class's logic threads in the app, and its whole fuel in the web player, which runs one thread (Logic: step blocks).
+
+**Cost:** Nothing per step; the table once per core version
+
+**It can never:** Run a step past its fuel or its ceiling; move work to the GPU or between frames outside its memory, or to another thread except as step blocks (Logic: step blocks); take a ceiling from the working agent
+
+**Lands:** R6, with the logic module
+
+#### Logic: step blocks
+
+For: a crowd of thousands, a fluid grid, a cloth or a network's inference whose step is too big for one thread's ceiling
+
+**Fields**
+
+- `parallel: {blocks: u8, 2 to 64, out: [{at: global name, stride: bytes}], scratch: [{at: global name, bytes}], fuel: per step block = 500,000}` (optional, on the logic item; at most 8 `out` regions and 4 scratch regions; `step`, `join` and every block together stay within `budget.fuel`, at most 10,000,000)
+- Exports: `block(k: i64, b: i32)`, and optionally `join(k: i64)`
+- Logic threads: `{budget class → threads}`, published by `deep_kinds` (figure 1, work product 2, showpiece 4, export 4: proposals, all 1 under the one-instance form)
+- Forms: `copy_on_write` (each block in its own instance whose memory maps the step's state copy-on-write, on the logic threads) | `one_instance` (blocks one after another in one instance); the web player and checks always run `one_instance`
+- Spike, before it lands: on the reference Mac, an 8,000-agent fixture at 60 Hz with 8 blocks, both forms; `copy_on_write` is chosen only if its step's wall time on 4 threads is at most half the one-instance form's and its mapping and page-fault overhead stays under 0.3 ms a step
+- Trap kind: `block_write {block, offset}`
+
+**Semantics:** A step with blocks runs `step(k)` as any step does. Then each block b, from 0 to `blocks` − 1, runs `block(k, b)` on S, the memory and globals `step(k)` left, and sees only its own writes: reading another block's slice reads S, so no order between blocks can show. Each `out` region splits into `blocks` slices of `stride` bytes, and block b writes only slice b of each and its scratch, which is zeroed before it runs and dropped after; the program keeps its shadow stack and any per-block arena in scratch. A write anywhere else, found by comparing the pages the block wrote, as the rollback ring finds written pages, with S, traps `block_write`, naming the block and the first offset, so an allocation from the shared heap traps too. A block's changes to mutable globals are dropped. When several blocks trap, the lowest-numbered is reported, as one instance reaches it first. The module then copies each block's slices into memory, disjoint and so in any order, runs `join(k)`, and copies arrays, occurrences and fired inputs out as after any step. The block count is the document's, never the machine's, so the results are the same bits whichever form runs: in `one_instance` each block's slices are kept aside and its slices and scratch restored to S before the next, and in `copy_on_write` each instance starts from S mapped copy-on-write. Which form the app uses is decided once, by the spike: if copy-on-write misses either threshold, the app runs one instance too, every class's logic threads read 1, and no document changes. Logic items stepping at the same time read only earlier steps (Phase), so the module may also run them on separate logic threads, with the same bits as one thread. The bake keeps each block's fuel. A step's fuel against the step ceiling (Logic: work across steps) is its critical path, `step` plus `join` plus the busiest thread's blocks dealt round-robin, in the app, and its whole fuel in the web player, which runs one thread. Checkpoints, saves and rollbacks hold nothing new, since scratch is dead between steps; a match re-runs steps with the same threads, and a heavy step still plays in lockstep (Net: lockstep).
+
+**Cost:** Merging O(bytes of slices); restoring slices and scratch between blocks in one instance, or mapping S once per block on copy-on-write; an 8,000-agent crowd at about 100 fuel an agent in `step` and 800 in blocks costs about 0.8M + 6.4M ÷ 4 = 2.4M fuel of critical path on 4 threads, against 7.2M on one (estimate)
+
+**It can never:** Let a program see a thread, a lock or another block's writes; take the block count from the machine; give different bits on one thread and on several; write outside its slices and scratch; run on more than one thread in the web player; switch forms without the spike's verdict
+
+**Lands:** R6, with the logic module, after its spike
+
+#### Logic: preview
+
+For: a tactics game that shows the path to a hovered hex, the turns it takes and a fight's forecast before the player commits
+
+**Fields**
+
+- `preview: {reads: [control ID], writes: {name → {type: bool | i32 | f64 | vec2 | vec3, count: u32 = 1}}}` (on the logic item; reads: view or viewer controls, or a point control's `hover`, which fills 152 B as a point entry does (Control: point); its arrays read as `<logic ID>.preview.<name>`)
+- Export: `preview(k: i64)`, with the immutable global `preview_at` (its read region, then its write region)
+
+**Semantics:** When a control it reads changes, a step runs or a seek lands, at most once a frame, the logic module copies the item's state as the last step left it, its memory and globals, into a throwaway instance, fills the preview read region with the controls' values, calls `preview(k)` with that step's number under the item's fuel, memory and stack budgets, copies the write region into the item's preview arrays, and drops the copy. Preview arrays are session state: drivers, readouts and the items that draw them read them (a logic item or a world that reads such a driver is refused at check, naming it), but no step, world, other logic item, check, hash, save, bake, input track or match reads or holds them, and a frame for an export, a golden or a check draws them at their defaults (zero). A trap in `preview` clears its arrays and is reported as logic.trap naming the preview, and the item plays on. In a match each copy previews for its own viewer, and nothing crosses.
+
+**Cost:** Per preview, a copy of the item's memory and a call within its fuel: about 0.3 ms for 4 MiB (estimate); nothing while the controls it reads stay still
+
+**It can never:** Change the item's state, a hash, a save, the bake, the input track or another copy; run in an export or a check; read anything but its declared controls and the item's state as the last step left it
+
+**Lands:** R6, with the logic module
+
+#### Logic: sandbox
+
+For: every logic item: the same steps in the app, on another machine and in a browser
+
+**Fields**
+
+- `subset: WebAssembly 2.0 without vector instructions; one memory, maximum = minimum ≤ budget.memory; tables fixed, each ≤ 65,536 entries; no passive segments; no mutable reference globals; no imports; program ≤ 4 MiB`
+- `rewrite: {nan: canonical, fuel: per block + per byte of memory.copy and memory.fill, stack: per call, grow: trap, start: an export run once}` (once, at check, by the logic module's own pinned pass)
+- `engine: wasmtime =49.0.2` (in the app; in the web player, the browser's own engine)
+- Trap kinds: `fuel | stack | grow | unreachable | divide | overflow | conversion | bounds | call | occurrences | pages | pages_full | block_write | services` (occurrences: Logic: occurrences; pages and pages_full: Logic: world pages; block_write: Logic: step blocks; services: Logic: between-step services)
+
+**Semantics:** At check the logic module first links the libraries the item names (Logic: linked libraries), then validates the program and refuses one that imports anything, uses a vector, atomic or shared-memory instruction, declares a memory or a table that can grow, changes a table or drops a segment (`table.set`, `table.fill`, `table.copy`, `table.init`, `elem.drop`, `memory.init` or `data.drop`), or holds a passive data or element segment, a mutable global of a reference type or a table over 65,536 entries, and one over 4 MiB, naming the import, the instruction and its function, the segment or the limit. A table keeps what its active segments put there at instantiation, so a call through it always reaches the same function, and memory and globals are the program's whole state. It then rewrites the program once, deterministically: every float result that is NaN becomes the one canonical NaN, each block charges its instruction count to the step's fuel, each `memory.copy` and `memory.fill` first charges one more unit per byte it touches, since its work grows with its length, each call charges its frame's height to the stack, growth traps, and the start function, if any, becomes an export the logic module runs once, before `init` and under a step's budgets. The rewritten program, by hash, is what runs everywhere, so a step that runs out traps at the same instruction in the app, on another machine and in a browser, whatever each engine's own limits. wasmtime's own fuel, whose costs change between its versions, isn't used, so taking a wasmtime release changes no step. Threads stay off inside a program, and the stack budget stays well under any engine's own limit; only the logic module runs an item's step blocks, or items stepping at one time, on several threads, each block in its own instance, with the same bits as one thread (Logic: step blocks).
+
+**Cost:** The rewrite once per program, O(instructions); the metering about 10 to 30% of a step (estimate)
+
+**It can never:** Import a function; grow its memory; change a table or keep a segment to use later; see a thread or run on the GPU; run past its fuel, stack or memory; be rewritten differently on another machine
+
+**Lands:** R6
+
+#### Logic: linked libraries
+
+For: a game that links a tested grid search, turn order or inventory instead of writing it again, such as a kit's
+
+**Fields**
+
+- `links: [{name@version, asset: asset ID}]` (on the logic item; at most 16; each a logic library a pack carries, by hash)
+- A library: a relocatable WebAssembly object under the one subset, exporting functions and importing only functions of libraries listed before it; with links, the program is a relocatable object too, importing its libraries' functions as `lib:<name>.<function>`
+- Fixtures, shipped with each library: `[{item: a logic item that links only this library, track: input track, expect: {arrays at steps, full-state hashes}}]`
+- `needs: [{name@version, asset: asset ID}]` and `implements: [name@major]` (optional, on a library in its pack: the libraries it calls, and the interfaces it claims, Logic: library interfaces)
+
+**Semantics:** At check, before the subset check and the rewrite, the logic module's own pinned linker merges the program and its libraries into one module, following the WebAssembly tool conventions for static linking: one memory, the libraries' data placed after the program's, and every `lib:` import resolved to the library's function. The merged module is the program the subset check, the rewrite and everything after see, so the running program still imports nothing. A link whose bytes don't match its hash, a name@version an installed pack maps to another hash, an import no listed library exports, a library that imports anything but an earlier library, or a merged program over 4 MiB is refused at check, naming it. The rewritten program's hash covers the libraries, so a new library version changes the bake's key and goldens like any program change, and a save bound to a state layout survives it when the layout stays (Logic: saves across changes). A library links only once its fixtures have passed on this core: the logic module runs each once per library hash and module version, with logic.determinism's comparisons and the fixture's expected arrays, and refuses the link, naming the fixture and what differs, when one fails, or naming the library when it ships none. Library code runs only in the sandbox, under the item's budgets, and a trap in it names the library and its function. `deep_query` names an item's libraries, each with its name@version and hash. A library the working agent wrote, with its fixtures, binds only that agent's own claims, as its own checks do. The linker follows each library's `needs`, and theirs, in dependency order, ties broken by name, so an item's `links` names only what its program calls; every library it reaches counts toward the 16, and two versions of one library among them, a need whose name@version an installed pack maps to another hash, or a cycle is refused at check, naming it. A library that names `implements` links only once each interface's fixtures pass too (Logic: library interfaces), and a provider links libraries the same way (Provider `gen@1`: links, meshes and the library form).
+
+**Cost:** The link once per program and library set, O(bytes), before the rewrite; fixtures once per library hash
+
+**It can never:** Leave an import in the running program; link at run time or load code from a host; write a check; run outside the sandbox or past the item's budgets; link with fixtures unrun
+
+**Lands:** R6, with the logic module
+
+#### Logic: library interfaces
+
+For: a kit that swaps one crowd, physics or state-machine library for another and keeps its proof, and a check that trusts what an interface's fixtures show
+
+**Fields**
+
+- In a pack: `interfaces: {name@major → {exports: [{name, params: [type], results: [type]}], layout: name@version (optional), fixtures: [asset ID], planted: [asset ID], digest: d1 digest}}`
+- On a library in its pack: `implements: [name@major]`
+- Fixture: `{item: a logic item that links the library under test, track: input track, expect: {arrays at steps, tolerance: exact | {abs, rel}}, answer: string}` (answer: how the expected values were worked out)
+- Registry (Registry and seal: registries): `lib.interface@1 {fill: first_party_pack | pack, resolve: check, binds: all for a first-party pack's entries, author for others}`, its kit each entry's fixtures, its planted wrong entry each interface's planted library
+- First-party interfaces, in first-party packs: `physics2d.lib@1`, `fsm@1` and `nn.mlp@1` first; `crowd@1`, `bt@1` and `script.vm@1` with the first kit that links one
+
+**Semantics:** An interface names what a library offers: its exports with their signatures, the state layout it keeps, and fixtures whose expected values come from the interface, never from a library: worked from first principles, such as a slide's distance v² ÷ 2μg, or from a table the interface ships. A library that names an interface in `implements` links only once every fixture of that interface passes on this core, run once per library hash and interface digest with logic.determinism's comparisons, as its own fixtures run (Logic: linked libraries); a fail names the interface, the fixture, the array, the expected value and the tolerance. Each interface ships at least one planted library that must fail one of its fixtures, or its pack is refused, naming the interface. `physics2d.lib@1` takes its worlds and answers from the physics behavior kit (Physics: behavior kit), so a 2D physics library in logic proves it behaves like the documented world. A kit names interfaces where it can, so swapping a library links the program again and reruns exactly that interface's fixtures and the kit's checks. An interface in a first-party pack binds every claim; one in an outside pack binds only its author's own claims, as a library the working agent wrote does. The digest covers the exports, the layout and the fixtures, so any change takes a new major. `deep_kinds` lists each interface with its exports, its fixtures and the libraries that implement it.
+
+**Cost:** Fixtures once per library hash and interface digest, at link, under 5 s an interface (estimate); nothing per step
+
+**It can never:** Take an expected value or a tolerance from the library it tests; change under its digest; link a library whose interface fixtures didn't run; let an outside pack's interface pass a first-party claim; ship without a planted library
+
+**Lands:** R6, with the logic module
+
+#### Logic: data layouts
+
+For: weights for a small network, a state machine's table, a behaviour tree, a navigation graph or a world's pages that a logic item or a provider reads as data, checked before anything reads it
+
+**Fields**
+
+- In a pack: `layouts: {name@version → {validator: asset ID, max_bytes: ≤ 64 MiB, twins: [asset ID], doc: string ≤ 2,000 chars}}` (twins: at least one malformed asset the validator must refuse)
+- On a data asset: `layout: name@version`
+- A validator: a program under the one subset exporting `memory`, `validate(len: i64) → i64` (−1 when valid, else the first bad byte's offset) and the immutable global `in_at`; imports: none; budget: fuel 8 a byte, at least 10,000,000, memory the asset plus 4 MiB
+- Registry (Registry and seal: registries): `data.layout@1 {fill: module | first_party_pack | pack, resolve: check, binds: all}`, its kit each entry's twins, its planted wrong entry a validator that accepts its own twin
+- First-party entries: `nav.graph@1`, `table.layout@1`, `fn.table@1` (Driver: tables), `voxels.grid@1` (Voxels `voxels@1`), `pages@1` (a header, then each page's number as a u32 and its 64 KiB, in page order, at most 4,096 pages: its own cap, past a pack layout's 64 MiB)
+
+**Semantics:** A data asset names its layout, and the layout's validator runs once per asset hash and validator hash at check, admitted and rewritten by the logic module's pinned pass like any program (Logic: sandbox), reading the asset's bytes at `in_at`. It returns valid or the first bad offset, and a bad asset is refused wherever it's named, in a logic item's `assets`, a provider's `out: data` or `out: pages`, or a world's `init`, naming the asset, the layout and the offset; a trap in a validator refuses the asset the same way, naming the trap. A validator can only refuse: it never passes a requirement, writes a check or changes an asset, so every entry binds all claims, and what a logic item does with the data is still held by the piece's own checks. A layout is accepted only once its validator refuses every one of its twins, else its pack is refused, naming the twin. An asset past `max_bytes` is refused before its validator runs. `deep_kinds` lists each layout with its doc, its size cap and the pack that declares it.
+
+**Cost:** Once per asset hash: 8 fuel a byte, so a 16 MiB weights file in about 0.13 s (estimate); nothing per frame. Budget class: checks, off the UI thread.
+
+**It can never:** Pass a requirement, write a check or change an asset; read anything but the asset's bytes; run in a frame; enter the registry while it accepts one of its twins
+
+**Lands:** R6, with the logic module
+
+#### Logic: checkpoints and bake
+
+For: seeking into a game or a simulation, replaying a session, and the same run on another machine
+
+**Fields**
+
+- Checkpoint: `{step, deep_hash: u64, memory: bytes, globals}` (deep_hash: the full state's hash, over its memory, globals, arrays and the step it has reached on the input track), every `checkpoint.every` steps, in a ring within its byte budget, the first once the start function and `init` have run, before step 0; the first and every eighth hold the whole memory, and the rest only the 64 KiB pages written since the checkpoint before, as the rollback ring stores them (Net: rollback)
+- Step hash: `{step, hash: u64}` (its globals, the arrays it wrote and its occurrences, each step, to find where two runs part; memory it doesn't cover can differ, so it never tells two states apart)
+- Bake: `key = sha256(rewritten program + logic item + its reads' content keys + the input track + recorded readings + seed + logic module version + engine version)`; `step_hashes, checkpoints, arrays, occurrences, fuel: [u64] (per step), traps` (arrays: each step's changed element ranges with their values, and every array whole at each checkpoint)
+- Golden: as a physics golden, naming the first step and the first byte of memory or array that differs
+
+**Semantics:** A seek restores the nearest checkpoint at or before t and steps forward; when the ring passes its budget, the spacing doubles. A restore rebuilds the whole memory from the last whole checkpoint at or before it and the pages after it, and a checkpoint the ring drops merges its pages into the next one's. Playback rebuilds each step's arrays from the last checkpoint's whole arrays and the ranges after it, and the rebuilt arrays must match the recorded step hashes. A piece with an open span (Transport) bakes as it's played, so its bake grows only with what changed. A seek across a checkpoint followed by play must equal a straight run in full: their deep hashes match at each checkpoint, and continuation probes, the same next inputs fed to both states, give the same arrays and deep hashes. Equal step hashes only locate where outputs part and never show two states equal. A restore loads a checkpoint's memory and globals into a fresh instance and never runs the start function or `init` again; its tables need nothing, since nothing can change them. Playback of a baked run reads its arrays and never runs the program; only a fork of the input track runs it again, from the nearest checkpoint. A golden recorded on one machine replays on another, and in the web player. An item with world pages adds its page map's changes and its move queue to each checkpoint (Logic: world pages), and one with mirror reads keeps each mirror's pending ranges in it (Logic: mirror reads).
+
+**Cost:** A whole checkpoint is the program's memory (4 MiB by default) plus its globals, and the rest the pages written since (a 32 MiB memory that writes 3 pages a turn stores 192 KiB); a step's arrays in the bake O(elements changed); a step hash O(bytes written); a deep hash O(memory)
+
+**It can never:** Keep state outside its memory and globals; mix checkpoints across rewritten programs or versions; be trusted across machines without a golden
+
+**Lands:** R6
+
+#### Logic: saves
+
+For: a game that stops and goes on later, exactly where it stopped
+
+**Fields**
+
+- `saves: {slots: 1 to 8 = 1, request: array name, ends: array name, migrate: [{from: {layout, content, modules}, by: asset ID, remap: asset ID}] = []}` (on the logic item; `request` and `ends` are its own i32 arrays, `ends` optional; `migrate`, whose `remap` is optional: Logic: saves across changes; a piece without `saves` has none)
+- Save: `{slot, layout, content, modules, runtime, document, program, step, input_at, track, ended: bool, state: {module → checkpoint}, hash: sha256}` (the state layout, the content the piece names (its data assets and each world whose state the save holds, by hash) and the module-set digest, which bind it; the runtime digest (Registry and seal); the document and the rewritten program by hash, which it names but isn't bound to; the step, the last entry read on the input track, the input track from step 0 by hash, whether the game ended, and every canvas module's carried state there, logic's memory as its 64 KiB pages that hold a nonzero byte)
+- Kept: each slot's newest save and the one before it
+- Stored: in the app, files the piece owns, by hash beside its evidence; in the web player, the browser's storage for the page's origin (Export: web player); carry records are stored as saves are (Logic: carry records)
+
+**Semantics:** A step that writes a slot number into the item's `request` array saves that slot once the step ends, so a game saves from its own menu or at its own rest points. A save holds every canvas module's carried state at that step, as its own checkpoint holds it (logic its memory and globals, physics the whole world), with the step and the input position, bound by hash to the state layout the program exports, the content the piece names and the module-set digest, and a hash over the whole. Logic's memory is kept as the 64 KiB pages that hold a nonzero byte, each with its index, and opening a save starts from zeroed memory, writes the save's pages and then the current program's active data segments, so a save never depends on the program's own start state, which a fix may change, and a fix's new constants take effect (a game keeps what it saves outside its data segments, as `gridcore.save`'s one region does): a 32 MiB memory whose game has touched 3 MiB saves about 3 MiB. It's written to a temporary name and renamed once it reads back whole, as an export is, so a write that fails leaves the slot as it was. The viewer opens a save from the app or the player, never the piece's logic: it restores every checkpoint into fresh instances, as a seek does, and goes on from its input position, so for the same next entries the frames and full-state hashes equal a run that never stopped, and the viewer's next entry forks the track there, as after a seek. A save that fails its own hash, such as one cut short, is named, and the slot's other save opens instead when it reads back whole. A save opens when its state layout, content and module set match the piece's, so a fix that keeps the layout keeps every save. One whose layout, content or module set differs is refused, naming what differs, unless the piece declares a migration from those hashes, or only its runtime digest differs; Logic: saves across changes says how each then opens, as a new save while the old one stays. A step that writes a slot number into `ends` saves that slot as ended once the step ends: once the ended save reads back whole, the slot's earlier save is deleted and the slot opens only at that end, so a game that ends in death can't be opened before it. Ended is the game's rule, not a lock on the viewer's timeline, which seeks a recorded run as always. A save is the piece's own and never counts as evidence. An item with world pages adds its page map's entries that differ from `init`, with their bytes once each (Logic: world pages).
+
+**Cost:** A save is its checkpoints plus a header: a 4 MiB logic memory and a small world write about 4 MiB in about 20 ms, off the UI thread (estimate)
+
+**It can never:** Open part of a state; open a save whose state layout, content or module set doesn't match the piece's without a declared migration; open an ended slot before its end; replace a slot's save before the new one reads back whole; be opened by the piece's own logic; count as evidence
+
+**Lands:** R6, with the logic module
+
+#### Logic: saves across changes
+
+For: a game whose saves should still open after a fix, after its state moves, and after a backend is swapped
+
+**Fields**
+
+- State layout: the bytes at the immutable global `layout_at`, after a u32 of their length (optional; such as a name, a version and a field table `[{name, offset, type, count}]`); their hash is the layout a save binds, and a program that exports none has its program hash as its layout
+- Migration: `{from: {layout, content, modules}, by: asset ID, remap: asset ID}` (in `saves.migrate`; remap optional: a table asset from old keys to new)
+- Migration budget: fuel 8 per byte of the old and new memories together, at least 10,000,000; memory the new memory plus the old plus 4 MiB; stack 256 KiB
+- Exports of a migration: the immutable globals `old_at`, `remap_at` and `new_at`
+
+**Semantics:** A save opens straight when its state layout, content and module set match the piece's, whatever else changed, so a fix to a program's rules that keeps its layout keeps every save, and logic.layout proves the claim on fixture saves (Check input: logic kinds). A save opens straight only when the program's mutable globals also match the save's in count and type, else it's refused as a layout mismatch, naming the first global that differs. When the layout, content or module set doesn't match and the piece declares a migration from those hashes, the migration, a program under the one subset admitted at check like any logic, runs once under its own budget, scaled to memory since moving memory costs fuel by the byte. The logic module copies the old memory and globals into its memory at `old_at`, as input only, since what the migration leaves there is never read back, and the remap table at `remap_at`, so keys a change renamed are data a check can read; the migration writes the new memory and the new program's mutable globals at `new_at`, which become the new state. Its result is written as a new save under the current layout while the old one stays, and a migration that traps leaves only the old one, named with the trap. When only the runtime digest differs (Registry and seal), as after a physics backend is swapped, a save's carried state may be bytes the current build can't load: the viewer gets one notice naming what changed, and the app re-derives the save by replaying its own input track headless from step 0 to its step under the current build, writes the result as a new save bound to the current runtime digest, and opens it, while the old one stays. The notice comes once per cause and never again for that save. A save whose layout, content or module set differs with no migration is refused, naming what differs.
+
+**Cost:** A migration O(memory), once per save; a re-derivation as many steps as the save holds, headless; a save's track a few KiB per minute of play (estimate)
+
+**It can never:** Open a save under a layout it doesn't match without a migration; load bytes one engine wrote into another; let a migration change the old save; show the same notice twice; count as evidence
+
+**Lands:** R6, with the logic module
+
+#### Logic: carry records
+
+For: a campaign whose roster, gold or base carries from one chapter's piece to the next
+
+**Fields**
+
+- `carry: {request: array name, out: [array name]}` (optional, on the giving item: one of its own i32 arrays, and the arrays the record holds)
+- `carry_in: {arrays: {name → {type, count}}, accepts: [layout]}` (optional, on the taking item: the record's shape, and the state layouts of the items whose records it takes)
+- Record: `{from: {layout, document, program}, step, arrays: {name → values}, hash: sha256}`
+
+**Semantics:** A step that writes 1 into the giving item's `request` array writes a carry record once the step ends: its `out` arrays as that step left them, with the item's state layout, document and program by hash. It's written to a temporary name and renamed once it reads back whole, kept where saves are, and never counts as evidence. The viewer opens a record into the taking piece as they open a save, from the app or the player, and it enters that piece's input track as one entry at step 0, by hash, so a replay reads the same record. At step 0 the logic module fills the taking item's read region, after its other reads, with a u32 1 and the record's arrays in `carry_in`'s order, or a u32 0 and zeros without one. A record whose arrays don't match that shape, or whose layout `accepts` doesn't list, is refused, naming the array or both layouts. A record moves numbers only, such as a roster's units and their experience or a base's stock, and the taking piece's rules decide what they become.
+
+**Cost:** A record is its arrays plus a header, read once at step 0
+
+**It can never:** Carry memory, a checkpoint or a string; enter a piece but at step 0 through its track; be taken by an item whose `accepts` doesn't list its layout; count as evidence
+
+**Lands:** R6, with the logic module
+
+#### Logic: world pages
+
+For: an open world, a voxel sandbox or a factory map larger than one item's memory, kept in pages the item asks for as the player moves
+
+**Fields**
+
+- `pages: {max: u32 ≤ 65,536, slots: u16 ≤ 512, moves: u8 ≤ 16 = 8, lead: steps, 1 to 8 = 4, init: zero | {asset: asset ID} | {gen: <pack>.<name>, params}, written_max: MiB = 256 (≤ 4,096), web_max: MiB ≤ 256}` (optional, on the logic item; init: an asset in the `pages@1` layout, Logic: data layouts, or a provider's `out: pages`, Provider `gen@1`: links, meshes and the library form)
+- A world page: 64 KiB, the size of a memory page, numbered 0 to `max` − 1, so a world of up to 4 GiB
+- Page region, at the immutable global `pages_at`, 64 KiB aligned: `moves` requests `{page: u32, slot: u32}` (the program's; page 0xFFFFFFFF asks for nothing), then the slot table, `slots` × `{page: u32, fresh: u32}` (the module's), then `slots` page slots
+- Page map: `{page → sha256}` for every page written or loaded from `init`, with a root hash over (page, hash) in page order
+- Move queue: `[{step, page, slot}]`, at most `lead` × `moves`
+- Trap kinds: `pages {request, why}`, `pages_full {written}`; meter: `pages.late`
+
+**Semantics:** A logic item that declares `pages` keeps a world past its memory in a page store the logic module owns, carried state of kind `pages` (Carried state). The world is the page map: a page never written reads as its `init` content, or zeros. After `init`, and after each step k, the module reads the requests in order. A page at or past `max`, a slot at or past `slots`, a page already in a slot or in the queue, or a slot named twice traps `pages`, naming the request; each valid request joins the queue for step k + `lead` (step `lead` − 1 after `init`). Before that step, ahead of the read region fill, the queued moves run in queue order: when the slot's page was written since it loaded, found as the rollback ring finds written pages, its bytes are hashed and the page map updated, and a slot holding no page is never written back; then the requested page's bytes, as the map gives them, load into the slot, and the slot table names the page, with `fresh` 1 when the map has no entry and `init` gives zeros, so the program can generate it. Each move charges 65,536 fuel to that step, so the step ceiling and `logic.budget` cover paging. The store keeps page bytes by hash, in memory and past that on disk beside the evidence store, which changes no value: a page still on disk when its step comes holds that step, as lockstep holds for a late message (Net: lockstep), the meter counts `pages.late`, and every result stays as it would be. A step that would leave the map holding more written pages than `written_max` traps `pages_full`, counting pages, not resident bytes, so every host traps at the same step. A checkpoint adds the map's changes since the one before and the move queue to the item's memory and globals, and the deep hash covers the map's root and the queue, so a seek restores them, the slots then load exactly as in play, and seeking equals playing. Page bytes are shared by hash across checkpoints, and a version that only a dropped checkpoint named is freed when the ring thins. A save adds the map's entries that differ from `init`, with their bytes once each, and a migration may name a program that runs once per distinct old page hash under the migration budget for one page (Logic: saves across changes). In a match, each match step's checkpoint adds the map's changes, and replaced page versions stay for `window` + 1 steps; a paged world usually passes `net.budget` only in lockstep. The web player keeps the store in memory up to `web_max`, and its export refuses a piece whose `init` asset or `written_max` passes it, naming the size. Checks read pages from the bake as data. The page size, the request layout and the map's hash are part of the logic interface, whose state stays `canonical`.
+
+**Cost:** A move copies and hashes 64 KiB, about 0.03 ms, charged as 65,536 fuel; 8 moves a step stream 30 MiB/s at 60 Hz for about 0.5M fuel, a sixth of the app's step ceiling; a checkpoint adds 36 B per changed map entry; a 256 MiB world whose player wrote 20 MiB saves about 20 MiB (estimate)
+
+**It can never:** Load or write back a page during a step; let the disk's timing change a value or a step; hold one page in two slots; free a page version a checkpoint, a save or the map names; reach a file or a host; pass `written_max` without a trap
+
+**Lands:** R6, with the logic module
+
+#### Logic: between-step services
+
+For: hit-scan shots, line of sight and a guard's perception that ask the physics world a question and have the answer by the next step
+
+**Fields**
+
+- `services: {name@major → {max_per_step: u16}}` (optional, on the logic item)
+- Region at the immutable global `services_at`: for each service in declaration order, a u32 count and `max_per_step` requests in its request layout, then a u32 count and its results in its result layout
+- A service, which a first-party canvas module registers before the seal: `{name@major, request: layout, result: layout, max_per_step: u16 ≤ 1,024, fuel_per_request}`
+- Registry (Registry and seal: registries): `logic.service@1 {fill: module, resolve: seal, binds: all}`, its kit each service's fixtures, its planted wrong entry a service that answers from the world after its next step
+- First service, the physics module's `physics.cast@1`: requests `ray {world, from, dir: vec3, max: m, groups: u32} | sweep {world, shape: sphere | capsule | box, from, to: pose, groups} | overlap {world, shape, at: pose, groups}`, at most 256 a step, `fuel_per_request` 4,000; results: a u32 hit count and up to 8 hits `{id: u32, address: u32, point: vec3, normal: vec3, distance: f64}` for each request, sorted by distance, then ID
+- Trap kind: `services {service, count}`
+
+**Semantics:** Right after step k, before any world steps again, the module hands each service its requests in order, and the service answers against the state step k read: for `physics.cast@1`, each world as its last step before step k's time left it, through the backend's own queries, as `physics.query` reads a bake (Check input: `physics.query`). The module writes the results into the item's memory before step k's checkpoint is taken and before step k + 1, so checkpoints, saves and rollbacks hold them and seeking equals playing; the program reads them one step after it asked. A count over `max_per_step` traps `services`, naming the service and the count, and each request charges its `fuel_per_request` to step k + 1. Results depend on the physics implementation, which the runtime digest already names, so a match's copies share them. Only first-party canvas modules fill this registry: a service is native code answering the sandbox, so no pack, plug-in or agent adds one, and each service's fixtures, in the logic interface's conformance kit, compare its answers with the check kind's on the same state.
+
+**Cost:** About 1 to 5 µs a ray or a sweep in a level of a few hundred static shapes, so 256 a step take about 0.3 to 1.3 ms (estimate); nothing for an item that asks nothing
+
+**It can never:** Answer during a step or through an import; run code a pack, a plug-in or an agent brought; answer from a state the step didn't read; write outside the item's result region; drop a request
+
+**Lands:** R6, with the logic and physics modules
+
+#### Logic: mirror reads
+
+For: a rules item that reads a crowd item's 100,000 positions, or an economy that reads a factory's whole grid, without copying every element every step
+
+**Fields**
+
+- `mirrors: [{array: array path, at: global name}]` (optional, on the logic item; at most 16, each an array another logic item writes)
+- At each mirror's global: the whole array, laid out as its writer's arrays are
+- In the read region, after everything `reads` names and in `mirrors` order, before a carry record, per mirror: a u32 count of changed ranges and each range `{first: u32, count: u32}`, at most 256, or the count 0xFFFFFFFF when the whole array was copied
+- Pending ranges: the writer's changed ranges since the reader's last step, kept in the reader's checkpoints
+
+**Semantics:** Before each step of the reading item, the module copies into each mirror only the element ranges its writer changed since the reader's last step, as the bake keeps them (Logic: checkpoints and bake), so the mirror holds the array as the steps before left it, exactly what a plain read gives, and two items stepping at one time read each other's earlier steps in either order. More than 256 pending ranges collapse to one whole copy, marked by its count. The mirror is the reader's memory and its pending ranges are in the reader's checkpoints, so a seek gives the next step the same mirror and the same range list as play, and seeking equals playing. A mirror of an array no logic item writes, of the reader's own array or a preview array, or one that would pass the end of memory or overlap another region is refused at check, naming it.
+
+**Cost:** O(changed bytes) a step instead of O(array): a 1,000,000-element f64 array whose writer changed 1% copies about 80 KB, under 0.1 ms, against 8 MB and 0.5 to 1 ms read whole (estimate); the mirror counts in the reader's memory
+
+**It can never:** Differ from a plain read of the same array; write the writer's array; give a seek another range list than play; mirror anything but a logic item's array
+
+**Lands:** R6, with the logic module
+
+#### Provider `gen@1`
+
+For: what a pack brings that no canvas module draws: a static voxel mesher, a dungeon or cave generator, an odd tiling, a graph for a grid game
+
+**Fields**
+
+- `program: asset ID` (a WebAssembly module by hash, kept as data in its pack)
+- `params: {name → {type, unit, default, range}}` (a schema; the values a document gives are constants)
+- `seed: u64 = the document's seed`
+- `assets: [asset ID]` (optional; read by hash, copied into memory before it runs, as a logic item's are)
+- `out: mesh {max_vertices: u32 ≤ 262,144, closed: bool = false} | rows {columns: {name → dtype}, max_rows: u32 ≤ 1,000,000} | data {layout: name@version, max_bytes: ≤ 16 MiB}` (exactly one)
+- `budget: {fuel = 1,000,000,000, memory: MiB = 64}` (at most 10,000,000,000 and 256 MiB)
+- Exports: `memory`, `gen(seed: i64) → i32`, and the immutable globals `params_at`, `assets_at` and `out_at`; imports: none
+- In a pack: `providers: {name → {program: sha256, params, out}}`; in a document: `{gen: <pack>.<name>, params}` wherever it names an asset of the output's kind
+
+**Semantics:** A provider is a program under the logic module's one subset, admitted and rewritten once by its pinned pass like any logic (Logic: sandbox), so fuel, NaNs and traps behave the same everywhere. It runs only in a check's build phase, once per content key, hash(program, params, seed, asset hashes, out, the logic module's version), off the UI thread, and its output is stored by that key and shared like a builder's; it never runs in a frame, so its output is constant for a revision and seeking equals playing. It reads only its params, its seed and assets by hash: a param bound to time, a channel, a control, a reading or a logic array is refused at check, naming the param. It writes exactly one declared output from `out_at`: a mesh in the builder's output shape (positions, normals, uv0, indices, parts and bounds), rows with typed columns that a mark set reads as it reads a table asset's, or a data asset in a named layout, such as a tile graph a logic item names among its assets. Writing past its cap traps with `over_cap`; any trap fails the document's check, naming the provider, the item and the trap's kind, and keeps no part of the output. A mesh output runs `geometry.shading`, and one declared `closed` fails, naming the provider and the first open edge, unless every edge, welded, joins exactly two faces; rows pass the table probe, and a data asset its layout's validator. Outside packs may carry providers, checked once per version like recipes; a provider never registers a check kind, a builder, an operator or a tool entry, and checks read its output as data. The web player's bundle carries outputs by hash and runs no provider. A provider may also link libraries, take another item's built mesh, ship its source as a logic library proved to give the same bytes, and fill a range of a world's pages (Provider `gen@1`: links, meshes and the library form).
+
+**Cost:** Its fuel once per content key at check, about 1 ns a unit in the app (estimate); nothing per frame. Budget class: checks, off the UI thread.
+
+**It can never:** Run in a frame or at run time; read the clock, a control, a reading or a logic array; write more than one output, or past its cap; register a check, a builder, an operator or a tool entry; import anything
+
+**Lands:** R6, with the logic module
+
+#### Provider `gen@1`: links, meshes and the library form
+
+For: a voxelizer or a remesher that works on a builder's output, a generator that previews floor 1 at check and makes floor 40 in play, and a world's authored regions written at check
+
+**Fields**
+
+- `links: [{name@version, asset: asset ID}]` (optional, on a provider in its pack; logic libraries, with their `needs`)
+- `mesh_in: [{param: name, item: ID}]` (optional; params that take another item's built mesh by its content key)
+- `library: {asset: asset ID}` (optional; the same source built as a logic library exporting `gen(seed: i64, params_at: i32, out_at: i32) → i32`, with a fixture `{seed, params, expect: output hash}` the pack must ship)
+- `out: … | pages {first: u32, count: u32 ≤ 4,096}` (a range of a world's pages in the `pages@1` layout)
+
+**Semantics:** A provider with `links` is merged with its libraries and their `needs` by the logic module's linker before the subset check and the rewrite, as a logic item is (Logic: linked libraries), so it still imports nothing, its content key covers the libraries, and a library whose fixtures haven't run is refused. A param named in `mesh_in` takes another item's built mesh (positions, normals, uv0, indices, parts and bounds) by its content key, copied in as an asset is, so a static modifier comes as a provider; the provider's key covers that content key, a mesh that depends on the provider's own output is a cycle, refused at check, and a mesh from a logic item, an instancer or anything bound to time is refused, naming it, so the output stays constant for a revision. With `library` the pack also offers the provider's source as a logic library of the same name and version, and its fixture runs both forms with one seed and the same params and requires the same output bytes, so floor 40 made in play is the floor the provider would make at check; the library form runs only inside a logic item, under its budgets and step ceiling, sliced across steps like any heavy work (Logic: work across steps). With `out: pages` it writes `count` pages from `first`, each range its own content key, so a world's authored regions come from check and the rest from play (Logic: world pages).
+
+**Cost:** Linking as a logic item's; a mesh input copied once per content key, O(bytes); the equality fixture once per pair of hashes (estimate)
+
+**It can never:** Run in a frame or at run time (its library form runs only inside a logic item); take a mesh from a logic item, an instancer or anything bound to time; let its two forms give different bytes; leave an import
+
+**Lands:** R6, with the logic module
+
+<a id="net"></a>
+
+### Shared play over a relay
+
+- **Only inputs travel.** Two to eight players share one piece, in the app or in a browser on the web player, over a relay the piece declares. Each copy sends only its player's input entries, which enter every copy's input track at their step, and every copy runs the same fixed-step logic and physics, so the world stays the same everywhere with no state or pixels on the wire.
+- **Late inputs roll back.** A copy predicts each player's input as their last one; an input that arrives late restores the checkpoint at its step and steps forward again within a window, and copies compare full-state hashes, so a desync stops the match and names its first step and field.
+- **Peers are equals.** Every copy holds the full state, so a piece offers no hidden information between players and no copy is an authority: a piece's rules validate every input's player, phase and legality on every copy, and a match whose copies all trap the same way ends as faulted, never healthy.
+- **Heavy steps wait instead.** A piece whose steps cost too much to run again plays in lockstep: a copy steps only once it holds every player's entries, so nothing is predicted or rolled back.
+- **Courtesy fog and fair rolls.** Each copy knows which player it is, so a piece can hide what that player can't see, as a courtesy and never a secret; and a roll can take random bits every copy adds after the action is confirmed, so nobody reads it ahead or picks it.
+
+#### Net `net@1`
+
+For: a piece two to eight people play together: a game for two, a quiz teams race through, a lab a class runs together
+
+**Fields**
+
+- `relay: https URL` (one host, the only one the module names: copies find each other through it, and their messages go through it unless both platforms allow a direct path)
+- `players: 2 to 8` (how many play; the match starts when that many have joined)
+- `step_rate: Hz = 60` (under the valid-rates rule; each stepping item's step length divides the match step's or is a whole multiple of it, so a 120 Hz world and a 1 Hz economy both line up with match steps)
+- `delay: steps = 2` (0 to 30; the viewer's own entries take effect this many match steps later)
+- `window: steps = 8` (0 to 16; 0 is lockstep: Net: lockstep)
+- `hash_every: steps = 60`
+- `timeout: s = 5`
+- `draw_after: [control ID] = []` (the controls whose entries take a random draw: Net: random draws after commit)
+- Message: `{match, player, step, entries: [entry]}` (one from each player each match step, empty when there are none), and the hashes of Net: desync and replay
+
+**Semantics:** Every copy plays the piece from its start with the same document, input track and recorded readings, by hash, and the same module-set digest and runtime digest, which names the physics pin (Registry and seal: runtime digest); a copy whose hashes differ can't join, naming what differs. Players are numbered in the order the relay saw them join, and nobody joins after the start. Match step k is at k times its step length, on the one clock. Each copy sends one message a match step with its player's entries, stamped `delay` steps after the first step it hasn't run, and every copy puts each message's entries on its input track at their step with their player, ordered by step, player and seq, never by arrival, so every copy applies the same entries at the same steps. A peer's entry passes the checks the viewer's own entries pass: one that names a control or an input the piece doesn't declare, or a value out of its range, is refused alike on every copy, naming the player. Peers are equals: every copy holds the full state, so a piece offers no hidden information between players, only a courtesy fog (Net: this copy's player), and no copy is an authority, and since the module checks only that an entry is declared and in range, a piece's rules validate every input's player, phase and legality on every copy. During a match no copy fetches a source or records a reading, except the copy of the player a piece names in `readings_from`, whose readings travel as its own entries (Logic: readings), and nobody scrubs, seeks or forks; afterwards its recorded track does all three like any other. A player who leaves, or whose messages stop for `timeout`, ends the match on every copy.
+
+**Cost:** One message from each player each match step, about 32 B plus 32 B per entry (estimate); nothing per frame beyond a rollback
+
+**It can never:** Send state, pixels, a reading other than as the named player's entry, a cookie, a credential or anything about the viewer; order entries by arrival; take a player after the start; hide one player's state from another; count as evidence
+
+**Lands:** R6
+
+#### Net: rollback
+
+For: every match: an input that comes late changes the past exactly as if it had come on time
+
+**Fields**
+
+- Rollback ring: each canvas module with carried state keeps its own checkpoint for each of the last `window + 1` match steps, beside its usual ring and never thinned; logic's stores only the 64 KiB memory pages written since the match step before
+- Prediction: a player's input as their last one (their controls keep their last values)
+- `confirmed: step` (the last match step for which the copy holds every player's message)
+
+**Semantics:** In a match each canvas module with carried state also checkpoints at every match step, as its own checkpoints are defined: physics the whole world, logic its memory and globals, though logic's rollback checkpoint stores only the memory pages written since the match step before, and a restore rebuilds the whole memory exactly, as full-state hashes show. Until a player's message for a step arrives, the copy predicts their input as their last one, which adds no entry. A message that brings an entry stamped at a step already run adds it to the input track at that step, dropping nothing, since it's no fork, then restores every checkpoint at the nearest match step at or before it and steps forward to now, as a seek does, in the order a straight run uses; a message that brings nothing new rolls nothing back. What the replaced steps made is dropped: their occurrences, and any voice spawned from an occurrence the corrected run doesn't make again, which fades out over 5 ms, while a voice from one it does make again plays on. A copy runs at most `window` steps past `confirmed` and waits there, so no input lands outside the window. Live frames may rest on a prediction; an export renders only from the recorded track, so no frame a rollback replaced is ever final. With `window` 0 a copy never runs past `confirmed`, so it keeps no rollback ring and nothing rolls back (Net: lockstep).
+
+**Cost:** A checkpoint of each module with carried state each match step, logic's only the pages written that step, since full copies of a 4 MiB memory at 60 Hz would move 240 MiB/s; a rollback restores once and steps at most `window` match steps again within one frame
+
+**It can never:** Apply an entry at its arrival instead of its step; restore past the window; keep an occurrence from a replaced step; show a predicted frame in an export
+
+**Lands:** R6
+
+#### Net: lockstep
+
+For: a piece whose steps cost too much to run again: a factory game, a strategy game with hundreds of units, a crowd lab
+
+**Fields**
+
+- `window: 0` (on `net@1`)
+- `delay: steps` (0 to 30, as for rollback; at 20 Hz, 4 steps hide 200 ms)
+- Waiting notice: `{player, since: s}` (the app's or the web player's own, shown once a copy has waited 0.25 s, never the piece's)
+
+**Semantics:** With `window` 0 a copy runs match step k only once it holds every player's message for k, so `confirmed` is always the step it is about to run: it predicts no input, rolls nothing back and keeps no rollback ring, so each canvas module checkpoints only on its own ring and a match step costs its own steps alone. Each copy still stamps its own entries `delay` steps ahead, so a message may take up to `delay` match steps to arrive before anyone waits. When a player's message for the next step hasn't arrived, the copy waits at the last step it ran, as a copy at the end of its rollback window does: the match's clock holds, as the timeline holds in present mode, and frames show that step's arrays. After 0.25 s of waiting the app or the web player, never the piece, shows a notice naming the player, which clears when the message arrives, and after `timeout` the match ends on every copy, as it always does. Entries order by step, player and seq, and hashes, desync reports, records and replays are the same in both modes, since a prediction never reaches the track. Rollback stays the choice for a light piece, where an input should show at once; lockstep is for one whose step is heavy, where `net.budget` measures one match step instead of a window (Check input: net kinds).
+
+**Cost:** No rollback ring and no step run twice: a match step costs its own steps; the latency is `delay` match steps plus any wait
+
+**It can never:** Run a step before it holds every player's message for it; predict an input; keep a rollback ring; draw its waiting notice in the piece
+
+**Lands:** R6, with the net module
+
+#### Net: this copy's player
+
+For: each player seeing their own side of a board: fog in a tactics game, a hand of cards turned away, a scout's view
+
+**Fields**
+
+- `match.me: player | none` (a view value: 1 to 8 in a match, as the relay numbered the copy; 1 for a piece played alone; in a replay or an export of a recorded match, the record's own player unless it names another, or none for every side)
+- Readers: drivers, a mark set's or an instancer's `seen` column (Mark set: logic columns), hit tests and the accessibility tree, as a view input like the camera
+- Join prompt line, for a piece that reads it: "Fog in this piece is a courtesy. Every copy can see everything."
+
+**Semantics:** In a match each copy sets `match.me` to its own player. It's a view value, like the camera: drivers and a mark set's or an instancer's `seen` column may read it, so a unit the piece's logic marks unseen by a player is hidden on that player's copy, and hit tests and the accessibility tree skip what's hidden, so it's never picked or announced there. Logic and physics never read it: a logic item or a world input that names it, directly or through a driver, is refused at check, naming the item, so every copy's state, track and full-state hashes stay the same while each draws its own side. It never enters the input track, a checkpoint, a full-state hash, a save or a message, and the content key of whatever reads it holds its value, so each player's frames cache apart. It hides and never secures: every copy holds the full state, so a modified copy shows everything, and the Join prompt of a piece that reads it says so in one line: "Fog in this piece is a courtesy. Every copy can see everything." A piece played alone reads 1. A replay or an export of a recorded match reads the record's own player by default, may name another to show that side, or none to show every side.
+
+**Cost:** Nothing per step; one view value, and a cache per player for what reads it
+
+**It can never:** Be read by logic, physics or a world input; enter the input track, a checkpoint, a hash, a save or a message; keep anything from a modified copy; be set by the piece
+
+**Lands:** R6, with the net module
+
+#### Net: random draws after commit
+
+For: rolls nobody can read ahead or pick: a dice game, a tactics game's hit chance, a deck shuffled during a match
+
+**Fields**
+
+- `draw_after: [control ID]` (on `net@1`)
+- Entries a copy writes for its player: `draw.commit {step, hash: sha256}`, then `draw.reveal {step, bits: u64}` (the writer `net`)
+- Read by logic: `net.draws` → `{step, value: u64}` (a logic item names it in `reads`)
+
+**Semantics:** When a copy confirms a match step that holds an entry on a control in `draw_after`, from any player, it takes 64 bits from its platform's secure random source and sends, in its next message, a commitment: the hash of the bits, the match ID, its player and that step. Once it holds every player's commitment for that step, it sends its bits. Both go on the input track like any entry, at their step with their player, so replays and exports read them. Every copy checks each player's bits against that player's commitment: bits that don't match end the match as faulted on every copy, naming the player and the step (Net: desync and replay), and bits still missing `timeout` worth of match steps after the step's last commitment end it as timeout, naming the player. At the first step whose entries complete every player's bits for a step, a logic item that reads `net.draws` gets that step's draw: the first 8 bytes of sha256 over the match ID, the draw's number (1 for the match's first drawn step, then counting up) and every player's bits in player order, never the step itself, so an action moved by a step keeps its draw (`rng.timing`). No copy can know a draw before its action is confirmed, since every copy takes its bits after that, and none can choose it, since each committed before it saw another's bits; a player who withholds bits only ends the match. The step's seed, hash(the document's seed, the logic ID, k), is unchanged, so a piece's rules take a roll from the draw for its action's step, not from the seed. A piece played alone writes its own bits for each such step at the next step, with no commitment and a zero match ID, so its rules run the same way: from its platform's secure random source when you play it, and from hash(the run's seed, the draw's number) in a replica, so a check's seeded run repeats and running a check again can't fish for a luckier draw.
+
+**Cost:** A 32 B commitment and an 8 B reveal per player per drawn step; a draw arrives about two message trips after its action (estimate)
+
+**It can never:** Draw before its action is confirmed; send its bits before it holds every commitment; take a match's roll from the document's seed; keep a draw off the recorded track
+
+**Lands:** R6, with the net module
+
+#### Net: desync and replay
+
+For: every match: copies that part are caught and named, and a match plays again exactly
+
+**Fields**
+
+- Full-state hash: `{step, hash: u64}` (every canvas module's whole carried state) every `hash_every` match steps, sent once confirmed
+- Reports: `net.desync {first_step, module, field, players}`, `net.fault {step, item, kind}`
+- Record: `{document, module-set digest, runtime digest, players, track, confirmed, end: left | timeout | desync | faulted}` (the merged input track up to the last confirmed step)
+
+**Semantics:** Each copy hashes its whole carried state every `hash_every` match steps once it has confirmed that step, and sends the hash. A mismatch stops the match on every copy; the copies then exchange their step hashes since the last full-state hash that matched and, at the first step that differs, a hash for each field of each module's canonical state, so `net.desync` names the first step and field that differ, as a golden's report does, though no state crosses. Every input stays inside the one subset's determinism rules, derived data comes from the closed function list's pinned math, and physics runs on the pinned backend with its determinism features, so a desync is a defect, never noise. A copy whose logic traps ends the match as faulted and tells the others, which end it too, with `net.fault` naming the item, the step and the trap's kind, even when every copy trapped the same way and every hash agrees, so agreeing copies never make a faulted match read as healthy. A player's draw bits that don't match their commitment end the match as faulted too, with `net.fault` naming the player, the step and the kind `draw` (Net: random draws after commit). Each copy records the match's merged input track up to the last step it confirmed: the app keeps it beside the piece as a fork of its track, and the web player for as long as its page is open, so the match replays exactly and the app exports it like any piece; any two copies' records agree on every step both confirmed.
+
+**Cost:** A full-state hash every `hash_every` steps, O(state); a report's field hashes once
+
+**It can never:** Play on past a mismatch or a trap; retry a desync away; record a predicted entry; count as evidence
+
+**Lands:** R6
+
+#### Net: relay and Join
+
+For: every match: no network until a person clicks Join, and then only the declared relay and the match's other copies
+
+**Fields**
+
+- `relay` (from `net@1`)
+- Join prompt: `{relay host, players so far, courtesy, readings}` (the app's or the web player's own, never the piece's; courtesy is the fog line for a piece that reads `match.me`: Net: this copy's player; readings, the line for a piece that names `readings_from`: Logic: readings)
+- Sent: `{match ID, messages}` (a match ID drawn at random for each match)
+- Transport: the network seam (Seam and backend), speaking `relay@1` (Net: relay protocol `relay@1`): https to the relay, and a direct path between copies where both platforms allow one
+
+**Semantics:** Copies find each other through the relay. Their messages then go directly between them when both platforms allow, otherwise through the relay, and either way the relay holds nothing. The module opens nothing until the viewer clicks Join on a prompt the app or the web player draws, never the piece, which names the relay host and says that the relay, and on a direct path the other players, see the copy's network address. Only a person's click joins: it needs a gesture serial from hardware input, so a tour, a piece's logic, an agent's tool or a replica can't. A piece with no relay shows no Join and opens nothing. After Join the module sends only the player's messages, the match ID and the hashes that check the copies agree: no cookie, credential, reading (beyond the named player's, as entries: Logic: readings), state or anything about the viewer. In the app the connection is a capability call, as DeepBuild's own outside calls are, its grant the one declared host for that match, opened by the Join, with no secret; in the web player it's the viewer's browser's, with no credential. The first player gets a link that carries the match ID in its fragment, which the host serving the piece never sees, and the others join through it. The relay is yours: one you run on one of your hosts over SSH, such as the small relay DeepBuild ships, which keeps only each match's open connections and forwards each message that doesn't go direct to that match's other copies, or one you choose; DeepBuild runs no service. Not in this module: authoritative servers, matchmaking, anti-cheat, voice and large player counts.
+
+**Cost:** One connection per copy to the relay, and on a direct path one to each other copy; the relay forwards only what doesn't go direct and keeps nothing
+
+**It can never:** Reach a host but the declared relay and, on a direct path, the match's other copies, or any host before Join; join on anything but a person's click; send a cookie, a credential or anything about the viewer
+
+**Lands:** R6
+
+#### Net: relay protocol `relay@1`
+
+For: a relay you run, or one you choose, that every copy, in the app or the web player, can count on to carry a match the same way
+
+**Fields**
+
+- `relay@1 {digest: d1 digest}` (frozen)
+- `hello {protocol: relay@1, digest}` (the relay's first reply)
+- `join {match: 16 B, players: 2 to 8}` → `{player: u8}`
+- `forward {match, frame}`
+- `signal {match, to: player, offer | answer | address}` (only to set up a direct path)
+- Frame: `{match: 16 B, player: u8, step: u32, entries: u16, then each entry}` (a documented little-endian layout)
+
+**Semantics:** The relay protocol is a contract with a frozen digest, as every plug-in interface is: joining a match by its ID, forwarding a frame to that match's other copies, the signaling a direct path needs, and the message frame in a documented little-endian layout. The app's network backend, the web player's and the small relay DeepBuild ships all speak it. After Join, a copy's first exchange reads the relay's hello, and a relay that names another protocol or digest is refused before any entry is sent, naming the relay host and the digest it gave. A relay you choose must speak `relay@1`, and the relay suite the shipped relay passes in the local preflight (joining, forwarding only within a match, and keeping nothing once a match ends) is the one it must pass. A new shape is `relay@2`, never a change to `relay@1`. The network seam's suite has an interop part (Seam and backend): the app's backend and the web player's play one match through the shipped relay behind the test relay's faults and pass `net.rollback` together, so two transports never differ on the wire.
+
+**Cost:** Frames as Net `net@1` counts them, about 32 B plus 32 B per entry; one hello per Join
+
+**It can never:** Carry state, a reading other than as a player's entry, a cookie or anything about the viewer; forward a frame to another match; change under its digest
+
+**Lands:** R6, with the net module
+
+<a id="media"></a>
+
+## Sound and video on the picture's clock
+
+- **Our own processing code.** Audio runs through our own code with pinned math. Output is identical for the same build and CPU architecture; across architectures it's measured, not promised, because no reference library promises it.
+- **Blocks.** Audio renders in 128-sample blocks, an internal size and never a timing unit. A k-rate value holds for a block; an a-rate value is per sample, and gain is a-rate.
+- **The audio thread** allocates nothing, takes no locks, and calls no platform sin, exp, tan or pow.
+
+#### Asset
+
+**Fields**
+
+- `sha256`; `kind: video | audio | image`
+- `probe: {streams: [{type, codec, time_base: rational, duration: flick, frame_rate: rational (normalized), sample_rate: Hz, layout: [{label, azimuth: deg, elevation: deg}], color: {primaries, transfer, matrix, range}, alpha: none | straight | premultiplied, size: [px, px]}]}`
+- `decoder: {name, version}`
+- `made_by: {tool, version, model, input, prompt, edit_of, cost, synthetic: bool, output: {name → value}}` (output: what the model returned about it)
+- `license: {id, terms, shareable: bool, credit: string}`
+- `proxies: [{sha256, gop: 1 | 10, scale}]`
+- `attached: [bake ID]`
+- `loop: {start, end: samples, crossfade: flick = 0}` (optional); `anchors` (optional)
+
+**Semantics:** Evidence stored by hash, probed once in the decode worker, with flicks derived exactly from the stream's own time base. A seek goes to the previous key frame and decodes forward, or uses a short-GOP proxy.
+
+**Cost:** Probe O(container index); a proxy costs about one encode
+
+**It can never:** Ship without a license that fits how it's shared; be decoded outside the worker; assume a color space it wasn't tagged with
+
+**Lands:** R1 journey videos; R6
+
+#### Asset: meshes
+
+For: generated and licensed game assets that `mesh.asset` places
+
+**Fields**
+
+- `kind: video | audio | image | mesh` (mesh: a glTF 2.0 binary, .glb)
+- `probe: {mesh: {nodes, meshes, primitives, triangles, vertices: u32, bounds: [vec3, vec3], m, uv_sets: u8, tangents: bool, materials: u16, textures: [{role, size: [px, px], format: png | jpeg | ktx2}], skins: u16, joints: u16, max_influences: u8, animations: [{name, span: flick}], extensions_used: [string], generator: string}}`
+- `dropped: [{material, input}]` (what the import couldn't hold; Material: texture maps)
+
+**Semantics:** A mesh asset is probed once in the decode worker, so checks read its counts, maps, skin and clips without opening it. Its license and made_by come from the job that made it or the person who brought it, and an asset whose license doesn't allow shipping can't be exported. Skins and clips are kept untouched for export; the canvas draws the bind pose unless a placement plays one of its clips (Asset: skinned playback). A mesh from a tessellate job also carries its B-rep's exact measures and its measured error (Asset job: tessellate).
+
+**Cost:** Probe O(accessor bytes) once, in the decode worker; no cost per frame.
+
+**It can never:** Be decoded outside the worker; lose its license or made_by; be shown skinned or animated except through Asset: skinned playback.
+
+**Lands:** R6, with `mesh.asset`
+
+#### Asset: skinned playback
+
+For: films and stills that place licensed or generated characters: posed and walking people in the house and the city, a presenter in an explainer film, the generated walk checked on DeepBuild's own bones
+
+**Fields**
+
+- On `mesh.asset`: `skin: {pose: bind | clips = clips, influences: 4, bones: from the probe}` (at most 4 influences and 256 bones)
+- Bone IDs: the bone_map profile's names when one exists (hips, spine, head, upper_arm_l …), else the node's name, sanitized and made unique in the asset (an empty or repeated name takes its node index), fixed at import in a table from node index to bone; each is a sub-address `item#bone`
+- Import: joints compose through the node hierarchy in an order sorted at import, non-joint ancestors included (a skin's joints needn't list parents first); `JOINTS_0` indexes the skin's joints array, which is also the palette's order; the skinned mesh node's own transform is ignored, as glTF requires
+- Clip: `from_asset {asset, animation: name}` (the asset's own glTF animation, with the item's bones as slots); it may also name another mesh asset whose skin has the same bone IDs and rest pose, each bone within 0.1 mm and 0.01°, checked at import, or it's refused with `skeleton_mismatch`, naming the first bone that differs (a clip made for another skeleton comes through the retarget job: Asset job)
+- Bone channels: `items/<id>#<bone>/at/rot | pos | scale`, `blend: add | replace = add` (add turns relative to the clip's pose)
+- Read-only: `items/<id>#<bone>/world` (the evaluated bone, for drivers and checks)
+
+**Semantics:** Each frame, active placements sample the asset's clips at their local times by glTF's samplers in pinned math (STEP holds; LINEAR lerps translation and scale and slerps rotation along the shorter arc; CUBICSPLINE is the Hermite form with tangents scaled by the key interval, and rotations are normalized after), blend in placement order, bone channels apply, bone constraints run parent before child, and the palette (bone world × inverse bind) skins the mesh by linear blend in the vertex stage. All of it is a function of t, so seeking equals playing, and the evaluated bones, computed on the CPU, are what checks read. With no placement the pose is the bind pose, as today. Normals skin as normalize(cofactor(M) × n) × sign(det M), with M the blended 3 × 3. glTF's own rules hold at import: input times must start at 0 or later and be strictly increasing, so negative, duplicate, decreasing or non-finite times are refused with a code; rotation keys must be unit quaternions; a CUBICSPLINE sampler needs at least two keys; and a skin without inverse bind matrices uses identity matrices. Our own limits, such as 4 influences and 256 bones, refuse under codes of their own, so format conformance and our limits stay apart.
+
+**Cost:** CPU per skinned item per frame: about 3 channels per bone at up to 100 ns each, so 20 to 30 µs for 65 to 100 bones, plus O(bones) composition; GPU about 50 multiply-adds per vertex; 48 B per palette entry and 16 B per vertex for indices and weights (estimates). Budget class: figure, work product, showpiece, export.
+
+**It can never:** Integrate between frames (no inertialization history or ragdoll; a spring chain's follow-through is baked at check); solve IK by iteration or retarget at run time; author weights, rest poses or rigs; exceed 4 influences or 256 bones (refused; an asset job can reweight); use dual quaternions (deferred).
+
+**Lands:** R6, with `mesh.asset`; it narrows Asset: meshes's "be shown skinned or animated" to anything beyond this row
+
+#### Asset: skinned playback: bounds
+
+For: camera.framing on a walking character, culling, and the geometry audit's broad phase on skinned items in the house and the city
+
+**Fields**
+
+- Probe output on a skinned `mesh.asset` (read-only): `bone_boxes: [{bone, min: vec3, max: vec3}], m` (model space)
+- Evaluated (read-only): `items/<id>/bounds` at t
+
+**Semantics:** At probe, each bone gets the model-space box of the bind-pose vertices it influences with a nonzero weight. Each frame the item's bounds are the box around all bone boxes transformed by their palette matrices, which contains every skinned vertex, since each is a convex combination of points inside those boxes. The bounds are computed on the CPU in pinned f64 math, so checks read the same box on every machine.
+
+**Cost:** Probe O(vertices × influences) once in the decode worker; per frame O(bones) by Arvo's box transform, about 1 µs for 100 bones (estimate); 24 B per bone. Budget class: as the skinned item.
+
+**It can never:** Be smaller than the skinned mesh at a sampled t (parity/scene/instance-bounds-over-time.film checks every vertex); read GPU results; be authored.
+
+**Lands:** R6, with skinned playback
+
+#### Asset: skinned playback: plants
+
+For: footsteps that land with a walking presenter's feet in films; dust puffs under the generated walk preview
+
+**Fields**
+
+- On a placement of an asset clip (optional): `plants: {bones: [bone | chain] = [foot_l, foot_r], height: m = 0.03, speed: m/s = 0.05, min_gap: flick = "0.1s"}`
+- Output: occurrence list `<item>.plants` with entries `{t: flick, bone, point: vec3, m}`
+
+**Semantics:** At check the core samples the evaluated bones at the document's frame rate over the placement's active span, and records a plant at the first frame where a bone's height above the item's support and its speed both fall under their thresholds, at least min_gap after that bone's last plant. The list is sorted by (t, bone), baked under the clip's, the placement's and the support's content keys, and read by spawns, particles and drivers, so seeking equals playing. animation.contacts uses the same thresholds, so a plant and a reported slide never disagree.
+
+**Cost:** O(frames × bones) at check per unique key: two bones over 10 s at 60 fps is 1,200 samples, under 1 ms (estimate); 32 B per entry; nothing per frame. Budget class: as the skinned item.
+
+**It can never:** Be typed as times by hand (a marker does that); read GPU results; go stale silently when the clip, the placement or the support changes (it rebakes).
+
+**Lands:** R6, with skinned playback
+
+#### Asset: morph targets
+
+For: a 3D presenter whose face speaks the narration; a licensed or generated character's expressions; a product that squeezes or opens by its own shapes
+
+**Fields**
+
+- On `mesh.asset`: `weights: {target name → channel}` (the asset's own glTF targets; its clips' weight channels drive them by default)
+- Weight channels: `items/<id>/params/weights/<target>`, `blend: add | replace = add` (add lands on what the clip and the visemes give; a clip's weights split at import into one channel per target)
+- `visemes: {set: A to H and X, map: {viseme → target name}, fade: ms = 60}` (the puppet@1 set, so a narration's viseme bake keys the mouth)
+- `visemes.map` values may also be `{target name → weight}` (a viseme as a mix of the face's own targets, such as jaw open and funnel); `visemes.influence: channel = 1` (fades the narration's mouth in and out)
+- Probe adds: `targets: [{mesh, names: [string], count: u16, dropped: [attribute]}]` (dropped: deltas our vertex stage doesn't apply)
+
+**Semantics:** Each frame the evaluated weights blend the asset's own targets into its positions, normals and tangents in the vertex stage, before skinning, as glTF orders them, from a texture of target deltas, so any number of targets applies and a weight of 0 costs nothing. Weights come from the asset's clips, sampled by the same pinned math as bones, from channels and drivers, or from a viseme bake: at each viseme occurrence its mapped target rises to 1 and the other mouth targets fall to 0 over `fade`. These stack in a fixed order, so none is a second writer: the placements on a weight, which mix as Placement says; then the viseme bake's part, added and scaled by `visemes.influence`, where X adds nothing and a weighted map raises each of its targets to its weight; then the weight's channel, by its blend; then at most one driver. So an idle clip's blink, a keyed smile and the narration's mouth share one face, and a clip that moves the mouth itself gives it up with `except: [mouth]` (Placement: only). Evaluated vertices are computed on the CPU for checks and bounds, as bones are, so seeking equals playing on every machine. glTF's own rules hold at import: a target may leave out any attribute, whose deltas are then zero, so one target can move POSITION and NORMAL and the next POSITION alone; a primitive with no targets keeps its own vertices under every weight; every primitive that has targets has the same number of them, or the mesh is refused with the validator's code, naming it; and a target moves only attributes its primitive has. glTF's text allows a primitive with no targets since its September 2026 revision, so where a Khronos glTF Validator release still counts one against the others, the import keeps the mesh and lists that message as a warning. A target is named by the mesh's `extras.targetNames`, or else by its index. Our own limit stays apart from glTF's rules: the vertex stage morphs positions, normals and tangents, so a target's texture-coordinate or color deltas are listed in the probe's `dropped`, with a warning on the item, and never applied.
+
+**Cost:** O(active targets × the vertices they move) in the vertex stage; a face of 20,000 vertices with 6 of its 52 targets active costs about 0.05 ms of GPU (estimate), and the CPU evaluation runs only for checks. Budget class: work product, showpiece, export.
+
+**It can never:** Author or sculpt a target; keep weights between frames; morph a mesh that has no targets of its own.
+
+**Lands:** R6, with skinned playback
+
+#### Asset: licences through jobs
+
+For: exports that carry a sampled piano, a narrator and a foley pack: credits that can't drop out
+
+**Fields**
+
+- `license.from: [asset | job output]` (derived: a job output's licences are the union of its inputs')
+- Bundling: `cc0 | cc_by` (with credit); never `cc_by_sa | nc | gpl`
+
+**Semantics:** A runner job's output inherits its inputs' licences: score stems carry their libraries, narration its narrator, foley its pack. The export's credits walk this graph. A CC BY input without its credit makes the export FAIL, and a non-shareable or unknown input makes a shared export BLOCKED with an ask. DeepBuild bundles CC0 and CC BY with credits only; CC BY-SA, NC and GPL assets are never bundled, espeak-ng included.
+
+**Cost:** O(edges) per export. Budget class: export.
+
+**It can never:** Drop a credit; bundle a CC BY-SA, NC or GPL asset; treat an unknown licence as shareable.
+
+**Lands:** R6
+
+#### Asset: tables
+
+For: a data story's dataset; a chart's values and labels; a template's numbers: data whose source is on record
+
+**Fields**
+
+- `kind: … | table` (CSV or JSON lines, ≤ 16 MB*)
+- `probe: {table: {rows: u32, columns: [{name, dtype, unit}], key: column}}`
+- `source: {url, fetched: time} | handle | agent` (written by what brought it: the hub for a fetch, the record for a handle, and `agent` for a table an agent wrote)
+- `source` also takes `job {kind, tool, input}` for a table an import job wrote (Asset job: imports)
+
+**Semantics:** Probed once in the decode worker into typed columns, with a header, a unit per column and a key column, so a mark set reads a column by name and a chart's labels trace to the file by hash. A text cell keeps its raw bytes and their range in the file, untouched by line ends or Unicode normalization; a label draws the cell's display form, NFC, and a trace or a check that quotes a cell compares its raw bytes. A table fetched through the Source block keeps its URL and fetch time, which the hub writes, never the agent. A table an agent wrote is its own word: its numbers count as story numbers, which pass only where the document binds no status and no reading.
+
+**Cost:** Probe O(bytes) once, in the decode worker; columns O(rows) once; nothing per frame. Budget class: any class with data.
+
+**It can never:** Be parsed outside the decode worker; take its source from an agent's say-so; hold a formula (values only).
+
+**Lands:** R2, with data views
+
+#### Asset: tables: catalogs `table.layout@1`
+
+For: a game's items, recipes, creatures, units and scenario triggers: one typed catalog that the rules, the text and the checks all read
+
+**Fields**
+
+- `kind: … | catalog`
+- `catalog {tables: {name → table asset ID}, schema: {table → {id: column, inherit: column (optional), columns: {name → {type: i32 | f64 | bool | ref table | refs table | copy table, unit, range}}}}}`
+- Out: `table.layout@1` by hash: a little-endian header (magic, version, table count), then a directory per table (its name hash, row count, and each column's name hash, type and offset), then each column contiguous: i32 and f64 as values, bool as a byte, `ref` as a u32 row index into its table, `refs` as a u32 offset and count into one shared u32 pool, `copy` as the i32 key of an entry in its copy table, `data.copy[locale][table]` (Text `text@1`: keyed copy); rows sorted by the u32 hash of their ID
+
+**Semantics:** Probed once in the decode worker, like any table (Asset: tables), from its tables and a schema the brief or a kit gives. Inheritance resolves first: a row whose `inherit` names another takes that row's values for every column it leaves empty, and a cycle is refused, naming its rows. Each ID and each column name then hashes to a u32 by FNV-1a, and two IDs or two column names whose hashes collide are refused, naming both, so a hash never names two rows. A `ref` whose ID no row holds is packed as 0xFFFFFFFF and listed, and `catalog.refs` fails on it. The same bytes reach every reader by hash: a logic item names the catalog among its data assets and reads a column by its name's hash and a row by a binary search on its ID's hash (Logic `logic@1`); a text item shows a row's `copy` column through keyed copy, the logic reading its key into an array (Text `text@1`: keyed copy); and the catalog checks read it (Check input: catalog kinds). A game project's catalog files, CSV or JSON lines at paths its brief names, go through the same probe, so both routes' catalogs meet the same checks.
+
+**Cost:** Probe O(rows × columns) once per content key: 10,000 rows of 20 columns about 1 MB, under a second (estimate); nothing per frame. Budget class: any class with data.
+
+**It can never:** Hold a formula or code; key a row by its position; hold an ID twice; be parsed outside the decode worker
+
+**Lands:** R6, with the catalog plug-in
+
+#### Asset: terminal recordings
+
+For: the test run that proved a change, replayed in a code-change film; a command's output in a walkthrough
+
+**Fields**
+
+- `kind: … | terminal` (a size, then output bytes with their times)
+- `probe: {terminal: {cols, rows: u16, span: flick, keyframes: u32}}`
+
+**Semantics:** Converted once at import, in the decode worker, by a pinned terminal emulator into a keyframe of the whole grid every second and row patches stamped in flicks, so a cell grid plays it by t (Cell grid `cells@1`) and nothing parses escapes per frame. A command check's output recorded with times can be the recording, so a film replays the run that proved the change. Like any media, it's evidence by hash, and showing it proves nothing.
+
+**Cost:** Import O(bytes) once; about 52 KB per keyframe of 120 × 36 cells (estimate); nothing per frame beyond the cell grid's own. Budget class: as the cell grid.
+
+**It can never:** Be parsed in the frame loop or outside the decode worker; take keys or input; play without its hash.
+
+**Lands:** R6, with films
+
+#### Strip and track
+
+**Fields**
+
+- `track: u16`
+- `src: asset | scene | text | generator` (a sound job's stem or variant: Strip and track: generator sources and rate ramps); `src` also takes `synth`, live sound from a synth preset (Synth `synth@1`)
+- `start: time` (or a marker expression); `in, out: flick` (of the source)
+- `rate: rational = 1 | ramp {…}` (declares its time translation; a ramp is a tape stop or start)
+- `gain: dB | expression = 0`; `pitch: semitones | expression = 0`; `pan: −1..1 = 0`
+- `fade_in, fade_out: {length: flick, curve: linear | equal_power | exp}`
+- `opacity: f32 = 1`; `rect`
+- `loop: bool = false`
+- `span: flick | auto = auto` (how long the strip plays; auto is (out − in) ÷ rate, or to the transport's end for a looping strip)
+- `align: {onset: strongest | first, to: time}` (optional)
+- `bus`; `enabled: expression`; `tags`
+- `at_stage: play | wait` (while a stage holds the timeline; default `play` for a strip that loops, `wait` otherwise)
+
+**Semantics:** Active over [start, start + (out − in) ÷ rate), with source time = in + (t − start) × rate; audio starts mid-block at the exact sample, with gain evaluated per sample. With its span set, a strip is active over [start, start + span) instead, and a looping strip's span runs to the transport's end unless set. A looping strip plays its source to the end of its loop region (the asset's loop points, or its whole length), then repeats the region until its span ends, where its fade_out ends. A strip that starts or stops anywhere but its source's own start or end fades over at least 5 ms on an equal-power curve, declared or not, so no edit clicks. On a track at most two strips overlap, each overlap carries exactly one transition, and a third is refused. A strip with `at_stage: play` runs on the clock (Marker: present mode): its source time counts the clock from where the timeline entered its span, so it plays on through a hold or a jump, and it stops when the timeline leaves its span. A video the camera, masks or callouts must reach plays as an image item instead (Image `image@1`: video frames), and its sound stays a strip. The evidence player is a two-track strip view: a journey's video opens at the step a check looked at (from the evidence's step times, with key frames at step starts), and a call recording at the turn a check flagged, with captions.
+
+**Cost:** Per active audio strip: resampling when the rate isn't 1, plus gain per sample; per video strip, one decode or texture per frame
+
+**It can never:** Be called a clip; hide a cut a check needs; play sound outside the device gate
+
+**Lands:** R1 the evidence player; R6
+
+#### Strip and track: generator sources and rate ramps
+
+For: a score's stems and a foley preset's variants played as strips; a tape stop
+
+**Fields**
+
+- `src: generator {job: ID, output: stem name | variant}` (a score.render@1 or foley.render@1 output)
+- `rate: ramp {to: rational, over: flick, shape: linear | exp}` (pitch follows the rate)
+
+**Semantics:** A generator strip plays the asset a score or foley job made, resolved at check by the job's key; the core synthesizes only through a synth (Synth `synth@1`), and a job that hasn't run makes the strip BLOCKED. A rate ramp's source time is the exact integral of the rate, resampled with pitch following, as tape does, so seeking equals playing. A ramp belongs to the strip, so Time remap's audio rule still holds.
+
+**Cost:** As any audio strip; a ramp resamples per sample. Budget class: as the media module.
+
+**It can never:** Synthesize in the audio thread; play a job output that didn't pass its check; ramp a rate on a video strip.
+
+**Lands:** R6, with the media module
+
+#### Bus
+
+**Fields**
+
+- `gain: dB = 0`; `pan: −1..1 = 0`; `mute: bool = false`
+- `processors: [ID]` (ordered)
+- `sends: [{to: bus, gain: dB = 0, tap: pre | post = post}]`
+- `out: bus = master`; `layout = stereo`
+- `loudness_target: LUFS` (optional)
+
+**Semantics:** Mixed per block in topological order as a plain sum, with no normalizing. Any cycle is refused. The master ends in the limiter.
+
+**Cost:** O(inputs × block) adds, plus processors
+
+**It can never:** Form a cycle; drop a voice without its fade
+
+**Lands:** R6
+
+#### Processor
+
+**Fields**
+
+- `kind`, one of:
+- `eq {bands: [{type: lowpass | highpass | bandpass | lowshelf | highshelf | peaking | notch | allpass, freq: Hz = 350, q = 1, gain: dB = 0}]}`
+- `compressor {threshold: dB = −24, knee: dB = 30, ratio = 12, attack: s = 0.003, release: s = 0.25, makeup: dB | auto, key: bus}`
+- `limiter {ceiling: dBTP, lookahead: s = 0.005, release: s = 0.1, oversample: 4 | 8 = 8}`
+- `delay {time: s ≤ 2, feedback: [0, 1), mix}`
+- `reverb {ir: asset | {decay: s, size, damping}, mix}`
+- `pitch {semitones, window: s = 0.1}`
+- `shaper`, `crush`, `modulate` (Processor: shaper, crush and modulate)
+- Derived: `tail: flick`; `latency: samples`
+- `checkpoint_every: s = 1`
+
+**Semantics:** Biquads follow the Audio EQ Cookbook formulas; the compressor and limiter laws are ours, written down. State is checkpointed on a fixed grid, so a seek restores a checkpoint and renders forward, and seek equals play bit for bit on the same build and architecture. The tail says how long a bus keeps rendering after its input stops, and latency is compensated across parallel paths.
+
+**Cost:** A biquad about 5 multiply-adds per sample per band; convolution by partitioned FFT, priced per instance; a checkpoint is mostly delay lines (a 2 s stereo reverb at 48 kHz is about 0.77 MB)
+
+**It can never:** Be plug-in code; feed back without bound; report a tail shorter than its decay to −120 dBFS
+
+**Lands:** R6
+
+#### Processor: shaper, crush and modulate
+
+For: tape, toy and retro scores; a radio voice; a pixel film's bit-crushed blips; an old print's wow
+
+**Fields**
+
+- `shaper {curve: tanh | soft_clip | fold = tanh, drive: dB = 6, mix: f32 = 1, oversample: 2 | 4 = 4}`
+- `crush {bits: u8 = 8 (1 to 16), hold_hz: Hz = 0 (0 is off), mix}`
+- `modulate {wow_hz: Hz = 0.5, flutter_hz: Hz = 8, depth: cents = 10, seed}`
+
+**Semantics:** shaper is memoryless per sample, oversampled through the limiter's filters; crush quantizes bits and holds a sample for its period, state that checkpoints like any processor's; modulate reads a fractional delay whose time follows two periodic curves of t and the seed, so seeking equals playing. Tails: shaper and crush 0; modulate its largest delay.
+
+**Cost:** shaper about 10 multiply-adds per sample at 4×; crush 2; modulate a Lagrange-interpolated read, about 8. Budget class: as the media module.
+
+**It can never:** Be plug-in code; draw randomness from a stream; read the wall clock.
+
+**Lands:** R6, with the media module
+
+#### Synth `synth@1`
+
+For: sound that follows the picture: an engine whose pitch follows a car's speed, a sonified chart, a theremin toy, footsteps whose timbre follows the ground
+
+**Fields**
+
+- `synth@1 {preset: <pack>.<name>@major, params: {name → expression}, voices: u8 = 1 (≤ 32), seed}`, as a strip's source (`src: synth`) or a Spawn template's
+- Preset: `{nodes: {ID → node}, edges: [[from, to, input]], out: node ID, params: {name → {unit, range, default}}, cost: per voice}`, an entry of the `synth.preset@1` registry (Registry and seal: registries), filled by first-party packs and packs
+- Nodes, a closed list: `osc {wave: sine | saw | square | triangle, hz}`, `noise {color: white | pink | brown}`, `modes {ratios, t60s}`, `string {hz, damping}`, `env {attack, hold, decay, sustain, release}`, `biquad {type, freq, q, gain}`, `shaper`, `crush`, `delay {time: s ≤ 2, feedback: [0, 1)}`, `gain`, `mix`
+- `checkpoint_every: s = 1`; derived: `tail: flick`
+
+**Semantics:** A synth makes sound live from a synth preset: a graph over the closed node list that foley's presets and the processors already use, run by our own pinned math in the audio thread, which allocates nothing, takes no locks and calls no platform sin, exp, tan or pow. Each block, every param is evaluated at the time of the block's first sample, from expressions over t, channels, drivers, logic arrays and, in a voice a Spawn starts, its occurrence's fields; it holds for the block, and a change ramps linearly across one block, so a value a logic step writes reaches the sound within one block (2.7 ms at 48 kHz). Oscillator phases are fixed point, noise draws hash(seed, synth ID, voice, sample index), and every node's state (phases, filter states, envelope stages and delay lines) checkpoints every second, as a processor's does, in the bake at check as well as while it plays, so a seek restores the nearest checkpoint and renders at most a second forward, and seeking equals playing bit for bit on one build and CPU architecture. A synth plays through its bus, the master's limiter and the device gate like any strip, and an export renders it offline with everything else, held to its loudness profile. Packs, outside packs included, carry presets as data, checked once per version: every node is in the list, the graph has no cycle except through a delay of at least one block, every param has a range, and the cost at defaults is within the preset's estimate. A score's synth instrument names a preset the same way. The node list stays closed, since its math runs in the audio thread; a new node is a first-party change with its fixtures.
+
+**Cost:** Per voice per block, O(nodes × block): an osc about 4 multiply-adds a sample, a biquad 5, a mode 3 (estimates); 32 voices of 8 nodes stay under 10% of one core at 48 kHz (estimate); a checkpoint is mostly delay lines. Budget class: as the media module.
+
+**It can never:** Run plug-in code or a node outside the closed list; draw from a random stream; read the wall clock or a live meter; feed back without a delay; play outside the device gate
+
+**Lands:** R6, with the media module
+
+#### Emitter
+
+**Fields**
+
+- `item` (its transform)
+- `src: strip | bus`
+- `distance: {model: inverse | linear | exponential = inverse, ref: m = 1, max: m = 10,000, rolloff: f32 = 1}`
+- `cone: {inner: deg = 360, outer: deg = 360, outer_gain: f32 = 0}`
+- `pan: equal_power`
+- The listener is the camera.
+
+**Semantics:** Per block, gain = distance gain × cone gain, using the W3C Web Audio formulas with the cone's sign fixed as listener minus source; then an equal-power pan from the direction to the listener, ramped within the block.
+
+**Cost:** O(1) per emitter per block
+
+**It can never:** Use HRTF; follow anything but its item
+
+**Lands:** R6
+
+#### Spawn
+
+**Fields**
+
+- `on: occurrence list + filter` (such as physics `hit` where the tags include "wood", or a logic item's `<logic ID>.occurrences`, whose declared fields the expressions read and whose field named `point`, if any, is its point: Logic: occurrences)
+- `play: strip template` (a weighted list: Spawn: variants; the variant and span expressions: Spawn: variant and span)
+- `gain, pitch, pan: expressions over occurrence fields (speed, impulse, tags)`
+- `cooldown: flick = 30 ms` (per pair a, b)
+- `max_voices: u8 = 8` (1 to 64)
+- `steal: oldest | furthest | quietest | none = oldest`
+- `priority: u8 = 128`
+- `seed`
+- `at: point | a | b | none = point` (where each voice is heard from: its occurrence's point, or the item that shows body a or b as it moves; none in a 2D document or when the occurrence has no point)
+- `distance: none | {model, ref, max, rolloff} = none` (as Emitter's; none keeps the spawn's gain)
+- `follow_remap: bool = false` (true: under a time remap, a voice's rate and pitch follow the remap's rate)
+
+**Semantics:** For each occurrence in flick order, a voice starts at its flick, sample-accurately, unless its pair is cooling down. Past `max_voices`, `steal` picks one, with ties broken by start flick, then stable ID, and "quietest" judged from the evaluated gain, never a live meter. Random draws are hash(seed, spawn ID, occurrence index), so which voices sound depends only on the list, never on CPU load. In 3D each voice is heard from where `at` puts it: it pans by the Emitter row's equal-power law with the camera as listener, per block from t, so seeking equals playing; a spawn that sets its own pan keeps it, and gain falls with distance only when distance is set. On a world under a time remap, each voice starts at its occurrence's parent flick and plays at its own rate, or, with follow_remap, at that rate times the remap's constant rate, so its pitch follows as tape's does.
+
+**Cost:** Planning O(occurrences); rendering O(live voices × block)
+
+**It can never:** Spawn from anything but a baked occurrence list; let load or a live meter decide
+
+**Lands:** R6
+
+#### Spawn: variants
+
+For: physics labs where many balls hit wood; films with footsteps or debris landing
+
+**Fields**
+
+- `play: strip template | [{template: strip template, weight: f32 = 1}]` (the list is new)
+- `pick: weighted | no_repeat | by_variant = weighted` (new; by_variant: Spawn: variant and span)
+
+**Semantics:** Picks are computed once, in flick order over the baked occurrence list, from hash(seed, spawn ID, occurrence index) and the weights. With no_repeat, a pick never repeats the previous pick for the same spawn. Because the picks are a fold over a sorted list baked before playback, a seek reads the same choices.
+
+**Cost:** O(occurrences) once at planning; nothing per block. Budget class: as the media module.
+
+**It can never:** Depend on CPU load, a live meter or the wall clock; change a pick when seeking; pick from an unbaked event.
+
+**Lands:** R6, with the media module
+
+#### Spawn: variant and span
+
+For: footsteps louder at speed, a pen's scrape that lasts its stroke, a blip per letter, foley on authored moments
+
+**Fields**
+
+- `variant: expression over occurrence fields → level` (with `pick: by_variant`)
+- `round_robin: hash | none = hash` (no immediate repeat of a take)
+- `span: expression → flick` (the voice's length)
+- `on` also takes `markers.<kind>`, `<item>.reveal` and `<item>.build`
+
+**Semantics:** For each occurrence, variant picks the level and the round robin picks a take within it by hash(seed, spawn ID, occurrence index), never repeating the level's previous take; span sets the voice's length, faded by the template's fades. Lists compiled from markers, text reveals and path builds are baked at check like any occurrence list, so Spawn still reads only baked lists.
+
+**Cost:** O(occurrences) at planning; nothing per block beyond the voices. Budget class: as the media module.
+
+**It can never:** Pick by CPU load or a live meter; pick from an unbaked event; play past the template's source.
+
+**Lands:** R6, with foley@1
+
+#### Analysis bake
+
+**Fields**
+
+- `asset` (plus the decoded PCM's hash)
+- `analyzer: id@version`
+- `kind: loudness {subblock: 10 ms, k_variant, tp_oversample: 4 | 8, channel weights by azimuth and elevation} | onsets {method: transient | spectral_flux, threshold} | beats {model: id + weights hash, tempo_range} | words {source: tts_marks | aligner, model} | visemes {set: A to H and X, map: id@version, source: tts_marks | aligner = the line's own, lead: flick = "1f"} | activity {model: silero@6.2.3, threshold = 0.5} | envelope {rate: Hz = 24, outputs: [rms, centroid]}`
+- `params`; `runtime: {cpu | gpu, precision, threads}` (for model kinds)
+
+**Semantics:** Loudness is a power bake: f64 K-weighted energy per channel per 10 ms sub-block, plus sample and true peaks, from which momentary, short-term, integrated, LRA and maxima derive exactly. Signal kinds, onsets and envelopes among them (the attack start, at sample accuracy; RMS and spectral centroid every 1 ÷ rate s, which open and widen a 2D mouth), re-check to an exact match; model kinds (aligners, neural beats, speech marks) are recorded artifacts, re-checked to within one model frame (10 to 20 ms). Raw units such as Apple byte offsets, Azure's 100 ns or 1/80 s are kept and converted to flicks by a stated rule. Visemes map phonemes to shapes through the pinned table `map`: from the speech job's own phoneme timings for a synthesized line (tts_marks), or from a pinned recognizer run on a recording's audio (aligner); both are model kinds. Each shape is placed `lead` before its sound, since a drawn mouth forms before the voice is heard.
+
+**Cost:** Loudness about 20 flops per sample per channel plus the true-peak filter (48 multiply-adds per sample at 4×); 800 B/s per channel; aligners need 0.27 to 3.9 GB, so they run as runner jobs
+
+**It can never:** Run live where a bake would do; recompute silently under another analyzer version; call loudness exclusion a gate
+
+**Lands:** R6
+
+#### Ducking
+
+**Fields**
+
+- `target: bus`
+- `key: spans` (from an activity or words bake)
+- `depth: dB = −12`
+- `attack: s = 0.2`; `hold: s = 0.3`; `release: s = 0.8`
+- `merge_gap: s = 0.8`
+
+**Semantics:** Spans closer than `merge_gap` merge, then a gain channel ramps from each span's start − attack so it reaches depth exactly at the start, holds to the span's end + hold, and releases over release. It's a seekable driver, not a live sidechain.
+
+**Cost:** O(spans) at bake; O(1) per block
+
+**It can never:** Listen live to a sidechain where spans exist
+
+**Lands:** R6
+
+#### Device gate
+
+**Fields**
+
+- `owner: panel | plug-in ID`
+- `granted_by: input entry` (a gesture in that panel, by serial)
+- `state: suspended | running | interrupted | muted`
+- `quiet_hours`
+- `limiter: {ceiling: dBTP = −1}`
+- `loudness_cap: LUFS short-term` (plug-in sources)
+- `reserved: [sound ID]` (the question chime and notices)
+- `lowpass_sandboxed: Hz = 18,000` (optional)
+- `stats: {underruns, underrun_time, latency}`
+
+**Semantics:** Sound for an owner starts only after a gesture in its panel, which covers that panel's sources until it closes, you mute it, or quiet hours begin; the shell always shows the owner and a mute. The limiter and the cap apply after the mix, and reserved sounds come only from the app, with an asset too similar to one refused at load. `interrupted`, when another app or the OS takes the device, is distinct from muted. A port that drives gear that makes sound (Port) has its plug-in as an owner: Connect needs a gesture in the piece's panel, and a mute or quiet hours stop its out side.
+
+**Cost:** O(1) per block, plus the limiter
+
+**It can never:** Start sound unasked; imitate the question chime; be granted by an agent
+
+**Lands:** R1 minimal (gesture, owner indicator, limiter) with the evidence player; R6 the rest
+
+#### Capture
+
+**Fields**
+
+- `source: screen | window | camera | microphone`
+- `via: picker` (screen and window) `| os_permission + trusted control` (camera and microphone on macOS)
+- `hold: shortcut`
+- `indicator: system + app`
+- `max: s = 120`
+- `first_frame: ms ≤ 100`
+- `out: asset` (redaction `unknown`)
+
+**Semantics:** Frames and samples are kept only while the shortcut is held, every frame during a hold is kept, and the result is evidence that stays on the machine until its redaction is complete or you approve. On macOS, screen and window come through the system picker; there's no system picker for the camera and no picker control for the microphone, so those use the OS permission plus DeepBuild's own held-shortcut control, never a standing grant. Linux uses the desktop portal's screen-cast picker.
+
+**Cost:** Encoding about real time on the hardware encoder
+
+**It can never:** Record without the hold; give anything a standing grant; record for an agent
+
+**Lands:** R2 screen and window (bug reports); R6 camera and microphone
+
+#### Decode worker
+
+**Fields**
+
+- `sandbox: no network, no devices` (FFmpeg built without network protocols; App Sandbox and XPC)
+- `caps: {max_bytes, max_duration: s, max_pixels}`
+- `memory: MB = 200`
+- `codecs`: the platform's, plus our own audio decoders so every platform reads WAV, AIFF, CAF, MP3, AAC-LC and HE-AAC, ALAC, FLAC, Opus (Ogg, WebM) and Vorbis (Ogg)
+- `out: YUV planes + color tags | BGRA by IOSurface or DMA-BUF; PCM f32`
+
+**Semantics:** All probing, decoding, proxies and encoding happen here. Evidence video hashes decoded YUV planes before color conversion; RGB conversion uses the stream's tagged matrix and range. Speech aligners and other models run as runner jobs, never here.
+
+**Cost:** Bounded by its caps and frame pools
+
+**It can never:** Reach the network; parse outside the sandbox; exceed its memory budget
+
+**Lands:** R1 journey video; R6
+
+#### Export
+
+**Fields**
+
+- `range: whole | [in, out] | ranges | still {t | marker} | frames | stages`
+- `every_nth: u16 = 1`; `size`; `frame_rate`
+- `purpose: draft | delivery = delivery`
+- `video: {codec: h264 | hevc | hevc_alpha | prores_4444 | png_seq | gif | lottie | pdf, alpha: straight | premultiplied, color: bt709, keyframe_interval, quality}`
+- `video.quality: draft | standard | master = standard` (the export.fidelity floor: PSNR-Y 35, 40 and 45 dB)
+- `pdf {notes: bool = false}` (a handout: one page per stage's settled still, with its notes only when `notes` is true)
+- `audio: {codec: aac | pcm, sample_rate, layout}`
+- A `codec` is one a qualified encode tool registers, these first (Export: encode job); `lottie`, `pdf`, the playable page and the web player stay the export's own writers
+- `loudness_profile`; `captions: {profile, files: srt | vtt, mode: open | closed | both = open}`
+- `chapters` (from section markers); `credits` (from asset licenses)
+- `shards: u8 = 1`
+- `metadata: {doc hash, seed, versions, title, writer}`
+- `timescales` (per track)
+- `hash: sha256` over canonical raw buffers
+- Receipt: `{size, frame_rate, duration, frame_hashes, pcm_hashes, integrated, lra, max_m, max_s, true_peak, sample_peak, plr, av_offset (with AAC priming and edit-list state), caption coverage and violations, licenses, credits, encoder {name, version, hardware}, adapter {name, driver, backend, software: bool}, nonfinite: [{item, frames}], color_probe {tags, max_error}, fidelity {frames, samples, psnr_y, ssim, worst_1pct}, timing: {evaluate, draw, readback, hash, encode, guards: s}, reused_frames: u32}`
+
+**Semantics:** Rendered offline on the virtual clock, with a readiness gate that fails on a missing asset, tails pre-rolled, shards joined, and each frame's audio its exact sample span. Hashes are taken on canonical raw buffers before encoding: BGRA8 rows top-down without padding, or YUV planes, and PCM as interleaved f32le. Encoding is a job: the export hands the canonical buffers by hash to the encode job kind, whose first tools are VideoToolbox on macOS, NVENC on NVIDIA and VA-API on Intel and AMD under Linux, and OpenH264 only as a separate download (Export: encode job). An export is all or nothing: a decode error, a lost device or a missing bake at any frame stops it with an issue naming the frame, and nothing partial is left, since it writes to a temporary name and renames on success. A film's span is a whole number of frames at the export rate, or the check names the hold it adds; audio is never padded silently. The delivery's first audio sample meets its first frame within one sample once its edit list is applied, so an encoder's priming never moves the sound, and the receipt's `av_offset` shows it. H.264, HEVC and ProRes 4444 are BT.709 limited range with their tags written, ProRes 4444's alpha full range, since ProRes decoders read its color as limited range whatever the encoder was fed; PNG is full range. A look with grain raises the encoder's quality floor. An export holds the GPU lease while it runs, so a second export waits for the lease instead of sharing the GPU. Every film export runs the export kinds (Check input: export kinds) and makes a contact sheet every 1 s and strips around every moment. A frame whose content key and view equal the previous frame's reuses its raw buffer and hash: it isn't drawn, read back or hashed again, and the encode job gets it as a repeat. The delivery still holds every frame. A draft is an export with `purpose: draft`: it runs film.blank and frames.finite but not the delivery decode, it stays in the app's store, and it can never be shared, attached or sent; it leaves `video.quality` as set. An export on a software adapter runs the same guards. A 4:2:0 codec needs an even width and height: an odd size is refused at check with `export_size_odd`, naming the size and the nearest even one. MP4 and MOV deliveries put their header first. Each chapter's first frame is a key frame. The export lists each strip the film's end cuts, with its start and the seconds lost, as a warning a brief may refuse.
+
+**Cost:** Per frame: evaluate, draw, read back (about 8.3 MB at 1080p), hash, and encode in hardware; a held span costs one frame's draw, readback and hash, whatever its length. A draft at least 4x real time at 1080p60, and a delivery with every guard at least 2x real time, on the reference Mac from the command to the file, measured on the speed fixture set (a 36 s 2D explainer with 40% reading holds and a 10 s 3D orbit at 1080p60, mean of 3 runs)
+
+**It can never:** Differ from the settled live frame, except as a path-traced final, which final.match holds to it; leave a partial file; pad audio silently; compare encoded bytes; write flicks as a file timescale; use a GPL encoder; leave the machine with incomplete redaction without your approval; count as evidence for a claim about code; pick the software adapter while a hardware one answers; deliver a frame drawn by a fallback the receipt doesn't name
+
+**Lands:** R1 stills, through render-back; R6 video
+
+#### Export: glTF
+
+For: work products and game assets, as engine-ready files
+
+**Fields**
+
+- `format: glb | gltf = glb` (FBX only from the convert job, after a decision)
+- `pivot: base_center | origin | bounds_center | anchor = origin`
+- `lods: {from: lod_bands | jobs, levels: [{triangles: u32, impostor: u8}], per: document | item = document, skinned: bool = false}`
+- `collision: {from: world handle | job ID, body: ID, per: document | item = document, extras: bool = false}`
+- `textures: {size: px, maps: [map], orm: bool = true, normal: +y, uv: uv0 | uv1 = uv1, mode: atlas | tile | palette | as_delivered = atlas, per_material: bool = false, shared_atlas: bool = false}`
+- `sockets: {name → anchor}`; `attributes: {name → glTF attribute}` (such as wind to `COLOR_0.r`); `variants: {set → KHR_materials_variants}`
+- `clips: {name → {clip: clip ID, channel: channel ID, from_asset: {asset, animation}, sample: frame_rate, targets: transforms | params | joints, loop: bool, root_motion: in_place | keep}}`
+- `skin: {from: asset ID, max_influences: u8 = 4, bone_map: job output}` (a mesh asset's skin, passed through untouched)
+- `keep: {ids: extras, provenance: extras, licenses: copyright, identifiers: verbatim}`
+- `outputs: {name → {profile: engine export profile, file, format, textures: png | ktx2, compress: none | meshopt | draco}}`; `jobs: {ID → asset job}`
+- Receipt adds: `warnings: [{item, what}]`, `validator: {tool, errors, warnings, report: sha256}`, `triangles: [u32]`, `meshes: u32`, `joints: u16`, `clips: {name → span}`, `textures: {count, size, bytes}`, `extensions: [string]`, `files: {name → sha256}`
+
+**Semantics:** One export, evaluated at a time, writes one file per engine profile, with LODs, collision, sockets, clips and a skin mapped to what each importer reads. Procedural looks reach the files through the bake job, and a generated asset's textures and identifiers pass through as delivered. The Khronos validator and a round trip run on every file, and the free headless imports run as checks. Anything a file can't hold, such as text, lines and points in 3D, particles, puffs, effects and the sky, is listed by item in the receipt's warnings, never dropped silently. The validator supports neither compressed geometry, KTX2 images nor the physics extensions, so it can't check their data and rejects a KTX2 image as a type no extension it knows enables; it runs on each file before compression and KTX2 encoding, a compressed file's round trip decodes it and compares it with the uncompressed one within its quantization step, and its KTX2 images pass the encoder's own glTF check instead. A mesh asset's morph targets pass through as delivered, except that a primitive with no targets, beside primitives that have them, is written with that many targets of zeros, all reading one accessor with no buffer view per vertex count, which costs no buffer bytes, so the validator and importers that still apply glTF's older rule read the file as glTF's text does.
+
+**Cost:** As the asset jobs it names, plus one evaluation at t; the house exports in under 2 s and under 300 MB.
+
+**It can never:** Export a status color as a data color; drop a license, a credit or an embedded identifier; write a file for an engine whose profile refuses an extension the file uses.
+
+**Lands:** R6, extending the glTF export
+
+#### Export: Lottie
+
+For: titles, icons and loaders that ship to a web page or an app
+
+**Fields**
+
+- `video.codec: … | lottie` with `lottie: {container: json | dotlottie = json, images: embed | none = embed}`
+- Receipt adds: `warnings: [{item, what}]`
+
+**Semantics:** Writes a document's 2D items, groups, paths, paints, masks, mattes, keys, placements and time remaps in the types Lottie 1.0.1 defines, since its schema lets any other type through as unknown and its players skip it: trim, round corners and pucker as its tm, rd and pb modifiers, a trim with each true as Parallel (m 1, which a missing m also means) and with each false as Sequential (m 2); a repeater as its copies, groups with their transforms and opacities; zig zag, offset path and twist as their output paths, keyed at each export frame where they change; linear, hold and Bézier keys as Lottie's own, auto tangents as their computed handles, and any other interpolation (a named ease, a spring, quantize, catmull_rom) and any color key in OKLab or OKLCh as linear keys at the export frame rate. It lists in warnings each key it sampled and each item Lottie can't hold (operators, passes, insets, 3D, sound, drawn looks, noise fills, the eleven blend modes past its sixteen and add, difference masks, feathered or expanded masks, luma mattes taken in linear light), never dropping one silently. A value the evaluation sets beyond keys, placements and time remaps, such as a driver's, a follow's, a constraint's, a physics output's, a flip's or a parallax's, exports as linear keys sampled at the export frame rate and is listed with the keys it sampled; a draw order that changes with t is listed as an item Lottie can't hold. Text exports as glyph outlines by default, so it looks the same without our fonts. A text item exports as one group per unit its animators address (grapheme, word or line), each holding that unit's glyph outlines, with the unit's position, scale, rotation, opacity, tracking and fill color as linear keys sampled at the export frame rate wherever an animator or a text-on-path placement moves it; a unit's blur, stroke, glyph shift and 3D turn are listed in warnings. A gradient in OKLab exports with stops added until the written sRGB ramp stays within 0.01 ΔEOK of it at 256 points. A hard drop and a halo with no blur export as an offset or a stroked copy; a blurred drop, a glow, an inner shade, a bevel and satin are listed as items Lottie can't hold. A path's ends export as paths of their own, keyed at each export frame where they move. A document with a status binding is refused, since a Lottie can't keep the status rule; a bound value exports as its text, named in warnings with its as-of time. All or nothing, like any export.
+
+**Cost:** O(items + keys); a 200-item title in under 1 s (target). Budget class: export.
+
+**It can never:** Write an expression; drop a warning; export a status color as data; leave a partial file.
+
+**Lands:** R6, with export
+
+#### Export: playable page
+
+For: sharing a live piece with someone who doesn't run DeepBuild: a walkthrough with branches and a quiz, hotspots with cards, a product's variants and explode, a figure's stages
+
+**Fields**
+
+- `video.codec: … | page` with `page: {sample: {control: ID, count: u8 = 16} (optional; at most 64), orbit: {frames: u8 = 36} (optional; at most 72), still: png | jpeg = png}`
+- Receipt adds: `states, edges, bytes, warnings: [{item, what}]`
+
+**Semantics:** The export lists the piece's discrete states: its stages and waiting markers, each choice's and toggle's options and each variant set, keeping only the controls a state's read set reads, plus at most one sampled continuous control and an optional turntable of the camera. A piece with logic keys each state by its logic's whole carried state too: the step it has reached on the input track and its memory, globals and arrays, by hash, so two paths that leave the logic in different states stay two states even when everything it writes matches. Its step hash only diagnoses. A piece with a physics world keys each state by the world's checkpoint too, by hash, so two launches that end with the same picture but different velocities stay two states. Each state renders as its settled still, or its loop, and each edge, one control changing, as its frames from the change until settled: all canonical renders through Export, with their sound and captions. It writes a folder: an index page, a fixed player DeepBuild ships, the media, and a manifest of states, edges and keys with each target's screen box per state from render-back's ID table, so a click on a box, a key or a button plays that edge. The page loads nothing from the network, since its content policy allows only its own files, and runs no code from the document. It refuses a document with a status binding, as a Lottie export does, shows a bound value as text with its as-of time, and lists in warnings what it can't hold: a second continuous control, a drag past its samples, a free camera past the turntable. A piece past 64 states or 256 edges is refused, naming the controls that multiply or the logic item; the web player runs such a piece live, and its bundle falls back to a page of the piece's tour (Export: web player). All or nothing, with redaction and licenses as for any export.
+
+**Cost:** The renders: (states + edges) × their spans at the export rate, plus a still per state; a 24-state walkthrough with 3 s states and about 120 edges of 1 s each, at 1080p30, renders about 3 minutes of frames and writes under 250 MB (estimates). Budget class: export.
+
+**It can never:** Run code from the document; load from the network; show a frame the app didn't render; carry a status color; leave the machine with incomplete redaction without your approval; count as evidence
+
+**Lands:** R6, with export
+
+#### Export: web player
+
+For: sharing a live piece someone can play in a browser, with its physics, logic and data, without DeepBuild
+
+**Fields**
+
+- `video.codec: … | web` with `web: {sources: [{reading: ID, url: https, every: s ≥ 60, path}] (optional), fallback: page = page}`
+- Bundle: an index page, the player (the canvas core built for wasm32), the document and everything it names by hash, the rewritten logic programs, the input track with its recorded readings, and as its fallback the piece's playable page, or past the page's caps a page of its tour
+- Receipt adds: `player: {core version, module-set digest, hash}, fallback: page | tour_only, sources, bytes, refused: [{item, why}]`
+- Saves: the browser's storage for the page's origin, with Export save and Import save on the player's own controls (Logic: saves)
+- `element: deep-player` (the bundle also defines `<deep-player src>`, which loads one bundle from its own files)
+- Members `play()`, `pause()`, `paused`, `currentTime` (s; setting it seeks, and seeking equals playing), `duration` (NaN before load), `stage`, `next()`, `back()`; events `timeupdate`, `stagechange`, `ended`; `autoplay` (muted until a click, as the sound rule says)
+
+**Semantics:** The index page asks the browser for WebGPU. With it, the player runs the piece live on one thread, with the app's canvas modules and phases: evaluation, physics on the same pinned backend, logic on the browser's own WebAssembly engine running the programs the app rewrote, the GPU layer on WebGPU, and 2D writer layers drawn by Vello CPU, as headless renders are. Light is today's light there, since WebGPU has no ray queries: a piece that names ray-traced light falls back to it, and the receipt says so. Without it, the fallback page plays instead: the full playable page for a piece within the page's caps, and past them a page of the piece's tour, which the receipt marks `tour_only`. A tour page holds the states one pass of the tour reaches and the clips between them, in its order, or only the first state for a piece with no tour. Data is only what the export recorded, readings by hash with their as-of times, plus the public sources the piece declares, which need no key: the player fetches each with no cookie or credential, records each value as an input entry at the first step not yet run, and shows it with its source and age. Its only other hosts are the relay a piece's net item declares and, on a direct path, the other copies in its match, reached only after the viewer clicks Join on the player's prompt that names the relay (Net: relay and Join). The bundle holds nothing that reaches your machine: no app shell, question card, hub address, secret or handle, and nothing it does writes to the record. The export refuses a piece with a status binding, a source that needs a key, a strip it can't carry decoded, capture, or a canvas module the player lacks, naming each, and checks each logic program again against the hash it recorded. A logic.budget that names `web` runs in this player (Check input: logic kinds), and carry records and ended slots keep to the browser's storage as saves do. It then reads the written bundle back, all or nothing: every file the document, the player and the fallback page name must be there and match its hash, and the input track must match the app's by hash, or the export fails, naming the first that doesn't. The player likewise loads only files that match their hashes. A piece whose logic declares saves keeps them in the browser's storage for the page's origin, each written whole or not at all, so a write the browser refuses, for quota or any other reason, keeps the last good save and says so; the player's own controls export a save to a file and import one, which opens only as any save does (Logic: saves). Live play is the piece running live, in the app or in the player: a tour-only fallback, a video or a still never satisfies a requirement for live play, the receipt's `tour_only` marks the first, and a check that requires live play, such as a playtest (Check input: playtest), fails on any of them, naming which. The bundle's player also loads as an element in another page, from the bundle's own files. A host page can only play, pause, read and seek the clock and step the stages; it can never send data, inputs or patches to the piece. Several players on a page share one core. Each draws at the element's device pixels, and draws nothing out of view while its clock runs. Each font is subset to the glyphs the piece's text can show; a subset keeps the font's licence and name.
+
+**Cost:** The player about 5 to 10 MB compressed without fonts and assets (estimate); a frame as the piece's class on the viewer's GPU. Budget class: export.
+
+**It can never:** Reach the hub, the record or a secret; load from a host the piece didn't declare, or reach its relay or another copy before Join; leave out a file it names; send a cookie, a credential or anything about the viewer; run threads; carry a status color; count as evidence; run code from a host page; take data, inputs or patches from a host page
+
+**Lands:** R6, with export and the web's platform suite
+
+#### Export: path-traced finals
+
+For: a film's final render, hero stills, product shots where glass, bounce light and soft shadows have to be right
+
+**Fields**
+
+- On Export: `frames: realtime | path_traced = realtime`
+- `path: {samples: u32 = 1024 (≤ 65,536), bounces: u8 = 8, roulette_after: u8 = 3}`
+- `match: {iou: f32 = 0.99, exposure: EV = 0.33}` (final.match, against the real-time frames)
+- Receipt adds: `final {frame_hashes, samples, match: [{frame, item, iou, ev}]}`
+
+**Semantics:** A final renders an export's frames with the 3D layer's light path traced on the structures Light: ray traced builds: paths from the camera with next-event estimation toward every light and the sky, through the materials' own lobes (subsurface as a random walk, hair as its fiber model) and volumes by delta tracking, with the lens and the shutter sampled per path for depth of field and motion blur. Whatever an export draws after lighting (ink, effects, bloom, the finish, overlays, 2D writer layers and status colors) draws as in the real-time export, and puffs and sprite particles draw over it by depth as in real time. Each path's random numbers come from hash(document seed, frame index, pixel, sample index), so a frame depends on its own index alone: a final replays byte for byte on one machine, and a frame rendered alone equals the same frame in the sequence. Nothing carries between frames, and no denoiser reads another frame. final.match compares each final frame with the real-time export frame at the same t: each kept item's silhouette from the object-ID pass within iou, and the frame's mean log luminance within exposure; a failure names the frame, the item and the numbers. render.noise runs on finals too, and its fix names a sample count. Frames are hashed on canonical raw buffers and kept by hash as an asset that the export encodes under the export kinds, so a second export of the same final renders nothing. A final runs as a runner job under the GPU lease, sharded by frame range; on a GPU without ray queries it's BLOCKED, naming why. A film with a part whose material has a light response (Operator output: light response) is refused with `light_response_in_final`, naming the part, before any frame renders, since paths take the materials' own lobes; that film's final is its real-time export. Cycles' render job stays an optional oracle: its still at a final's camera and t is compared by final.match as a reading, never a gate.
+
+**Cost:** samples × paths per pixel: a 1080p frame of the product fixture at 1,024 samples is about 2 billion paths of up to 8 bounces, tens of seconds per frame on the reference Mac (estimate); a 10 s film at 30 fps is 300 frames, a job of hours. Budget class: export, as a runner job.
+
+**It can never:** Seed a path by anything but its frame's own index; read another frame; pass a frame final.match failed; count as evidence across machines; run in the live view.
+
+**Lands:** R6
+
+#### Export: encode job
+
+For: a delivery in a codec today's encoders don't write: a web film in AV1 or VP9, an archive in ProRes 422, sound in Opus or FLAC
+
+**Fields**
+
+- Job kind `encode` (registered through `deep.registerJob`): input `{frames: sha256, pcm: sha256, size, frame_rate, color, alpha, sample_rate, layout}` (the canonical raw buffers); params `{codec, container, keyframe_interval, quality, bitrate}`; output: one file by hash
+- Tools through `deep.registerJobTool`: `{name@version, codecs: [codec], containers: [container], hardware: bool, run, qualification}`; the first are VideoToolbox on macOS, NVENC, VA-API, OpenH264 as a separate download, our own PNG sequence and GIF writers, and an AAC tool qualified on Linux (first candidate: LGPL FFmpeg's native AAC encoder, run as its own process; to be verified). On a machine with no hardware encoder, H.264 goes to OpenH264, fetched once after an ask, and every other request to our own PNG sequence writer
+- Export: `video.codec` and `audio.codec` take any codec a qualified tool registers; `tool: name@version` (optional, only when the brief pins one)
+- Receipt: `encoder {name, version, hardware}`, as Export's receipt has it, naming the tool
+
+**Semantics:** The export renders, hashes and checks canonical raw buffers as it always has, then hands them by hash to an encode job, so the canvas core links no encoder and a new codec needs no canvas change. A document names a codec, never a tool unless its brief pins one, and the export takes the first qualified tool for that codec on this machine. A tool qualifies by encoding the export kinds' fixture film: its delivery, decoded in a fresh decode worker apart from the tool, must pass export.fidelity and export.color and meet the sync rule (Check input: export kinds). Every delivery runs those kinds again, so a tool's exit code, its own report and its bytes are never trusted; a codec the decode worker can't decode on this machine leaves export.fidelity BLOCKED, naming the codec, and the export isn't delivered. A tool runs as its own process, with no network and only the buffers it's given, keyed by hash(tool@version, params, buffer hashes) like any job. Lottie, the playable page and the web player stay the export module's own writers.
+
+**Cost:** As the tool's own encode, plus one decode of the delivery for its checks: the two together at least 4x real time at 1080p60 in hardware (estimate), so a delivery meets Export's 2x. Budget class: export.
+
+**It can never:** Hash or compare encoded bytes; deliver a file the export kinds didn't pass; change a raw buffer; run in the canvas core or the decode worker; let a document name a tool its brief didn't pin
+
+**Lands:** R6, with export
+
+#### Export: wrappers
+
+For: sharing a piece as a file someone opens without DeepBuild: a zip for a game site, a desktop app, an app on a phone's home screen, a store upload
+
+**Fields**
+
+- Job kinds: `wrap.web_zip {from: web player bundle | playable page}`, `wrap.desktop {from: web player bundle, target: macos | linux | windows}`, `wrap.mobile_web {from: web player bundle, target: ios | android}`, `wrap.store {from: wrapper, target: store}`; tools through `deep.registerJobTool`
+- Output: a file by hash; receipt `{target, from: sha256, files: {name → sha256}, hosts: [host], launch: {environment, first_frame: ms, outcome}}`
+- Upload: a Send (the tech design's Send block), with the store's key by handle
+- A game project: one export preset per target in its blueprint
+
+**Semantics:** A wrap job wraps an export's output, by hash, for one target; it never renders again and never changes a byte the bundle holds. A desktop wrapper puts the web player bundle in the platform's own web view, and where that view lacks WebGPU the bundle's fallback page plays, as in a browser. A wrapper is marked playable only after a fresh launch on a clean profile of its target, through an environment for that target and behind a recording proxy: the piece reaches its first frame, every file it loads matches its hash, and it reaches no host but those the bundle declares (a net item's relay and its public sources), or the launch fails, naming the file or the host. Uploading to a store or a game site is a Send, never a job's own step. A game project's other targets work the same way: an export preset per target in its blueprint, each its own qualification, launched fresh in an environment of that target.
+
+**Cost:** Seconds to wrap; a fresh launch to its first frame under 30 s per target (estimate). Budget class: export, for the job.
+
+**It can never:** Change or re-encode a file the bundle holds; mark a wrapper playable before its fresh launch passes; load from a host the bundle doesn't declare; upload without an ask or a standing rule
+
+**Lands:** R6, with the web player
+
+#### Asset job
+
+For: turning a work product or a generated mesh into engine-ready files
+
+**Fields**
+
+- `kind: unwrap | bake | simplify | tangents | pack | encode | compress | convex | convert | impostor | bone_map | preview`
+- `tool: name@version` (pinned: an open tool, or DeepBuild's own bake and pack); `enabled: bool = true`; `ask: ask ID` (a decision it waits on)
+- `input: asset ID | job output | [ID]`; `out: ID | [ID]`; `params`, by kind:
+- `unwrap {uv: uv1, texel_density: px per m, padding: px = 4, resolution: px, rotate_charts: bool = true, by_material: bool = false}`
+- `bake {from: document | asset, t: time = 0, source: asset ID, cage: m, mode: atlas | tile | palette, maps: [base_color | normal | metallic | roughness | occlusion | emission], size: px, uv: uv1, samples: u16 = 4, padding: px = 8, normal_space: tangent, normal_convention: +y, insets: [inset ID], tiles: {materials: [material], tile: m, periodic: bool}, distance: m, engine: cycles}`
+- `simplify {levels: [{ratio: f32, max_triangles: u32}] | auto, auto: {growth, min_gain, max_error}, error: f32, lock_border: bool, keep: [attribute], weld: bool}` (per-part params keyed by import IDs; tools not qualified for the same bytes across platforms add the target triple and the tool's build to the job key, and other machines reuse the verified bytes by hash)
+- `tangents {uv: uv0 | uv1}`; `pack {orm: {r, g, b: map}, mask_map: {r, g, b, a: map}, separate: [map]}`
+- `encode {base_color, emission, normal, orm: etc1s | uastc | png, mips: bool = true, max_size: px, zstd: u8}`
+- `compress {mesh: none | meshopt | draco, quantize: bool}`; `convex {max_hulls: u8, max_points: u16 ≤ 64, threshold: f32}`
+- `convert {to: fbx, up: y | z, forward, unit_scale: f32, smoothing: face | edge | none, embed_textures: bool, collision_prefix: string, lod_groups: bool, add_leaf_bones: bool, bake_anim: bool, primary_bone_axis, secondary_bone_axis}`
+- `convert` also brings a mesh file in: `{from: fbx | obj | stl | ply | gltf = by the file's extension, to: glb}` (units and the up axis from the file where it states them, otherwise STL in millimetres with +Z up and OBJ and PLY in metres with +Y up; `up` and `unit_scale` override them; FBX goes through the FBX writer's own tool, with no other FBX library)
+- `impostor {views: u8, size: px, maps: [map]}`; `bone_map {profiles: [name], require: [bone]}`
+- `preview {clip, seconds: s, size: [px, px], frame_rate, camera: turntable | ID, engine: eevee | cycles}`
+- `kind: … | retarget`: `retarget {from: {asset, animation}, to: asset, profile: humanoid, root: scale_by_hips | keep = scale_by_hips}` (both skins mapped by a bone_map job; DeepBuild's own pinned tool)
+
+**Semantics:** An offline runner job with a pinned tool, keyed by hash(tool@version, params, input hashes), so a rerun with the same key is a cache hit that reads the stored output. Other machines reuse a verified output, one that passed its job's checks, by its own hash. A rerun is claimed to give the same bytes only for a tool qualified to, one whose qualification run gave the same bytes for its fixtures on each target triple it claims. Any other tool's key adds the target triple (CPU architecture and OS) and the tool's build (its binary, wheel or container image, by hash). Each output is stored by hash beside the export, and nothing it makes changes the document. Job kinds and their tools are registered lists, not closed ones: each kind registers through `deep.registerJob` with its schema, outputs, key, output checks and qualification, these kinds as the asset-tools plug-in's, and a tool or provider joins a registered kind through `deep.registerJobTool`, so a third party adds one with one approval once it passes the kind's qualification, and `deep try` runs two tools of one kind on the same inputs and compares the kind's measures. The speech engines (Narration: speech engines), the score and foley renderers and the generation job's providers register the same way. A document still names its tool by name@version, pinned, and an output enters it only after the kind's output checks pass. The bake evaluates the document's own materials, patterns and operators into uv1, which is how procedural looks reach an engine. An encode job writes base color and emission with the sRGB transfer function and normal, ORM and every other data map linear, and fails, naming the map, when a file it wrote declares any other. It assigns each map's transfer function and primaries rather than reading them from the input, BT.709 for color and unspecified for data, as KHR_texture_basisu requires, and refuses any color conversion, since the encoder reads an untagged 8-bit PNG as sRGB and would convert a data map's values; each file it writes passes the encoder's own glTF check (`ktx validate --gltf-basisu`). Every kind that writes a mesh it changed (unwrap, simplify, compress with quantize, boolean, remesh, fracture and tessellate) runs `geometry.shading` on its input and its output, and an output with more of any defect than its input fails the job, naming the defect and the count; the job's receipt keeps both counts. An inbound convert writes a .glb through its pinned tool, in metres with +Y up, keeps the input's license and made_by, and its output passes `asset.validate` and the probe before any item names it; a file the tool can't read fails the job, naming it, and nothing is written. A retarget job aligns both skins' rest poses through the profile's reference pose, copies each mapped bone's rotation relative to its rest, scales root travel by the ratio of hip heights, and writes the clip onto the target's skeleton as an asset by hash; animation.loop, animation.contacts and animation.limits run on its output, and a required bone the map lacks fails the job, naming it.
+
+**Cost:** Seconds per job for a 10,000 to 100,000 triangle asset (estimates, not measured): xatlas, meshoptimizer, MikkTSpace and gltfpack are CPU tools; a bake is one canvas render per map at its size; an occlusion bake in Blender's Cycles takes minutes at 128 samples.
+
+**It can never:** Run in the canvas core or per frame; change the document; use a tool whose license forbids shipping its output; re-encode a generated asset's textures without a decision when its terms forbid altering identifiers.
+
+**Lands:** R6, as the asset-tools plug-in, with the glTF export
+
+#### Asset job: modeling, simulation and render kinds
+
+For: the castle's crenellations and arrow slits, the generated hard-surface props, cleaned generated meshes, films that need a wall to break, a flag, a splash or a smoke card, interiors' baked light, and path-traced hero stills
+
+**Fields**
+
+- `kind: … | boolean | remesh | fracture | simulate | render | light` (beside unwrap, bake, simplify and the rest)
+- `boolean {base: item | asset, ops: [{op: union | difference | intersect, with: item | asset}] ≤ 16, at: time = 0, solver: manifold | exact = manifold, weld: m = 0.00001, parts: keep | merge = keep}`
+- `remesh {mode: voxel | isotropic | quad, voxel: m | target_edge: m | faces: u32, keep: [attribute], sharp: deg = 30}`
+- `fracture {method: voronoi | clustered | radial | planar | slice | brick, sites: u16 ≤ 512, levels: u8 = 1 (≤ 3), seed, noise: {amplitude: m = 0, frequency: 1/m}, min_volume: m³, inner_material: material, connection: touching | delaunay = touching, hulls: {max_points: u16 ≤ 64}}` (out: a fracture asset of pieces, bonds and the source mesh)
+- `simulate {engine: ours | tool@version, sim: cloth | soft | liquid | smoke_2d | smoke_3d, from: item | asset, span: s, frame_rate, seed, params: object}` (out: a mesh sequence, a flipbook for smoke_2d, or a density grid sequence for smoke_3d, which Volume volume@1 plays)
+- `render {tool: cycles@version, t: time, camera: ID, size: [px, px], samples: u16 = 256, seed: u64, denoise: oidn | none = oidn, device: cpu = cpu}` (out: a still by hash)
+- `light {probe: light.probe ID, rays, bounces, seed, t: time = the probe's capture_at}` (out: an irradiance grid by hash, from our own pinned CPU tracer)
+- `runner: name@version` (kinds that run Blender go through a private runner kept outside the public repo; without it the job is BLOCKED with an unblock ask)
+
+**Semantics:** Each runs offline as a runner job keyed by hash(tool@version, params, input hashes), and its output is an asset by hash that items name like any mesh asset, flipbook or grid; nothing it makes changes the document, and a rerun with the same key is a cache hit. A boolean of watertight inputs keeps named parts from the faces that made them, and a non-manifold input is refused with a fix (remesh first), never repaired silently. A fracture makes each disconnected part of a cell its own piece, bonded only where it touches; with noise it trims each piece's hull against its bonded neighbours, and bonded hulls that still overlap by more than 1 mm fail the job, naming both pieces. simulate runs a pinned outside tool or our own stable-fluids solver, in 2D or in 3D, render gives a display-only path-traced still from an outside renderer, kept as an optional oracle for our own finals (Export: path-traced finals), and none of them counts as physics evidence or as the canvas's export. Cloth and soft volumes simulate on our own solver by vertex block descent, and liquid on a pinned open fluid tool, which can also bake smoke; Blender stays a choice through its private runner, and every simulate output plays back exactly from the bake, seeking equal to playing.
+
+**Cost:** Estimates: a manifold boolean in tens of ms per 10,000 triangles and an exact one in seconds; a remesh in seconds; a fracture of 100 to 500 pieces in seconds; a 256 × 256 smoke for 240 frames in seconds on one core (about 60 MB of 8-bit frames); a light bake of seconds to a minute; a 1080p Cycles still on the CPU at 256 samples in minutes. Budget class: export for the jobs; their outputs draw in any 3D class.
+
+**It can never:** Run in the canvas core or per frame; change the document; repair geometry silently; spend beyond the runner's budget; count a path-traced still as cross-machine evidence.
+
+**Lands:** R6, as the asset-tools plug-in
+
+#### Asset job: tessellate
+
+For: a brief that brings a CAD part, such as a servo, a bracket or an enclosure, as a STEP or B-rep file
+
+**Fields**
+
+- `kind: … | tessellate` (beside unwrap, bake, simplify and the rest)
+- `tessellate {from: asset, tool: usd-brep@1.0.0 | occt@8.0.1, units: m | cm | mm | in | from_file = from_file, up: y | z | from_file = from_file, error: ratio | m = 0.001, angle: deg = 15, max_edge: m = 0, heal: bool = false, parts: body | face_group = body, max_triangles: u32 = 500,000, look: generated | look@major = generated}`
+- `from`: a STEP file (ISO 10303), an Open CASCADE `.brep` file or a usd-brep file of B-reps
+- `error`: the largest distance allowed between the mesh and the exact surfaces, as a ratio of each body's bounds diagonal or a length such as `"0.5 mm"`; `max_edge` 0 is off
+- `tessellate` also takes `assembly: keep | flatten = keep` (keep: a node per part occurrence, placed as in the file; flatten: one node with a named part per body) and `measure: [{name, kind: distance | angle | radius | diameter | length, of: feature, to: feature (optional)}] ≤ 64` (a feature is a face `<part>#f<n>` or an edge `<part>#e<n>` the probe lists)
+- Out: a mesh asset (`.glb`) by hash, one named part per body or face group; its probe adds `exact: {volume: m³, area: m², centroid: [m, m, m], inertia: mat3 (per unit density), accuracy: f32, tool}`, `error: {target: m, measured: m}`, `faces: {total, failed: u32}` and `manifold: bool` per part; per part, `features: {f<n> → {surface: plane | cylinder | cone | sphere | torus | other, params, area: m²}, e<n> → {curve: line | circle | other, params, length: m}}`; and `measures: {name → {value, unit, accuracy, points: [vec3, vec3], tool}}`
+
+**Semantics:** An offline runner job keyed by hash(tool@version, params, input hashes) plus the target triple (CPU architecture and OS, a container's own on macOS) and the tool's build, since neither tool claims the same bytes on every platform. Other machines reuse a verified output, one that passed the job's checks, by its own hash; a rerun on another machine is judged by the job's own measures and never claimed to give the same bytes, since neither tool is qualified to. It is strict: a face that fails fails the job, naming the body and the face, with no partial mesh, and a missing payload or zero bodies fails too. It heals only when asked and keeps the healer's report with the output. It measures what it made and never trusts an exit code or a success status: each tool computes the exact measures at a relative accuracy of 1e-6, which `exact.accuracy` records, since at usd-brep's default of 1e-3 its own notes report area errors up to 1.4% on faces bounded by circles; `error.measured`, the largest distance from each triangle's centroid and edge midpoints to the exact surfaces, may not pass the target; the mesh's volume must match `exact.volume` within `exact.accuracy` × `exact.volume` plus `error.measured` × `exact.area`; and `geometry.shading` runs on the output, whose input has no mesh and so no defect. Past `max_triangles` the job fails with a fix: a larger error. Units and the up axis convert to metres and +Y. Each body becomes a named part whose ID comes from its name in the file, sanitized and made unique, with an empty or repeated name taking its index. CAD colors become roles in a generated look, or the nearest roles of the look you name, as the Lottie import does, so a status color never arrives through a CAD file. A readout may cite `exact.volume` or `exact.area` as a measured source, at no more precision than its accuracy. With `assembly: keep`, the default, the mesh keeps the file's product structure: one node per part occurrence, nested as its assemblies are and placed by the file's own transforms, and one mesh per distinct part, which its occurrences share, so an explode or an assembly sequence moves each part. Node names come from the file's product names, made unique as body names are, and an item places one through `mesh.asset`'s `node`. The probe lists each part's faces and edges in the tool's order for that file, which the job key pins, with each one's kind and exact parameters. Each measure is computed on the exact surfaces at the job's accuracy, never on the mesh: a distance between two cylinders or circles runs between their axes or centres, and any other is the shortest, with its two points. A measure whose kind doesn't fit its features fails the job, naming it, and a readout may cite a measure as it cites `exact.volume`. A B-rep never enters a document, and the canvas draws only the mesh. Both tools run as their own processes and are never linked into the app: usd-brep (Apache-2.0) natively on Linux and Windows and in a Linux container on macOS, and Open CASCADE (LGPL-2.1 with its exception) through its OCP wheels, which read STEP. You install them, DeepBuild never bundles or downloads either, and without one the job is BLOCKED with one unblock ask.
+
+**Cost:** Seconds per body for 10,000 to 100,000 triangles (estimate), plus seconds to start a container on macOS; nothing per frame. Budget class: export, for the job.
+
+**It can never:** Put a B-rep in a document; tessellate while drawing, by view or on first read; trust an exit code or a success status; keep a partial mesh; heal unasked; run a script an agent wrote; write a B-rep back out; link either tool into the app.
+
+**Lands:** R6, in the asset-tools plug-in, when the first brief brings a CAD file
+
+#### Asset job: navigate
+
+For: bounded games whose creatures find their way through a level: a guard on patrol, a chase through a maze, a pet that follows you across a house
+
+**Fields**
+
+- `kind: … | navigate` (beside unwrap, bake, simplify and the rest)
+- `navigate {from: world ID | plate ID (a terrain plate; grid form only), form: grid | mesh = mesh, capsule: {radius: m, height: m}, climb: m, slope: deg = 45, cell: m = the radius ÷ 3, bounds: box (optional)}`
+- Out: a navigation graph, `nav.graph@1` by hash: `{form, capsule, climb, slope, cell, source: sha256 (of the world's static shapes), nodes: [{floor: m, cell: [i32, i32] | polygon: [vec3]}], links: [{a, b: u32, cost: m, rise: m}]}`, in a documented little-endian layout: a header, the nodes in order, then the links sorted by (a, b)
+
+**Semantics:** An offline runner job in the asset-tools plug-in, keyed by hash(tool@version, params, input hashes) like every asset job. Its only input is a 3D world's static shapes, so moving a dynamic or kinematic body never changes the graph, which is the level's and not a moment's. DeepBuild's own pinned baker voxelizes those shapes, `cell` across and half that up; marks a voxel's top walkable where its surface's slope is at most `slope` and the capsule's height is free above it; erodes the walkable area by the capsule's radius; and links neighbouring cells whose floors differ by at most `climb`, each link's cost its length. The mesh form merges linked cells into convex polygons that stay inside walkable cells, linked where two share an edge. Its math is integer once the shapes are voxelized, so its qualification run must give the same bytes on every target triple, and its key leaves the triple out. A world with no static shape fails the job, naming it. A piece's logic names the graph among its data assets (Logic `logic@1`) and finds paths with its own search, and `nav.reach` checks the graph and those paths against the world. From a terrain plate (Builder plate: terrain) the job bakes the grid form from the plate's heights instead: a cell every `cell` (the plate's spacing by default; a brief sets the tile size), each cell's floor the plate's height at its centre from the same samples its height-field shape uses, rounded to the millimetre; a cell is walkable where its rise to each neighbour stays within `cell` × tan(`slope`), rounded once to the millimetre, and linked where the rise is within `climb`. Everything after the rounding is integer, so the bytes are the same on every target triple, and its `source` is the plate's content key.
+
+**Cost:** Seconds for a level of a few thousand static shapes at 0.1 m (estimate); about 12 B a node and 12 B a link; nothing per frame. Budget class: export, for the job.
+
+**It can never:** Run in the canvas core or per frame; change during a run, or see a dynamic body; find a path for a piece; change the document
+
+**Lands:** R6, in the asset-tools plug-in
+
+#### Pack: measure@1 dimensions
+
+For: a CAD explainer's or a machine figure's dimensions: a hole's diameter, a span between two faces, a thickness, an angle
+
+**Fields**
+
+- `recipes`: `measure.linear@1`, `measure.radial@1`, `measure.angular@1`, each taking `measure: <asset>#<name>` (a tessellate job's measure)
+- `offset: m | auto = auto` (auto: clear of the part by 8% of its bounds diagonal); `facing: camera | upright | fixed = upright`
+- `unit: auto | mm | m | in = auto` (auto: mm below 1 m); `decimals: u8 = 2` (never past the measure's accuracy); `text: {size: px = 14, role = readout}`
+
+**Semantics:** A first-party pack, checked once per version. Each recipe expands at check into marks in 3D: two extension lines from the measure's points, a dimension line, or an arc for an angle, with arrow `ends`, and text whose value reads the measure through a `probe` var. It parents to the part that owns the measure's first feature, so it moves with an explode or an assembly sequence, and it draws in the shot's look. A dimension whose value isn't a probe measure is refused, naming the item.
+
+**Cost:** Expands at check into four to six marks, then costs as those marks. Budget class: any 3D class.
+
+**It can never:** Carry code; show a typed number; measure anything itself
+
+**Lands:** R6, with the tessellate job
+
+#### Pack: pixel@1 drawing on a grid
+
+For: pixel-art games and pieces: tiles, sprites and their walk cycles in a small palette, on both routes
+
+**Fields**
+
+- `palettes: {name → [sRGB8] ≤ 32}`
+- `rules: {sides (16 masks) | corners_and_sides (47 masks) | edges_6 (64 masks, for hex grids) → mask table}` (named as the terrain recipe's rules: Mark set: atlas tiles)
+- `cells: [8 | 12 | 16 | 24 | 32 | 48 | 64] px`
+- Drawing on a grid: the Generation job's `drawing` with `pixel {cell, palette}`
+- Jobs (Asset job: pixel kinds) and checks (Check input: pixel kinds) come with the asset-tools plug-in
+
+**Semantics:** A first-party pack, checked once per version like any pack, that holds data only: palettes, the neighbour-mask tables a tile rule set needs, and cell sizes. Drawing on a grid means every pixel is one of the palette's colors, alpha is 0 or 255, and every frame's size is a whole number of cells, which `pixel.grid` checks before an item names it. Art comes from a generation job's drawing with `pixel` set, from `sprite.procedural` when nothing may be spent, or from your own files, and `atlas.pack` and `tiles.transitions` make the atlas and the transition tiles that atlas tile sets draw (Mark set: atlas tiles). A game project imports the same atlas and name index by hash, so both routes draw the same tiles. A game brief can name a palette and an approved sheet by hash as its look, so a run asks nothing about its look.
+
+**Cost:** Nothing at run time beyond the atlas it draws from. Budget class: any.
+
+**It can never:** Carry code or shaders; hold more than 32 colors in a palette; blend a pixel between two colors; name a palette after a studio or a trademark
+
+**Lands:** R6, as a first-party pack, with the asset-tools plug-in
+
+#### Asset job: pixel kinds
+
+For: an atlas packed from loose sprites, the transition tiles between terrains, and sprites made from a seed when nothing may be spent
+
+**Fields**
+
+- `kind: … | atlas.pack | tiles.transitions | sprite.procedural`
+- `atlas.pack {inputs: [asset ID], cell: [px, px], padding: px = 1, size: px ≤ 4,096}` → an atlas image and a name index (name → tile index)
+- `tiles.transitions {bases: {class → asset ID}, pairs: [[class, class]], rules: sides | corners_and_sides | edges_6, mask: straight | ragged = ragged, seed: u64}` → one tile per mask of each pair
+- `sprite.procedural {kind: creature | item | tile | hero, cell: px, palette: name, frames: u8 = 1, seed: u64}`
+
+**Semantics:** Offline runner jobs in the asset-tools plug-in, keyed by hash(tool@version, params, input hashes) like every asset job. `atlas.pack` places tiles in name order along rows from the top left, extrudes each tile's edge pixels into its padding so sampling never bleeds a neighbour, and writes the name index; its math is integer, so its qualification run must give the same bytes on every target triple, and its own output check reads every padding ring back against its tile's edge, naming a tile whose ring differs. `tiles.transitions` builds, for each pair of classes, one tile per mask the rule set lists, each cut from the two base tiles along an edge drawn by hash(seed, pair, mask), straight or ragged, and snapped to the palette; `edges_6` covers a hex grid's six edges. `sprite.procedural` makes a sprite from its seed alone: a shape grown on half the cells and mirrored, shaded by the palette's roles, with walk frames that shift it an eighth of a cell at a time; it calls no provider, so it costs nothing and asks nothing, and the same seed gives the same bytes. Each result passes `pixel.grid` before an item names it.
+
+**Cost:** O(pixels) once: 200 tiles of 16 px under a second (estimate); nothing per frame. Budget class: export, for the job.
+
+**It can never:** Run in the canvas core or per frame; call a provider or spend; read the clock; resample a pixel between colors
+
+**Lands:** R6, in the asset-tools plug-in
+
+#### Asset job: Lottie import
+
+For: a Lottie title or icon from a designer, brought in to edit, check and reuse
+
+**Fields**
+
+- `kind: … | import` with `import {from: lottie, look: generated | look@major = generated}` (out: a document by hash)
+
+**Semantics:** An offline job that maps a Lottie file into a document and runs the document check on it: Lottie's layers become items and groups, precomps groups with placements, shapes paths with ops, keys bezier, and masks, mattes and markers their own kinds. A position keyed with spatial tangents becomes follow_path along its curve by arc length, as Lottie players move it; easing given per dimension splits its channel into one per dimension; a missing trim m means each true; a luma matte takes luma: encoded, as Lottie players take it; and merge paths, text layers and layer effects come back as issues naming their layer, as expressions do. Literal colors become roles in a generated look, or the nearest roles of the look you name. Expressions come back as issues naming their layer, never as code. Nothing changes until a writer shows the result, which passes the same checks as any document.
+
+**Cost:** Seconds per file (estimate). Budget class: export, for the job.
+
+**It can never:** Carry an expression into a document; change its source file; run in the canvas core or per frame.
+
+**Lands:** R6, with the Lottie export
+
+#### Asset job: imports
+
+For: files people already have: a sprite editor's layered sheet, a tile map from a map editor, a MIDI file, a layered 3D scene file
+
+**Fields**
+
+- `kind: … | import`, whose `import.from` also takes `sprites | tilemap | midi | scene` (beside `lottie`)
+- `sprites {file: .ase | .aseprite | a sheet with its JSON, layers: merge | each = merge}` → image assets as a flipbook, and its tags as clips
+- `tilemap {file: .tmx | .tmj | .ldtk, layers: [name] (optional)}` → per layer a tile-grid table (an `i32` a cell, with its flip and turn bits), an atlas image from its tilesets, its objects as rows, and a document fragment of atlas tile sets that names them
+- `midi {file: .mid (format 0 or 1), map: {program → score instrument}}` → a `score.music@1` fragment of notes, with a tempo map from the file's tempo changes
+- `scene {file: .usd | .usda | .usdc | .usdz, tool: name@version}` → a mesh asset (.glb) with its node structure and `dropped`
+- Output by hash with `made_by {tool, version, input}`; a table's `source` is `job {kind, tool, input}` (Asset: tables)
+
+**Semantics:** An offline runner job keyed by hash(tool@version, params, input hashes), like every asset job; its tools register through `deep.registerJobTool` and qualify on the kind's fixtures, each with a planted defect. It maps a file onto kinds the canvas already has: images, tables, meshes and document fragments. Every output passes the probe and its kind's checks before an item names it (asset.validate for a mesh, pixel.grid for a pixel sheet, the table probe, the document check for a fragment), and a fragment changes nothing until a writer shows it by patch, as the Lottie import's document does. Sprites: each frame keeps its size and offset, and a tag becomes a clip of its frames and durations. Tile maps: flip and turn bits survive into the table, and a tile whose tileset image is missing fails the job, naming the tile. MIDI: each note keeps its tick through the file's tempo changes into the score's beat grid, and a program the map doesn't name fails the job, naming it. Scenes: units and the up axis convert to metres and +Y, instances stay nodes, and what the glTF material model can't hold is listed in `dropped`. A file's licence comes from whoever brought it, and a script or an expression a file carries comes back as an issue, never as code.
+
+**Cost:** Seconds per file (estimate). Budget class: export, for the job.
+
+**It can never:** Run a script a file carries; change its source file; hand an item an output before its checks pass; drop a flip bit, a tempo change or a licence silently
+
+**Lands:** R6, in the asset-tools plug-in
+
+#### Asset job: typeset
+
+For: formulas and math labels in films and figures: a proof's steps, a term that moves between lines, a matrix whose entries light up
+
+**Fields**
+
+- `kind: … | typeset` (beside unwrap, bake, import and the rest)
+- `typeset {syntax: latex_math | latex_text | typst_math | typst = latex_math, parts: [{source: string, id: string (optional)}] ≤ 256 (or `source: string ≤ 8 KiB` for one part), display: bool = true, font: math font name = new_computer_modern_math, macros: [\newcommand line] ≤ 64 = []}`
+- Tools through `deep.registerJobTool`: first `typst-mitex` (DeepBuild's own: Typst 0.15.1 and mitex 0.2.7 as libraries, Apache-2.0, with its math fonts bundled); another, such as MathJax for `\ce`, joins by qualifying on the kind's fixtures
+- Out: one SVG asset by hash, `made_by {tool, version, input}`, `license` naming each font whose outlines it draws; probe `parts: [{id, source, box: [x, y, w, h], u}]`, `baseline: u`, `glyphs: u32`
+- Part ids: the part's own `id`, else `t-` and its source with each byte outside A-Z, a-z and 0-9 written as `_` and two hex digits; a source that repeats takes `.2`, `.3` in reading order, so `a^2` is `t-a_5e2` in every formula that has it
+- Issues: `typeset.unknown_command {command, at: byte range}`, `typeset.parts_apart {parts}`, `formula.alt_mismatch {item}`
+
+**Semantics:** An offline runner job keyed by hash(tool@version, params), run through `deep_job`. The parts are one formula, joined and typeset once, so parting a formula moves none of its glyphs. Each part that stands on its own (its braces, environments and `\left`…`\right` closed in it) becomes one `<g id>` holding exactly its glyphs and rules; a fragment such as `^2` joins the part before it. Parts that split a term, such as `e^{i` and `\pi}`, fail `typeset.parts_apart`, naming both, and nothing is written. A matrix's entries take ids when each is typeset as its own part outside the environment, as math.matrix lays them out. Every glyph is an outline: the SVG holds no `<text>`, no `<use>` and no outside reference, and paints only `currentColor`, which the vector item maps to a role. A command the tool doesn't convert fails `typeset.unknown_command`, naming it and its bytes. A `vector@1` that names a typeset output takes the job's source as its `alt`, and one whose `alt` differs fails `formula.alt_mismatch`. The same source gives the same id in every output, so match_morph pairs the terms two formulas share without the agent naming them.
+
+**Cost:** About 10 to 50 ms a formula warm, under 1 s cold (estimate); about 1 KB of SVG a glyph. Budget class: export, for the job.
+
+**It can never:** Run in the canvas core or per frame; fetch a package or a font; write a `<text>` element; give two parts of one formula the same id; pass a source it couldn't convert.
+
+**Lands:** R6, in the asset-tools plug-in, with films
+
+#### Generation job
+
+For: generated meshes, textures, rigs and clips: characters, creatures and organic props; 2D drawings and part kits for puppet@1
+
+**Fields**
+
+- `kind: mesh | texture | remesh | rig | animate | drawing` (drawing: `{frames: u16 | parts: [name], size: [px, px], alpha: bool = true, pivots: bool, look: look ID, pixel: {cell: px, palette: name} (optional)}`, which makes image assets: a flipbook or a part kit; with `pixel`, it draws on a grid in a pixel@1 palette of at most 32 colors, snapping every result to the palette and the cell grid, which `pixel.grid` checks before an item names it (Pack: pixel@1 drawing on a grid))
+- `provider: name@version` (a hosted model reached through a source, or an open model on a host)
+- `endpoint: string` (the provider's call, such as `POST /v1/generate`)
+- `inputs: {prompt: string ≤ 800 chars, images: [sha256], asset: asset ID}`
+- `motion: {action: string ≤ 400 chars, duration: s, loop: bool = false, root: in_place | travel = travel}` (animate only: the action in words, such as walking to the table, picking up the cup and waving)
+- `params: object` (the provider's own schema, pinned with its version and checked before the call)
+- `targets: {faces: u32, topology: triangle | quad, pose: t_pose | a_pose | none, height: m}`
+- `requires: {humanoid: bool, textured: bool, faces_max: u32, facing: +z}` (what the provider accepts, checked before the call)
+- `candidates: u8 = 1` (≤ 4; more than one asks a taste call); `enabled: bool = true`
+- `runtime: {where: service | host, host: host handle, gpu_gb: GB, timeout: s}`
+- `license_expected: SPDX | LicenseRef`; `ask: ask ID` (the authority ask or standing rule that allows the spend)
+- `check: check input` (`asset.validate` at least); `out: asset ID | {name → asset ID}`
+- The budget and deadline are the runner's, as the tech design's Runner block says.
+
+**Semantics:** A runner job that calls a provider, downloads each result once and stores it as an asset by hash, with made_by filled from the call (tool, version, model, prompt, input hashes, cost, synthetic: true, the provider's task IDs) and the license the provider's terms give. The result counts as a reading, never a verdict: an item may name it only after its check passes, `asset.lighting` included for a textured result (Check input: asset kinds: painted light), and a person picks among candidates, a pick that approves what it picks by its hash wherever it shows later, so a film never asks about a picked character again (Film brief: defaults, treatment and asks). A rig job checks its input's quad ratio before the call (Check input: loop kinds: quad ratio). An animate job returns its clip on the humanoid profile; the clip reaches a character only through the retarget asset job, and a placement may name it only after animation.contacts and animation.limits pass on that character, and animation.loop too when it loops. A paid call needs an authority ask or a standing rule, and inputs a provider may train on are named in that ask.
+
+**Cost:** The provider's credits or GPU-hours, counted against the issue's budget before the call. For a hosted provider, about 20 credits a preview, 10 a texture refine, 5 a rig and 3 an animation action, at $0.02 a credit (estimates). Open models run on the user's GPU host: Step1X-3D 27 to 29 GB, Hunyuan3D 2.1 29 GB, UniRig 8 GB or more.
+
+**It can never:** Run in the canvas core or the decode worker; keep a provider URL in a document (signed URLs expire, and a provider may delete results within 3 days); ship an asset whose license doesn't allow it; be a verdict or answer an ask.
+
+**Lands:** R6, as the meshgen plug-in on the runner, with `mesh.asset`
+
+#### Score `score.music@1` and `score.render@1`
+
+For: original music written as data and cued to moments: a picture book's ukulele, a keynote's pulse, a cartoon band that hits every gag
+
+**Fields**
+
+- `instruments: {id → {source: sampled {library: pack@version, preset} | pluck {preset, overrides} | synth {preset} (a synth.preset@1 entry), stem: name}}`
+- `events: {id → {at: "bar:beat" | time | "@marker±", inst, pitch: name | midi (fractional), dur: beats | s, vel: 0..1, pan, gain: dB, attack, release, bend: [[s, semitones]], vib: {hz, depth, from}, strum}}`
+- `seed = hash(id)`
+- `loop: {from: "bar:beat", to: "bar:beat"}` (optional: a bed's loop region; by default, when a strip loops one of the score's stems, from the score's start to its last bar line)
+- Job `score.render@1 {tool: score.render@version, sample_rate: 48 kHz, format: flac}` → `stems: {name → asset}`, `note_on` (an occurrence list per event), `credits`, `made_by`
+
+**Semantics:** Event times resolve through the film's tempo map at check. The job renders each stem as a runner job keyed by hash(tool@version, the stem's events and instruments, library hashes), so editing one part re-renders one stem. Every random draw (round robin, grain picks, noise) is hash(score seed, event ID, purpose), never a stream, so adding a note changes no other note's grain picks or noise. The round robin starts from that hash mod n and moves to the next take when it would repeat the previous note's take on the same instrument, a fold in time order like Spawn's no_repeat, so a new note can move only the takes after it on that instrument. No fast math: output is identical per build and architecture. Each note's declared onset lands in note_on, which cues, spawns and drivers read. score.pitch holds notes within ±35 cents; the pack warns past 4 semitones from a sample, refuses a sustained pad below MIDI 48 unless marked bass, and refuses a held note over 60 s. With a loop region, declared or by default, the render folds the tails of the region's last notes onto its start in each stem and sets each stem's loop points to the region's ends, so a looping strip repeats it with no seam; the region joins the job's key.
+
+**Cost:** Offline, per stem, keyed by hash; a cache hit costs nothing. Nothing per frame beyond playing its strips. Budget class: export for the job.
+
+**It can never:** Synthesize live in the audio thread; draw randomness from one stream; bundle a CC BY-SA, NC or GPL library; ship a stem without its credits.
+
+**Lands:** R6, as the score@1 pack and runner job
+
+#### Foley `foley.preset@1` and `foley.render@1`
+
+For: a sound for every visible action: a crayon's scrape, a page turn, a stamp, a metal hit, a typewriter's blip
+
+**Fields**
+
+- `presets: {material → {action → foley preset}}`: materials `paper | wood | metal | glass | plastic | rubber | ink | cloth | stone | electronic`, actions `tap | hit | scrape | slide | whoosh | pop | tear | drip | click`; a preset is a closed graph of `noise {color}`, `osc {wave, hz}`, `modes {ratios, t60s}`, `string {hz, damping}`, `env {attack, hold, decay}` and the core's biquads
+- On the film: `foley_materials: {collection → material}`
+- Job `foley.render@1 {levels: 3, round_robins: 4, sample_rate: 48 kHz}` → `variants: {level × round robin → asset}`
+
+**Semantics:** Each preset renders offline into levels × round robins, 12 variants, keyed by hash(tool@version, preset, seed), with every draw hashed per variant, so a rerun is a cache hit and output is identical per build and architecture. Spawn plays them: variant picks the level from the occurrence's fields, the round robin is a hash with no immediate repeat, and span sets a scrape's length. A film binds materials to collections, so a reveal, a build, a plant or a moment on an item finds its sound; a contact finds its sound by its contact material's tag, read as a foley material, since sounds map from tags.
+
+**Cost:** Offline: milliseconds per variant (estimate); nothing per frame beyond the voices. Budget class: export for the job.
+
+**It can never:** Run in the audio thread; draw from one stream; be plug-in code.
+
+**Lands:** R6, as the foley@1 pack and runner job
+
+#### Narration and captions
+
+**Fields**
+
+- Script: `{narrator: {plugin, name, license, synthetic: bool, cost}, lines: {ID → {t: time, text: template over bound values, say: string, voice, rate, locale: BCP 47, kind: speech | vocalization | caption = speech, names: [string]}}}` (caption: text shown and written to the sidecar, with no speech job)
+- Each line also takes: `after: line ID | none = none`, `gap: s = 0.3` (with `after`, the line starts `gap` after that line's end), and `direction: {emotion: neutral | calm | happy | sad | excited | serious = neutral, style: string ≤ 200 (an instruction in words), tags: [string] (an engine's audio tags, such as whispers)}`
+- Each line also takes: `spoken_by: item | none = the document's one item with visemes` (a puppet.rig@1 or a mesh.asset with a visemes map; with more than one, each line names its own) and `recording: {asset, in: flick = 0, out: flick = the asset's end}` (optional: your own take of the line)
+- Captions: `{from: script | words bake, box, max_chars: per line, max_lines, min_dur: s, max_cps, gap_frames, font: role, size: f32, u, plate: role, profile, shown_by: text ID}` (shown_by: a line whose words already show on screen)
+
+**Semantics:** Narration is a speech plug-in job whose cost is counted, one job per line keyed by hash(engine@version, voice, rate, say), and its words bake into an occurrence list that places word markers and caption timing, from an aligner run on the transcript narration.transcript@1 verified, or from the engine's own durations. `say` is the spoken form; it may differ from `text` only on marked names, normalizer expansions and readings of homographs and polyphonic characters, or it's refused with `say_not_text`. Engines: Narration: speech engines. Captions are always on, and in a timeline built from the record a line's caption sets its beat's minimum dwell. DeepBuild writes captions as .srt and .vtt sidecars itself, since AVAssetWriter can't. The lines an item speaks compile at check into one occurrence list, `<item>.visemes`, in document time, with the rest shape X between lines, which that item's mouth flip or visemes map reads by default. With more than one item with visemes, a line that names none moves no mouth and raises the notice `spoken_by_unset`. A line with a recording plays that take and runs no speech job: it counts as `synthetic: false` with the asset's licence, its words and visemes bake from the audio by the aligner, and narration.transcript@1 holds it to its text like any line. Two lines of one narrator never overlap: a line that starts before another's end is refused with `narration.overlap`, naming both and the overlap, with the fix `after`. A line that runs past the end of its section marker FAILs `narration.fit`, naming the overrun; piece@1 and explain@1 lengthen a section to its line plus 0.5 s at expansion. An engine passes on what `direction` asks that it supports; the rest is dropped with the notice `direction_ignored`, naming it. narration.transcript@1 compares the text with tags removed.
+
+**Cost:** Synthesis is a counted job; caption layout O(words) per change
+
+**It can never:** Share narration from a narrator whose license doesn't allow sharing; turn captions off; time captions by guesswork when a bake exists, or from unverified marks
+
+**Lands:** R6
+
+#### Narration: speech engines
+
+For: narration made on your machine by default, with a voice whose licence allows sharing
+
+**Fields**
+
+- `engine: speech.kokoro@0.9.4 (default) | platform (drafts only) | azure (networked, paid) | edge_tts (not a default) | elevenlabs (networked, paid, behind an authority ask: its character alignments are `tts_marks`, used for word markers only after narration.transcript@1 passes the line)`, or an engine a plug-in registers as a speech tool (the tech design's `deep.registerJobTool`), held to narration.transcript@1 like these
+- `g2p: misaki (English) | pypinyin and jieba (Chinese)`
+- `espeak_ng: never bundled` (your own install, run as its own process)
+- Job key: `hash(engine@version, voice, rate, say)`
+
+**Semantics:** Kokoro runs as a pinned runner job with its lexicon front ends and weights and voices by sha256. A word outside the lexicon makes its line BLOCKED, naming the word; the fix is a respelling in `say`, which narration.transcript@1 then checks. Platform voices are for drafts, with `shareable: false` unless their terms say otherwise. Azure Speech is a networked, paid job behind an authority ask. A shared export with an edge-tts voice is BLOCKED until you decide on its terms. Caption timing comes from an aligner run on the verified transcript, or from Kokoro's own durations, never from unverified marks.
+
+**Cost:** One job per line, cached by key; tooling installs on first use as a plan with its size. Budget class: none (runner jobs).
+
+**It can never:** Bundle espeak-ng; share a voice whose licence doesn't allow it; time captions from unverified marks.
+
+**Lands:** R6
+
+#### Loudness and caption profiles
+
+**Fields**
+
+- Loudness: `r128 {integrated: −23.0 LUFS ± 0.2 LU, true_peak: ≤ −1 dBTP}` (for a programme up to 2 minutes, also `max_short_term: ≤ −18.0 LUFS`) | `streaming {integrated: −14.0 ± 1.0 LU, true_peak: ≤ −1.0 dBTP, and ≤ −2.0 dBTP when integrated is above −14.0}` | `podcast {−16 ± 1 LUFS; ≤ −1 dBTP}` | `none`; measured by BS.1770-5 in EBU Mode (Tech 3341 V4)
+- Captions: `netflix-en-adult {42 chars per line, 2 lines, 20 chars per s, 5/6 s to 7 s per caption, 2-frame gaps}` | `netflix-en-kids {17 chars per s}` | `bbc-1.2.5` | `netflix-zh-hans` | `netflix-ja` | `netflix-ko` (values read from the current guides, with the date read; each profile names its locales)
+- Caption timing in the netflix profiles: `{in: within 2 frames of the first word, near_cut: an out-time within 0.5 s of a cut ends 2 frames before it, crossing_cut: a caption whose speech crosses a cut ends 2 frames before it or at least 0.5 s after it, gaps: under 0.5 s close to 2 frames}`
+- A row, as data: `{name, targets: {measure → target}, locales (captions), sources: [{value, page, read: date}]}`, an entry of `profile.loudness@1` or `profile.caption@1`
+
+**Semantics:** A profile is a named set of targets, checked at export on the PCM and on the decoded delivery, so true peak is measured after the codec too. Profiles are rows of data, entries of the `profile.loudness@1` and `profile.caption@1` registries (Registry and seal: registries), filled by first-party packs and packs: a loudness row sets targets on the measures BS.1770-5 already gives (integrated, momentary and short-term maxima, LRA, true peak), a caption row the limits and timing rules above, each value with its source and the date it was read. The rows here ship first-party. An outside pack's row binds only claims whose definition names it, a row the working agent wrote binds only its own claims, and a new measure is a first-party change. A caption profile names its locales, and a film whose narration locale no profile covers is BLOCKED; captions are held to their profile, never to the film audit's hold. A programme up to 2 minutes is short-form, so r128 also holds its maximum short-term loudness. Caption layout follows the profile's timing as well as its limits, so no caption flashes across a cut and no gap between captions falls between 2 frames and half a second. The limiter ceiling sits below the target by the true-peak meter's worst under-read (0.69 dB at 4× oversampling, 0.17 dB at 8×) plus a codec margin (0.5 dB for AAC at 256 kb/s, until measured on the reference encoder). Gain is linear: one static gain toward the target from the master's power bake, the true-peak limiter, a re-measure, and at most one correction pass; outside the profile the export FAILs with its numbers. Checks against reference meters allow ±0.1 LU on integrated, momentary and short-term, ±1 LU on LRA, and +0.2/−0.4 dB on true peak.
+
+**Cost:** Derived from the power bake, O(blocks)
+
+**It can never:** Use ±0.5 LU (R 128 V3, superseded); invent a minimum caption duration no guideline gives; normalize dynamically; warn and still pass; hold a target its row gives no source for
+
+**Lands:** R6
+
+#### Engine export profile
+
+For: an export's outputs, one per engine; like the loudness and caption profiles
+
+**Fields**
+
+- `profile: gltf | unity_gltfast | unity_fbx | unreal_interchange | unreal_fbx | godot | blender | roblox`
+- `format: glb | gltf | fbx`; `reader: name and version`; `up, front: axis`; `units: m | cm`
+- `textures: {format: png | ktx2, color: etc1s | uastc, data: etc1s | uastc, max_size: px, size_rule, orm: rgb | mask_map | separate, normal: +y}`
+- `geometry: {compress: none | meshopt | draco, quantize: bool, tangents: bool = true, max_influences: u8 = 4, refuses: [extension]}`
+- `lods: lod0_only | named | from_file | generated_on_import | as_objects`; `collision: none | extras | prefix | suffix | mesh_colliders`
+- `sockets: empty_nodes | prefix`; `clips: sampled | legacy | loop_suffix`; `skin: {humanoid, min_bones: u16, pose}`
+- `check: {tool, free: bool, decision: bool}`; `sources: [string]` (each page with the date it was read); `unknowns: [string]`
+
+**Semantics:** A named, closed set of rules for one engine's importer, applied at export and checked there, as a loudness profile is. The table ships with the core, with every value's source and the date it was read, and an export names a profile per output, never per-asset rules. A value no source states is listed as unknown, so no check passes on a guess. A blueprint for another engine (the tech design's Blueprints) may carry that engine's profile as data in the same shape, with its sources and unknowns; its adapter's headless import checks it, and it binds only exports through that adapter, while the table here stays as it ships.
+
+**Cost:** None at run time: a table lookup per output.
+
+**It can never:** Be edited by a document or a plug-in; claim a value its sources don't state; make a paid or signed-in check a default (Unity and Unreal checks are decisions).
+
+**Lands:** R6, with the glTF export
+
+#### Engine export profile: OMI physics
+
+For: generated game assets and work products exported for Godot
+
+**Fields**
+
+- `collision: none | extras | prefix | suffix | mesh_colliders | omi_physics` (omi_physics is new; the default for godot)
+
+**Semantics:** Bodies and shapes from the export's collision source are written as OMI_physics_body and OMI_physics_shape, which Godot imports into bodies and collision shapes with no name suffixes. Godot 4.7's reader takes a capsule's or cylinder's radius only from `radius` and a capsule's `height` as its full height, where the OMI spec writes `radiusBottom` and `radiusTop` and a capsule's mid height, so the godot profile writes `radius` beside them and a capsule's full height, and its sources record the difference. Other profiles keep their current rules. The Godot oracle lane checks body types, shape kinds and sizes after import.
+
+**Cost:** None at run time: two extension writers in the glTF export.
+
+**It can never:** Write an extension a profile doesn't list; claim a reader its sources don't state.
+
+**Lands:** R6, with the glTF export
+
+Game assets, from the dry run of October 11: ten game assets written as documents, from a treasure chest to a rigged character, and exported for Unity, Unreal, Godot, Blender and Roblox. Builders and recipes already describe the props; shipping them adds the glTF export, asset jobs, generation jobs and engine export profiles above. Not proposed: skinning in the canvas core (a rigged asset draws in its bind pose, and its skin and clips pass through the export untouched), authoring rigs or clips, KTX2, Draco or meshopt inside the canvas, the FBX SDK (FBX comes only from Blender's writer, after a decision), uploads to any store, and MSFT_lod, which the engines here don't read; Godot does read OMI_physics_shape and OMI_physics_body, so the godot profile writes them (Engine export profile: OMI physics). Coverage reached 100% of the ten assets' fields only because these rows were written from them, so the next case someone else writes is the real test.
+
+Strip speed is `rate`, and a narration's synthesized speech comes from a narrator named by `name`. The tech design puts the device gate in R6, but its R1 evidence player must play call recordings, so a minimal gate lands in R1; section 13 records the decision.
+
+<a id="checks"></a>
+
+## What holds a document to its rules
+
+Every check returns issues as data: `{check, code, severity: error | warning | notice, ids, path, t, what, fix}`. Each code is in the check catalog with its canvas module, what it means and its fix, and the code, never the message text, is what an agent branches on; a canvas module that can emit a code the catalog doesn't list fails its conformance kit. At run time, a code the catalog doesn't list makes that check's result INVALID, naming the code, never a pass. Cheap checks run before every show and incrementally after each patch; heavy checks run off the UI thread or headless, on request. A picture explains and never proves, so a document check passes a claim only when the document is itself the work: when the claim's definition names it among its deliverables. In a claim, an item skipped as `unknown_kind` makes the document's checks BLOCKED, naming the kind, as a missing canvas module does. An export the definition names as a deliverable is held to its target: each item its receipt lists as one the format or an output's engine profile can't hold fails the `export` check, naming the item and what, unless the definition itself lets that item go; a key it sampled is listed and never fails, and outside a claim each stays a warning. On the base commit, a check of a deliverable the base doesn't have fails rather than running nothing, which proves it can fail, so drafting keeps it.
+
+#### Check input
+
+**Fields**
+
+- `{kind, probe: path | query, at_times: [time], expect, tolerance, except: [ID | span], render: {seconds, pixels, theme, reduced_motion, widths: [px]}, sweeps: {control → samples | replay}, declared_cuts: [marker]}`
+- `kind: document.validate | document.budget | document.frame_time | document.layout | document.determinism | geometry.audit | film.audit | film.flicker | film.layout | honest_numbers | record_replay | export | physics.determinism | physics.audit | physics.query | nav.reach | logic.determinism | logic.budget | net.rollback | net.desync | net.budget | kind_rules | view.complete`
+
+**Semantics:** The one input shape for every document check, so a brief's moments, holds and cues become checks. An exception the document itself declares (an `except` entry, a declared cut or span, a floating item or an allowed contact) is its writer's own statement. It narrows that writer's own checks, but a check from a claim's definition never passes on it alone: a requirement that passes only because of it stays INCONCLUSIVE and asks whether to approve it, as one covered only by the agent's own checks does. Cheap kinds (schema, ranges, references, cycles, the budget estimate, accessible names) run before every show; the rest run on request.
+
+**Cost:** A full cheap check ≤ 50 ms per 10,000 items; ≤ 2 ms per patch
+
+**It can never:** Use a picture as proof; be skipped for an agent's document
+
+**Lands:** R1 validation; R6 the rest
+
+#### Check input: plug-in reads
+
+For: a check plug-in that reads a document's evaluated data or plays a piece, as the first-party playtest does
+
+**Fields**
+
+- `deep.canvas.read(doc@rev, {paths: [path], at: [time], lists: [occurrence list + filter], bake: item ID})` → `{values: {path → [value]}, rows: [occurrence], keys: {path → content key}, coverage}`
+- `deep.canvas.play(piece, {seed, track, span, values: [path], frames: [step]})` → `{track: sha256, values, trap, step_times, frames: [sha256]}`
+
+**Semantics:** Two read-only calls of the extension API that a check runner uses. `read` evaluates a revision as `deep_query` does, by stable ID with its coverage, under the plug-in's grant and the uses it declared, and a path it may not read comes back `ref_unresolved`. `play` runs the piece headless in a replica on its virtual clock, with the given entries as the writer `bot`, and returns what it recorded, as the playtest's runs do (Check input: playtest). Frames come back by hash, as evidence, never as values. Neither patches a document or writes the record. The seeds, tracks and spans a check plays come from its definition or the brief, never the working agent, as the playtest's do. A result built on them passes only with its evidence, the read's content keys or the play's track by hash, so a PASS from a runner that read nothing is refused, as any run without results is.
+
+**Cost:** A read as `deep_query`'s, 200 rows in under 50 ms; a play as one playtest run (estimate)
+
+**It can never:** Write a document; return a picture as a value; read past the plug-in's grant; mint a gesture serial; play from a seed or entries the check's input doesn't give
+
+**Lands:** R6, with the playtest plug-in
+
+#### Check input: asset kinds
+
+For: game assets, generated meshes and glTF exports
+
+**Fields**
+
+- `kind: asset.validate | asset.import | asset.roundtrip` (beside the document kinds)
+- `tool: name@version` (the pinned outside tool the check runs: gltf-validator, blender or godot; unity and unreal only after a decision)
+- Expect keys: `errors, warnings, triangles, max_triangles, textured, skins, joints, max_influences, up, front, bounds, pivot, lod_meshes, materials, armatures, collision_nodes, mesh_instances, static_bodies, shapes, skeletons, empties, animations, bone_map, loop_rotation_deg, loop_translation_m, min_y_m, geometry_hash, licenses, credits, provenance, identifiers`
+- Expect key `dropped: u32` (material inputs an import couldn't hold; a brief may require 0)
+
+**Semantics:** Asset checks run headless as runner jobs on the files an export or a generation job wrote: the Khronos validator's report, Blender in background mode, and Godot's headless import, each parsed rather than trusted for its exit code. A Unity or Unreal import is a check only after the person decides on its license and install. A check never reads a rendered picture as proof.
+
+**Cost:** The validator in under a second per file; Blender and Godot imports in a few seconds each (estimates).
+
+**It can never:** Pass on a tool's exit code alone; run a paid or signed-in engine without a decision; be skipped for an agent's export.
+
+**Lands:** R6, with the glTF export
+
+#### Check input: asset kinds: painted light
+
+For: generated textures and textured meshes, and any base color map that may hold light painted in
+
+**Fields**
+
+- `asset.lighting {samples: u32 = 4096, ao_rays: u16 = 32, mip: px = 64, explained_max: f32 = 0.5}` (beside the asset kinds)
+- Result: `explained: f32` (the share of the base color's luminance variance that the mesh's own occlusion and facing explain), `direction: vec3` (the light that fit implies), `map`, and up to 64 sample points that fit best
+
+**Semantics:** Finds light painted into a base color map, which would shade the asset twice under a scene's own lights. At sample points on the surface, placed by a pattern seeded by the asset's hash, it reads the map at its 64 × 64 mip, so fine painted detail doesn't hide shading, and groups the points by hue (OKLab a and b in steps of 0.03), so a change of paint, such as a red cap over white gills, doesn't read as light. Within each group it fits luminance in linear light, by least squares, to the mesh's own ambient occlusion (`ao_rays` rays a point against its BVH) and to its normal, one linear term per axis, as a soft light gives; `explained` is the fit's R², pooled by group size. Over `explained_max` fails, naming the map, the share and the light direction, with two fixes: regenerate the texture with lighting removed, which providers offer, or keep it as painted on purpose, such as snow on top or grime in folds, a writer's exception that asks you as any does. A map whose luminance barely varies (a standard deviation under 0.01) passes with `explained` 0. It runs in f64 on the CPU over the asset's own data, so it holds on every machine and never reads a render; a map it can't decode, or a mesh with no UVs for it, is BLOCKED, naming it. A generation job runs it on every textured result, beside `asset.validate`. Numbers here are proposals to calibrate on generated and hand-painted fixtures; a brief may only tighten them.
+
+**Cost:** O(samples × ao_rays × log triangles); 4,096 points at 32 rays each on a 100,000-triangle mesh in about 0.2 s (estimate). Budget class: checks, off the UI thread.
+
+**It can never:** Read a rendered picture; pass a map it couldn't sample; change the texture itself; take a threshold from an agent.
+
+**Lands:** R6, with generated meshes
+
+#### Check input: pixel kinds
+
+For: pixel art that stays pixel art: palette colors only, hard edges, a tile for every neighbour the map can make, walk frames that don't swim
+
+**Fields**
+
+- `kind: … | pixel.grid | tiles.coverage | sprite.frames` (the asset-tools plug-in's)
+- `pixel.grid {assets: [asset ID], palette: name, cell: px}`
+- `tiles.coverage {atlas: asset ID, index: asset ID, rules: sides | corners_and_sides | edges_6, pairs: [[class, class]]}`
+- `sprite.frames {sprite: asset ID, palette: name, drift: px = 1}`
+- Codes: `pixel.off_palette | pixel.soft_alpha | pixel.off_grid | tiles.missing_mask | sprite.drift`
+
+**Semantics:** Each reads pixel data, never a judgment. `pixel.grid`: every pixel's color is exactly one of the palette's, every alpha is 0 or 255, and each frame's size is a whole number of cells, or it fails naming the asset, the frame and the first pixel off. `tiles.coverage`: for each pair of classes the brief's map can put side by side, the atlas's name index holds a tile for every mask the rule set lists, or it fails naming the pair and the first missing mask. `sprite.frames`: a sprite's frames share its palette and cell, and the bounding box and baseline of its opaque pixels move at most `drift` from frame to frame, or it fails naming the frame. A result that fails never reaches an item.
+
+**Cost:** O(pixels) each, once per asset hash. Budget class: checks, off the UI thread.
+
+**It can never:** Decide from a model's reading; pass a near color; read a rendered frame
+
+**Lands:** R6, with pixel@1
+
+#### Check input: loop kinds
+
+For: the render-back, check and send-back loop on every 3D case and film: the castle, the city, the house, figures, films, physics labs, game assets and 3D data views
+
+**Fields**
+
+- `kind: … | scene.scale | camera.framing | render.exposure | render.contrast | render.noise | geometry.shading | animation.contacts | animation.loop | animation.limits | effects.audit | render.review` (beside the document kinds)
+- `scene.scale {sizes: from kinds and packs (studio@1 sizes), tolerance: ratio = 2}`
+- `camera.framing {keep: [ID] | kept, inside: safe, margin: f32 = 0.04, fill: [f32, f32] = [0.2, 0.9], cut: refuse, horizon_max: deg = 1, overlay: avoid}`
+- `render.exposure {subject: collection | kept = kept, clipped_max: f32 = 0.005, crushed_max: f32 = 0.01, key_ev: [EV, EV] = [−0.5, 0.5]}` (key_ev is the subject's mean log luminance against middle grey)
+- `render.contrast {text: wcag | apca = wcag, min: 4.5, subject_ratio: f32 = 1.5}`
+- `render.noise {flat_variance_max: f32, seeds: 2}` (stills with samples, and job stills)
+- `geometry.shading {normals: outward | consistent = outward, uv_when: map | always = map, stretch_max: f32 = 0.25, texel: [px/m, px/m] (optional), degenerate: refuse, manifold: for_boolean}`
+- `animation.contacts {bones, height: m = 0.03, speed: m/s = 0.05}`; `animation.loop {pose: deg = 2, root: m = 0.01}`; `animation.limits {from: bone_map profile}`
+- `effects.audit {count_peak: u32, bounds: box (analytic), overdraw: {max: f32 = 8}, gpu_ms: measured against declared}`
+- Extended kinds: `document.validate` gains `assets: {missing: 0, maps: present, licenses: present}`; `document.budget` gains `lod: {max_vertices_below_px}`; `physics.audit` gains `settle: {by: time, speed: m/s = 0.05}`, `energy: {max_gain: ratio per s = 0.01}`, `max_speed: m/s`, `penetration: {max: m = 0.01}`, `joints: {max_error: m | deg}`, `faults: [nan, capacity, speed_cap, penetration]`, `soft: {max_stretch: ratio = 1.1}` (each soft body's most stretched edge, its length over its rest length)
+- `render.review {asks: [matches_brief | reads_as_modeled | mood]}` (oracle model: a reading or a taste ask, never a pass)
+
+**Semantics:** Each code kind returns numbers, the pixels or item IDs that fail, and a fix as patch ops (raise exposure 0.7 EV; pull the camera back 1.4 m; the door is 20 m and doors are 1.9 to 2.4 m), and exposure fixes come from the light falling on the subject, as an incident meter reads it. scale, framing, shading, animation and the effect counts run on evaluated data and hold on any machine; exposure, contrast, noise and effect timing read pixels on one machine and are INCONCLUSIVE elsewhere. render.review records a model's judgment as a reading that may open a taste ask, and never passes a requirement. Its taste ask is keyed by the revision's hash, so one revision raises at most one, and a hash you answered is never asked again. Its reading lists at most five findings, worst first, each with a stable ID tied to the revision, its evidence (the snapshot and the crop), the symptom, a fix and an acceptance condition a check can measure. On a later revision it renders the same cameras and marks each earlier finding resolved, remaining or regressed, and a review that can't read its images says so and gives no reading.
+
+**Cost:** Evaluated-data kinds O(items) or O(frames × bones); pixel kinds one GPU reduction and a few KB read back per checked time (about 0.1 ms). Budget class: checks run off the UI thread or headless, on request.
+
+**It can never:** Pass on a model's judgment or a picture; compare GPU pixels across machines; skip a time the brief names; fix the document itself.
+
+**Lands:** R6, with render-back timing
+
+#### Check input: loop kinds: occluded share
+
+For: the castle's hero shots and product shots whose subject must stay in view, a character behind a foreground pillar, a figure's kept part behind another
+
+**Fields**
+
+- `camera.framing` gains `occluded_max: f32 = 0.4` (the most of a kept item's in-frame sample points that other items may hide)
+- `occluded_samples: u16 = 64` (points per kept item, on its true shape, placed by a pattern seeded by its ID)
+- Items in the check input's `except` never count as occluders (deliberate foreground framing)
+- Result: `occluded: [{item, share: f32, occluders: [ID]}]`
+
+**Semantics:** At each checked time, a ray runs from the camera to each of a kept item's sample points, and the point is hidden when the first item the ray meets is another item. The occluded share is hidden points ÷ the points inside the frame; points outside the frame, and a kept item with none inside it, are `cut`'s business. Items with `transmission > 0` or `alpha_mode: blend` never occlude. Cutaways in effect at the checked time cut occluders as they're drawn: a ray passes through the part of an item's true shape on a cutaway's hidden side, and a kept item's sample points there don't count as in frame. A view-class cutaway counts as pinned, as it is when a golden runs; the geometry audit keeps whole true shapes. It runs in f64 on the CPU over evaluated data, with the geometry audit's BVH, so it holds on every machine and never reads a pixel. A failure names the kept item, its occluders and the share, and its fix is patch ops: the smallest orbit or elevation step, found on evaluated data, that brings the share under the limit.
+
+**Cost:** O(kept items × samples × log items) ray casts per checked time; 10 kept items at 64 samples in a 1,000-item scene take about 1 ms (estimate). Budget class: checks, off the UI thread.
+
+**It can never:** Read pixels; move the camera itself; count glass or a blended item as an occluder, or geometry a cutaway hides; place a camera automatically.
+
+**Lands:** R6, with the loop's checks
+
+#### Check input: loop kinds: camera paths
+
+For: walkthroughs that glide through doorways, flights between a city's towers, a push into a cut-away engine, zoom-ins on a screen recording, a focus pull that has to land
+
+**Fields**
+
+- `camera.framing` gains `path_rate: Hz = 30` (samples along each shot, plus every key and path point; between them each measure is bounded, never assumed)
+- `clearance: m = auto` (the least distance from the camera to any solid's true shape, cut by the cutaways in effect; auto is the distance from the camera to its near plane's corners, √(n² + h²) for a near plane at distance n with half-diagonal h, so no solid reaches the near plane or the space between it and the camera)
+- `corners: refuse` (inside a shot and across a glide, the camera's position and aim may not change speed or direction all at once)
+- `raster_max: f32 = 1.5` (the most an image or a video in frame is magnified past its own pixels, in export px per source px)
+- `focus_coc_max: px = 1.5` (with depth of field on, the most blur at a kept item's centre)
+- `sweeps: from_brief` (it also runs across the brief's control sweeps, each range bounded between its samples as Control sweep bounds it)
+- Result: `paths: [{shot, t, measure, item, value}]`
+
+**Semantics:** Whenever camera.framing runs, it also samples each shot at path_rate and at every key and path point, on evaluated data in f64, so these measures hold on every machine. Between samples, clearance, raster_max and focus_coc_max are bounded over each span by the interval forms of the camera's pose and the items' motion (The closed function list), and a span is split until its bound decides the measure, so a camera can't dip into a wall between two samples; a span the bound can't settle within the check's budget is refused, naming the shot and the span, never passed on its samples. clearance measures through the geometry audit's BVH, from the box that bounds the camera over a span to each solid, or to the box that bounds a moving one, counting solids as the scene audit counts them. corners compares the camera's velocity on either side of each key and path point: a jump over 10% of the shot's mean speed, or over 0.01 m/s and 0.5°/s in a shot that barely moves, fails, except at a hold key, a slam, a shake or a cut. raster_max divides the export pixels an image or video item spans by its source pixels. focus_coc_max takes the circle of confusion from the lens in closed form at the item's evaluated distance. A failure names the shot, the time, the item and the value, and its fix is patch ops: move the path's nearest point by the depth, set the keys to auto tangents, cap the zoom where the raster limit holds, or move the focus to the item.
+
+**Cost:** Clearance one BVH distance query per span bound, about 10 µs, plus one per sample where a span splits, so about 25 ms for a 60 s film (estimate); corners O(keys); raster and focus O(items in frame) per sample; sweeps multiply by their samples and splits. Budget class: checks, off the UI thread.
+
+**It can never:** Read pixels; move the camera itself; check the camera you move as a viewer; skip a key or a path point.
+
+**Lands:** R6, with the loop's checks
+
+#### Check input: loop kinds: shading defects
+
+For: generated and licensed game assets, the meshes a boolean, remesh or fracture job makes, and every mesh a geometry job changes
+
+**Fields**
+
+- `geometry.shading` gains `weld: m = 0.00001` (positions this close count as one vertex, the boolean job's default)
+- `degenerate_area: ratio = 1e-12` (a face smaller than this times its part's bounds diagonal squared is degenerate)
+- Result: `non_manifold_edges, non_manifold_vertices, inconsistent_edges, flipped_faces, degenerate_faces: u32`, each with up to 64 face or edge IDs
+
+**Semantics:** Defects are counted on positions welded within `weld`, since glTF splits vertices at UV and normal seams. Each face is judged on its own: `flipped_faces` counts every face whose corner normals point against its own vector area, so one sum never judges a mesh, and `normals: outward` on a closed part also needs a positive signed volume. The fields decide what fails, never a severity. A mesh the check can't read is BLOCKED, naming the primitive and why, never skipped and never passed: undecoded Draco or meshopt data, a mode other than triangles, or a skinned or morphed mesh away from its bind pose. Every asset job that writes a mesh it changed runs the check on its input and its output (Asset job).
+
+**Cost:** O(triangles) per mesh with an edge hash map, about tens of milliseconds per 100,000 triangles (estimate); twice per geometry job. Budget class: checks, off the UI thread.
+
+**It can never:** Judge a mesh by one winding sum; count only exact zero area as degenerate; skip a mesh it can't read; let a severity decide; repair the mesh itself.
+
+**Lands:** R6, with the loop's checks and the asset-tools plug-in
+
+#### Check input: loop kinds: quad ratio
+
+For: meshes that deform, with a skin or morph targets, and every mesh a rig job takes
+
+**Fields**
+
+- `geometry.shading` gains `quad_min: f32 = 0.85` (for a mesh that deforms)
+- `pair: {normal_max: deg = 30, corner_max: deg = 30}`
+- Result: `quad_ratio: f32`, `unpaired: u32`, with up to 64 unpaired triangle IDs
+
+**Semantics:** glTF holds only triangles, so the check finds the quads again: two triangles that share an edge pair into a quad when their normals differ by at most `normal_max` and their four corners make a convex quad with every corner within `corner_max` of a right angle. Pairs are taken best first, by their worst corner, with ties to the lower triangle indices, and each triangle joins one pair at most; `quad_ratio` is twice the pairs over the triangles. A mesh that deforms, one with a skin or morph targets or the input of a rig job, fails under `quad_min`, naming the ratio and up to 64 unpaired triangles, with a remesh job in quad mode as the fix; any other mesh reports its ratio and never fails on it. It pairs on positions welded within `weld`, at the bind pose, so it holds on every machine. A rig job runs it on its input before the call, so a paid rig never starts on a mesh that won't bend cleanly. Numbers here are proposals to calibrate on generated and remeshed fixtures; a brief may only tighten them.
+
+**Cost:** O(triangles × log triangles) for the pairing sort; about 30 ms per 100,000 triangles (estimate). Budget class: checks, off the UI thread.
+
+**It can never:** Fail a mesh that doesn't deform on its ratio; remesh the mesh itself; take a threshold from an agent.
+
+**Lands:** R6, with the loop's checks and generated meshes
+
+#### Check input: loop kinds: ID view and observations
+
+For: every render.review on 3D cases and films, so a model's reading points at items instead of describing a picture
+
+**Fields**
+
+- `render.review` gains `grounding: ids | none = ids`
+- `observe: [exposure_tone | color_cast | crushed_shadows | clipped_highlights | missing_item | extra_item | wrong_material | framing | other]` (the closed list a reading may use)
+- Result: `observations: [{category, item: u16}]`; `dropped: u16`
+
+**Semantics:** Beside each snapshot the model also gets the ID view: the same frame(t) drawn flat in a color per item from its ID hash, with a number at the visible centre of each item in render-back's ID table. A kept item that doesn't show at all is listed under a number of its own with no mark, so a reading can name it as missing. Each number resolves to the item's ID, kind and material. The view is drawn from the core's own object-ID pass with its numbers as text marks, so it adds no GPU work beyond the shipped passes; its colors keep the look's status distance, and its numbers are names, marked as names. An observation with no number, a number the ID view doesn't list, or a category outside `observe` is dropped and counted in `dropped`. The result stays a reading or a taste ask: it never passes a requirement, never changes a check and is never evidence.
+
+**Cost:** One flat pass of the same view and size, plus labels; the model call as before. Budget class: checks, off the UI thread.
+
+**It can never:** Pass a requirement; change a check or its outcome; name an item the ID view doesn't list; count as evidence.
+
+**Lands:** R6, with the loop's checks
+
+#### Check input: `physics.query`
+
+For: physics labs whose numbers are the point (a range against its formula, a cradle's transfer, a run of dominoes in order), and scenes that must keep a path clear
+
+**Fields**
+
+- `probe: output {path, at: time | {list: occurrence list + filter, nth: first | last | u32 = first}} | occurrences {list: occurrence list + filter, measure: count | first | last | field {name} | order {by: [ID]} = count} | ray {from, dir: vec3, max: m = 100, groups: [name] = all} | sweep {shape, from, to: pose, groups = all} | overlap {shape, at: pose, groups = all}`
+- `state: step | time | occurrence = the first step` (the world state a ray, sweep or overlap reads)
+- `expect: value | range | ids | order`, with the check input's `tolerance`
+- Result: `{value, step, t, ids, machines: any | same}`
+
+**Semantics:** Reads the bake and never steps past it. Outputs and occurrences come from its columns; a ray, sweep or overlap runs on the CPU through the backend's own queries, on the state restored from the nearest checkpoint at or before its step and stepped to it, with hits sorted by distance, then ID. A result says `machines: any` when the bake's golden matched on its second machine, and `same` otherwise. A probe whose occurrence never comes within the span fails, naming the list and the filter; a missing bake is BLOCKED. The expectations a claim relies on come from its brief or definition, as for every check, so the working agent can't change them; one it writes in its own document narrows only its own checks. The same queries answer a logic item between its steps, against the world its step read (Logic: between-step services).
+
+**Cost:** A column read is O(log E); a spatial query restores one checkpoint, steps at most `every` steps, then costs O(log n + hits). Budget class: checks, off the UI thread.
+
+**It can never:** Step past the bake; run on the GPU; read a picture; pass a claim on an expectation only the working agent wrote.
+
+**Lands:** R6, with the physics module
+
+#### Check input: `nav.reach`
+
+For: every piece with navigation: each goal can be reached, and no path the piece stores walks through a wall
+
+**Fields**
+
+- `kind: … | nav.reach` (beside the document kinds)
+- `nav.reach {graph: asset ID, world: world ID | plate ID, starts: [point | item ID], goals: [point | item ID], paths: [array path] = [], overlay: array path (optional), at: [step] = every step the overlay changes}` (a path is an array of points a logic item writes; the overlay is an i32 a node that a logic item writes, nonzero where something placed during play blocks the node)
+- Result: `{pairs: [{start, goal, step, reachable: bool, nearest: node}], crossings: [{array, step, segment, point, hit: ID}]}`
+
+**Semantics:** Registered by the physics module, since blocked space is the world's static shapes. It refuses a graph whose source hash isn't the hash of the world's static shapes now, naming both, so a stale graph never passes. It places each start and goal on the node under it, within the capsule's radius across and its climb up, and one off the graph fails, naming it. Its own breadth-first search over the graph's links, never the piece's, looks for a route from every start to every goal, and a pair without one fails, naming the start, the goal and the node nearest the goal that the search reached. Each array in `paths` is read from the bake at every step where it changes: each point must sit on a node, each segment must stay on walkable nodes with every rise along it within the climb, and the capsule, raised by the climb and swept along the segment through the world's static shapes by the backend's own queries, must hit nothing. A crossing fails, naming the array, the step, the segment and the first point off the graph or the shape it hit. It reads the bake and never steps past it, and a missing graph or bake is BLOCKED. The starts, goals and paths a claim relies on come from its brief or definition, so the working agent can't change them. With an overlay the graph itself still never changes: at each step in `at`, read from the bake, the search and each stored path skip every node the overlay blocks, so a wall a player builds or a door the rules close counts at the steps it stands, and a failure names the step; an overlay whose length isn't the graph's node count is refused, naming both. A grid baked from a terrain plate is checked the same way, its starts and goals placed on the cell under them and its sweeps run against the plate's height-field shape.
+
+**Cost:** A search O(nodes + links) per start and per step in `at`; a path O(cells it crosses) plus one sweep per segment. Budget class: checks, off the UI thread.
+
+**It can never:** Use the piece's own search; pass a stale graph; step past the bake; read a picture
+
+**Lands:** R6, with the navigate job
+
+#### Check input: logic kinds
+
+For: every piece with logic: it replays exactly, it fits its budgets, and a trap says where it happened
+
+**Fields**
+
+- `kind: … | logic.determinism | logic.budget | logic.layout` (beside the document kinds)
+- `logic.determinism {at_times: [time], compare: same_machine | cross_machine | web = same_machine}`
+- `logic.budget {fuel_share: ratio = 0.5, on: [app | web] = [app]}` (fuel_share: the most of its fuel budget any step of the bake may use; on: the hosts it holds the steps to)
+- `logic.layout {saves: [asset ID], steps: u32 = 60, same: [array name] = []}` (same: the arrays a change of rules must leave as they were, which the brief names; saves: fixture saves an earlier program of the piece wrote)
+- Trap report: `logic.trap {item, step, t, kind, function, offset, inputs: [entry]}`
+
+**Semantics:** logic.determinism runs the bake twice from step 0 and once from each checkpoint before each sampled time, and passes only when every step hash and array matches, the deep hashes match at each checkpoint, and each continuation probe agrees: from both states, a seeded entry for one control the item reads, then 60 steps, gives the same arrays and deep hashes, one probe per control, so equal step hashes alone never pass; `cross_machine` replays the golden on a second machine and `web` in the web player, each BLOCKED with one unblock ask until it has run. logic.budget reads the bake's fuel per step, its memory and its stack, and fails when a step used more than `fuel_share` of its fuel or the steps one frame runs can't fit the class's frame time, naming the step. It also fails a step whose fuel passes the step ceiling for the piece's budget class on a host in `on` (Logic: work across steps), from the bake's fuel alone, so every machine fails the same step, naming the step, the host and the ceiling (a step with step blocks counts its critical path on the class's logic threads in the app and its whole fuel on the web, and page moves count as fuel: Logic: step blocks, Logic: world pages); with `web` it also plays the bake's steps in the web player in headless Chrome on the reference Mac and times each frame's steps there, BLOCKED with one unblock ask until that has run. logic.layout opens each fixture save under the piece's current program, straight when the state layouts match or through its declared migration, and in a second replica under the program that wrote it, by hash; feeds both the continuation probes logic.determinism uses for `steps` steps; and passes only when the save opens, neither traps and every array in `same` matches at every step, else it fails, naming the save, the array and the first element and step that differ. Its saves and `same` come from the brief or definition, so the working agent can't pick them. A trap in any run, in a check or live, fails the check that ran it and reports the item, the step and time, the trap's kind, the function and offset where it stopped, and the input entries that step read, so `deep_show` can replay to that step.
+
+**Cost:** One or two runs of the bake; compares O(steps × bytes written). Budget class: checks, off the UI thread.
+
+**It can never:** Pass a run that trapped; take a budget from the working agent; read a picture
+
+**Lands:** R6, with the logic module
+
+#### Check input: net kinds
+
+For: every piece with net: a late input changes nothing, a desync is caught where it starts, and rolling back fits the frame
+
+**Fields**
+
+- `kind: … | net.rollback | net.desync | net.budget` (beside the document kinds)
+- `net.rollback {players: 2 to 8 = 2, steps: u32 = 1200}`
+- `net.desync {seed}` (where the planted change lands)
+- `net.budget` (against the class's frame time)
+
+**Semantics:** Each runs copies of the piece in one process over a test relay, with no network, driven by its recorded input tracks or seeded ones. net.rollback plays the match twice, once with every message on time and once with each player's messages held back by up to the window in a seeded order, and passes only when both reach the same full-state hash at every confirmed step, hold no occurrence from a replaced step and record the same track. net.desync plants a one-unit shift in one field of one copy's state at a seeded step, and passes only when the match stops within one `hash_every` interval of it, naming that step and field. net.budget runs the piece's busiest stretch with a full window to roll back each frame, and fails when the checkpoints of one match step, or restoring and stepping the window again, can't fit the class's frame time, naming the canvas module that costs most, and counts the snapshot bytes the rollback ring writes per second, logic's being only the memory pages written since the match step before, where full copies of a 4 MiB memory at 60 Hz would move 240 MiB/s. With `window` 0, net.rollback holds messages back by up to the delay plus a seeded jitter and passes only when no copy ran a step before it held every player's message, naming the first step a copy ran early; and net.budget measures the busiest single match step against the class's frame time and counts no rollback ring (Net: lockstep).
+
+**Cost:** Two runs of the match and a planted one. Budget class: checks, off the UI thread.
+
+**It can never:** Reach the network; pass a run that rolled back past its window; read a picture
+
+**Lands:** R6, with the net module
+
+#### Check input: playtest
+
+For: bounded games: a level a player can finish, no spot that traps them, no step that blows the frame, played live
+
+**Fields**
+
+- `kind: playtest` (a plug-in's, registered through `deep.registerCheck`, beside the document kinds)
+- Subject: the piece's document, or an export of it (a web player bundle plays the document it holds), or a game project's build by hash, launched and driven through its hook (`game.hook@1`; the tech design's Blueprints)
+- `playtest {bots: [bot], runs: u16 = 20 (per bot), seed: u64, span: s = 120 | {steps: u32}, play: game.play@1 (optional), stuck: {measure: array path | output path | name, by: number = 1, within: s = 10 | {steps: u32}}, goals: [{name, when: array path | expression | {sensor: ID, body: ID}, each: bool = false}], soak: {bot, steps: u32, every: steps = 3,600, limits: {memory: MiB, save: KiB, step: ms (p99)}} (optional), frames: {every: s = 0}, piece_seed: own | run = own}` (a goal is reached at the first step its array or expression is true, or its body enters the sensor; an expression is over the play interface's names, with the closed function list's operators, such as `depth >= 3 && turn <= 2000`)
+- Bot: `{policy: {keys: {control → [[t, value]]}, pick: {control → {from: [value] | [min, max], every: s = 0.25}}}} | {logic: {program: asset ID, reads: [array path | output path], plays: {name → control ID}, budget}} | {legal: {pick: seeded | greedy, every: steps = 1}} | {explorer: {every: steps = 1}} | {descender: {action: name, every: steps = 1}} | {model: {provider: name@version, every: steps ≥ 15, budget: {calls: u32, tokens: u32}}}`, each with `expect: {goal → miss}` and `share: {goal → [min, max]}` (optional)
+- A run, in a replica: `play {piece, bot, seed, span, values: [path], frames: [step]}` → `{track: sha256, values, trap, step_times, frames: [sha256]}`
+- Result per run: `{seed, track, outcome: reached | ended | stuck {from_step} | goal_missed {goal} | trap {logic.trap} | over_budget {frame, ms} | invalid {why}, replay: sha256, frames, counted: bool}`
+- Codes: `playtest.not_live | playtest.stuck | playtest.goal_missed | playtest.trap | playtest.over_budget | playtest.replay | playtest.band | playtest.expect | playtest.soak`, and `play.missing` (Play interface `game.play@1`)
+
+**Semantics:** A first-party plug-in registers it, so the canvas core and the canvas modules know nothing of it; with the plug-in off, a requirement that names it is BLOCKED, naming the plug-in. It's the check that requires live play (Export: web player): it plays the piece itself, live, from its document, so a subject that is a tour-only fallback, a video or a still fails with `playtest.not_live`, naming which, before any run. Each run plays in a replica (Replica `deep_drive`), through a play mode the plug-in drives: the piece plays headless on the replica's virtual clock, a step at a time, from its own document and seed, or the run's seed with `piece_seed: run`, and the bot's entries join its input track with the writer `bot`. A policy is data, like a tour: its keys set controls at their times, and each `pick` sets its control every `every` seconds to a value drawn by hash(the run's seed, the control, the step). A logic bot is a logic item the replica adds to its own copy of the piece: it reads what it declares, and each `plays` array holds a value and a serial, and each step whose serial differs from the step before puts that value on the control as one entry, stamped at its next step, so a bot that presses north twice sends two entries. Run i's seed is hash(the check's seed, i). With `piece_seed: run`, run i plays the piece with the run's seed in place of the document's, recorded with the run and used again by its replay, so each run generates its own floors; with `own` the piece keeps the document's seed. The replica returns the recorded track, the values of the paths the check names at each step, any trap, each step's time and the frames asked for, and the plug-in judges the run from them. A run is stuck when, before it has reached every goal, its measure, a number or a position, moves less than `by` over some `within` seconds, and the outcome names the step it last moved. A run that reaches every goal ends `reached`, and one whose span runs out with no failure ends `ended`. A goal is missed when no run reaches it, or when a run doesn't and the goal says `each`. A trap in the piece's logic fails its run as `logic.trap` reports it, and a trap in a bot makes its run INVALID, never a pass. A run is over budget at the first frame, at the piece's frame rate, whose steps can't fit the class's frame time, as logic.budget measures it, with the bot's own steps timed apart. Every run's track is played again in a fresh replica without its bot and must reach the same full-state hash of the piece's carried state at every checkpoint and at the end; a run whose replay differs fails with `playtest.replay`, naming the run and the first step that differs. Each run's evidence is its seed, its track by hash, its outcome with its step, and its frames by hash (its first, its outcome's and any the input asks for), which show what happened and never decide an outcome. `testsRun` counts runs, and a PASS without every run's track, outcome and replay is refused. The runs, seed, bots, bands, goals, soak and stuck rule come from the brief or definition, so the working agent can't change them or pick a lucky seed, and a bot the working agent wrote binds only its own checks. Its codes are in the check catalog under the plug-in, each with a planted twin in its conformance kit. With a play interface (Play interface `game.play@1`), locked in the brief before generation, the plug-in's own bots play a generated game the working agent never wrote them for. The legal bot picks one of the rows the piece lists, by hash(the run's seed, the step) when seeded and by the highest `legal.score` when greedy, with ties drawn the same way. The explorer walks, by its own breadth-first search over the grid's classes, toward the nearest reachable cell it hasn't stood on, opening a locked cell only after standing on its key; the descender walks the same way to the nearest exit and takes its `action` there. Each acts only through a listed row whose target is the next cell of its path, falls back to the legal bot's seeded pick when no row is, and acts at most once every `every` steps. A span or a stuck rule in steps counts the steps the piece runs. A bot's `share` holds the share of its runs that reach each goal it names inside its band, or the check fails `playtest.band`, naming the bot, the goal, the share and the band; its `expect: miss` fails any of its runs that reaches that goal with `playtest.expect`, naming the run and the step, so a bot that must lose proves the game can be lost. A soak plays one long run of its bot and reads, every `every` steps, the size of the piece's logic memories, the size of a save made through the play interface's save action when it names one, and the window's p99 step time, and fails `playtest.soak` at the first window over a limit, naming the measure, the window and the value. A model bot asks a model reached through a source, between steps on the replica's virtual clock, for one of the listed rows, given the interface's values, and drops a reply that isn't one; steps in which it sent no entry never count toward stuck. It counts only through replay: its run that ends stuck, traps or goes over budget fails the check, since that track fails the same way without it, and one whose track replays without it to no such failure is refused, naming the run; its runs that reach a goal are readings (`counted: false`), so goals, bands and a PASS rest on the other bots' runs. Its calls are spend, under the brief's standing rule. On a game project's build (the tech design's Blueprints), the bots read the interface through the hook's state and legal-action reads, act through its act, and step the build headless at the template's fixed tick; a logic bot runs in a logic sandbox the plug-in hosts beside the build, never in it; each run replays in a fresh launch from its recorded actions and must reach the same state digest at every checkpoint, or fail `playtest.replay`; and frame time there is the load journey's, not this check's.
+
+**Cost:** A run is one headless play of its span and one replay, in replicas under their lease, at most two at once; 20 runs of a 2-minute piece take minutes (estimate); a soak of 100,000 steps takes minutes more, a game project's runs add a launch each, and a model bot adds its calls, counted as spend (estimates). Budget class: checks, off the UI thread.
+
+**It can never:** Run in the canvas core or a frame; change the piece; decide an outcome from a frame; pass without every run's track and replay; take a tour, a video or a still as live play; take its seed, bots, bands, goals or stuck rule from the working agent; count a model bot's run toward a goal or a band
+
+**Lands:** R6, with the logic module, as the playtest plug-in
+
+#### Play interface `game.play@1`
+
+For: generated games that a bot locked before generation must play: a crawler's floors, a factory's waves, a board's turns, on the canvas or as an engine project
+
+**Fields**
+
+- `game.play@1 {grid: {cells: name, size: [u16, u16], shape: square | hex = square, hex: {orient: flat | pointy, offset: odd | even} (as Mark set: hex grid), moves: 4 | 8 = 4 (square), classes: {open | blocked | door | locked | key | exit → [i32]}, locks: {locked value → key value}, floor: name (optional), ready: expression (optional)}, units: {cell: name, hp: name, side: name, alive: name, self: u16 = 0}, turn: name, rewards: {name → name}, values: {name → name}, actions: {name → {control: control ID, action: name (on an actions control), args: none | cell | row | option}}, legal: {rows: name, count: name, score: name (optional)}, accepted: name, refused: name, start: [cell] (optional)}`
+- A name is, on the canvas, a logic array path (`<logic ID>.<array>`), and on an engine project a field of the template's `GameState` that the hook reads (the tech design's Blueprints)
+- `grid.cells`: an i32 a cell, row-major; `units.cell`: two i32 a unit, x then y
+- `legal.rows`: i32 rows of (action, a, b), `action` an index into `actions` in declaration order and `a`, `b` its arguments (a cell's x and y, a row's key, an option's index), `legal.count` of them
+- Code: `play.missing`
+
+**Semantics:** Declared in a game's brief before anything is generated and copied into its definition with the checks that read it, so the working agent can't change it. It's what a game publishes for bots and checks, under the same names on both routes: the playtest plug-in's first-party bots, `rules.legal`, `grid.reach`, the grid core kit's checks and the goals' expressions read only these names. Each step the piece lists the actions it would take now as `legal.rows`, and raises `accepted` for each entry it takes and `refused` for each entry it turns down. A first-party bot acts only by choosing a listed row, which becomes the entry a player's gesture on that action's control would make (an option; on an actions control, its named `action` with repeat 0; a cell, as a press and a release of a point control's first button there, as Enter on a focused cell writes; or a row's key in the first set its pick control names), stamped at the next step with the writer `bot`, so a run replays from its track alone. A cell's class is the class whose values hold its value; a value no class holds counts as blocked, and a locked cell opens once a cell holding its key value under `locks` is reached. `floor` names the array that counts floors or depths, and `ready` is true once a floor is generated, which `grid.reach` reads. A piece that publishes no array, or one of the wrong type, for a name the interface declares fails every check that reads it with `play.missing`, naming the name, before any run. Values are read from the bake or the hook, never from a picture.
+
+**Cost:** The piece's own work: about 12 B a listed row each step; a check reads O(names) per step it reads. Budget class: as the piece.
+
+**It can never:** Change once the brief is locked; be written by the working agent; take a value from a picture; let a first-party bot act but through a listed row
+
+**Lands:** R6, with the playtest plug-in's bots
+
+#### Check input: `rules.legal`
+
+For: every game with a play interface: each action it lists is taken, and an action it doesn't list is turned down
+
+**Fields**
+
+- `kind: rules.legal` (the playtest plug-in's, beside playtest)
+- `rules.legal {playtest: requirement ID, samples: u16 = 50 (per run), unlisted: u16 = 8 (per sample), seed: u64}`
+- Result: `{tested: u32, listed_refused: [{run, step, row}], unlisted_taken: [{run, step, entry}]}`
+- Codes: `rules.listed_refused | rules.unlisted_taken`
+
+**Semantics:** Registered by the playtest plug-in, and reads the runs of the playtest it names, with that playtest's subject and play interface; with that requirement unrun, it's BLOCKED. In each run it picks `samples` steps by hash(seed, run, i), spread over the steps where `legal.count` was above zero. At each, it restores the run's state at that step in a replica (Replica `deep_drive`), or on a game project's build relaunches and replays the run's actions to that tick, and from that one state tests entries one at a time, each in a throwaway copy, so none sees another's effects. Each listed row, put as its entry, must raise `accepted`, leave `refused` as it was and change at least one other name the interface declares (a wait at least moves `turn`), or it fails `rules.listed_refused`, naming the run, the step and the row. Then `unlisted` entries, drawn by hash(seed, run, step, j) from each action's arguments (a cell on the grid, a row's key, an option) and held by no listed row, must each raise `refused` and leave every other name as it was, or it fails `rules.unlisted_taken`, naming the run, the step and the entry. Its seed comes from the brief.
+
+**Cost:** One restore and one step per tested entry: 50 samples × (the listed rows + 8) a run, about a second a run for a grid game (estimate). Budget class: checks, off the UI thread.
+
+**It can never:** Take the piece's word that an entry was legal; test from a state no run reached; let one test see another's effects; draw its entries from the working agent
+
+**Lands:** R6, with the play interface
+
+#### Check input: `grid.reach`
+
+For: generated grid levels: every floor's exit and every room can be reached, through doors and locks whose keys can be reached first, and a flow field leads every spawn to its target
+
+**Fields**
+
+- `kind: grid.reach` (the playtest plug-in's)
+- `grid.reach {playtest: requirement ID, starts: [cell] = the interface's start, or the self unit's cell, goals: [cell | class] = [exit], every: [class] = [], depths: [u16]}` (the grid, its shape, classes and locks, its floor and ready come from the play interface)
+- Flow form: `grid.reach {playtest, flow: {next: name, cost: name, solid: [class] = [blocked], targets: [cell | class], spawns: [cell | class], lag: steps = 0}}` (`next`: an i32 a cell, the row-major index of the cell to step to, or a negative value for none)
+- Result: `{floors: [{run, seed, depth, step, reached: bool, unreached: [cell], nearest: cell}], coverage: {depth → runs}, flow: [{run, step, cell, why: rises | solid | loops | unreached}]}`
+- Codes: `grid.unreached | grid.flow`
+
+**Semantics:** Registered by the playtest plug-in, beside playtest. Each playtest run records the play interface's grid at every step where `ready` turns true, so this check reads the floors the piece really generated, by run seed, never floors the agent picked; with that requirement unrun, it's BLOCKED. For each recorded floor it runs its own breadth-first search, never the piece's, from each start over open, door, key and exit cells (4 or 8 neighbours on a square grid, as `moves` says, and 6 on a hex grid with its offset), with key-and-door closure: a locked cell opens once the search has reached a cell holding its key under `locks`, and the search runs again until nothing more opens. Every goal, and every cell of a class in `every`, must be reached, or it fails `grid.unreached`, naming the run and its seed, the depth, the cell and the reached cell nearest it. Each depth in `depths` that no run generated is BLOCKED, never PASS, and the result counts the runs that generated each depth, so a brief that needs floor 5 checked names a playtest whose bots get there. The flow form reads `next` and `cost` from each run's bake: from `lag` steps after any step the grid changes, every cell its own search can lead to a target must step to a neighbour that isn't solid and whose cost is lower, or it fails `grid.flow`, naming the run, the step, the cell and why (it rises, enters a solid cell or loops); and every spawn must reach a target both by its own search and by following `next`, or it fails naming the spawn. Starts, goals, depths and lag come from the brief or definition.
+
+**Cost:** A search O(cells) per floor, run again once per lock that opens: 200 floors of 32 × 32 well under a second (estimate); the flow form O(cells) per checked step. Budget class: checks, off the UI thread.
+
+**It can never:** Use the piece's own search or its own reachable flags; check a floor no run generated; pass a depth it never saw; read a picture
+
+**Lands:** R6, with the play interface
+
+#### Check input: catalog kinds
+
+For: games with content tables: no reference to nothing, no recipe nobody can make, no loop that makes something from nothing, no line without its words, no victory nothing can trigger
+
+**Fields**
+
+- `kind: catalog.refs | catalog.reach | catalog.economy | catalog.bounds | catalog.copy | scenario.reach` (the catalog plug-in's)
+- `catalog.refs {catalog: asset ID}`
+- `catalog.reach {catalog, roots: [{table, ids: [ID] | column: name}], makes: [{table, inputs: column, tools: column, outputs: column}], every: [table]}`
+- `catalog.economy {catalog, makes, value: {table, column} (optional), margin: f64 = 0}`
+- `catalog.bounds {catalog, ranges: {table.column → [min, max]}}`
+- `catalog.copy {catalog, shown: [table.column], locales: [locale]}`
+- `scenario.reach {catalog, triggers: table, map: table (optional), goals: [trigger ID], turns: u16}` (a trigger row: `{id, trigger: turn n | flag name | enter {side, cells} | defeated {side}, when: [flag], sets: [flag], shows: [copy key], ends: victory | defeat | none}`)
+- Codes: `catalog.ref_missing | catalog.unreachable | catalog.gain_cycle | catalog.out_of_range | catalog.copy_missing | scenario.unreachable`
+
+**Semantics:** A first-party plug-in registers them through `deep.registerCheck`, and each reads a catalog in its one documented layout (Asset: tables: catalogs `table.layout@1`), never an agent's summary of it. `catalog.refs`: every `ref` and `refs` column names a row its table holds, or it fails naming the table, the row's ID, the column and the missing ID. `catalog.reach` computes a fixed point from the roots: a row a root names is reachable, a recipe becomes reachable once all its inputs and tools are, and its outputs then are; every row of each table in `every` must be reachable, or it fails naming the row and, for a recipe, the first input nothing yields. `catalog.economy` looks for a cycle of recipes (an uncraft is a recipe too) that, each made once, ends with more of some row than it began, and fails naming the cycle and the row it gains; with a value column, a recipe whose outputs are worth more than its inputs by more than `margin` fails too, naming it. `catalog.bounds` holds each column to its range, naming the row. `catalog.copy`: every key a shown column holds has an entry in that column's copy table, `data.copy[locale][table]`, in every locale, or it fails naming the key and the locale; whether the copy fits stays the text module's check. `scenario.reach` computes a fixed point over a scenario's trigger rows from its start: a turn trigger within `turns` can fire, a flag trigger once a reachable row sets the flag, an enter trigger once the check's own search over `map` reaches one of its cells from that side's units, and a defeated trigger once the side has units to lose; every goal must be reachable, and every key a reachable row shows must have copy, or it fails naming the row and the first trigger or condition that can't hold. Roots, tables, ranges, goals and locales come from the brief, the definition or the kit, so "everything is craftable" from the working agent is never evidence: a list it wrote binds only its own checks.
+
+**Cost:** Each O(rows + references) once per catalog hash: 5,000 recipes in under 100 ms (estimate). Budget class: checks, off the UI thread.
+
+**It can never:** Read a catalog in another layout; take its roots from the working agent; run the piece; judge whether copy fits
+
+**Lands:** R6, as the catalog plug-in
+
+#### Check input: grid core kinds
+
+For: games built on the grid core kit: a roll that doesn't depend on when you clicked, a board that shows the rules' map, a forecast that tells the truth
+
+**Fields**
+
+- `kind: rng.timing | board.agree | forecast.agree` (the grid core kit's check plug-in)
+- `rng.timing {playtest: requirement ID, samples: u16 = 20, compare: [name] = the interface's units and rewards}`
+- `board.agree {playtest: requirement ID, board: mark set ID, map: {class → [tile]}, every: steps = 60}`
+- `forecast.agree {playtest: requirement ID, forecast: name (an f64 an outcome), action: name, outcomes: name, salts: u16 = 1,000, confidence: f64 = 0.999}`
+- Codes: `rng.timing | board.agree | forecast.agree`
+
+**Semantics:** A plug-in the grid core kit names registers them, and each reads the runs of the playtest it names. `rng.timing` picks `samples` action entries by hash and replays each run with that entry and every later one stamped one step later: after the moved action's step, every compared name must equal the original run's after its step, or it fails naming the entry, the step and the first name that differs, since a roll drawn from the step's seed moves with the click. `board.agree` reads the board's evaluated tile column, never its pixels, every `every` steps: each cell must draw a tile that `map` allows for the class the rules' grid holds there, or it fails naming the step, the cell, the class and the tile. `forecast.agree` finds each step where the forecast is shown for an action, resolves that action from that state in `salts` throwaway copies, each with a different salt for the kit's random streams, and counts the outcome the rules write to `outcomes`; each shown probability must lie within the binomial interval at `confidence` around its counted share, or it fails naming the step, the action, the outcome, the shown share and the counted one. Their inputs come from the brief or the kit.
+
+**Cost:** `rng.timing` one replay per sample; `board.agree` O(cells) per read step; `forecast.agree` one restore and one step per salt, 1,000 salts about a second (estimate). Budget class: checks, off the UI thread.
+
+**It can never:** Read a picture; take a forecast's word; change the piece; take its inputs from the working agent
+
+**Lands:** R6, with the grid core kit
+
+#### Check input: `narration.transcript@1`
+
+For: every narrated film: the voice says the script, alone and under the mix
+
+**Fields**
+
+- `narration.transcript@1 {model: whisper.cpp@1.9.5 (weights by sha256: base.en; small for zh, ja and ko), beam: 5, temperature: 0 (no fallback), pad: s = 0.6, prompt: per locale, scope: [line, mix], window: [t − 0.15 s, t + duration + 0.25 s], normalizer: normalizer@1, extra_tokens: 1 (mix only)}`
+- `normalizer@1`: a pinned table for both sides (case, punctuation, hyphens, contractions, British spellings, every number form to digit tokens, NFKC, CJK numerals)
+- `match: tokens | syllables` (toneless syllables for Chinese, kana readings for Japanese, Hangul syllables for Korean)
+- `names: phoneme match (g2p_en)`; `ask: exception {line text hash, audio sha256}`
+
+**Semantics:** A runner job transcribes each line's own audio and its window in the export with the pinned model; each transcript is a recorded artifact, like the analysis bake's model kinds, and code compares it with `say`, or `text` when say is absent. PASS needs both the line and its mix window to match. A mismatch FAILs naming the line, the expected text and what was heard, with a respelling fix; when a respelling can't settle it, one exception ask per (line text hash, audio sha256) goes to a person with the clip and both strings, never asked twice. No agent writes an expected text. Vocalizations are checked for speech activity only, and a polyphonic Chinese character must carry its reading in say. A planted twin with 300 ms cut from one line must FAIL. BLOCKED when the job can't run.
+
+**Cost:** One transcription per line and per window, cached by (model hash, audio hash); CPU only. Budget class: checks, off the UI thread.
+
+**It can never:** Take an expected text from an agent; pass on character similarity alone; pass a line whose transcription didn't run; ask about the same (line, audio) twice.
+
+**Lands:** R6
+
+#### Check input: mix kinds
+
+For: narrated films whose voice must sit above the bed, and scores whose notes must be in tune
+
+**Fields**
+
+- `mix.speech_ratio {min: LU = 10 (a brief may lower it to 6, never below), window: short-term, spans: activity bake}` (on by default for films with narration)
+- `score.pitch {tolerance: cents = 35}` (on every score render)
+- Per-bus power bakes at export: 800 B/s per channel
+
+**Semantics:** speech_ratio: over the activity bake's speech spans, the narration bus's short-term loudness minus the summed other buses must reach the minimum; a FAIL names the span and the numbers. Whether words survive the mix is narration.transcript's mix scope. score.pitch measures each declared note in its stem against its pitch, at its declared onset.
+
+**Cost:** The power bakes the export already computes, per bus; pitch O(notes) inside the render job. Budget class: checks, off the UI thread.
+
+**It can never:** Measure live; pass without its bakes (BLOCKED); take a threshold from an agent.
+
+**Lands:** R6
+
+#### Check input: `lipsync.video`
+
+For: a face in a video that speaks a narration: a recorded presenter, a generated talking head, a clip dubbed into another language
+
+**Fields**
+
+- `kind: lipsync.video` (a first-party plug-in's, registered through `deep.registerCheck`, beside the document kinds)
+- `lipsync.video {subject: strip ID | image item (video frames), words: words bake, track: face.track output, open_within: frames = 1, rest_after: s = 0.25, open_at: f32 = 0.15, found_at: share = 0.98}`
+- Job kind `face.track {asset, model: id@version, weights: sha256}` → a table of each frame's mouth opening (0 to 1) and whether a face was found; a model kind, like the aligner
+- Codes: `lipsync.late {word, frames}`, `lipsync.open_in_silence {span}`, `lipsync.no_face {frames}`
+
+**Semantics:** `rig.lipsync` holds a rig's or a mesh asset's mouth, which the document moves; a face in a video is pixels the document doesn't move, so this kind reads a recorded table of its mouth instead. It reads the strip's placement and the words bake through the read API for check plug-ins, never a picture, and the `face.track` table by hash: each word's onset must show an opening of at least `open_at` within `open_within` frames, and each silence of at least `rest_after` must close it, or it fails, naming the word or the span and the frames. `face.track` is a model kind, recorded once by hash and re-checked within one model frame, as the aligner is, and a PASS rests on that recorded table, as narration.transcript@1's rests on its transcript; a span where fewer than `found_at` of the frames found a face is INCONCLUSIVE, naming the frames, never PASS. Thresholds and the `face.track` model come from the brief or the definition, never the working agent.
+
+**Cost:** `face.track` about real time on the reference Mac, once per asset hash (estimate); the check O(words + frames). Budget class: checks, off the UI thread.
+
+**It can never:** Read a picture itself, only `face.track`'s recorded table; pass a span with no face; take a threshold or the `face.track` model from the working agent; hold a rig or a mesh asset with visemes, which rig.lipsync holds
+
+**Lands:** R6, with narration
+
+#### Check input: export kinds
+
+For: every film export: no blank or broken frames, colors tagged right, a delivery true to the frames we hashed
+
+**Fields**
+
+- `film.blank {luma: ≤ 0.06, coverage: ≥ 0.98, min: s = 0.1, except: [declared span]}`
+- `frames.finite {targets: float render targets}` (any non-finite count is FAIL)
+- `export.color {h264 | hevc: BT.709 primaries, transfer and matrix, limited range, tags nclx 1-1-1 and range tv; prores_4444: limited range with full-range alpha; png: full range; probe: 75% bars and a grey ramp within ±2 code values}`
+- `export.fidelity {frames: exact; samples: exact per channel, priming removed; psnr_y: dB ≥ 40 | ssim: ≥ 0.98, per frame, on luma and any alpha, worst 1% reported}`
+
+**Semantics:** Each runs on every film export, with no brief needed. film.blank reads the raw frames, and an intended black is declared once as an exception. frames.finite is one integer bit-test reduction over float targets, exact on every GPU. export.color reads the written file's tags in the decode worker and decodes a one-frame probe made with the same encoder settings. export.fidelity decodes the delivered file's own bytes in a fresh decode worker, apart from the one that encoded it, through the file's own color tags and edit list, and compares it with the raw frames and PCM on the same machine. It passes only when the delivery holds exactly the receipt's frames, each at its own frame time and closer to its own raw frame than to a neighbour that differs, and exactly the receipt's sample frames per channel once the edit list removes the encoder's priming and end padding, with luma, and alpha where the codec carries it, straight or premultiplied as declared, above the floor. So it catches an encoder that drops, repeats or pads a frame or a sample, or starves the bitrate. A live view may drop a late frame; an export never may. A software adapter makes the pixel kinds INCONCLUSIVE.
+
+**Cost:** film.blank O(pixels) on frames already read back; frames.finite one reduction per frame; export.fidelity one decode of the delivery; the probe under 1 s. Budget class: export.
+
+**It can never:** Pass a frame it didn't read; compare GPU pixels across machines; let an intended black pass without being declared.
+
+**Lands:** R6, with export
+
+#### Check input: rig kinds
+
+For: every film that shows a puppet@1 rig or an acting object
+
+**Fields**
+
+- `kind: … | rig.pop | rig.inbetween | rig.shoulder_order | rig.props_between_palms | rig.expressions | rig.reach | rig.contacts_2d | rig.views | rig.marks | rig.lipsync` (beside the document kinds)
+- `rig.pop {theta_max: deg = 35, d_max: ratio of height = 0.08, except: keys marked pop}`
+- `rig.inbetween {theta_big: deg = 60}`
+- `rig.shoulder_order {sweep: flexion 0 to 180° at fixed abduction, samples: 37}`
+- `rig.props_between_palms {tolerance: u, roll: distance ÷ radius within 2%}`
+- `rig.expressions {min_brow: px = 3}`; `rig.contacts_2d {height: ratio = 0.01, speed: ratio of height per s = 0.05}`
+- `rig.reach`, `rig.views`, `rig.marks` (no fields)
+- `rig.lipsync {open_within: frames = 1, rest_after: s = 0.25}` (on a rig or a mesh.asset with visemes; on by default for every item a line is spoken by)
+
+**Semantics:** Code oracles on evaluated data: each samples the rig's parts at the look's quantize rate and at the brief's moments, so it holds on every machine. pop: no joint turns more than theta_max and no part moves more than d_max between drawings, unless the key is marked pop. inbetween: a change past theta_big gets at least one in-between drawing. shoulder_order: abduction composes before flexion, and the sweep never crosses the hand past the body's midline or a raised arm over the face. props_between_palms: a held prop sits between the palm sockets, hands it over with no jump past d_max, and rolls by distance ÷ radius. expressions: sad and worried brows have the inner end above the outer, angry below, at least min_brow tall at final size. reach: a target past the chain's length is a FAIL unless stretch is cartoon. contacts_2d: planted feet don't slide. views: every view has every part. marks: every silhouette mark draws in every look the rig appears in. lipsync: over the lines an item speaks, the evaluated mouth (a rig's shown mouth drawing, or a mesh asset's most weighted mouth target) leaves X at most open_within frames before each word's start in the words bake and no later than the frame that shows it, and returns to X within rest_after of each speech span's end in the activity bake; and wherever the line's phonemes hold one viseme for at least three frames, the mouth shows it at the middle of that span, shifted by lead, with the viseme recomputed from the phoneme timings through the pinned map, never read from the visemes bake. Each failure names the rig, part, time and a fix. Numbers here are proposals to calibrate on the pack's examples; a brief may only tighten them.
+
+**Cost:** O(frames × parts) per rig at the look's quantize rate; the shoulder sweep 37 evaluations per chain. Budget class: checks, off the UI thread.
+
+**It can never:** Pass on a picture or a model's reading; skip a view, expression or mark the rig declares; take a threshold from an agent.
+
+**Lands:** R6, with puppet@1
+
+#### Geometry audit
+
+**Fields**
+
+- `states: [rest | apart | loop | take_apart (with reversals) | sweeps | tour | motion_angles]`
+- `tolerance: {sunk, touch, land: m}`
+- `relations` (contacts allowed, from objects)
+- `displays: {item → [string]}` (widest strings)
+- `motion_angles: {assembly → samples}`
+
+**Semantics:** Proves from each part's true shape that nothing passes into anything in every state, every part is held, every wire and tube end lands, display text fits at its widest string, and declared ranges hold. Each failure names the part IDs, the check, the time and a fix.
+
+**Cost:** ≤ 500 ms per 1,000 parts, off the UI thread
+
+**It can never:** Test rendered pixels; skip a state the document can reach
+
+**Lands:** R6
+
+#### Geometry audit: scenes
+
+For: one-shot scenes: interpenetration and floating parts in the house, the city, the castle and physics labs at rest
+
+**Fields**
+
+- `scope: figure | scene = figure`
+- `overlap: {pairs: all | [[collection, collection]], tolerance: m = 0.002}`
+- `support: {gravity: vec3 = (0, −1, 0), tolerance: m = 0.005, floating: [ID]}` (floating names what may float, such as a lamp on a wire or a bird)
+
+**Semantics:** The same audit on true shapes, with items in place of parts: no two items pass into each other past the tolerance, and every item rests on something unless declared floating. Each failure names both IDs, the depth or the gap, the time and a fix, such as lower the vase 0.2 m. Before the overlap pass, two items with one geometry hash whose transforms put each corner of their bounds within 0.1 mm of the same corner are coincident: the failure names both IDs, and its fix is a patch that removes one, never a move. It runs in f64 on the CPU, so it holds on every machine. A pair that includes a part from a tessellate job uses a tolerance no smaller than that part's measured error; with a smaller tolerance the pair is INCONCLUSIVE.
+
+**Cost:** O(n log n) with a BVH, within the audit's 500 ms per 1,000 parts, off the UI thread. Budget class: checks, off the UI thread.
+
+**It can never:** Test rendered pixels; count puffs, particles or insets as solids; pass an item that floats without being declared.
+
+**Lands:** R6
+
+#### Control sweep
+
+**Fields**
+
+- `sweeps: {control → samples: u16 | replay}` (samples start the search; between them a range is bounded, never assumed)
+- `combine: each | corners | grid = each`
+- `at: rest | apart`
+
+**Semantics:** Steps each swept control through its range, or replays a stagger with its reversals, and runs the geometry audit at every sample. The samples only start the search: the whole range of a slider, a turn or a drag is bounded by the rule of The closed function list. The interval forms of the drivers, constraints and channels the control feeds bound each part's true shape over a stretch of the swept values, and a stretch is split, with the audit run at each split, until its bound decides the audit, so a part whose motion peaks between two samples is still found. A replay is bounded the same way over the time between its samples. A toggle, a choice or a stages control has a few values, and each is audited. Anything only sampled is an estimate, listed as one, which never decides a check: a part the control moves through the physics module or a piece's logic, since a run at one value bounds nothing at the next, or a stretch the bound can't settle within the check's budget. A check that needs the audit over that stretch is refused, naming the control and the stretch, never passed on its samples. Faults that appear only at some settings get found: a dry run's lazy-tongs bars overlapped only below an 8 mm pitch.
+
+**Cost:** Samples × the audit's cost, plus one interval bound per part and stretch and one audit per split; grid sweeps multiply
+
+**It can never:** Sample fewer points than declared; skip a control that moves geometry; pass a range on its samples alone
+
+**Lands:** R6
+
+#### Film audit
+
+**Fields**
+
+- `readable: {max_motion: px per frame = 0.5, min_opacity: f32 = 0.95, min_contrast: f32 = 4.5, min_size: px, inside: safe}`
+- `hold: {min: s = 1.5, min_title_card: s = 4.0, pad: s = 1.5, rate: {cjk: 4.5, other: 15}}` (graphemes per second)
+- `line_limit` (checked with the longest copy across locales)
+- `boundaries`: items carried across a cut must match unless the cut is declared
+- `cursor_path`: crosses only the text it presses
+- `except: [cursor path | declared cut]`
+
+**Semantics:** Text counts as readable only while it moves under 0.5 px a frame, stays at 95% opacity or more, keeps 4.5:1 contrast, is above the minimum size and sits wholly inside the safe area. A hold must last at least max(min, or min_title_card for a title card, pad + n_cjk ÷ rate.cjk + n_other ÷ rate.other), where n_cjk counts extended grapheme clusters (UAX #29) in Han, Hiragana, Katakana or Hangul, n_other those in Latin, Greek or Cyrillic plus digits and punctuation, never whitespace, and a title card is a text item that is its shot's only subject. It starts on the first frame where every grapheme is readable and the string has stopped changing, and counts the first unbroken readable run, so a typewriter's typing and a counter's ticking don't count. A grapheme in a script with no stated rate, such as Arabic, Devanagari or Thai until a rate is read for it, makes the item BLOCKED, naming the script. A brief may only tighten these numbers. Captions are held to their caption profile, never to this rule. The audit also checks the brief's moments, the longest headline against its line limit, state across shot boundaries, and that no hold or checked moment falls inside a transition. It also runs on the reduced-motion rendition (Transport), where every hold must still be readable and every moment still show.
+
+**Cost:** One evaluation per checked frame, with no GPU; O(frames × text items)
+
+**It can never:** Count time while text moves, fades, is still being revealed or sits outside the safe area; accept a hold shorter than its graphemes need
+
+**Lands:** R6
+
+#### Film audit: craft@1
+
+For: briefs that want a film to read as a film, not a slide deck
+
+**Fields**
+
+- `craft: [check]` on the brief, from:
+- `shot_length {min: s = 2, max: s = 6, hard_max: s = 8, montage: [{span: marker, min: s ≥ 0.25}], signature: {count: 1, max: s = 20}}`
+- `camera_grammar {push_run_max: u8 = 2, accents_max: ratio = 0.33, neighbours: differ}`
+- `camera_grammar` also takes `cut_change {angle_min: deg = 30, size_min: ratio = 1.4}` (on by default) and `line: {through: [ID, ID]}` (optional)
+- `ends {first, last: not text-led}`; `text_led {max: ratio = 0.30, words: u8 = 8}`
+- `look_lock {looks: one | sequence, palette: one}`; `recipes {max: u8 = 2}`
+- `numbers_in_script`; `caption_band {height: ratio = 0.15}`
+- `motion_share {min: f32 = 0.035, warn: f32 = 0.06, blank_max: s = 0.3}`; `accents {within: frames = 1}`
+- `not_example {min_differ: 4 of 6}` (shot kinds by edit distance, the first shot's kind and look, the signature transition, camera moves, the tempo map's section shape and the last shot, against the nearest explain@1 example or fixture film)
+- `silences {count_min: u8 = 2, length_min: s = 0.5, max_dbfs: −60 per 10 ms sub-block, cues_inside: refuse}`; `sound_coverage {actions: tagged moments within 1 frame, beds: ambience, foley and music in each section, table: the treatment's sound table}`; `sound_bridges {count_min: u8 = 2, lead_or_tail: s = 0.25}`
+- `mix.balance {bands: [20, 120, 500, 2000, 8000] Hz, low_max: dB = −3, air_max: dB = −15}` (the music bus); `sound_lock {instruments: the brief's sound palette}`
+
+**Semantics:** Each is a threshold over a measure the core computes from the evaluated film: shot spans from the timeline and camera moves from the camera's evaluated poses, text area and word counts from layout, numbers from the narration's words, and motion share from frame differences (12 fps, 320 px wide, grey, the caption band masked, cuts and cross-fades left out, a pair counted when its mean difference is at least 9 levels). A brief names the checks it wants, drafted with the definition of done, and no agent can change a threshold. A brief may lower shot_length's minimum only inside a declared montage span, and may declare one long take up to 20 s. not_example compares structure only, so likeness in meaning stays a person's call. camera_grammar classes each shot's move by what its camera does, never by its label: a change in distance or view width over 10% is a push or a pull, an aim turn over 5° a pan, an azimuth sweep over 10° about the kept items an orbit, and less is a hold. Across a cut between shots that keep a common item, the direction from the camera to that item turns by at least angle_min, or the item's framed height changes by at least size_min, or the cut fails as a jump cut. With line, every shot's camera stays on one side of the vertical plane through the two items. The sound checks read the export's per-bus power bakes and the occurrence lists its spawns played. Each check's description, threshold and fix is generated into the skill.
+
+**Cost:** Timeline and layout measures O(shots + text items); motion share reads one 320-px grey frame per 1/12 s, about 0.2 ms each
+
+**It can never:** Run unless the brief names it; take a threshold from an agent; pass a film on its own
+
+**Lands:** R6, with explain@1
+
+#### Film layout
+
+For: 2D films and figures where an agent places text, formulas and shapes by hand: a label an axis runs through, a formula a filled shape covers, a title the frame cuts
+
+**Fields**
+
+- `kind: film.layout` (Check input)
+- `at: cues | moments | [time] = cues` (cues: the end of every cue, hold and shot, plus the brief's moments; a run of frames equal by evaluated data is checked once)
+- `text: [kind] = [text@1, vector@1, mark.text, counter]` (glyph runs and formula parts, by their evaluated glyph boxes)
+- `overlap_min: f32 = 0.05` (the share of the smaller box two texts may share)
+- `touch: u = 4` (a stroke this close to a glyph box touches it: 4 px at 1080p on the default frame)
+- `covered_max: f32 = 0.3`; `fill_opaque: f32 = 0.5`; `backdrop_opaque: f32 = 0.9`
+- `cut_min: u = 2.7`
+- `backdrops: [ID | kind]` (items sized to sit behind text, whose edges never cross it; halos count as backdrops)
+- `notes: {open_paths, out_of_frame, camera_framed}` (notices, never errors)
+- Codes: `layout.cut {item, sides: [{edge, by: u}]}`, `layout.overlap {a, b, share}`, `layout.crossing {text, stroke}`, `layout.covered {text, by, share}`, each with `t` (first seen), `ts` (every time seen) and a fix
+
+**Semantics:** Reads evaluated data, never pixels, so it holds on every machine. Text boxes come from glyph outlines. Strokes are the core's flattened polylines. A crossing is a segment clipped against the text's box grown by `touch`. Covered is the even-odd share of a 7×7 grid of samples in the text's box. An opaque fill under a text that covers its four corners is its backdrop; lines drawn before that fill never cross the text, and neither do grid lines of axis@1 under a text. An open path or plot leaving the frame, an item wholly out of frame, and anything but a lone text while the camera has moved are notices. One pair seen at many times is one issue, listing every time. Fixes are patch ops: a cut moves `at.pos` by the overshoot plus `cut_min`, or scales to the safe width when both sides are cut; an overlap moves the later text by the smallest offset that clears it, along its anchor's free side; a crossing adds a 4 px halo in the look's paper role (Text `text@1`: halo), or raises the text above the stroke; a covered text gets the fill's draw order lowered below it.
+
+**Cost:** O(times × (texts² + texts × stroke segments)), about 60 cue ends × 40 texts × 200 strokes in under 50 ms (estimate); off the UI thread.
+
+**It can never:** Read pixels; check a 3D item (camera.framing does); count a morph's two copies of one glyph run as an overlap; take a threshold from the working agent (a brief may only tighten them).
+
+**Lands:** R6
+
+#### Film brief: defaults, treatment and asks
+
+For: every film an agent makes from a one-line ask: at most one early question, a plan that becomes checks, at most two taste calls
+
+**Fields**
+
+- `profile_defaults: {duration: [30 s, 60 s], size: 1920×1080, frame_rate: 24, locale: the ask's, captions: on (a profile by locale), loudness: streaming, narration: on, look_proof: on, storyboard: off}`
+- `treatment: {structures: [3], chosen, why, logline, arc, references: [{work, learn, avoid}], shot_list, cue_map, sound_table}`
+- `asks: {look_proof: taste (provisional), storyboard: choice (only on request), final: taste}`
+- `sheets: {contact: every 1 s, strips: moment + k × 0.2 s for k = −2..3, issues: beside = beside, cue_ends: true, cell: [px, px] = [960, 540], per_image: u8 = 6}` (issues: an issue view beside each cell, the same frame with each issue's items outlined and numbered as in the check result, as the ID view numbers items)
+- `ease: {first_preview: s, accepted: s, repair_rounds, interventions, edits: [{rounds, s, items}], waits: {provider, cache, you: s}}`
+
+**Semantics:** The definition job drafts the brief and its treatment from the ask alone and asks only what can't default, in at most one early question, and nothing when the ask and the defaults cover it; the defaults are declared, so nothing defaults silently. The shot list and cue map compile into the brief's moments and cues, and the sound table into craft@1's beds and silences, so the plan becomes checks, and the working agent can't change it: a change is a definition ask. The schema checks only that there are three structures and that the chosen one is among them. Before any paid or heavy job, three candidate looks that differ, each on the same moment's still, or a model sheet render through render-back onto a variant sheet, beside none of these, as one provisional taste ask, which also shows the model sheet of each rig the film brings that no answer has approved, so its answer approves each rig by its hash and new rigs add no taste call; cheap work goes on and a paid narrator waits. The look proof also shows each skinned character the film brings that no answer has approved, so its answer approves each by its hash too. An approval counts wherever it was given, by a pick among a generation job's candidates, a rig's model sheet or an earlier film's look proof, and the record keeps it by the character's hash, so no character's hash is asked about twice. An asset a job derives from an approved character, by a rig, a remesh or a retexture, carries that approval through its made_by inputs, so the derived hash isn't asked about either. A shot that shows a character, rigged or skinned, by a hash no answer approved is BLOCKED with one ask that shows it beside the film's approved characters, so a look-alike never stands in across a cut, and that ask's answer holds for the look-alike's hash wherever it shows later. A storyboard of 6 to 9 cells comes only when the ask requests it. Every export makes its contact sheet and moment strips, attached to render.review and the final taste ask, keyed by the export's hash and never asked twice. A cell equal by hash to the one before is dropped and its time listed, and the issue view leaves the cell itself untouched. Each brief keeps its ease, from the record's events: the time to its first usable preview (the first revision that validates and plays its whole length) and to its accepted output, its repair rounds, your interventions (each question and taste call you answer and each edit you make) and each targeted edit's rounds, time and items touched, with provider, cache and your own waits kept out of the making time. Work runs in dependency order: narration, its words bake, word-anchored moments, the score render, then export. A film reaches its final taste ask in the order these rules already set, with no ask added: the brief and treatment, locked by the definition; the look proof's candidates; recipes expanded at check; the brief's objective checks; render.review's reading from a second model; the delivered file's checks; then the final taste ask, and a model's reading never passes a claim.
+
+**Cost:** The brief compiles in O(moments + cues) at check; the sheets render once per export. Budget class: as the film.
+
+**It can never:** Let the working agent write or change the treatment; ask what a default answers; ask the look proof or the final film twice for the same hash; ask about a character's hash an answer already settled, wherever that answer was given.
+
+**Lands:** R6, with film recipes
+
+#### Flicker check
+
+**Fields**
+
+- `max_flashes: per s = 3`
+- `area: fraction of the view = 0.25`
+- `luminance_delta: f32 = 0.1` (relative luminance, linear)
+- `darker_max: f32 = 0.80` (a pair counts only when its darker frame is below it, as WCAG 2.3.1 says)
+- `reseed`: a fill, paper or boil seed may change only with quantized time (⌊t × hz⌋, or a cycle of n drawings) and IDs, never with playback
+
+**Semantics:** Flags any region larger than the area whose relative luminance changes by more than the delta, with the darker frame below 0.80, more than three times a second, and any hatch, paper or boil whose seed follows playback instead of time and IDs. The boil may run only where the look allows it.
+
+**Cost:** O(frames × regions)
+
+**It can never:** Pass a fill that reseeds every frame; ignore reduced motion
+
+**Lands:** R6
+
+#### Honest numbers
+
+**Fields**
+
+- `scan: all displayed text`
+- `names: [string]`, or `{name: true}` on a text item (marked names)
+- `number_words: bool = true`
+- `quotes`: a code item's `quote` and a cell grid's recording (their digits are quotation: listed, never counted)
+- `formulas`: a vector's `alt` is scanned as displayed text; its integers are notation, listed and never counted; a number with a fractional part, or one the vector maps in `numbers: {text → source path}`, must trace to a source
+- `sources`: bound values, drivers, and `data` constants with a source, or with `source: story` (a story number) in a document that binds no status and no reading
+
+**Semantics:** Every number shown must trace to a bound value, or to a driver over sourced constants. A number read from a table with a source (Asset: tables), or derived from one by an encode's format, a transform or a counter, traces to that table, and a number a template shows traces to its path's source; a quote's digits are quotation, found in its display text and listed by their raw byte ranges, and a quote whose raw bytes differ from its source fails on its own. Names that contain digits pass only when marked; number words count as numbers. An unsourced number fails, naming the item and the fix: bind it, compute it, or mark it a name. A physics output or an occurrence field read from a bake counts as computed, since the bake is evidence of what ran. A story number, such as a score, a round or a clock that belongs to a film's story, is a `data` constant with `source: story`; it passes only where the document binds no status and no reading and isn't shown inside one that does, and the check lists it as a story number.
+
+**Cost:** O(displayed text) per change
+
+**It can never:** Pass an unmarked literal number; guess that a string is a name
+
+**Lands:** R1; R6 story numbers
+
+#### Determinism
+
+**Fields**
+
+- `at_times: [time]`
+- `compare: same_machine | cross_machine | shards` (shards: exports with 1 and 3 shards)
+- `evaluated: instance arrays, poses, glyph runs, layout positions, PCM from our own kernels`
+- `raster_2d: Vello CPU, f32 pipeline, scalar SIMD level`
+- `pixel_hash: a GPU reduction to 128 bits`
+
+**Semantics:** On one machine, seeking to t equals playing to t for the same document, recorded input track, rendering mode, backend and settings, compared on canonical renders' raw pixels (hashed on the GPU, 16 bytes read back) and raw samples; the live view's frame history is display only, rebuilt on a jump, and never part of the comparison. Every live-only part draws its fallback in the canonical renders compared (Determinism class). Across machines it compares evaluated data and Vello CPU rasters from its f32 pipeline at the scalar SIMD level, never GPU pixels, since GPUs rasterize differently and Vello CPU's own SIMD levels differ by up to one code value (its NEON path fuses multiply-adds that its x86 paths round twice); anything it compares there is computed in f64 or scalar code through libm, never glam's f32 SIMD paths, and every result says machines: any or same. Audio is identical per build and architecture, and measured across architectures. `compare: shards` exports with 1 and 3 shards and needs identical frame and PCM hashes, which catches state that leaks across shard seams.
+
+**Cost:** Hashing ≤ 5% of render time while checking; nothing otherwise
+
+**It can never:** Compare GPU pixels across machines; compare encoded bytes
+
+**Lands:** R1 for core views on evaluated data; R6 films and scenes
+
+#### Record replay
+
+**Fields**
+
+- `subject: handle`
+- `frames: all | every n`
+- `projections` (the ones the timeline reads)
+
+**Semantics:** At every checked frame, each key a timeline from the record generated must equal the state the projections give at the mapped record time. Zero mismatches pass; the claim-film dry run passed 721 of 721 frames.
+
+**Cost:** O(frames × keys)
+
+**It can never:** Compare against authored keys
+
+**Lands:** R1
+
+#### Frame budget
+
+**Fields**
+
+- `render: {seconds, pixels, theme, reduced_motion}`
+- `expect: p95 within the class`
+- `still: 0 frames drawn while nothing moves`
+- `allocations: 0 after warm-up`
+- `envelope: {scene: every pass on at once, run: s = 60, report: [frame time p50, p95 and p99, input to present, seek rebuild, peak memory per process, export throughput], baseline: the first run's report per device, limits: your decision}`
+
+**Semantics:** Renders headless on the reference Mac, measures CPU and GPU per frame with timestamp queries, and compares the 95th percentile with the document's class. It also checks zero submissions while still, and zero heap allocations after warm-up with a counting allocator. Its combined envelope plays one fixture scene live in the app with every pass the build has on at once (skin and hair, ray-traced light, a volume, frame history, a physics world, text, and narration over music) for a sustained 60 s on each named device: the reference Mac, and the M1 and the M3 once rays land. Its p95 frame time and GPU memory stay within the showpiece class and input shows within 2 frames; its p99 frame time, a seek's rebuild, the peak memory of the app and the decode worker, and its export throughput are first measured as a calibration baseline on each device, which proves only that later runs don't regress. Their acceptance limits are your decision, asked once with that baseline beside each; until you answer the envelope is BLOCKED on them, and it passes only within the limits you approved. A pass within its own budget alone proves nothing about the total.
+
+**Cost:** The render's own duration
+
+**It can never:** Run on the UI thread; count a degraded frame as within budget
+
+**Lands:** R1 the line's budget; R6 the rest
+
+#### Layout check
+
+**Fields**
+
+- `widths: [px] = [390, panel, full]`
+- `safe: margin`
+- `expect: placed labels don't overlap; overlays stay in safe areas; nothing below the minimum readable size`
+
+**Semantics:** Lays the document out at each width and checks that placed labels overlap neither each other nor a status color, overlays stay inside safe areas, and a figure still reads at 390 px wide. For films, text cut by the frame, overlapping, crossed or covered over time is film.layout's (Film layout).
+
+**Cost:** One layout per width
+
+**It can never:** Pass with a needs-you label hidden
+
+**Lands:** R1
+
+The tech design compares seek and play "on raw pixels"; GPUs rasterize differently, so raw pixels hold only on one machine, and across machines the check uses evaluated data, as the decisions on architecture say. The reading rates (1.5 s plus 4.5 CJK and 15 other graphemes a second, and 4 s for a title card) follow recalled reading norms, unverified; the flicker thresholds come from WCAG.
+
+<a id="gpu"></a>
+
+## GPU operators, as data
+
+Where GPUI can't draw, the canvas core runs GPU operators: typed graphs of steps from the core's op table, a registry only canvas modules fill (`gpu.step@1`), written as data, which the core compiles to WGSL, validates with naga and runs under wgpu's runtime checks. Nothing in a graph is code: no shader text, no callback, and no loop without a count fixed at check. Each operator is a material, a pass or compute work, declares its cost and its determinism class, keeps no history between frames, and draws before status colors, which it can never read or write. The effects library, material patterns and the look's passes ship as operators; packs and agents compose graphs from the public steps, or write them in a WGSL subset that the core lowers to those steps, and no plug-in ever brings a shader the GPU runs as written.
+
+### The operator, its steps, inputs, outputs and checks
+
+#### GPU operator
+
+**Fields**
+
+- `id`; `kind`: one of the three (an item in its writer's layer)
+- `about: string ≤ 400 chars` (required)
+- `inputs: {name → operator input}`
+- `steps: {step ID → step}` (≤ 256)
+- `source: {wgsl: asset ID}` (in place of `steps`, lowered to them at check: Compile, validate and cache: the WGSL subset)
+- `outputs: {name → operator output}`
+- Where it runs: see Place in the frame
+- `determinism: exact | same_machine | live_only = same_machine` (computed from its steps and inputs; a declaration is compared: Determinism class)
+- `cost: {ns_per_px | ns_per_element: f32}` (declared)
+- `resolution: full | half | quarter = half` (passes)
+- `fallback: none | look = look` (what draws while it compiles or after it's switched off)
+- `uses: [operator name@major]` (operators it calls as steps)
+
+**Semantics:** A typed graph shaped like a recipe: inputs, steps that form a DAG, and outputs. The core checks it, compiles it to one WGSL program per kind and feature set, and runs it as part of the frame. It's a pure function of its inputs and `t`, so `frame(t) = eval(doc, t)` still holds.
+
+**Cost:** Check O(steps × repeat counts); compile once per content key, off the UI thread; per frame its declared cost × pixels or elements, summed into the class budget
+
+**It can never:** Carry shader text the GPU runs as written, or call code; read its own earlier output or any state from a previous frame; read or write a status color; run before it passes the check
+
+**Lands:** R2 shipped operators, with the GPU layer; R6 composed graphs, once the cost model is calibrated
+
+#### Step and the closed step list
+
+**Fields**
+
+- Step: `{op: name@major, args: {port → step ID[.port] | input name | literal}, when: step ID` (optional; guards a compute write)`}`
+- Types: `bool, i32, u32, f32, vec2<T>, vec3<T>, vec4<T>, mat3x3<f32>, mat4x4<f32>`
+- Ops, by category (the table below): values, arithmetic and bits, compare and select, math, seeded, geometry, view, time and seed, textures, storage, `repeat`, color, derivatives, `discard_if`, `use`
+- Per op, in the core's op table: `{signature, weight, fetches, exact: bool, kinds}`
+- The structural steps add types and ops (Step and the closed step list: structural steps)
+- The op table is the registry `gpu.step@1` (Registry and seal: registries), `fill: module`: canvas modules fill it before the seal, each entry with its signature, a weight from micro-benchmarks, an exactness fixture and a planted wrong twin; packs bring step functions instead
+
+**Semantics:** One op table, versioned with the core, gives every op its signature, cost weight, exactness and the operator kinds it may appear in. Arguments convert only by widening (an integer to f32, a scalar to a vector), and anything else needs an explicit step. `repeat` is the only loop: its count is fixed at check, as in recipes, its accumulated values are typed, and its body is a sub-graph.
+
+**Cost:** Op weights from micro-benchmarks on the reference Mac (estimates until measured: about 1 unit for an add or a compare, 4 for a divide or a square root, 8 for a transcendental, 16 per noise octave), plus fetches by format and filter
+
+**It can never:** Contain WGSL, GLSL or any code string; recurse; nest repeats deeper than 2 or loop without a fixed count; use subgroups, f64, pointers or an index past a declared length; read the clock or a frame counter; take an op table entry from a pack, a plug-in or a document
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Step and the closed step list: structural steps
+
+For: distance outlines and wide separable blurs in looks; sorting see-through instances and compacting culled ones; a median of nine; a volume a compute operator fills for fog or voxels
+
+**Fields**
+
+- `iterate {count: u8 ≤ 16, body: pass graph, ping_pong: {format, resolution}}` (a pass step: runs `body` count times, each run reading the last run's output as the input `prev`)
+- `sort_by_key {keys: storage u32, values: storage u32, count ≤ 1,048,576} → storage` (compute; stable)
+- `scan {in: storage u32 | i32, op: add} → storage` (compute; an exclusive prefix sum)
+- `compact {in: storage, flag: storage bool, count} → {out: storage, count: u32}` (compute; keeps flagged elements in index order)
+- Type `array<T, n ≤ 16>`, a value: `index(a, i)` clamps i into [0, n − 1], and `with(a, i, v)` returns a copy
+- Compute output `texture3d {format: r32uint | r32float | rgba16float | rgba8unorm, size: [u32, u32, u32] ≤ [256, 256, 256]}`; steps `load3d(tex, ixyz)` and `sample3d(tex, uvw)`
+- Each an entry of `gpu.step@1` (Registry and seal: registries) that the effects module fills
+
+**Semantics:** These open what the step list couldn't say without code, and each stays data. `iterate` runs its body as count passes over two targets of the declared format and resolution, so a jump-flood outline or a separable blur of any radius is a graph; the check costs it as count passes and refuses a body that reads anything but its own inputs and `prev`. `sort_by_key`, `scan` and `compact` are shipped multi-dispatch steps whose WGSL is reviewed with the app: their results depend only on their inputs, never on dispatch order or an atomic's returned value, so they're exact on integer keys and values and give the same bits on every GPU, with equal keys kept in index order. A small array is a value, never memory, and its index clamps as wgpu's checks would. A 3D texture is written by one compute operator and read by later operators in the same frame, like storage, and never kept to the next.
+
+**Cost:** `iterate`: count × its body's cost at its resolution; `sort_by_key` about 1.5 ns an element for 1M keys, `scan` and `compact` about 0.3 ns (estimates, on the reference Mac); a 3D texture its bytes in the class's operator storage (64 MB at 256³ in rgba8)
+
+**It can never:** Keep a ping-pong target, a sorted buffer or a 3D texture to the next frame; iterate past 16 or inside another iterate; read an atomic's returned value outside the shipped steps' reviewed code; take an entry from a pack, a plug-in or a document
+
+**Lands:** R6, with composed graphs
+
+#### Operator input
+
+**Fields**
+
+- `{type, unit, range: [min, max], default, from}`, with `from` one of:
+- `param: path` (an item param)
+- `channel: path` (evaluated on the CPU at the frame's flick)
+- `bound: bound value ID` (with `stale: bool` beside it)
+- `column: {item, name}` (a mark-set or instance column, per element)
+- `attribute: {name, domain}` (a builder attribute)
+- `texture: sha256 | inset ID | target {op: ID | core, output: color | depth | normal | object_id} | target {collection: ID, output: color | coverage | pressure | height}` (a collection's own targets: Effect and GPU operator: collection targets)
+- `storage: {op: ID, output}` (written earlier in the same frame)
+- `texture3d: {op: ID, output}` (a 3D texture a compute operator wrote earlier in the same frame: Step and the closed step list: structural steps)
+- `time: t | phase {period: flick}`
+- `seed` (hash of the document seed and item ID, `u32`)
+- `role: look role` (theme-resolved; status roles excluded)
+- Derived: `rate: per_frame | per_item | per_element`
+
+**Semantics:** Inputs are the only way data enters an operator, and values live in buffers, never in the program, so changing one never recompiles. Params, channels and bound values are evaluated on the CPU at the frame's flick and uploaded only when they change. Time arrives as f32 seconds from the document's start, or as a phase computed in exact flicks, so long films don't lose precision. Inside a placement or a time remap, `t`, phases and channel inputs take the item's local time, as its channels do.
+
+**Cost:** About 16 B per per-frame input, in one buffer; columns and attributes are bound in place, never copied; a texture costs its fetches
+
+**It can never:** Read another document, the network, the record, the clock or the card; read a target after status colors are drawn; read storage from an earlier frame; take a value outside its range (refused, or clamped with a notice when it comes from a reading)
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Operator output
+
+**Fields**
+
+- Material operator: `base_color: vec3` (linear); `alpha: f32`; `metallic, roughness: f32`; `emission: vec3`; `normal: vec3` (tangent space); `displace: f32, m` (along the normal, ≤ `displace_max`); `depth_offset: f32, m` (≤ `depth_max`); `element: u32` (the pick sub-address); `vertex_offset: vec3, m` (object space, its length at most the operator's `offset_max: m`); `light` and `ambient` (step functions the core's light loop calls: Operator output: light response)
+- Pass operator: `color: vec4` (premultiplied; linear in the `effects` chain, display-referred in the `finish`); `coverage: f32`; `blend: replace | over | add | multiply | screen = over`
+- Compute operator: `storage {type, count: u32}`; `texture {format: r32uint | r32float | rgba16float | rgba8unorm, size: [u32, u32]}`; `instances {instancer ID, columns: pos | rot | scale | color | alpha}`; `readback {bytes ≤ 64 KiB}` (exact only); `texture3d {format, size: [u32, u32, u32] ≤ [256, 256, 256]}`
+- Outputs, the light loop's step functions among them, are the registry `gpu.output@1` (Registry and seal: registries), `fill: module`, which the effects module declares with today's outputs as its first entries: scene3d fills `vertex_offset`, `light` and `ambient`
+
+**Semantics:** Outputs are typed and checked against what consumes them: a material operator's outputs feed the core's own shading, a pass's color blends in at its place in the chain, and compute outputs feed later operators or an instancer in the same frame. The core packs object IDs from the item's own pick ID and the element the operator names, so an operator can't make another item pickable or hide one. A readback is the only way a GPU result reaches the CPU, a frame late, and only an exact operator may have one. A material operator's `vertex_offset` moves each vertex in object space by at most `offset_max`, which grows the item's bounds, its culling and its shadow casters by that much; checks, the geometry audit, picks on the CPU and physics read the shape without it, and a longer offset is clamped to `offset_max` with the notice `operator.offset_clamped`.
+
+**Cost:** Storage and textures count against the session's GPU memory; a readback adds one copy and a fence
+
+**It can never:** Write a status color or the status layer; write another item's object ID, or depth beyond its declared offset; write the record; feed a check unless it's exact and read back
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Operator output: light response
+
+For: cel and toon bands lit by a scene's sun and lamps; hatching whose density follows the light; warm and cool technical shading in figures; a rim that brightens toward a lamp
+
+**Fields**
+
+- On a material operator: `light: step function | graph` (once per shaded light) and `ambient: step function | graph` (once per pixel)
+- `light` inputs, computed by the core: `n, v, l: vec3` (the shading normal, to the eye and to the light, in view space); `radiance: vec3` (linear, after the light's falloff, IES distribution, light function and receivers); `shadow: f32` (0..1, from shadow maps or rays); `light_hash: u32` (a hash of the light's ID); and the operator's own outputs (`base_color`, `roughness`, `metallic` and the rest)
+- `light` output: `radiance: vec3` (linear, ≥ 0)
+- `ambient` inputs: `irradiance: vec3` (probes and the environment, after ambient occlusion) and `env: vec3` (one environment sample along the reflection at the roughness); output `radiance: vec3`
+- Defaults: `core.light@1` and `core.ambient@1`, the core's own shading as step functions
+- Registry: entries of `gpu.output@1` that scene3d fills
+- Issue: `light_response.range {op, t}`
+
+**Semantics:** The core keeps its light loop: it picks the shaded lights by the light policy, culls them by cluster, computes each light's radiance and shadow, and calls the material's `light` for each, in the policy's order (score bucket, then ID), summing what it returns, each times the light's weight near the cut; then it adds `ambient` and emission. So a cel material bands `max(dot(n, l), 0) × shadow` with public steps, a hatch material picks its tone pattern by the summed light, and none of them sees a light the policy cut, casts a shadow or changes a light's count, flux or budget. A response is a graph like any other: its class is same machine at best, its steps count in the operator's cost times the lights in each pixel's cluster, and its pixels sit under the status guard. Where rays are on, `shadow` comes from rays, and reflections and bounce light that land on the part shade it with the defaults (Light: ray traced); path-traced finals refuse a part with a light response, naming it (Export: path-traced finals). A negative or non-finite return counts as 0 and raises `light_response.range`, once per operator and time.
+
+**Cost:** The response's steps × the lights in each pixel's cluster: a three-band cel response about 12 ALU a light against the default lobe's 40 or so (estimates); nothing on the CPU per frame
+
+**It can never:** Read a light the policy cut, a shadow map or the light list; change a light's count, flux, shadow or budget; carry light between frames; return a status color; reach a path-traced final
+
+**Lands:** R6, with composed graphs
+
+#### Place in the frame
+
+**Fields**
+
+- Material operator: attached by `material.op: operator ID`; its vertex steps are those that feed `displace` or `vertex_offset`
+- Pass operator: `chain: effects | finish = effects` (linear, before tone mapping; or display-referred, with the look's finish); `order: fractional key`; `applies_to: view | collection = view`; `resolution`
+- Compute operator: `elements: u32 ≤ 1,048,576`; `workgroup: 64 | 128 | 256 | [8, 8] | [16, 16] = 64`; `after: [operator ID]`
+- Derived: `refresh: on_change | every_frame` (every frame only when it reads `t`)
+
+**Semantics:** The frame runs compute operators first, in dependency order, then shadows, the sky, geometry with its material operators, the `effects` chain, bloom, tone mapping, the `finish` chain, the status guard, then status colors and overlays. Inside a transition window each side runs these places through its own look as far as the `finish` chain, and the transition blends the two finished sides before the status guard. A compute operator whose inputs didn't change keeps its last output, keyed by content key and input epochs, so a still canvas still costs nothing. A pass sees only targets earlier in that order. Canvas modules register passes only into these places, each with an order key, declared target reads and writes, its resolution, a pixel-wise flag, cost coefficients, a determinism class, noise seeds and its GPU resources' rebuild rule; there are no free edges between passes.
+
+**Cost:** One extra full-screen pass per pass operator at its resolution; one dispatch per compute operator that runs; material operators add their per-pixel cost to the items they shade
+
+**It can never:** Choose its place beyond its chain and order; run after the status guard; dispatch more elements than it declared
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Compile, validate and cache
+
+**Fields**
+
+- Check, in order: schema, closed ops, types, DAG, fixed repeat counts, the rules for its kind, determinism, limits, cost
+- `emit: WGSL`, written by the core; bind groups fixed (0 frame, 1 inputs, 2 storage)
+- `validate: naga Validator {flags: all, capabilities: none}` (no f64, subgroups, binding arrays or immediates)
+- `runtime: wgpu ShaderRuntimeChecks::checked()` (bounds checks, forced loop bounding, integer-division guards)
+- `key = hash(canonical steps and args, op table version, core version, kind, target formats, MSAA)`, 128 bits
+- `cache: {wgsl, naga module, pipeline}` by key; ≤ 32 operator pipelines per document session
+- Issues: `operator_unknown_op, operator_type, operator_cycle, operator_unbounded, operator_kind_rule, not_exact, operator_limit, cost_understated, over_budget, operator_compile, operator_source, live_only_canonical`
+
+**Semantics:** Nothing reaches the GPU before the check passes, and only the core writes WGSL. naga parses and validates every module with no optional capabilities, and wgpu runs it with its default checks, so an out-of-range index is clamped and no loop runs forever. Only a change to the steps, the op table or the target makes a new key, and equal graphs across documents share one pipeline. Vertex stages for passes that share depth mark the clip position @invariant, and warm-up at check also enumerates the feature sets kinds create implicitly (text in 3D, puffs, insets, status overlays).
+
+**Cost:** Check O(steps); compile off the UI thread once per key (about 1 to a few ms per module through naga and the Metal compiler, an estimate); nothing per frame
+
+**It can never:** Compile on the UI thread; show before its pipeline is ready (the item draws its fallback and the frame reports settling); be keyed by a value
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Compile, validate and cache: pass fusion
+
+For: films' and the castle's finish chains (grain, vignette, tint, grade)
+
+**Fields**
+
+- `fuse: pixel_wise | none = pixel_wise` (on the compile step)
+- pixel-wise: every texture read in the operator is at its own pixel
+
+**Semantics:** Adjacent pass operators in one chain that are all pixel-wise compile into one WGSL pass, in order, so k finishes cost one full-screen pass instead of k. Fusion never crosses a blur, depth of field, glare, the status guard or another writer's layer. The fused module keeps each operator's declared cost and determinism for the meter.
+
+**Cost:** Saves k − 1 full-screen passes, about 0.1 to 0.2 ms each at 1080p (estimate); one compile per fused key. Budget class: every class that runs pass operators.
+
+**It can never:** Fuse across writers, the status guard or a neighbourhood read; move any operator's output by more than one 10-bit code value, the rounding of the intermediate targets it drops and the reassociation WGSL allows.
+
+**Lands:** R6, with operators
+
+#### Compile, validate and cache: the WGSL subset
+
+For: packs and agents that write operators as code they already know: a toon ramp, a hatch pattern, a ripple, a distance outline
+
+**Fields**
+
+- `source: {wgsl: asset ID}` (on a GPU operator or a step function, in place of `steps`; UTF-8, ≤ 64 KB*)
+- Entry: one function for the operator's kind, `fn material(i: In) -> Out`, `fn pass(i: In) -> Out` or `fn compute(i: In)`, where `In` and `Out` are the operator's declared inputs and outputs
+- Lowered: each expression to a public op; `if` and `else` to `select`, or to a `when` guard on a compute write; `switch` with ≤ 8 cases to `switch`; a `for` loop whose count is a constant, or an input with a max ≤ 64, to `repeat`, the variables it assigns becoming accumulators and `break if` becoming `stop_if`; calls to functions in the same source inlined; `let` and `var` to graph values; `discard` to `discard_if`
+- Refused: globals, bindings and overrides of its own; `loop` and `while`; a pointer past a function's own locals; recursion; a second entry; any builtin or type the op table lacks
+- Issue: `operator_source {line, column, construct}`
+
+**Semantics:** A source is one way to write an operator's graph, never a second kind of operator. At check the effects module's pinned front end parses it with naga's WGSL parser, finds the entry for the operator's kind and lowers it statement by statement, in source order, to steps of the public op table; anything with no step is refused, naming its line, column and construct, and nothing is approximated. The lowered graph then runs the whole check (Compile, validate and cache): its key is its canonical steps, so a source and a hand-written graph that lower alike share one pipeline; its cost is estimated from those steps; and its determinism class is computed from them (Determinism class). The core writes the WGSL a GPU runs from that graph, as for any graph, so the source's text never reaches naga's backends, a pipeline or the GPU. `deep_query` returns the lowered graph beside the source, each step naming its line.
+
+**Cost:** Parsing and lowering O(source) once per source hash, off the UI thread, about 1 ms per 300 lines (estimate); then the graph's own check and compile; nothing per frame beyond the graph's cost
+
+**It can never:** Reach the GPU, naga's backends or a pipeline as written; declare a binding, a global or an override; loop without a fixed count; approximate a construct the op table lacks; be keyed by its text rather than its lowered steps
+
+**Lands:** R6, with composed graphs
+
+#### Operator cost and limits
+
+**Fields**
+
+- Declared: `cost: {ns_per_px | ns_per_element: f32}`
+- Estimated: `Σ op weight × trips × c_alu + fetches × c_fetch(format, filter) + storage bytes × c_byte`
+- Per frame: × pixels at its resolution × render scale² × overdraw (material and pass operators), or × elements (compute)
+- Limits in every class: `steps ≤ 256`; repeats `count ≤ 64`, nested ≤ 2, ≤ 256 trips per invocation; fetches ≤ 16 per pixel (material), ≤ 32 (pass), ≤ 8 per element (compute); ≤ 8 textures and ≤ 4 storage outputs per operator; workgroup ≤ 256 invocations and ≤ 16 KiB shared; ≤ 1,048,576 elements per dispatch
+- By class: `budget.operators` (the table below)
+
+**Semantics:** The check refuses an operator whose estimate exceeds its declaration by more than 25% (`cost_understated`), then sums declared costs into the document's GPU time and refuses one over its class, naming the top three. At run time the meter times each pass with the pass's timestamp writes, splitting a fused pass by declared shares, and calibration runs give each operator its own pass (Metal offers timestamps inside a pass only with draw or dispatch boundary sampling); one measured at more than twice its declaration steps down its own writer's layer (half resolution, then quarter, then off) and tells that writer at each rung.
+
+**Cost:** Two timestamp queries per operator per frame while the meter samples
+
+**It can never:** Raise its class; degrade another writer's operators; approximate a number, a bound value or a status color
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Determinism class
+
+**Fields**
+
+- `determinism: exact | same_machine | live_only = same_machine` (computed from the steps and the inputs; a declaration may be weaker than the computed class, never stronger; the list is closed, owned by the core, and reopens only if WGSL guarantees more about float evaluation)
+- Exact allows: integer and bool ops, `select` on them, and bitcasts (floats travel only as bits); `load` of integer formats; atomics `add, min, max, and, or, xor` as statements whose result is never read; `shared` and `barrier`; writes only at the invocation's own index
+- Exact excludes: every f32 operation, even `min`, `max`, `floor` and compares, since WGSL lets a GPU flush subnormals, ignore the sign of zero and assume no NaN or infinity; `sample`, derivatives, `t`, float noise (the integer `hash` stays)
+- Same machine: any public op, repeatable on one machine, backend, driver and pipeline: no history, no races, writes only at its own index or through atomics
+- Live only: whatever reads something canonical renders never have, such as a display's headroom, the live view's own earlier frames or its internal scale. Today: Look `look@1`: frame history, GPU surface: HDR output and the live upscale; an operator may declare it, with a `fallback`
+- Issue: `live_only_canonical {item}`
+
+**Semantics:** An exact operator gives the same bits on every GPU, because WGSL defines integer arithmetic and order-free atomics exactly, while float rounding, fusion, reassociation, subnormals and NaN handling may vary (WGSL §15.7; wgpu compiles Metal with Apple's default math mode, which is fast). A check whose result holds on any machine reads GPU work only from an exact operator through a readback, or it's refused with `not_exact`. A same-machine result may reach canonical renders, exports and the pixel checks that say `machines: same` (render.exposure, render.contrast, render.noise and the effects audit's timing), which are INCONCLUSIVE on another machine, and it passes the same-machine check that seeking equals playing, on the GPU pixel hash. A live-only part never reaches a canonical render, render-back, an export, a golden, a content key or a check: each declares the fallback those draw (the settled canonical frame for frame history, SDR for the HDR surface, scale 1 for the upscale, an operator's `fallback`), and a material operator declared live only with `fallback: none` is refused with `live_only_canonical`, since its item would leave a hole. The check computes each operator's class from its steps and inputs, and refuses one that declares a stronger class.
+
+**Cost:** Nothing at run time; the check reads each op's exactness flag
+
+**It can never:** Feed a check whose result holds on any machine unless it's exact; let a same-machine result count on another machine; let a live-only part reach a canonical render, an export, a golden or a check; depend on dispatch order, an atomic's returned value or a subgroup size; call itself exact when a step isn't
+
+**Lands:** R2, with the GPU layer; the determinism check's GPU pixel hash is the first exact operator
+
+#### Status guard
+
+**Fields**
+
+- `applies_to`: every pixel a material or pass operator wrote, wherever status can show (the status-color rule); any other document runs no guard
+- `min_distance`: the look's `status.min_distance` (OKLab ΔE = 0.10)
+- `colors`: the look's status map, in the current theme
+- `order`: after the `finish` chain, before status colors
+- `notice: status_guard {op, pixels_moved}` (sampled)
+
+**Semantics:** A pixel an operator wrote that lands within the look's distance of a status color moves to the nearest allowed color: the rule the look already applies to plug-in and terminal colors, now per pixel. Operators run before status colors are drawn, can't read that layer and can't target a paint slot a status binding owns. Status colors then draw unlit on top, with their legend.
+
+**Cost:** One full-screen pass of about 30 ALU per touched pixel (estimate), skipped when no operator drew
+
+**It can never:** Be turned off by a document, a look or an operator where status can show; recolor a status binding's own pixels; run before the last operator
+
+**Lands:** R2 with the GPU layer; R6 for composed graphs
+
+#### Shipped operators and composed graphs
+
+**Fields**
+
+- `origin: shipped | pack | composed`
+- Shipped: the effects library (`glow, ink, dof, flare, wave_field, plume, arc, airflow, sparks, blur, particles`), material patterns (`plaster` to `asphalt`), the look's passes (bloom, ink edges, tone mapping, finishes such as halftone, separations, print wear, the tone curve, the screen, grain and vignette; the union outline; the indexed basis's palette pass), and the core's own passes (shadow, sky, object ID, pixel hash)
+- `internal_steps`: shipped only (mip chains, multi-pass chains, hand-written WGSL reviewed with the app)
+- `cost`: measured ms per megapixel (shipped) | declared and checked (pack, composed)
+- `version: name@major`; packs pinned and signed
+
+**Semantics:** Shipped operators are reviewed and benchmarked with the app, may use internal steps and hand-written WGSL, and reach documents only by name and params, as effects do today. Packs and agents compose graphs from the public steps, may call shipped operators as steps, and go through the full check, so no plug-in ever brings shader text. A composed graph that proves itself can join the shipped library only by review with the app, never through a document. fx@1's operators stay composed.
+
+**Cost:** Shipped: measured per kind. Composed: declared, estimated and metered
+
+**It can never:** Let a composed graph use an internal step; let a pack take a shipped operator's name; load an operator from the network
+
+**Lands:** R2 shipped, with the GPU layer; R6 composed graphs, after calibration
+
+#### Shipped operators and composed graphs: pack graphs and step functions
+
+For: a toon pack whose ramp serves its materials and its outline pass; a hatch pack's tone patterns; a crowd pack's compute graphs
+
+**Fields**
+
+- On Pack: `operators: {name → operator graph}` of all three kinds, material, pass and compute
+- On Pack: `functions: {name@major → step function}`
+- Step function: `{about: string ≤ 400 chars, ports: {in: {name → type}, out: {name → type}}, steps: {step ID → step} ≤ 256 | source: {wgsl: asset ID}}`
+- Derived: `exact: bool`; `kinds: [material | pass | compute]` (from its body's steps)
+- Registry: `gpu.function@1` (Registry and seal: registries), `fill: module | pack`: scene3d fills the defaults `core.light@1` and `core.ambient@1` at the seal, and a pack's functions resolve at check through the pinned pack
+
+**Semantics:** A pack may name graphs of every kind, which documents use by name as they use fx@1's, and step functions: sub-graphs with typed ports that any operator calls with `use(<pack>.<name>@major, args)`, inlined at check as a shipped operator called as a step is, at most 4 deep and never recursive. A function's exactness and the kinds it may appear in come from its body's steps, never from a declaration, so a function with a derivative can't be called from a compute graph, and an exact operator calls only exact functions. A function may be written in the WGSL subset (Compile, validate and cache: the WGSL subset). Its name carries its pack, so no pack takes a shipped operator's name or another pack's. Each graph and function runs the whole operator check, with its ports' defaults, when its pack's version is checked, and again inside every operator that calls it.
+
+**Cost:** Checked once per pack version, O(steps); inlined steps count in the caller's check and cost; nothing per frame of its own
+
+**It can never:** Use an internal step; take a shipped operator's name or another pack's; recurse or nest past 4; be called exact when its body isn't; load from the network
+
+**Lands:** R6, with composed graphs
+
+#### Draw path: GPUI or the GPU layer
+
+**Fields**
+
+- `gpui`: app chrome, panels, text, and every 2D mark R1 draws (quads with rounded corners and borders, box shadows, CPU-tessellated paths, sprites, underlines, video surfaces; rect masks, two-stop linear gradients, per-primitive opacity)
+- `gpu_layer`: 3D scenes, effects, insets, operators, and any 2D writer layer one of whose items uses an operator
+- `handoff`: one GPU surface per layer (an IOSurface on macOS)
+- Rule: the cheapest path that draws it exactly
+
+**Semantics:** GPUI keeps drawing everything it can, and a 2D writer layer moves to the GPU layer only when one of its items uses an operator (or, after the 2D renderer decision, a Vello GPU feature); the move costs a handoff, counted in its budget. Operator output reaches the window only as a GPU surface GPUI composites, behind the shell and the question card. 2D goldens and snapshots keep rendering with Vello CPU, so an operator in a 2D view is display only there; render-back adds a GPU snapshot from this machine labelled `display_only`, which no check reads.
+
+**Cost:** A zero-copy handoff took 0.7 to 0.9 ms at 1936×1584 in the spike (measured); GPUI paths add nothing
+
+**It can never:** Draw over the shell or the card; let a client pick its path; move a layer GPUI could draw exactly onto the GPU layer without saying why in its cost report
+
+**Lands:** R1 GPUI paths; R2 the GPU layer
+
+Words: an operator's graph is shaped like a recipe (inputs, steps, outputs), and "step" already means one operation in a recipe, so no new word is needed; "node" stays with graph views. Its only loop is `repeat`, with the recipe meaning: a count fixed at check. The three kinds replace a `stage` field, since stages is a control kind, and a pass names its `chain` (the look's effects or its finish) rather than a slot. "Status guard" is the one new name. "Same machine" and "live only", which name two of the three classes, "step function", "light response", "light function" and "iterate" are new too (One word per idea). Numbers marked as estimates are targets for the op table's micro-benchmarks.
+
+### Every public step
+
+The math group reuses the drivers' closed function list, so a field on the CPU and a step on the GPU mean the same thing.
+
+| Category | Steps | Exact | Runs in |
+|---|---|---|---|
+| Values | `const`, `input`, `convert` (explicit), `compose`, `split` (swizzles) | yes for integers | all |
+| Arithmetic and bits | `add sub mul div rem neg`; `and or xor not shl shr`; `count_ones first_leading_bit first_trailing_bit`; `bitcast` | integers yes, f32 no | all |
+| Compare and select | `eq ne lt le gt ge`, `all any`, `select`, `switch` (≤ 8 cases) | yes | all |
+| Math | The drivers' list (`min max clamp abs sign floor ceil fract round mod sqrt pow exp log sin cos tan asin acos atan atan2 mix smoothstep remap length distance dot cross normalize`) plus `trunc inverse_sqrt exp2 log2 reflect refract mul(mat, vec) transpose`. `step` stays out, as on the CPU. | only `min max abs sign floor ceil round trunc` | all |
+| Seeded | `hash(u32…) → u32` (the CPU's fixed hash); `rand(key) → [0, 1)` as `(hash >> 8) × 2⁻²⁴`, exact in f32; `noise(p, seed)`; `fbm(p, seed, octaves ≤ 8)`; `cells(p, seed) → {f1, f2, id: u32, center: vec2}` (a 3×3 search); `dither(pixel, n)` | `hash` yes; the rest no | all |
+| Geometry | `position(space)`, `normal(space)`, `tangent`, `uv0`, `uv1`, `attribute(name)`, `column(name)`, `front_facing`, `part`, `element`, `vertex_index`, `instance_index` | indices yes | material, compute |
+| View | `camera(position \| view \| projection \| near \| far)`, `screen_uv`, `pixel`, `screen_size`, `depth`, `view_z`, `object_id`, `normal_target` | `pixel`, `object_id` yes | material, pass |
+| Time and seed | `t`, `phase(period)`, `seed` | `seed` yes | all |
+| Textures | `sample(tex, uv, lod)`, `load(tex, ixy)`, `size(tex)`, `sample_env(dir, roughness)`, `triplanar(tex, scale)` (3 fetches) | `load` of integer formats | all; `sample_env` in materials only |
+| Storage | `read(buf, i)`, `write(buf, i, v)`, `store(tex, ixy, v)`, `atomic_add \| atomic_min \| atomic_max \| atomic_and \| atomic_or \| atomic_xor` (no returned value), `shared(type, n)`, `barrier` | yes (integers) | compute; `read` anywhere |
+| Repeat | `repeat {count: const \| input with max ≤ 64, accumulate: {name → initial}, body: steps}`, `stop_if` | if its body is | all |
+| Color | `luminance`, `to_oklab`, `from_oklab`, `role(name)`, `scale(name, x)` (a scale's palette), `blend(mode)` with every mode of Frame and group: blend modes but dissolve, `adjust(saturation \| hue \| brightness \| contrast \| exposure \| gamma \| invert)`, `to_hsl`, `from_hsl` | no | material, pass |
+| Spline and warp | `spline(points: [[x, y]] ≤ 16, x) → f32` (a monotone cubic built at check into a 64-entry table in the input buffer that holds each piece's four cubic coefficients, at most 15 pieces, never samples and never an image); `homography(quad: [vec2; 4]) → mat3x3` (square to quad, closed form) | no | all |
+| Derivatives | `ddx`, `ddy`, `fwidth` | no | material, pass |
+| Discard | `discard_if(cond)` | yes | material |
+| Use | `use(name@major, args)`, inlined, ≤ 4 deep, never recursive; a shipped operator that isn't pixel-wise, such as the blur, runs as its own pass between the graph's parts instead, each part checked and costed | if the callee is | all |
+| Structural | `iterate`; `sort_by_key`, `scan`, `compact`; `index` and `with` on `array<T, n ≤ 16>`; `load3d`, `sample3d` (Step and the closed step list: structural steps) | `sort_by_key`, `scan`, `compact`, `index` and `load3d` on integers yes; `iterate` if its body is | `iterate`: pass; `sort_by_key`, `scan`, `compact`: compute; the rest all |
+| Left out | Shader text and spliced strings; JavaScript callbacks; accumulated time and frame counters; previous-frame inputs; randomness tied to platform sine or creation order; subgroups; scenes rendered inside a graph; lights, shadows, environment maps and tone mapping (the core's own); debug and inspector hooks | n/a | n/a |
+
+### Operator budgets by class
+
+| Budget class | Plug-in operators | Operator GPU time | Pass resolution | Compute elements | Operator storage |
+|---|---|---|---|---|---|
+| core view | none: shipped operators only | 0.2 ms* | n/a | n/a | 8 MB* |
+| data view | pass, compute | 0.5 ms* | half | 1,048,576 | 64 MB* |
+| figure | material, pass, compute | 1 ms* | half | 262,144* | 32 MB* |
+| work product | material, pass, compute | 1 ms* | half | 262,144* | 64 MB* |
+| showpiece | all three kinds | 4 ms at full screen* | full | 1,048,576 | 128 MB* |
+| export | all three kinds | no frame cap; within the export's stated speeds | full | 1,048,576 | 128 MB* |
+
+Numbers marked * are proposals inside each class's existing frame and memory caps; operator time counts toward the class's frame GPU time, never beside it. A document may only tighten them.
+
+### Not proposed, and why
+
+- **Authored morph targets.** An asset's own targets play (Asset: morph targets), so a 3D presenter can speak; authoring or sculpting targets stays out, since puppets, take-aparts and machines are rigid parts with parents and 2D morphs are path channels.
+- **A game engine's heavy systems.** Digital humans and our own liquid solver. The canvas is where agents show people their work, not a game engine: scenes stay modest, characters come licensed or generated, and liquids stay runner jobs. A bounded game takes the physics module's character body, a navigation graph a job bakes and the piece's own logic searches, and the playtest plug-in; a grid or board game takes the grid core kit; big worlds and crowds come as kits on world pages and step blocks; a navigation graph baked again during a run waits for a brief, characters that push what they meet stay out, and a complete game takes the engine project route. Virtualized geometry, dense meshlets drawn by clusters, waits for a case and for an M3 or newer, which its 64-bit texture atomics need. Bounce light from moving lights comes from rays (Light: ray traced), a licensed character's skin and hair from Material: subsurface and Material: hair, and our own path tracer renders finals (Export: path-traced finals).
+- **Image decals.** Insets set 2D content into named faces, and a projected inset casts it over curved surfaces (Inset: projected), which covers signs, screens, labels, data layers and printed marks.
+- **Temporal effects in canonical renders** (TAA, TRAA, TAAU, temporal reprojection, recurrent denoising, after-image, velocity motion blur from the previous frame, GTAO's temporal filtering). Each keeps history, so a frame would depend on how it was reached; MSAA and sample-based motion blur cover exports, render-back and checks. Only the live view reprojects its own frames, over a fixed window that a jump renders again, for antialiasing, upscaling and denoising (Look look@1: frame history); after-images and velocity from the previous frame stay out there too.
+- **Screen-space and voxel reflections and global illumination** (SSR, SSGI, VXGI). Screen-space forms miss what's off screen and keep history, and voxel forms cost too much. Rays give reflections and bounce light where the GPU has ray queries (Light: ray traced); elsewhere the environment covers glossy reflections, light probes add local reflections and baked bounce light without history, and a planar mirror is one pass with no history (Material: mirror). Water ripples a mirror in closed form (Material: water).
+- **Order-independent transparency.** A good idea, but back-to-front sorting with ID tie-breaks is already deterministic and stays the default; see-through surfaces that cross, as math films' do, resolve per pixel on request (Object: see-through order).
+- **Gaussian splats, marching cubes, loft surfaces.** Splats are deferred until a brief needs a captured or generated place. Marching cubes, which would mesh a volume, is deferred with metaballs until a case needs voxel work; fog, clouds and smoke are volumes to light now (Volume volume@1), with puffs, height fog and smoke flipbooks as their fallback. Lofts aren't needed; a surface from a formula is the `surface` builder (Builder `surface`: surfaces from a formula).
+- **Color grading LUT images and chromatic aberration.** No adopted look needs them; a lens distortion with chromatic aberration waits for a look that does. Lens flares (Effect: flare), CRT and retro passes (the screen finish) and palette tables built at check (Look look@1: indexed basis) are rows now.
+- **Display P3 output.** Projected patterns come from light functions (Light: light function), point-light shadows and IES distributions are rows in section 6, and status colors are defined in sRGB. HDR output on an XDR display keeps sRGB's primaries (GPU surface: HDR output).
+- **Extruded 3D text.** Text stays flat and shaped by the one shaper.
+- **Pixel reads into values**. A pixel reaches the CPU only through an exact readback a frame late, so a value read from one would depend on the previous frame.
+
+<a id="open"></a>
+
+## What's decided, and what would reopen it
+
+These follow the tech design's Decisions, each with what would reopen it.
+
+| Question | Decision | Reopens if |
+|---|---|---|
+| Our own solver for ropes and cloth | Build first, with no licensing or patent review gating it: `soft@1` runs live on Rapier's soft bodies, new in 0.36, behind the backend interface, and heavier cloth and fluid shots bake through the simulate job, cloth on our own solver by vertex block descent and liquid on a pinned open fluid tool, which can also bake smoke, and play back exactly from the bake. R6. | A lab's rope or cloth misses its golden or its step budget on Rapier's soft bodies, or you ask to revisit it |
+| The 2D renderer | Release 1 marks stay within what GPUI's paths draw: rectangle masks, solid fills and two-stop gradients. Masks by shape, isolated group opacity, multi-stop gradients and multi-color SVG move to Vello GPU in R2, provided its spike shows a second 2D handoff under 1 ms a frame; alpha, luminance and feathered masks wait for its mask layers, which Vello GPU 0.3.0 still refuses as unimplemented; shape masks don't need them. Goldens and snapshots render with Vello CPU either way, with its f32 pipeline at the scalar SIMD level, the configuration Vello's own snapshot suite takes as its reference. Vello GPU is the GPU renderer Vello means to make its primary one, with no compute shaders; since Vello's September 2026 split, its compute renderer is labelled experimental research and isn't a candidate, so the spike measures Vello GPU through wgpu. | The R2 spike misses the handoff budget |
+| Where agent-built panels run | An out-of-process panel host that sends element trees, with the JIT off, through a switch the panel host carries since gpui-shell has none yet, and a panel's git dependencies refused at install; shipped panels run in the app, on the UI thread, under a 4 ms per-update budget. The gpui-kit spike measures the element-tree cost on a 443-node benchmark. | The measured cost doesn't fit the budget |
+| Rapier's soft bodies | Used for live ropes and cloth from 0.36, which added them, behind the backend interface, which absorbs that release's API break, with our own goldens on macOS and Linux for the rope and banner labs, since Rapier's own goldens cover neither. | A cross-machine golden fails |
+| Clicks on the question card | Only hardware input and VoiceOver answer the card. Synthetic events and other accessibility clients, including agents with computer use, are refused. | macOS can't tell VoiceOver from another client; then hardware keys and clicks only, with full keyboard access |
+| A minimal sound gate in R1 | Yes: the gesture, the owner indicator and the −1 dBTP limiter land in R1 with the evidence player, so a flagged call turn can be heard. | R1 drops call recordings |
+| Linux and Windows GPU handoff | On Linux, GPUI's wgpu device is shared once both use one wgpu major, with a DMA-BUF otherwise; on Windows, a DXGI shared handle into Direct3D 11. The copy through memory stays the declared fallback. | A platform's handoff can't meet the frame budget |
+| Layered layout at 10,000 nodes | Our own Rust layered layout with aggregation into portals, since the Rust layered crates are unproven at that size. The layout memory format ships in R1. | It misses 50 ms per local change at 10,000 nodes |
+| Which text shaper | One Rust shaper with bundled fonts that measures and draws on every platform: the stack Vello uses, which pairs with Vello CPU snapshots. GPUI's own text stays for the app's chrome. Text in depth draws from our own atlas over parley and skrifa, rasterized by Vello CPU (R2), and MTSDF pages (R6); parley shapes with HarfRust, so swash, which carries a shaper of its own, isn't linked. | The R1 spike can't shape 10,000 characters in 2 ms |
+| Skinning in the canvas core | Minimal, in R6: an asset's own glTF skin (4 influences, at most 256 bones) and its own clips, sampled at `t` and skinned by linear blend, with bone channels and analytic bone constraints. Morph targets join it, so a 3D presenter's face can speak: the asset's own glTF targets, with weights as channels that its clips, drivers or a narration's viseme bake key. Dual quaternions, iterative IK, rigs, run-time retargeting and skinned crowds stay out. A clip made for another skeleton comes through an offline retarget job, and a flock or a crowd shares one loop baked from a clip, each copy at its own phase. Sampling at `t` and linear blend are pure, characters come as data through puppet@1 rigs or as licensed or generated assets, and films with characters are now part of the goal. | A character shows twisting that linear blend can't hide; the measured cost passes 0.1 ms of CPU per character |
+| Light probes | One item kind, `light.probe@1`: reflection cubes the core recaptures whenever anything a capture sees changes (items in its range, inside its influence or not, the lights that reach them, the sky), and irradiance grids a light job bakes whole. Never updated per frame or from the camera. Bounce light from moving lights or objects comes from ray-traced global illumination, which traces the same irradiance probes whole whenever their key changes, where the GPU has ray queries. | A case needs moving bounce light on a GPU without ray queries |
+| Blender as a local test oracle | Yes. You install Blender; DeepBuild never bundles or downloads it, and runs it as its own process. The script that imports bpy is a private runner kept outside the public repo; the public repo keeps the fixtures and the lane's interface: the files it writes and reads, the metrics, and a config entry pointing to the local runner. Without Blender or the runner the lane is BLOCKED with an unblock ask. Its fixtures are never must-pass, and its outputs are never committed as goldens. | The project starts distributing builds; Blender can no longer run headless as a separate process |
+| Unreal as a local test oracle | Yes, under your own Epic license and install: optional, local, files in and out, through a private runner kept outside the public repo. No Unreal code or content enters the repo. Without a configured install the lane is BLOCKED with one unblock ask; its fixtures are never must-pass, and its outputs stay local evidence. | The project starts distributing builds; Epic's terms change for automated, headless use of the editor |
+| Stam's stable-fluids patent (US 6,266,071) | Treated as expired: it was filed in November 1998, so its 20-year term ended in 2018. Our own 2D smoke solver is allowed, as an offline asset job. | A later review finds a live patent on our solver's method; the project starts distributing builds and a review asks for a formal opinion |
+| Boolean geometry | Offline asset jobs only (manifold by default, exact on request), whose output a mesh asset places; never live. | A case needs a cut that changes over time |
+| CAD files | Only through an optional offline tessellate job, from R6 when a brief first brings one: usd-brep (Apache-2.0) or Open CASCADE (LGPL-2.1 with its exception), each run as its own process and never linked into the app, turns a STEP or B-rep file into a mesh asset whose error against the exact surfaces is measured. Without a tool the job is BLOCKED with one unblock ask. A B-rep never enters a document, nothing tessellates while drawing or by view, there's no B-rep export, and agents never write kernel scripts. | A case needs to hand work back to a CAD tool |
+| The loop's checks | One family of document check kinds with no model (`scene.scale`, `camera.framing`, `render.exposure`, `render.contrast`, `render.noise`, `geometry.shading`, `effects.audit`, the geometry audit's scene scope, the animation checks), plus `render.review`, whose result is a reading or a taste ask and never a pass. | A check needs pixels that its name says it doesn't read |
+| Quality defaults | One first-party pack, `studio@1`: lighting rigs, measured materials, looks (Neutral for product, toy and paper scenes, AgX for night, lamps and fire, none for drawings), lens and framing presets, typical sizes, and effect and lab presets, so an agent names one pack instead of learning two. | The pack's size makes a version change too slow to check; two families need different release cadences |
+| Agent tools for scenes | Three new tools, `deep_kinds`, `deep_query` and `deep_job`, plus new modes on `deep_show` and new kinds on `deep_run`. No tool runs an agent's code outside the logic module's sandbox, drives a live editor or app, or answers, decides or overrules. | An agent needs a capability none of the five covers |
+| Selection without history | Level of detail, the light cut and label placement are pure functions of the view. Near a threshold a margin blends two bands by projected size through a fixed per-pixel dither, lights near the cut dim by their score, and labels chain from the base zoom. There is no session hysteresis and no fade in wall-clock time, so a view gives the same frame however it was reached. | A case shows popping or flicker that a margin can't hide |
+| Caches | Every cache is keyed by everything its output reads: a cascade by the sun, its snapped projection (which follows the camera) and the casters inside it; a local shadow by the light and every item meeting its range; a probe capture by everything it sees, the lights and the sky. A cached output always equals a clean rebuild, and a fixture checks each kind of change. | Never by itself: a cache that can't prove it is removed |
+| Exact GPU work | Integer, bool and bit operations only, with floats carried as bits. WGSL lets a GPU flush subnormals, ignore the sign of zero and assume no NaN or infinity, so no float operation is exact. Only exact work is compared across GPUs; float results hold on one machine. | WGSL guarantees more about float evaluation |
+| Looks per shot | One look per shot, the document's by default, and at most two in one frame through look regions; the status map and legend stay the document's. A speedrun and a long scroll need more than one look, and a status color must read the same in all of them. | A film needs three looks in one frame, or a region's edge costs more than twice the frame |
+| Painterly looks in 3D | Strokes on surfaces, chosen by hash against the density their projected size needs; a print look's separations anchor to the frame, the sheet or the plate as declared, and pixel looks draw natively on an indexed basis. Strokes painted on the screen swim when the camera moves, and strokes chosen by the previous frame break seeking. | Stroke counts can't fit the showpiece class at 4K, or a look needs strokes that follow motion between frames |
+| Canvas done | The canvas is done when six art-motion shorts, each in 2D and 3D, pass their briefs within three rounds each, play live, scrub exactly and get no red light from the outside film gate, and one frozen 60-second interactive brief passes as one piece. A second bar holds twelve math and science films, each from a one-line brief, each passing its brief, film.audit and film.layout within three rounds. Primitives that exist prove nothing about how easy a film is to make or how good it is. | You name another bar, or the gate changes its measures |
+| An outside film gate | An open-source film gate (MIT), pinned at one commit, runs in the local preflight on our exports, never in the app or on CI. It reads only an MP4, and its author calibrated it on 13 judged films, so it's a weak but independent check beside our own. | It needs its engine to run, its license changes, or its calibration set changes |
+| The canvas core's modules | A small core plus first-party canvas modules compiled in. Each registers kinds, arrays, tables, operators, carried state, passes, steps, check kinds, tool entries, cost terms and fixtures, and the registry seals before the first document. One writer per array; read sets declared once and used for access, order, change tests and keys; closed phases; a canonical tie-break; module_missing for absent canvas modules. Third parties extend with data packs or the extension host. R2. From R6 a canvas module implements one interface, and one implementation of each interface seals, chosen at build time and proved by that interface's conformance kit; a runtime digest names each implementation whose state is an engine's own bytes or whose results are measured. Compiled third-party canvas modules stay out: outside code runs only in the logic sandbox, as a piece's logic, a pack's programs and the libraries they link, or once at check as a provider or a data layout's validator. From 6.9.9 every list is a registry, with who may fill it, its conformance kit and a planted wrong entry; closed, with its reason; or open, declared by each item or pack that uses it (Registry and seal: registries). | A case needs composition the closed phases can't express, or a brief needs per-frame work no module has and no provider can express |
+| Kits | A blueprint naming one genre's packs, linked libraries, check plug-ins, a recipe and definition-of-done checks, never a canvas module. The grid core first; each genre layer waits for a brief of its genre. Big worlds and crowds come as kits on world pages and step blocks. | A genre needs per-frame work a library in the sandbox can't do within the frame budget |
+| Outside code at check | Providers run once per content key, and data layouts' validators once per asset, while a document is checked, under the logic subset: a provider writes one declared, capped output that checks read as data, a validator can only refuse, and neither runs in a frame. | A provider's output can't be checked as data, or a case needs one to run in a frame |
+| Level of detail by error | Hand-set bands keep their margin; inside the full and proxy bands, a mesh asset's index-only levels are chosen by projected error against 1 device px, shadow passes by the light's projection. A band blend uses an integer level computed on the CPU and complementary masks in every pass. R2 zoom levels; R6 3D. | Dither crawl shows under motion, or a film shows a pop at 1 px |
+| Ambient occlusion in shading | A shading input from a depth and normal prepass, applied only to ambient, probe and environment light, with multi-bounce and specular occlusion, and no history. R6. | The prepass costs more than its share of the class budget |
+| Order-free mix and bone masks | blend: mix sums weighted differences from the base in canonical order, so writer and placement order can't change a pose; Placement: only masks bones, because an asset's clip binds every bone. R6. | A case blends rotations more than 90 degrees apart |
+| Lightmaps | Only if the house needs them: our own CPU light job gains a lightmap mode with a JNLM denoiser, and Object: lightmap reads it. Path-traced finals come from our own render mode, with Cycles as an optional oracle. R6. | Probe grids and ambient occlusion give interiors acceptable contact light |
+| Oracle lanes | Godot joins Blender and Unreal as an optional lane through a public runner script: import counts, skin hierarchies, joint matrices at bind and at its import bake grid only, since its importer resamples every clip, STEP and LINEAR included, onto that grid; values between keys stay with the analytic oracle. BLOCKED without Godot and never must-pass. R6. Lanes that compare images use one perceptual oracle, as the tech design's How we know version 0 works describes: a blank guard, then FLIP with structure, crushed-black and color guards and silhouette IoU. The blank guard runs before every image comparison from R2, the cross lane reports the numbers as readings from R3, and the oracle lanes gate on them in R6. | Godot's importer changes so the lane gates nothing new |
+| Depth and 2D blending | Reversed Z with an infinite far plane; 2D composited in sRGB-encoded space with OKLab gradients, as GPUI draws them with its OKLab option and the patch's exact gradient mode. R2. | Vello CPU can't match, or a case needs HDR 2D |
+| CPU math that feeds a check | f64 or scalar code with libm through one ops module; glam's f32 SIMD only in display code; a lint from R1; a cross-architecture fixture compared when the first x86_64 target ships. | glam guarantees identical SIMD results across targets |
+| Platform seams for the canvas | Every platform-dependent part of the canvas sits behind a seam whose backend is a canvas module with its version in every key it feeds, and a platform ships a seam only when its backend passes the seam's suite. macOS first, and the web from R6, through the web player. | Never on its own |
+| Characters drawn as data | puppet@1: 2D rigs and rigid 3D puppets as documents a recipe expands into groups, flips, analytic reach and pose clips, drawn in the shot's look. Each new rig is approved once from its model sheet, keyed by its hash, and held to rig checks on evaluated data. Characters stay data and never a piece's logic, an object with a face that acts is a rig, and organic 3D characters stay licensed or generated assets with skinned playback. R6. | A rig needs per-frame code or an iterative solve, or a model sheet keeps missing faults the rig checks should catch |
+| Status colors where status shows | A document with a status binding, a view of the record and anything shown inside a view of the record keep data colors at the look's distance from status colors, under the status guard. Any other document, such as an art film played or exported on its own, may use any palette. Status roles are reachable only through a binding. R2. | A document without a status binding is mistaken for status in use |
+| Sound as data | score@1 and foley@1 hold music and sounds as data; score.render@1 and foley.render@1 render them by pinned runner jobs into stems and variants by hash, with every draw hashed per event, declared onsets and licences that pass through. The canvas core only plays strips; processors gain shaper, crush and modulate, and strips a rate ramp. R6. From 6.9.9 live synthesis plays synth presets, data over the closed nodes (synth@1), seeking as it plays. | A preset needs a node the closed list lacks, or live synthesis can't seek as it plays |
+| Shader authoring | Operators may be written in a WGSL subset the core lowers to its public steps; raw shader code stays out. | A brief needs something the lowering refuses that isn't a determinism or termination rule |
+| Narration heard back | narration.transcript@1 transcribes each line and its mix window with a pinned whisper.cpp model and compares by code through a pinned normalizer, toneless syllables for CJK and phonemes for marked names. A PASS rests on that recorded transcript, like the other model bakes; a mismatch FAILs with a respelling fix or opens one ask per (line, audio). No agent writes an expected text. R6. | A planted mismatch passes, or you rule a model's transcript can't pass alone; then the engine's word marks must also agree within 0.1 s per word |
+| Reading holds | max(1.5 s, or 4 s for a title card, 1.5 s + CJK graphemes ÷ 4.5 + other graphemes ÷ 15), counted from full reveal inside the safe area; a script with no stated rate is BLOCKED; captions follow their profiles, CJK profiles included. R6. | Timed reading on our own films differs from the rule by more than 20%, or the recalled reading norms prove wrong |
+| Bundled media and voices | CC0 and CC BY with credits; never CC BY-SA, NC or GPL; espeak-ng never bundled, so Kokoro runs without it and an out-of-lexicon word is BLOCKED until respelled. Large assets are fetched on first use, pinned by hash, after one ask. R6. | The project starts distributing builds and a review asks for a formal opinion |
+| Drawn, print and pixel looks | Drawing looks gain a light, paper anchored to the world with tooth and age, line profiles, separations, drawn fills and print finishes (print wear, a tone curve, a screen), all without history; pixel looks draw natively on an indexed basis; print@1 ships print and photographic processes named by technique; flares and planar mirrors leave Not proposed, and LUT images stay refused. R6. | A look needs a pass that reads an earlier frame |
+| Film briefs | Declared film-profile defaults leave at most one early question; the treatment is drafted with the definition and compiles into moments, cues and sound checks the working agent can't change; a look proof, carrying each new rig's model sheet, comes before paid work, a storyboard only on request, and contact sheets with every export. R6. | Films keep needing a second early question, or a treatment drafted from the ask alone can't be met |
+| Piece recipes | piece@1: twelve recipes, each turning a subject and a few parameters into a whole piece with studio@1's light, camera moves with stated amounts, pacing within the craft checks, a music bed, narration, captions and the checks the piece needs. Agents start there and break out one derived item to change one thing. No new tool: `deep_show` takes the piece, and `deep_kinds` and the skill list the recipes first. R6. | Agents keep breaking out the same item, or keep asking for a piece no recipe makes |
+| Motion-graphics depth | Added as data on the existing primitives: 25 more group blend modes, a group's passes and backdrop, echo, path ops and star@1, gradient, tapered and waved strokes, a noise fill, glow, an inner shade, bevel and satin, deeper text animators with noise and field selectors, lag and smooth for drivers, contrast, exposure, gamma and invert on adjust, fx@1's named operators with three new public steps, and Lottie export and import. Each is a pure function of the document and t, evaluates other times again instead of keeping history, and draws from shipped operators or the closed step list. R2 the W3C blend modes and add, gradient strokes and focal points, star@1 and adjust's new fields; R6 the rest. | A case needs a pass that reads an earlier frame or another writer's layer, or a named operator the public steps can't express within the pass limits |
+| What stays out of motion-graphics depth | JavaScript expressions, the expression selector and scripts, since tools hold no code, any code a document holds is its sandboxed logic, and drivers and the field selector cover the numeric cases; pixel reads into values, since a pixel reaches the CPU only a frame late; LUT and OCIO files, since LUT images stay refused and color stays linear BT.709 with sRGB output for checks and exports; live 2D booleans, since boolean geometry stays an offline job and mask combine gives the coverage; extruded 3D text, since text stays flat and shaped by the one shaper; and installed fonts, since fonts ship with the look. | Each by its own rule: a case needs a cut that changes over time, an output beyond sRGB, or a font no look can ship |
+| What a pointed change may touch | A point-and-ask carries its time, the revision you saw and how precisely you pointed; if the item is gone first, it comes back detached, never dropped. A change it asks for may touch only the selected items and what derives from them (`outside_selection` otherwise), a region can be asked about but never patched, and a note you pin to an item closes only by a later revision of that item whose checks pass, or by you. R2; the selection's bound R6. | A case needs a pointed change to reach beyond the selection; then it's a new ask, never a wider lease |
+| What every return card draws | A turn view: a still `view` the record writer builds from the returns projection, its parts at most nine by salience@1 in boxes by the Map's top-level parts, with status-bound check chips and gaps, over a timeline from the record of the turn; core view class, no transcript text, and only its line on a folded return. R2. | A turn's parts need positions that match the Map's own layout, which keeps its memory per view |
