@@ -1,14 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { measureOnce } from './benchmark.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
   const failures = [];
   for (const lane of lanes) {
+    const started = performance.now();
     write(`RUN ${lane.name}`);
     let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
     for (const [command, ...args] of lane.commands) {
@@ -42,8 +44,9 @@ export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
         };
       }
     }
-    if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}`);
-    else write(`PASS ${lane.name}`);
+    const elapsed = ((performance.now() - started) / 1000).toFixed(2);
+    if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
+    else write(`PASS ${lane.name} (${elapsed} s)`);
   }
   for (const failure of failures) write(failure);
   return failures.length ? 1 : 0;
@@ -51,19 +54,19 @@ export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const started = performance.now();
-  process.exitCode = runLanes([
-    { name: 'typecheck/build', commands: [['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-    { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check']], fix: 'Format the Rust source with cargo fmt.' },
-    { name: 'unit', commands: [
-      [process.execPath, 'node_modules/vitest/vitest.mjs', 'run'],
-      ['cargo', 'test', '--workspace', '--locked'],
-      [process.execPath, '--test', 'tests/preflight.test.mjs'],
-    ], fix: 'Repair the behavior named by the failing test.' },
-  ]);
-  if (existsSync(join(root, '.github/workflows')) && readdirSync(join(root, '.github/workflows')).length) {
-    console.error('FAIL lint: GitHub workflows are forbidden.\n  Fix: Remove .github/workflows entries.');
-    process.exitCode = 1;
+  let observation = {}, checkStatus = 1;
+  try {
+    const { elapsedMs, peakBytes, status, output } = measureOnce([process.execPath, 'scripts/checks.mjs'], root);
+    if (output) console.log(output.trimEnd());
+    observation = { elapsedMs, peakBytes, status };
+    checkStatus = status === 0 ? 0 : 1;
+  } catch (error) {
+    console.log(`BLOCKED check workload: ${error.message}\n  Fix: Restore the check runner and native time/RSS measurement.`);
   }
+  const perfStatus = runLanes([
+    { name: 'perf', commands: [[process.execPath, 'scripts/perf.mjs', JSON.stringify(observation)]], fix: 'Restore the regressed budget; a first measurement adjustment needs its recorded reason.' },
+  ]);
+  process.exitCode = checkStatus || perfStatus;
   const elapsed = performance.now() - started;
   console.log(`Preflight elapsed: ${(elapsed / 1000).toFixed(2)} s (budget: <300 s)`);
   if (elapsed >= 300_000) {

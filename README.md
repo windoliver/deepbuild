@@ -57,15 +57,25 @@ later issues; running this skeleton does not install hooks or start a service.
 
 All checks run locally. `npm run release:check` and `npm run preflight` invoke
 that exact same `scripts/preflight` entry point; there are no GitHub workflows.
-The preflight performs one strict TypeScript build, Rust formatting, Vitest,
-Cargo tests (which compile the Rust binary) and the small runner regression
-suite. It also refuses GitHub workflows and reports failures without stopping
-later checks. It does not repeat builds, run release optimization or benchmark
-placeholder commands. The separate `npm run typecheck` also checks test and
-Vitest-config types when needed; the preflight build checks production sources.
+The five lanes are `typecheck`, `lint`, `unit`, `parity quick` and `perf`.
+They check all TypeScript sources, tests and configuration, build the TypeScript
+packages, and run Rust formatting, Vitest, Cargo tests
+(which compile the Rust binary), tooling tests, built/source CLI parity, and
+a small runtime benchmark. Failed lanes report their first error and a fix;
+later lanes still run. GitHub workflows are forbidden and the complete run must
+take under five minutes.
 
-Issue #12 remains incomplete: real parity/snapshot checks, performance budgets
-and merge-base benchmarking are not implemented in this minimal skeleton.
+Performance budgets live in `benchmarks/budgets.json`. The harness measures p50
+and p95 elapsed time and peak resident memory, comparing the current executable
+with the merge base of `HEAD` and `origin/main`. Each measured command gets one
+warmup and five samples; whole builds and test suites are never sampled in a
+loop. The complete check workload is timed once on each version, with a separate
+elapsed-time and peak-memory comparison. When the merge base contains
+benchmarks, its check workload runs once in a temporary source archive and
+builds its binaries. A newly introduced benchmark records `INITIAL` and its
+reason, rather than inventing a baseline; absolute limits still apply.
+The first task measures hook process startup, including launch overhead;
+hook forwarding and its overhead budget arrive with their implementation.
 
 ## Documentation
 

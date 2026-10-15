@@ -20,6 +20,7 @@
     "test:unit": "vitest run",
     "test:rust": "cargo test --workspace --locked",
     "test:tooling": "node --test tests/*.test.mjs",
+    "parity": "node scripts/parity.mjs",
     "preflight": "scripts/preflight",
     "release:check": "scripts/preflight"
   },

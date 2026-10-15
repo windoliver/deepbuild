@@ -1,0 +1,16 @@
+{
+  "preflight": {
+    "margin": 0.5,
+    "limits": { "elapsedMs": 300000 },
+    "initialReason": "Issue #12 first measurement: the merge base has no local check workload. Time the typecheck, lint, unit and parity lanes once, including their TypeScript and Rust builds, and measure native peak RSS. The five-minute ceiling comes from issue #12; subsequent elapsed time and memory are compared with the merge base using a 50% margin."
+  },
+  "tasks": [
+    {
+      "id": "hook-startup",
+      "command": ["target/debug/deep-hook", "--version"],
+      "margin": 0.5,
+      "limits": { "peakBytes": 10000000 },
+      "initialReason": "Issue #12 first measurement: the merge base has no executable benchmark. Measure skeleton process startup, not issue #17 hook overhead, with a 50% relative margin and the design's 10 MB peak-memory ceiling. A first-measurement limit adjustment records previousLimits here with its reason; established definitions are frozen."
+    }
+  ]
+}

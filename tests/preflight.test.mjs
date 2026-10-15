@@ -70,4 +70,3 @@ test('first failure preserves ordering across stderr and stdout', (t) => {
   assert.notEqual(result.status, 0, result.stderr);
   assert.match(result.stdout, /FAIL unit: Error: original failure\n\s+Fix: Repair unit\./);
 });
-
