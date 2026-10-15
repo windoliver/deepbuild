@@ -3,8 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { compare, measure, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
-import * as benchmark from '../scripts/benchmark.mjs';
+import { compare, measure, measureOnce, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
 
 const budget = { id: 'startup', command: ['binary'], margin: 0.5, limits: { peakBytes: 10_000_000 }, initialReason: 'First measured executable in issue #12.' };
 const config = { tasks: [budget] };
@@ -78,7 +77,7 @@ test('current and merge-base samples alternate, so both see the same machine loa
 });
 
 test('a single workload measurement keeps failed check output and status for later lanes', () => {
-  const result = benchmark.measureOnce([process.execPath, '-e', 'console.log("check failed"); process.exit(7)'], process.cwd());
+  const result = measureOnce([process.execPath, '-e', 'console.log("check failed"); process.exit(7)'], process.cwd());
   assert.equal(result.status, 7);
   assert.match(result.output, /check failed/);
   assert.ok(result.elapsedMs > 0 && result.peakBytes > 0);

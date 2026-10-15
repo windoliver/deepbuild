@@ -22,11 +22,11 @@ export const checks = [
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
 ];
 
-export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
+export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
   for (const lane of lanes) {
     const started = performance.now();
-    write(`RUN ${lane.name}`);
+    console.log(`RUN ${lane.name}`);
     let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
     for (const [command, ...args] of lane.commands) {
       let directory, descriptor, result, output = '';
@@ -47,7 +47,7 @@ export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
           result = { status: null, error };
         }
       }
-      if (output) write(output);
+      if (output) console.log(output);
       if (result.status !== 0 && !failure) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
         failure = {
@@ -61,8 +61,8 @@ export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
     }
     const elapsed = ((performance.now() - started) / 1000).toFixed(2);
     if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
-    else write(`PASS ${lane.name} (${elapsed} s)`);
+    else console.log(`PASS ${lane.name} (${elapsed} s)`);
   }
-  for (const failure of failures) write(failure);
+  for (const failure of failures) console.log(failure);
   return failures.length ? 1 : 0;
 }

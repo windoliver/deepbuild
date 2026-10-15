@@ -19,14 +19,10 @@ describe('deep checkout command', () => {
     expect(result.stdout).toBe('0.0.0\n');
   });
 
-  it('refuses commands that have not been implemented', () => {
+  it('refuses commands that have not been implemented, with the usage exit code', () => {
     const result = run('status');
-    expect(result.status).not.toBe(0);
+    expect(result.status).toBe(2);
     expect(result.stderr).toContain('Unsupported command');
     expect(result.stdout).toBe('');
-  });
-
-  it('uses the usage exit code when nothing ran', () => {
-    expect(run('status').status).toBe(2);
   });
 });
