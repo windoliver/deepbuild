@@ -1,0 +1,31 @@
+{
+  "name": "deepbuild",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "bin": {
+    "deep": "packages/cli/dist/main.js"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces && cargo build --workspace --locked",
+    "typecheck": "tsc --noEmit",
+    "lint": "cargo fmt --all -- --check",
+    "test:unit": "vitest run",
+    "test:rust": "cargo test --workspace --locked",
+    "test:tooling": "node --test tests/*.test.mjs",
+    "preflight": "scripts/preflight",
+    "release:check": "scripts/preflight"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

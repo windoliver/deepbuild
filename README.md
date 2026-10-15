@@ -31,7 +31,41 @@ DeepBuild is an agent-native studio for everything visual. Describe a 2D motion 
 
 ## Status
 
-Design stage: there's nothing to install yet. Version 0 (R1) brings every Claude Code and Codex session into one app, with the asks that need you and proof at every stop. The canvas core lands in R2, and films, figures and 3D scenes in R6. Follow along in the [milestones](https://github.com/windoliver/deepbuild/milestones).
+The repository skeleton runs locally; the app and hub are still in development. Version 0 (R1) brings every Claude Code and Codex session into one app, with the asks that need you and proof at every stop. The canvas core lands in R2, and films, figures and 3D scenes in R6. Follow along in the [milestones](https://github.com/windoliver/deepbuild/milestones).
+
+## Run the checkout
+
+Use a supported Node.js LTS release, **22.19 or newer**, and Rust with Cargo,
+`rustfmt` installed (included in the default rustup toolchain).
+On macOS, also install the Xcode Command Line Tools for the native linker.
+
+```sh
+git clone https://github.com/windoliver/deepbuild.git
+cd deepbuild
+npm install
+npm run build
+npm link
+deep --help
+scripts/preflight
+```
+
+`npm run build` compiles every TypeScript workspace and the
+`crates/deep-hook` binary. `npm link` exposes the built `deep` command on your
+npm prefix's `bin` directory, which must be on `PATH`. Both binaries currently
+provide help and version output only. Setup, hooks and hub commands land in
+later issues; running this skeleton does not install hooks or start a service.
+
+All checks run locally. `npm run release:check` and `npm run preflight` invoke
+that exact same `scripts/preflight` entry point; there are no GitHub workflows.
+The preflight performs one strict TypeScript build, Rust formatting, Vitest,
+Cargo tests (which compile the Rust binary) and the small runner regression
+suite. It also refuses GitHub workflows and reports failures without stopping
+later checks. It does not repeat builds, run release optimization or benchmark
+placeholder commands. The separate `npm run typecheck` also checks test and
+Vitest-config types when needed; the preflight build checks production sources.
+
+Issue #12 remains incomplete: real parity/snapshot checks, performance budgets
+and merge-base benchmarking are not implemented in this minimal skeleton.
 
 ## Documentation
 
