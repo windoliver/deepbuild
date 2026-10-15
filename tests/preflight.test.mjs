@@ -1,11 +1,28 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { checks } from '../scripts/lanes.mjs';
 
-const runner = new URL('../scripts/preflight.mjs', import.meta.url).href;
+const runner = new URL('../scripts/lanes.mjs', import.meta.url).href;
+const scripts = new URL('../scripts/', import.meta.url);
+
+// A copy of the real preflight entry and harness, with stub check and perf workloads.
+function entry(t, { checks, perf = '', limit = 300_000 }) {
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'deep-preflight-entry-')));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
+  for (const file of readdirSync(scripts)) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
+  writeFileSync(join(cwd, 'scripts/checks.mjs'), checks);
+  writeFileSync(join(cwd, 'scripts/perf.mjs'), perf);
+  writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: limit }, initialReason: 'Fixture.' }, tasks: [] }));
+  writeFileSync(join(cwd, 'package.json'), '{ "private": true }');
+  return cwd;
+}
+const preflight = (cwd) => spawnSync(process.execPath, [join(cwd, 'scripts/preflight.mjs')], { encoding: 'utf8' });
 
 function fixture(t, steps) {
   const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-test-'));
@@ -69,4 +86,60 @@ test('first failure preserves ordering across stderr and stdout', (t) => {
   const result = fixture(t, [{ name: 'unit', error: 'Error: original failure', laterOutput: 'Error: later cleanup failure' }]);
   assert.notEqual(result.status, 0, result.stderr);
   assert.match(result.stdout, /FAIL unit: Error: original failure\n\s+Fix: Repair unit\./);
+});
+
+test('preflight runs every lane when started through a symlinked path', (t) => {
+  const cwd = entry(t, { checks: 'console.log("checks ran")', perf: 'console.log("perf ran")' });
+  const link = `${cwd}-link`;
+  symlinkSync(cwd, link);
+  t.after(() => rmSync(link, { force: true }));
+  const result = preflight(link);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /checks ran[\s\S]*perf ran/);
+});
+
+test('lane output streams while the measured workload is still running', async (t) => {
+  const cwd = entry(t, { checks: `
+    import { existsSync } from 'node:fs';
+    console.log('lane started');
+    const until = Date.now() + 10_000;
+    while (!existsSync('release') && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, 20));
+    console.log(existsSync('release') ? 'released by streamed output' : 'never released');
+  ` });
+  const child = spawn(process.execPath, [join(cwd, 'scripts/preflight.mjs')]);
+  let stdout = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk) => {
+    stdout += chunk;
+    if (stdout.includes('lane started')) writeFileSync(join(cwd, 'release'), '');
+  });
+  await once(child, 'close');
+  assert.match(stdout, /released by streamed output/);
+});
+
+test('failed check lanes block perf instead of measuring a broken workload', (t) => {
+  const cwd = entry(t, { checks: 'process.exitCode = 1', perf: 'import { writeFileSync } from "node:fs"; writeFileSync("perf-ran", "");' });
+  const result = preflight(cwd);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /BLOCKED perf: .+\n\s+Fix: .+/);
+  assert.equal(existsSync(join(cwd, 'perf-ran')), false);
+});
+
+test('the check budget comes from budgets.json and excludes the perf comparison', (t) => {
+  const sleep = 'await new Promise((resolve) => setTimeout(resolve, 2500));';
+  const slowChecks = preflight(entry(t, { checks: sleep, limit: 2000 }));
+  assert.equal(slowChecks.status, 1, slowChecks.stdout);
+  assert.match(slowChecks.stdout, /FAIL preflight budget/);
+  const slowPerf = preflight(entry(t, { checks: '', perf: sleep, limit: 2000 }));
+  assert.equal(slowPerf.status, 0, slowPerf.stdout);
+});
+
+test('the unit lane runs every tooling test file', (t) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-tooling-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, 'tests'));
+  for (const name of ['one', 'two']) writeFileSync(join(cwd, 'tests', `${name}.test.mjs`), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(name)}, '');`);
+  const [command, ...args] = checks.find(({ name }) => name === 'unit').commands.find((parts) => parts.includes('--test'));
+  // A nested test runner that inherits this runner's context runs no files.
+  spawnSync(command, args, { cwd, env: { ...process.env, NODE_TEST_CONTEXT: undefined } });
+  assert.deepEqual(['one', 'two'].filter((name) => existsSync(join(cwd, name))), ['one', 'two']);
 });

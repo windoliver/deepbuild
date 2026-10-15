@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { compare, measure, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
 import * as benchmark from '../scripts/benchmark.mjs';
@@ -41,22 +44,37 @@ test('first measurement names its reason, while established budgets cannot disap
   assert.equal(initial.reason, budget.initialReason);
 });
 
-test('a cap or regression in any measured metric fails even when another metric improves', () => {
+test('a cap, or a p50 or peak-memory regression, fails even when another metric improves', () => {
   const base = { p50Ms: 10, p95Ms: 20, peakBytes: 1000 };
   assert.equal(compare(budget, base, base).status, 'PASS');
-  for (const metric of Object.keys(base)) {
+  for (const metric of ['p50Ms', 'peakBytes']) {
     assert.throws(() => compare(budget, { ...base, [metric]: base[metric] * 2 }, base), new RegExp(metric));
   }
   assert.throws(() => compare(budget, { ...base, peakBytes: 10_000_000 }, null), /peakBytes/);
 });
 
+test('a slow tail alone is not a regression, while p95 keeps its absolute cap', () => {
+  const base = { p50Ms: 10, p95Ms: 20, peakBytes: 1000 };
+  const tail = { ...base, p95Ms: 60 };
+  assert.equal(compare(budget, tail, base).status, 'PASS');
+  assert.throws(() => compare({ ...budget, limits: { p95Ms: 50 } }, tail, base), /p95Ms/);
+});
+
 test('real process measurements reject a slower program and a failed command', () => {
-  const run = (delay) => measure([process.execPath, '-e', `setTimeout(() => {}, ${delay})`], process.cwd());
-  const fast = run(50);
-  const slow = run(200);
-  assert.ok(fast.p50Ms >= 50 && fast.p95Ms >= fast.p50Ms && fast.peakBytes > 0);
-  assert.throws(() => compare({ ...budget, limits: {} }, slow, fast), /p50Ms|p95Ms/);
+  const [slow, fast] = measure(['sleep', '0.1'], process.cwd(), { command: ['true'], cwd: process.cwd() });
+  assert.ok(slow.p50Ms >= 100 && slow.p95Ms >= slow.p50Ms && fast.peakBytes > 0);
+  assert.throws(() => compare({ ...budget, limits: {} }, slow, fast), /p50Ms/);
   assert.throws(() => measure([process.execPath, '-e', 'process.exit(9)'], process.cwd()), /exited 9/);
+});
+
+test('current and merge-base samples alternate, so both see the same machine load', (t) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'deep-benchmark-order-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const append = (side) => ['sh', '-c', `echo ${side} >> order`];
+  measure(append('current'), cwd, { command: append('base'), cwd });
+  const order = readFileSync(join(cwd, 'order'), 'utf8').trim().split('\n');
+  assert.ok(order.length >= 40, `${order.length} samples`);
+  assert.deepEqual(order, order.map((_, index) => (index % 2 ? 'base' : 'current')));
 });
 
 test('a single workload measurement keeps failed check output and status for later lanes', () => {
