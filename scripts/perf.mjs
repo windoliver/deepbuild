@@ -3,66 +3,71 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compare, measure, measureOnce, validateBudgets } from './benchmark.mjs';
+import { compare, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
 const run = (command, args, cwd = root, options = {}) => execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 120_000, maxBuffer: 128 * 1024 * 1024, ...options });
-let archive, baselineWorkload, baselineError;
+// BLOCKED: perf could not compare. FAIL: a measurement broke its budget.
+const blocked = (message, fix) => Object.assign(Error(message), { fix });
+const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
+const verdicts = [];
+const started = performance.now();
+console.log('RUN perf');
+let archive;
 try {
-  const baseCommit = run('git', ['merge-base', 'HEAD', 'origin/main']).trim();
+  const observed = JSON.parse(process.argv[2] ?? '{}');
+  if (observed.status !== 0) throw blocked('the current check workload did not pass, so there is nothing to compare', 'Repair the failing check lanes; perf runs once they pass.');
+  let baseCommit;
+  try {
+    baseCommit = run('git', ['merge-base', 'HEAD', 'origin/main'], root, { stdio: 'pipe' }).trim();
+  } catch {
+    throw blocked('no merge base with origin/main to compare against', 'Fetch main so the merge base exists: git fetch origin main');
+  }
   const current = JSON.parse(readFileSync(join(root, manifest), 'utf8'));
   const base = run('git', ['ls-tree', '--name-only', baseCommit, manifest]).trim()
     ? JSON.parse(run('git', ['show', `${baseCommit}:${manifest}`])) : null;
   validateBudgets(current, base);
-  if (base?.preflight || base?.tasks.length) {
+  if (!current.preflight) throw Error('missing preflight budget');
+  let baseline = null;
+  if (base?.preflight || base?.tasks?.length) {
     archive = mkdtempSync(join(tmpdir(), 'deep-benchmark-base-'));
     // All git reads stay in this checkout. The disposable archive has no .git.
-    const source = run('git', ['archive', baseCommit], root, { encoding: null });
-    run('tar', ['-xf', '-', '-C', archive], root, { input: source });
-    try {
-      run('npm', ['ci', '--no-audit', '--no-fund'], archive);
-      baselineWorkload = measureOnce([process.execPath, 'scripts/checks.mjs'], archive);
-      if (baselineWorkload.status !== 0) throw Error(`base checks exited ${baselineWorkload.status}: ${baselineWorkload.output}`);
-    } catch (error) {
-      baselineError = error;
-      console.error(`BLOCKED perf merge base: ${error.message}`);
-      process.exitCode = 1;
-    }
+    run('tar', ['-xf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
+    run('npm', ['ci', '--no-audit', '--no-fund'], archive);
+    warm(archive);
+    baseline = measureOnce([process.execPath, 'scripts/checks.mjs'], archive);
+    if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
+  const reading = ({ elapsedMs, peakBytes }) => ({ elapsedMs, peakBytes });
+  const workloadBase = base?.preflight ? baseline : null;
   try {
-    const observed = JSON.parse(process.argv[2] ?? '{}');
-    if (observed.status !== 0) throw Error('current check workload did not finish successfully');
-    if (baselineError) throw baselineError;
-    if (!current.preflight) throw Error('missing preflight budget');
-    if (base?.preflight && !baselineWorkload) throw Error('missing established preflight measurement');
-    const baseline = base?.preflight ? baselineWorkload : null;
-    const outcome = compare({ id: 'preflight', ...current.preflight }, observed, baseline, ['elapsedMs', 'peakBytes']);
-    const reading = ({ elapsedMs, peakBytes }) => ({ elapsedMs, peakBytes });
-    console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(observed), base: baseline ? reading(baseline) : null }));
+    const outcome = compare({ id: 'preflight', ...current.preflight }, observed, workloadBase, ['elapsedMs', 'peakBytes']);
+    console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(observed), base: workloadBase && reading(workloadBase) }));
   } catch (error) {
-    console.error(`BLOCKED perf preflight: ${error.message}`);
-    process.exitCode = 1;
+    verdicts.push(['FAIL', error.message, regressed]);
   }
   for (const budget of current.tasks) {
+    const established = base?.tasks?.find(({ id }) => id === budget.id);
+    let samples;
     try {
-      const established = base?.tasks.find(({ id }) => id === budget.id);
-      const observed = measure(budget.command, root);
-      if (baselineError && established) {
-        console.log(JSON.stringify({ task: budget.id, baseCommit, status: 'BLOCKED', current: observed, base: null, reason: 'Merge-base workload failed' }));
-        continue;
-      }
-      const baseline = established ? measure(established.command, archive) : null;
-      const outcome = compare(budget, observed, baseline);
-      console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: observed, base: baseline }));
+      samples = measure(budget.command, root, established && { command: established.command, cwd: archive });
     } catch (error) {
-      console.error(`FAIL perf ${budget.id}: ${error.message}`);
-      process.exitCode = 1;
+      verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
+      continue;
+    }
+    const [now, then = null] = samples;
+    try {
+      console.log(JSON.stringify({ task: budget.id, baseCommit, ...compare(budget, now, then), current: now, base: then }));
+    } catch (error) {
+      verdicts.push(['FAIL', error.message, regressed]);
     }
   }
 } catch (error) {
-  console.error(`BLOCKED perf: ${error.message}`);
-  process.exitCode = 1;
+  verdicts.push(['BLOCKED', error.message, error.fix ?? 'Resolve the named cause; budgets in benchmarks/budgets.json are frozen once they reach main.']);
 } finally {
   if (archive) rmSync(archive, { recursive: true, force: true });
 }
+for (const [state, message, fix] of verdicts) console.log(`${state} perf: ${message}\n  Fix: ${fix}`);
+if (verdicts.length) process.exitCode = 1;
+else console.log(`PASS perf (${((performance.now() - started) / 1000).toFixed(2)} s)`);

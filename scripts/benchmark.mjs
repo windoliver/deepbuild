@@ -20,31 +20,46 @@ export function parsePeakRss(output, platform) {
   return bytes;
 }
 
-export function measureOnce(command, cwd) {
+// stream shows the command's output as it runs instead of capturing it.
+export function measureOnce(command, cwd, stream = false) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('BLOCKED: native peak RSS requires macOS or Linux');
   const flags = process.platform === 'darwin' ? ['-l'] : ['-f', 'peak_rss_kb=%M'];
   const directory = mkdtempSync(join(tmpdir(), 'deep-benchmark-time-'));
   const timing = join(directory, 'time');
   try {
     const started = performance.now();
-    const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...command], { cwd, encoding: 'utf8', timeout: 300_000, maxBuffer: 32 * 1024 * 1024 });
+    const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...command], stream
+      ? { cwd, stdio: ['ignore', 'inherit', 'inherit'] }
+      : { cwd, encoding: 'utf8', timeout: 300_000, maxBuffer: 32 * 1024 * 1024 });
     const elapsedMs = performance.now() - started;
     if (result.error) throw result.error;
     const peakBytes = parsePeakRss(readFileSync(timing, 'utf8'), process.platform);
-    return { elapsedMs, peakBytes, status: result.status, output: result.stdout + result.stderr };
+    return { elapsedMs, peakBytes, status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
-export function measure(command, cwd) {
-  const samples = [];
-  for (let index = 0; index < 6; index++) {
-    const result = measureOnce(command, cwd);
-    if (result.status !== 0) throw Error(`${command[0]} exited ${result.status}: ${result.output}`);
-    if (index) samples.push({ ms: result.elapsedMs, peakBytes: result.peakBytes }); // One warmup, then five observations.
+// Alternates current and merge-base runs so both see the same machine load: one warmup round, then 20 rounds.
+// Returns [current] or [current, base].
+export function measure(command, cwd, base) {
+  const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
+  const samples = sides.map(() => []);
+  for (let round = 0; round <= 20; round++) {
+    sides.forEach(([argv, directory], side) => {
+      const result = measureOnce(argv, directory);
+      if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes });
+    });
   }
-  return summarize(samples);
+  return samples.map(summarize);
+}
+
+// Builds unmeasured, so a checkout and its merge base are both timed warm. The check lanes run
+// the same builds and report their errors, so a failure here is left for them.
+export function warm(cwd) {
+  for (const [command, ...args] of [['npm', 'run', 'build'], ['cargo', 'test', '--workspace', '--locked', '--no-run']])
+    spawnSync(command, args, { cwd, stdio: 'ignore' });
 }
 
 export function validateBudgets(current, base) {
@@ -61,20 +76,20 @@ export function validateBudgets(current, base) {
     if (task.id !== 'preflight' && (!Array.isArray(task.command) || !task.command.length || task.command.some((part) => typeof part !== 'string' || !part))) throw Error(`${task.id}: invalid command`);
     if (!Number.isFinite(task.margin) || task.margin < 0) throw Error(`${task.id}: invalid margin`);
     if (typeof task.initialReason !== 'string' || !task.initialReason.trim()) throw Error(`${task.id}: first measurement requires a reason`);
-    for (const limits of [task.limits, ...(task.previousLimits ? [task.previousLimits] : [])]) {
-      const allowed = task.id === 'preflight' ? ['elapsedMs', 'peakBytes'] : metrics;
-      if (!limits || Object.entries(limits).some(([key, value]) => !allowed.includes(key) || !Number.isFinite(value) || value <= 0)) throw Error(`${task.id}: invalid limits`);
-    }
+    const allowed = task.id === 'preflight' ? ['elapsedMs', 'peakBytes'] : metrics;
+    if (!task.limits || Object.entries(task.limits).some(([key, value]) => !allowed.includes(key) || !Number.isFinite(value) || value <= 0)) throw Error(`${task.id}: invalid limits`);
   }
   if (!ids.size) throw Error('No budget task was measured');
 }
 
+// p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
+// interleaved samples still moves past a 50% margin in a few runs out of a hundred, and p50 does not.
 export function compare(budget, current, base, keys = metrics) {
   for (const metric of keys) {
     if (!Number.isFinite(current[metric]) || current[metric] <= 0) throw Error(`${budget.id}: missing ${metric}`);
     if (budget.limits[metric] !== undefined && current[metric] >= budget.limits[metric]) throw Error(`${budget.id}: ${metric} ${current[metric]} reached cap ${budget.limits[metric]}`);
     if (base && (!Number.isFinite(base[metric]) || base[metric] <= 0)) throw Error(`${budget.id}: missing base ${metric}`);
-    if (base && current[metric] > base[metric] * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%`);
+    if (base && metric !== 'p95Ms' && current[metric] > base[metric] * (1 + budget.margin)) throw Error(`${budget.id}: ${metric} ${current[metric]} regressed beyond base ${base[metric]} + ${budget.margin * 100}%`);
   }
   return base ? { status: 'PASS' } : { status: 'INITIAL', reason: budget.initialReason };
 }

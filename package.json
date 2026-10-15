@@ -15,12 +15,6 @@
   },
   "scripts": {
     "build": "npm run build --workspaces && cargo build --workspace --locked",
-    "typecheck": "tsc --noEmit",
-    "lint": "cargo fmt --all -- --check",
-    "test:unit": "vitest run",
-    "test:rust": "cargo test --workspace --locked",
-    "test:tooling": "node --test tests/*.test.mjs",
-    "parity": "node scripts/parity.mjs",
     "preflight": "scripts/preflight",
     "release:check": "scripts/preflight"
   },

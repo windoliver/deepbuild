@@ -1,76 +1,32 @@
 import { spawnSync } from 'node:child_process';
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { measureOnce } from './benchmark.mjs';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { measureOnce, warm } from './benchmark.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-
-export function runLanes(lanes, { cwd = root, write = console.log } = {}) {
-  const failures = [];
-  for (const lane of lanes) {
-    const started = performance.now();
-    write(`RUN ${lane.name}`);
-    let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };
-    for (const [command, ...args] of lane.commands) {
-      let directory, descriptor, result, output = '';
-      try {
-        directory = mkdtempSync(join(tmpdir(), 'deep-preflight-output-'));
-        const log = join(directory, 'output');
-        descriptor = openSync(log, 'w', 0o600);
-        // One shared descriptor preserves the child's stdout/stderr write order.
-        result = spawnSync(command, args, { cwd, stdio: ['ignore', descriptor, descriptor] });
-        output = readFileSync(log, 'utf8').trim();
-      } catch (error) {
-        result = { status: null, error };
-      } finally {
-        try {
-          if (descriptor !== undefined) closeSync(descriptor);
-          if (directory) rmSync(directory, { recursive: true, force: true });
-        } catch (error) {
-          result = { status: null, error };
-        }
-      }
-      if (output) write(output);
-      if (result.status !== 0 && !failure) {
-        const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
-        failure = {
-          state: result.error ? 'BLOCKED' : 'FAIL',
-          error: result.error?.message
-            ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
-            ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b/i.test(line))
-            ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`,
-        };
-      }
-    }
-    const elapsed = ((performance.now() - started) / 1000).toFixed(2);
-    if (failure) failures.push(`${failure.state} ${lane.name}: ${failure.error}\n  Fix: ${lane.fix}\n  Elapsed: ${elapsed} s`);
-    else write(`PASS ${lane.name} (${elapsed} s)`);
-  }
-  for (const failure of failures) write(failure);
-  return failures.length ? 1 : 0;
+// Parity and budgets run ./target/debug binaries; a shared Cargo target directory would misplace them.
+delete process.env.CARGO_TARGET_DIR;
+const started = performance.now();
+let observation = {}, checkStatus = 1;
+console.log('Warming builds (not timed)');
+warm(root);
+try {
+  // Lane output streams as it runs, so a measurement that breaks never hides what ran.
+  const { elapsedMs, peakBytes, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
+  observation = { elapsedMs, peakBytes, status };
+  checkStatus = status === 0 ? 0 : 1;
+} catch (error) {
+  console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
 }
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const started = performance.now();
-  let observation = {}, checkStatus = 1;
-  try {
-    const { elapsedMs, peakBytes, status, output } = measureOnce([process.execPath, 'scripts/checks.mjs'], root);
-    if (output) console.log(output.trimEnd());
-    observation = { elapsedMs, peakBytes, status };
-    checkStatus = status === 0 ? 0 : 1;
-  } catch (error) {
-    console.log(`BLOCKED check workload: ${error.message}\n  Fix: Restore the check runner and native time/RSS measurement.`);
-  }
-  const perfStatus = runLanes([
-    { name: 'perf', commands: [[process.execPath, 'scripts/perf.mjs', JSON.stringify(observation)]], fix: 'Restore the regressed budget; a first measurement adjustment needs its recorded reason.' },
-  ]);
-  process.exitCode = checkStatus || perfStatus;
-  const elapsed = performance.now() - started;
-  console.log(`Preflight elapsed: ${(elapsed / 1000).toFixed(2)} s (budget: <300 s)`);
-  if (elapsed >= 300_000) {
-    console.log('FAIL preflight budget: elapsed time reached 300 seconds\n  Fix: Reduce local check time below the issue #12 five-minute budget.');
-    process.exitCode = 1;
-  }
+const checksMs = performance.now() - started;
+let perfStatus = 1;
+if (checkStatus) console.log('RUN perf\nBLOCKED perf: the check lanes did not pass, so their workload was not measured\n  Fix: Repair the failing lanes above; perf runs once they pass.');
+else perfStatus = spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd: root, stdio: 'inherit' }).status ?? 1;
+process.exitCode = checkStatus || perfStatus;
+// The checks and their builds share one budget; perf's merge-base run is extra.
+const budgetMs = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8')).preflight.limits.elapsedMs;
+console.log(`Checks elapsed: ${(checksMs / 1000).toFixed(2)} s (budget: <${budgetMs / 1000} s); preflight elapsed: ${((performance.now() - started) / 1000).toFixed(2)} s`);
+if (checksMs >= budgetMs) {
+  console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);
+  process.exitCode = 1;
 }

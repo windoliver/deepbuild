@@ -38,6 +38,9 @@ The repository skeleton runs locally; the app and hub are still in development. 
 Use a supported Node.js LTS release, **22.19 or newer**, and Rust with Cargo,
 `rustfmt` installed (included in the default rustup toolchain).
 On macOS, also install the Xcode Command Line Tools for the native linker.
+On Linux, install GNU time at `/usr/bin/time`; the checks measure peak memory
+through it. Preflight compares with `origin/main`, so a clone made with
+`--single-branch` needs `git fetch origin main` first.
 
 ```sh
 git clone https://github.com/windoliver/deepbuild.git
@@ -61,19 +64,23 @@ The five lanes are `typecheck`, `lint`, `unit`, `parity quick` and `perf`.
 They check all TypeScript sources, tests and configuration, build the TypeScript
 packages, and run Rust formatting, Vitest, Cargo tests
 (which compile the Rust binary), tooling tests, built/source CLI parity, and
-a small runtime benchmark. Failed lanes report their first error and a fix;
-later lanes still run. GitHub workflows are forbidden and the complete run must
-take under five minutes.
+a small runtime benchmark. Lane output streams as it runs. Failed lanes report
+their first error and a fix; later lanes still run, and `perf` is `BLOCKED` when
+they fail. GitHub workflows are forbidden, and the checks with their builds must
+take under five minutes; perf's merge-base run is extra.
 
 Performance budgets live in `benchmarks/budgets.json`. The harness measures p50
 and p95 elapsed time and peak resident memory, comparing the current executable
-with the merge base of `HEAD` and `origin/main`. Each measured command gets one
-warmup and five samples; whole builds and test suites are never sampled in a
-loop. The complete check workload is timed once on each version, with a separate
-elapsed-time and peak-memory comparison. When the merge base contains
-benchmarks, its check workload runs once in a temporary source archive and
-builds its binaries. A newly introduced benchmark records `INITIAL` and its
-reason, rather than inventing a baseline; absolute limits still apply.
+with the merge base of `HEAD` and `origin/main`. Each measured command runs one
+warmup round and 20 rounds, alternating with the merge base's build so both see
+the same machine load. p50 and peak memory must stay within the margin; p95 is
+reported and held to absolute limits, because its tail moves past the margin
+between identical binaries. Whole builds and test suites are never sampled in a
+loop: after an untimed warm-up build on both sides, the check workload is timed
+once on each version, with a separate elapsed-time and peak-memory comparison.
+When the merge base contains benchmarks, its check workload runs in a temporary
+source archive. A newly introduced benchmark records `INITIAL` and its reason,
+rather than inventing a baseline; absolute limits still apply.
 The first task measures hook process startup, including launch overhead;
 hook forwarding and its overhead budget arrive with their implementation.
 
