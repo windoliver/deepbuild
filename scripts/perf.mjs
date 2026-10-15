@@ -15,7 +15,7 @@ try {
   const base = run('git', ['ls-tree', '--name-only', baseCommit, manifest]).trim()
     ? JSON.parse(run('git', ['show', `${baseCommit}:${manifest}`])) : null;
   validateBudgets(current, base);
-  if (base?.tasks.length) {
+  if (base?.preflight || base?.tasks.length) {
     archive = mkdtempSync(join(tmpdir(), 'deep-benchmark-base-'));
     // All git reads stay in this checkout. The disposable archive has no .git.
     const source = run('git', ['archive', baseCommit], root, { encoding: null });
@@ -35,6 +35,7 @@ try {
     if (observed.status !== 0) throw Error('current check workload did not finish successfully');
     if (baselineError) throw baselineError;
     if (!current.preflight) throw Error('missing preflight budget');
+    if (base?.preflight && !baselineWorkload) throw Error('missing established preflight measurement');
     const baseline = base?.preflight ? baselineWorkload : null;
     const outcome = compare({ id: 'preflight', ...current.preflight }, observed, baseline, ['elapsedMs', 'peakBytes']);
     const reading = ({ elapsedMs, peakBytes }) => ({ elapsedMs, peakBytes });
