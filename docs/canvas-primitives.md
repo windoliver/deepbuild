@@ -7489,7 +7489,7 @@ For: formulas and math labels in films and figures: a proof's steps, a term that
 **Fields**
 
 - `kind: … | typeset` (beside unwrap, bake, import and the rest)
-- `typeset {syntax: latex_math | latex_text | typst_math | typst = latex_math, parts: [{source: string, id: string (optional)}] ≤ 256 (or `source: string ≤ 8 KiB` for one part), display: bool = true, font: math font name = new_computer_modern_math, macros: [\newcommand line] ≤ 64 = []}`
+- `typeset {syntax: latex_math | latex_text | typst_math | typst = latex_math, parts: [{source: string, id: string (optional)}] ≤ 256 (or source: string ≤ 8 KiB for one part), display: bool = true, font: math font name = new_computer_modern_math, macros: [\newcommand line] ≤ 64 = []}`
 - Tools through `deep.registerJobTool`: first `typst-mitex` (DeepBuild's own: Typst 0.15.1 and mitex 0.2.7 as libraries, Apache-2.0, with its math fonts bundled); another, such as MathJax for `\ce`, joins by qualifying on the kind's fixtures
 - Out: one SVG asset by hash, `made_by {tool, version, input}`, `license` naming each font whose outlines it draws; probe `parts: [{id, source, box: [x, y, w, h], u}]`, `baseline: u`, `glyphs: u32`
 - Part ids: the part's own `id`, else `t-` and its source with each byte outside A-Z, a-z and 0-9 written as `_` and two hex digits; a source that repeats takes `.2`, `.3` in reading order, so `a^2` is `t-a_5e2` in every formula that has it
@@ -7592,7 +7592,7 @@ For: narration made on your machine by default, with a voice whose license allow
 
 **Fields**
 
-- `engine: speech.kokoro@0.9.4 (default) | platform (drafts only) | azure (networked, paid) | edge_tts (not a default) | elevenlabs (networked, paid, behind an authority ask: its character alignments are `tts_marks`, used for word markers only after narration.transcript@1 passes the line)`, or an engine a plug-in registers as a speech tool (the tech design's `deep.registerJobTool`), held to narration.transcript@1 like these
+- `engine: speech.kokoro@0.9.4 (default) | platform (drafts only) | azure (networked, paid) | edge_tts (not a default) | elevenlabs (networked, paid, behind an authority ask: its character alignments are tts_marks, used for word markers only after narration.transcript@1 passes the line)`, or an engine a plug-in registers as a speech tool (the tech design's `deep.registerJobTool`), held to narration.transcript@1 like these
 - `g2p: misaki (English) | pypinyin and jieba (Chinese)`
 - `espeak_ng: never bundled` (your own install, run as its own process)
 - Job key: `hash(engine@version, voice, rate, say)`
