@@ -63,8 +63,9 @@ in under five minutes.
 
 `perf` compares the checkout with its merge base on `origin/main` using the
 budgets in `benchmarks/budgets.json`: p50 and p95 time and peak memory for each
-command, plus one timed run of the whole check workload. p50 and peak memory
-must stay within a budget's margin; p95 has only absolute limits. A budget is
+command, plus one run of the whole check workload. p50, the workload's CPU
+time and peak memory must stay within a budget's margin; p95 and wall time,
+which machine load moves, have only absolute limits. A budget is
 frozen once it reaches main, and a new one records `INITIAL` with its reason. A
 clone made with `--single-branch` needs `git fetch origin main` first.
 
