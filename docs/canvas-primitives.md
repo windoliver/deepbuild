@@ -572,7 +572,10 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `action.entered`, `action.reported` (new) | `{call, plugin, action, request, input}`; `{call, changed: [store item \| notice or send key], verified: true \| false \| unverified, checked, error}` | returns | what changed, on the return card, with a no-op, a false or unverified change or a call never reported ahead of the agent's text; whether a schedule run made a change it declared |
 | `lease.acquired`, `lease.released`, `lease.stale`, `lease.denied` (new) | `{resource, holder, mode, expires}` | leases | lease badges |
 | `merge.dry_run` (new) | `{a, b, conflicts: [path]}` | dry_merges | conflict links, in the attention treatment |
-| `reading.recorded` (new) | `{reading, value, unit, as_of, source, n}` | readings | bound values; estimates as the p50 of the last n |
+| `reading.recorded` (new) | `{reading, value, unit, as_of, source, n, outside}` | readings | bound values; estimates as the p50 of the last n; an outside reading's source and age |
+| `reading.batch` (new) | `{source, as_of, file: sha256}` | nothing: a series resolves through its file | bound values on one series, resolved through the file at the frame's log position |
+| `reading.rollup` (new) | `{source, span: minute \| hour, start, file: sha256}` | rollups | values past 24 hours, shown as the window's last and marked rollup |
+| `layer.rows` (new) | `{layer, project, parent, level, file: sha256}`, each row's citations in the file | layer_rows | a map layer's rows and links as they were at each log position |
 | `pr.merged` (new) | `{pr, merge_sha}` | tasks | the merge station |
 | `evidence.put` | `{sha256, kind, redaction, license, step_times}` | evidence | the evidence player; images |
 | `doc.patched` | `{doc, rev, patch, writer, achieved}` | documents, returns | an item's history and the by-writer lens; what the agent drew, on its return card |
@@ -589,7 +592,9 @@ The films dry run wrote `verdict.created` and `sendback.delivered`; the scenes d
 | tasks (new) | `{task_ref, thread, state, owner, round, next_step: {owner: you \| agent \| job \| check \| nobody, action}}` | the line's rows and stations |
 | open_items (new) | `{task_ref, text, opened, closed}` | the line; receipts |
 | notices (new) | `{kind, key, subscribed_by, sent, cites}` | Needs you (never counted in it) |
-| readings (new) | `{reading, value, unit, as_of, source, fresh_for}` | bound values |
+| readings (new) | `{reading, value, unit, as_of, source, fresh_for, outside}` | bound values |
+| rollups (new) | `{source, span, start, evidence}` | bound values past 24 hours |
+| layer_rows (new) | `{layer, project, parent, level, evidence, log_pos}` | the Map's layers, the time scrubber and compare |
 | plans (new) | `{ask, steps, hash, answered_hash}` | authority cards |
 | deliveries (new) | `{delivery, to, via, outcome}` | the line |
 | dry_merges (new) | `{a, b, conflicts, as_of}` | the Map |
@@ -2079,7 +2084,7 @@ For: hex boards: a tactics map, a strategy board, a hex puzzle, a board game exp
 - `missing: dash | hide = dash`
 - Read-only: the as-of time and the source's name
 
-**Semantics:** Resolved from a record state pinned to the frame, with its as-of time, so a replay shows the same value. Shows the value and unit, with the as-of time on hover. A value goes stale when the frame's pinned host time passes its as-of time plus `stale_after`; the frame clock arms a frame then, so a still view grays it on time and a replay grays it at the same frame. A stale value grays out and shows its age. Updates coalesce to once per frame, and numeric targets go through scales. `super` raises the unit to the number's top, as a degree sign sits.
+**Semantics:** Resolved from a record state pinned to the frame, with its as-of time, so a replay shows the same value. Shows the value and unit, with the as-of time on hover. A value goes stale when the frame's pinned host time passes its as-of time plus `stale_after`; the frame clock arms a frame then, so a still view grays it on time and a replay grays it at the same frame. A stale value grays out and shows its age. Updates coalesce to once per frame, and numeric targets go through scales. `super` raises the unit to the number's top, as a degree sign sits. A reading handle may name one series of a series source, `reading:<source>#<series>`. A value resolved through a rollup shows the window's `last`, marked rollup; one whose Read now the quota refused keeps its value, marked `quota` with the time it can run; and one whose file is gone or fails its hash reads missing with that cause.
 
 **Cost:** O(1) per bound value per reading change, never per frame; about 64 B each; 10,000 refreshed in under 1 ms
 
@@ -6325,12 +6330,12 @@ For: a piece that plays on live data: a lab that follows a sensor, a ticker game
 
 **Fields**
 
-- On a source (the tech design's Source block): `shape: scalar | vec {n: ≤ 16} | layout {name@version (a data layout: Logic: data layouts), bytes: ≤ 256} = scalar`; `delivery: latest | each {max_per_step: ≤ 16} = latest`
+- On a source (the tech design's Source block): `shape: scalar | vec {n: ≤ 16} | layout {name@version (a data layout: Logic: data layouts), bytes: ≤ 256} | series {n: ≤ 10,000} = scalar`; `delivery: latest | each {max_per_step: ≤ 16} = latest`
 - In a logic item's read region, per reading: a `u32` count and 4 zero bytes, then each value as its shape lays it out (an `f64` each for scalar and vec; the layout's bytes padded to 8) followed by its as-of time as an `i64` of microseconds; `latest` holds at most one, `each` every value since the step before, oldest first
 - On `net@1`: `readings_from: player | none = none`
 - Issue: `reading.overflow {reading, step, dropped}`
 
-**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with `reading.overflow`, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key.
+**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with `reading.overflow`, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key. A piece reads one series of a series source, `reading:<source>#<series>`, as a scalar; a whole series never enters a read region, and a piece that binds one is refused at check, naming the source.
 
 **Cost:** Per reading per step, O(bytes); an `each` reading of 16 values of 8 numbers fills about 1.2 KB of read region (estimate). Budget class: as the logic item.
 
