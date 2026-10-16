@@ -8,11 +8,11 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, '-e', `
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, '-e', `
     const fs = require('node:fs');
     if (fs.existsSync('.github/workflows') && fs.readdirSync('.github/workflows').length)
       throw Error('GitHub workflows are forbidden.');
-  `]], fix: 'Format Rust with cargo fmt and remove any .github/workflows entries.' },
+  `]], fix: 'Format Rust with cargo fmt, fix the clippy warnings and remove any .github/workflows entries.' },
   { name: 'unit', commands: [
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run'],
     ['cargo', 'test', '--workspace', '--locked'],
