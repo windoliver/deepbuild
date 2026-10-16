@@ -31,7 +31,42 @@ DeepBuild is an agent-native studio for everything visual. Describe a 2D motion 
 
 ## Status
 
-Design stage: there's nothing to install yet. Version 0 (R1) brings every Claude Code and Codex session into one app, with the asks that need you and proof at every stop. The canvas core lands in R2, and films, figures and 3D scenes in R6. Follow along in the [milestones](https://github.com/windoliver/deepbuild/milestones).
+The repository skeleton runs locally; the app and hub are still in development. Version 0 (R1) brings every Claude Code and Codex session into one app, with the asks that need you and proof at every stop. The canvas core lands in R2, and films, figures and 3D scenes in R6. Follow along in the [milestones](https://github.com/windoliver/deepbuild/milestones).
+
+## Run the checkout
+
+Use Node.js **22.19 or newer** and Rust with Cargo and `rustfmt` (included in
+the default rustup toolchain). On macOS, also install the Xcode Command Line
+Tools; on Linux, install GNU time at `/usr/bin/time`.
+
+```sh
+git clone https://github.com/windoliver/deepbuild.git
+cd deepbuild
+npm install
+npm run build
+npm link
+deep --help
+scripts/preflight
+```
+
+`npm run build` compiles the TypeScript workspaces and the `crates/deep-hook`
+binary, and `npm link` puts the built `deep` command in your npm prefix's `bin`
+directory, which must be on `PATH`. Both binaries print only help and version
+for now; running the skeleton installs no hooks and starts no service.
+
+`scripts/preflight` runs every check locally; `npm run preflight` and
+`npm run release:check` run the same entry point, and there are no GitHub
+workflows. Its lanes are `typecheck`, `lint`, `unit`, `parity quick` and
+`perf`. A failed lane reports its first error and a fix, later lanes still run,
+and `perf` is `BLOCKED` when they fail. The checks with their builds must finish
+in under five minutes.
+
+`perf` compares the checkout with its merge base on `origin/main` using the
+budgets in `benchmarks/budgets.json`: p50 and p95 time and peak memory for each
+command, plus one timed run of the whole check workload. p50 and peak memory
+must stay within a budget's margin; p95 has only absolute limits. A budget is
+frozen once it reaches main, and a new one records `INITIAL` with its reason. A
+clone made with `--single-branch` needs `git fetch origin main` first.
 
 ## Documentation
 

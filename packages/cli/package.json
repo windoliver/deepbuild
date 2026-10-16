@@ -1,0 +1,9 @@
+{
+  "name": "@deepbuild/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22.19.0" },
+  "scripts": { "build": "tsc -p tsconfig.json" }
+}

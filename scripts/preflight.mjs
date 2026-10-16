@@ -1,0 +1,32 @@
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { measureOnce, warm } from './benchmark.mjs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+// Parity and budgets run ./target/debug binaries; a shared Cargo target directory would misplace them.
+delete process.env.CARGO_TARGET_DIR;
+const started = performance.now();
+let observation = {}, checkStatus = 1;
+console.log('Warming builds (not timed)');
+warm(root);
+try {
+  // Lane output streams as it runs, so a measurement that breaks never hides what ran.
+  const { elapsedMs, peakBytes, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
+  observation = { elapsedMs, peakBytes, status };
+  checkStatus = status === 0 ? 0 : 1;
+} catch (error) {
+  console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
+}
+const checksMs = performance.now() - started;
+let perfStatus = 1;
+if (checkStatus) console.log('RUN perf\nBLOCKED perf: the check lanes did not pass, so their workload was not measured\n  Fix: Repair the failing lanes above; perf runs once they pass.');
+else perfStatus = spawnSync(process.execPath, ['scripts/perf.mjs', JSON.stringify(observation)], { cwd: root, stdio: 'inherit' }).status ?? 1;
+process.exitCode = checkStatus || perfStatus;
+// The checks and their builds share one budget; perf's merge-base run is extra.
+const budgetMs = JSON.parse(readFileSync(new URL('../benchmarks/budgets.json', import.meta.url), 'utf8')).preflight.limits.elapsedMs;
+console.log(`Checks elapsed: ${(checksMs / 1000).toFixed(2)} s (budget: <${budgetMs / 1000} s); preflight elapsed: ${((performance.now() - started) / 1000).toFixed(2)} s`);
+if (checksMs >= budgetMs) {
+  console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);
+  process.exitCode = 1;
+}
