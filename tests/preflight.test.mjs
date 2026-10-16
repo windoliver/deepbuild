@@ -143,3 +143,18 @@ test('the unit lane runs every tooling test file', (t) => {
   spawnSync(command, args, { cwd, env: { ...process.env, NODE_TEST_CONTEXT: undefined } });
   assert.deepEqual(['one', 'two'].filter((name) => existsSync(join(cwd, name))), ['one', 'two']);
 });
+
+test('the lint lane fails Rust code that clippy warns about', (t) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-clippy-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, 'src'));
+  writeFileSync(join(cwd, 'Cargo.toml'), '[package]\nname = "fixture"\nversion = "0.0.0"\nedition = "2021"\n');
+  writeFileSync(join(cwd, 'Cargo.lock'), 'version = 4\n\n[[package]]\nname = "fixture"\nversion = "0.0.0"\n');
+  writeFileSync(join(cwd, 'src/main.rs'), 'fn unused() {}\n\nfn main() {}\n');
+  const clippy = checks.find(({ name }) => name === 'lint').commands.find((parts) => parts.includes('clippy'));
+  assert.ok(clippy, 'the lint lane runs clippy');
+  const [command, ...args] = clippy;
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
+  assert.notEqual(result.status, 0, result.stderr);
+  assert.match(result.stderr, /function `unused` is never used/);
+});
