@@ -1093,7 +1093,7 @@ Nine are trusted: slab, lathe, extrude, tube, ball, coil, plate, display and sur
 
 #### Transport
 
-**What it is, and its shape:** The clock, in flicks, with rational frame rates whose frame length is a whole number of flicks. While sound plays, the audio device is the master; otherwise the display is, and export uses a virtual clock. A gesture's entry then takes the flick of the first sample not yet written, and a live world runs one audio block ahead of that sample's place on the timeline, holding while the timeline holds, so what a gesture starts, and each hit it causes, sounds on its own sample live and on replay. Each frame reports when it next changes, so a still canvas costs nothing. Under reduced motion a film still plays, with its large motion replaced in closed form.
+**What it is, and its shape:** The clock, in flicks, with rational frame rates whose frame length is a whole number of flicks. While sound plays, the audio device is the master; otherwise the display is, and export uses a virtual clock. A gesture's entry then takes its stamp from the event's own time plus a short lead, never from the frame that handles it, and every canvas module with steps runs one audio block ahead of the first sample not yet written, holding while the timeline holds, so what a gesture starts, and each hit it causes, sounds on its own sample live and on replay. Each frame reports when it next changes, so a still canvas costs nothing. Under reduced motion a film still plays, with its large motion replaced in closed form.
 
 **It can never:** Run while nothing changes
 
@@ -1237,7 +1237,7 @@ Nine are trusted: slab, lathe, extrude, tube, ball, coil, plate, display and sur
 
 #### Frame history
 
-**What it is, and its shape:** The live view's antialiasing and upscaling while it moves: a fixed window of its own frames on a 1/60 s grid, each jittered by its own time, reprojected to t through poses evaluated at both times and rejected by depth, a color clamp and a reactive mask, so nothing older than the window reaches a frame. A jump renders the window again before it shows, so the frame at a time is the same whether you seek or play, and at rest the view settles to the canonical frame. Its determinism class is live only, so canonical renders draw the frame it settles to.
+**What it is, and its shape:** The live view's antialiasing and upscaling while it moves: a fixed window of its own frames on a grid at the view's frame cap, each jittered by its own time, reprojected to t through poses evaluated at both times and rejected by depth, a color clamp and a reactive mask, so nothing older than the window reaches a frame. A jump renders the window again before it shows, so the frame at a time is the same whether you seek or play, and at rest the view settles to the canonical frame. Its determinism class is live only, so canonical renders draw the frame it settles to.
 
 **It can never:** Reach an export, render-back, a golden, a check or a content key, or use a frame from outside its window
 
