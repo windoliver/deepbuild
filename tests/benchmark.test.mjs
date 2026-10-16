@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { compare, measure, measureOnce, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
+import { compare, measure, measureOnce, parseCpuMs, parsePeakRss, summarize, validateBudgets } from '../scripts/benchmark.mjs';
 
 const budget = { id: 'startup', command: ['binary'], margin: 0.5, limits: { peakBytes: 10_000_000 }, initialReason: 'First measured executable in issue #12.' };
 const config = { tasks: [budget] };
@@ -28,6 +28,25 @@ test('native peak RSS parses bytes on macOS and KiB on Linux without accepting m
   for (const invalid of ['', 'peak_rss_kb=NaN', 'peak_rss_kb=-1', 'peak_rss_kb=0']) {
     assert.throws(() => parsePeakRss(invalid, 'linux'), /peak RSS/);
   }
+});
+
+test('CPU time parses user plus system seconds on macOS and Linux without accepting missing readings', () => {
+  for (const [user, sys] of [[0, 0], [0.01, 0.02], [1.5, 0.25], [123.45, 6.78]]) {
+    const expected = Math.round((user + sys) * 1000);
+    assert.equal(parseCpuMs(`        9.99 real  ${user.toFixed(2)} user  ${sys.toFixed(2)} sys\n  1  maximum resident set size\n`, 'darwin'), expected);
+    assert.equal(parseCpuMs(`Command exited with non-zero status 1\npeak_rss_kb=1\ncpu_s=${user.toFixed(2)} ${sys.toFixed(2)}\n`, 'linux'), expected);
+  }
+  for (const invalid of ['', 'cpu_s=x y', 'cpu_s=-1 0', 'peak_rss_kb=1']) {
+    assert.throws(() => parseCpuMs(invalid, 'linux'), /CPU time/);
+  }
+  assert.throws(() => parseCpuMs('  1  maximum resident set size', 'darwin'), /CPU time/);
+});
+
+test('a measured command reports the CPU it used, not the time it waited', () => {
+  const waiting = measureOnce(['sleep', '0.3'], process.cwd());
+  assert.ok(waiting.elapsedMs >= 300 && waiting.cpuMs < 100, JSON.stringify(waiting));
+  const busy = measureOnce([process.execPath, '-e', 'const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 300_000;);'], process.cwd());
+  assert.ok(busy.cpuMs >= 300, JSON.stringify(busy));
 });
 
 test('first measurement names its reason, while established budgets cannot disappear or change', () => {

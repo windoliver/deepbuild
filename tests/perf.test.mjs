@@ -31,14 +31,22 @@ function repository(t, checks) {
 }
 
 test('the merge base is timed warm, so a slower checkout cannot hide behind its cold build', (t) => {
-  // Cold, the merge base's checks take 3 s; warm, they take one process start.
+  // Cold, the merge base's checks burn 3 s of CPU; warm, they take one process start.
   const { perf } = repository(t, () => `
     import { existsSync } from 'node:fs';
-    if (!existsSync('warm')) await new Promise((resolve) => setTimeout(resolve, 3000));
+    const start = process.cpuUsage();
+    if (!existsSync('warm')) for (let used; (used = process.cpuUsage(start)).user + used.system < 3_000_000;);
   `);
-  const result = perf({ status: 0, elapsedMs: 1500, peakBytes: 1 });
+  const result = perf({ status: 0, elapsedMs: 1500, cpuMs: 1500, peakBytes: 1 });
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /FAIL perf: preflight: elapsedMs 1500 regressed/);
+  assert.match(result.stdout, /FAIL perf: preflight: cpuMs 1500 regressed/);
+});
+
+test('wall time that only machine load stretched is not a regression', (t) => {
+  const { perf } = repository(t, () => '');
+  const result = perf({ status: 0, elapsedMs: 60_000, cpuMs: 1, peakBytes: 1 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /"task":"preflight"[^\n]*"status":"PASS"/);
 });
 
 test('a checkout without origin/main is blocked with the fetch that fixes it', (t) => {

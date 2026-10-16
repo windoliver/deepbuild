@@ -20,10 +20,18 @@ export function parsePeakRss(output, platform) {
   return bytes;
 }
 
+// User plus system CPU seconds of the command and every child it waited for, in ms.
+export function parseCpuMs(output, platform) {
+  const match = platform === 'darwin' ? output.match(/^\s*[\d.]+ real\s+([\d.]+) user\s+([\d.]+) sys\s*$/m) : output.match(/^cpu_s=([\d.]+) ([\d.]+)$/m);
+  const ms = Math.round((Number(match?.[1]) + Number(match?.[2])) * 1000);
+  if (!Number.isSafeInteger(ms) || ms < 0) throw Error('Missing or invalid CPU time');
+  return ms;
+}
+
 // stream shows the command's output as it runs instead of capturing it.
 export function measureOnce(command, cwd, stream = false) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('BLOCKED: native peak RSS requires macOS or Linux');
-  const flags = process.platform === 'darwin' ? ['-l'] : ['-f', 'peak_rss_kb=%M'];
+  const flags = process.platform === 'darwin' ? ['-l'] : ['-f', 'peak_rss_kb=%M\ncpu_s=%U %S'];
   const directory = mkdtempSync(join(tmpdir(), 'deep-benchmark-time-'));
   const timing = join(directory, 'time');
   try {
@@ -33,8 +41,9 @@ export function measureOnce(command, cwd, stream = false) {
       : { cwd, encoding: 'utf8', timeout: 300_000, maxBuffer: 32 * 1024 * 1024 });
     const elapsedMs = performance.now() - started;
     if (result.error) throw result.error;
-    const peakBytes = parsePeakRss(readFileSync(timing, 'utf8'), process.platform);
-    return { elapsedMs, peakBytes, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    const report = readFileSync(timing, 'utf8');
+    const peakBytes = parsePeakRss(report, process.platform);
+    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

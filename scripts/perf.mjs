@@ -39,10 +39,12 @@ try {
     baseline = measureOnce([process.execPath, 'scripts/checks.mjs'], archive);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
-  const reading = ({ elapsedMs, peakBytes }) => ({ elapsedMs, peakBytes });
+  const reading = ({ elapsedMs, cpuMs, peakBytes }) => ({ elapsedMs, cpuMs, peakBytes });
   const workloadBase = base?.preflight ? baseline : null;
   try {
-    const outcome = compare({ id: 'preflight', ...current.preflight }, observed, workloadBase, ['elapsedMs', 'peakBytes']);
+    // One run per side: its wall time moves with machine load, so only CPU time and peak memory are
+    // compared with the merge base. Wall time is held to the budget's cap by preflight.mjs.
+    const outcome = compare({ id: 'preflight', ...current.preflight }, observed, workloadBase, ['cpuMs', 'peakBytes']);
     console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(observed), base: workloadBase && reading(workloadBase) }));
   } catch (error) {
     verdicts.push(['FAIL', error.message, regressed]);
