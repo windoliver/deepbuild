@@ -7,7 +7,7 @@ Read [docs/technical-design.md](docs/technical-design.md) before edits. Keep thi
 These hold in the core and every extension:
 
 1. An agent's word is never evidence. Only check results are.
-2. Nothing missing or unrun passes. It's `BLOCKED` or `INVALID`.
+2. Nothing missing or unrun passes. It's `BLOCKED`, `INVALID` or `INCONCLUSIVE`, never `PASS`.
 3. Agents can't change checks or decisions.
 4. A person sees only what needs a person, and never the same question twice.
 

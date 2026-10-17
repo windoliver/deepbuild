@@ -1986,7 +1986,7 @@ For: speed trails on type, motion echoes, a time-difference reveal
 
 #### Frame and group: warp
 
-For: a plane bent by z², a shear shown as 3Blue1Brown shows it, a wave through a word, a line that ripples
+For: a plane bent by z², a shear shown as its matrix changes, a wave through a word, a line that ripples
 
 **Fields**
 
@@ -2375,7 +2375,7 @@ For: text-mode games and simulations: a dungeon drawn in glyphs, a survival map 
 - `roles` include `math`, a math face such as New Computer Modern Math (OFL), so a lone symbol set as text@1 (a θ beside an angle) matches the typeset formulas beside it
 - `fallback: [font name]` (bundled faces in order, such as Noto Sans for each script, Noto Sans CJK and an emoji face, each with a license that allows embedding)
 - `time: {quantize_hz, smooth: [what stays smooth], boil: {hz, amount_px, scope, while: drawing | moving | always, cycle: u8 = 0, seed}}` (with `cycle: n`, the boil's seed is ⌊t × hz⌋ mod n, so n drawings repeat)
-- `tone_map: none | filmic`; `exposure: EV100`; `finish: [effect]` (grain, vignette, tint, the grade, deband, print wear, the tone curve and the screen run as one shipped pass with identity defaults: Look look@1: print finishes; ao moves to Look look@1: ao); `transition: {kind, span}`
+- `tone_map` (none, filmic, agx or neutral, defined below); `exposure: EV100`; `finish: [effect]` (grain, vignette, tint, the grade, deband, print wear, the tone curve and the screen run as one shipped pass with identity defaults: Look look@1: print finishes; ao moves to Look look@1: ao); `transition: {kind, span}`
 
 **Semantics:** One look per shot, the document's by default, and switching it never changes data; the status map and legend stay the document's in every shot. Sizes are px at design size, and the theme is part of every cache key. The boil is defined here only, as a function of time and IDs, never of playback, and hatch fills never reseed between frames. The status distance and the status guard apply wherever status can show (the status-color rule); any other document, such as an art film played on its own, may use any palette.
 
@@ -2391,7 +2391,7 @@ For: the castle at night (`agx`); figures, the house and 3D charts (`neutral`)
 
 **Fields**
 
-- `tone_map: none | filmic | agx {white: f32 = 16.29, contrast: f32 = 1.25} | neutral = none (agx as an analytic curve between the AgX inset and outset matrices, per channel: below 0.18, x^c ÷ (x^c + a) with a = (1 ÷ 0.18 − 1) × 0.18^c; above it, 0.18 + k·d·(1 + d ÷ w) ÷ (1 + k·d ÷ 0.82) with d = x − 0.18, k the toe's slope at 0.18 and w = k × (white − 0.18)² ÷ 0.82, so contrast c and white are its only parameters; neutral after Khronos's reference; both analytic: no LUT asset)`
+- `tone_map: none | filmic | agx {white: f32 = 16.29, contrast: f32 = 1.25} | neutral = none (agx as an analytic curve between the AgX inset and outset matrices, per channel: below 0.18, x^c ÷ (x^c + a) with a = (1 ÷ 0.18 − 1) × 0.18^c; above it, 0.18 + k·d·(1 + d ÷ w) ÷ (1 + k·d ÷ 0.82) with d = x − 0.18, k the toe's slope at 0.18 and w = k × (white − 0.18)² ÷ 0.82, clamped to 1 above white, so contrast c and white are its only parameters; neutral after Khronos's reference; both analytic: no LUT asset)`
 - `filmic` names the ACES fit the prototype uses
 
 **Semantics:** `agx` rolls bright lamps off without the hue shift and over-saturation a filmic curve gives. `neutral` keeps base colors, and so the look's roles, recognizable up to bright highlights. Status colors still draw after tone mapping, so no curve can change one.
@@ -3495,7 +3495,7 @@ For: films with characters drawn in the film's own look: a picture book's girl, 
 **Fields**
 
 - `kinds: puppet.rig@1`
-- Check plug-in: the first-party rig check plug-in, which registers `rig.pop, rig.inbetween, rig.shoulder_order, rig.props_between_palms, rig.expressions, rig.reach, rig.contacts_2d, rig.views, rig.marks` (Check input: rig kinds); the pack and the plug-in make the `puppet@1` kit
+- Check plug-in: the first-party rig check plug-in, which registers `rig.pop, rig.inbetween, rig.shoulder_order, rig.props_between_palms, rig.expressions, rig.reach, rig.contacts_2d, rig.views, rig.marks, rig.lipsync` (Check input: rig kinds); the pack and the plug-in make the `puppet@1` kit
 - `sheet: model` (views × expressions × key poses)
 - Examples: one 2D rig, one rigid 3D puppet and a faceless pictogram, each with its model sheet and a walk
 
