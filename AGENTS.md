@@ -13,12 +13,12 @@ These hold in the core and every extension:
 
 ## Proof
 
+- Acceptance tests come first: a job that never sees the implementation writes them from the issue, the design and the base commit only, with the issue's expected values, under `tests/acceptance/<issue>/`, protected as `.deepbuild/` is. Never edit one; dispute it as a separate proposal (`deep_propose` once it exists) with its failing output.
 - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
-- Take expected values from the issue, never your implementation.
-- Reuse sufficient tests. Add one only for required behavior or a specific regression from this change that existing coverage misses. Prove it fails on a wrong program (merge base or reverted fix); otherwise it proves nothing.
+- Reuse sufficient tests. Add one only for required behavior or a specific regression from this change that existing coverage misses. Prove it fails on a wrong program (merge base or reverted fix), in the way the criterion names; otherwise it proves nothing.
 - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
 - Use the smallest test on real components: end-to-end for user-visible behavior, fast tests for logic, property tests for parsers/numbers. Mock only at boundaries you don't own.
-- Never edit, skip, weaken, special-case or delete failing tests/checks to finish, or retry until green. If they cannot pass, stop and report `BLOCKED`.
+- Never edit, skip, weaken, special-case, re-record or delete failing tests, goldens or checks to finish, or retry until green; change a test, golden or expected output that covers a criterion only through a separately approved proposal. If they cannot pass, stop and report `BLOCKED`.
 - Run relevant checks once per meaningful change; rerun only affected checks after corrections. Full preflight requires task/release justification. Documentation-only edits need diff review, not code tests.
 - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
 
