@@ -13,19 +13,19 @@ These hold in the core and every extension:
 
 ## Proof
 
-- Acceptance tests come first: a job that never sees the implementation writes them from the issue, the design and the base commit only, with the issue's expected values, under `tests/acceptance/<issue>/`, protected as `.deepbuild/` is. They drive only surfaces the issue or a contract names, never an internal module. Never edit one; dispute it as a separate proposal (`deep_propose` once it exists) with its failing output.
+- Acceptance tests come first, in `tests/acceptance/<issue>/`: a job that sees only the issue, the design and the base commit writes them with the issue's expected values, through surfaces those name. Never edit one; a dispute goes to that job's blind redraft (design: Dogfooding).
 - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
-- Reuse sufficient tests. Add one only for required behavior or a specific regression from this change that existing coverage misses. Prove it fails on a wrong program (the merge base or a reverted fix for a fix; the criterion's planted wrong program or a mutant for new code), in the way the criterion names; otherwise it proves nothing.
+- Reuse sufficient tests; add one only for required behavior or a regression existing coverage misses. It must fail on a wrong program as its criterion names (the merge base or a reverted fix for a fix; a planted twin or a mutant for new code), or it proves nothing.
 - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
-- Use the smallest test on real components: end-to-end for user-visible behavior, fast tests for logic, property tests for parsers/numbers. Mock only at boundaries you don't own.
-- Never edit, skip, weaken, special-case, re-record or delete failing tests, goldens or checks to finish, or retry until green; change a test, golden or expected output that covers a criterion only through a separately approved proposal. If they cannot pass, stop and report `BLOCKED`.
-- Run relevant checks once per meaningful change; rerun only affected checks after corrections. Full preflight requires task/release justification. Documentation-only edits need diff review, not code tests.
+- Use the smallest test on real components: end-to-end for what users see, fast tests for logic, property tests for parsers and numbers. Mock only at boundaries you don't own.
+- Never edit, skip, weaken, special-case, re-record or delete failing tests, goldens or checks to finish, or retry until green; change one that covers a criterion only by an approved proposal. If they can't pass, stop and report `BLOCKED`.
+- Run relevant checks once per meaningful change, and only affected ones after corrections. Full preflight needs a task or release reason. Docs-only edits need diff review, not code tests.
 - A PR says `Closes #n` only when every acceptance criterion in the issue is proven. Otherwise it says `Part of #n` and lists what's open.
 
 ## Machine and safety
 
 - Never kill processes by name or port. Stop only processes you started, by PID.
-- Never write hooks into any repo's settings. This project installs hooks at user level only.
+- Never write hooks into a repo's settings; this project installs hooks at user level only.
 - No CI on push or pull request. Checks run locally; everything runs once at release through preflight.
 - No secrets or personal data in code, fixtures, logs or evidence. Redact.
 - Ported code keeps its license notice in the receiving file. Never port GPL code.
@@ -34,9 +34,8 @@ These hold in the core and every extension:
 
 - Keep the core to the record, gates, asks and adapters. Explain why an extension cannot meet any proposed addition.
 - One PR per issue, under about 400 handwritten lines or explain why it cannot split. Note unrelated findings separately.
-- Map changes, tests and tools to requirements or necessary regression protection for this change. Never drop or move criteria without user approval.
-- Delete your additions whose removal changes neither required behavior nor meaningful proof; revert your unrelated edits. Preserve unrelated existing code, others' work and required failing checks.
+- Map changes, tests and tools to requirements or regression protection this change needs. Never drop or move criteria without user approval.
+- Delete your additions whose removal changes neither required behavior nor proof, and code your change leaves without a caller; revert unrelated edits. Preserve others' code and work and required failing checks.
 - No option, flag, fallback, config key, dependency, export or duplicate test the task doesn't need.
-- Leave no code without a caller, and delete what your change leaves unused.
 - Add a shared abstraction only when two callers need it now.
 - Reach a module only through its public entry. No import cycles, and the core never imports an extension.
