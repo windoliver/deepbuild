@@ -13,9 +13,9 @@ These hold in the core and every extension:
 
 ## Proof
 
-- Acceptance tests come first: a job that never sees the implementation writes them from the issue, the design and the base commit only, with the issue's expected values, under `tests/acceptance/<issue>/`, protected as `.deepbuild/` is. Never edit one; dispute it as a separate proposal (`deep_propose` once it exists) with its failing output.
+- Acceptance tests come first: a job that never sees the implementation writes them from the issue, the design and the base commit only, with the issue's expected values, under `tests/acceptance/<issue>/`, protected as `.deepbuild/` is. They drive only surfaces the issue or a contract names, never an internal module. Never edit one; dispute it as a separate proposal (`deep_propose` once it exists) with its failing output.
 - Every behavior fix starts with a test failing for the expected reason. Commit it first only when authorized; otherwise save failing output and leave changes uncommitted. Make it pass unchanged.
-- Reuse sufficient tests. Add one only for required behavior or a specific regression from this change that existing coverage misses. Prove it fails on a wrong program (merge base or reverted fix), in the way the criterion names; otherwise it proves nothing.
+- Reuse sufficient tests. Add one only for required behavior or a specific regression from this change that existing coverage misses. Prove it fails on a wrong program (the merge base or a reverted fix for a fix; the criterion's planted wrong program or a mutant for new code), in the way the criterion names; otherwise it proves nothing.
 - Test behavior, not implementation. A test that would still pass if every function it calls returned nothing is not a test; rewrite or delete it.
 - Use the smallest test on real components: end-to-end for user-visible behavior, fast tests for logic, property tests for parsers/numbers. Mock only at boundaries you don't own.
 - Never edit, skip, weaken, special-case, re-record or delete failing tests, goldens or checks to finish, or retry until green; change a test, golden or expected output that covers a criterion only through a separately approved proposal. If they cannot pass, stop and report `BLOCKED`.
