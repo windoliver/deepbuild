@@ -5,9 +5,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-// The repo's declared test paths. The unit lane's runners find their files inside them, and perf sets
-// the test files a change adds or modifies apart by them.
+// The repo's declared test paths. The unit lane's runners take their file patterns from them, and perf
+// sets the test files a change adds or modifies apart by them.
 export const testPaths = ['tests/**', 'packages/**/test/**', 'packages/**/*.test.ts', 'crates/*/tests/**'];
+/** A runner's file patterns: each declared path narrowed to that runner's test files. Cargo finds its own. */
+export const testGlobs = (extension) => testPaths
+  .map((path) => (path.endsWith('/**') ? `${path}/*.test.${extension}` : path))
+  .filter((glob) => glob.endsWith(`.test.${extension}`) && !glob.startsWith('crates/'));
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -19,7 +23,7 @@ export const checks = [
   { name: 'unit', commands: [
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run'],
     ['cargo', 'test', '--workspace', '--locked'],
-    [process.execPath, '--test', 'tests/**/*.test.mjs'],
+    [process.execPath, '--test', ...testGlobs('mjs')],
   ], fix: 'Repair the behavior named by the failing test.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
