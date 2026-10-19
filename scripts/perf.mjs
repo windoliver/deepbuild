@@ -95,15 +95,20 @@ try {
     let samples, runs;
     try {
       samples = measure(budget.command, root, established && { command: established.command, cwd: archive });
-      // Each limit is judged on five runs, each its own warm-up round and 20 samples.
-      runs = Object.keys(budget.limits).length ? Array.from({ length: 5 }, () => measure(budget.command, root)[0]) : [];
+      // Each limit is judged on five timed runs after one untimed warm-up run.
+      const once = () => {
+        const result = measureOnce(budget.command, root);
+        if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
+        return result;
+      };
+      runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
     } catch (error) {
       verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
       continue;
     }
     const [now, then = null] = samples;
     const machine = fingerprint();
-    const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => run[metric]), fingerprint: machine })]));
+    const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
     let outcome;
     try {
       // compare holds only the merge-base regression here; the limits are judged above.
