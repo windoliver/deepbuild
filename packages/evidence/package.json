@@ -1,0 +1,10 @@
+{
+  "name": "@deepbuild/evidence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=22.19.0" },
+  "exports": "./dist/index.js",
+  "scripts": { "build": "tsc -p tsconfig.json" }
+}
