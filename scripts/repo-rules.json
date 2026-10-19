@@ -2,7 +2,7 @@
   "deps": {
     "package.json": {
       "devDependencies": {
-        "@types/node": { "spec": "22.20.5", "why": "Issue #12: Node's types for the TypeScript workspaces." },
+        "@types/node": { "spec": "24.19.2", "why": "Issue #12: Node's types for the TypeScript workspaces, at the Node 24.22 floor." },
         "fast-check": { "spec": "4.10.2", "why": "Issue #15: the seeded 1,000-case property test of the scrubber (criterion 16)." },
         "typescript": { "spec": "5.9.3", "why": "Issue #12: the typecheck lane and the workspace builds." },
         "vitest": { "spec": "5.0.5", "why": "Issue #12: the unit lane's TypeScript tests." }
