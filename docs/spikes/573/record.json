@@ -1,0 +1,2397 @@
+{
+ "spike": 573,
+ "evidence": {
+  "manifestSha256": "3f0fa06fe68710e3d1add6bc900641c5ad2802950a71f0851853f171fcf21f8f"
+ },
+ "issues": [
+  {
+   "key": "e33d78df1407b46813355e93fa52b7c1204114e6c497fd58133bdc0df5ffb4f5",
+   "ref": "windoliver/deepbuild#12",
+   "base": "8f534c8e1c3f6e88e1ffc7b590f6ea508fa5495c",
+   "fix": "1e0b2c6196c660ad6e4e056b7b91dca81d49bbf5",
+   "ui": false,
+   "criteria": [
+    "04ae82dd",
+    "2bd67310",
+    "db1eb90a",
+    "df90b3f0",
+    "8157ad10",
+    "e7bbd23e",
+    "d4f17597",
+    "f3464117"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "df90b3f0"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "db1eb90a"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "04ae82dd"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "2bd67310"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": [
+      "df90b3f0"
+     ]
+    },
+    {
+     "id": "R8",
+     "run": "plain-1",
+     "covers": [
+      "8157ad10"
+     ]
+    },
+    {
+     "id": "R9",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R10",
+     "run": "plain-1",
+     "covers": [
+      "d4f17597"
+     ]
+    },
+    {
+     "id": "R11",
+     "run": "plain-1",
+     "covers": []
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "6c5bdbe295e96bc0004a5070788a8b5380fbe98568b4c7eb1f64b3856409171d",
+   "ref": "windoliver/deepbuild#48",
+   "base": "1de288cb4c27b33e83f75ef854d49caaaff41088",
+   "fix": "dcfd7b86f55373c14181f5da827fb2aee6f663b0",
+   "ui": false,
+   "criteria": [
+    "d82aa825",
+    "a0c92350",
+    "e5ba087b",
+    "25de0c6b",
+    "0f909fd3"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "d82aa825"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "a0c92350"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "e5ba087b"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "25de0c6b"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    }
+   ],
+   "checks": []
+  },
+  {
+   "key": "6cd54b5b3d69300c95ecefdf52237202c40e11a23dd878ae574feb131808e950",
+   "ref": "windoliver/deepbuild#246",
+   "base": "dcfd7b86f55373c14181f5da827fb2aee6f663b0",
+   "fix": "6acd16c797a7279f420534e541c7602eadfb3c9e",
+   "ui": false,
+   "criteria": [
+    "2e9cb165",
+    "094f105c",
+    "42978497",
+    "5108fe64",
+    "51bf5bdf",
+    "939f63f9",
+    "a3e35806",
+    "1765221d",
+    "a62d7384",
+    "a24d287e",
+    "833bf30b",
+    "3ad46066",
+    "666054b0",
+    "dbdbd69d",
+    "43c90abd"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "51bf5bdf"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": []
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    }
+   ]
+  },
+  {
+   "key": "b613adf76e2adf7015371856f25b4fe471b329a6272f653a286c37bc419abd2e",
+   "ui": false,
+   "criteria": [
+    "31cbecfc",
+    "e557fe7c",
+    "2fa45dda",
+    "153a87e9"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "2fa45dda"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "31cbecfc"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R8",
+     "run": "plain-1",
+     "covers": [
+      "153a87e9"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "f30142c2c1bd45cf39fb7ba8890bd57115830faf4a1566961ab7ef6dd79dbf4c",
+   "ui": false,
+   "criteria": [
+    "cbcc129f",
+    "f537732e",
+    "b20c688b",
+    "17e2c9e7",
+    "7b4eca10"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "cbcc129f"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "f537732e"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "b20c688b"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "17e2c9e7"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "7b4eca10"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    },
+    {
+     "id": "C3",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C4",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "b94c8b4d0506965cef66cd88b6c12cbead87dcdf32fc36a5a6c99d6f22a3a89e",
+   "ui": false,
+   "criteria": [
+    "01498163",
+    "218e44f3",
+    "3f357fac",
+    "786d3bca"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "01498163"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "218e44f3"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "786d3bca"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C3",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "7327d497fa14f89da70f98ba57879187382022f80972b33fa4d880c42658c950",
+   "ui": false,
+   "criteria": [
+    "0c940e35",
+    "b5ecb6da",
+    "d3899ad3"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "0c82ecb63efb48b5249110183e7000211c4c29c1a721c35395c27a586951543b",
+   "ui": false,
+   "criteria": [
+    "edd49deb",
+    "aafe3799",
+    "312fd20b"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "edd49deb"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "edd49deb"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "312fd20b"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    }
+   ]
+  },
+  {
+   "key": "3c7ffd01050e94d672fa8e834c4e3d21a76bd5d842cecd6e133df627072ae24e",
+   "ui": false,
+   "criteria": [
+    "700ec738",
+    "0f49ca85",
+    "fb31c798",
+    "4156f92a"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "0f49ca85"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "fb31c798"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "4156f92a"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "e54435fb4c37771b1b7559ef4b25f793c1da4777cce77b2031c0bd160ef5ba0f",
+   "ui": false,
+   "criteria": [
+    "0f1d36ad",
+    "5154f0a4",
+    "0cd2bd20",
+    "a86d842e",
+    "5be0032e"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "0cd2bd20"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "5be0032e"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": []
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    }
+   ]
+  },
+  {
+   "key": "8dc0eb26182207f9decb30d6306be0deac58e3549a9bf7f5d8ad0faccee28811",
+   "ui": false,
+   "criteria": [
+    "952d2e76",
+    "2bef6f35",
+    "69393314",
+    "2258aaf6",
+    "a584242c",
+    "fd61f32f",
+    "dacc65b6",
+    "5ecf1368"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "2258aaf6"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "2bef6f35"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": [
+      "a584242c"
+     ]
+    },
+    {
+     "id": "R8",
+     "run": "plain-1",
+     "covers": [
+      "fd61f32f"
+     ]
+    },
+    {
+     "id": "R9",
+     "run": "plain-1",
+     "covers": [
+      "dacc65b6"
+     ]
+    },
+    {
+     "id": "R10",
+     "run": "plain-1",
+     "covers": [
+      "5ecf1368"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "383d98c8397b65c277d8361d667df8620aee61ebb6b62b869a28c3f2c77459f0",
+   "ui": false,
+   "criteria": [
+    "98202c1b",
+    "70fb50cb",
+    "94318dd6",
+    "ba4a7c3a",
+    "db9e889e",
+    "bc3d1bc5"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "98202c1b"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "98202c1b"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "70fb50cb"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "db9e889e"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": [
+      "bc3d1bc5"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "e43ea635378834c62ea12204bf18c8925db9d65d06ae9891bee80b6c21c468fe",
+   "ui": false,
+   "criteria": [
+    "b2ab56f2",
+    "eb08aa2f",
+    "1322cc24",
+    "0fda3c61",
+    "6ae44b63",
+    "01f263e9",
+    "48bfaab3"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "b2ab56f2"
+     ]
+    },
+    {
+     "id": "R1b",
+     "run": "plain-1",
+     "covers": [
+      "b2ab56f2"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "eb08aa2f"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3b",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "6ae44b63"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": []
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    },
+    {
+     "id": "C3",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "4a39da7a3608dc2d275e530a83e140e8dac0ccd0540b55fdd7180607e2cd789d",
+   "ui": false,
+   "criteria": [
+    "7b88b4eb",
+    "18dc6f17",
+    "c5ec6435",
+    "c369eb94",
+    "c75c75d6",
+    "7b7d8ab6"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "7b88b4eb"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "18dc6f17"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "c5ec6435"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "c369eb94"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "c75c75d6"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "7b7d8ab6"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "a4e2754b316164a013138e5d892030b02bb93c9af3cd2a38a7c6a48a69c33cae",
+   "ui": false,
+   "criteria": [
+    "55950eb1",
+    "56e3e286",
+    "61ffbf90",
+    "7fe56ece",
+    "f781e89d",
+    "332390c3"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "7fe56ece"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "7fe56ece"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "332390c3"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "f781e89d"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": [
+      "55950eb1"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    },
+    {
+     "id": "C3",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    }
+   ]
+  },
+  {
+   "key": "fd69652bfec9072d772dea2d7335f518629a5428633676bd45a8adc7098a9a85",
+   "ui": true,
+   "criteria": [
+    "d62326e8",
+    "b85f1782"
+   ],
+   "runs": [
+    {
+     "id": "plain-0",
+     "variant": "plain",
+     "counted": false,
+     "discarded": "Drafted under the spike's first UI prompt, which let a screen criterion go without a journey; this draft wrote none, so the UI issues were redrafted under a prompt that asks for one. Its audit also flagged the checkout's index: two tracked files the base's own .gitignore hides were on disk but not in the checkout's commit (fixed before the redraft). Nothing in its inputs came from the fix."
+    },
+    {
+     "id": "goal-steps-0",
+     "variant": "goal-steps",
+     "counted": false,
+     "discarded": "Drafted under the spike's first UI prompt, which let a screen criterion go without a journey; this draft wrote none and no goal step, so the UI issues were redrafted under a prompt that asks for one. Its audit also flagged the checkout's index: two tracked files the base's own .gitignore hides were on disk but not in the checkout's commit (fixed before the redraft). Nothing in its inputs came from the fix."
+    },
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    },
+    {
+     "id": "goal-steps-1",
+     "variant": "goal-steps",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "d62326e8"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "b85f1782"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "b85f1782"
+     ]
+    },
+    {
+     "id": "R1",
+     "run": "goal-steps-1",
+     "covers": [
+      "d62326e8"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "goal-steps-1",
+     "covers": [
+      "b85f1782"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "goal-steps-1",
+     "covers": [
+      "b85f1782"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C1",
+     "run": "goal-steps-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C3",
+     "run": "goal-steps-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "c0fb0289ed008e712e279e2bf7a8c8f88113f2b3c7c2db35dcb2d6cfd025f16a",
+   "ui": true,
+   "criteria": [
+    "2e3f3e98",
+    "a107a7a1",
+    "bf6ccf87",
+    "9a6ad2ac"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    },
+    {
+     "id": "goal-steps-1",
+     "variant": "goal-steps",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "bf6ccf87"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "9a6ad2ac"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R1",
+     "run": "goal-steps-1",
+     "covers": [
+      "2e3f3e98"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "goal-steps-1",
+     "covers": [
+      "a107a7a1"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "goal-steps-1",
+     "covers": [
+      "a107a7a1"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "goal-steps-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "goal-steps-1",
+     "covers": [
+      "2e3f3e98"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "goal-steps-1",
+     "covers": []
+    },
+    {
+     "id": "R7",
+     "run": "goal-steps-1",
+     "covers": [
+      "bf6ccf87"
+     ]
+    },
+    {
+     "id": "R8",
+     "run": "goal-steps-1",
+     "covers": [
+      "9a6ad2ac"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C1",
+     "run": "goal-steps-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C2",
+     "run": "goal-steps-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634",
+   "ui": true,
+   "criteria": [
+    "70856a05",
+    "315f9e34",
+    "3ce87aaf",
+    "eb188e59",
+    "89319cf0"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    },
+    {
+     "id": "goal-steps-1",
+     "variant": "goal-steps",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": [
+      "70856a05"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "315f9e34"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": [
+      "315f9e34"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "eb188e59"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "89319cf0"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R1",
+     "run": "goal-steps-1",
+     "covers": [
+      "70856a05"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "goal-steps-1",
+     "covers": [
+      "315f9e34"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "goal-steps-1",
+     "covers": [
+      "3ce87aaf"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "goal-steps-1",
+     "covers": [
+      "eb188e59"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "goal-steps-1",
+     "covers": [
+      "89319cf0"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "goal-steps-1",
+     "covers": []
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "elsewhere",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C3",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C4",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C5",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    },
+    {
+     "id": "C1",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 3,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 3,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C3",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 3,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C4",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 3,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d",
+   "ui": true,
+   "criteria": [
+    "b1169756",
+    "a7f38326",
+    "f4e2b994",
+    "1341161f"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    },
+    {
+     "id": "goal-steps-1",
+     "variant": "goal-steps",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": [
+      "a7f38326"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": [
+      "a7f38326"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "f4e2b994"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": [
+      "1341161f"
+     ]
+    },
+    {
+     "id": "R1",
+     "run": "goal-steps-1",
+     "covers": [
+      "b1169756"
+     ]
+    },
+    {
+     "id": "R2",
+     "run": "goal-steps-1",
+     "covers": [
+      "b1169756"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "goal-steps-1",
+     "covers": [
+      "b1169756"
+     ]
+    },
+    {
+     "id": "R4",
+     "run": "goal-steps-1",
+     "covers": [
+      "a7f38326"
+     ]
+    },
+    {
+     "id": "R5",
+     "run": "goal-steps-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "goal-steps-1",
+     "covers": [
+      "a7f38326"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "goal-steps-1",
+     "covers": [
+      "f4e2b994"
+     ]
+    },
+    {
+     "id": "R8",
+     "run": "goal-steps-1",
+     "covers": [
+      "1341161f"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C2",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C3",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    },
+    {
+     "id": "C4",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "elsewhere",
+     "fix": "failed"
+    },
+    {
+     "id": "C5",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C6",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C7",
+     "run": "plain-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "elsewhere",
+     "fix": "failed"
+    },
+    {
+     "id": "C1",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C2",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C3",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    },
+    {
+     "id": "C4",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C5",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C6",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "elsewhere",
+     "fix": "failed"
+    },
+    {
+     "id": "C7",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    },
+    {
+     "id": "C8",
+     "run": "goal-steps-1",
+     "journey": true,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "passed"
+    }
+   ]
+  },
+  {
+   "key": "02013d336d8bde55ad36f58ae2a824273ab391e795571eb3fd30bd4ff29973fb",
+   "ui": true,
+   "criteria": [
+    "093d23b4",
+    "b04b6f1a",
+    "0182a863",
+    "fa63d5c0"
+   ],
+   "runs": [
+    {
+     "id": "plain-1",
+     "variant": "plain",
+     "counted": true
+    },
+    {
+     "id": "goal-steps-1",
+     "variant": "goal-steps",
+     "counted": true
+    }
+   ],
+   "requirements": [
+    {
+     "id": "R1",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "plain-1",
+     "covers": [
+      "fa63d5c0"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "plain-1",
+     "covers": []
+    },
+    {
+     "id": "R6",
+     "run": "plain-1",
+     "covers": [
+      "0182a863"
+     ]
+    },
+    {
+     "id": "R7",
+     "run": "plain-1",
+     "covers": [
+      "fa63d5c0"
+     ]
+    },
+    {
+     "id": "R1",
+     "run": "goal-steps-1",
+     "covers": []
+    },
+    {
+     "id": "R2",
+     "run": "goal-steps-1",
+     "covers": [
+      "fa63d5c0"
+     ]
+    },
+    {
+     "id": "R3",
+     "run": "goal-steps-1",
+     "covers": []
+    },
+    {
+     "id": "R4",
+     "run": "goal-steps-1",
+     "covers": []
+    },
+    {
+     "id": "R5",
+     "run": "goal-steps-1",
+     "covers": [
+      "0182a863"
+     ]
+    },
+    {
+     "id": "R6",
+     "run": "goal-steps-1",
+     "covers": [
+      "fa63d5c0"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "id": "C1",
+     "run": "plain-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C1",
+     "run": "goal-steps-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "assertion",
+     "fix": "failed"
+    },
+    {
+     "id": "C2",
+     "run": "goal-steps-1",
+     "journey": false,
+     "goalSteps": 0,
+     "base": "passed",
+     "fix": "passed"
+    }
+   ]
+  }
+ ],
+ "readings": [
+  {
+   "id": "coverage:e33d78df1407b46813355e93fa52b7c1204114e6c497fd58133bdc0df5ffb4f5",
+   "covered": 6,
+   "criteria": 8,
+   "share": 0.75
+  },
+  {
+   "id": "checks:e33d78df1407b46813355e93fa52b7c1204114e6c497fd58133bdc0df5ffb4f5",
+   "drafted": 2,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:6c5bdbe295e96bc0004a5070788a8b5380fbe98568b4c7eb1f64b3856409171d",
+   "covered": 4,
+   "criteria": 5,
+   "share": 0.8
+  },
+  {
+   "id": "checks:6c5bdbe295e96bc0004a5070788a8b5380fbe98568b4c7eb1f64b3856409171d",
+   "drafted": 0,
+   "proven": 0,
+   "share": 0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:6cd54b5b3d69300c95ecefdf52237202c40e11a23dd878ae574feb131808e950",
+   "covered": 1,
+   "criteria": 15,
+   "share": 0.0667
+  },
+  {
+   "id": "checks:6cd54b5b3d69300c95ecefdf52237202c40e11a23dd878ae574feb131808e950",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:b613adf76e2adf7015371856f25b4fe471b329a6272f653a286c37bc419abd2e",
+   "covered": 3,
+   "criteria": 4,
+   "share": 0.75
+  },
+  {
+   "id": "checks:b613adf76e2adf7015371856f25b4fe471b329a6272f653a286c37bc419abd2e",
+   "drafted": 1,
+   "proven": 1,
+   "share": 1.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:f30142c2c1bd45cf39fb7ba8890bd57115830faf4a1566961ab7ef6dd79dbf4c",
+   "covered": 5,
+   "criteria": 5,
+   "share": 1.0
+  },
+  {
+   "id": "checks:f30142c2c1bd45cf39fb7ba8890bd57115830faf4a1566961ab7ef6dd79dbf4c",
+   "drafted": 4,
+   "proven": 1,
+   "share": 0.25,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:b94c8b4d0506965cef66cd88b6c12cbead87dcdf32fc36a5a6c99d6f22a3a89e",
+   "covered": 3,
+   "criteria": 4,
+   "share": 0.75
+  },
+  {
+   "id": "checks:b94c8b4d0506965cef66cd88b6c12cbead87dcdf32fc36a5a6c99d6f22a3a89e",
+   "drafted": 3,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:7327d497fa14f89da70f98ba57879187382022f80972b33fa4d880c42658c950",
+   "covered": 0,
+   "criteria": 3,
+   "share": 0.0
+  },
+  {
+   "id": "checks:7327d497fa14f89da70f98ba57879187382022f80972b33fa4d880c42658c950",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:0c82ecb63efb48b5249110183e7000211c4c29c1a721c35395c27a586951543b",
+   "covered": 2,
+   "criteria": 3,
+   "share": 0.6667
+  },
+  {
+   "id": "checks:0c82ecb63efb48b5249110183e7000211c4c29c1a721c35395c27a586951543b",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:3c7ffd01050e94d672fa8e834c4e3d21a76bd5d842cecd6e133df627072ae24e",
+   "covered": 3,
+   "criteria": 4,
+   "share": 0.75
+  },
+  {
+   "id": "checks:3c7ffd01050e94d672fa8e834c4e3d21a76bd5d842cecd6e133df627072ae24e",
+   "drafted": 2,
+   "proven": 1,
+   "share": 0.5,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:e54435fb4c37771b1b7559ef4b25f793c1da4777cce77b2031c0bd160ef5ba0f",
+   "covered": 2,
+   "criteria": 5,
+   "share": 0.4
+  },
+  {
+   "id": "checks:e54435fb4c37771b1b7559ef4b25f793c1da4777cce77b2031c0bd160ef5ba0f",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:8dc0eb26182207f9decb30d6306be0deac58e3549a9bf7f5d8ad0faccee28811",
+   "covered": 6,
+   "criteria": 8,
+   "share": 0.75
+  },
+  {
+   "id": "checks:8dc0eb26182207f9decb30d6306be0deac58e3549a9bf7f5d8ad0faccee28811",
+   "drafted": 2,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:383d98c8397b65c277d8361d667df8620aee61ebb6b62b869a28c3f2c77459f0",
+   "covered": 4,
+   "criteria": 6,
+   "share": 0.6667
+  },
+  {
+   "id": "checks:383d98c8397b65c277d8361d667df8620aee61ebb6b62b869a28c3f2c77459f0",
+   "drafted": 2,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:e43ea635378834c62ea12204bf18c8925db9d65d06ae9891bee80b6c21c468fe",
+   "covered": 3,
+   "criteria": 7,
+   "share": 0.4286
+  },
+  {
+   "id": "checks:e43ea635378834c62ea12204bf18c8925db9d65d06ae9891bee80b6c21c468fe",
+   "drafted": 3,
+   "proven": 2,
+   "share": 0.6667,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:4a39da7a3608dc2d275e530a83e140e8dac0ccd0540b55fdd7180607e2cd789d",
+   "covered": 6,
+   "criteria": 6,
+   "share": 1.0
+  },
+  {
+   "id": "checks:4a39da7a3608dc2d275e530a83e140e8dac0ccd0540b55fdd7180607e2cd789d",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:a4e2754b316164a013138e5d892030b02bb93c9af3cd2a38a7c6a48a69c33cae",
+   "covered": 4,
+   "criteria": 6,
+   "share": 0.6667
+  },
+  {
+   "id": "checks:a4e2754b316164a013138e5d892030b02bb93c9af3cd2a38a7c6a48a69c33cae",
+   "drafted": 3,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "coverage:fd69652bfec9072d772dea2d7335f518629a5428633676bd45a8adc7098a9a85",
+   "covered": 2,
+   "criteria": 2,
+   "share": 1.0
+  },
+  {
+   "id": "checks:fd69652bfec9072d772dea2d7335f518629a5428633676bd45a8adc7098a9a85",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "journeys:fd69652bfec9072d772dea2d7335f518629a5428633676bd45a8adc7098a9a85:goal-steps",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0
+  },
+  {
+   "id": "journeys:fd69652bfec9072d772dea2d7335f518629a5428633676bd45a8adc7098a9a85:plain",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0
+  },
+  {
+   "id": "coverage:c0fb0289ed008e712e279e2bf7a8c8f88113f2b3c7c2db35dcb2d6cfd025f16a",
+   "covered": 2,
+   "criteria": 4,
+   "share": 0.5
+  },
+  {
+   "id": "checks:c0fb0289ed008e712e279e2bf7a8c8f88113f2b3c7c2db35dcb2d6cfd025f16a",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "journeys:c0fb0289ed008e712e279e2bf7a8c8f88113f2b3c7c2db35dcb2d6cfd025f16a:goal-steps",
+   "drafted": 0,
+   "proven": 0,
+   "share": 0
+  },
+  {
+   "id": "journeys:c0fb0289ed008e712e279e2bf7a8c8f88113f2b3c7c2db35dcb2d6cfd025f16a:plain",
+   "drafted": 0,
+   "proven": 0,
+   "share": 0
+  },
+  {
+   "id": "coverage:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634",
+   "covered": 4,
+   "criteria": 5,
+   "share": 0.8
+  },
+  {
+   "id": "checks:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634",
+   "drafted": 5,
+   "proven": 1,
+   "share": 0.2,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 1
+  },
+  {
+   "id": "journeys:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634:goal-steps",
+   "drafted": 4,
+   "proven": 0,
+   "share": 0.0
+  },
+  {
+   "id": "journeys:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634:plain",
+   "drafted": 5,
+   "proven": 1,
+   "share": 0.2
+  },
+  {
+   "id": "coverage:9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d",
+   "covered": 3,
+   "criteria": 4,
+   "share": 0.75
+  },
+  {
+   "id": "checks:9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d",
+   "drafted": 7,
+   "proven": 1,
+   "share": 0.1429,
+   "droppedPassesOnBase": 1,
+   "droppedFailsElsewhere": 2
+  },
+  {
+   "id": "journeys:9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d:goal-steps",
+   "drafted": 8,
+   "proven": 6,
+   "share": 0.75
+  },
+  {
+   "id": "journeys:9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d:plain",
+   "drafted": 7,
+   "proven": 1,
+   "share": 0.1429
+  },
+  {
+   "id": "coverage:02013d336d8bde55ad36f58ae2a824273ab391e795571eb3fd30bd4ff29973fb",
+   "covered": 2,
+   "criteria": 4,
+   "share": 0.5
+  },
+  {
+   "id": "checks:02013d336d8bde55ad36f58ae2a824273ab391e795571eb3fd30bd4ff29973fb",
+   "drafted": 1,
+   "proven": 0,
+   "share": 0.0,
+   "droppedPassesOnBase": 0,
+   "droppedFailsElsewhere": 0
+  },
+  {
+   "id": "journeys:02013d336d8bde55ad36f58ae2a824273ab391e795571eb3fd30bd4ff29973fb:goal-steps",
+   "drafted": 0,
+   "proven": 0,
+   "share": 0
+  },
+  {
+   "id": "journeys:02013d336d8bde55ad36f58ae2a824273ab391e795571eb3fd30bd4ff29973fb:plain",
+   "drafted": 0,
+   "proven": 0,
+   "share": 0
+  },
+  {
+   "id": "coverage:all",
+   "covered": 65,
+   "criteria": 108,
+   "share": 0.6019
+  },
+  {
+   "id": "checks:all",
+   "drafted": 42,
+   "proven": 7,
+   "share": 0.1667,
+   "droppedPassesOnBase": 12,
+   "droppedFailsElsewhere": 3
+  },
+  {
+   "id": "journeys:all:goal-steps",
+   "drafted": 13,
+   "proven": 6,
+   "share": 0.4615
+  },
+  {
+   "id": "journeys:all:plain",
+   "drafted": 13,
+   "proven": 2,
+   "share": 0.1538
+  }
+ ],
+ "decision": {
+  "draftingJob": {
+   "outcome": "changes",
+   "changes": [
+    "Draft a check only through a surface the issue or the approved spec names: a command, route, page, module or message text it states. Where the issue leaves the interface open (a message's exact wording, a data shape, an element's accessible name, when a retry runs, which of two remedies it allows), the requirement goes to the early question instead of a check that guesses. In the spike, 20 of 42 drafted checks failed on the base on their named assertion and then failed on the merged fix too; read by hand, 17 of those 20 assert something the issue doesn't state (a value, an endpoint, a tool's name, how a script finds its repo, a fixture's label), and 3 assert something it does state yet still fail the fix: one matches a label exactly where the issue shows it beside a count, one reads ambiguous wording the other way from the fix, and one uses a storage key the issue named but the base's own code had already named differently, which the fix followed (checks:all).",
+    "Build the stand-in for a base with nothing to start, and the early question, as week 5's main path rather than an edge case: 55 of 108 requirements for new or fixed behavior got no check, because the code the check would enter isn't on the base yet; the drafted definition of this repo's #48 has no check at all (checks:6c5bdbe295e96bc0004a5070788a8b5380fbe98568b4c7eb1f64b3856409171d).",
+    "Run the drafting job's own base run the way the gate will: in a fresh temporary checkout of the base, through the repo's own test entry and build. Eight checks in three issues ran only because of build output the job had left in its checkout; on a fresh checkout of the merged fix they ran no test until the spike's harness ran the repo's own build on both sides.",
+    "Count checks for behavior that must not change apart from new-behavior checks in the readings: all 12 checks dropped for passing on the base were such guards, which behaved as the design asks (checks:all).",
+    "Keep each requirement's criterion whole: the requirement's own text is what its check is written from, so it quotes the criterion in full and its checks name each condition. Two raters agree that the drafted requirements state only 65 of 108 criteria in full (coverage:all); in 23 more, a requirement quotes or paraphrases the criterion but its text drops a condition the criterion states, such as 'only the final reply is sent'."
+   ],
+   "text": "Week 5's drafting job changes. Its requirements state only 65 of 108 criteria in full (coverage:all), and only 7 of 42 drafted checks fail on the base on a named assertion and pass on the merged fix (checks:all): most new-behavior checks either guess an interface the issue leaves open and fail the merged fix, or are never written because the base has nothing to enter. Week 5 builds the drafting job with the five changes listed here.",
+   "cites": [
+    "coverage:all",
+    "checks:all",
+    "checks:6c5bdbe295e96bc0004a5070788a8b5380fbe98568b4c7eb1f64b3856409171d"
+   ]
+  },
+  "goalSteps": {
+   "build": false,
+   "text": "Week 5 doesn't build goal steps (#581); #581 stays parked until a later reading shows they help. Offered goal steps, the drafting job used them in 1 of the 5 UI issues; there its goal-step journeys proved 0 of 4 against 1 of 5 for its locator journeys (journeys:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634:goal-steps, journeys:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634:plain). The pooled share is higher with goal steps offered (journeys:all:goal-steps, 6 of 13, against journeys:all:plain, 2 of 13), but all of that rise is one issue whose goal-steps draft used no goal step (journeys:9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d:goal-steps, 6 of 8, against 1 of 7 without), so it measures the variance between two drafts of the same issue, not goal steps. The acting harness itself worked: it gave up on the base where the control didn't exist and acted on the fix.",
+   "cites": [
+    "journeys:all:goal-steps",
+    "journeys:all:plain",
+    "journeys:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634:goal-steps",
+    "journeys:d33c1873c441c0d29d698c68d4fe511d2ad695f7bbf050ac4fc483cc361a0634:plain",
+    "journeys:9d99281d7a926796428195061e5b17826676e41785f2d0b4019fcdcbd5a9618d:goal-steps"
+   ]
+  }
+ }
+}
