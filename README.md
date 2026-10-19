@@ -65,7 +65,11 @@ in under five minutes.
 budgets in `benchmarks/budgets.json`: p50 and p95 time and peak memory for each
 command, plus one run of the whole check workload. p50, the workload's CPU
 time and peak memory must stay within a budget's margin; p95 and wall time,
-which machine load moves, have only absolute limits. A budget is
+which machine load moves, have only absolute limits. When the change adds or
+modifies files under the declared test paths (`testPaths` in
+`scripts/lanes.mjs`), the workload runs once more without them, and that run is
+what is compared with the merge base; the full run is held only to the caps,
+and both runs and the CPU the change's own tests account for are reported. A budget is
 frozen once it reaches main, and a new one records `INITIAL` with its reason. A
 clone made with `--single-branch` needs `git fetch origin main` first.
 
