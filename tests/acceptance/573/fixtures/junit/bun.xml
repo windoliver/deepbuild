@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="2" assertions="1" failures="2" skipped="0" time="0.333367">
+  <testsuite name="deep-draft-samp.test.ts" file="deep-draft-samp.test.ts" tests="2" assertions="1" failures="2" skipped="0" time="0.051067" hostname="KWN9VC2WN4">
+    <testcase name="assertion" classname="" time="0.009544" file="deep-draft-samp.test.ts" line="2" assertions="1">
+      <failure type="AssertionError" message="expect(received).toBe(expected)&#10;&#10;Expected: 3&#10;Received: 2&#10;">AssertionError: expect(received).toBe(expected)&#10;&#10;Expected: 3&#10;Received: 2&#10;&#10;      at deep-draft-samp.test.ts:3:17&#10;</failure>
+    </testcase>
+    <testcase name="typeerror" classname="" time="0.003282" file="deep-draft-samp.test.ts" line="5" assertions="0">
+      <failure type="TypeError" message="{}.missing is not a function. (In &apos;{}.missing()&apos;, &apos;{}.missing&apos; is undefined)">TypeError: {}.missing is not a function. (In &apos;{}.missing()&apos;, &apos;{}.missing&apos; is undefined)&#10;      at deep-draft-samp.test.ts:7:12&#10;</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
