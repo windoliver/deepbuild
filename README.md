@@ -35,7 +35,7 @@ The repository skeleton runs locally; the app and hub are still in development. 
 
 ## Run the checkout
 
-Use Node.js **22.19 or newer** and Rust with Cargo and `rustfmt` (included in
+Use Node.js **24.22 or newer** and Rust with Cargo and `rustfmt` (included in
 the default rustup toolchain). On macOS, also install the Xcode Command Line
 Tools; on Linux, install GNU time at `/usr/bin/time`.
 
