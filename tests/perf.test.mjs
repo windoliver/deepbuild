@@ -66,7 +66,10 @@ test('a failed checkout is blocked without building the merge base', (t) => {
 });
 
 test('the full run with the change\'s own tests is still held to the peak-memory cap', (t) => {
-  const { cwd, git, perf } = repository(t, () => '');
+  // The run without the change's tests also regresses against the base, so neither failure may hide the other.
+  const { cwd, git, perf } = repository(t, () => `
+    if (process.cwd().includes('without-tests')) { const start = process.cpuUsage(); for (let used; (used = process.cpuUsage(start)).user + used.system < 200_000;); }
+  `);
   writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000, peakBytes: 1e9 }, initialReason: 'Fixture base.' }, tasks: [] }));
   git('commit', '-qam', 'cap');
   git('update-ref', 'refs/remotes/origin/main', 'HEAD');
@@ -75,4 +78,5 @@ test('the full run with the change\'s own tests is still held to the peak-memory
   const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 2e9 });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /FAIL perf: preflight: peakBytes 2000000000 reached cap 1000000000/);
+  assert.match(result.stdout, /FAIL perf: preflight: cpuMs \d+ regressed beyond base/);
 });
