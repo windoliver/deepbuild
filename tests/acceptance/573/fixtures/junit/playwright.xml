@@ -1,0 +1,91 @@
+<testsuites id="" name="" tests="3" failures="2" skipped="0" errors="1" time="6.724683999999999">
+<testsuite name="deep-draft-samp.spec.ts" timestamp="2026-10-19T18:00:28.379Z" hostname="chromium" tests="3" failures="2" skipped="0" time="2.62" errors="1">
+<testcase name="expect timeout" classname="deep-draft-samp.spec.ts" time="1.432">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|/work/repo/apps/web/test-results/deep-draft-samp-expect-timeout-chromium/error-context.md]]
+]]>
+</system-out>
+<failure message="expect(locator).toBeVisible() failed" type="expect.toBeVisible">
+<![CDATA[  [chromium] › deep-draft-samp.spec.ts:2:5 › expect timeout ────────────────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('button', { name: 'Missing' })
+    Expected: visible
+    Timeout: 1000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('button', { name: 'Missing' }) with timeout 1000ms
+      - waiting for getByRole('button', { name: 'Missing' })
+
+
+      2 | test("expect timeout", async ({ page }) => {
+      3 |   await page.setContent("<p>hi</p>");
+    > 4 |   await expect(page.getByRole("button", { name: "Missing" })).toBeVisible({ timeout: 1000 });
+        |                                                               ^
+      5 | });
+      6 | test("click timeout", async ({ page }) => {
+      7 |   await page.setContent("<p>hi</p>");
+        at /work/repo/apps/web/e2e/samp/deep-draft-samp.spec.ts:4:63
+
+    Error Context: ../../test-results/deep-draft-samp-expect-timeout-chromium/error-context.md
+]]>
+</failure>
+</testcase>
+<testcase name="click timeout" classname="deep-draft-samp.spec.ts" time="1.078">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|/work/repo/apps/web/test-results/deep-draft-samp-click-timeout-chromium/error-context.md]]
+]]>
+</system-out>
+<error message="locator.click: Timeout 1000ms exceeded." type="TimeoutError">
+<![CDATA[  [chromium] › deep-draft-samp.spec.ts:6:5 › click timeout ─────────────────────────────────────────
+
+    TimeoutError: locator.click: Timeout 1000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Missing' })
+
+
+       6 | test("click timeout", async ({ page }) => {
+       7 |   await page.setContent("<p>hi</p>");
+    >  8 |   await page.getByRole("button", { name: "Missing" }).click({ timeout: 1000 });
+         |                                                       ^
+       9 | });
+      10 | test("value mismatch", async ({ page }) => {
+      11 |   await page.setContent("<p>hi</p>");
+        at /work/repo/apps/web/e2e/samp/deep-draft-samp.spec.ts:8:55
+
+    Error Context: ../../test-results/deep-draft-samp-click-timeout-chromium/error-context.md
+]]>
+</error>
+</testcase>
+<testcase name="value mismatch" classname="deep-draft-samp.spec.ts" time="0.11">
+<system-out>
+<![CDATA[
+[[ATTACHMENT|/work/repo/apps/web/test-results/deep-draft-samp-value-mismatch-chromium/error-context.md]]
+]]>
+</system-out>
+<failure message="expect(received).toBe(expected) // Object.is equality" type="expect.toBe">
+<![CDATA[  [chromium] › deep-draft-samp.spec.ts:10:5 › value mismatch ───────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "bye"
+    Received: "hi"
+
+      10 | test("value mismatch", async ({ page }) => {
+      11 |   await page.setContent("<p>hi</p>");
+    > 12 |   expect(await page.textContent("p")).toBe("bye");
+         |                                       ^
+      13 | });
+      14 |
+        at /work/repo/apps/web/e2e/samp/deep-draft-samp.spec.ts:12:39
+
+    Error Context: ../../test-results/deep-draft-samp-value-mismatch-chromium/error-context.md
+]]>
+</failure>
+</testcase>
+</testsuite>
+</testsuites>
