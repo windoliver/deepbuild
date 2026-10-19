@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="1" errors="0" time="0.037">
+    <testsuite name="tests/deep-draft-sample.test.ts" timestamp="2026-10-19T18:36:32.522Z" hostname="KWN9VC2WN4" tests="3" failures="1" errors="0" skipped="2" time="0.037">
+        <testcase classname="tests/deep-draft-sample.test.ts" name="suite &gt; first check" time="0.037">
+            <failure message="expected [] to have a length of 1 but got +0" type="AssertionError">
+AssertionError: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/deep-draft-sample.test.ts:112:47
+            </failure>
+        </testcase>
+        <testcase classname="tests/deep-draft-sample.test.ts" name="suite &gt; second check" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="tests/deep-draft-sample.test.ts" name="suite &gt; third check" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+</testsuites>

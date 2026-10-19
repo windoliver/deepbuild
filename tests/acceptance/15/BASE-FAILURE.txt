@@ -1,0 +1,117 @@
+Base commit: 3fa77580e3815e1fa295f16ba6487c07bcae4f45
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/15
+Date: 2026-10-18T23:56:46Z  Node v23.9.0  vitest vitest/5.0.5
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/15
+
+ ❯ sharing.test.ts (0 test)
+ ❯ store.test.ts (0 test)
+ ❯ gitleaks.test.ts (0 test)
+ ❯ intake.test.ts (0 test)
+ ❯ origin.test.ts (0 test)
+ ❯ scrub-property.test.ts (0 test)
+ ❯ budgets.test.ts (0 test)
+ ❯ redaction.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts [ budgets.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/budgets.test.ts
+ ❯ budgets.test.ts:3:1
+      1| import { execFileSync } from 'node:child_process';
+      2| import { afterEach, describe, expect, it, type TestContext } from 'vit…
+      3| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      4| import { anyUse, DAY, mulberry32, png, removeRoots, storeText, T0, tem…
+      5|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  gitleaks.test.ts [ gitleaks.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/gitleaks.test.ts
+ ❯ gitleaks.test.ts:2:1
+      1| import { afterAll, describe, expect, it } from 'vitest';
+      2| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      3| import { anyUse, removeRoots, storeText, stored, T0, tempRoot, text } …
+      4| import { fixtureFor, GITLEAKS_TAG, goRegExp, loadGitleaks, type Fixtur…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  intake.test.ts [ intake.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/intake.test.ts
+ ❯ intake.test.ts:2:1
+      1| import { afterEach, describe, expect, it } from 'vitest';
+      2| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      3| import type { MediaType, PutRequest } from '../../../packages/evidence…
+      4| import { anyUse, jpegFixture, layoutFiles, mp4Fixture, png, removeRoot…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  origin.test.ts [ origin.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/origin.test.ts
+ ❯ origin.test.ts:2:1
+      1| import { afterEach, describe, expect, it } from 'vitest';
+      2| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      3| import type { PutRequest } from '../../../packages/evidence/src/index.…
+      4| import { anyUse, png, removeRoots, sha256, storeText, stored, T0, temp…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  redaction.test.ts [ redaction.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/redaction.test.ts
+ ❯ redaction.test.ts:2:1
+      1| import { afterEach, describe, expect, it } from 'vitest';
+      2| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      3| import type { TextRequest } from '../../../packages/evidence/src/index…
+      4| import {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  scrub-property.test.ts [ scrub-property.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/scrub-property.test.ts
+ ❯ scrub-property.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      3| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      4| import type { EvidenceStore, Writer } from '../../../packages/evidence…
+      5| import { anyUse, base64Form, cut, mulberry32, removeRoots, storeText, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  sharing.test.ts [ sharing.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/sharing.test.ts
+ ❯ sharing.test.ts:5:1
+      3| import { join } from 'node:path';
+      4| import { afterEach, describe, expect, it } from 'vitest';
+      5| import { openEvidenceStore } from '../../../packages/evidence/src/inde…
+       | ^
+      6| import type { Origin, Peer, Redaction, SendBoundary, ShareAsk, ShareVi…
+      7| import { png, removeRoots, sha256, T0, tempRoot } from './helpers.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  store.test.ts [ store.test.ts ]
+Error: Cannot find module '../../../packages/evidence/src/index.ts' imported from <checkout>/tests/acceptance/15/store.test.ts
+ ❯ store.test.ts:4:1
+      2| import { join } from 'node:path';
+      3| import { afterEach, describe, expect, it } from 'vitest';
+      4| import { EvidenceError, openEvidenceStore } from '../../../packages/ev…
+       | ^
+      5| import type { PutRequest, Redaction } from '../../../packages/evidence…
+      6| import { anyUse, DAY, filesEqual, layoutFiles, png, removeRoots, sha25…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  no tests
+   Start at (time)
+   Duration  337ms (worker 98%, environment 2%)
+
+exit status: 1

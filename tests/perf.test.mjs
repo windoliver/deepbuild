@@ -12,7 +12,7 @@ function repository(t, checks) {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'deep-perf-test-')));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   for (const directory of ['scripts', 'benchmarks']) mkdirSync(join(cwd, directory));
-  for (const file of ['perf.mjs', 'benchmark.mjs']) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
+  for (const file of ['perf.mjs', 'benchmark.mjs', 'lanes.mjs']) copyFileSync(new URL(file, scripts), join(cwd, 'scripts', file));
   const files = {
     'scripts/checks.mjs': checks(cwd),
     'package.json': JSON.stringify({ name: 'fixture', private: true, scripts: { build: `node -e "require('node:fs').writeFileSync('warm', '')"` } }),
@@ -63,4 +63,16 @@ test('a failed checkout is blocked without building the merge base', (t) => {
   assert.equal(result.status, 1);
   assert.match(result.stdout, /BLOCKED perf: .+\n\s+Fix: .+/);
   assert.equal(existsSync(join(cwd, 'base-ran')), false);
+});
+
+test('the full run with the change\'s own tests is still held to the peak-memory cap', (t) => {
+  const { cwd, git, perf } = repository(t, () => '');
+  writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 300_000, peakBytes: 1e9 }, initialReason: 'Fixture base.' }, tasks: [] }));
+  git('commit', '-qam', 'cap');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  mkdirSync(join(cwd, 'tests'));
+  writeFileSync(join(cwd, 'tests/added.test.mjs'), '');
+  const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 2e9 });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /FAIL perf: preflight: peakBytes 2000000000 reached cap 1000000000/);
 });

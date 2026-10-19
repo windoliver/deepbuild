@@ -35,7 +35,7 @@ The repository skeleton runs locally; the app and hub are still in development. 
 
 ## Run the checkout
 
-Use Node.js **22.19 or newer** and Rust with Cargo and `rustfmt` (included in
+Use Node.js **24.22 or newer** and Rust with Cargo and `rustfmt` (included in
 the default rustup toolchain). On macOS, also install the Xcode Command Line
 Tools; on Linux, install GNU time at `/usr/bin/time`.
 
@@ -61,11 +61,23 @@ workflows. Its lanes are `typecheck`, `lint`, `unit`, `parity quick` and
 and `perf` is `BLOCKED` when they fail. The checks with their builds must finish
 in under five minutes.
 
+`lint` also runs `scripts/repo-rules.mjs`, which fails on GitHub workflows,
+agent hooks or plugins in a repo's `.claude` or `.codex` settings, secrets such
+as home paths and tokens, and any dependency `scripts/repo-rules.json` doesn't
+list, and it reports the change's size against the merge base. To add a
+dependency, list it there with its exact spec and why the task needs it. To keep
+a deliberate fixture value, add an `allowedFindings` entry with its path, kind,
+the SHA-256 of the exact value and why.
+
 `perf` compares the checkout with its merge base on `origin/main` using the
 budgets in `benchmarks/budgets.json`: p50 and p95 time and peak memory for each
 command, plus one run of the whole check workload. p50, the workload's CPU
 time and peak memory must stay within a budget's margin; p95 and wall time,
-which machine load moves, have only absolute limits. A budget is
+which machine load moves, have only absolute limits. When the change adds or
+modifies files under the declared test paths (`testPaths` in
+`scripts/lanes.mjs`), the workload runs once more without them, and that run is
+what is compared with the merge base; the full run is held only to the caps,
+and both runs and the CPU the change's own tests account for are reported. A budget is
 frozen once it reaches main, and a new one records `INITIAL` with its reason. A
 clone made with `--single-branch` needs `git fetch origin main` first.
 
