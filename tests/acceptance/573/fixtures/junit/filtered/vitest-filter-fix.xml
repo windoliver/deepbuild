@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="0" errors="0" time="0.067">
+    <testsuite name="tests/deep-draft-sample.test.ts" timestamp="2026-10-19T18:37:29.462Z" hostname="KWN9VC2WN4" tests="3" failures="0" errors="0" skipped="2" time="0.067">
+        <testcase classname="tests/deep-draft-sample.test.ts" name="suite &gt; first check" time="0.065">
+        </testcase>
+        <testcase classname="tests/deep-draft-sample.test.ts" name="suite &gt; second check" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="tests/deep-draft-sample.test.ts" name="suite &gt; third check" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+</testsuites>
