@@ -116,3 +116,13 @@ test('the measured preflight workload has its own frozen time and peak-memory bu
   }
   assert.throws(() => compare(workload, { elapsedMs: 300_000, peakBytes: 1000 }, null, ['elapsedMs', 'peakBytes']), /elapsedMs/);
 });
+
+test('an established harness budget cannot disappear or change, so it can never switch its lane off', () => {
+  const harness = { limits: { sessionMs: 60_000, wholeMs: 600_000 }, margin: 1, initialReason: 'First harness measurement in issue #48.' };
+  const withHarness = { ...config, harness };
+  validateBudgets(withHarness, null);
+  validateBudgets(withHarness, structuredClone(withHarness));
+  assert.throws(() => validateBudgets(config, withHarness), /harness/);
+  for (const change of [{ margin: 5 }, { limits: { sessionMs: 120_000, wholeMs: 600_000 } }, { initialReason: 'Reset' }])
+    assert.throws(() => validateBudgets({ ...config, harness: { ...harness, ...change } }, withHarness), /harness/);
+});
