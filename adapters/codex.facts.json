@@ -1,0 +1,29 @@
+{
+  "schema": "adapter.facts@1",
+  "versions": ["0.144.0"],
+  "agent": "codex",
+  "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
+  "signIn": {
+    "readBy": "a run is BLOCKED until the agent is signed in",
+    "args": ["login", "status"],
+    "signedIn": "exit code 0; the output is never kept"
+  },
+  "launch": {
+    "readOnlyJob": {
+      "readBy": "DeepBuild's own jobs: read-only sandbox, none of the user's config or MCP servers, no bypass flag, prompt on stdin",
+      "args": ["exec", "--json", "-s", "read-only", "--skip-git-repo-check", "--ignore-user-config", "-m", "gpt-reserve", "-c", "model_reasoning_effort=\"low\"", "-"],
+      "prompt": "stdin"
+    }
+  },
+  "usage": {
+    "readBy": "every run prints its cost and is held to its cap",
+    "cost": "unpriced",
+    "costFrom": "nothing: on a plan Codex reports tokens only, and no rate card is verified, so a token cap stands in for the cost cap",
+    "tokens": "the rollout's last token_count info.total_token_usage; input_tokens includes cached_input_tokens, which is taken back out"
+  },
+  "transcripts": {
+    "readBy": "a run keeps its session's own rollout",
+    "home": ["CODEX_HOME", "~/.codex"],
+    "path": "sessions/{YYYY}/{MM}/{DD}/rollout-{time}-{thread}.jsonl"
+  }
+}

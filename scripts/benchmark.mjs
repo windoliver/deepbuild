@@ -74,6 +74,7 @@ export function warm(cwd) {
 export function validateBudgets(current, base) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
   if (base?.preflight && !isDeepStrictEqual(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
+  if (base?.harness && !isDeepStrictEqual(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
   for (const established of base?.tasks ?? []) {
     if (!isDeepStrictEqual(current.tasks.find(({ id }) => id === established.id), established))
       throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
