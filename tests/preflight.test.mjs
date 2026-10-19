@@ -144,6 +144,24 @@ test('the unit lane runs every tooling test file', (t) => {
   assert.deepEqual(['one', 'two'].filter((name) => existsSync(join(cwd, name))), ['one', 'two']);
 });
 
+test('the unit lane runs only test files inside the declared test paths, which perf sets apart', (t) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-test-paths-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, 'scripts'));
+  for (const file of ['scripts/lanes.mjs', 'vitest.config.ts']) copyFileSync(new URL(`../${file}`, import.meta.url), join(cwd, file));
+  symlinkSync(new URL('../node_modules', import.meta.url).pathname, join(cwd, 'node_modules'));
+  writeFileSync(join(cwd, 'package.json'), '{ "type": "module" }');
+  const write = (file, body) => { mkdirSync(join(cwd, file, '..'), { recursive: true }); writeFileSync(join(cwd, file), body); };
+  // A test file outside the declared paths would run in the check workload yet never be set apart by perf.
+  for (const name of ['tests/inside', 'scripts/outside']) write(`${name}.test.mjs`, `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(name.split('/')[1])}, '');`);
+  for (const name of ['packages/a/test/inside', 'scripts/outside']) write(`${name}.test.ts`, "import { it } from 'vitest'; it('runs', () => {});");
+  const [command, ...args] = checks.find(({ name }) => name === 'unit').commands.find((parts) => parts.includes('--test'));
+  spawnSync(command, args, { cwd, env: { ...process.env, NODE_TEST_CONTEXT: undefined } });
+  assert.deepEqual(['inside', 'outside'].filter((name) => existsSync(join(cwd, name))), ['inside']);
+  const listed = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'list', '--filesOnly'], { cwd, encoding: 'utf8' });
+  assert.deepEqual(listed.stdout.trim().split('\n'), ['packages/a/test/inside.test.ts'], listed.stderr);
+});
+
 test('the lint lane fails Rust code that clippy warns about', (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-clippy-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
