@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compare, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
-import { testPaths } from './lanes.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
@@ -13,9 +12,14 @@ const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
 // BLOCKED: perf could not compare. FAIL: a measurement broke its budget.
 const blocked = (message, fix) => Object.assign(Error(message), { fix });
 const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
-const testPattern = RegExp(`^(?:${testPaths.map((glob) => glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/|\*\*|\*/g, (wild) => ({ '**/': '(?:.*/)?', '**': '.*', '*': '[^/]*' })[wild])).join('|')})$`);
-// A directory of npm ci, warm builds and the check workload, timed once like the merge base.
+// A directory of npm ci, warm builds and the check workload, timed once like the merge base. The checks
+// read git, so each disposable copy gets its own throwaway repository, committed without the user's
+// hooks or signing.
 function checkRun(directory) {
+  const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], directory, { stdio: 'pipe' });
+  git('init', '-q');
+  git('add', '-A');
+  git('commit', '-qm', 'perf copy');
   run('npm', ['ci', '--no-audit', '--no-fund'], directory);
   warm(directory);
   return measureOnce([process.execPath, 'scripts/checks.mjs'], directory);
@@ -41,7 +45,7 @@ try {
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
     archive = mkdtempSync(join(tmpdir(), 'deep-benchmark-base-'));
-    // All git reads stay in this checkout. The disposable archive has no .git.
+    // Git reads stay in this checkout; checkRun gives the disposable copy a repository of its own.
     run('tar', ['-xf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
     baseline = checkRun(archive);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
@@ -49,10 +53,14 @@ try {
   const reading = ({ elapsedMs, cpuMs, peakBytes }) => ({ elapsedMs, cpuMs, peakBytes });
   const workloadBase = base?.preflight ? baseline : null;
   // The change's own test files, committed or not: preflight runs on the working tree.
-  const ownTests = workloadBase ? [...new Set([
+  const changed = workloadBase ? [...new Set([
     ...files(['diff', '--name-only', '--no-renames', '--diff-filter=AM', baseCommit]),
     ...files(['ls-files', '--others', '--exclude-standard']),
-  ])].filter((file) => testPattern.test(file)) : [];
+  ])] : [];
+  // The declared test paths come from the lanes, loaded only when there is a changed file to sort.
+  const { testPaths } = changed.length ? await import('./lanes.mjs') : { testPaths: [] };
+  const testPattern = RegExp(`^(?:${testPaths.map((glob) => glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/|\*\*|\*/g, (wild) => ({ '**/': '(?:.*/)?', '**': '.*', '*': '[^/]*' })[wild])).join('|')})$`);
+  const ownTests = changed.filter((file) => testPattern.test(file));
   let rest = null;
   if (ownTests.length) {
     without = mkdtempSync(join(tmpdir(), 'deep-benchmark-without-tests-'));

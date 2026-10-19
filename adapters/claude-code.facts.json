@@ -1,0 +1,33 @@
+{
+  "schema": "adapter.facts@1",
+  "versions": ["2.1.302", "2.1.303"],
+  "agent": "claude",
+  "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
+  "signIn": {
+    "readBy": "a run is BLOCKED until the agent is signed in",
+    "args": ["auth", "status"],
+    "signedIn": "stdout is JSON with loggedIn true"
+  },
+  "launch": {
+    "session": {
+      "readBy": "scripted sessions run interactively in a pseudo-terminal, never with -p, which ends async hooks at teardown",
+      "args": ["--model", "haiku", "--setting-sources", "project", "--strict-mcp-config", "--settings", "{settings}"]
+    },
+    "readOnlyJob": {
+      "readBy": "DeepBuild's own jobs: only the MCP servers they need, none of the checkout's settings, no bypass flag, prompt on stdin",
+      "args": ["-p", "--output-format", "stream-json", "--verbose", "--model", "haiku", "--strict-mcp-config", "--setting-sources", "user", "--permission-mode", "dontAsk"],
+      "prompt": "stdin"
+    }
+  },
+  "usage": {
+    "readBy": "every run prints its cost and is held to its cap",
+    "cost": "reported",
+    "costFrom": "the status line's cost.total_cost_usd in a session, the result event's total_cost_usd in a job",
+    "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens"
+  },
+  "transcripts": {
+    "readBy": "a run keeps its session's own transcript",
+    "home": ["CLAUDE_CONFIG_DIR", "~/.claude"],
+    "path": "projects/{cwd with each non-alphanumeric character as -}/{session}.jsonl"
+  }
+}

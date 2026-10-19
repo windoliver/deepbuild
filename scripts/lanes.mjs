@@ -15,15 +15,13 @@ export const testGlobs = (extension) => testPaths
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, '-e', `
-    const fs = require('node:fs');
-    if (fs.existsSync('.github/workflows') && fs.readdirSync('.github/workflows').length)
-      throw Error('GitHub workflows are forbidden.');
-  `]], fix: 'Format Rust with cargo fmt, fix the clippy warnings and remove any .github/workflows entries.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above and fix the clippy warnings.' },
   { name: 'unit', commands: [
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run'],
     ['cargo', 'test', '--workspace', '--locked'],
-    [process.execPath, '--test', ...testGlobs('mjs')],
+    // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
+    // tests spend plan usage, and #246's check that change against its own base.
+    [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
@@ -57,13 +55,13 @@ export function runLanes(lanes, { cwd = root } = {}) {
       if (output) console.log(output);
       if (result.status !== 0 && !failure) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
-        failure = {
-          state: result.error ? 'BLOCKED' : 'FAIL',
-          error: result.error?.message
-            ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
-            ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b/i.test(line))
-            ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`,
-        };
+        const error = result.error?.message
+          ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
+          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b/i.test(line))
+          ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
+        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not FAIL.
+        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED)\s+(.+)/) ?? [];
+        failure = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
       }
     }
     const elapsed = ((performance.now() - started) / 1000).toFixed(2);

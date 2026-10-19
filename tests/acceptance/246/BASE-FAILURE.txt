@@ -1,0 +1,100 @@
+Acceptance tests for #246 on the base dcfd7b8 (no implementation), run on 2026-10-19:
+
+  node --test 'tests/acceptance/246/*.test.mjs'
+
+Trimmed to one failure reason per test. Local paths are redacted: <checkout> is this checkout,
+<tmp> the system temporary folder.
+
+# tests 43
+# pass 0
+# fail 43
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - the lint lane runs scripts/repo-rules.mjs second, after cargo fmt --check, holds no inline check, and its fix points to the Fix lines
+    lint.commands[1] is the clippy command, not [node, scripts/repo-rules.mjs] (expected length 2, actual 8)
+not ok 2 - a clean scratch checkout passes the lint lane, with each rule saying what it read
+    the lane prints PASS lint (0.26 s) but no PASS workflows/secrets/deps line: the inline node -e check prints nothing
+not ok 3 - a workflow file makes the lint summary FAIL lint: workflows: .github/workflows/ci.yml
+    the summary reads FAIL lint: Error: GitHub workflows are forbidden. (the inline check), not FAIL lint: workflows: .github/workflows/ci.yml
+not ok 4 - a lane takes its state from a diagnostic line that starts with FAIL, INVALID or BLOCKED, and drops the word
+    the summary reads FAIL blocked-lane: BLOCKED rule: cargo could not run, not BLOCKED blocked-lane: rule: cargo could not run
+not ok 5 - an unreadable file alone makes the lint summary BLOCKED, and the base's lane tests pass unedited
+    the lint lane exits 0 and prints PASS lint: nothing reads the unreadable file (expected exit 1)
+not ok 6 - an unreadable file beside a FAIL makes the lint summary FAIL, with the FAIL printed first
+    the summary reads FAIL lint: Error: GitHub workflows are forbidden. (the inline check), not FAIL lint: workflows: .github/workflows/ci.yml
+not ok 7 - perf measures a merge base whose checks call git ls-files, in a throwaway repository of its own
+    BLOCKED perf: merge-base checks exited 1: fatal: not a git repository (or any of the parent directories): .git
+not ok 8 - benchmarks/budgets.json gains the repo-rules task with its limits, margin and first-measurement reason
+    no repo-rules task in benchmarks/budgets.json
+not ok 9 - on this checkout, every check passes on one line saying what it read, and git status is unchanged
+    Error: Cannot find module '<checkout>/scripts/repo-rules.mjs'
+not ok 10 - a file at .github/workflows/ci.yml fails the workflows check with its fix
+    Error: Cannot find module '<tmp>/deep-rules-246-TLCxl3/scripts/repo-rules.mjs'
+not ok 11 - agent-hooks fails on its own for a hooks key in .claude/settings.json
+    Error: Cannot find module '<tmp>/deep-rules-246-uJe75r/scripts/repo-rules.mjs'
+not ok 12 - agent-hooks fails on its own for a hooks key in a git-ignored .claude/settings.local.json
+    Error: Cannot find module '<tmp>/deep-rules-246-IKzaYf/scripts/repo-rules.mjs'
+not ok 13 - agent-hooks fails on its own for a hooks key in packages/cli/.claude/settings.json
+    Error: Cannot find module '<tmp>/deep-rules-246-8Q9WCb/scripts/repo-rules.mjs'
+not ok 14 - agent-hooks fails on its own for an enabledPlugins key in .claude/settings.json
+    Error: Cannot find module '<tmp>/deep-rules-246-nXqCNP/scripts/repo-rules.mjs'
+not ok 15 - agent-hooks fails on its own for "disableAllHooks": true in .claude/settings.json
+    Error: Cannot find module '<tmp>/deep-rules-246-WuqNHb/scripts/repo-rules.mjs'
+not ok 16 - agent-hooks fails on its own for a file at .codex/config.toml
+    Error: Cannot find module '<tmp>/deep-rules-246-bu9Cxs/scripts/repo-rules.mjs'
+not ok 17 - a .claude/settings.json with permissions and "disableAllHooks": false passes, and node_modules/ and target/ are not read
+    Error: Cannot find module '<tmp>/deep-rules-246-UvBBZB/scripts/repo-rules.mjs'
+not ok 18 - a value of each kind in a tracked file fails with its path, line, column and kind, never its text
+    Error: Cannot find module '<tmp>/deep-rules-246-2yalCe/scripts/repo-rules.mjs'
+not ok 19 - a value of each kind in a new untracked file fails with its path, line, column and kind, never its text
+    Error: Cannot find module '<tmp>/deep-rules-246-tWcYHT/scripts/repo-rules.mjs'
+not ok 20 - the clean twins pass: excluded paths, near misses, lockfiles, binary files and ignored files
+    Error: Cannot find module '<tmp>/deep-rules-246-csmDuJ/scripts/repo-rules.mjs'
+not ok 21 - an allowedFindings entry skips exactly its value in its file and is counted
+    Error: Cannot find module '<tmp>/deep-rules-246-DjeKzw/scripts/repo-rules.mjs'
+not ok 22 - an allowedFindings entry that matches nothing fails
+    Error: Cannot find module '<tmp>/deep-rules-246-rXFBFZ/scripts/repo-rules.mjs'
+not ok 23 - an allowedFindings entry without why is INVALID
+    Error: Cannot find module '<tmp>/deep-rules-246-SSmmnK/scripts/repo-rules.mjs'
+not ok 24 - with #12's three devDependencies listed, an unlisted, re-specified or undeclared one fails
+    Error: Cannot find module '<tmp>/deep-rules-246-MhPO7K/scripts/repo-rules.mjs'
+not ok 25 - a new packages/x/package.json with a dependencies entry fails, and one with none passes
+    Error: Cannot find module '<tmp>/deep-rules-246-buJvd7/scripts/repo-rules.mjs'
+not ok 26 - package.json dependencies is read
+    Error: Cannot find module '<tmp>/deep-rules-246-xgX70j/scripts/repo-rules.mjs'
+not ok 27 - package.json devDependencies is read
+    Error: Cannot find module '<tmp>/deep-rules-246-NbRyYq/scripts/repo-rules.mjs'
+not ok 28 - package.json optionalDependencies is read
+    Error: Cannot find module '<tmp>/deep-rules-246-zEat2g/scripts/repo-rules.mjs'
+not ok 29 - package.json peerDependencies is read
+    Error: Cannot find module '<tmp>/deep-rules-246-J2eBdT/scripts/repo-rules.mjs'
+not ok 30 - package.json overrides is read
+    Error: Cannot find module '<tmp>/deep-rules-246-xBPz5Z/scripts/repo-rules.mjs'
+not ok 31 - a Rust dependency fails in each section that declares it, and passes once listed with spec ^1
+    Error: Cannot find module '<tmp>/deep-rules-246-hte9wM/scripts/repo-rules.mjs'
+not ok 32 - a path dependency is listed relative to its manifest, and no absolute path is printed or listed
+    Error: Cannot find module '<tmp>/deep-rules-246-SNTfBa/scripts/repo-rules.mjs'
+not ok 33 - a scratch repository whose only files are lockfiles is INVALID secrets: 0 files scanned
+    Error: Cannot find module '<tmp>/deep-rules-246-8jnvMi/scripts/repo-rules.mjs'
+not ok 34 - a checkout with no package.json or Cargo.toml is INVALID deps
+    Error: Cannot find module '<tmp>/deep-rules-246-H4oCU7/scripts/repo-rules.mjs'
+not ok 35 - a missing scripts/repo-rules.json is INVALID deps, and a malformed one names the parse error
+    Error: Cannot find module '<tmp>/deep-rules-246-AzzcTT/scripts/repo-rules.mjs'
+not ok 36 - a tracked file with mode 000 is BLOCKED secrets, and a tracked file deleted from the tree is skipped
+    Error: Cannot find module '<tmp>/deep-rules-246-2AFuw2/scripts/repo-rules.mjs'
+not ok 37 - a Cargo.toml with only git on PATH is BLOCKED deps: cargo metadata could not run
+    Error: Cannot find module '<tmp>/deep-rules-246-Y3cElf/scripts/repo-rules.mjs'
+not ok 38 - a 450-line handwritten file beside a 1,000-line lockfile change is over the guideline, and the run still exits 0
+    Error: Cannot find module '<tmp>/deep-rules-246-IhUKpt/scripts/repo-rules.mjs'
+not ok 39 - committed, uncommitted and new untracked lines all count, under the guideline
+    Error: Cannot find module '<tmp>/deep-rules-246-HD4YLP/scripts/repo-rules.mjs'
+not ok 40 - without origin/main, size is not measured and the run still exits 0
+    Error: Cannot find module '<tmp>/deep-rules-246-AjotPJ/scripts/repo-rules.mjs'
+not ok 41 - no dependency is added: manifests keep #12's sections and repo-rules.mjs imports only node: modules
+    ENOENT: no such file or directory, open '<checkout>/scripts/repo-rules.mjs'
+not ok 42 - property (seed 582): each of 1000 planted values is reported at exactly its line and column, with its kind
+    1000 of 1000 cases were not reported exactly: Cannot find module <tmp>/deep-rules-246-…/scripts/repo-rules.mjs
+not ok 43 - property (seed 582): the same 1000 texts without the planted values report nothing
+    Error: Cannot find module '<tmp>/deep-rules-246-mvF7al/scripts/repo-rules.mjs'

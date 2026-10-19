@@ -4,6 +4,11 @@
     "limits": { "elapsedMs": 300000 },
     "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin."
   },
+  "harness": {
+    "limits": { "sessionMs": 60000, "wholeMs": 600000 },
+    "margin": 1,
+    "initialReason": "Issue #48 first measurement: the merge base has no harness. The lane runs only when a change touches the harness, its hook or its launch facts, since each run spends plan usage. It runs every scripted session once, on real agents, and holds each to 60 s and all of them to 10 minutes on the reference Mac. Model latency moves a single run far more than a code change does, so a later merge base's runs are compared with a 100% margin."
+  },
   "tasks": [
     {
       "id": "hook-startup",
@@ -11,6 +16,13 @@
       "margin": 0.5,
       "limits": { "peakBytes": 10000000 },
       "initialReason": "Issue #12 first measurement: the merge base has no executable benchmark. Measure skeleton process startup, not issue #17 hook overhead, in 20 rounds interleaved with the merge base. p50 and peak memory get a 50% relative margin and the design's 10 MB peak-memory ceiling; p95 is reported, since its tail moves past that margin between identical binaries. Established definitions are frozen."
+    },
+    {
+      "id": "repo-rules",
+      "command": ["node", "scripts/repo-rules.mjs"],
+      "margin": 0.5,
+      "limits": { "p50Ms": 1000, "p95Ms": 2000, "peakBytes": 128000000 },
+      "initialReason": "Issue #246 first measurement: the merge base has no repo-rules check. Time the lint lane's rules on this repo in 20 rounds: one read of every file git lists, one cargo metadata call and the size diff against the merge base. Issue #246 caps p50 at 1 s, p95 at 2 s and peak memory at 128 MB; later merge bases hold p50 and peak memory to a 50% margin."
     },
     {
       "id": "evidence-put-5mb",
