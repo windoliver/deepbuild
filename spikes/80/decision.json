@@ -1,0 +1,1023 @@
+{
+  "issue": 80,
+  "baseCommit": "dcfd7b86f55373c14181f5da827fb2aee6f663b0",
+  "hooks": [
+    "hooks/hook.sh",
+    "hooks/hook.mjs",
+    "hooks/remove-marker.py",
+    "hooks/answer-when-idle.sh"
+  ],
+  "surfaces": {
+    "claude-terminal": {
+      "agent": "claude",
+      "agentVersion": "2.1.303",
+      "appVersion": null,
+      "config": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude waiter",
+                  "timeout": 1800,
+                  "asyncRewake": true
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "FileChanged": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "matcher": "spike80-ticker",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "ConfigChange": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "SessionEnd": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "CwdChanged": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ]
+        },
+        "statusLine": {
+          "type": "command",
+          "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude status"
+        }
+      }
+    },
+    "claude-desktop": {
+      "agent": "claude",
+      "agentVersion": "2.1.299",
+      "appVersion": "2.42304.0",
+      "config": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude waiter",
+                  "timeout": 1800,
+                  "asyncRewake": true
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude waiter",
+                  "asyncRewake": true,
+                  "timeout": 1800
+                }
+              ]
+            }
+          ],
+          "StopFailure": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "FileChanged": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "matcher": "spike80-ticker",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "ConfigChange": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "Notification": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "SessionEnd": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ],
+          "CwdChanged": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude"
+                }
+              ]
+            }
+          ]
+        },
+        "statusLine": {
+          "type": "command",
+          "command": "cd \"$CLAUDE_PROJECT_DIR\" && ~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh claude status"
+        }
+      }
+    },
+    "codex-cli": {
+      "agent": "codex",
+      "agentVersion": "0.144.0",
+      "appVersion": null,
+      "config": {
+        "description": "Throwaway #80 spike hooks; they act only inside ~/deepbuild-spike80",
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex async-line",
+                  "async": true,
+                  "timeout": 120
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex",
+                  "timeout": 2700
+                }
+              ]
+            }
+          ],
+          "SessionEnd": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex",
+                  "timeout": 3
+                }
+              ]
+            }
+          ],
+          "Interrupt": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex",
+                  "timeout": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "codex-desktop": {
+      "agent": "codex",
+      "agentVersion": "0.160.0",
+      "appVersion": "ChatGPT 26.930.31730 (Codex Framework 154.0.8037.98)",
+      "config": {
+        "description": "Throwaway #80 spike hooks; they act only inside ~/deepbuild-spike80",
+        "hooks": {
+          "SessionStart": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            }
+          ],
+          "UserPromptSubmit": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            }
+          ],
+          "PreToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            },
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex async-line",
+                  "async": true,
+                  "timeout": 120
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex"
+                }
+              ]
+            }
+          ],
+          "Stop": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex",
+                  "timeout": 2700
+                }
+              ]
+            }
+          ],
+          "SessionEnd": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex",
+                  "timeout": 3
+                }
+              ]
+            }
+          ],
+          "Interrupt": [
+            {
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "~/dev/claude-worktrees/doneright/github-issue-80-82bc3e/spikes/80/hooks/hook.sh codex",
+                  "timeout": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "criteria": {
+    "#80.373518b6": {
+      "criterion": "A held stop with a reason reaches the agent in both apps",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "codex-desktop",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a155d9-981c-7a20-a6bc-466975b4739d",
+          "invocation": "096f76157476",
+          "recording": {
+            "sha256": "d0e7469aa20c7525035d5929ac505cb29badfdb3b8ff5826803ae4da57cc6c55",
+            "bytes": 4680255,
+            "type": "video/mp4"
+          }
+        },
+        {
+          "surface": "claude-desktop",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "4efa4b70-98df-4d62-b0d5-98260935a841",
+          "invocation": "6428335c2568",
+          "transcript": "logs/claude-desktop-transcript.jsonl"
+        }
+      ],
+      "decision": {}
+    },
+    "#80.6231c088": {
+      "criterion": "An idle interactive Claude Code session, in the terminal and in the desktop app (never `claude -p`, which ends async hooks at teardown), wakes on an answer, or the fallback is documented with its delay",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "claude-terminal",
+          "log": "logs/claude-terminal.jsonl",
+          "session": "0b1dba30-7d4e-4c66-83df-ce84df27db32",
+          "result": "woke",
+          "invocation": "1731676df86e"
+        },
+        {
+          "surface": "claude-desktop",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "4efa4b70-98df-4d62-b0d5-98260935a841",
+          "result": "woke",
+          "invocation": "bca4518d83bc",
+          "transcript": "logs/claude-desktop-transcript.jsonl"
+        }
+      ],
+      "decision": {
+        "why": "Woke in the terminal (2.1.303) and the desktop app (2.1.299) with no prompt typed; the wake arrives as a UserPromptSubmit whose prompt is a task-notification with the waiter's stderr. Earlier waiters keep running in the desktop app, so one answer can wake a session more than once: the adapter must end the old waiter itself."
+      }
+    },
+    "#80.9492ec1f": {
+      "criterion": "A message typed mid-turn shows up as an ask at the next hook",
+      "status": "BLOCKED",
+      "findings": [],
+      "decision": {
+        "blockedOn": "Needs a person to type into a Claude desktop session while one of its tool calls runs; nothing was typed mid-call in the desktop runs. In the terminal (2.1.303) a typed message fires UserPromptSubmit at once and is queued, which the hook records as an ask."
+      }
+    },
+    "#80.8c6cf36a": {
+      "criterion": "The verdict line appears in both apps' chats",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "codex-desktop",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a155d9-981c-7a20-a6bc-466975b4739d",
+          "invocation": "020c5bbb2e72",
+          "recording": {
+            "sha256": "d0e7469aa20c7525035d5929ac505cb29badfdb3b8ff5826803ae4da57cc6c55",
+            "bytes": 4680255,
+            "type": "video/mp4"
+          }
+        },
+        {
+          "surface": "claude-desktop",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "4efa4b70-98df-4d62-b0d5-98260935a841",
+          "invocation": "de42ef7dad50",
+          "transcript": "logs/claude-desktop-transcript.jsonl"
+        }
+      ],
+      "decision": {
+        "codexDesktop": "On Codex Desktop 0.160.0 only a send-back verdict shows in the chat, as the continuation bubble with Hook feedback. A passing stop's systemMessage, a stopReason with continue: false and a UserPromptSubmit systemMessage all stay out of the chat, so a PASS line goes to the next prompt and the DeepBuild app.",
+        "claudeDesktop": "The Stop systemMessage verdict is saved as a hook_system_message the desktop chat shows, for PASS and FAIL alike.",
+        "limit": "Codex Desktop 0.160.0 shows only a send-back verdict; a PASS line there goes to the next prompt and the DeepBuild app."
+      }
+    },
+    "#80.1af2fb72": {
+      "criterion": "The spike records whether the Claude desktop app runs your Claude Code status line command and whether the Codex app writes token events with `rate_limits`; for an app that does neither, the decision says how its account gets a first window reading",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "codex-desktop",
+          "log": "logs/codex-desktop-rollout.jsonl",
+          "session": "01a155d9-981c-7a20-a6bc-466975b4739d",
+          "observed": true,
+          "recording": {
+            "sha256": "d0e7469aa20c7525035d5929ac505cb29badfdb3b8ff5826803ae4da57cc6c55",
+            "bytes": 4680255,
+            "type": "video/mp4"
+          }
+        },
+        {
+          "surface": "claude-desktop",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "4efa4b70-98df-4d62-b0d5-98260935a841",
+          "observed": false,
+          "transcript": "logs/claude-desktop-transcript.jsonl"
+        }
+      ],
+      "decision": {
+        "claudeDesktop": "Not run: zero statusLine calls in two desktop sessions, one started after the status line was installed in its folder settings, against 50 in one terminal session. Not yet on a recording.",
+        "firstWindowReading": {
+          "claude-desktop": "An account used only in the Claude desktop app reports no window: its first reading comes from the unblock ask the design already has (run DeepBuild jobs there without a reading, at most 10 a day, or connect the CLI, whose status line reports rate_limits on Pro and Max)."
+        },
+        "codexDesktop": "Codex Desktop 0.160.0 writes token_count with rate_limits on every account; a pro account carries the weekly window (10,080 min) and no 300-minute window, and a business account carries none, which reads as unknown, never reset."
+      }
+    },
+    "#80.014d1b64": {
+      "criterion": "A Codex stop held by a hook whose timeout setup raised to 45 minutes continues with its reason after 45 minutes, in the CLI and in Codex Desktop; if Codex ends the hold sooner, the decision records when, and the slow lane's hold is set below it",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "codex-cli",
+          "log": "logs/codex-cli.jsonl",
+          "session": "01a155d7-3969-7943-94f0-28bdf5eb3329",
+          "invocation": "43e9bf0913b9",
+          "result": "held"
+        },
+        {
+          "surface": "codex-desktop",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a155d8-49fe-7d51-8c1a-39880840be77",
+          "invocation": "3760700246e6",
+          "result": "held",
+          "recording": {
+            "sha256": "4593f2edbf51924966bf65f66b829ce2c37f948f18c19554a31c4266382072b1",
+            "bytes": 413871,
+            "type": "video/mp4"
+          }
+        }
+      ],
+      "decision": {
+        "slowLaneHoldMs": 2695000,
+        "why": "Held 2,695 s in the CLI (0.144.0) and in Codex Desktop (0.160.0), then continued with the reason. A second CLI hold past the timeout was cut at exactly 2,700 s (\"hook timed out after 2700s\"), so Codex ends a hold at its configured timeout and the slow lane holds at most 2,695 s.",
+        "recordingNote": "The recording made at 22:40 UTC shows the hold thread's outcome: the \"held 2695 s, then sent back\" bubble and the agent's reply with the code word."
+      }
+    },
+    "#80.9b528e55": {
+      "criterion": "Nine send-backs in a row with no tool call between them show where Claude Code's cap on consecutive stop-hook continuations ends the turn, and the decision records the cap the done gate plans around",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "claude-terminal",
+          "log": "logs/claude-terminal.jsonl",
+          "session": "8c16136b-01e7-4f0d-9cdf-96db87b22344",
+          "from": "a4c82216ec4e",
+          "endedAfter": 8,
+          "recording": {
+            "sha256": "ef1295ce6051334c620943517dbb6f29b386a04a509d79a4c7a68ac80d9c3d3b",
+            "bytes": 800449,
+            "type": "video/mp4"
+          }
+        }
+      ],
+      "decision": {
+        "stopContinuationCap": 8,
+        "why": "Claude Code 2.1.303 continued 8 send-backs in a row and overrode the 9th (\"A hook blocked the turn from ending 9 consecutive times — overriding and ending turn\"); the count resets at a tool call; CLAUDE_CODE_STOP_HOOK_BLOCK_CAP raises it. The done gate plans for at most 8 consecutive send-backs without a tool call, and treats a 9th as never delivered."
+      }
+    },
+    "#80.b11edf91": {
+      "criterion": "Codex Desktop: whether any entry in `~/.codex/hooks.json` fires on the tested app version is recorded; if none fires, Codex app sessions are watch-only: recorded from their transcripts, with verdicts and answers delivered on your next prompt",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "codex-desktop",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a155d9-981c-7a20-a6bc-466975b4739d",
+          "observed": true,
+          "recording": {
+            "sha256": "d0e7469aa20c7525035d5929ac505cb29badfdb3b8ff5826803ae4da57cc6c55",
+            "bytes": 4680255,
+            "type": "video/mp4"
+          }
+        }
+      ],
+      "decision": {
+        "codexDesktopMode": "gated",
+        "why": "Every entry in ~/.codex/hooks.json fired on Codex Desktop 0.160.0 (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop); hooks trusted in the CLI (same hashes in config.toml) were already trusted in the app, which asked only to trust each new folder. The app also starts its own background \"suggestion\" sessions in every new folder, with prompts nobody typed, that run tool calls through the same hooks."
+      }
+    },
+    "#80.119fc62b": {
+      "criterion": "Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead at p95 is recorded in both desktop apps, and a held stop adds under 20 ms beyond its checks",
+      "status": "INCONCLUSIVE",
+      "findings": [],
+      "decision": {
+        "why": "Reference Mac (Mac15,7). Claude desktop, on AC: held stops added 7.2 to 10.2 ms beyond their checks; hook overhead p95 81.7 ms, Node start included. Codex Desktop, on battery: 4 to 10.7 ms with one 50 ms outlier, and a 45-minute hold reads -36 ms because wall and monotonic clocks drift; overhead p95 152.3 ms. The Codex Desktop samples were not on AC, so the budget is INCONCLUSIVE until Codex Desktop is measured on AC.",
+        "blockedOn": "Codex Desktop samples on AC: on a rewritten hooks.json the app fired no spike entry, so none could be taken"
+      },
+      "budgets": {
+        "machine": {
+          "model": "Mac15,7",
+          "chip": "Apple M3 Pro",
+          "cpus": 12,
+          "memoryBytes": 38654705664,
+          "power": "mixed: Claude desktop samples on AC, Codex Desktop samples on battery",
+          "lowPowerMode": false,
+          "thermal": "nominal",
+          "macOS": "26.7.1 (25G241)"
+        },
+        "baseCommit": "dcfd7b86f55373c14181f5da827fb2aee6f663b0",
+        "base": null,
+        "initialReason": "The merge base dcfd7b8 has no desktop hooks spike to compare with; this is the first measurement.",
+        "hookOverheadMs": {
+          "claude-desktop": {
+            "samples": [
+              34.161,
+              47.725,
+              39.745,
+              41.124,
+              42.356,
+              45.387,
+              39.688,
+              31.776,
+              28.104,
+              73.17,
+              28.075,
+              18.207,
+              19.97,
+              47.354,
+              81.673,
+              40.369,
+              32.826,
+              32.164,
+              26.018
+            ],
+            "p95": 81.673
+          },
+          "codex-desktop": {
+            "samples": [
+              48.984,
+              29.826,
+              42.768,
+              25.764,
+              27.883,
+              48.014,
+              59.951,
+              134.405,
+              102.319,
+              53.629,
+              152.31,
+              39.57,
+              22.631,
+              20.698,
+              23.516,
+              19.439,
+              21.046,
+              19.604,
+              23.423,
+              24.095,
+              21.875,
+              2695047.98,
+              20.566
+            ],
+            "p95": 152.31
+          }
+        },
+        "heldStopExtraMs": {
+          "claude-desktop": [
+            {
+              "ms": 7.981,
+              "log": "logs/claude-desktop.jsonl",
+              "invocation": "35957b29f7c5"
+            },
+            {
+              "ms": 7.197,
+              "log": "logs/claude-desktop.jsonl",
+              "invocation": "0936712b643c"
+            },
+            {
+              "ms": 7.506,
+              "log": "logs/claude-desktop.jsonl",
+              "invocation": "055309025450"
+            },
+            {
+              "ms": 10.205,
+              "log": "logs/claude-desktop.jsonl",
+              "invocation": "511fe964c451"
+            },
+            {
+              "ms": 7.191,
+              "log": "logs/claude-desktop.jsonl",
+              "invocation": "06e94afddf6b"
+            }
+          ],
+          "codex-desktop": [
+            {
+              "ms": 10.07,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "096f76157476"
+            },
+            {
+              "ms": 50.041,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "0fbe87f63493"
+            },
+            {
+              "ms": 8.157,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "b75d559cc06e"
+            },
+            {
+              "ms": 10.679,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "ac4e78a76209"
+            },
+            {
+              "ms": 7.818,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "ebe29bf26f73"
+            },
+            {
+              "ms": 4,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "020c5bbb2e72"
+            },
+            {
+              "ms": -36.228,
+              "log": "logs/codex-desktop.jsonl",
+              "invocation": "3760700246e6"
+            }
+          ]
+        }
+      }
+    },
+    "#80.15c33f50": {
+      "criterion": "The spike records, for the terminal and each app, whether a line reached the chat while a 60 s tool call still ran, and whether anything fired before a session was deleted, each with the recording that shows the route or the version tested with none; #120 and #88 keep the criteria that need a route only where the decision names one",
+      "status": "BLOCKED",
+      "findings": [
+        {
+          "surface": "claude-terminal",
+          "kind": "line",
+          "log": "logs/claude-terminal.jsonl",
+          "session": "8c16136b-01e7-4f0d-9cdf-96db87b22344",
+          "route": "FileChanged systemMessage (a brief notification in the footer)",
+          "call": "a944de262970",
+          "callEnd": "98bc3f4ff037",
+          "invocation": "f14788d12ad5",
+          "recording": {
+            "sha256": "ef1295ce6051334c620943517dbb6f29b386a04a509d79a4c7a68ac80d9c3d3b",
+            "bytes": 800449,
+            "type": "video/mp4"
+          }
+        },
+        {
+          "surface": "codex-cli",
+          "kind": "line",
+          "log": "logs/codex-cli.jsonl",
+          "session": "01a15559-6c46-74a2-80a8-c477103ff3d3",
+          "route": null
+        },
+        {
+          "surface": "codex-desktop",
+          "kind": "line",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a155d9-981c-7a20-a6bc-466975b4739d",
+          "route": null
+        },
+        {
+          "surface": "codex-desktop",
+          "kind": "delete",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a155d9-981c-7a20-a6bc-466975b4739d",
+          "deletedAt": 1792442194000,
+          "route": null,
+          "action": "archive"
+        },
+        {
+          "surface": "claude-desktop",
+          "kind": "line",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "4efa4b70-98df-4d62-b0d5-98260935a841",
+          "route": null,
+          "basis": "FileChanged fired 3 times during a 65.5 s call, but Claude Code documents that its systemMessage \"doesn't reach the SDK message stream\", which the desktop app runs on, and the desktop transcript saves no line for it while it saves every Stop line"
+        },
+        {
+          "surface": "claude-desktop",
+          "kind": "delete",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "4efa4b70-98df-4d62-b0d5-98260935a841",
+          "deletedAt": 1792449573000,
+          "route": "SessionEnd",
+          "action": "archive",
+          "transcript": "logs/claude-desktop-transcript.jsonl"
+        }
+      ],
+      "decision": {
+        "codexCli": "0.144.0 skips async hooks (\"async hooks are not supported yet\"); no hook fired during a 65.3 s call",
+        "codexDesktop": "0.160.0: no hook fired during a 65.5 s call; archiving an open thread fired no SessionEnd and moved its rollout to ~/.codex/archived_sessions",
+        "claudeDesktop": "FileChanged fired during a 65 s call in a fresh desktop session, but the desktop transcript saves no line for it, unlike Stop lines; whether anything shows needs the window on a recording",
+        "issues": "#120: an in-call line has a route only in the Claude Code terminal (FileChanged notification); none in the Claude desktop app (2.1.299), Codex CLI (0.144.0) or Codex Desktop (0.160.0). #88: Claude desktop fires SessionEnd before an archive; Codex Desktop fires nothing before an archive and moves the rollout to ~/.codex/archived_sessions.",
+        "blockedOn": "Only archives were tested: a permanent delete in each app is still open. Everything else in this criterion is recorded.",
+        "claudeDesktopDelete": "Archiving a Claude desktop session fired SessionEnd (reason other) about 1.2 s before the archive finished (session 4efa4b70 at 22:32:52 UTC); not on a recording, and a permanent delete is untested"
+      }
+    },
+    "#80.661b1ddf": {
+      "criterion": "The spike records whether Claude Code's ConfigChange hook fires, in the terminal and in the desktop app, when a Bash call's child process removes a hook entry from `~/.claude/settings.json`, with the recording or the version tested; the Claude Code adapter adds a ConfigChange entry only where the decision says it fires",
+      "status": "PASS",
+      "findings": [
+        {
+          "surface": "claude-terminal",
+          "log": "logs/claude-terminal.jsonl",
+          "session": "5ae084ad-1574-45f0-ad8f-3f2e6122ddd7",
+          "observed": true,
+          "call": "a00ec1fbf079"
+        },
+        {
+          "surface": "claude-desktop",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "3b23a185-7068-4f55-94cb-407112039860",
+          "observed": true,
+          "call": "c01d481d0013"
+        }
+      ],
+      "decision": {
+        "firesOn": [
+          "claude-terminal",
+          "claude-desktop"
+        ],
+        "adapter": "#18 adds a ConfigChange entry (matcher user_settings) on both Claude Code surfaces. It fired about 1.4 s after the Bash call whose child removed the entry, in that session and in every other open session that watches the file. In auto mode the classifier denied the same call as [Self-Modification] before it ran, so an auto-mode agent cannot make that edit through a Bash call that names settings.json."
+      }
+    }
+  },
+  "notes": [
+    "Recordings stay outside the repo, named by hash. They are window captures at one frame a second with the UTC time stamped above each frame (Claude Code terminal: tmux pane text rendered to frames).",
+    "Claude desktop evidence without a recording: session 3b23a185 (this spike's own desktop session) held 5 stops and woke twice; session 4efa4b70 (a fresh desktop session in ~/deepbuild-spike80/claude-desk) held 5 stops, showed verdicts, woke on an answer after 32 s idle, and fired FileChanged 3 times during a 65 s call.",
+    "Claude desktop: hooks run with PWD set to the session's environment folder, not its working folder; earlier asyncRewake waiters keep running, so one answer woke the session twice (the design assumes a new waiter replaces the old one).",
+    "Claude Code 2.1.303: a message typed mid-turn fires UserPromptSubmit at once and is queued; an asyncRewake wake starts its turn with a UserPromptSubmit whose prompt is a task-notification carrying the waiter's stderr; in auto mode a Bash call naming settings.json is denied as [Self-Modification].",
+    "Sessions c2d0466d (a terminal session whose environment leaked CLAUDE_CODE_ENTRYPOINT=claude-desktop) and dry runs are dropped from the logs; payload tool_response fields are dropped.",
+    "Oct 19 22:29 UTC, on AC: the fresh desktop session 4efa4b70 held 5 stops, woke on an answer, and fired FileChanged 3 times during a 65.5 s call; no message was typed during the call, and the window showed other sessions, so none of it is on a recording.",
+    "22:29–22:33 UTC, this spike's own desktop session on AC: 5 held stops with FAIL verdict lines, then a clean idle wake (wake9b7fff56ee); the window recording showed another session, so it was deleted.",
+    "Codex Desktop picks up ~/.codex/hooks.json again on a new turn (after the file was restored, a turn fired no hooks), unlike the CLI, which kept a session's hooks. At 22:43 UTC the reinstalled entries did not fire: the trusted hashes in ~/.codex/config.toml for those entry keys had changed since 20:26 by something outside this spike, and the app skipped them without a review prompt.",
+    "Oct 19, 23:12–23:19 UTC: two more desktop calls (60 s and 240 s) with the hooks armed received no typed message, and the throwaway session \"#80 spike: delete me\" (ee1496ed) was not deleted, so the typed and permanent-delete cases stay open.",
+    "Oct 19, 23:16 UTC: the Codex CLI listed every spike entry as trusted, yet Codex Desktop 0.160.0 fired none of them on two new turns after ~/.codex/hooks.json was rewritten. The adapter cannot assume the CLI's trust carries to the app; it needs the app's own health reading."
+  ]
+}
