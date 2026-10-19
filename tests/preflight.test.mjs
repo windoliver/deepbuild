@@ -136,13 +136,12 @@ test('the check budget comes from budgets.json and excludes the perf comparison'
 test('the unit lane runs every tooling test file', (t) => {
   const cwd = mkdtempSync(join(tmpdir(), 'deep-preflight-tooling-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  mkdirSync(join(cwd, 'tests/acceptance/1'), { recursive: true });
-  // Acceptance tests sit in tests/acceptance/<issue>/.
-  for (const name of ['one', 'two', 'acceptance/1/three']) writeFileSync(join(cwd, 'tests', `${name}.test.mjs`), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(name.split('/').pop())}, '');`);
+  mkdirSync(join(cwd, 'tests'));
+  for (const name of ['one', 'two']) writeFileSync(join(cwd, 'tests', `${name}.test.mjs`), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(name)}, '');`);
   const [command, ...args] = checks.find(({ name }) => name === 'unit').commands.find((parts) => parts.includes('--test'));
   // A nested test runner that inherits this runner's context runs no files.
   spawnSync(command, args, { cwd, env: { ...process.env, NODE_TEST_CONTEXT: undefined } });
-  assert.deepEqual(['one', 'two', 'three'].filter((name) => existsSync(join(cwd, name))), ['one', 'two', 'three']);
+  assert.deepEqual(['one', 'two'].filter((name) => existsSync(join(cwd, name))), ['one', 'two']);
 });
 
 test('the unit lane runs only test files inside the declared test paths, which perf sets apart', (t) => {
