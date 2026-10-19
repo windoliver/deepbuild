@@ -32,8 +32,13 @@ try {
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
     archive = mkdtempSync(join(tmpdir(), 'deep-benchmark-base-'));
-    // All git reads stay in this checkout. The disposable archive has no .git.
+    // Git reads stay in this checkout. The merge base's checks read git, so the disposable copy gets
+    // its own throwaway repository, committed without the user's hooks or signing.
     run('tar', ['-xf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
+    const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], archive, { stdio: 'pipe' });
+    git('init', '-q');
+    git('add', '-A');
+    git('commit', '-qm', `merge base ${baseCommit}`);
     run('npm', ['ci', '--no-audit', '--no-fund'], archive);
     warm(archive);
     baseline = measureOnce([process.execPath, 'scripts/checks.mjs'], archive);

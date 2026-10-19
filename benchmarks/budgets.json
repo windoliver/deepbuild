@@ -16,6 +16,13 @@
       "margin": 0.5,
       "limits": { "peakBytes": 10000000 },
       "initialReason": "Issue #12 first measurement: the merge base has no executable benchmark. Measure skeleton process startup, not issue #17 hook overhead, in 20 rounds interleaved with the merge base. p50 and peak memory get a 50% relative margin and the design's 10 MB peak-memory ceiling; p95 is reported, since its tail moves past that margin between identical binaries. Established definitions are frozen."
+    },
+    {
+      "id": "repo-rules",
+      "command": ["node", "scripts/repo-rules.mjs"],
+      "margin": 0.5,
+      "limits": { "p50Ms": 1000, "p95Ms": 2000, "peakBytes": 128000000 },
+      "initialReason": "Issue #246 first measurement: the merge base has no repo-rules check. Time the lint lane's rules on this repo in 20 rounds: one read of every file git lists, one cargo metadata call and the size diff against the merge base. Issue #246 caps p50 at 1 s, p95 at 2 s and peak memory at 128 MB; later merge bases hold p50 and peak memory to a 50% margin."
     }
   ]
 }

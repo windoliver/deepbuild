@@ -1,0 +1,12 @@
+{
+  "deps": {
+    "package.json": {
+      "devDependencies": {
+        "@types/node": { "spec": "22.20.5", "why": "Issue #12: Node's types for the TypeScript workspaces." },
+        "typescript": { "spec": "5.9.3", "why": "Issue #12: the typecheck lane and the workspace builds." },
+        "vitest": { "spec": "5.0.5", "why": "Issue #12: the unit lane's TypeScript tests." }
+      }
+    }
+  },
+  "allowedFindings": []
+}
