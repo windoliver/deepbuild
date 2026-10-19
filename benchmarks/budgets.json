@@ -4,6 +4,11 @@
     "limits": { "elapsedMs": 300000 },
     "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin."
   },
+  "harness": {
+    "limits": { "sessionMs": 60000, "wholeMs": 600000 },
+    "margin": 1,
+    "initialReason": "Issue #48 first measurement: the merge base has no harness. The lane runs only when a change touches the harness, its hook or its launch facts, since each run spends plan usage. It runs every scripted session once, on real agents, and holds each to 60 s and all of them to 10 minutes on the reference Mac. Model latency moves a single run far more than a code change does, so a later merge base's runs are compared with a 100% margin."
+  },
   "tasks": [
     {
       "id": "hook-startup",
