@@ -1,6 +1,6 @@
 {
   "schema": "adapter.facts@1",
-  "versions": ["2.1.302", "2.1.303"],
+  "versions": ["2.1.302", "2.1.303", "2.1.304"],
   "agent": "claude",
   "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
   "signIn": {
