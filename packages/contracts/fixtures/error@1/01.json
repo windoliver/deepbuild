@@ -1,0 +1,8 @@
+{
+  "code": "format",
+  "retryable": false,
+  "remediation": "Send the value in the field's format.",
+  "path": "/seq",
+  "actual": "01",
+  "evidence": []
+}

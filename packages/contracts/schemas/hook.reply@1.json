@@ -1,0 +1,24 @@
+{
+  "title": "hook.reply@1",
+  "description": "The reply deep-hook prints, already mapped to the agent's own output.",
+  "type": "object",
+  "properties": {
+    "exit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "stdout": {
+      "type": "string"
+    },
+    "stderr": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "exit",
+    "stdout",
+    "stderr"
+  ],
+  "additionalProperties": false
+}

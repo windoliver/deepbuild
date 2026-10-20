@@ -1,0 +1,62 @@
+{
+  "title": "hook.request@1",
+  "description": "deep-hook's request line: the agent's hook JSON, stamped with seq and id.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Wall-clock ns since the Unix epoch when the hook started, as a canonical decimal string."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, minted with its seq."
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "ppid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "matched": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The guard entries in rules.json the call matched, by name."
+    },
+    "payload": {
+      "x-opaque": "the agent's hook JSON, unchanged; its adapter reads it",
+      "description": "The agent's hook JSON, unchanged."
+    }
+  },
+  "required": [
+    "v",
+    "agent",
+    "event",
+    "seq",
+    "id",
+    "pid",
+    "ppid",
+    "matched",
+    "payload"
+  ],
+  "additionalProperties": false
+}
