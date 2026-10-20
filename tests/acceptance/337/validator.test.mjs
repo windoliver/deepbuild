@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import {
   BUDGETS, budgetGateProblems, budgetProblems, buildProblems, decisionProblems, displayProblem, failedCriteria, FALLBACK, headlessProblems, judge, namedTests, PANELS,
-  menuBarProblems, panelProblems, parseLibtest, preflightProblems, REFERENCE, screenProblems, sha256, STOCKS, stocksProblems, TOOLKIT_ROW, windowProblems,
+  menuBarProblems, panelProblems, parseLibtest, preflightProblems, REFERENCE, REFERENCES, CONDITIONS, screenProblems, sha256, STOCKS, stocksProblems, TOOLKIT_ROW, windowProblems,
 } from './validate.mjs';
 
 const clone = (value) => structuredClone(value);
@@ -79,6 +79,8 @@ function uncapturedRecord(base) {
 }
 const docsRecord = (base) => { const record = rightRecord(base); record.panels[1].inputs = ['issue#337', 'docs/technical-design.md', UPSTREAM_DOC, { doc: 'docs/spikes/337/task.md', sha256: sha256(TASK) }]; return record; };
 const five = (value) => [value * 0.96, value * 0.98, value, value * 0.97, value * 0.99];
+// The second reference Mac's fingerprint (Mac15,12, Apple M3, 16 GiB), conditions met.
+const secondReference = () => { const { name, ...hardware } = REFERENCES[1]; return { ...hardware, ...CONDITIONS }; };
 
 function rightRecord(base) {
   return {
@@ -218,9 +220,17 @@ const planted = [
   [BUDGETS, 'idle CPU at exactly 1%, not under it', budgetGateProblems, (r) => { r.budgets.idleCpuPercent.runs = [1, 1, 1, 1, 1]; }, /idle CPU is INCONCLUSIVE/],
   [BUDGETS, 'idle CPU at exactly 1% decides nothing', budgetProblems, (r) => { r.budgets.idleCpuPercent.runs = [1, 1, 1, 1, 1]; r.budgets.idleCpuPercent.display = '1%'; }, /idle CPU.*INCONCLUSIVE decides nothing/],
   [BUDGETS, 'a 5.5-minute preflight with gpui-kit', budgetGateProblems, (r) => { r.budgets.preflightMs.runs = five(330_000); }, /local preflight is FAIL/],
-  [BUDGETS, 'measured off the reference Mac', budgetProblems, (r) => { r.machine.model = 'Mac14,6'; }, /not measured on the reference Mac: model is "Mac14,6"/],
+  [BUDGETS, 'measured on a Mac that is neither reference', budgetProblems, (r) => { r.machine.model = 'Mac14,6'; }, /not measured on a reference Mac: model is "Mac14,6", .*: neither Mac15,7 \(M3 Pro, 36 GB\) nor Mac15,12 \(M3, 16 GB\)/],
+  [BUDGETS, "the first reference Mac's model with the second's chip and memory", budgetProblems, (r) => { r.machine.chip = 'Apple M3'; r.machine.memoryBytes = 16 * 2 ** 30; }, /not measured on a reference Mac: model is "Mac15,7", chip is "Apple M3", memoryBytes is 17179869184: neither/],
   [BUDGETS, 'measured on battery', budgetGateProblems, (r) => { r.machine.power = 'battery'; }, /is INCONCLUSIVE/],
+  [BUDGETS, 'measured on battery, named', budgetProblems, (r) => { r.machine.power = 'battery'; }, /not measured on a reference Mac: power is "battery", not "ac"/],
+  [BUDGETS, 'Low Power Mode on', budgetProblems, (r) => { r.machine.lowPowerMode = true; }, /lowPowerMode is true, not false/],
+  [BUDGETS, 'thermal state fair', budgetProblems, (r) => { r.machine.thermalState = 'fair'; }, /thermalState is "fair", not "nominal"/],
   [BUDGETS, 'no macOS build', budgetProblems, (r) => { delete r.machine.macosBuild; }, /the macOS build is missing/],
+  [BUDGETS, 'on the second reference Mac, on battery', budgetProblems, (r) => { Object.assign(r.machine, secondReference(), { power: 'battery' }); }, /not measured on a reference Mac: power is "battery", not "ac"/],
+  [BUDGETS, 'on the second reference Mac, Low Power Mode on', budgetProblems, (r) => { Object.assign(r.machine, secondReference(), { lowPowerMode: true }); }, /lowPowerMode is true, not false/],
+  [BUDGETS, 'on the second reference Mac, thermal state fair', budgetProblems, (r) => { Object.assign(r.machine, secondReference(), { thermalState: 'fair' }); }, /thermalState is "fair", not "nominal"/],
+  [BUDGETS, 'on the second reference Mac, no macOS build', budgetProblems, (r) => { Object.assign(r.machine, secondReference()); delete r.machine.macosBuild; }, /the macOS build is missing/],
   [BUDGETS, 'four runs', budgetProblems, (r) => { r.budgets.coldStartMs.runs.pop(); }, /coldStartMs: runs must be five/],
   [BUDGETS, 'no app size', budgetProblems, (r) => { delete r.budgets.appBytes; }, /budgets\.appBytes \(app size\) is missing/],
   [BUDGETS, 'a displayed number that is not the worst run', budgetProblems, (r) => { r.budgets.coldStartMs.display = '0.40 s'; }, /coldStartMs: display "0\.40 s" isn't the recorded worst run/],
@@ -300,7 +310,7 @@ test('scope: a CI workflow is refused', (t) => {
   rejects(preflightProblems(rightRecord(base), LANES, repo), /never in CI/);
 });
 
-test(`${BUDGETS} the budget rule: under the limit passes, over by more than the margin fails, anything else or off the reference Mac is INCONCLUSIVE`, () => {
+test(`${BUDGETS} the budget rule: under the limit passes, over by more than the margin fails, anything else or off both reference Macs is INCONCLUSIVE`, () => {
   const machine = { ...REFERENCE, macosBuild: '25A354' };
   assert.equal(judge([990, 995, 999, 980, 985], 1000, machine), 'PASS');
   assert.equal(judge([990, 995, 1000, 980, 985], 1000, machine), 'INCONCLUSIVE');
@@ -308,6 +318,23 @@ test(`${BUDGETS} the budget rule: under the limit passes, over by more than the 
   assert.equal(judge([1040, 1040, 1040, 1040, 1040], 1000, machine), 'INCONCLUSIVE');
   assert.equal(judge([500, 500, 500, 500, 500], 1000, { ...machine, thermalState: 'fair' }), 'INCONCLUSIVE');
   assert.equal(judge([500, 500, 500, 500], 1000, machine), 'BLOCKED');
+});
+
+test(`${BUDGETS} a run on either reference Mac counts: the second (Mac15,12, Apple M3, 16 GiB) passes the reference check, and a Mac that is neither doesn't`, (t) => {
+  const { repo, base } = scratchRepo(t);
+  const second = { ...secondReference(), macosBuild: '25A354' };
+  assert.deepEqual(second, { model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 17179869184, power: 'ac', lowPowerMode: false, thermalState: 'nominal', macosBuild: '25A354' });
+  assert.equal(judge([990, 995, 999, 980, 985], 1000, second), 'PASS');
+  assert.equal(judge([1200, 1200, 1200, 1200, 1200], 1000, second), 'FAIL');
+  assert.equal(judge([990, 995, 999, 980, 985], 1000, { ...second, model: 'Mac14,6' }), 'INCONCLUSIVE');
+  assert.equal(judge([990, 995, 999, 980, 985], 1000, { ...second, power: 'battery' }), 'INCONCLUSIVE');
+  assert.equal(judge([990, 995, 999, 980, 985], 1000, { ...second, lowPowerMode: true }), 'INCONCLUSIVE');
+  assert.equal(judge([990, 995, 999, 980, 985], 1000, { ...second, thermalState: 'fair' }), 'INCONCLUSIVE');
+  assert.equal(judge([990, 995, 999, 980, 985], 1000, { ...second, macosBuild: '' }), 'INCONCLUSIVE');
+  const record = rightRecord(base);
+  record.machine = second;
+  holds(budgetProblems(record, repo));
+  holds(budgetGateProblems(record));
 });
 
 test('displayed numbers are read to their written precision', () => {
