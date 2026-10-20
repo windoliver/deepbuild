@@ -2,10 +2,58 @@
   "deps": {
     "package.json": {
       "devDependencies": {
-        "@types/node": { "spec": "24.19.2", "why": "Issue #12: Node's types for the TypeScript workspaces, at the Node 24.22 floor." },
-        "fast-check": { "spec": "4.10.2", "why": "Issue #15: the seeded 1,000-case property test of the scrubber (criterion 16)." },
-        "typescript": { "spec": "5.9.3", "why": "Issue #12: the typecheck lane and the workspace builds." },
-        "vitest": { "spec": "5.0.5", "why": "Issue #12: the unit lane's TypeScript tests." }
+        "@types/node": {
+          "spec": "24.19.2",
+          "why": "Issue #12: Node's types for the TypeScript workspaces, at the Node 24.22 floor."
+        },
+        "fast-check": {
+          "spec": "4.10.2",
+          "why": "Issue #15: the seeded 1,000-case property test of the scrubber (criterion 16)."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #12: the typecheck lane and the workspace builds."
+        },
+        "vitest": {
+          "spec": "5.0.5",
+          "why": "Issue #12: the unit lane's TypeScript tests."
+        }
+      }
+    },
+    "crates/deep-app/Cargo.toml": {
+      "dependencies": {
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #337: the toolkit under trial, pinned to one commit since gpui-kit is unpublished at this milestone."
+        },
+        "gpui-shell": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #337: runs the agents' JavaScript panels, quickjs and components only, no webview."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #337: reads the recorded quotes the panels replay; already in gpui-kit's tree."
+        }
+      },
+      "dev-dependencies": {
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #337: gpui-kit's test support, for the headless renders and clicks."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "objc2": {
+          "spec": "^0.6",
+          "why": "Issue #337: the menu-bar count; gpui-kit has no status item. Already in gpui's tree."
+        },
+        "objc2-app-kit": {
+          "spec": "^0.3",
+          "why": "Issue #337: NSStatusItem for the menu-bar count. Already in gpui's tree."
+        },
+        "objc2-foundation": {
+          "spec": "^0.3",
+          "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
+        }
       }
     }
   },
