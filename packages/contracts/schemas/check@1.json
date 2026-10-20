@@ -1,0 +1,64 @@
+{
+  "title": "check@1",
+  "description": "A check; a PASS never rests on a model alone.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "validity",
+        "command",
+        "journey",
+        "review",
+        "numbers",
+        "docs",
+        "draft",
+        "narrowing",
+        "document",
+        "physics_golden",
+        "media"
+      ]
+    },
+    "runner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "depth": {
+      "type": "string",
+      "minLength": 1
+    },
+    "oracle": {
+      "type": "string",
+      "enum": [
+        "code",
+        "model",
+        "person"
+      ],
+      "description": "Who judges it: code, a model or a person."
+    },
+    "contract": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "description": "The numeric contract a check comparing numbers with a reference declares."
+    }
+  },
+  "required": [
+    "kind",
+    "runner",
+    "inputs",
+    "depth",
+    "oracle",
+    "contract"
+  ],
+  "additionalProperties": false
+}

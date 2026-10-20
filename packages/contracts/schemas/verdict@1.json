@@ -1,0 +1,242 @@
+{
+  "title": "verdict@1",
+  "description": "The verdict record that is hashed.",
+  "x-hash": {
+    "excludes": [
+      "/checkout"
+    ]
+  },
+  "type": "object",
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "pattern": "^verdict:[0-9A-Za-z]+$",
+      "description": "A verdict: handle."
+    },
+    "claim": {
+      "type": "string",
+      "pattern": "^claim:[0-9A-Za-z]+$",
+      "description": "A claim: handle."
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "INVALID",
+        "BLOCKED",
+        "INCONCLUSIVE"
+      ]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "req": {
+            "type": "string",
+            "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+            "description": "A requirement: req:<definition>#R<n>."
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "INVALID",
+              "BLOCKED",
+              "INCONCLUSIVE",
+              "pending"
+            ]
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1
+          },
+          "depth": {
+            "type": "string",
+            "minLength": 1
+          },
+          "oracle": {
+            "type": "string",
+            "enum": [
+              "code",
+              "model",
+              "person"
+            ],
+            "description": "Who judges it: code, a model or a person."
+          },
+          "runs": {
+            "type": "object",
+            "properties": {
+              "clean": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "needed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "counted": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^run:[0-9A-Za-z]+$",
+                  "description": "A run: handle."
+                }
+              }
+            },
+            "required": [
+              "clean",
+              "needed",
+              "counted"
+            ],
+            "additionalProperties": false
+          },
+          "smallest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "points_to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            }
+          },
+          "proof": {
+            "type": "string",
+            "enum": [
+              "statement",
+              "static_check",
+              "test_run",
+              "journey",
+              "decision"
+            ]
+          },
+          "ask": {
+            "type": "string",
+            "pattern": "^ask:[0-9A-Za-z]+$",
+            "description": "A ask: handle."
+          }
+        },
+        "required": [
+          "req",
+          "outcome",
+          "check",
+          "depth",
+          "oracle",
+          "runs",
+          "smallest",
+          "points_to",
+          "evidence",
+          "proof"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "smallest": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "points_to": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "key": {
+      "type": "object",
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "doc_revisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "check_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^d1:[0-9a-f]{64}$"
+          }
+        },
+        "state_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "A SHA-256, in lower-case hex."
+          }
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "commit",
+        "doc_revisions",
+        "check_digests",
+        "state_digests",
+        "environment",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    "checkout": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The checkout it ran in, a local path shown to you; the hash leaves it out."
+    }
+  },
+  "required": [
+    "verdict",
+    "claim",
+    "outcome",
+    "reasons",
+    "requirements",
+    "smallest",
+    "points_to",
+    "commit",
+    "key",
+    "checkout"
+  ],
+  "additionalProperties": false
+}

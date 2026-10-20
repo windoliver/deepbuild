@@ -1,0 +1,10 @@
+{
+  "kind": "command",
+  "runner": "vitest",
+  "inputs": [
+    "packages/contracts"
+  ],
+  "depth": "unit",
+  "oracle": "code",
+  "contract": null
+}

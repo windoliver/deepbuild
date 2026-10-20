@@ -1,0 +1,43 @@
+{
+  "title": "guard@1",
+  "description": "One guard entry, which deep-hook and the hub's guard engine both read.",
+  "type": "object",
+  "properties": {
+    "match": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "watch",
+        "warn",
+        "block"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "next_step": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fail_closed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "match",
+    "scope",
+    "mode",
+    "reason",
+    "next_step",
+    "fail_closed"
+  ],
+  "additionalProperties": false
+}

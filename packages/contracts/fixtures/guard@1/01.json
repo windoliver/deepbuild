@@ -1,0 +1,8 @@
+{
+  "match": "shell:pkill *",
+  "scope": "all_repos",
+  "mode": "block",
+  "reason": "Never kill processes by name.",
+  "next_step": "Stop the process by its PID.",
+  "fail_closed": true
+}
