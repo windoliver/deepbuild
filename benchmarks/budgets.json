@@ -60,6 +60,13 @@
       "initialReason": "Issue #56 first measurement: the merge base has no hub core. The bench starts the Effect 4 spike hub, holds one hook in each of 50 sessions on a check that passes at once, and prints hold latency, the hub's peak memory and its leaked handles; perf times the whole bench in 20 rounds and caps its peak memory at 250 MB, about twice what the hub and its bench use together. p50 and peak memory get a 50% margin against a later merge base, since a run that starts processes moves with machine load."
     },
     {
+      "id": "contracts-validate",
+      "command": ["node", "benchmarks/contracts.mjs"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 µs at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "corpus-replay",
       "command": ["node", "scripts/corpus.mjs", "replay"],
       "margin": 0.5,

@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "suggestion.filed",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "suggestion": "01K74G3A5C7E9G1J3M5P7R9T1V",
+    "doc": "doc:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "item": "row.m14",
+    "writer": "agent",
+    "patch": "01K74G3A5C7E9G1J3M5P7R9T1V",
+    "base": 4,
+    "ops": [
+      {
+        "set": {
+          "id": "row.m14",
+          "path": "params/label",
+          "value": "Total"
+        }
+      }
+    ]
+  }
+}

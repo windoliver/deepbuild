@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "action.reported",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "call": "01K74G3A5C7E9G1J3M5P7R9T1V",
+    "changed": [
+      "store:forecast"
+    ],
+    "verified": "unverified",
+    "checked": "the forecast store after the write",
+    "error": null
+  }
+}

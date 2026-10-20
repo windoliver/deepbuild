@@ -1,0 +1,40 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.created",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "unblock",
+    "question": "Merge PR 42 into main?",
+    "options": [
+      {
+        "id": "merge",
+        "label": "Merge it",
+        "decision": "allow"
+      }
+    ],
+    "recommended": "merge",
+    "deadline": 1760017051123,
+    "fallback": "hold the merge",
+    "default": "hold the merge",
+    "provisional": false,
+    "owner": "you",
+    "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pinned_to": {
+      "kind": "commit",
+      "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+    },
+    "steps": [
+      "run deep env up"
+    ],
+    "where": "~/src/deepbuild",
+    "why": "the stack is down",
+    "unblocks": [
+      "task:01K74FX2B4D6F8H0K2M4P6R8T0"
+    ],
+    "proves": "the journey runs"
+  }
+}

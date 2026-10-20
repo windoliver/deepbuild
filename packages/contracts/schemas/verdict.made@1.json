@@ -1,0 +1,706 @@
+{
+  "title": "verdict.made@1",
+  "description": "The verdict engine made a verdict. Only the core appends it.",
+  "$defs": {
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "req": {
+            "type": "string",
+            "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+            "description": "A requirement: req:<definition>#R<n>.",
+            "maxLength": 8192
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "INVALID",
+              "BLOCKED",
+              "INCONCLUSIVE",
+              "pending"
+            ]
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "depth": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "oracle": {
+            "type": "string",
+            "enum": [
+              "code",
+              "model",
+              "person"
+            ],
+            "description": "Who judges it: code, a model or a person."
+          },
+          "runs": {
+            "type": "object",
+            "properties": {
+              "clean": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "needed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 65535
+              },
+              "counted": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^run:[0-9A-Za-z]+$",
+                  "description": "A run: handle.",
+                  "maxLength": 8192
+                }
+              }
+            },
+            "required": [
+              "clean",
+              "needed",
+              "counted"
+            ],
+            "additionalProperties": false
+          },
+          "smallest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 8192
+          },
+          "points_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 8192
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex.",
+              "maxLength": 8192
+            }
+          },
+          "proof": {
+            "type": "string",
+            "enum": [
+              "statement",
+              "static_check",
+              "test_run",
+              "journey",
+              "decision"
+            ]
+          },
+          "ask": {
+            "type": "string",
+            "pattern": "^ask:[0-9A-Za-z]+$",
+            "description": "An ask: handle.",
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "req",
+          "outcome",
+          "check",
+          "depth",
+          "oracle",
+          "runs",
+          "smallest",
+          "points_to",
+          "evidence",
+          "proof"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "key": {
+      "type": "object",
+      "properties": {
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
+        },
+        "doc_revisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          }
+        },
+        "check_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^d1:[0-9a-f]{64}$",
+            "maxLength": 8192
+          }
+        },
+        "state_digests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "A SHA-256, in lower-case hex.",
+            "maxLength": 8192
+          }
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          }
+        }
+      },
+      "required": [
+        "commit",
+        "doc_revisions",
+        "check_digests",
+        "state_digests",
+        "environment",
+        "tools"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "x-feeds": [
+    "verdicts"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "verdict.made"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "PASS"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "req": {
+                    "type": "string",
+                    "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+                    "description": "A requirement: req:<definition>#R<n>.",
+                    "maxLength": 8192
+                  },
+                  "outcome": {
+                    "const": "PASS"
+                  },
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "depth": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "oracle": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "model",
+                      "person"
+                    ],
+                    "description": "Who judges it: code, a model or a person."
+                  },
+                  "runs": {
+                    "type": "object",
+                    "properties": {
+                      "clean": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "needed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "counted": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^run:[0-9A-Za-z]+$",
+                          "description": "A run: handle.",
+                          "maxLength": 8192
+                        }
+                      }
+                    },
+                    "required": [
+                      "clean",
+                      "needed",
+                      "counted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "smallest": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "points_to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex.",
+                      "maxLength": 8192
+                    }
+                  },
+                  "proof": {
+                    "type": "string",
+                    "enum": [
+                      "statement",
+                      "static_check",
+                      "test_run",
+                      "journey",
+                      "decision"
+                    ]
+                  },
+                  "ask": {
+                    "type": "string",
+                    "pattern": "^ask:[0-9A-Za-z]+$",
+                    "description": "An ask: handle.",
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "req",
+                  "outcome",
+                  "check",
+                  "depth",
+                  "oracle",
+                  "runs",
+                  "smallest",
+                  "points_to",
+                  "evidence",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "FAIL"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements"
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "INVALID"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements"
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "BLOCKED"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements"
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "INCONCLUSIVE"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "$ref": "#/$defs/requirements"
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

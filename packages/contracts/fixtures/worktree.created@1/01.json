@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "worktree.created",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "path": "~/src/deepbuild-311",
+    "branch": "feat/311",
+    "owner": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "base": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+  }
+}

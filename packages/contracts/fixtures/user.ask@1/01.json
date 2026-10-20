@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "user.ask",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "msg": 3,
+    "text": "[redacted] add seq to the wire",
+    "tasks": [
+      "task:01K74FX2B4D6F8H0K2M4P6R8T0"
+    ],
+    "from": "person"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "plan.proposed",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "ask": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+    "steps": [
+      {
+        "does": "merge PR 42 into main",
+        "changes": [
+          "main"
+        ],
+        "undo": "git revert --no-edit HEAD",
+        "public": true,
+        "cost": 0
+      }
+    ],
+    "diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "hash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  }
+}
