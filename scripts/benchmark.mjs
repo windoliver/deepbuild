@@ -74,16 +74,20 @@ export function warm(cwd) {
   for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore' });
 }
 
-// A timing or memory budget counts only on the reference Mac, on mains power, with Low Power Mode
-// off and the thermal state nominal (design: The reference Mac).
-const reference = [
-  ['model', 'Mac15,7', 'model'],
-  ['chip', 'Apple M3 Pro', 'chip'],
-  ['memoryBytes', 36 * 2 ** 30, 'memory (36 GB)'],
+// A timing or memory budget counts only on a reference Mac, on mains power, with Low Power Mode
+// off and the thermal state nominal (design: The reference Mac). There are two, and a budget holds
+// on each.
+const references = [
+  { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 },
+  { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 },
+];
+const hardware = ['model', 'chip', 'memoryBytes'];
+const conditions = [
   ['power', 'ac', 'power (mains)'],
   ['lowPowerMode', false, 'Low Power Mode'],
   ['thermalState', 'nominal', 'thermal state'],
 ];
+const referenceNames = references.map(({ name }) => name).join(' or ');
 
 // The machine a result ran under. A field this machine can't report, as off macOS, is null, so the
 // result is a reading.
@@ -111,17 +115,19 @@ export function fingerprint() {
   };
 }
 
-// Judges one limit on five runs taken after warm-up. On the reference Mac it passes when all five
+// Judges one limit on five runs taken after warm-up. On a reference Mac it passes when all five
 // are within the limit and fails when all five are over it by more than the margin, the larger of
 // 5% and the five runs' spread, both as fractions of the limit. Anything else, and every result off
-// the reference Mac, is INCONCLUSIVE with the five runs attached.
+// the reference Macs, is INCONCLUSIVE with the five runs attached.
 export function judgeLimit({ limit, runs, fingerprint: machine }) {
   if (!Array.isArray(runs) || runs.length !== 5 || runs.some((run) => !Number.isFinite(run) || run < 0))
     return { status: 'BLOCKED', limit, runs, reason: `a limit is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}` };
   const margin = Math.max(0.05, (Math.max(...runs) - Math.min(...runs)) / limit);
-  const off = reference.filter(([key, value]) => machine?.[key] !== value).map(([key, value, label]) => `${label} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`);
+  const off = references.some((reference) => hardware.every((key) => machine?.[key] === reference[key])) ? []
+    : [`${hardware.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: neither ${referenceNames}`];
+  off.push(...conditions.filter(([key, value]) => machine?.[key] !== value).map(([key, value, label]) => `${label} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`));
   if (!machine?.macosBuild) off.push('the macOS build is missing');
-  if (off.length) return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `a reading, not a budget result: off the reference Mac Mac15,7 (M3 Pro, 36 GB, mains power, Low Power Mode off, thermal state nominal): ${off.join('; ')}` };
+  if (off.length) return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `a reading, not a budget result: off the reference Macs (${referenceNames}; mains power, Low Power Mode off, thermal state nominal): ${off.join('; ')}` };
   if (runs.every((run) => run <= limit)) return { status: 'PASS', limit, runs, margin };
   if (runs.every((run) => run > limit * (1 + margin))) return { status: 'FAIL', limit, runs, margin, reason: `all five runs are over ${limit} by more than the ${(margin * 100).toFixed(1)}% margin` };
   return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `the five runs are neither all within ${limit} nor all over it by more than the ${(margin * 100).toFixed(1)}% margin` };
