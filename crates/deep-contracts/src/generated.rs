@@ -26,6 +26,18 @@ impl Contract for ActionEnteredKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ActionEnteredWriter;
+
+impl Contract for ActionEnteredWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ActionEnteredData {
     pub call: String,
     pub plugin: String,
@@ -62,7 +74,7 @@ pub struct ActionEntered {
     pub id: String,
     pub kind: ActionEnteredKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: ActionEnteredWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -140,6 +152,18 @@ impl Contract for ActionReportedKind {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActionReportedWriter;
+
+impl Contract for ActionReportedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionReportedDataVerified {
     True,
@@ -202,7 +226,7 @@ pub struct ActionReported {
     pub id: String,
     pub kind: ActionReportedKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: ActionReportedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -4938,6 +4962,18 @@ impl Contract for LayerRowsKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LayerRowsWriter;
+
+impl Contract for LayerRowsWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LayerRowsData {
     pub layer: String,
     pub project: String,
@@ -4974,7 +5010,7 @@ pub struct LayerRows {
     pub id: String,
     pub kind: LayerRowsKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: LayerRowsWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -6499,6 +6535,18 @@ impl Contract for MergeDryRunKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MergeDryRunWriter;
+
+impl Contract for MergeDryRunWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct MergeDryRunData {
     pub a: String,
     pub b: String,
@@ -6529,7 +6577,7 @@ pub struct MergeDryRun {
     pub id: String,
     pub kind: MergeDryRunKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: MergeDryRunWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -7839,6 +7887,18 @@ impl Contract for ReadingRollupKind {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReadingRollupWriter;
+
+impl Contract for ReadingRollupWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReadingRollupDataSpan {
     Minute,
@@ -7895,7 +7955,7 @@ pub struct ReadingRollup {
     pub id: String,
     pub kind: ReadingRollupKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: ReadingRollupWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -8920,6 +8980,18 @@ impl Contract for TaskClosedKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TaskClosedWriter;
+
+impl Contract for TaskClosedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TaskClosedData {
     pub by_verdict: String,
 }
@@ -8944,7 +9016,7 @@ pub struct TaskClosed {
     pub id: String,
     pub kind: TaskClosedKind,
     pub subject: String,
-    pub writer: String,
+    pub writer: TaskClosedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,

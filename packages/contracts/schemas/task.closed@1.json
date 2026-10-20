@@ -24,9 +24,8 @@
       "description": "The task this event is about, by its task_ref."
     },
     "writer": {
-      "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "const": "core",
+      "description": "Only the core appends this kind."
     },
     "actor": {
       "type": "string",

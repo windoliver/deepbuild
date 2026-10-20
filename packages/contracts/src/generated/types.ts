@@ -6,7 +6,7 @@ export interface ActionEntered {
   id: string;
   kind: "action.entered";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -28,7 +28,7 @@ export interface ActionReported {
   id: string;
   kind: "action.reported";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -703,7 +703,7 @@ export interface LayerRows {
   id: string;
   kind: "layer.rows";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -949,7 +949,7 @@ export interface MergeDryRun {
   id: string;
   kind: "merge.dry_run";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1186,7 +1186,7 @@ export interface ReadingRollup {
   id: string;
   kind: "reading.rollup";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1362,7 +1362,7 @@ export interface TaskClosed {
   id: string;
   kind: "task.closed";
   subject: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
