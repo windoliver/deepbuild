@@ -297,3 +297,20 @@ it('a string length counts code points, whatever shortcut decides it', () => {
   expect(reg.validate('max@1', { s: '😀' }).ok).toBe(true);
   expect(reg.validate('max@1', { s: 'ab' }).ok).toBe(false);
 });
+
+it('an x-hash exclude resolves through a union, in every branch', () => {
+  const branch = (tag: string, extra: Record<string, Schema>) => tagged(tag, { checkout: { type: 'string' }, ...extra });
+  const hashed = { 'x-hash': { excludes: ['/checkout'] }, oneOf: [branch('a', {}), branch('b', {})] };
+  expect(problemsOf(hashed)).toEqual([]);
+  const missing = { 'x-hash': { excludes: ['/checkout'] }, oneOf: [branch('a', {}), tagged('b', {})] };
+  expect(problemsOf(missing)).toEqual([expect.objectContaining({ path: '/x-hash' })]);
+});
+
+it('a PASS verdict record has no requirement short of PASS', () => {
+  const verdict = fixtures('verdict@1')[0] as { outcome: string; requirements: { outcome: string }[] };
+  const pass = { ...verdict, outcome: 'PASS', requirements: verdict.requirements.map((r) => ({ ...r, outcome: 'PASS' })) };
+  expect(validate('verdict@1', pass).ok).toBe(true);
+  for (const outcome of ['pending', 'FAIL']) {
+    expect(validate('verdict@1', { ...pass, requirements: pass.requirements.map((r) => ({ ...r, outcome })) }).ok, outcome).toBe(false);
+  }
+});
