@@ -1,7 +1,7 @@
 // The PID ledger: every process group this hub starts, appended to <state>/ledger.jsonl as it
 // starts and as it's seen gone, so a hub restarted after kill -9 can stop what the killed one left.
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
 type Entry = { pgid: number; at: number } | { pgid: number; gone: true };
@@ -14,7 +14,7 @@ export function killGroup(pgid: number): void {
   }
 }
 
-function groupAlive(pgid: number): boolean {
+export function groupAlive(pgid: number): boolean {
   try {
     process.kill(-pgid, 0);
     return true;
@@ -23,8 +23,13 @@ function groupAlive(pgid: number): boolean {
   }
 }
 
+// Waits until a group sent SIGKILL has no process left. A child forked as the signal landed can
+// miss it, so a group still there after 100 ms of probes gets SIGKILL again.
 export async function waitGroupGone(pgid: number): Promise<void> {
-  while (groupAlive(pgid)) await new Promise((resolve) => setTimeout(resolve, 10));
+  for (let probe = 1; groupAlive(pgid); probe++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    if (probe % 20 === 0) killGroup(pgid);
+  }
 }
 
 // Every process on the machine with its group and start time. ps prints whole seconds.
@@ -38,57 +43,61 @@ function processTable(): Array<{ pid: number; pgid: number; start: number }> {
 
 export class Ledger {
   readonly live = new Set<number>();
-  readonly #path: string;
+  readonly #fd: number;
 
-  constructor(state: string) {
-    this.#path = join(state, 'ledger.jsonl');
+  private constructor(fd: number) {
+    this.#fd = fd;
+  }
+
+  // Stops what an earlier hub on this state left running, then starts a fresh ledger, open for the
+  // hub's life: under endpoint security every open costs milliseconds of a blocked event loop.
+  static async open(state: string): Promise<Ledger> {
+    const path = join(state, 'ledger.jsonl');
+    if (existsSync(path)) await reap(readFileSync(path, 'utf8'));
+    return new Ledger(openSync(path, 'w'));
   }
 
   started(pgid: number): void {
     this.live.add(pgid);
-    this.#append({ pgid, at: Date.now() });
+    this.#write({ pgid, at: Date.now() });
   }
 
   gone(pgid: number): void {
     this.live.delete(pgid);
-    this.#append({ pgid, gone: true });
+    this.#write({ pgid, gone: true });
   }
 
-  // Stops every group an earlier hub on this state started and never saw gone, then starts a fresh
-  // ledger. A group counts as that hub's only while it still has members: its ID can't be reused
-  // until it's empty. If its leader is still among them, the leader must also have started when the
-  // ledger says (within ps's whole seconds), so a reused PID that leads a new group is left alone.
-  async reap(): Promise<void> {
-    const open = new Map<number, number>();
-    if (existsSync(this.#path)) {
-      for (const line of readFileSync(this.#path, 'utf8').split('\n')) {
-        if (!line) continue;
-        const entry = JSON.parse(line) as Entry;
-        if ('gone' in entry) open.delete(entry.pgid);
-        else open.set(entry.pgid, entry.at);
-      }
-    }
-    if (open.size) {
-      const table = processTable();
-      const stopping: Promise<void>[] = [];
-      for (const [pgid, at] of open) {
-        const members = table.filter((row) => row.pgid === pgid);
-        const leader = members.find((row) => row.pid === pgid);
-        if (!members.length) continue;
-        if (leader && Math.abs(leader.start - at) >= 2000) {
-          process.stderr.write(`left running: process group ${pgid} isn't the one the ledger recorded\n`);
-          continue;
-        }
-        killGroup(pgid);
-        stopping.push(waitGroupGone(pgid));
-      }
-      await Promise.all(stopping);
-    }
-    writeFileSync(this.#path, '');
+  #write(entry: Entry): void {
+    // Synchronous, so the line is on disk before a kill -9 can land.
+    writeSync(this.#fd, `${JSON.stringify(entry)}\n`);
   }
+}
 
-  #append(entry: Entry): void {
-    // Written synchronously, so the entry is on disk before a kill -9 can land.
-    appendFileSync(this.#path, `${JSON.stringify(entry)}\n`);
+// Stops every group the ledger says started and was never seen gone. A group counts as the earlier
+// hub's only while it still has members: its ID can't be reused until it's empty. If its leader is
+// still among them, the leader must also have started when the ledger says (within ps's whole
+// seconds), so a reused PID that leads a new group is left alone.
+async function reap(ledger: string): Promise<void> {
+  const open = new Map<number, number>();
+  for (const line of ledger.split('\n')) {
+    if (!line) continue;
+    const entry = JSON.parse(line) as Entry;
+    if ('gone' in entry) open.delete(entry.pgid);
+    else open.set(entry.pgid, entry.at);
   }
+  if (!open.size) return;
+  const table = processTable();
+  const stopping: Promise<void>[] = [];
+  for (const [pgid, at] of open) {
+    const members = table.filter((row) => row.pgid === pgid);
+    const leader = members.find((row) => row.pid === pgid);
+    if (!members.length) continue;
+    if (leader && Math.abs(leader.start - at) >= 2000) {
+      process.stderr.write(`left running: process group ${pgid} isn't the one the ledger recorded\n`);
+      continue;
+    }
+    killGroup(pgid);
+    stopping.push(waitGroupGone(pgid));
+  }
+  await Promise.all(stopping);
 }

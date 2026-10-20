@@ -11,7 +11,7 @@ import { realClock, virtualClock } from './clock.ts';
 import type { Clock } from './clock.ts';
 import { childOf, HOLD_MS, runHold } from './hold.ts';
 import type { Hold } from './hold.ts';
-import { killGroup, Ledger } from './ledger.ts';
+import { Ledger, waitGroupGone } from './ledger.ts';
 import { Pool } from './pool.ts';
 
 interface Extension {
@@ -21,7 +21,8 @@ interface Extension {
 
 interface Session {
   node: AbortController;
-  open: Set<AbortController>;
+  // Each open hold's node, with the promise that its lease is back.
+  open: Map<AbortController, Promise<void>>;
 }
 
 type Request =
@@ -45,8 +46,7 @@ export async function main(args: string[]): Promise<void> {
   const state = resolve(values.state);
   mkdirSync(state, { recursive: true });
 
-  const ledger = new Ledger(state);
-  await ledger.reap();
+  const ledger = await Ledger.open(state);
   const extensions = await Promise.all(
     (values.extension ?? []).map(async (path) => ((await import(pathToFileURL(resolve(path)).href)) as { default: Extension }).default),
   );
@@ -55,23 +55,23 @@ export async function main(args: string[]): Promise<void> {
   const pool = new Pool(ports);
   const hub = new AbortController();
   const sessions = new Map<string, Session>();
-  const holding = new Set<Promise<void>>();
 
   async function hold(request: Hold, socket: Socket): Promise<void> {
     const until = clock.now() + HOLD_MS;
     send(socket, { ack: request.id, hold_until_ms: until });
     let session = sessions.get(request.session);
     if (!session) {
-      session = { node: childOf(hub.signal), open: new Set() };
+      session = { node: childOf(hub.signal), open: new Map() };
       sessions.set(request.session, session);
     }
     const node = childOf(session.node.signal);
-    session.open.add(node);
     for (const extension of extensions) notify(extension, { id: request.id, session: request.session }, node.signal);
     const cancelTimeout = clock.at(until, () => node.abort('timeout'));
-    const result = await runHold(request, node.signal, pool, ledger);
-    // Only microtasks run between runHold's last look at the signal and here, so a cancel counts
-    // exactly the holds that end `cancelled`.
+    const { result: decided, released } = runHold(request, node.signal, pool, ledger);
+    session.open.set(node, released);
+    const result = await decided;
+    // Only microtasks run between the hold's decision and here, so a cancel counts exactly the holds
+    // that end `cancelled`.
     session.open.delete(node);
     cancelTimeout();
     node.abort('ended');
@@ -83,13 +83,15 @@ export async function main(args: string[]): Promise<void> {
     socket.end();
   }
 
-  function cancel(name: string): number {
+  // Answers once the holds it cancelled have stopped their processes and given their leases back.
+  async function cancel(name: string): Promise<number> {
     const session = sessions.get(name);
     if (!session) return 0;
     sessions.delete(name);
-    const open = [...session.open].filter((node) => !node.signal.aborted).length;
+    const cancelled = [...session.open].filter(([node]) => !node.signal.aborted).map(([, released]) => released);
     session.node.abort('cancelled');
-    return open;
+    await Promise.all(cancelled);
+    return cancelled.length;
   }
 
   function serve(line: string, socket: Socket): void {
@@ -104,15 +106,14 @@ export async function main(args: string[]): Promise<void> {
         const { id, session } = request;
         const argv = request.check?.argv;
         if (!isArgv(argv)) return reply(socket, { error: 'check.argv must be a non-empty array of strings' });
-        const work = hold({ id, session, argv }, socket).catch((error: unknown) => {
+        void hold({ id, session, argv }, socket).catch((error: unknown) => {
           process.stderr.write(`hold ${id} failed: ${error instanceof Error ? error.stack : String(error)}\n`);
         });
-        holding.add(work);
-        void work.finally(() => holding.delete(work));
         return;
       }
       case 'cancel':
-        return reply(socket, { ok: true, cancelled: cancel(request.session) });
+        void cancel(request.session).then((cancelled) => reply(socket, { ok: true, cancelled }));
+        return;
       case 'leases':
         return reply(socket, { pool: pool.ports, held: pool.held() });
       case 'stats':
@@ -147,10 +148,8 @@ export async function main(args: string[]): Promise<void> {
   });
   hub.abort('cancelled');
   server.close();
-  // Aborted holds stop their groups at once and then wait to see them gone; past 3 s, stop
-  // whatever is left without waiting.
-  await Promise.race([Promise.allSettled(holding), new Promise((done) => setTimeout(done, 3000))]);
-  for (const pgid of ledger.live) killGroup(pgid);
+  // Aborting the hub sent SIGKILL to every running group; wait up to 3 s to see them gone.
+  await Promise.race([Promise.all([...ledger.live].map(waitGroupGone)), new Promise((done) => setTimeout(done, 3000))]);
   // An extension's pending promise or timer would keep Node running, so exit outright.
   process.exit(0);
 }
