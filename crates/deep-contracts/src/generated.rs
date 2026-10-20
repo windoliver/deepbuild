@@ -965,7 +965,7 @@ impl Contract for AskCreatedDataAuthorityPinnedTo {
             "\"commit\"" => Ok(Self::Commit(<AskCreatedDataAuthorityPinnedToCommit as Contract>::from_json(value, at)?)),
             "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedDataAuthorityPinnedToDocRevision as Contract>::from_json(value, at)?)),
             "\"evidence\"" => Ok(Self::Evidence(<AskCreatedDataAuthorityPinnedToEvidence as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
@@ -1203,7 +1203,7 @@ impl Contract for AskCreatedDataUnblockPinnedTo {
             "\"commit\"" => Ok(Self::Commit(<AskCreatedDataUnblockPinnedToCommit as Contract>::from_json(value, at)?)),
             "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedDataUnblockPinnedToDocRevision as Contract>::from_json(value, at)?)),
             "\"evidence\"" => Ok(Self::Evidence(<AskCreatedDataUnblockPinnedToEvidence as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
@@ -1456,7 +1456,7 @@ impl Contract for AskCreatedDataTastePinnedTo {
             "\"commit\"" => Ok(Self::Commit(<AskCreatedDataTastePinnedToCommit as Contract>::from_json(value, at)?)),
             "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedDataTastePinnedToDocRevision as Contract>::from_json(value, at)?)),
             "\"evidence\"" => Ok(Self::Evidence(<AskCreatedDataTastePinnedToEvidence as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
@@ -1694,7 +1694,7 @@ impl Contract for AskCreatedDataExceptionPinnedTo {
             "\"commit\"" => Ok(Self::Commit(<AskCreatedDataExceptionPinnedToCommit as Contract>::from_json(value, at)?)),
             "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedDataExceptionPinnedToDocRevision as Contract>::from_json(value, at)?)),
             "\"evidence\"" => Ok(Self::Evidence(<AskCreatedDataExceptionPinnedToEvidence as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
@@ -1932,7 +1932,7 @@ impl Contract for AskCreatedDataChoicePinnedTo {
             "\"commit\"" => Ok(Self::Commit(<AskCreatedDataChoicePinnedToCommit as Contract>::from_json(value, at)?)),
             "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedDataChoicePinnedToDocRevision as Contract>::from_json(value, at)?)),
             "\"evidence\"" => Ok(Self::Evidence(<AskCreatedDataChoicePinnedToEvidence as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
@@ -2170,7 +2170,7 @@ impl Contract for AskCreatedDataDefinitionPinnedTo {
             "\"commit\"" => Ok(Self::Commit(<AskCreatedDataDefinitionPinnedToCommit as Contract>::from_json(value, at)?)),
             "\"doc_revision\"" => Ok(Self::DocRevision(<AskCreatedDataDefinitionPinnedToDocRevision as Contract>::from_json(value, at)?)),
             "\"evidence\"" => Ok(Self::Evidence(<AskCreatedDataDefinitionPinnedToEvidence as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
@@ -2250,7 +2250,7 @@ impl Contract for AskCreatedData {
             "\"exception\"" => Ok(Self::Exception(<AskCreatedDataException as Contract>::from_json(value, at)?)),
             "\"choice\"" => Ok(Self::Choice(<AskCreatedDataChoice as Contract>::from_json(value, at)?)),
             "\"definition\"" => Ok(Self::Definition(<AskCreatedDataDefinition as Contract>::from_json(value, at)?)),
-            other => Err(format!("{at}/kind: {other} is not a listed tag")),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
         }
     }
     fn to_json(&self) -> Value {
