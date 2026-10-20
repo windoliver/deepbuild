@@ -65,7 +65,8 @@
         },
         "merge_sha": {
           "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
         }
       },
       "required": [

@@ -1,6 +1,6 @@
 {
   "title": "worktree.removed@1",
-  "description": "A worktree was removed.",
+  "description": "You removed a worktree; nothing removes one on its own.",
   "x-feeds": [
     "sessions"
   ],
@@ -25,8 +25,10 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "app"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",
@@ -60,17 +62,21 @@
       "properties": {
         "path": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "branch": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "owner": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>).",
+          "maxLength": 8192
         }
       },
       "required": [

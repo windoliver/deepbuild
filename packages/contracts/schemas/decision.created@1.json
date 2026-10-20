@@ -60,21 +60,25 @@
         "key": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         },
         "scope": {
           "type": "string",
           "pattern": "^(session:[0-9A-Za-z]+|repo:[0-9A-Za-z]+|all)$",
-          "description": "Where it applies: session:<id>, then repo:<id>, then all."
+          "description": "Where it applies: session:<id>, then repo:<id>, then all.",
+          "maxLength": 8192
         },
         "answer": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "ask": {
           "type": "string",
           "pattern": "^ask:[0-9A-Za-z]+$",
-          "description": "A ask: handle."
+          "description": "A ask: handle.",
+          "maxLength": 8192
         }
       },
       "required": [

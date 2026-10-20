@@ -61,20 +61,24 @@
         "run": {
           "type": "string",
           "pattern": "^run:[0-9A-Za-z]+$",
-          "description": "A run: handle."
+          "description": "A run: handle.",
+          "maxLength": 8192
         },
         "check": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "claim": {
           "type": "string",
           "pattern": "^claim:[0-9A-Za-z]+$",
-          "description": "A claim: handle."
+          "description": "A claim: handle.",
+          "maxLength": 8192
         },
         "commit": {
           "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
         }
       },
       "required": [

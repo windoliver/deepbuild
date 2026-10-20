@@ -60,7 +60,8 @@
       "properties": {
         "answer": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "plan_hash": {
           "type": [
@@ -68,7 +69,8 @@
             "null"
           ],
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         },
         "decision": {
           "type": "string",

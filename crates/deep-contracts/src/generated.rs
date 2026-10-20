@@ -5858,7 +5858,7 @@ pub struct LeaseAcquiredData {
     pub resource: LeaseAcquiredDataResource,
     pub holder: String,
     pub mode: LeaseAcquiredDataMode,
-    pub expires: Option<i64>,
+    pub expires: i64,
 }
 
 impl Contract for LeaseAcquiredData {
@@ -6017,7 +6017,7 @@ pub struct LeaseDeniedData {
     pub resource: LeaseDeniedDataResource,
     pub holder: String,
     pub mode: LeaseDeniedDataMode,
-    pub expires: Option<i64>,
+    pub expires: i64,
 }
 
 impl Contract for LeaseDeniedData {
@@ -6176,7 +6176,7 @@ pub struct LeaseReleasedData {
     pub resource: LeaseReleasedDataResource,
     pub holder: String,
     pub mode: LeaseReleasedDataMode,
-    pub expires: Option<i64>,
+    pub expires: i64,
 }
 
 impl Contract for LeaseReleasedData {
@@ -6335,7 +6335,7 @@ pub struct LeaseStaleData {
     pub resource: LeaseStaleDataResource,
     pub holder: String,
     pub mode: LeaseStaleDataMode,
-    pub expires: Option<i64>,
+    pub expires: i64,
 }
 
 impl Contract for LeaseStaleData {
@@ -10361,15 +10361,17 @@ pub struct WorktreeCreatedData {
     pub path: String,
     pub branch: Option<String>,
     pub owner: String,
+    pub base: String,
 }
 
 impl Contract for WorktreeCreatedData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["path", "branch", "owner"])?;
+        let members = deep_contracts::members(value, at, &["path", "branch", "owner", "base"])?;
         Ok(Self {
             path: deep_contracts::required(members, at, "path")?,
             branch: deep_contracts::required(members, at, "branch")?,
             owner: deep_contracts::required(members, at, "owner")?,
+            base: deep_contracts::required(members, at, "base")?,
         })
     }
     fn to_json(&self) -> Value {
@@ -10377,6 +10379,7 @@ impl Contract for WorktreeCreatedData {
         members.push(("path".to_string(), self.path.to_json()));
         members.push(("branch".to_string(), self.branch.to_json()));
         members.push(("owner".to_string(), self.owner.to_json()));
+        members.push(("base".to_string(), self.base.to_json()));
         Value::Object(members)
     }
 }
@@ -10465,6 +10468,25 @@ impl Contract for WorktreeRemovedKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorktreeRemovedWriter {
+    App,
+}
+
+impl Contract for WorktreeRemovedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+        }.to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorktreeRemovedData {
     pub path: String,
@@ -10496,7 +10518,7 @@ pub struct WorktreeRemoved {
     pub id: String,
     pub kind: WorktreeRemovedKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: WorktreeRemovedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,

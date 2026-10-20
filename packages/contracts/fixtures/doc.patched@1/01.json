@@ -10,10 +10,10 @@
     "doc": "doc:01K74G3A5C7E9G1J3M5P7R9T1V",
     "rev": 4,
     "patch": "01K74G3A5C7E9G1J3M5P7R9T1V",
-    "writer": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "writer": "mcp:01K74G1Z3X5V7T9R1P3N5M7K9H",
     "achieved": {
       "created": {
-        "rect": 1
+        "slab@1": 1
       },
       "updated": 0,
       "deleted": {},

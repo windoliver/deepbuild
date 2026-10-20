@@ -62,12 +62,14 @@
         "session": {
           "type": "string",
           "pattern": "^session:[0-9A-Za-z]+$",
-          "description": "A session: handle."
+          "description": "A session: handle.",
+          "maxLength": 8192
         },
         "evidence": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         }
       },
       "required": [

@@ -68,11 +68,13 @@
         },
         "target": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "diff": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "evidence": {
           "type": "array",
@@ -82,11 +84,13 @@
               "at": {
                 "type": "string",
                 "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-                "description": "A record handle."
+                "description": "A record handle.",
+                "maxLength": 8192
               },
               "quote": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 8192
               }
             },
             "required": [
@@ -99,7 +103,8 @@
         "scope": {
           "type": "string",
           "pattern": "^(session:[0-9A-Za-z]+|repo:[0-9A-Za-z]+|all)$",
-          "description": "Where it applies: session:<id>, then repo:<id>, then all."
+          "description": "Where it applies: session:<id>, then repo:<id>, then all.",
+          "maxLength": 8192
         },
         "replay": {
           "type": [
@@ -130,7 +135,8 @@
             "null"
           ],
           "pattern": "^(you|rule:[0-9A-Za-z]+)$",
-          "description": "You, or the rule that applied it; never an agent."
+          "description": "You, or the rule that applied it; never an agent.",
+          "maxLength": 8192
         },
         "supersedes": {
           "type": [
@@ -138,7 +144,8 @@
             "null"
           ],
           "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-          "description": "A record handle."
+          "description": "A record handle.",
+          "maxLength": 8192
         }
       },
       "required": [

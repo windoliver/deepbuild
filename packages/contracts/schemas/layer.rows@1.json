@@ -60,18 +60,21 @@
       "properties": {
         "layer": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "project": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "parent": {
           "type": [
             "string",
             "null"
           ],
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "level": {
           "type": "integer",
@@ -81,7 +84,8 @@
         "file": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         }
       },
       "required": [

@@ -63,15 +63,18 @@
           "properties": {
             "host": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 8192
             },
             "kind": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 8192
             },
             "key": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 8192
             }
           },
           "required": [
@@ -84,7 +87,8 @@
         "holder": {
           "type": "string",
           "pattern": "^(session:[0-9A-Za-z]+|mcp:[^\\s]+|ext:[^\\s]+)$",
-          "description": "A session, or a document prefix's writer."
+          "description": "A session, or a document prefix's writer.",
+          "maxLength": 8192
         },
         "mode": {
           "type": "string",
@@ -94,10 +98,7 @@
           ]
         },
         "expires": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991,
           "description": "Milliseconds since the Unix epoch."

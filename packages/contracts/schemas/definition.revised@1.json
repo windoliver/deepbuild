@@ -60,12 +60,14 @@
         "definition": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         },
         "task_ref": {
           "type": "string",
           "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
-          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>)."
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>).",
+          "maxLength": 8192
         },
         "requirements": {
           "type": "array",
@@ -74,17 +76,20 @@
             "properties": {
               "id": {
                 "type": "string",
-                "pattern": "^R[1-9][0-9]*$"
+                "pattern": "^R[1-9][0-9]*$",
+                "maxLength": 8192
               },
               "text": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 8192
               },
               "checks": {
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 8192
                 }
               },
               "oracle": {
@@ -98,7 +103,8 @@
               },
               "depth": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 8192
               }
             },
             "required": [
@@ -114,11 +120,13 @@
         "hash": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         },
         "base_commit": {
           "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
         },
         "budget": {
           "type": [
@@ -146,7 +154,8 @@
         "dispute_ask": {
           "type": "string",
           "pattern": "^ask:[0-9A-Za-z]+$",
-          "description": "A ask: handle."
+          "description": "A ask: handle.",
+          "maxLength": 8192
         }
       },
       "required": [

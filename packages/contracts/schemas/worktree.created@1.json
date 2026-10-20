@@ -1,6 +1,6 @@
 {
   "title": "worktree.created@1",
-  "description": "A worktree was created.",
+  "description": "A worktree was created for its task, the owner, from its base commit.",
   "x-feeds": [
     "sessions"
   ],
@@ -60,23 +60,33 @@
       "properties": {
         "path": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "branch": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "owner": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>).",
+          "maxLength": 8192
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
         }
       },
       "required": [
         "path",
         "branch",
-        "owner"
+        "owner",
+        "base"
       ],
       "additionalProperties": false
     },

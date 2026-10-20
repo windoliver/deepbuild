@@ -61,7 +61,8 @@
         "task_ref": {
           "type": "string",
           "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
-          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>)."
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>).",
+          "maxLength": 8192
         },
         "attempt": {
           "type": "integer",
@@ -70,7 +71,8 @@
         },
         "commit": {
           "type": "string",
-          "pattern": "^[0-9a-f]{40}$"
+          "pattern": "^[0-9a-f]{40}$",
+          "maxLength": 8192
         },
         "scope": {
           "type": "string",

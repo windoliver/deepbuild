@@ -61,14 +61,16 @@
         "notice": {
           "type": "string",
           "pattern": "^notice:[0-9A-Za-z]+$",
-          "description": "A notice: handle."
+          "description": "A notice: handle.",
+          "maxLength": 8192
         },
         "cites": {
           "type": "array",
           "items": {
             "type": "string",
             "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-            "description": "A record handle."
+            "description": "A record handle.",
+            "maxLength": 8192
           }
         }
       },

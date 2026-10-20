@@ -9,6 +9,7 @@
   "data": {
     "path": "~/src/deepbuild-311",
     "branch": "feat/311",
-    "owner": "you"
+    "owner": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "base": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
   }
 }

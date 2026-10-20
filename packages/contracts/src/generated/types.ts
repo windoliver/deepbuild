@@ -863,7 +863,7 @@ export interface LeaseAcquired {
     };
     holder: string;
     mode: "exclusive" | "shared";
-    expires: number | null;
+    expires: number;
   };
   evidence?: Array<string>;
 }
@@ -888,7 +888,7 @@ export interface LeaseDenied {
     };
     holder: string;
     mode: "exclusive" | "shared";
-    expires: number | null;
+    expires: number;
   };
   evidence?: Array<string>;
 }
@@ -913,7 +913,7 @@ export interface LeaseReleased {
     };
     holder: string;
     mode: "exclusive" | "shared";
-    expires: number | null;
+    expires: number;
   };
   evidence?: Array<string>;
 }
@@ -938,7 +938,7 @@ export interface LeaseStale {
     };
     holder: string;
     mode: "exclusive" | "shared";
-    expires: number | null;
+    expires: number;
   };
   evidence?: Array<string>;
 }
@@ -1600,6 +1600,7 @@ export interface WorktreeCreated {
     path: string;
     branch: string | null;
     owner: string;
+    base: string;
   };
   evidence?: Array<string>;
 }
@@ -1610,7 +1611,7 @@ export interface WorktreeRemoved {
   id: string;
   kind: "worktree.removed";
   subject?: string;
-  writer: string;
+  writer: "app";
   actor: string;
   scope: string;
   ts: number;

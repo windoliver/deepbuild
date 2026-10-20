@@ -61,7 +61,8 @@
         "by_verdict": {
           "type": "string",
           "pattern": "^verdict:[0-9A-Za-z]+$",
-          "description": "A verdict: handle."
+          "description": "A verdict: handle.",
+          "maxLength": 8192
         }
       },
       "required": [

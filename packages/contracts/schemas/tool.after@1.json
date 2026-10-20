@@ -76,22 +76,26 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 8192
           }
         },
         "command": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "server": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "tool": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         }
       },
       "required": [

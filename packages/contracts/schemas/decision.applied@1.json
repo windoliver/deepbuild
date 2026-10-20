@@ -60,12 +60,14 @@
         "decision": {
           "type": "string",
           "pattern": "^decision:[0-9A-Za-z]+$",
-          "description": "A decision: handle."
+          "description": "A decision: handle.",
+          "maxLength": 8192
         },
         "ask": {
           "type": "string",
           "pattern": "^ask:[0-9A-Za-z]+$",
-          "description": "A ask: handle."
+          "description": "A ask: handle.",
+          "maxLength": 8192
         }
       },
       "required": [

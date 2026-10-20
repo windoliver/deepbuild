@@ -60,20 +60,26 @@
       "properties": {
         "suggestion": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "doc": {
           "type": "string",
           "pattern": "^doc:[0-9A-Za-z]+$",
-          "description": "A doc: handle."
+          "description": "A doc: handle.",
+          "maxLength": 8192
         },
         "item": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,47}(\\.[a-z0-9][a-z0-9_-]{0,47}){0,7}$",
+          "description": "An item's ID in its document.",
+          "maxLength": 8192
         },
         "writer": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+          "description": "Who wrote it, from the connection, as the envelope writes a writer.",
+          "maxLength": 8192
         },
         "patch": {
           "type": "string",

@@ -62,7 +62,8 @@
         "doc": {
           "type": "string",
           "pattern": "^doc:[0-9A-Za-z]+$",
-          "description": "A doc: handle."
+          "description": "A doc: handle.",
+          "maxLength": 8192
         },
         "rev": {
           "type": "integer",
@@ -75,7 +76,9 @@
         },
         "writer": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+          "description": "Who wrote it, from the connection, as the envelope writes a writer.",
+          "maxLength": 8192
         },
         "achieved": {
           "type": "object",
@@ -83,7 +86,7 @@
             "created": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z0-9_.-]+$"
+                "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)*@[1-9][0-9]*$"
               },
               "additionalProperties": {
                 "type": "integer",
@@ -99,7 +102,7 @@
             "deleted": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[A-Za-z0-9_.-]+$"
+                "pattern": "^[a-z0-9_-]+(\\.[a-z0-9_-]+)*@[1-9][0-9]*$"
               },
               "additionalProperties": {
                 "type": "integer",

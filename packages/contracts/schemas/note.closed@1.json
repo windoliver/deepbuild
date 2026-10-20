@@ -83,7 +83,8 @@
             "null"
           ],
           "pattern": "^run:[0-9A-Za-z]+$",
-          "description": "A run: handle."
+          "description": "A run: handle.",
+          "maxLength": 8192
         }
       },
       "required": [

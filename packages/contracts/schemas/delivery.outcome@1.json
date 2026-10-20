@@ -60,7 +60,8 @@
       "properties": {
         "delivery": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "via": {
           "type": "string",

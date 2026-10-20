@@ -61,12 +61,14 @@
         "claim": {
           "type": "string",
           "pattern": "^claim:[0-9A-Za-z]+$",
-          "description": "A claim: handle."
+          "description": "A claim: handle.",
+          "maxLength": 8192
         },
         "verdict": {
           "type": "string",
           "pattern": "^verdict:[0-9A-Za-z]+$",
-          "description": "A verdict: handle."
+          "description": "A verdict: handle.",
+          "maxLength": 8192
         },
         "round": {
           "type": "integer",
@@ -76,7 +78,8 @@
         "to": {
           "type": "string",
           "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-          "description": "A record handle."
+          "description": "A record handle.",
+          "maxLength": 8192
         }
       },
       "required": [

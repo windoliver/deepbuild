@@ -61,7 +61,8 @@
         "run": {
           "type": "string",
           "pattern": "^run:[0-9A-Za-z]+$",
-          "description": "A run: handle."
+          "description": "A run: handle.",
+          "maxLength": 8192
         },
         "outcome": {
           "type": "string",
@@ -95,53 +96,62 @@
           "items": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$",
-            "description": "A SHA-256, in lower-case hex."
+            "description": "A SHA-256, in lower-case hex.",
+            "maxLength": 8192
           }
         },
         "check": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "assertion": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "expected": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "actual": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "step": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "points_to": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "findings": {
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 8192
           }
         },
         "environment": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         }
       },
       "required": [

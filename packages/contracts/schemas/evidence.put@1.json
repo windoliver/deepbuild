@@ -61,16 +61,19 @@
         "sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "description": "A SHA-256, in lower-case hex.",
+          "maxLength": 8192
         },
         "kind": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "source": {
           "type": "string",
           "minLength": 1,
-          "description": "What made the file."
+          "description": "What made the file.",
+          "maxLength": 8192
         },
         "origin": {
           "type": "string",
@@ -91,7 +94,8 @@
         },
         "license": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "step_times": {
           "type": "array",
@@ -100,7 +104,8 @@
             "properties": {
               "step": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "maxLength": 8192
               },
               "start_ms": {
                 "type": "integer",

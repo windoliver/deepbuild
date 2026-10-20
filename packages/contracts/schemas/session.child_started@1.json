@@ -61,12 +61,14 @@
         "parent": {
           "type": "string",
           "pattern": "^session:[0-9A-Za-z]+$",
-          "description": "A session: handle."
+          "description": "A session: handle.",
+          "maxLength": 8192
         },
         "child": {
           "type": "string",
           "pattern": "^session:[0-9A-Za-z]+$",
-          "description": "A session: handle."
+          "description": "A session: handle.",
+          "maxLength": 8192
         },
         "task_ref": {
           "type": [
@@ -74,7 +76,8 @@
             "null"
           ],
           "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
-          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>)."
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>).",
+          "maxLength": 8192
         }
       },
       "required": [

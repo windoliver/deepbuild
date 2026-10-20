@@ -61,16 +61,18 @@
         "reading": {
           "type": "string",
           "pattern": "^reading:[0-9A-Za-z]+$",
-          "description": "A reading: handle."
+          "description": "A reading: handle.",
+          "maxLength": 8192
         },
         "value": {
           "type": "number",
-          "minimum": 0,
+          "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
         "unit": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "as_of": {
           "type": "integer",
@@ -80,7 +82,8 @@
         },
         "source": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "n": {
           "type": "integer",

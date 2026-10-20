@@ -60,21 +60,25 @@
       "properties": {
         "agent": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "worktree": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         },
         "branch": {
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "maxLength": 8192
         },
         "thread": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 8192
         }
       },
       "required": [
