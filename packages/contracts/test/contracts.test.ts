@@ -286,3 +286,14 @@ describe('the fifth review', () => {
     expect(() => encode('hook.request@1', Object.assign(new Date(0), request))).toThrow(expect.objectContaining({ code: 'not_json' }));
   });
 });
+
+it('a string length counts code points, whatever shortcut decides it', () => {
+  const reg = registry([
+    { name: 'min@1', schema: record({ s: { type: 'string', minLength: 2 } }) },
+    { name: 'max@1', schema: record({ s: { type: 'string', maxLength: 1 } }) },
+  ]);
+  expect(reg.validate('min@1', { s: '😀' }).ok).toBe(false);
+  expect(reg.validate('min@1', { s: '😀😀' }).ok).toBe(true);
+  expect(reg.validate('max@1', { s: '😀' }).ok).toBe(true);
+  expect(reg.validate('max@1', { s: 'ab' }).ok).toBe(false);
+});
