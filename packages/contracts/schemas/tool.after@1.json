@@ -78,16 +78,6 @@
                 "null"
               ],
               "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
             }
           },
           "required": [
@@ -116,16 +106,6 @@
                 "string",
                 "null"
               ],
-              "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
               "maxLength": 8192
             }
           },
@@ -156,16 +136,6 @@
                 "null"
               ],
               "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
             }
           },
           "required": [
@@ -194,16 +164,6 @@
                 "string",
                 "null"
               ],
-              "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
               "maxLength": 8192
             }
           },
@@ -234,16 +194,6 @@
                 "null"
               ],
               "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
             }
           },
           "required": [
@@ -272,16 +222,6 @@
                 "string",
                 "null"
               ],
-              "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
               "maxLength": 8192
             }
           },
@@ -352,16 +292,6 @@
                 "string",
                 "null"
               ],
-              "maxLength": 8192
-            },
-            "server": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tool": {
-              "type": "string",
-              "minLength": 1,
               "maxLength": 8192
             }
           },

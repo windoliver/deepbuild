@@ -1410,38 +1410,26 @@ export interface ToolAfter {
     kind: "shell";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "read";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "edit";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "write";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "search";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "fetch";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "mcp";
     paths: Array<string>;
@@ -1452,8 +1440,6 @@ export interface ToolAfter {
     kind: "unknown";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   };
   evidence?: Array<string>;
 }
@@ -1474,38 +1460,26 @@ export interface ToolBefore {
     kind: "shell";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "read";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "edit";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "write";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "search";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "fetch";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   } | {
     kind: "mcp";
     paths: Array<string>;
@@ -1516,8 +1490,6 @@ export interface ToolBefore {
     kind: "unknown";
     paths: Array<string>;
     command: string | null;
-    server?: string;
-    tool?: string;
   };
   evidence?: Array<string>;
 }
