@@ -248,3 +248,41 @@ it('the generators refuse a type name the generated code already uses', () => {
   // A nested type never takes such a name either.
   expect(generateRust([{ name: 'str@1', schema: record({ ing: { type: 'object', properties: {}, required: [], additionalProperties: false } }) }])).not.toMatch(/pub struct String\b/);
 });
+
+describe('the fifth review', () => {
+  const request = { v: 1, agent: 'a', event: 'e', seq: '1', id: '01K74FKZVK8Q2X5R7M3N9P4T6W', pid: 1, ppid: 1, matched: [], payload: {} };
+
+  it('a revoked proxy is refused in the error shape', () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    expect(validate('hook.request@1', proxy).ok).toBe(false);
+    expect(() => encode('hook.request@1', proxy)).toThrow(expect.objectContaining({ name: 'ContractError' }));
+    expect(() => canonicalize(proxy as never)).toThrow(expect.objectContaining({ name: 'ContractError' }));
+  });
+
+  it('a nullable record at the root or in $defs generates Rust', () => {
+    const rec: Schema = { type: ['object', 'null'], properties: { a: { type: 'boolean' } }, required: [], additionalProperties: false } as unknown as Schema;
+    expect(lintSchemas([{ name: 'root@1', schema: rec }])).toEqual([]);
+    expect(generateRust([{ name: 'root@1', schema: rec }])).toMatch(/pub type Root = Option<RootValue>;/);
+    expect(() => generateRust([{ name: 'def@1', schema: { $defs: { maybe: rec }, ...record({ m: { $ref: '#/$defs/maybe' } }) } }])).not.toThrow();
+  });
+
+  it("a schema name never closes the generated doc comment", () => {
+    expect(generateTypeScript([{ name: 'a*/b@1', schema: { type: 'string' } }])).not.toContain('a*/b');
+  });
+
+  it("an error's path is well-formed Unicode, so the error is an error@1", () => {
+    try {
+      decode('hook.request@1', JSON.stringify({ ...request, payload: { '\ud800': 1 } }));
+      expect.unreachable();
+    } catch (error) {
+      expect(validate('error@1', JSON.parse(JSON.stringify(error))).ok).toBe(true);
+    }
+  });
+
+  it('encode refuses an object that is not plain, with or without a seq', () => {
+    class Event { constructor(fields: object) { Object.assign(this, fields); } }
+    expect(() => encode('hook.request@1', new Event(request))).toThrow(expect.objectContaining({ code: 'not_json' }));
+    expect(() => encode('hook.request@1', Object.assign(new Date(0), request))).toThrow(expect.objectContaining({ code: 'not_json' }));
+  });
+});
