@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { nameClaims, typeName } from './codegen-ts.js';
-import { isObject, unionTag, type Schema, type SchemaEntry } from './json.js';
+import { isObject, segment, unionTag, type Schema, type SchemaEntry } from './json.js';
 
 const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
   'let', 'loop', 'match', 'mod', 'move', 'mut', 'pub', 'ref', 'return', 'self', 'static', 'struct', 'super', 'trait', 'true', 'type',
@@ -140,7 +140,7 @@ ${arms.map((a) => `    ${a.variant}(${a.type}),\n`).join('')}}
 impl Contract for ${name} {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::tag(value, at, ${literal(tag)})?.as_str() {
-${arms.map((a) => `            ${literal(a.text)} => Ok(Self::${a.variant}(<${a.type} as Contract>::from_json(value, at)?)),\n`).join('')}            other => Err(format!("{at}/${tag}: {other} is not a listed tag")),
+${arms.map((a) => `            ${literal(a.text)} => Ok(Self::${a.variant}(<${a.type} as Contract>::from_json(value, at)?)),\n`).join('')}            other => Err(format!("{at}{}: {other} is not a listed tag", ${literal(segment(tag))})),
         }
     }
     fn to_json(&self) -> Value {

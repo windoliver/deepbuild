@@ -1,7 +1,7 @@
 // Regressions the acceptance suite doesn't reach: schemas the lint must refuse because the validator or a
 // generator can't serve them, and refusals that must stay in the one error shape.
 import { describe, expect, it } from 'vitest';
-import { contextBoundFor, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
+import { canonicalize, checkViewBindings, contextBoundFor, decode, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
 import type { Schema } from '../src/index.js';
 
 const record = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema =>
@@ -151,4 +151,60 @@ it('a schema string holding half a surrogate pair, which no Rust literal can, is
   expect(problemsOf(record({ e: { type: 'string', enum: ['\ud800'] } })).length).toBeGreaterThan(0);
   expect(problemsOf(record({ '\udc00': { type: 'string' } })).length).toBeGreaterThan(0);
   expect(problemsOf(record({ e: { const: 'a\ud83d' } })).length).toBeGreaterThan(0);
+});
+
+describe('one JSON both languages accept', () => {
+  const reply = { exit: 0, stdout: '', stderr: '' };
+  const nest = (n: number): unknown => (n === 0 ? 1 : { a: nest(n - 1) });
+
+  it('refuses half a surrogate pair, a hole, a Map, a Date, NaN and undefined, in validate and canonicalize alike', () => {
+    // eslint-disable-next-line no-sparse-arrays
+    for (const bad of ['\ud800', [, 1], new Map(), new Date(0), Number.NaN, undefined]) {
+      expect(validate('hook.reply@1', { ...reply, stdout: bad }).ok, String(bad)).toBe(false);
+      expect(() => canonicalize(bad as never), String(bad)).toThrow(expect.objectContaining({ name: 'ContractError' }));
+    }
+    expect(() => decode('hook.reply@1', '{"exit":0,"stdout":"\\ud800","stderr":""}')).toThrow(expect.objectContaining({ name: 'ContractError' }));
+  });
+
+  it('counts nesting from the document root, as the Rust parser does', () => {
+    const request = { v: 1, agent: 'a', event: 'e', seq: '1', id: '01K74FKZVK8Q2X5R7M3N9P4T6W', pid: 1, ppid: 1, matched: [] };
+    expect(validate('hook.request@1', { ...request, payload: nest(254) }).ok).toBe(true);
+    expect(validate('hook.request@1', { ...request, payload: nest(256) }).ok).toBe(false);
+  });
+
+  it('a value whose getter throws is refused, not thrown', () => {
+    const value = { ...reply, get stdout(): string { throw Error('getter'); } };
+    expect(validate('hook.reply@1', value).ok).toBe(false);
+  });
+});
+
+describe('the error shape', () => {
+  it('a ContractError is exactly an error@1', () => {
+    try {
+      decode('hook.ack@1', '1');
+    } catch (error) {
+      expect(Object.keys(error as object).sort()).toEqual(['actual', 'code', 'evidence', 'path', 'remediation', 'retryable']);
+      expect(validate('error@1', JSON.parse(JSON.stringify(error))).ok).toBe(true);
+    }
+  });
+
+  it('a value under the read cap is kept whole, with half a surrogate pair shown as U+FFFD, never dropped', () => {
+    expect(checkViewBindings(['ab\ud800'])).toMatchObject({ ok: false, issues: [{ actual: 'ab\ufffd' }] });
+    expect(checkViewBindings(['a\ud800x\ud800'])).toMatchObject({ ok: false, issues: [{ actual: 'a\ufffdx\ufffd' }] });
+  });
+});
+
+describe('the generators refuse type names that are not identifiers, and escape a union tag', () => {
+  it('names', () => {
+    for (const name of ['9x@1', 'self@1', '-@1']) {
+      const entries = [{ name, schema: { type: 'boolean' } as Schema }];
+      expect(() => generateTypeScript(entries), name).toThrow(new RegExp(name.replace(/[-]/g, '\\-')));
+      expect(() => generateRust(entries), name).toThrow();
+    }
+  });
+
+  it('a tag with braces or quotes stays inside its Rust string', () => {
+    const rust = generateRust([{ name: 'u@1', schema: { oneOf: [tagged('a', {}), tagged('b', {})].map((b) => ({ ...b, properties: { 'k{x}"': (b.properties as Schema).t!, }, required: ['k{x}"'] })) } }]);
+    expect(rust).not.toMatch(/format!\("[^"]*k\{x\}/);
+  });
 });
