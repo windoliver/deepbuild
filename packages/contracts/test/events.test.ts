@@ -199,6 +199,18 @@ describe('the design says', () => {
     expect(ok('note.opened@1', { ...note, data: still })).toBe(true);
   });
 
+  it('a learned change cites the sessions and quotes behind it; a rollback need not', () => {
+    for (const name of ['learn.proposed@1', 'learn.applied@1', 'learn.widened@1']) {
+      expect(ok(name, { ...first(name), data: { ...first(name).data, evidence: [] } }), name).toBe(false);
+    }
+    expect(ok('learn.rolled_back@1', { ...first('learn.rolled_back@1'), data: { ...first('learn.rolled_back@1').data, evidence: [] } })).toBe(true);
+  });
+
+  it("a reading's value is any finite number, past 2^53 too", () => {
+    const reading = first('reading.recorded@1');
+    for (const value of [6.02214076e23, -1e16]) expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value } }), String(value)).toBe(true);
+  });
+
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
