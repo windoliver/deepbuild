@@ -293,6 +293,12 @@ describe('the drift check', () => {
       + 'It reads `rules.json`, the preset `art.ink_wash` and the code `grid.out_of_range`.';
     expect(catalogueDrift([{ where: '#1', text }])).toEqual(['telemetry.sampled', 'telemetry.dropped', 'telemetry.kept'].map((kind) => ({ kind, where: '#1' })));
   });
+
+  it('a name the text calls an event kind through a connective or a colon is drift too, and its twins that are not kinds are not', () => {
+    const text = 'Adds the event kind named `telemetry.sampled`, an event kind: `telemetry.dropped`, the event kind called '
+      + '`telemetry.kept` and event kinds such as `telemetry.lost`. The event kind field reads `rules.json`; event kinds live in `catalog.refs`.';
+    expect(catalogueDrift([{ where: '#2', text }])).toEqual(['telemetry.sampled', 'telemetry.dropped', 'telemetry.kept', 'telemetry.lost'].map((kind) => ({ kind, where: '#2' })));
+  });
 });
 
 // Readings the design leaves open, pinned here so a change to one is a decision; each is listed in the PR for
