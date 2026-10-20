@@ -57,53 +57,322 @@
       "description": "Its position in the event log, assigned by the hub at append."
     },
     "data": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "shell",
-            "read",
-            "edit",
-            "write",
-            "search",
-            "fetch",
-            "mcp",
-            "unknown"
-          ]
-        },
-        "paths": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 8192
-          }
-        },
-        "command": {
-          "type": [
-            "string",
-            "null"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "shell"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
           ],
-          "maxLength": 8192
+          "additionalProperties": false
         },
-        "server": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 8192
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "read"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
+          ],
+          "additionalProperties": false
         },
-        "tool": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 8192
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "edit"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "write"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "search"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "fetch"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "mcp"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command",
+            "server",
+            "tool"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "unknown"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "command": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "server": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "tool": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "paths",
+            "command"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "kind",
-        "paths",
-        "command"
-      ],
-      "additionalProperties": false
+      ]
     },
     "evidence": {
       "type": "array",

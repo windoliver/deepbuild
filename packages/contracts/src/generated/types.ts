@@ -744,7 +744,7 @@ export interface LearnProposed {
     evidence: LearnProposedEvidence;
     scope: string;
     replay: LearnProposedReplay;
-    applied_by: string | null;
+    applied_by: string;
     supersedes: LearnProposedSupersedes;
   };
   evidence?: Array<string>;
@@ -790,7 +790,7 @@ export interface LearnRolledBack {
     evidence: LearnRolledBackEvidence;
     scope: string;
     replay: LearnRolledBackReplay;
-    applied_by: string | null;
+    applied_by: string;
     supersedes: LearnRolledBackSupersedes;
   };
   evidence?: Array<string>;
@@ -1407,7 +1407,49 @@ export interface ToolAfter {
   seq?: bigint;
   log_pos?: number;
   data: {
-    kind: "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+  } | {
+    kind: "unknown";
     paths: Array<string>;
     command: string | null;
     server?: string;
@@ -1429,7 +1471,49 @@ export interface ToolBefore {
   seq?: bigint;
   log_pos?: number;
   data: {
-    kind: "shell" | "read" | "edit" | "write" | "search" | "fetch" | "mcp" | "unknown";
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    server?: string;
+    tool?: string;
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+  } | {
+    kind: "unknown";
     paths: Array<string>;
     command: string | null;
     server?: string;

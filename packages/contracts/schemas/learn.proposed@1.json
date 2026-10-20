@@ -198,10 +198,7 @@
               "$ref": "#/$defs/replay"
             },
             "applied_by": {
-              "type": [
-                "string",
-                "null"
-              ],
+              "type": "string",
               "pattern": "^you$",
               "description": "Only you change the base.",
               "maxLength": 8192

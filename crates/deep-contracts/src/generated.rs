@@ -5583,7 +5583,7 @@ pub struct LearnProposedDataBase {
     pub evidence: LearnProposedEvidence,
     pub scope: String,
     pub replay: LearnProposedReplay,
-    pub applied_by: Option<String>,
+    pub applied_by: String,
     pub supersedes: LearnProposedSupersedes,
 }
 
@@ -5866,7 +5866,7 @@ pub struct LearnRolledBackDataBase {
     pub evidence: LearnRolledBackEvidence,
     pub scope: String,
     pub replay: LearnRolledBackReplay,
-    pub applied_by: Option<String>,
+    pub applied_by: String,
     pub supersedes: LearnRolledBackSupersedes,
 }
 
@@ -11663,56 +11663,28 @@ impl Contract for ToolAfterKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolAfterDataKind {
-    Shell,
-    Read,
-    Edit,
-    Write,
-    Search,
-    Fetch,
-    Mcp,
-    Unknown,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataShellKind;
 
-impl Contract for ToolAfterDataKind {
+impl Contract for ToolAfterDataShellKind {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "shell" => Ok(Self::Shell),
-            "read" => Ok(Self::Read),
-            "edit" => Ok(Self::Edit),
-            "write" => Ok(Self::Write),
-            "search" => Ok(Self::Search),
-            "fetch" => Ok(Self::Fetch),
-            "mcp" => Ok(Self::Mcp),
-            "unknown" => Ok(Self::Unknown),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
+        deep_contracts::constant(value, at, "\"shell\"").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Shell => "shell",
-            Self::Read => "read",
-            Self::Edit => "edit",
-            Self::Write => "write",
-            Self::Search => "search",
-            Self::Fetch => "fetch",
-            Self::Mcp => "mcp",
-            Self::Unknown => "unknown",
-        }.to_string())
+        deep_contracts::parse("\"shell\"").expect("a constant is JSON")
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ToolAfterData {
-    pub kind: ToolAfterDataKind,
+pub struct ToolAfterDataShell {
+    pub kind: ToolAfterDataShellKind,
     pub paths: Vec<String>,
     pub command: Option<String>,
     pub server: Option<String>,
     pub tool: Option<String>,
 }
 
-impl Contract for ToolAfterData {
+impl Contract for ToolAfterDataShell {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
         deep_contracts::check_member(members, at, "paths", &RULE_10)?;
@@ -11739,6 +11711,371 @@ impl Contract for ToolAfterData {
             members.push(("tool".to_string(), value.to_json()));
         }
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataReadKind;
+
+impl Contract for ToolAfterDataReadKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"read\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"read\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataRead {
+    pub kind: ToolAfterDataReadKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolAfterDataRead {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataEditKind;
+
+impl Contract for ToolAfterDataEditKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"edit\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"edit\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataEdit {
+    pub kind: ToolAfterDataEditKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolAfterDataEdit {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataWriteKind;
+
+impl Contract for ToolAfterDataWriteKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"write\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"write\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataWrite {
+    pub kind: ToolAfterDataWriteKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolAfterDataWrite {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataSearchKind;
+
+impl Contract for ToolAfterDataSearchKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"search\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"search\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataSearch {
+    pub kind: ToolAfterDataSearchKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolAfterDataSearch {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataFetchKind;
+
+impl Contract for ToolAfterDataFetchKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"fetch\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"fetch\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataFetch {
+    pub kind: ToolAfterDataFetchKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolAfterDataFetch {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataMcpKind;
+
+impl Contract for ToolAfterDataMcpKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"mcp\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"mcp\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataMcp {
+    pub kind: ToolAfterDataMcpKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: String,
+    pub tool: String,
+}
+
+impl Contract for ToolAfterDataMcp {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::required(members, at, "server")?,
+            tool: deep_contracts::required(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        members.push(("server".to_string(), self.server.to_json()));
+        members.push(("tool".to_string(), self.tool.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataUnknownKind;
+
+impl Contract for ToolAfterDataUnknownKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"unknown\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"unknown\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterDataUnknown {
+    pub kind: ToolAfterDataUnknownKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolAfterDataUnknown {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolAfterData {
+    Shell(ToolAfterDataShell),
+    Read(ToolAfterDataRead),
+    Edit(ToolAfterDataEdit),
+    Write(ToolAfterDataWrite),
+    Search(ToolAfterDataSearch),
+    Fetch(ToolAfterDataFetch),
+    Mcp(ToolAfterDataMcp),
+    Unknown(ToolAfterDataUnknown),
+}
+
+impl Contract for ToolAfterData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "kind")?.as_str() {
+            "\"shell\"" => Ok(Self::Shell(<ToolAfterDataShell as Contract>::from_json(value, at)?)),
+            "\"read\"" => Ok(Self::Read(<ToolAfterDataRead as Contract>::from_json(value, at)?)),
+            "\"edit\"" => Ok(Self::Edit(<ToolAfterDataEdit as Contract>::from_json(value, at)?)),
+            "\"write\"" => Ok(Self::Write(<ToolAfterDataWrite as Contract>::from_json(value, at)?)),
+            "\"search\"" => Ok(Self::Search(<ToolAfterDataSearch as Contract>::from_json(value, at)?)),
+            "\"fetch\"" => Ok(Self::Fetch(<ToolAfterDataFetch as Contract>::from_json(value, at)?)),
+            "\"mcp\"" => Ok(Self::Mcp(<ToolAfterDataMcp as Contract>::from_json(value, at)?)),
+            "\"unknown\"" => Ok(Self::Unknown(<ToolAfterDataUnknown as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Shell(inner) => inner.to_json(),
+            Self::Read(inner) => inner.to_json(),
+            Self::Edit(inner) => inner.to_json(),
+            Self::Write(inner) => inner.to_json(),
+            Self::Search(inner) => inner.to_json(),
+            Self::Fetch(inner) => inner.to_json(),
+            Self::Mcp(inner) => inner.to_json(),
+            Self::Unknown(inner) => inner.to_json(),
+        }
     }
 }
 
@@ -11834,56 +12171,28 @@ impl Contract for ToolBeforeKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolBeforeDataKind {
-    Shell,
-    Read,
-    Edit,
-    Write,
-    Search,
-    Fetch,
-    Mcp,
-    Unknown,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataShellKind;
 
-impl Contract for ToolBeforeDataKind {
+impl Contract for ToolBeforeDataShellKind {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "shell" => Ok(Self::Shell),
-            "read" => Ok(Self::Read),
-            "edit" => Ok(Self::Edit),
-            "write" => Ok(Self::Write),
-            "search" => Ok(Self::Search),
-            "fetch" => Ok(Self::Fetch),
-            "mcp" => Ok(Self::Mcp),
-            "unknown" => Ok(Self::Unknown),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
+        deep_contracts::constant(value, at, "\"shell\"").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Shell => "shell",
-            Self::Read => "read",
-            Self::Edit => "edit",
-            Self::Write => "write",
-            Self::Search => "search",
-            Self::Fetch => "fetch",
-            Self::Mcp => "mcp",
-            Self::Unknown => "unknown",
-        }.to_string())
+        deep_contracts::parse("\"shell\"").expect("a constant is JSON")
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ToolBeforeData {
-    pub kind: ToolBeforeDataKind,
+pub struct ToolBeforeDataShell {
+    pub kind: ToolBeforeDataShellKind,
     pub paths: Vec<String>,
     pub command: Option<String>,
     pub server: Option<String>,
     pub tool: Option<String>,
 }
 
-impl Contract for ToolBeforeData {
+impl Contract for ToolBeforeDataShell {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
         deep_contracts::check_member(members, at, "paths", &RULE_10)?;
@@ -11910,6 +12219,371 @@ impl Contract for ToolBeforeData {
             members.push(("tool".to_string(), value.to_json()));
         }
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataReadKind;
+
+impl Contract for ToolBeforeDataReadKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"read\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"read\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataRead {
+    pub kind: ToolBeforeDataReadKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolBeforeDataRead {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataEditKind;
+
+impl Contract for ToolBeforeDataEditKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"edit\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"edit\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataEdit {
+    pub kind: ToolBeforeDataEditKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolBeforeDataEdit {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataWriteKind;
+
+impl Contract for ToolBeforeDataWriteKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"write\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"write\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataWrite {
+    pub kind: ToolBeforeDataWriteKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolBeforeDataWrite {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataSearchKind;
+
+impl Contract for ToolBeforeDataSearchKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"search\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"search\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataSearch {
+    pub kind: ToolBeforeDataSearchKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolBeforeDataSearch {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataFetchKind;
+
+impl Contract for ToolBeforeDataFetchKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"fetch\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"fetch\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataFetch {
+    pub kind: ToolBeforeDataFetchKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolBeforeDataFetch {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataMcpKind;
+
+impl Contract for ToolBeforeDataMcpKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"mcp\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"mcp\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataMcp {
+    pub kind: ToolBeforeDataMcpKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: String,
+    pub tool: String,
+}
+
+impl Contract for ToolBeforeDataMcp {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::required(members, at, "server")?,
+            tool: deep_contracts::required(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        members.push(("server".to_string(), self.server.to_json()));
+        members.push(("tool".to_string(), self.tool.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataUnknownKind;
+
+impl Contract for ToolBeforeDataUnknownKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"unknown\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"unknown\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeDataUnknown {
+    pub kind: ToolBeforeDataUnknownKind,
+    pub paths: Vec<String>,
+    pub command: Option<String>,
+    pub server: Option<String>,
+    pub tool: Option<String>,
+}
+
+impl Contract for ToolBeforeDataUnknown {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["kind", "paths", "command", "server", "tool"])?;
+        Ok(Self {
+            kind: deep_contracts::required(members, at, "kind")?,
+            paths: deep_contracts::required(members, at, "paths")?,
+            command: deep_contracts::required(members, at, "command")?,
+            server: deep_contracts::optional(members, at, "server")?,
+            tool: deep_contracts::optional(members, at, "tool")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("kind".to_string(), self.kind.to_json()));
+        members.push(("paths".to_string(), self.paths.to_json()));
+        members.push(("command".to_string(), self.command.to_json()));
+        if let Some(value) = &self.server {
+            members.push(("server".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.tool {
+            members.push(("tool".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToolBeforeData {
+    Shell(ToolBeforeDataShell),
+    Read(ToolBeforeDataRead),
+    Edit(ToolBeforeDataEdit),
+    Write(ToolBeforeDataWrite),
+    Search(ToolBeforeDataSearch),
+    Fetch(ToolBeforeDataFetch),
+    Mcp(ToolBeforeDataMcp),
+    Unknown(ToolBeforeDataUnknown),
+}
+
+impl Contract for ToolBeforeData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "kind")?.as_str() {
+            "\"shell\"" => Ok(Self::Shell(<ToolBeforeDataShell as Contract>::from_json(value, at)?)),
+            "\"read\"" => Ok(Self::Read(<ToolBeforeDataRead as Contract>::from_json(value, at)?)),
+            "\"edit\"" => Ok(Self::Edit(<ToolBeforeDataEdit as Contract>::from_json(value, at)?)),
+            "\"write\"" => Ok(Self::Write(<ToolBeforeDataWrite as Contract>::from_json(value, at)?)),
+            "\"search\"" => Ok(Self::Search(<ToolBeforeDataSearch as Contract>::from_json(value, at)?)),
+            "\"fetch\"" => Ok(Self::Fetch(<ToolBeforeDataFetch as Contract>::from_json(value, at)?)),
+            "\"mcp\"" => Ok(Self::Mcp(<ToolBeforeDataMcp as Contract>::from_json(value, at)?)),
+            "\"unknown\"" => Ok(Self::Unknown(<ToolBeforeDataUnknown as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/kind")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Shell(inner) => inner.to_json(),
+            Self::Read(inner) => inner.to_json(),
+            Self::Edit(inner) => inner.to_json(),
+            Self::Write(inner) => inner.to_json(),
+            Self::Search(inner) => inner.to_json(),
+            Self::Fetch(inner) => inner.to_json(),
+            Self::Mcp(inner) => inner.to_json(),
+            Self::Unknown(inner) => inner.to_json(),
+        }
     }
 }
 
