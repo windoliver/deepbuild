@@ -38,6 +38,17 @@ function nodeAt(root: Schema, schema: Schema, value: JsonValue): Schema {
 const hasHalfPair = (text: string) => /\p{Surrogate}/u.test(text);
 const sample = <T>(arb: fc.Arbitrary<T>, numRuns: number, seed: number): T[] => fc.sample(arb, { seed, numRuns });
 
+/** Strings a pattern matches, and each of them with a character changed or added, which it mostly doesn't. */
+function near(pattern: string, seed: number): string[] {
+  const matching = fc.stringMatching(new RegExp(pattern, 'u'));
+  return [...sample(matching, 8, seed), ...sample(matching.chain((s) => fc.tuple(fc.constant(s), fc.nat(s.length), fc.string({ maxLength: 2, unit: 'binary' })))
+    .map(([s, i, inserted]) => s.slice(0, i) + inserted + s.slice(i + 1)), 8, seed + 1)].filter((s) => !hasHalfPair(s));
+}
+
+/** The pattern a place's value or keys must match, if any. */
+const patternOf = (schema: Schema): string | undefined => (typeof schema.pattern === 'string' ? schema.pattern
+  : typeof (schema.propertyNames as Schema | undefined)?.pattern === 'string' ? String((schema.propertyNames as Schema).pattern) : undefined);
+
 /** Values to put where `value` is, for the schema node it answers to: near its bounds, past them, and other text. */
 function replacements(schema: Schema, value: JsonValue, seed: number): JsonValue[] {
   const type = Array.isArray(schema.type) ? schema.type.find((t) => t !== 'null') : schema.type;
@@ -48,12 +59,7 @@ function replacements(schema: Schema, value: JsonValue, seed: number): JsonValue
       const n = num(key);
       if (n !== undefined && n < 10_000) out.push('a'.repeat(n), 'a'.repeat(n + 1), 'a'.repeat(Math.max(0, n - 1)));
     }
-    if (typeof schema.pattern === 'string') {
-      const matching = fc.stringMatching(new RegExp(schema.pattern, 'u'));
-      out.push(...sample(matching, 8, seed));
-      out.push(...sample(matching.chain((s) => fc.tuple(fc.constant(s), fc.nat(s.length), fc.string({ maxLength: 2, unit: 'binary' })))
-        .map(([s, i, inserted]) => s.slice(0, i) + inserted + s.slice(i + 1)), 8, seed + 1));
-    }
+    if (typeof schema.pattern === 'string') out.push(...near(schema.pattern, seed));
     out.push(...sample(fc.string({ maxLength: 12, unit: 'binary' }), 3, seed + 2));
     return out.filter((s) => !hasHalfPair(s));
   }
@@ -72,8 +78,11 @@ function replacements(schema: Schema, value: JsonValue, seed: number): JsonValue
     return out;
   }
   if (value !== null && typeof value === 'object' && type === 'object' && !schema.properties) {
-    const [first] = Object.values(value);
-    return first === undefined ? [] : [{ ...value, 'Not A Key': first }, { ...value, '': first }];
+    // The first key renamed: to keys the pattern matches, to near misses, and to keys it never could.
+    const entries = Object.entries(value);
+    if (!entries.length) return [];
+    const keys = [...near(String((schema.propertyNames as Schema).pattern), seed), 'Not A Key', ''];
+    return keys.map((key) => Object.fromEntries(entries.map(([k, v], i) => [i === 0 ? key : k, v])));
   }
   return [];
 }
@@ -105,7 +114,7 @@ describe('the Rust types refuse what the schemas refuse', () => {
       places(schema, schema, fixture, (v) => v).forEach((place, p) => {
         for (const replacement of replacements(place.schema, place.value, 311 + f * 1000 + p)) {
           cases.push(place.set(replacement));
-          patterns.push(typeof place.schema.pattern === 'string' ? place.schema.pattern : undefined);
+          patterns.push(patternOf(place.schema));
         }
       });
     });
@@ -131,7 +140,7 @@ describe('the Rust types refuse what the schemas refuse', () => {
       if (node === null || typeof node !== 'object') return;
       for (const [key, child] of Object.entries(node)) {
         if (key === 'pattern' && typeof child === 'string') published.add(child);
-        else if (key !== 'enum' && key !== 'propertyNames') walk(child);
+        else if (key !== 'enum') walk(child);
       }
     };
     for (const { schema } of listSchemas()) walk(schema);
