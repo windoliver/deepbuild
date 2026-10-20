@@ -1,0 +1,54 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "verdict.made",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "outcome": "INVALID",
+    "verdict": "verdict:01K74G4B6D8F0H2K4M6P8R0T2V",
+    "claim": "claim:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "reasons": [
+      "R2 failed"
+    ],
+    "requirements": [
+      {
+        "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R2",
+        "outcome": "INVALID",
+        "check": "contracts.unit",
+        "depth": "unit",
+        "oracle": "code",
+        "runs": {
+          "clean": 0,
+          "needed": 3,
+          "counted": [
+            "run:01K74G3A5C7E9G1J3M5P7R9T1V"
+          ]
+        },
+        "smallest": "seq \"01\" accepted",
+        "points_to": "packages/contracts/src/validate.ts:12",
+        "evidence": [
+          "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        ],
+        "proof": "test_run"
+      }
+    ],
+    "smallest": "seq \"01\" accepted",
+    "points_to": "packages/contracts/src/validate.ts:12",
+    "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+    "key": {
+      "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+      "doc_revisions": [],
+      "check_digests": [
+        "d1:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+      ],
+      "state_digests": [],
+      "environment": "node-25.7.0/darwin-arm64",
+      "tools": [
+        "vitest@5.0.5"
+      ]
+    }
+  }
+}

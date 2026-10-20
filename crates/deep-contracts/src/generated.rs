@@ -8589,12 +8589,43 @@ impl Contract for SuggestionFiledKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SuggestionFiledDataWriter {
+    You,
+    Shell,
+    Record,
+    Agent,
+    Plugin,
+}
+
+impl Contract for SuggestionFiledDataWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "you" => Ok(Self::You),
+            "shell" => Ok(Self::Shell),
+            "record" => Ok(Self::Record),
+            "agent" => Ok(Self::Agent),
+            "plugin" => Ok(Self::Plugin),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::You => "you",
+            Self::Shell => "shell",
+            Self::Record => "record",
+            Self::Agent => "agent",
+            Self::Plugin => "plugin",
+        }.to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SuggestionFiledData {
     pub suggestion: String,
     pub doc: String,
     pub item: String,
-    pub writer: String,
+    pub writer: SuggestionFiledDataWriter,
     pub patch: String,
     pub base: i64,
     pub ops: Vec<deep_contracts::Value>,

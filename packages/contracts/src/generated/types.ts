@@ -1328,7 +1328,7 @@ export interface SuggestionFiled {
     suggestion: string;
     doc: string;
     item: string;
-    writer: string;
+    writer: "you" | "shell" | "record" | "agent" | "plugin";
     patch: string;
     base: number;
     ops: Array<unknown>;
