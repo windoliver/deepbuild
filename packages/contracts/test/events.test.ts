@@ -1,6 +1,6 @@
 // Regressions for event kinds whose schemas read the design looser, or other, than it says.
 import { describe, expect, it } from 'vitest';
-import { catalogue, fixtures, validate } from '../src/index.js';
+import { catalogue, fixtures, getSchema, validate } from '../src/index.js';
 
 type Event = Record<string, unknown> & { data: Record<string, unknown> };
 const first = (name: string): Event => structuredClone(fixtures(name)[0]) as Event;
@@ -57,11 +57,16 @@ describe('the design says', () => {
   it("a task's task_ref may be the message that asked for it", () => {
     const task = first('task.created@1');
     expect(ok('task.created@1', { ...task, data: { ...task.data, task_ref: 'session:01K74G1Z3X5V7T9R1P3N5M7K9H#msg3' } })).toBe(true);
+    for (const task_ref of ['session:01K74G1Z3X5V7T9R1P3N5M7K9H', 'verdict:01K74G4B6D8F0H2K4M6P8R0T2V']) expect(ok('task.created@1', { ...task, data: { ...task.data, task_ref } }), task_ref).toBe(false);
   });
 
   it("evidence carries its source and origin, and a verdict its reasons", () => {
     const evidence = first('evidence.put@1');
-    expect(evidence.data.origin).toBeDefined();
+    for (const field of ['source', 'origin']) {
+      const { [field]: _dropped, ...without } = evidence.data;
+      expect(ok('evidence.put@1', { ...evidence, data: without }), `without ${field}`).toBe(false);
+    }
+    for (const origin of ['deepbuild', 'you', 'agent']) expect(ok('evidence.put@1', { ...evidence, data: { ...evidence.data, origin } }), origin).toBe(true);
     expect(ok('evidence.put@1', { ...evidence, data: { ...evidence.data, origin: 'model' } })).toBe(false);
     const { reasons: _reasons, ...noReasons } = first('verdict.made@1').data;
     expect(ok('verdict.made@1', first('verdict.made@1'))).toBe(true);
@@ -82,6 +87,7 @@ describe('the design says', () => {
 
   it('a task asked for by a message closes by that same handle', () => {
     expect(ok('task.closed@1', { ...first('task.closed@1'), subject: 'session:01K74G1Z3X5V7T9R1P3N5M7K9H#msg3' })).toBe(true);
+    expect(ok('task.closed@1', { ...first('task.closed@1'), subject: 'verdict:01K74G4B6D8F0H2K4M6P8R0T2V' })).toBe(false);
   });
 
   it("a decision's scope is the learned layer's ladder, written the same way", () => {
@@ -101,6 +107,7 @@ describe('the design says', () => {
   it("a prompt links to a task by any task_ref, as every other kind does", () => {
     const ask = first('user.ask@1');
     expect(ok('user.ask@1', { ...ask, data: { ...ask.data, tasks: ['session:01K74G1Z3X5V7T9R1P3N5M7K9H#m214'] } })).toBe(true);
+    expect(ok('user.ask@1', { ...ask, data: { ...ask.data, tasks: ['verdict:01K74G4B6D8F0H2K4M6P8R0T2V'] } })).toBe(false);
   });
 
   it("a patch is named by its ULID, and says what it achieved in counts", () => {
@@ -135,6 +142,7 @@ describe('the design says', () => {
     const patched = first('doc.patched@1');
     const achieved = { created: { 'slab@1': 1 }, updated: 0, deleted: { 'village.house@1': 2 }, unchanged: false };
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved } })).toBe(true);
+    for (const kind of ['slab', 'Slab@1', 'slab@0']) expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: { ...achieved, created: { [kind]: 1 } } } }), kind).toBe(false);
   });
 
   it("a worktree's owner is its task, with its base commit, and only you remove one", () => {
@@ -154,6 +162,7 @@ describe('the design says', () => {
   it('a reading may be below zero', () => {
     const reading = first('reading.recorded@1');
     expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value: -3.5 } })).toBe(true);
+    expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value: '-3.5' } })).toBe(false);
   });
 
   it("an item is named by the document's item ID grammar", () => {
@@ -163,6 +172,18 @@ describe('the design says', () => {
   });
 
   it('an event keeps at most the read cap of any text field', () => {
+    // Every string an event's data can hold, in every kind, is held to the read cap, unless an enum or a format
+    // (a ULID, a seq) already bounds it.
+    const strings = (node: unknown, at: string): { at: string; max: unknown }[] => {
+      if (!node || typeof node !== 'object') return [];
+      const schema = node as Record<string, unknown>;
+      const own = (schema.type === 'string' || (Array.isArray(schema.type) && schema.type.includes('string'))) && !('enum' in schema) && !('format' in schema) ? [{ at, max: schema.maxLength }] : [];
+      return [...own, ...Object.entries(schema).flatMap(([key, child]) => strings(child, `${at}/${key}`))];
+    };
+    for (const { schema } of catalogue()) {
+      const { properties, $defs } = getSchema(schema) as { properties: { data: unknown }; $defs?: unknown };
+      for (const { at, max } of [...strings(properties.data, '/data'), ...strings($defs, '/$defs')]) expect(max, `${schema} ${at}`).toBe(8192);
+    }
     const long = 'x'.repeat(8193);
     const before = first('tool.before@1');
     expect(ok('tool.before@1', { ...before, data: { ...before.data, command: long } })).toBe(false);
@@ -174,9 +195,10 @@ describe('the design says', () => {
   it("a patch and the suggestion filed from it name the patch's canvas writer kind", () => {
     for (const name of ['doc.patched@1', 'suggestion.filed@1']) {
       const event = first(name);
-      for (const writer of ['you', 'shell', 'record', 'agent', 'plugin']) expect(ok(name, { ...event, data: { ...event.data, writer } }), `${name} ${writer}`).toBe(true);
+      for (const writer of ['shell', 'record', 'agent', 'plugin']) expect(ok(name, { ...event, data: { ...event.data, writer } }), `${name} ${writer}`).toBe(true);
       for (const writer of ['any thing', 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H']) expect(ok(name, { ...event, data: { ...event.data, writer } }), `${name} ${writer}`).toBe(false);
     }
+    expect(ok('doc.patched@1', { ...first('doc.patched@1'), data: { ...first('doc.patched@1').data, writer: 'you' } })).toBe(true);
   });
 
   it('a PASS verdict has no requirement pending or short of PASS', () => {
@@ -209,9 +231,10 @@ describe('the design says', () => {
   it("a reading's value is any finite number, past 2^53 too", () => {
     const reading = first('reading.recorded@1');
     for (const value of [6.02214076e23, -1e16]) expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value } }), String(value)).toBe(true);
+    for (const value of [Infinity, Number.NaN]) expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value } }), String(value)).toBe(false);
   });
 
-  it('only you settle a suggestion, or the core when a later change supersedes it; only you put an ask off', () => {
+  it('no agent, plug-in or hook settles a suggestion or puts an ask off; the app and the core do', () => {
     const agents = ['mcp:01K74G1Z3X5V7T9R1P3N5M7K9H', 'ext:acme.panel', 'hook'];
     for (const name of ['suggestion.settled@1', 'ask.later@1']) {
       for (const writer of agents) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
@@ -245,17 +268,6 @@ describe('the design says', () => {
     }
   });
 
-  it('a hook kind, a session start or a reading also comes from an adapter without hooks, or the hub', () => {
-    for (const name of ['tool.before@1', 'tool.after@1', 'agent.stop@1', 'session.start@1', 'user.ask@1', 'reading.recorded@1', 'reading.batch@1']) {
-      for (const writer of ['hook', 'core', 'ext:codex']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(true);
-    }
-  });
-
-  it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
-    const lease = first('lease.acquired@1');
-    for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
-  });
-
   it('every ask kind and every pin kind has a fixture', () => {
     const asks = fixtures('ask.created@1') as Event[];
     expect(new Set(asks.map((a) => a.data.kind))).toEqual(new Set(['authority', 'unblock', 'taste', 'exception', 'choice', 'definition']));
@@ -263,3 +275,22 @@ describe('the design says', () => {
   });
 });
 
+// Readings the design leaves open, pinned here so a change to one is a decision; each is listed in the PR for
+// the maintainer to confirm.
+describe('readings pending a maintainer', () => {
+  it('a hook kind, a session start or a reading also comes from an adapter without hooks, or the hub', () => {
+    for (const name of ['tool.before@1', 'tool.after@1', 'agent.stop@1', 'session.start@1', 'user.ask@1', 'reading.recorded@1', 'reading.batch@1']) {
+      for (const writer of ['hook', 'core', 'ext:codex']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(true);
+    }
+  });
+
+  it("a lease's holder may be any writer, so a document writer can hold its prefix", () => {
+    const lease = first('lease.acquired@1');
+    for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
+  });
+
+  it("a suggestion filed from another person's patch names the canvas writer kind you", () => {
+    const filed = first('suggestion.filed@1');
+    expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, writer: 'you' } })).toBe(true);
+  });
+});
