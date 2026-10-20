@@ -944,7 +944,7 @@
     },
     "#80.15c33f50": {
       "criterion": "The spike records, for the terminal and each app, whether a line reached the chat while a 60 s tool call still ran, and whether anything fired before a session was deleted, each with the recording that shows the route or the version tested with none; #120 and #88 keep the criteria that need a route only where the decision names one",
-      "status": "BLOCKED",
+      "status": "PASS",
       "findings": [
         {
           "surface": "claude-terminal",
@@ -1001,6 +1001,32 @@
           "route": "SessionEnd",
           "action": "archive",
           "transcript": "logs/claude-desktop-transcript.jsonl"
+        },
+        {
+          "surface": "claude-desktop",
+          "kind": "delete",
+          "action": "delete",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "ee1496ed-7385-4adf-8a19-e8f8ebc38846",
+          "deletedAt": 1792457296951,
+          "route": "SessionEnd",
+          "transcript": "logs/claude-desktop-transcript.jsonl",
+          "note": "deletedAt is when the app reported the delete done; SessionEnd (reason other) fired at 1792457291748, and the Claude Code transcript stayed on disk after the delete"
+        },
+        {
+          "surface": "codex-desktop",
+          "kind": "delete",
+          "action": "delete",
+          "log": "logs/codex-desktop.jsonl",
+          "session": "01a156b4-dffc-73d2-91de-ad19188f6c47",
+          "deletedAt": 1792457617479,
+          "route": "SessionEnd",
+          "recording": {
+            "sha256": "b396ed0374015ed527d57ec2ffce916f0eecfe917e33e904eb9b6479850775a4",
+            "bytes": 122012,
+            "type": "video/mp4"
+          },
+          "note": "deletedAt is when the rollout file left ~/.codex/sessions, 31.5 s after SessionEnd (reason other) fired at 1792457585947; the recording was made after the delete and shows the thread gone"
         }
       ],
       "decision": {
@@ -1008,8 +1034,8 @@
         "codexDesktop": "0.160.0: no hook fired during a 65.5 s call; archiving an open thread fired no SessionEnd and moved its rollout to ~/.codex/archived_sessions",
         "claudeDesktop": "FileChanged fired during a 65 s call in a fresh desktop session, but the desktop transcript saves no line for it, unlike Stop lines; whether anything shows needs the window on a recording",
         "issues": "#120: an in-call line has a route only in the Claude Code terminal (FileChanged notification); none in the Claude desktop app (2.1.299), Codex CLI (0.144.0) or Codex Desktop (0.160.0). #88: Claude desktop fires SessionEnd before an archive; Codex Desktop fires nothing before an archive and moves the rollout to ~/.codex/archived_sessions.",
-        "blockedOn": "Only archives were tested: a permanent delete in each app is still open. Everything else in this criterion is recorded.",
-        "claudeDesktopDelete": "Archiving a Claude desktop session fired SessionEnd (reason other) about 1.2 s before the archive finished (session 4efa4b70 at 22:32:52 UTC); not on a recording, and a permanent delete is untested"
+        "claudeDesktopDelete": "Archiving a Claude desktop session fired SessionEnd (reason other) about 1.2 s before the archive finished (session 4efa4b70 at 22:32:52 UTC); not on a recording, and a permanent delete is untested",
+        "deletes": "A permanent delete fires SessionEnd (reason other) first in both apps. The Claude desktop app keeps the Claude Code transcript on disk after the delete; Codex Desktop removes the rollout about 31 s after SessionEnd. An archive fires SessionEnd in the Claude desktop app and nothing in Codex Desktop, which moves the rollout to ~/.codex/archived_sessions."
       }
     },
     "#80.661b1ddf": {
