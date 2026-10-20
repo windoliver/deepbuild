@@ -384,3 +384,11 @@ describe('a value is read once, so what is checked is what is written or hashed'
 it('every verdict outcome has a fixture', () => {
   expect(new Set(fixtures('verdict@1').map((f) => (f as { outcome: string }).outcome))).toEqual(new Set(['PASS', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE']));
 });
+
+it("encode reads a seq array by its indices, never through the array's own map", () => {
+  const reg = registry([{ name: 's@1', schema: record({ s: { type: 'array', items: { type: 'string', format: 'seq' } } }) }]);
+  const own: unknown[] = [1n];
+  Object.defineProperty(own, 'map', { value: () => ['2'] });
+  class Mapped extends Array<unknown> { override map<U>(): U[] { return ['2'] as U[]; } }
+  for (const s of [own, Mapped.from([1n])]) expect(reg.encode('s@1', { s })).toBe('{"s":["1"]}');
+});

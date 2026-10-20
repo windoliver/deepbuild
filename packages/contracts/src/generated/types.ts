@@ -658,6 +658,18 @@ export interface LayerRows {
   evidence?: Array<string>;
 }
 
+export type LearnAppliedEvidence = Array<{
+  at: string;
+  quote: string;
+}>;
+
+export type LearnAppliedReplay = {
+  tasks: number;
+  regressions: number;
+} | null;
+
+export type LearnAppliedSupersedes = string | null;
+
 /** learn.applied@1 */
 export interface LearnApplied {
   v: 1;
@@ -671,23 +683,38 @@ export interface LearnApplied {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: "learned" | "base";
+    layer: "learned";
     target: string;
     diff: string;
-    evidence: Array<{
-      at: string;
-      quote: string;
-    }>;
+    evidence: LearnAppliedEvidence;
     scope: string;
-    replay: {
-      tasks: number;
-      regressions: number;
-    } | null;
+    replay: LearnAppliedReplay;
     applied_by: string;
-    supersedes: string | null;
+    supersedes: LearnAppliedSupersedes;
+  } | {
+    layer: "base";
+    target: string;
+    diff: string;
+    evidence: LearnAppliedEvidence;
+    scope: string;
+    replay: LearnAppliedReplay;
+    applied_by: string;
+    supersedes: LearnAppliedSupersedes;
   };
   evidence?: Array<string>;
 }
+
+export type LearnProposedEvidence = Array<{
+  at: string;
+  quote: string;
+}>;
+
+export type LearnProposedReplay = {
+  tasks: number;
+  regressions: number;
+} | null;
+
+export type LearnProposedSupersedes = string | null;
 
 /** learn.proposed@1 */
 export interface LearnProposed {
@@ -702,23 +729,38 @@ export interface LearnProposed {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: "learned" | "base";
+    layer: "learned";
     target: string;
     diff: string;
-    evidence: Array<{
-      at: string;
-      quote: string;
-    }>;
+    evidence: LearnProposedEvidence;
     scope: string;
-    replay: {
-      tasks: number;
-      regressions: number;
-    } | null;
+    replay: LearnProposedReplay;
     applied_by: string | null;
-    supersedes: string | null;
+    supersedes: LearnProposedSupersedes;
+  } | {
+    layer: "base";
+    target: string;
+    diff: string;
+    evidence: LearnProposedEvidence;
+    scope: string;
+    replay: LearnProposedReplay;
+    applied_by: string | null;
+    supersedes: LearnProposedSupersedes;
   };
   evidence?: Array<string>;
 }
+
+export type LearnRolledBackEvidence = Array<{
+  at: string;
+  quote: string;
+}>;
+
+export type LearnRolledBackReplay = {
+  tasks: number;
+  regressions: number;
+} | null;
+
+export type LearnRolledBackSupersedes = string | null;
 
 /** learn.rolled_back@1 */
 export interface LearnRolledBack {
@@ -733,23 +775,38 @@ export interface LearnRolledBack {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: "learned" | "base";
+    layer: "learned";
     target: string;
     diff: string;
-    evidence: Array<{
-      at: string;
-      quote: string;
-    }>;
+    evidence: LearnRolledBackEvidence;
     scope: string;
-    replay: {
-      tasks: number;
-      regressions: number;
-    } | null;
+    replay: LearnRolledBackReplay;
     applied_by: string | null;
-    supersedes: string | null;
+    supersedes: LearnRolledBackSupersedes;
+  } | {
+    layer: "base";
+    target: string;
+    diff: string;
+    evidence: LearnRolledBackEvidence;
+    scope: string;
+    replay: LearnRolledBackReplay;
+    applied_by: string | null;
+    supersedes: LearnRolledBackSupersedes;
   };
   evidence?: Array<string>;
 }
+
+export type LearnWidenedEvidence = Array<{
+  at: string;
+  quote: string;
+}>;
+
+export type LearnWidenedReplay = {
+  tasks: number;
+  regressions: number;
+} | null;
+
+export type LearnWidenedSupersedes = string | null;
 
 /** learn.widened@1 */
 export interface LearnWidened {
@@ -764,20 +821,23 @@ export interface LearnWidened {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: "learned" | "base";
+    layer: "learned";
     target: string;
     diff: string;
-    evidence: Array<{
-      at: string;
-      quote: string;
-    }>;
+    evidence: LearnWidenedEvidence;
     scope: string;
-    replay: {
-      tasks: number;
-      regressions: number;
-    } | null;
+    replay: LearnWidenedReplay;
     applied_by: string;
-    supersedes: string | null;
+    supersedes: LearnWidenedSupersedes;
+  } | {
+    layer: "base";
+    target: string;
+    diff: string;
+    evidence: LearnWidenedEvidence;
+    scope: string;
+    replay: LearnWidenedReplay;
+    applied_by: string;
+    supersedes: LearnWidenedSupersedes;
   };
   evidence?: Array<string>;
 }

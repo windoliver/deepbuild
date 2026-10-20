@@ -1,6 +1,6 @@
 // Regressions for event kinds whose schemas read the design looser, or other, than it says.
 import { describe, expect, it } from 'vitest';
-import { catalogue, catalogueDrift, fixtures, getSchema, validate } from '../src/index.js';
+import { catalogue, catalogueDrift, checkViewBindings, fixtures, getSchema, validate } from '../src/index.js';
 
 type Event = Record<string, unknown> & { data: Record<string, unknown> };
 const first = (name: string): Event => structuredClone(fixtures(name)[0]) as Event;
@@ -287,11 +287,40 @@ describe('the design says', () => {
   });
 });
 
+it("the catalogue's checks read a list by its indices, never through its own flatMap", () => {
+  const forge = <T>(items: T[]): T[][] => {
+    const own = [...items];
+    Object.defineProperty(own, 'flatMap', { value: () => [] });
+    class Flat<U> extends Array<U> { override flatMap<V>(): V[] { return []; } }
+    return [own, Flat.from(items)];
+  };
+  for (const kinds of forge(['learn.paused'])) expect(checkViewBindings(kinds).ok).toBe(false);
+  for (const sources of forge([{ where: '#1', text: '`learn.paused`' }])) expect(catalogueDrift(sources)).toEqual([{ kind: 'learn.paused', where: '#1' }]);
+});
+
+describe('the learned layer', () => {
+  it('a change aimed at the base names you as its applier, never a rule, in every learn kind', () => {
+    for (const name of ['learn.proposed@1', 'learn.applied@1', 'learn.widened@1', 'learn.rolled_back@1']) {
+      const event = first(name);
+      const data = (layer: string, applied_by: string) => ({ ...event, data: { ...event.data, layer, applied_by } });
+      expect(ok(name, data('base', 'rule:abc')), `${name} base by a rule`).toBe(false);
+      expect(ok(name, data('learned', 'rule:abc')), `${name} learned by a rule`).toBe(true);
+      expect(ok(name, data('base', 'you')), `${name} base by you`).toBe(true);
+    }
+  });
+});
+
 describe('the drift check', () => {
   it('a kind of a family the catalogue lacks is drift where the text calls it an event kind, and other dotted names are not', () => {
     const text = 'Adds the event kind `telemetry.sampled`, and the event kinds `telemetry.dropped` and `telemetry.kept`. '
       + 'It reads `rules.json`, the preset `art.ink_wash` and the code `grid.out_of_range`.';
     expect(catalogueDrift([{ where: '#1', text }])).toEqual(['telemetry.sampled', 'telemetry.dropped', 'telemetry.kept'].map((kind) => ({ kind, where: '#1' })));
+  });
+
+  it('a name the text calls an event kind through a connective or a colon is drift too, and its twins that are not kinds are not', () => {
+    const text = 'Adds the event kind named `telemetry.sampled`, an event kind: `telemetry.dropped`, the event kind called '
+      + '`telemetry.kept` and event kinds such as `telemetry.lost`. The event kind field reads `rules.json`; event kinds live in `catalog.refs`.';
+    expect(catalogueDrift([{ where: '#2', text }])).toEqual(['telemetry.sampled', 'telemetry.dropped', 'telemetry.kept', 'telemetry.lost'].map((kind) => ({ kind, where: '#2' })));
   });
 });
 
