@@ -114,21 +114,6 @@ mod screens {
         assert!(before != after, "selecting a session changed no pixels");
     }
 
-    fn menu_bar_count_screen() {
-        // The NSStatusItem itself can't be captured offscreen; this renders and clicks the
-        // window's count, which shows the same number from the same function.
-        let mut cx = context();
-        let handle = open(&mut cx, None);
-        shot(&mut cx, handle, "menu-bar-count");
-        cx.update_window(handle, |_, window, _| {
-            assert!(window.find("count").visible());
-        })
-        .unwrap();
-        // The report click is checked in `headless.rs`, on the test platform: here it would
-        // open a real browser.
-        click(&mut cx, handle, "count");
-    }
-
     fn panel_screen(agent: &str) {
         let mut cx = context();
         let handle = open(&mut cx, Some(agent));
@@ -143,9 +128,8 @@ mod screens {
     }
 
     pub fn run() -> i32 {
-        let cases: [(&str, fn()); 4] = [
+        let cases: [(&str, fn()); 3] = [
             ("window_screen", window_screen),
-            ("menu_bar_count_screen", menu_bar_count_screen),
             ("claude_code_panel_screen", || panel_screen("claude-code")),
             ("codex_panel_screen", || panel_screen("codex")),
         ];

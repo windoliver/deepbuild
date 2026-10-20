@@ -1,19 +1,15 @@
 # Panel brief: the stocks view
 
-This is the whole task an agent gets for issue #337. The other inputs are gpui-shell's own docs (`docs/` in the bundle) and the `gpui-kit.d.ts` the runtime generates. Write one file, `main.js`, and nothing else.
+This is the whole task an agent gets for issue #337. The only other inputs are gpui-shell's own docs (`docs/` in the bundle). Write one file, `main.js`, and nothing else.
 
 ## What it runs in
 
 The panel is a gpui-shell application: `main.js` default-exports a class extending `View` from `"gpui-kit"`. It runs under an empty policy, so it has no network, files, programs, storage or timers you didn't get from the docs. It may import `"gpui-kit"`, `"gpui-base"`, `"gpui-component"` and DeepBuild's module `"deepbuild"`.
 
-`"deepbuild"` exports one function:
+`"deepbuild"` exports one function, `quotes()`. It takes no arguments and returns a plain object with two fields:
 
-```js
-import { quotes } from "deepbuild";
-const q = quotes();
-// q.interval_s: seconds between ticks (60)
-// q.symbols: [{ symbol: "AAPL", name: "Apple", prices: [228.31, ...] }, ...] — 120 prices each
-```
+- `interval_s`: seconds between ticks (60).
+- `symbols`: an array with one entry per stock, each `{ symbol, name, prices }`, for example symbol `AAPL`, name `Apple`, and `prices` an array of 120 numbers, one per tick.
 
 The quotes are a recording. The panel replays them: it starts at tick 0, and only the `next` button moves time.
 

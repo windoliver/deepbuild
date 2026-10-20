@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import {
   BUDGETS, budgetGateProblems, budgetProblems, buildProblems, decisionProblems, displayProblem, failedCriteria, FALLBACK, headlessProblems, judge, namedTests, PANELS,
-  panelProblems, parseLibtest, preflightProblems, REFERENCE, screenProblems, sha256, STOCKS, stocksProblems, TOOLKIT_ROW, windowProblems,
+  menuBarProblems, panelProblems, parseLibtest, preflightProblems, REFERENCE, screenProblems, sha256, STOCKS, stocksProblems, TOOLKIT_ROW, windowProblems,
 } from './validate.mjs';
 
 const clone = (value) => structuredClone(value);
@@ -34,6 +34,9 @@ const NATIVE_TEXT = 'A small native app per platform, Swift on macOS, for the li
 const designWith = (text) => `# Design\n\n### Decided\n\n| Question | Decision | Reopens |\n|---|---|---|\n${TOOLKIT_ROW} ${text} | The two-day spike fails |\n`;
 const PANEL_SOURCE = { claude: 'export default function view(ui, data) { return ui.table(data.quotes("watchlist")); }\n', codex: 'export function render(h, deep) { const rows = deep.store.get("quotes"); return h.list(rows); }\n' };
 const QUOTES = { recorded: '2026-10-16T20:00:00Z', source: 'a fixture recorded from a market data source', quotes: [{ symbol: 'AAPL', time: '2026-10-16T19:59:00Z', price: 231.4 }, { symbol: 'MSFT', time: '2026-10-16T19:59:00Z', price: 512.1 }] };
+// The redrafted inputs: gpui-kit's own docs upstream at a pinned commit, and the task statement this change adds.
+const TASK = '# The spike\'s panel\n\nBuild the stocks view on recorded quotes. The headless test clicks `row-AAPL` and `open-report`.\n\n```text\nrow-<symbol>  open-report\n```\n';
+const UPSTREAM_DOC = `https://github.com/example/gpui-kit/blob/${'a'.repeat(40)}/crates/gpui-shell/README.md`;
 const LANES = [{ name: 'unit', commands: [['cargo', 'test', '--workspace', '--locked'], ['cargo', 'test', '-p', 'deep-app', '--test', 'headless']] }];
 
 function scratchRepo(t) {
@@ -47,6 +50,7 @@ function scratchRepo(t) {
   put(join(repo, 'docs/spikes/337/panels/claude-code/stocks.js'), PANEL_SOURCE.claude);
   put(join(repo, 'docs/spikes/337/panels/codex/stocks.js'), PANEL_SOURCE.codex);
   put(join(repo, 'docs/spikes/337/quotes.json'), JSON.stringify(QUOTES));
+  put(join(repo, 'docs/spikes/337/task.md'), TASK);
   put(join(repo, 'docs/spikes/337/report.html'), '<table><tr><td>AAPL</td><td>231.40</td></tr><tr><td>MSFT</td><td>512.10</td></tr></table>');
   for (const [name, width] of [['sessions', 1200], ['menu-bar', 300], ['panel-claude-code', 800], ['panel-codex', 801]]) put(join(repo, `docs/spikes/337/screens/${name}.png`), png(width, 600));
   put(join(repo, 'docs/spikes/337/screens/not-a-png.png'), 'hello');
@@ -66,6 +70,14 @@ function inProcessRecord(base) {
   Object.assign(record.decision, { agentPanels: 'in_process', text: IN_PROCESS_TEXT });
   return record;
 }
+// The redrafted menu-bar count: an OS menu-bar item gpui-kit can't capture, declared and checked by value.
+function uncapturedRecord(base) {
+  const record = rightRecord(base);
+  record.screens = record.screens.filter((screen) => screen.id !== 'menu-bar');
+  record.menuBar = { captured: false, reason: "the count is an NSStatusItem the app creates; gpui-kit's offscreen renderer captures only gpui windows", count: 3, test: 'menu_bar::count_matches_needs_you', checks: ['the item shows the open asks, 3', 'the window shows the same count'] };
+  return record;
+}
+const docsRecord = (base) => { const record = rightRecord(base); record.panels[1].inputs = ['issue#337', 'docs/technical-design.md', UPSTREAM_DOC, { doc: 'docs/spikes/337/task.md', sha256: sha256(TASK) }]; return record; };
 const five = (value) => [value * 0.96, value * 0.98, value, value * 0.97, value * 0.99];
 
 function rightRecord(base) {
@@ -74,7 +86,7 @@ function rightRecord(base) {
     mergeBase: base,
     machine: { ...REFERENCE, macosBuild: '25A354' },
     window: { screen: 'sessions', sessionRows: 1000 },
-    menuBar: { screen: 'menu-bar', count: 3 },
+    menuBar: { captured: true, screen: 'menu-bar', count: 3 },
     screens: [
       { id: 'sessions', test: 'sessions::thousand_rows_scroll_and_select', snapshot: 'docs/spikes/337/screens/sessions.png', clicks: ['row 500', 'row 999'] },
       { id: 'menu-bar', test: 'menu_bar::count_opens_needs_you', snapshot: 'docs/spikes/337/screens/menu-bar.png', clicks: ['the count'] },
@@ -123,6 +135,19 @@ test(`${PANELS} a right record whose agent-built panels ran in process, as a dec
   holds(all(inProcessRecord(base), repo));
 });
 
+test(`${PANELS} a right record whose panel was written from gpui-kit's pinned upstream docs and the task statement this change adds passes every check`, (t) => {
+  const { repo, base } = scratchRepo(t);
+  holds(all(docsRecord(base), repo));
+});
+
+test('scope: a right record whose menu-bar count is declared not captured, and checked by its own headless test, passes every check', (t) => {
+  const { repo, base } = scratchRepo(t);
+  const record = uncapturedRecord(base);
+  holds(all(record, repo));
+  assert.deepEqual(namedTests(record).screens.at(-1), ['the menu-bar count (not captured)', 'menu_bar::count_matches_needs_you']);
+  rejects(headlessProblems(namedTests(record).screens, { status: 0, stdout: 'test sessions::thousand_rows_scroll_and_select ... ok\ntest panels::claude_code_stocks ... ok\ntest panels::codex_stocks ... ok', stderr: '' }), /the menu-bar count \(not captured\): test "menu_bar::count_matches_needs_you" didn't run/);
+});
+
 test(`${FALLBACK} a right native record, after cold start missed its budget, passes the decision and budget checks`, (t) => {
   const { repo, base } = scratchRepo(t);
   put(join(repo, 'docs/technical-design.md'), designWith(NATIVE_TEXT));
@@ -144,6 +169,15 @@ const planted = [
   [PANELS, 'both agents credited with one file', panelProblems, (r) => { Object.assign(r.panels[1], { file: r.panels[0].file, sha256: r.panels[0].sha256 }); }, /is the other agent's file too/],
   [PANELS, 'a panel written from the code, not the docs', panelProblems, (r) => { r.panels[0].inputs.push('crates/deep-app/src/main.rs'); }, /isn't the issue or a doc at the merge base/],
   [PANELS, 'a panel written from a doc the merge base lacks', panelProblems, (r) => { r.panels[0].inputs.push('docs/spikes/337/report.html'); }, /isn't the issue or a doc at the merge base/],
+  [PANELS, 'an upstream doc on a branch, not a pinned commit', panelProblems, (r) => { r.panels[1].inputs.push('https://github.com/example/gpui-kit/blob/main/crates/gpui-shell/README.md'); }, /isn't a GitHub blob URL pinned to a full 40-hex commit/],
+  [PANELS, 'an upstream input that is source code', panelProblems, (r) => { r.panels[1].inputs.push(`https://github.com/example/gpui-kit/blob/${'a'.repeat(40)}/crates/gpui-shell/src/lib.rs`); }, /isn't a doc .*source code isn't docs/],
+  [PANELS, 'an upstream input that is an example', panelProblems, (r) => { r.panels[1].inputs.push(`https://github.com/example/gpui-kit/blob/${'a'.repeat(40)}/examples/stocks/README.md`); }, /is under examples\/, an example or test, not docs/],
+  [PANELS, 'an upstream input that is a test', panelProblems, (r) => { r.panels[1].inputs.push(`https://github.com/example/gpui-kit/blob/${'a'.repeat(40)}/crates/gpui-shell/tests/panels.md`); }, /is under tests\/, an example or test, not docs/],
+  [PANELS, "this repo's docs at another commit, passed off as upstream", panelProblems, (r) => { r.panels[1].inputs.push(`https://github.com/windoliver/deepbuild/blob/${'b'.repeat(40)}/docs/spikes/337/notes.md`); }, /is this repo/],
+  [PANELS, "another agent's panel given as an input", panelProblems, (r) => { r.panels[1].inputs.push({ doc: r.panels[0].file, sha256: r.panels[0].sha256 }); }, /isn't a tracked doc under docs\//],
+  [PANELS, 'a task statement whose hash is not the one given', panelProblems, (r) => { r.panels[1].inputs.push({ doc: 'docs/spikes/337/task.md', sha256: sha256('another task') }); }, /task\.md doesn't hash to its recorded sha256/],
+  [PANELS, 'a task statement that is not tracked', panelProblems, (r) => { r.panels[1].inputs.push({ doc: 'docs/spikes/337/untracked.md', sha256: sha256('x') }); }, /isn't a tracked doc under docs\//],
+  [PANELS, 'an input of an unknown kind', panelProblems, (r) => { r.panels[1].inputs.push({ file: 'tests/acceptance/337/validator.test.mjs' }); }, /isn't the issue, a doc at the merge base, a pinned upstream doc URL or \{doc, sha256\}/],
   [PANELS, "an agent-built panel in the app's process, undeclared", panelProblems, (r) => { Object.assign(r.panels[0].runtime, { runtime: 'in_process', thread: 'ui_main' }); }, /runs in_process with no declared deviation/],
   [PANELS, 'an agent-built panel claiming to be shipped', panelProblems, (r) => { r.panels[1].runtime.origin = 'shipped'; }, /origin is "shipped", not agent_built/],
   [PANELS, 'JIT on for an agent-built panel in the panel host', panelProblems, (r) => { r.panels[1].runtime.jit = 'on'; }, /jit is "on"/],
@@ -196,6 +230,17 @@ const planted = [
 
   ['scope', 'a 999-row session list', windowProblems, (r) => { r.window.sessionRows = 999; }, /sessionRows is 999/],
   ['scope', 'no menu-bar count screen', windowProblems, (r) => { r.menuBar.screen = 'tray'; }, /menuBar\.screen "tray"/],
+  ['scope', 'a menu-bar count that never says whether it was captured', windowProblems, (r) => { delete r.menuBar.captured; }, /menuBar\.captured is undefined, not true/],
+  ['scope', "the window's screen passed off as the menu bar's", windowProblems, (r) => { r.menuBar.screen = 'sessions'; }, /is the window's screen/],
+  ['scope', "a panel's screen passed off as the menu bar's", windowProblems, (r) => { r.menuBar.screen = 'panel-codex'; }, /is codex's panel's screen/],
+  ['scope', "the window's image passed off as the menu bar's", screenProblems, (r) => { r.screens[1].snapshot = r.screens[0].snapshot; }, /menu-bar: .* is the same image as screen sessions's/],
+  ['scope', 'a menu-bar count not captured that still names a screen', windowProblems, (r) => { Object.assign(r, uncapturedRecord(r.mergeBase)); r.menuBar.screen = 'sessions'; }, /menuBar\.screen is "sessions", but menuBar\.captured is false/],
+  ['scope', 'a menu-bar count not captured that still names an image', windowProblems, (r) => { Object.assign(r, uncapturedRecord(r.mergeBase)); r.menuBar.snapshot = r.screens[0].snapshot; }, /menuBar\.snapshot is .*but menuBar\.captured is false/],
+  ['scope', 'a menu-bar count not captured, with no reason', windowProblems, (r) => { Object.assign(r, uncapturedRecord(r.mergeBase)); delete r.menuBar.reason; }, /captured is false with no reason/],
+  ['scope', 'a menu-bar count not captured, with no headless test', windowProblems, (r) => { Object.assign(r, uncapturedRecord(r.mergeBase)); delete r.menuBar.test; }, /menuBar\.test must name the headless test/],
+  ['scope', "a menu-bar count not captured, checked only by the window's test", windowProblems, (r) => { Object.assign(r, uncapturedRecord(r.mergeBase)); r.menuBar.test = r.screens[0].test; }, /is a screen's test/],
+  ['scope', 'a menu-bar count not captured, asserting nothing', windowProblems, (r) => { Object.assign(r, uncapturedRecord(r.mergeBase)); r.menuBar.checks = []; }, /menuBar\.checks must name what/],
+  ['scope', 'a captured menu-bar count claiming a reason it was not captured', windowProblems, (r) => { r.menuBar.reason = 'not captured'; }, /menuBar\.reason is only for a count that isn't captured/],
   ['scope', 'no count read', windowProblems, (r) => { delete r.menuBar.count; }, /menuBar\.count is undefined/],
   ['scope', 'a screen with no snapshot', screenProblems, (r) => { r.screens[1].snapshot = 'docs/spikes/337/screens/none.png'; }, /isn't a tracked PNG/],
   ['scope', 'a snapshot that is not a PNG', screenProblems, (r) => { r.screens[1].snapshot = 'docs/spikes/337/screens/not-a-png.png'; }, /isn't a PNG with a size/],
@@ -228,6 +273,19 @@ test(`${STOCKS} a panel that fetches its own quotes is refused`, (t) => {
   const record = rightRecord(base);
   record.panels[1].sha256 = sha256(source);
   rejects(stocksProblems(record, repo), /codex's panel .* uses fetch\(\)/);
+});
+
+for (const [name, doc, pattern] of [
+  ['a task statement holding a reference implementation', '# Task\n\nBuild the stocks view.\n\n```js\nexport default (ui) => ui.table([]);\n```\n', /holds a script code block, a reference implementation/],
+  ['a task statement holding untagged script', '# Task\n\n```\nfunction view(ui) { return ui.table([]); }\n```\n', /holds a script code block/],
+  ["a task statement that copies the other agent's panel", `# Task\n\nDo it like this:\n\n    ${PANEL_SOURCE.claude.trim()}\n`, /holds a line of a recorded panel/],
+]) test(`${PANELS} rejects a planted wrong spike: ${name}`, (t) => {
+  const { repo, base } = scratchRepo(t);
+  put(join(repo, 'docs/spikes/337/task-bad.md'), doc);
+  g(repo, 'add', '-A'); g(repo, 'commit', '-qm', 'task');
+  const record = rightRecord(base);
+  record.panels[1].inputs.push({ doc: 'docs/spikes/337/task-bad.md', sha256: sha256(doc) });
+  rejects(panelProblems(record, repo), pattern);
 });
 
 test(`${FALLBACK} a web view crate in the lockfile is refused`, (t) => {

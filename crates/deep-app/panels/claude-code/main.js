@@ -6,151 +6,136 @@ export default class Stocks extends View {
   init() {
     const q = quotes();
     this.symbols = q.symbols;
-    this.lastTick = this.symbols[0].prices.length - 1;
     this.tick = 0;
+    this.maxTick = this.symbols[0].prices.length - 1;
     this.selected = this.symbols[0].symbol;
     this.targets = {};
     this.alerts = {};
   }
 
-  symbolAt(symbol) {
-    return this.symbols.find((s) => s.symbol === symbol);
+  stockBy(sym) {
+    return this.symbols.find((s) => s.symbol === sym);
   }
 
-  advanceAlerts() {
+  checkAlerts() {
     for (const s of this.symbols) {
-      const target = this.targets[s.symbol];
-      if (target === undefined) continue;
+      const t = this.targets[s.symbol];
+      if (!t) continue;
       if (this.alerts[s.symbol] !== undefined) continue;
-      const price = s.prices[this.tick];
-      if (price >= target) {
-        this.alerts[s.symbol] = target;
+      for (let i = t.setTick + 1; i <= this.tick; i++) {
+        if (s.prices[i] >= t.price) {
+          this.alerts[s.symbol] = t.price;
+          break;
+        }
       }
     }
   }
 
-  formatPct(current, base) {
-    const pct = ((current - base) / base) * 100;
-    const sign = pct >= 0 ? "+" : "";
-    return `${sign}${pct.toFixed(2)}%`;
-  }
-
-  row(s, cx) {
-    const price = s.prices[this.tick];
-    const base = s.prices[0];
-    return Button.new(`row-${s.symbol}`)
-      .h(28)
-      .px(10)
-      .items_center()
-      .justify_center()
-      .border(1)
-      .border_color(cx.theme().colors.border)
-      .bg(cx.theme().colors.surface)
-      .text_color(cx.theme().colors.foreground)
-      .on_click((_event, cx) => {
-        this.selected = s.symbol;
-        cx.notify();
-      })
-      .child(s.symbol)
-      .child(price.toFixed(2))
-      .child(this.formatPct(price, base));
-  }
-
-  chart(s, cx) {
-    const prices = s.prices.slice(0, this.tick + 1);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const span = max - min || 1;
-    return v_flex()
-      .gap(2)
-      .child(`Selected: ${s.symbol}`)
-      .child(
-        h_flex()
-          .gap(1)
-          .items_end()
-          .h(80)
-          .children(
-            prices.map((p) =>
-              div()
-                .w(2)
-                .h(Math.max(1, Math.round(((p - min) / span) * 80)))
-                .bg(cx.theme().colors.foreground),
-            ),
-          ),
-      );
-  }
-
   render(cx) {
-    this.advanceAlerts();
-    const sel = this.symbolAt(this.selected);
-    const target = this.targets[sel.symbol];
-    const alert = this.alerts[sel.symbol];
+    const theme = cx.theme();
+    const selStock = this.stockBy(this.selected);
+
+    const rows = this.symbols.map((s) => {
+      const p0 = s.prices[0];
+      const p = s.prices[this.tick];
+      const pct = ((p - p0) / p0) * 100;
+      const sign = pct >= 0 ? "+" : "";
+      return Button.new(`row-${s.symbol}`)
+        .h(28)
+        .px(10)
+        .bg(theme.colors.surface)
+        .text_color(theme.colors.foreground)
+        .border(1)
+        .border_color(theme.colors.border)
+        .rounded(4)
+        .on_click((_e, cx) => {
+          this.selected = s.symbol;
+          cx.notify();
+        })
+        .child(s.symbol)
+        .child(" ")
+        .child(p.toFixed(2))
+        .child(" ")
+        .child(`${sign}${pct.toFixed(2)}%`);
+    });
+
+    const target = this.targets[this.selected];
+
+    const alertRows = this.symbols
+      .filter((s) => this.alerts[s.symbol] !== undefined)
+      .map((s) =>
+        div()
+          .text_color(theme.colors.foreground)
+          .child(`Alert: ${s.symbol} crossed ${this.alerts[s.symbol].toFixed(2)}`),
+      );
 
     return v_flex()
       .size_full()
-      .gap(8)
+      .gap(6)
       .p(10)
-      .bg(cx.theme().colors.background)
-      .text_color(cx.theme().colors.foreground)
+      .bg(theme.colors.background)
+      .child(v_flex().gap(4).children(rows))
       .child(
-        v_flex()
-          .gap(4)
-          .children(this.symbols.map((s) => this.row(s, cx))),
-      )
-      .child(this.chart(sel, cx))
-      .child(
-        h_flex()
-          .gap(8)
-          .items_center()
-          .child(
-            Button.new("next")
-              .h(28)
-              .px(12)
-              .items_center()
-              .justify_center()
-              .border(1)
-              .border_color(cx.theme().colors.border)
-              .bg(cx.theme().colors.surface)
-              .text_color(cx.theme().colors.foreground)
-              .on_click((_event, cx) => {
-                if (this.tick < this.lastTick) {
-                  this.tick += 1;
-                  cx.notify();
-                }
-              })
-              .child("next"),
-          )
-          .child(`Tick ${this.tick}`),
+        div().text_color(theme.colors.foreground).child(`Selected: ${this.selected}`),
       )
       .child(
         h_flex()
-          .gap(8)
-          .items_center()
-          .child(
-            Button.new("alert-above")
-              .h(28)
-              .px(12)
-              .items_center()
-              .justify_center()
-              .border(1)
-              .border_color(cx.theme().colors.border)
-              .bg(cx.theme().colors.surface)
-              .text_color(cx.theme().colors.foreground)
-              .on_click((_event, cx) => {
-                const current = sel.prices[this.tick];
-                const t = current * 1.001;
-                this.targets[sel.symbol] = t;
-                delete this.alerts[sel.symbol];
-                cx.notify();
-              })
-              .child("alert-above"),
-          )
-          .when(target !== undefined, (el) =>
-            el.child(`Target ${sel.symbol} ${target.toFixed(2)}`),
-          )
-          .when(alert !== undefined, (el) =>
-            el.child(`Alert: ${sel.symbol} crossed ${alert.toFixed(2)}`),
+          .gap(2)
+          .children(
+            selStock.prices
+              .slice(0, this.tick + 1)
+              .map((_v, i) =>
+                div()
+                  .w(2)
+                  .h(2)
+                  .bg(theme.colors.primary),
+              ),
           ),
-      );
+      )
+      .child(div().text_color(theme.colors.foreground).child(`Tick ${this.tick}`))
+      .child(
+        Button.new("next")
+          .h(28)
+          .px(10)
+          .bg(theme.colors.primary)
+          .text_color(theme.colors.primary_foreground)
+          .border(1)
+          .border_color(theme.colors.border)
+          .rounded(4)
+          .on_click((_e, cx) => {
+            if (this.tick < this.maxTick) {
+              this.tick += 1;
+              this.checkAlerts();
+            }
+            cx.notify();
+          })
+          .child("Next"),
+      )
+      .child(
+        Button.new("alert-above")
+          .h(28)
+          .px(10)
+          .bg(theme.colors.primary)
+          .text_color(theme.colors.primary_foreground)
+          .border(1)
+          .border_color(theme.colors.border)
+          .rounded(4)
+          .on_click((_e, cx) => {
+            const p = this.stockBy(this.selected).prices[this.tick];
+            const t = p * 1.001;
+            this.targets[this.selected] = { price: t, setTick: this.tick };
+            delete this.alerts[this.selected];
+            cx.notify();
+          })
+          .child("Alert above"),
+      )
+      .when(target !== undefined, (el) =>
+        el.child(
+          div()
+            .text_color(theme.colors.foreground)
+            .child(`Target ${this.selected} ${target.price.toFixed(2)}`),
+        ),
+      )
+      .child(v_flex().gap(2).children(alertRows));
   }
 }

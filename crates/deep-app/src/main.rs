@@ -5,7 +5,7 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, mount_panel, sessions, waiting_count, Spike};
+use deep_app::{init, menu_bar_title, mount_panel, sessions, Spike};
 use gpui_kit::*;
 
 fn main() {
@@ -14,7 +14,7 @@ fn main() {
     application().run(move |cx| {
         gpui_kit::init(cx);
         init(cx);
-        menu_bar::show_count(waiting_count(&sessions()));
+        menu_bar::show_title(&menu_bar_title(&sessions()));
 
         let runtime = gpui_shell::components::new_isolated_runtime().expect("panel runtime");
         let options = WindowOptions {
@@ -61,11 +61,11 @@ mod menu_bar {
 
     /// gpui-kit has no menu-bar item, so the count is one `NSStatusItem`, kept for the life
     /// of the process.
-    pub fn show_count(count: usize) {
+    pub fn show_title(title: &str) {
         let mtm = MainThreadMarker::new().expect("the menu bar is set from the main thread");
         let item = NSStatusBar::systemStatusBar().statusItemWithLength(NSVariableStatusItemLength);
         if let Some(button) = item.button(mtm) {
-            button.setTitle(&NSString::from_str(&count.to_string()));
+            button.setTitle(&NSString::from_str(title));
         }
         std::mem::forget(item);
     }
@@ -73,5 +73,5 @@ mod menu_bar {
 
 #[cfg(not(target_os = "macos"))]
 mod menu_bar {
-    pub fn show_count(_: usize) {}
+    pub fn show_title(_: &str) {}
 }

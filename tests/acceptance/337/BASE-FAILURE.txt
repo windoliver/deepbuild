@@ -40,6 +40,6 @@ not ok 12 - scope: the build time is recorded
 The validator's own tests, which plant wrong spikes, pass at the base as they must:
 
   node --test tests/acceptance/337/validator.test.mjs
-# tests 76
-# pass 76
+# tests 101
+# pass 101
 # fail 0

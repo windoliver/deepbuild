@@ -150,13 +150,7 @@ export function panelProblems(record, repo = root) {
       files.add(panel.file);
     }
     if (!screens.has(panel.screen)) problems.push(`${at}: screen ${JSON.stringify(panel.screen)} isn't one of the recorded screens`);
-    // Written from the docs alone: every input is the issue or a doc at the merge base.
-    const inputs = list(panel.inputs);
-    if (!inputs.length) problems.push(`${at}: no inputs recorded`);
-    for (const input of inputs) {
-      if (input === 'issue#337') continue;
-      if (!/^docs\//.test(input ?? '') || git(repo, 'cat-file', '-e', `${record?.mergeBase}:${input}`).status !== 0) problems.push(`${at}: input ${JSON.stringify(input)} isn't the issue or a doc at the merge base`);
-    }
+    problems.push(...inputProblems(panel, record, repo, at));
     const rounds = list(panel.rounds);
     if (!rounds.length) problems.push(`${at}: no rounds recorded`);
     if (rounds.length - 1 > MAX_FIX_ROUNDS) problems.push(`${at}: ${rounds.length - 1} rounds of fixes, more than ${MAX_FIX_ROUNDS}`);
@@ -169,6 +163,60 @@ export function panelProblems(record, repo = root) {
     problems.push(...runtimeProblems(panel.runtime, at));
   }
   problems.push(...panelHostDecisionProblems(record));
+  return problems;
+}
+
+// Written "from the docs alone" (redrafted once, see the README). Each input the agent was given is named
+// precisely and is a doc, never code: the issue; a doc at the merge base; gpui-kit's own docs, upstream, as a
+// GitHub blob URL pinned to a full commit; or a doc this change adds under docs/ (the task statement), pinned by
+// its hash. Source code, examples, tests, another agent's panel and a reference implementation are refused.
+const DOC_FILE = /\.(md|markdown|mdx|rst|txt|adoc)$/i;
+const NOT_DOCS = ['examples', 'example', 'tests', 'test', 'fixtures', 'benches', 'snapshots'];
+const UPSTREAM = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/blob\/([0-9a-f]{40})\/([^?#]+)$/;
+const CODE_FENCE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)[^\n]*\n([\s\S]*?)^ {0,3}\1/gm;
+const SCRIPT_LANG = /^(js|javascript|mjs|cjs|jsx|ts|tsx|typescript)$/i;
+const SCRIPT_TOKENS = /\b(export|import|function|return|const|let)\b|=>/;
+export function inputProblems(panel, record, repo, at) {
+  const problems = [];
+  const inputs = list(panel?.inputs);
+  if (!inputs.length) problems.push(`${at}: no inputs recorded`);
+  const panelFiles = list(record?.panels).map((each) => each?.file).filter((file) => tracked(repo, file));
+  const panelLines = new Set(panelFiles.flatMap((file) => readTracked(repo, file).toString('utf8').split('\n').map((line) => line.trim()).filter((line) => line.length >= 30)));
+  for (const input of inputs) {
+    const named = JSON.stringify(input);
+    if (input === 'issue#337') continue;
+    if (typeof input === 'string' && !input.startsWith('https://')) {
+      if (!/^docs\//.test(input) || git(repo, 'cat-file', '-e', `${record?.mergeBase}:${input}`).status !== 0) problems.push(`${at}: input ${named} isn't the issue or a doc at the merge base`);
+      continue;
+    }
+    if (typeof input === 'string') {
+      // gpui-kit's own docs, upstream, at a pinned commit.
+      const match = input.match(UPSTREAM);
+      if (!match) { problems.push(`${at}: upstream input ${named} isn't a GitHub blob URL pinned to a full 40-hex commit (https://github.com/<owner>/<repo>/blob/<commit>/<path>)`); continue; }
+      const [, owner, repoName, , path] = match;
+      const segments = path.split('/');
+      if (`${owner}/${repoName}`.toLowerCase() === 'windoliver/deepbuild') problems.push(`${at}: upstream input ${named} is this repo; its docs are inputs as a path at the merge base or a doc this change adds, with its hash`);
+      else if (segments.includes('..') || !DOC_FILE.test(path)) problems.push(`${at}: upstream input ${named} isn't a doc (${DOC_FILE.source}); source code isn't docs`);
+      else if (segments.some((segment) => NOT_DOCS.includes(segment.toLowerCase()))) problems.push(`${at}: upstream input ${named} is under ${segments.find((segment) => NOT_DOCS.includes(segment.toLowerCase()))}/, an example or test, not docs`);
+      continue;
+    }
+    if (input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).every((key) => ['doc', 'sha256'].includes(key))) {
+      // A doc this change adds: the task statement naming what to build and the ids the headless test clicks.
+      const path = input.doc;
+      if (!/^docs\//.test(path ?? '') || !DOC_FILE.test(path) || !tracked(repo, path)) { problems.push(`${at}: input ${named} isn't a tracked doc under docs/ (${DOC_FILE.source})`); continue; }
+      if (panelFiles.includes(path)) { problems.push(`${at}: input ${named} is a recorded panel, not a doc`); continue; }
+      const bytes = readTracked(repo, path);
+      if (sha256(bytes) !== input.sha256) problems.push(`${at}: input ${path} doesn't hash to its recorded sha256, so it isn't the doc as given`);
+      const text = bytes.toString('utf8');
+      for (const fence of text.matchAll(CODE_FENCE)) {
+        if (SCRIPT_LANG.test(fence[2]) || (!fence[2] && SCRIPT_TOKENS.test(fence[3]))) { problems.push(`${at}: input ${path} holds a script code block, a reference implementation, not docs`); break; }
+      }
+      const copied = text.split('\n').map((line) => line.trim()).find((line) => panelLines.has(line));
+      if (copied) problems.push(`${at}: input ${path} holds a line of a recorded panel (${JSON.stringify(copied)}), so it isn't docs alone`);
+      continue;
+    }
+    problems.push(`${at}: input ${named} isn't the issue, a doc at the merge base, a pinned upstream doc URL or {doc, sha256} for a doc this change adds`);
+  }
   return problems;
 }
 
@@ -366,8 +414,36 @@ export function windowProblems(record) {
   const ids = new Set(list(record?.screens).map((screen) => screen?.id));
   if (!(Number.isInteger(record?.window?.sessionRows) && record.window.sessionRows >= SESSION_ROWS)) problems.push(`window.sessionRows is ${JSON.stringify(record?.window?.sessionRows)}, not at least ${SESSION_ROWS}`);
   if (!ids.has(record?.window?.screen)) problems.push(`window.screen ${JSON.stringify(record?.window?.screen)} isn't one of the recorded screens`);
-  if (!ids.has(record?.menuBar?.screen)) problems.push(`menuBar.screen ${JSON.stringify(record?.menuBar?.screen)} isn't one of the recorded screens`);
+  problems.push(...menuBarProblems(record));
   if (!(Number.isInteger(record?.menuBar?.count) && record.menuBar.count >= 0)) problems.push(`menuBar.count is ${JSON.stringify(record?.menuBar?.count)}, not the count the menu bar showed`);
+  return problems;
+}
+
+// The menu-bar count (redrafted once, see the README). "Render and click every screen headlessly with gpui-kit's
+// test support" covers what gpui-kit draws. If gpui-kit draws the count, it is captured as its own screen. If the
+// count is an OS menu-bar item gpui-kit can't capture, the record says so (captured: false, with why) and names the
+// headless test that checks its value and what that test asserts; it then names no image, so no other screen's
+// image can be passed off as the menu bar's.
+export function menuBarProblems(record) {
+  const problems = [];
+  const menuBar = record?.menuBar;
+  const screens = list(record?.screens);
+  const ids = new Set(screens.map((screen) => screen?.id));
+  if (menuBar?.captured === true) {
+    if (!ids.has(menuBar.screen)) problems.push(`menuBar.screen ${JSON.stringify(menuBar.screen)} isn't one of the recorded screens`);
+    else {
+      if (menuBar.screen === record?.window?.screen) problems.push(`menuBar.screen ${JSON.stringify(menuBar.screen)} is the window's screen; a captured menu-bar count is its own screen`);
+      const panel = list(record?.panels).find((each) => each?.screen === menuBar.screen);
+      if (panel) problems.push(`menuBar.screen ${JSON.stringify(menuBar.screen)} is ${panel.agent}'s panel's screen; a captured menu-bar count is its own screen`);
+    }
+    for (const key of ['reason', 'test', 'checks', 'snapshot']) if (menuBar[key] !== undefined) problems.push(`menuBar.${key} is only for a count that isn't captured; a captured count is its screen`);
+  } else if (menuBar?.captured === false) {
+    for (const key of ['screen', 'snapshot']) if (menuBar[key] !== undefined) problems.push(`menuBar.${key} is ${JSON.stringify(menuBar[key])}, but menuBar.captured is false: a count that isn't captured names no screen or image`);
+    if (!nonEmpty(menuBar.reason)) problems.push('menuBar.captured is false with no reason: say why gpui-kit\'s test support can\'t capture the menu-bar count');
+    if (!nonEmpty(menuBar.test)) problems.push('menuBar.captured is false, so menuBar.test must name the headless test that checks the count');
+    if (!list(menuBar.checks).length || !list(menuBar.checks).every(nonEmpty)) problems.push('menuBar.captured is false, so menuBar.checks must name what its headless test asserts');
+    if (nonEmpty(menuBar.test) && screens.some((screen) => screen?.test === menuBar.test)) problems.push(`menuBar.test ${JSON.stringify(menuBar.test)} is a screen's test; the count's own check is its own test`);
+  } else problems.push(`menuBar.captured is ${JSON.stringify(menuBar?.captured)}, not true (the count is its own screen) or false (it isn't captured, and the record says why)`);
   return problems;
 }
 
@@ -389,7 +465,9 @@ export function screenProblems(record, repo = root) {
     if (hashes.has(hash)) problems.push(`${at}: ${screen.snapshot} is the same image as screen ${hashes.get(hash)}'s`);
     hashes.set(hash, screen?.id);
   }
-  const needed = [['the session list window', record?.window?.screen], ['the menu-bar count', record?.menuBar?.screen], ...list(record?.panels).map((panel) => [`${panel?.agent}'s panel`, panel?.screen])];
+  // The menu-bar count is a screen when captured; when it isn't, menuBarProblems holds it to its declared check.
+  const countScreen = record?.menuBar?.captured === false ? [] : [['the menu-bar count', record?.menuBar?.screen]];
+  const needed = [['the session list window', record?.window?.screen], ...countScreen, ...list(record?.panels).map((panel) => [`${panel?.agent}'s panel`, panel?.screen])];
   for (const [what, id] of needed) if (!ids.has(id)) problems.push(`${what} has no rendered screen`);
   return problems;
 }
@@ -441,7 +519,11 @@ export function namedTests(record) {
   return {
     panels: list(record?.panels).map((panel) => [`${panel?.agent}'s panel`, list(record?.screens).find((screen) => screen?.id === panel?.screen)?.test]),
     stocks: [['the stocks panel on recorded quotes', record?.stocks?.test], ['the report opened in the browser', record?.report?.test]],
-    screens: list(record?.screens).map((screen) => [`screen ${screen?.id}`, screen?.test]),
+    screens: [
+      ...list(record?.screens).map((screen) => [`screen ${screen?.id}`, screen?.test]),
+      // A menu-bar count that isn't captured is still checked headlessly, by its own test.
+      ...(record?.menuBar?.captured === false ? [['the menu-bar count (not captured)', record.menuBar.test]] : []),
+    ],
   };
 }
 

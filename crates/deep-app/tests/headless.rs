@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use deep_app::{sessions, stocks, waiting_count, Spike, SESSION_COUNT};
+use deep_app::{menu_bar_title, sessions, stocks, waiting_count, Spike, SESSION_COUNT};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     px, size, AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, Point, TestAppContext,
@@ -119,6 +119,25 @@ fn session_list_count_and_report(cx: &mut TestAppContext) {
             .read_with(cx, |spike, _| spike.report().map(str::to_owned))
             .as_deref(),
         "the report opens in the browser"
+    );
+}
+
+/// The menu-bar item is an NSStatusItem, which gpui's offscreen renderer can't capture; its
+/// title comes from `menu_bar_title`, checked here against the count the window shows.
+#[gpui_kit::test]
+fn menu_bar_count(cx: &mut TestAppContext) {
+    let (window, spike, _) = open(cx, None);
+    let title = menu_bar_title(&sessions());
+    assert_eq!(title, "143");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("count").visible());
+    })
+    .unwrap();
+    // The window's count and the menu bar's come from the same sessions.
+    assert_eq!(
+        spike.read_with(cx, |spike, _| spike.waiting()).to_string(),
+        title
     );
 }
 

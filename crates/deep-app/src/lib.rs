@@ -80,6 +80,11 @@ pub fn stocks() -> Vec<Stock> {
     stocks
 }
 
+/// The menu-bar item's title: the count alone.
+pub fn menu_bar_title(sessions: &[Session]) -> String {
+    waiting_count(sessions).to_string()
+}
+
 /// DeepBuild's module for panels: the recorded quotes, as plain data.
 pub fn deepbuild_module() -> HostModule {
     HostModule::new("deepbuild").function("quotes", |_| {
