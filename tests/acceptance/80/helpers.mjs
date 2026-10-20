@@ -239,8 +239,14 @@ export const checks = {
     const callEnd = starts(lines).find((line) => ['PostToolUse', 'PostToolUseFailure'].includes(line.event) && line.at >= (next?.at ?? ask.at));
     const stop = starts(lines).find((line) => line.event === 'Stop' && line.at > tool.at);
     if (!callEnd || (stop && stop.at < callEnd.at)) c.fail('claude-desktop: the running tool call never ended inside the same turn after the ask');
-    const early = lines.find((line) => line.at < ask.at && line.invocation !== ask.invocation && text(line.payload).includes(ask.nonce));
-    if (early) c.fail(`claude-desktop: the typed nonce reached a hook before the ask (line ${early.$index + 1})`);
+    // Fresh within its turn: from the previous turn's Stop on, nothing reached a hook with the
+    // nonce before the ask. An earlier, finished turn's prompt may quote the same word, but the ask
+    // can't be that prompt replayed.
+    const turnStart = starts(lines).filter((line) => line.event === 'Stop' && line.at < tool.at).at(-1)?.at ?? -Infinity;
+    const early = lines.find((line) => line.at > turnStart && line.at < ask.at && line.invocation !== ask.invocation && text(line.payload).includes(ask.nonce));
+    if (early) c.fail(`claude-desktop: the typed nonce reached a hook in the same turn before the ask (line ${early.$index + 1})`);
+    const replayed = starts(lines).find((line) => line.event === 'UserPromptSubmit' && line.at < ask.at && line.invocation !== ask.invocation && typeof line.payload?.prompt === 'string' && line.payload.prompt.trim() === String(ask.ask.text).trim());
+    if (replayed) c.fail(`claude-desktop: the ask's text is the earlier prompt at line ${replayed.$index + 1}, not the message typed mid-turn`);
     c.cite(tool, ask, callEnd);
     return c;
   },
