@@ -1,4 +1,4 @@
-import { canonicalize, canonicalText, sha256Hex } from './canonical.js';
+import { canonicalize, plainJson, sha256Hex } from './canonical.js';
 import { ContractError, issue } from './errors.js';
 import { isObject, resolveRef, type JsonObject, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 import { getSchema } from './schemas.js';
@@ -55,8 +55,8 @@ function drop(value: JsonValue, keys: readonly string[]): void {
 export function recordHash(name: string, record: JsonValue): string {
   const marker = getSchema(name)['x-hash'];
   const excludes = isObject(marker) && Array.isArray(marker.excludes) ? marker.excludes.map(String) : [];
-  // A plain copy to drop the excludes from, rebuilt from the canonical text, which refuses what isn't JSON.
-  const copy = JSON.parse(canonicalText(record)) as JsonValue;
+  // A plain copy, read once, to drop the excludes from.
+  const copy = plainJson(record);
   for (const pointer of excludes) drop(copy, pointer.slice(1).split('/').map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~')));
   return sha256Hex(canonicalize(copy));
 }

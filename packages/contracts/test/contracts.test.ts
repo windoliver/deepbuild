@@ -229,7 +229,8 @@ describe('a value that cannot be read as JSON is refused in the error shape ever
     const second = { ...request, get pid() { if (reads++) throw Error('second'); return 1; } };
     const proxy = new Proxy({}, { ownKeys() { throw Error('boom'); } });
     const getter = { ...request, get seq(): string { throw Error('boom'); } };
-    expect(validate('hook.request@1', second).ok).toBe(false);
+    // Read once: the second read, which would throw, never happens.
+    expect(validate('hook.request@1', second).ok).toBe(true);
     for (const value of [proxy, getter]) expect(() => encode('hook.request@1', value)).toThrow(contractError);
     expect(() => canonicalize({ get a(): number { throw Error('boom'); } } as never)).toThrow(contractError);
   });

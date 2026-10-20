@@ -1,33 +1,32 @@
 import { createHash } from 'node:crypto';
 import { ContractError, issue } from './errors.js';
-import { notJson, type JsonValue } from './json.js';
+import { readJson, type JsonValue } from './json.js';
 
 /**
  * RFC 8785 (JCS) text. Keys sort by UTF-16 code units, which is what `Array.prototype.sort` compares,
  * and numbers and strings print as ECMAScript's JSON.stringify prints them, as the RFC specifies.
  */
 export function canonicalText(value: JsonValue): string {
-  let found: ReturnType<typeof notJson>;
-  let out = '';
-  try {
-    found = notJson(value);
-    if (!found) out = text(value);
-  } catch {
-    // A getter or a proxy that throws: the value can't be read as JSON.
-    found = { path: '', value };
-  }
-  if (found) throw new ContractError(issue('not_json', found.path, found.value));
-  return out;
+  return text(plainJson(value));
 }
 
+/** The plain copy `readJson` reads, or a ContractError `not_json` where it isn't JSON. */
+export function plainJson(value: unknown): JsonValue {
+  let read: ReturnType<typeof readJson>;
+  try {
+    read = readJson(value);
+  } catch {
+    // A getter or a proxy that throws: the value can't be read as JSON.
+    read = { path: '', value };
+  }
+  if ('json' in read) return read.json;
+  throw new ContractError(issue('not_json', read.path, read.value));
+}
+
+// Over a plain copy only, which nothing else can read or change.
 const text = (value: JsonValue): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    // By index, as the not-JSON walk read it: never through the array's own map or join.
-    const items: string[] = [];
-    for (let i = 0; i < value.length; i++) items.push(text(value[i]!));
-    return `[${items.join(',')}]`;
-  }
+  if (Array.isArray(value)) return `[${value.map(text).join(',')}]`;
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${text(value[key]!)}`).join(',')}}`;
 };
 
