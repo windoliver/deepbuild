@@ -71,15 +71,53 @@
         },
         "patch": {
           "type": "string",
-          "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
+          "format": "ulid"
         },
         "writer": {
           "type": "string",
           "minLength": 1
         },
         "achieved": {
-          "type": "boolean"
+          "type": "object",
+          "properties": {
+            "created": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "updated": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "deleted": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[A-Za-z0-9_.-]+$"
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "unchanged": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "created",
+            "updated",
+            "deleted",
+            "unchanged"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

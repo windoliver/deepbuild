@@ -4212,12 +4212,40 @@ impl Contract for DocPatchedKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct DocPatchedDataAchieved {
+    pub created: std::collections::BTreeMap<String, i64>,
+    pub updated: i64,
+    pub deleted: std::collections::BTreeMap<String, i64>,
+    pub unchanged: bool,
+}
+
+impl Contract for DocPatchedDataAchieved {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["created", "updated", "deleted", "unchanged"])?;
+        Ok(Self {
+            created: deep_contracts::required(members, at, "created")?,
+            updated: deep_contracts::required(members, at, "updated")?,
+            deleted: deep_contracts::required(members, at, "deleted")?,
+            unchanged: deep_contracts::required(members, at, "unchanged")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("created".to_string(), self.created.to_json()));
+        members.push(("updated".to_string(), self.updated.to_json()));
+        members.push(("deleted".to_string(), self.deleted.to_json()));
+        members.push(("unchanged".to_string(), self.unchanged.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct DocPatchedData {
     pub doc: String,
     pub rev: i64,
     pub patch: String,
     pub writer: String,
-    pub achieved: bool,
+    pub achieved: DocPatchedDataAchieved,
 }
 
 impl Contract for DocPatchedData {
@@ -4969,6 +4997,31 @@ impl Contract for LearnAppliedKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LearnAppliedWriter {
+    App,
+    Cli,
+    Core,
+}
+
+impl Contract for LearnAppliedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            "cli" => Ok(Self::Cli),
+            "core" => Ok(Self::Core),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+            Self::Cli => "cli",
+            Self::Core => "core",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LearnAppliedDataLayer {
     Learned,
     Base,
@@ -5042,7 +5095,7 @@ pub struct LearnAppliedData {
     pub evidence: Vec<LearnAppliedDataEvidenceItem>,
     pub scope: String,
     pub replay: Option<LearnAppliedDataReplay>,
-    pub applied_by: Option<String>,
+    pub applied_by: String,
     pub supersedes: Option<String>,
 }
 
@@ -5080,7 +5133,7 @@ pub struct LearnApplied {
     pub id: String,
     pub kind: LearnAppliedKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: LearnAppliedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -5539,6 +5592,31 @@ impl Contract for LearnWidenedKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LearnWidenedWriter {
+    App,
+    Cli,
+    Core,
+}
+
+impl Contract for LearnWidenedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            "cli" => Ok(Self::Cli),
+            "core" => Ok(Self::Core),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+            Self::Cli => "cli",
+            Self::Core => "core",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LearnWidenedDataLayer {
     Learned,
     Base,
@@ -5612,7 +5690,7 @@ pub struct LearnWidenedData {
     pub evidence: Vec<LearnWidenedDataEvidenceItem>,
     pub scope: String,
     pub replay: Option<LearnWidenedDataReplay>,
-    pub applied_by: Option<String>,
+    pub applied_by: String,
     pub supersedes: Option<String>,
 }
 
@@ -5650,7 +5728,7 @@ pub struct LearnWidened {
     pub id: String,
     pub kind: LearnWidenedKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: LearnWidenedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -6474,6 +6552,28 @@ impl Contract for NoteClosedKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteClosedWriter {
+    Core,
+    App,
+}
+
+impl Contract for NoteClosedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "core" => Ok(Self::Core),
+            "app" => Ok(Self::App),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Core => "core",
+            Self::App => "app",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NoteClosedDataBy {
     You,
     Check,
@@ -6529,7 +6629,7 @@ pub struct NoteClosed {
     pub id: String,
     pub kind: NoteClosedKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: NoteClosedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -6607,6 +6707,25 @@ impl Contract for NoteOpenedKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteOpenedWriter {
+    App,
+}
+
+impl Contract for NoteOpenedWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+        }.to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NoteOpenedDataRegion {
     pub x: f64,
@@ -6678,7 +6797,7 @@ pub struct NoteOpened {
     pub id: String,
     pub kind: NoteOpenedKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: NoteOpenedWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -8445,7 +8564,7 @@ pub struct SuggestionFiledData {
     pub writer: String,
     pub patch: String,
     pub base: i64,
-    pub ops: Vec<String>,
+    pub ops: Vec<deep_contracts::Value>,
 }
 
 impl Contract for SuggestionFiledData {

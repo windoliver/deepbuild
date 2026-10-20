@@ -599,7 +599,12 @@ export interface DocPatched {
     rev: number;
     patch: string;
     writer: string;
-    achieved: boolean;
+    achieved: {
+      created: { [key: string]: number };
+      updated: number;
+      deleted: { [key: string]: number };
+      unchanged: boolean;
+    };
   };
   evidence?: Array<string>;
 }
@@ -720,7 +725,7 @@ export interface LearnApplied {
   id: string;
   kind: "learn.applied";
   subject?: string;
-  writer: string;
+  writer: "app" | "cli" | "core";
   actor: string;
   scope: string;
   ts: number;
@@ -739,7 +744,7 @@ export interface LearnApplied {
       tasks: number;
       regressions: number;
     } | null;
-    applied_by: string | null;
+    applied_by: string;
     supersedes: string | null;
   };
   evidence?: Array<string>;
@@ -813,7 +818,7 @@ export interface LearnWidened {
   id: string;
   kind: "learn.widened";
   subject?: string;
-  writer: string;
+  writer: "app" | "cli" | "core";
   actor: string;
   scope: string;
   ts: number;
@@ -832,7 +837,7 @@ export interface LearnWidened {
       tasks: number;
       regressions: number;
     } | null;
-    applied_by: string | null;
+    applied_by: string;
     supersedes: string | null;
   };
   evidence?: Array<string>;
@@ -964,7 +969,7 @@ export interface NoteClosed {
   id: string;
   kind: "note.closed";
   subject?: string;
-  writer: string;
+  writer: "core" | "app";
   actor: string;
   scope: string;
   ts: number;
@@ -985,7 +990,7 @@ export interface NoteOpened {
   id: string;
   kind: "note.opened";
   subject?: string;
-  writer: string;
+  writer: "app";
   actor: string;
   scope: string;
   ts: number;
@@ -1326,7 +1331,7 @@ export interface SuggestionFiled {
     writer: string;
     patch: string;
     base: number;
-    ops: Array<string>;
+    ops: Array<unknown>;
   };
   evidence?: Array<string>;
 }

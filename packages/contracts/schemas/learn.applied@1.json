@@ -25,8 +25,12 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "app",
+        "cli",
+        "core"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",
@@ -125,10 +129,7 @@
           "additionalProperties": false
         },
         "applied_by": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": "string",
           "pattern": "^(you|rule:[0-9A-Za-z]+)$",
           "description": "You, or the rule that applied it; never an agent."
         },

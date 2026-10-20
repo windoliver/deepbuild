@@ -1,6 +1,6 @@
 {
   "title": "note.opened@1",
-  "description": "A note was opened on an item.",
+  "description": "A note was opened on an item. Only you write one, from the app.",
   "x-feeds": [
     "notes"
   ],
@@ -25,8 +25,10 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "app"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",
@@ -60,7 +62,7 @@
       "properties": {
         "note": {
           "type": "string",
-          "minLength": 1
+          "format": "ulid"
         },
         "doc": {
           "type": "string",

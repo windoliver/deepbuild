@@ -11,10 +11,16 @@
     "doc": "doc:01K74G3A5C7E9G1J3M5P7R9T1V",
     "item": "row.m14",
     "writer": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
-    "patch": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    "patch": "01K74G3A5C7E9G1J3M5P7R9T1V",
     "base": 4,
     "ops": [
-      "set items/row.m14/params/label"
+      {
+        "set": {
+          "id": "row.m14",
+          "path": "params/label",
+          "value": "Total"
+        }
+      }
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "title": "note.closed@1",
-  "description": "A note was closed.",
+  "description": "A note was closed, by you or by a check; never by an agent or a plug-in.",
   "x-feeds": [
     "notes"
   ],
@@ -25,8 +25,11 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "core",
+        "app"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",
@@ -60,7 +63,7 @@
       "properties": {
         "note": {
           "type": "string",
-          "minLength": 1
+          "format": "ulid"
         },
         "by": {
           "type": "string",
