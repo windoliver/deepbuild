@@ -628,9 +628,19 @@
     "#80.9492ec1f": {
       "criterion": "A message typed mid-turn shows up as an ask at the next hook",
       "status": "BLOCKED",
-      "findings": [],
+      "findings": [
+        {
+          "surface": "claude-desktop",
+          "log": "logs/claude-desktop.jsonl",
+          "session": "3b23a185-7068-4f55-94cb-407112039860",
+          "invocation": "875472fa3a32",
+          "typedAt": 1792458680968,
+          "transcript": "logs/claude-desktop-transcript.jsonl"
+        }
+      ],
       "decision": {
-        "blockedOn": "Needs a person to type into a Claude desktop session while one of its tool calls runs; nothing was typed mid-call in the desktop runs. In the terminal (2.1.303) a typed message fires UserPromptSubmit at once and is queued, which the hook records as an ask."
+        "why": "In the Claude desktop app (2.1.299) a message typed while a tool call runs is queued (queue-operation enqueue and a queued_command attachment at the moment it is typed) and fires no hook then; the next hook, the PostToolUse when the call ends, reads it from the transcript queue as an ask, and UserPromptSubmit fires only after that, when the app dequeues it. In the terminal (2.1.303) the same message fires UserPromptSubmit at once. The adapter reads typed messages from the transcript queue at the next hook in the desktop app, and at UserPromptSubmit in the terminal.",
+        "blockedOn": "The one mid-call message that reached the hook (typed at 1792458680968) quoted a code word already in its turn's opening prompt, so it can't count; one more message with a fresh word, typed while a call runs, is needed."
       }
     },
     "#80.8c6cf36a": {
