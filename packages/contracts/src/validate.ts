@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { ContractError, issue, type ContractIssue } from './errors.js';
-import { isObject, isPlainObject, notJson, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { isObject, isPlainObject, readJson, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 
 export type Validation = { ok: true } | { ok: false; issues: ContractIssue[] };
 
@@ -233,20 +233,23 @@ export function registry(entries: readonly SchemaEntry[]): Registry {
     }
     return found;
   };
-  const validate = (name: string, value: unknown): Validation => {
+  // Checks the plain copy read once from the value, which encode then writes.
+  const checked = (name: string, value: unknown): { result: Validation; json?: JsonValue } => {
     const { check } = get(name);
-    const out: ContractIssue[] = [];
-    let found: ReturnType<typeof notJson>;
+    let read: ReturnType<typeof readJson>;
     try {
-      found = notJson(value);
-      if (!found) check(value, '', out);
+      read = readJson(value);
     } catch {
       // A getter or a proxy that throws, on any read: the value can't be read as JSON.
-      found = { path: '', value };
+      read = { path: '', value };
     }
-    if (found) return { ok: false, issues: [issue('not_json', found.path, found.value)] };
-    return out.length ? { ok: false, issues: out } : { ok: true };
+    if (!('json' in read)) return { result: { ok: false, issues: [issue('not_json', read.path, read.value)] } };
+    const { json } = read;
+    const out: ContractIssue[] = [];
+    check(json, '', out);
+    return out.length ? { result: { ok: false, issues: out } } : { result: { ok: true }, json };
   };
+  const validate = (name: string, value: unknown): Validation => checked(name, value).result;
   const refuse = (result: Validation): void => { if (!result.ok) throw new ContractError(result.issues[0]!); };
   return {
     validate,
@@ -265,8 +268,9 @@ export function registry(entries: readonly SchemaEntry[]): Registry {
       } catch {
         throw new ContractError(issue('not_json', '', value));
       }
-      refuse(validate(name, wire));
-      return canonicalText(wire as JsonValue);
+      const { result, json } = checked(name, wire);
+      refuse(result);
+      return canonicalText(json!);
     },
   };
 }

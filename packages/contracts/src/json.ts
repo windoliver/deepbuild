@@ -20,38 +20,49 @@ export const isPlainObject = (value: unknown): value is JsonObject => {
 // A cheap test first, since nearly every string holds no surrogate at all.
 const halfPair = (text: string): boolean => /[\uD800-\uDFFF]/.test(text) && /\p{Surrogate}/u.test(text);
 
-/** The keys from the root down to the first value that isn't JSON, deepest last; built only on a refusal. */
+/** Where a walk stopped: the keys from the root down to the first value that isn't JSON, deepest last. */
 type Found = { keys: (string | number)[]; value: unknown };
+const REFUSED: unique symbol = Symbol('refused');
 
-function walk(value: unknown, depth: number): Found | undefined {
-  if (depth > MAX_DEPTH) return { keys: [], value };
-  if (value === null || typeof value === 'boolean') return undefined;
-  if (typeof value === 'number') return Number.isFinite(value) ? undefined : { keys: [], value };
-  if (typeof value === 'string') return halfPair(value) ? { keys: [], value } : undefined;
+// Each property and index is read once, into a plain copy, so a getter or a proxy can't answer the check
+// one way and the writer another.
+function copy(value: unknown, depth: number, stop: { found?: Found }): JsonValue | typeof REFUSED {
+  const refuse = (at: unknown): typeof REFUSED => ((stop.found = { keys: [], value: at }), REFUSED);
+  if (depth > MAX_DEPTH) return refuse(value);
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : refuse(value);
+  if (typeof value === 'string') return halfPair(value) ? refuse(value) : value;
   if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      const found = Object.hasOwn(value, i) ? walk(value[i], depth + 1) : { keys: [], value: undefined };
-      if (found) return found.keys.unshift(i), found;
+    const out: JsonValue[] = [];
+    for (let i = 0, n = value.length; i < n; i++) {
+      const item = Object.hasOwn(value, i) ? copy(value[i], depth + 1, stop) : refuse(undefined);
+      if (item === REFUSED) return stop.found!.keys.unshift(i), REFUSED;
+      out.push(item);
     }
-    return undefined;
+    return out;
   }
-  if (!isPlainObject(value)) return { keys: [], value };
+  if (!isPlainObject(value)) return refuse(value);
+  const out: JsonObject = {};
   for (const key in value) {
     if (!Object.hasOwn(value, key)) continue;
-    const found = halfPair(key) ? { keys: [], value: key } : walk(value[key], depth + 1);
-    if (found) return found.keys.unshift(key), found;
+    const item = halfPair(key) ? refuse(key) : copy(value[key], depth + 1, stop);
+    if (item === REFUSED) return stop.found!.keys.unshift(key), REFUSED;
+    if (key === '__proto__') Object.defineProperty(out, key, { value: item, enumerable: true, writable: true, configurable: true });
+    else out[key] = item;
   }
-  return undefined;
+  return out;
 }
 
 /**
- * The first place a value isn't JSON both languages read alike, or undefined: JSON is null, a boolean, a
- * finite number, a well-formed Unicode string (I-JSON's), an array without holes or a plain object with
- * well-formed keys, nested at most 256 deep. A getter that throws throws here.
+ * A plain copy of a value, read once, or the first place it isn't JSON both languages read alike: JSON is
+ * null, a boolean, a finite number, a well-formed Unicode string (I-JSON's), an array without holes or a
+ * plain object with well-formed keys, nested at most 256 deep. A getter or a proxy that throws throws here.
  */
-export function notJson(value: unknown): { path: string; value: unknown } | undefined {
-  const found = walk(value, 0);
-  return found && { path: found.keys.map(segment).join(''), value: found.value };
+export function readJson(value: unknown): { json: JsonValue } | { path: string; value: unknown } {
+  const stop: { found?: Found } = {};
+  const json = copy(value, 0, stop);
+  if (json !== REFUSED) return { json };
+  return { path: stop.found!.keys.map(segment).join(''), value: stop.found!.value };
 }
 
 /** One JSON Pointer segment, escaped. */
