@@ -1,7 +1,7 @@
 // Regressions the acceptance suite doesn't reach: schemas the lint must refuse because the validator or a
 // generator can't serve them, and refusals that must stay in the one error shape.
 import { describe, expect, it } from 'vitest';
-import { canonicalize, checkViewBindings, contextBoundFor, decode, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, recordHash, registry, sha256Hex, validate } from '../src/index.js';
+import { canonicalize, contextBoundFor, decode, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, parseHandle, recordHash, registry, sha256Hex, validate } from '../src/index.js';
 import type { JsonValue, Schema } from '../src/index.js';
 
 const record = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema =>
@@ -189,8 +189,8 @@ describe('the error shape', () => {
   });
 
   it('a value under the read cap is kept whole, with half a surrogate pair shown as U+FFFD, never dropped', () => {
-    expect(checkViewBindings(['ab\ud800'])).toMatchObject({ ok: false, issues: [{ actual: 'ab\ufffd' }] });
-    expect(checkViewBindings(['a\ud800x\ud800'])).toMatchObject({ ok: false, issues: [{ actual: 'a\ufffdx\ufffd' }] });
+    expect(() => parseHandle('ab\ud800')).toThrow(expect.objectContaining({ code: 'handle_syntax', actual: 'ab\ufffd' }));
+    expect(() => parseHandle('a\ud800x\ud800')).toThrow(expect.objectContaining({ code: 'handle_syntax', actual: 'a\ufffdx\ufffd' }));
   });
 });
 
