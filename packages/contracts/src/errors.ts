@@ -50,7 +50,12 @@ function readable(actual: unknown): string {
   try {
     return JSON.stringify(actual, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)) ?? String(actual);
   } catch {
-    return String(actual);
+    try {
+      return String(actual);
+    } catch {
+      // An object with no prototype, or a proxy, may have no text at all.
+      return Object.prototype.toString.call(actual);
+    }
   }
 }
 

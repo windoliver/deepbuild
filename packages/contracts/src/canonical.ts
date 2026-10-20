@@ -7,9 +7,17 @@ import { notJson, type JsonValue } from './json.js';
  * and numbers and strings print as ECMAScript's JSON.stringify prints them, as the RFC specifies.
  */
 export function canonicalText(value: JsonValue): string {
-  const found = notJson(value);
+  let found: ReturnType<typeof notJson>;
+  let out = '';
+  try {
+    found = notJson(value);
+    if (!found) out = text(value);
+  } catch {
+    // A getter or a proxy that throws: the value can't be read as JSON.
+    found = { path: '', value };
+  }
   if (found) throw new ContractError(issue('not_json', found.path, found.value));
-  return text(value);
+  return out;
 }
 
 const text = (value: JsonValue): string => {
