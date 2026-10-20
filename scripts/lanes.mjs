@@ -23,6 +23,9 @@ export const checks = [
     // tests spend plan usage, and #246's check that change against its own base.
     [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
+  // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
+  // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
+  { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
 ];

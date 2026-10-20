@@ -42,8 +42,9 @@ function keptRoot() {
 }
 // One perf run per checkout at a time: a second would delete the first's copies under it. The lock
 // appears whole, number and all, by linking a file already written. A lock whose process is gone,
-// or that names none, was left by a run that was killed: it is moved aside under a name of this
-// run's own and checked to be the one read, so a lock another run took meanwhile is put back.
+// or that names none, was left by a run that was killed, and is replaced in one step, under a
+// takeover mark that the lock's release also takes: between reading the lock and replacing it, no
+// other run can release or replace it, so the lock a run judges stale is the lock it replaces.
 function takeLock(file) {
   const mine = `${file}.${process.pid}`;
   writeFileSync(mine, String(process.pid));
@@ -55,45 +56,69 @@ function takeLock(file) {
       } catch (error) {
         if (error.code !== 'EEXIST') throw error;
       }
-      let content;
-      try {
-        content = readFileSync(file, 'utf8');
-      } catch (error) {
-        // Released between the link and the read.
-        if (error.code === 'ENOENT') continue;
-        throw error;
-      }
-      const holder = Number(content);
-      // A killed run's number can come back as this run's own.
-      if (Number.isInteger(holder) && holder > 0 && holder !== process.pid) {
-        let alive;
+      const taken = underTakeover(file, () => {
+        let content;
         try {
-          process.kill(holder, 0);
-          alive = true;
-        } catch (gone) {
-          alive = gone.code === 'EPERM';
-        }
-        if (alive) throw blocked(`another perf run (process ${holder}) is using ${dirname(file)}`, `Wait for that preflight to finish. If none is running, the process took over a killed run's number: rm ${file}`);
-      }
-      const stale = `${file}.stale.${process.pid}`;
-      try {
-        renameSync(file, stale);
-      } catch (error) {
-        if (error.code === 'ENOENT') continue;
-        throw error;
-      }
-      if (readFileSync(stale, 'utf8') !== content) {
-        try {
-          linkSync(stale, file);
+          content = readFileSync(file, 'utf8');
         } catch (error) {
-          if (error.code !== 'EEXIST') throw error;
+          // Released between the link and the read.
+          if (error.code === 'ENOENT') return false;
+          throw error;
         }
-      }
-      rmSync(stale, { force: true });
+        const holder = Number(content);
+        // A killed run's number can come back as this run's own.
+        if (Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder)) {
+          throw blocked(`another perf run (process ${holder}) is using ${dirname(file)}`, `Wait for that preflight to finish. If none is running, the process took over a killed run's number: rm ${file}`);
+        }
+        renameSync(mine, file);
+        return true;
+      });
+      if (taken) return file;
     }
     throw blocked(`could not take ${file}: other perf runs kept taking it`, 'Run one preflight at a time in this checkout.');
   } finally {
     rmSync(mine, { force: true });
+  }
+}
+function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (gone) {
+    return gone.code === 'EPERM';
+  }
+}
+// The takeover mark: a file only one run can create, held for a read and a rename. One left by a run
+// killed inside that window names a process that is gone, and is removed; two runs that find the same
+// one could, in the microseconds between, both go on, which needs that kill first.
+function underTakeover(file, act) {
+  const mark = `${file}.takeover`;
+  const until = Date.now() + 10_000;
+  for (;;) {
+    try {
+      writeFileSync(mark, String(process.pid), { flag: 'wx' });
+      break;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+    }
+    let holder;
+    try {
+      holder = Number(readFileSync(mark, 'utf8'));
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      throw error;
+    }
+    if (!(Number.isInteger(holder) && holder > 0 && holder !== process.pid && alive(holder))) {
+      rmSync(mark, { force: true });
+      continue;
+    }
+    if (Date.now() > until) throw blocked(`another perf run (process ${holder}) is taking ${dirname(file)}`, `Wait for that preflight to finish. If none is running: rm ${mark}`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+  try {
+    return act();
+  } finally {
+    rmSync(mark, { force: true });
   }
 }
 // Whether the lock still names this run. Runs racing for a killed run's lock can, rarely, both
@@ -275,7 +300,7 @@ try {
         if (error.code !== 'ENOENT') throw error;
       }
     }
-    rmSync(lock, { force: true });
+    underTakeover(lock, () => { if (ownsLock()) rmSync(lock, { force: true }); });
   }
 }
 for (const [state, message, fix] of verdicts) console.log(`${state} perf: ${message}\n  Fix: ${fix}`);

@@ -1,6 +1,6 @@
 {
   "schema": "adapter.facts@1",
-  "versions": ["0.144.0"],
+  "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2"],
   "agent": "codex",
   "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
   "signIn": {
@@ -25,5 +25,359 @@
     "readBy": "a run keeps its session's own rollout",
     "home": ["CODEX_HOME", "~/.codex"],
     "path": "sessions/{YYYY}/{MM}/{DD}/rollout-{time}-{thread}.jsonl"
+  },
+  "events": {
+    "readBy": "each hook's strict payload schema per covered version, from Codex's published hook input schemas (codex-rs/hooks/schema/generated at the version's tag), with tool_input an object and a shell or apply_patch call's tool_input.command a string as recorded; a missing or retyped field, or an event not listed, reads unverified and the session's holds go watch-only, naming the field; an unlisted field is only a reading (#47)",
+    "versions": {
+      "0.144.0": {
+        "SessionStart": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "source": "string",
+            "transcript_path": "string|null"
+          },
+          "optional": {}
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "prompt": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "PreToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_response": "any",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "Stop": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        }
+      },
+      "0.160.0": {
+        "SessionStart": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "source": "string",
+            "transcript_path": "string|null"
+          },
+          "optional": {}
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "prompt": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "PreToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_response": "any",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "Stop": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        }
+      },
+      "0.163.0-alpha.10.2": {
+        "SessionStart": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "source": "string",
+            "transcript_path": "string|null"
+          },
+          "optional": {}
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "prompt": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "PreToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_response": "any",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "Stop": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        }
+      }
+    }
+  },
+  "mapping": {
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant",
+    "common": { "session": "session_id", "subagent": "agent_id" },
+    "SessionStart": {
+      "kind": "session.start",
+      "data": { "source": "source" }
+    },
+    "UserPromptSubmit": {
+      "kind": "user.ask",
+      "data": { "text": "prompt" },
+      "origin": {
+        "rules": [
+          { "prompt": "<heartbeat>", "from": "continuation" }
+        ],
+        "otherwise": "person"
+      }
+    },
+    "PreToolUse": {
+      "kind": "tool.before",
+      "data": { "call": "tool_use_id", "tool": "tool_name" },
+      "call": "kind"
+    },
+    "PermissionRequest": {
+      "kind": "permission.request",
+      "data": { "kind": "=tool", "tool": "tool_name" },
+      "call": "detail"
+    },
+    "PostToolUse": {
+      "kind": "tool.after",
+      "data": { "call": "tool_use_id", "tool": "tool_name", "outcome": "=ok" }
+    },
+    "Stop": {
+      "kind": "agent.stop",
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" }
+    },
+    "SessionEnd": {
+      "kind": "session.end",
+      "data": { "reason": "reason" }
+    }
+  },
+  "toolKinds": {
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "tools": { "Bash": "shell", "apply_patch": "edit" },
+    "prefixes": { "mcp__": "mcp" },
+    "otherwise": "unknown"
+  },
+  "toolDetail": {
+    "readBy": "what a call of each kind carries: a shell call's command",
+    "command": { "shell": "tool_input.command" }
+  },
+  "patch": {
+    "readBy": "a patch's paths: every Add, Update or Delete File and Move to line, indented or not, against the payload's cwd or a leading cd; through apply_patch or a shell command that runs it",
+    "tools": ["apply_patch"],
+    "command": "tool_input.command",
+    "shell": "\\bapply_?patch\\b"
+  },
+  "turnWithoutPrompt": {
+    "readBy": "a turn no prompt hook started opens with a user.ask whose origin the rollout's opening user message names; goals and heartbeats are continuations, never your asks",
+    "payloadField": "turn_id",
+    "startedBy": ["UserPromptSubmit", "SessionStart"],
+    "turnEntry": "turn_context",
+    "turnField": "payload.turn_id",
+    "messageRole": { "path": "payload.role", "value": "user" },
+    "messageText": "payload.content",
+    "values": { "<codex_internal_context source=\"goal\">": "continuation" },
+    "otherwise": "unknown"
   }
 }

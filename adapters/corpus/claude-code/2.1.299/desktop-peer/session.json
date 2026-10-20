@@ -1,0 +1,9 @@
+{
+  "schema": "corpus.session@1",
+  "agent": "claude-code",
+  "version": "2.1.299",
+  "surface": "desktop",
+  "recorded": "2026-10-19",
+  "scenario": "desktop-peer",
+  "source": "the #80 spike's throwaway session in the Claude desktop app, logged by its hook"
+}
