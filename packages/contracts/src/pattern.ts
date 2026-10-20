@@ -52,7 +52,9 @@ const CONTROLS: Record<string, string> = { n: '\n', t: '\t', r: '\r', f: '\f', v
 const SYNTAX = '^$\\.*+?()[]{}|/';
 
 function parse(source: string): Node {
-  if (!source.startsWith('^') || !source.endsWith('$') || source.endsWith('\\$') || source.length < 2) throw Error('a pattern is anchored at both ends, ^…$');
+  // The final $ is escaped, so no anchor, when an odd run of backslashes comes before it.
+  const escaped = (source.slice(0, -1).match(/\\*$/)![0].length % 2) === 1;
+  if (!source.startsWith('^') || !source.endsWith('$') || escaped || source.length < 2) throw Error('a pattern is anchored at both ends, ^…$');
   const chars = [...source.slice(1, -1)];
   let i = 0;
   const peek = (): string | undefined => chars[i];
