@@ -44,6 +44,13 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #15 first measurement: the merge base has no evidence store. One process runs one retention pass over 36 days of records at 500 a day against a temp store, so p50 includes Node's start and the per-call limits stay in tests/acceptance/15/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "corpus-replay",
+      "command": ["node", "scripts/corpus.mjs", "replay"],
+      "margin": 0.5,
+      "limits": { "p50Ms": 120000 },
+      "initialReason": "Issue #47 first measurement: the merge base has no fixture corpus. One process replays every recorded payload under adapters/corpus through its adapter and compares it with its stored events, field by field. Issue #47 caps the full replay at 2 minutes on the reference Mac; later merge bases hold p50 and peak memory to a 50% margin."
     }
   ]
 }

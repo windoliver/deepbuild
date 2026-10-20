@@ -1,0 +1,8 @@
+{
+  "schema": "corpus.session@1",
+  "agent": "codex",
+  "version": "0.144.0",
+  "surface": "terminal",
+  "recorded": "2026-10-20",
+  "scenario": "goal"
+}
