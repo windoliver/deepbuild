@@ -712,7 +712,7 @@ fn ulid(text: &str) -> bool {
 
 /// Refuses a value its rule refuses, naming its JSON Pointer. A value of the wrong type passes here and is
 /// refused when it decodes.
-pub fn check(value: &Value, at: &str, rule: &Rule) -> Result<(), String> {
+fn check(value: &Value, at: &str, rule: &Rule) -> Result<(), String> {
     let refused = |what: &str| Err(format!("{}: {what}", here(at)));
     match (rule, value) {
         (Rule::Nullable(_), Value::Null) => Ok(()),

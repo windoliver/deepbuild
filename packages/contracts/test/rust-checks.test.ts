@@ -87,6 +87,15 @@ function replacements(schema: Schema, value: JsonValue, seed: number): JsonValue
   return [];
 }
 
+/** A value for a property no fixture carries, so its rules get mutants too; none for nodes the mutants can't reach. */
+function seedFor(root: Schema, schema: Schema): JsonValue | undefined {
+  const node = nodeAt(root, schema, null);
+  const type = Array.isArray(node.type) ? node.type.find((t) => t !== 'null') : node.type;
+  if (type === 'string') return typeof node.pattern === 'string' ? sample(fc.stringMatching(new RegExp(node.pattern, 'u')), 1, 311)[0] : 'a'.repeat(typeof node.minLength === 'number' ? node.minLength : 1);
+  if (type === 'integer' || type === 'number') return typeof node.minimum === 'number' ? node.minimum : 0;
+  return undefined;
+}
+
 /** Every value under a fixture with the schema node it answers to, and a setter that rebuilds the fixture. */
 function places(root: Schema, schema: Schema, value: JsonValue, set: (v: JsonValue) => JsonValue): { schema: Schema; value: JsonValue; set: (v: JsonValue) => JsonValue }[] {
   const node = nodeAt(root, schema, value);
@@ -97,6 +106,12 @@ function places(root: Schema, schema: Schema, value: JsonValue, set: (v: JsonVal
     for (const [key, item] of Object.entries(value)) {
       const child = node.properties ? (node.properties as Record<string, Schema>)[key] : (node.additionalProperties as Schema | undefined);
       if (child) out.push(...places(root, child, item, (v) => set({ ...value, [key]: v })));
+    }
+    // A property the fixture leaves out is tried too, with a value of its own as the start.
+    for (const [key, child] of Object.entries((node.properties ?? {}) as Record<string, Schema>)) {
+      if (key in value) continue;
+      const seed = seedFor(root, child);
+      if (seed !== undefined) out.push(...places(root, child, seed, (v) => set({ ...value, [key]: v })));
     }
   }
   return out;
