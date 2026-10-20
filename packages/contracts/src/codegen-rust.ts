@@ -1,6 +1,7 @@
 import { canonicalText } from './canonical.js';
 import { nameClaims, RESERVED_TYPES, typeName } from './codegen-ts.js';
-import { isObject, segment, unionTag, type Schema, type SchemaEntry } from './json.js';
+import { isObject, resolveRef, segment, unionTag, type Schema, type SchemaEntry } from './json.js';
+import { compilePattern } from './pattern.js';
 
 const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
   'let', 'loop', 'match', 'mod', 'move', 'mut', 'pub', 'ref', 'return', 'self', 'static', 'struct', 'super', 'trait', 'true', 'type',
@@ -34,8 +35,19 @@ const literal = (text: string): string => `"${[...text].map((c) => {
   return code < 0x20 || code > 0x7e ? `\\u{${code.toString(16)}}` : c;
 }).join('')}"`;
 
-/** What every schema's types share: the items written so far and the type names they, or a schema, hold. */
-interface Output { items: string[]; taken: Set<string>; reserved: Set<string> }
+/** A Rust f64 literal for a schema bound. */
+const float = (n: number): string => {
+  const text = String(n).replace('e+', 'e');
+  return /[.e]/.test(text) ? text : `${text}.0`;
+};
+const bound = (schema: Schema, key: string, write: (n: number) => string): string =>
+  (typeof schema[key] === 'number' ? `Some(${write(schema[key])})` : 'None');
+
+/**
+ * What every schema's types share: the items written so far, the type names they, or a schema, hold, and
+ * the statics written for rules and patterns, by their text.
+ */
+interface Output { items: string[]; taken: Set<string>; reserved: Set<string>; statics: Map<string, string> }
 
 /** Emits one schema's Rust types and their Contract impls into the shared output. */
 class Module {
@@ -45,6 +57,73 @@ class Module {
   constructor(private readonly root: Schema, private readonly rootName: string, private readonly schemaName: string, private readonly output: Output) {}
 
   get out(): string[] { return this.output.items; }
+
+  /** The name of a static holding `text`, written once however many fields share it. */
+  private shared(prefix: string, type: string, text: string): string {
+    const key = `${type} = ${text}`;
+    let name = this.output.statics.get(key);
+    if (!name) {
+      name = `${prefix}_${this.output.statics.size}`;
+      this.output.statics.set(key, name);
+      this.out.push(`static ${name}: ${type} = ${text};\n`);
+    }
+    return name;
+  }
+
+  private pattern(source: string): string {
+    const program = compilePattern(source).map((inst) => {
+      switch (inst.op) {
+        case 'char': return `deep_contracts::Inst::Char(&[${inst.ranges.map(([lo, hi]) => `(${lo}, ${hi})`).join(', ')}])`;
+        case 'split': return `deep_contracts::Inst::Split(${inst.x}, ${inst.y})`;
+        case 'jmp': return `deep_contracts::Inst::Jmp(${inst.to})`;
+        case 'match': return 'deep_contracts::Inst::Match';
+      }
+    });
+    return this.shared('PATTERN', '&[deep_contracts::Inst]', `&[\n    ${program.join(',\n    ')},\n]`);
+  }
+
+  /**
+   * The static rule for what a schema node says of its value beyond its type, or undefined when it says
+   * nothing more or its type checks itself: a record, a union, an enum's or a constant's.
+   */
+  rule(schema: Schema): string | undefined {
+    if (typeof schema.$ref === 'string') return this.rule(resolveRef(this.root, schema.$ref));
+    if ('x-opaque' in schema || 'const' in schema || Array.isArray(schema.oneOf)) return undefined;
+    if (Array.isArray(schema.type)) {
+      const inner = this.rule({ ...schema, type: schema.type.find((t) => t !== 'null')! });
+      return inner && this.shared('RULE', 'deep_contracts::Rule', `deep_contracts::Rule::Nullable(&${inner})`);
+    }
+    const count = (n: number) => String(n);
+    let text: string | undefined;
+    switch (schema.type) {
+      case 'string': {
+        const format = schema.format === 'ulid' ? 'Some(deep_contracts::Format::Ulid)' : 'None';
+        const pattern = typeof schema.pattern === 'string' ? `Some(${this.pattern(schema.pattern)})` : 'None';
+        if (format !== 'None' || pattern !== 'None' || 'minLength' in schema || 'maxLength' in schema) {
+          text = `deep_contracts::Rule::String { min: ${bound(schema, 'minLength', count)}, max: ${bound(schema, 'maxLength', count)}, format: ${format}, pattern: ${pattern} }`;
+        }
+        break;
+      }
+      case 'integer':
+      case 'number':
+        if ('minimum' in schema || 'maximum' in schema) text = `deep_contracts::Rule::Number { min: ${bound(schema, 'minimum', float)}, max: ${bound(schema, 'maximum', float)} }`;
+        break;
+      case 'array': {
+        const items = this.rule(schema.items as Schema);
+        if (items || 'minItems' in schema || 'maxItems' in schema) {
+          text = `deep_contracts::Rule::Array { min: ${bound(schema, 'minItems', count)}, max: ${bound(schema, 'maxItems', count)}, items: ${items ? `Some(&${items})` : 'None'} }`;
+        }
+        break;
+      }
+      case 'object':
+        if (!isObject(schema.properties)) {
+          const values = this.rule(schema.additionalProperties as Schema);
+          text = `deep_contracts::Rule::Map { keys: ${this.pattern(String((schema.propertyNames as Schema).pattern))}, values: ${values ? `Some(&${values})` : 'None'} }`;
+        }
+        break;
+    }
+    return text && this.shared('RULE', 'deep_contracts::Rule', text);
+  }
   private claim(name: string): string {
     const { taken, reserved } = this.output;
     if (name === this.exact) {
@@ -162,7 +241,7 @@ ${arms.map((a) => `            Self::${a.variant}(inner) => inner.to_json(),\n`)
       if (other !== undefined) throw Error(`${this.schemaName}: properties ${other} and ${key} would both be the Rust field ${ident}`);
       idents.set(ident, key);
       const inner = this.type(s as Schema, name + pascal(key));
-      return { key, ident, required: required.has(key), type: required.has(key) ? inner : `Option<${inner}>` };
+      return { key, ident, required: required.has(key), type: required.has(key) ? inner : `Option<${inner}>`, rule: this.rule(s as Schema) };
     });
     const keys = fields.map((f) => literal(f.key)).join(', ');
     this.out.push(`#[derive(Debug, Clone, PartialEq)]
@@ -172,7 +251,7 @@ ${fields.map((f) => `    pub ${f.ident}: ${f.type},\n`).join('')}}
 impl Contract for ${name} {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &[${keys}])?;
-        Ok(Self {
+${fields.flatMap((f) => (f.rule ? [`        deep_contracts::check_member(members, at, ${literal(f.key)}, &${f.rule})?;\n`] : [])).join('')}        Ok(Self {
 ${fields.map((f) => `            ${f.ident}: deep_contracts::${f.required ? 'required' : 'optional'}(members, at, ${literal(f.key)})?,\n`).join('')}        })
     }
     fn to_json(&self) -> Value {
@@ -215,7 +294,7 @@ ${fields.map((f) => (f.required
  */
 export function generateRust(entries: readonly SchemaEntry[]): string {
   // Each schema's own and definitions' names first, so no nested type takes one and two schemas never share one.
-  const output: Output = { items: [], taken: new Set(), reserved: new Set() };
+  const output: Output = { items: [], taken: new Set(), reserved: new Set(), statics: new Map() };
   const claim = nameClaims();
   for (const { name, schema } of entries) {
     const names = [typeName(name), ...Object.keys(isObject(schema.$defs) ? schema.$defs : {}).map((def) => typeName(name) + pascal(def))];

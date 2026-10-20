@@ -1,5 +1,6 @@
 //! `deep-contracts roundtrip <schema>` decodes each JSON line on stdin into the generated type for
-//! `<schema>` and prints its RFC 8785 text; `deep-contracts jcs` prints each line's RFC 8785 text.
+//! `<schema>` and prints its RFC 8785 text; `deep-contracts jcs` prints each line's RFC 8785 text;
+//! `deep-contracts check <schema>` prints `ok` or `refused <reason>` for each line, and goes on.
 
 use std::io::{BufRead, Write};
 
@@ -11,11 +12,19 @@ fn main() {
         (Some("roundtrip"), Some(schema), None) => Box::new(move |line| {
             deep_contracts::roundtrip(&schema, line).map_err(|error| format!("{schema}: {error}"))
         }),
+        (Some("check"), Some(schema), None) => Box::new(move |line| {
+            Ok(match deep_contracts::roundtrip(&schema, line) {
+                Ok(_) => "ok".to_string(),
+                Err(error) => format!("refused {error}"),
+            })
+        }),
         (Some("jcs"), None, None) => {
             Box::new(|line| deep_contracts::parse(line).map(|value| deep_contracts::jcs(&value)))
         }
         _ => {
-            eprintln!("usage: deep-contracts roundtrip <schema> | deep-contracts jcs");
+            eprintln!(
+                "usage: deep-contracts roundtrip <schema> | deep-contracts check <schema> | deep-contracts jcs"
+            );
             std::process::exit(2);
         }
     };
