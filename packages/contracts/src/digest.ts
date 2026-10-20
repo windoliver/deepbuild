@@ -55,6 +55,8 @@ function drop(value: JsonValue, keys: readonly string[]): void {
 export function recordHash(name: string, record: JsonValue): string {
   const marker = getSchema(name)['x-hash'];
   const excludes = isObject(marker) && Array.isArray(marker.excludes) ? marker.excludes.map(String) : [];
+  // A copy to drop the excludes from; canonicalize refuses what isn't JSON before the clone could throw.
+  canonicalize(record);
   const copy = structuredClone(record);
   for (const pointer of excludes) drop(copy, pointer.slice(1).split('/').map((s) => s.replace(/~1/g, '/').replace(/~0/g, '~')));
   return sha256Hex(canonicalize(copy));

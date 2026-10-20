@@ -1,7 +1,7 @@
 // Regressions the acceptance suite doesn't reach: schemas the lint must refuse because the validator or a
 // generator can't serve them, and refusals that must stay in the one error shape.
 import { describe, expect, it } from 'vitest';
-import { canonicalize, checkViewBindings, contextBoundFor, decode, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
+import { canonicalize, checkViewBindings, contextBoundFor, decode, encode, fixtures, recordHash, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
 import type { Schema } from '../src/index.js';
 
 const record = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema =>
@@ -207,4 +207,44 @@ describe('the generators refuse type names that are not identifiers, and escape 
     const rust = generateRust([{ name: 'u@1', schema: { oneOf: [tagged('a', {}), tagged('b', {})].map((b) => ({ ...b, properties: { 'k{x}"': (b.properties as Schema).t!, }, required: ['k{x}"'] })) } }]);
     expect(rust).not.toMatch(/format!\("[^"]*k\{x\}/);
   });
+});
+
+describe('a value that cannot be read as JSON is refused in the error shape everywhere', () => {
+  const request = { v: 1, agent: 'a', event: 'e', seq: '1', id: '01K74FKZVK8Q2X5R7M3N9P4T6W', pid: 1, ppid: 1, matched: [], payload: {} };
+  const contractError = expect.objectContaining({ name: 'ContractError', code: 'not_json' });
+
+  it('a cyclic or unreadable object with no prototype', () => {
+    const cyclic = Object.create(null) as Record<string, unknown>;
+    cyclic.self = cyclic;
+    const unreadable = Object.create(null, { a: { enumerable: true, get() { throw Error('boom'); } } }) as unknown;
+    for (const value of [cyclic, unreadable]) {
+      expect(validate('hook.request@1', value).ok).toBe(false);
+      expect(() => encode('hook.request@1', value)).toThrow(contractError);
+      expect(() => canonicalize(value as never)).toThrow(contractError);
+    }
+  });
+
+  it('a getter or proxy that throws, on the first read or a later one', () => {
+    let reads = 0;
+    const second = { ...request, get pid() { if (reads++) throw Error('second'); return 1; } };
+    const proxy = new Proxy({}, { ownKeys() { throw Error('boom'); } });
+    const getter = { ...request, get seq(): string { throw Error('boom'); } };
+    expect(validate('hook.request@1', second).ok).toBe(false);
+    for (const value of [proxy, getter]) expect(() => encode('hook.request@1', value)).toThrow(contractError);
+    expect(() => canonicalize({ get a(): number { throw Error('boom'); } } as never)).toThrow(contractError);
+  });
+
+  it('a record hash over a function or a symbol', () => {
+    for (const a of [() => 1, Symbol('x')]) expect(() => recordHash('verdict@1', { a } as never)).toThrow(contractError);
+  });
+});
+
+it('the generators refuse a type name the generated code already uses', () => {
+  for (const name of ['value@1', 'contract@1', 'string@1', 'vec@1', 'option@1', 'seq@1', 'array@1']) {
+    const entries = [{ name, schema: record({ a: { type: 'string' } }) }];
+    expect(() => generateRust(entries), name).toThrow(new RegExp(name));
+    expect(() => generateTypeScript(entries), name).toThrow(new RegExp(name));
+  }
+  // A nested type never takes such a name either.
+  expect(generateRust([{ name: 'str@1', schema: record({ ing: { type: 'object', properties: {}, required: [], additionalProperties: false } }) }])).not.toMatch(/pub struct String\b/);
 });

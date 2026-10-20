@@ -9,11 +9,14 @@ export function typeName(name: string): string {
   return pascal(base) + (version === '1' ? '' : `V${words(version).join('_')}`);
 }
 
+/** Names the generated TypeScript or Rust already uses: the types and traits it reaches by bare name. */
+export const RESERVED_TYPES = new Set(['Self', 'Array', 'Value', 'Contract', 'String', 'Vec', 'Option', 'Result', 'Seq', 'Box', 'Some', 'None', 'Ok', 'Err']);
+
 /** Records which schema each generated type name came from, refusing a name two schemas would share. */
 export function nameClaims(): (type: string, schema: string) => void {
   const owners = new Map<string, string>();
   return (type, schema) => {
-    if (!/^[A-Z][A-Za-z0-9_]*$/.test(type) || type === 'Self') throw Error(`${schema}: its type name ${JSON.stringify(type)} is not an identifier; rename the schema`);
+    if (!/^[A-Z][A-Za-z0-9_]*$/.test(type) || RESERVED_TYPES.has(type)) throw Error(`${schema}: its type name ${JSON.stringify(type)} is not an identifier the generated code can take; rename the schema`);
     const owner = owners.get(type);
     if (owner !== undefined) throw Error(`${schema}: its type ${type} is already ${owner}'s; rename one of them`);
     owners.set(type, schema);

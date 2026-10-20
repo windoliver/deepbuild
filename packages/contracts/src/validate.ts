@@ -235,12 +235,12 @@ export function registry(entries: readonly SchemaEntry[]): Registry {
     let found: ReturnType<typeof notJson>;
     try {
       found = notJson(value);
+      if (!found) check(value, '', out);
     } catch {
-      // A getter that throws: the value can't be read as JSON.
+      // A getter or a proxy that throws, on any read: the value can't be read as JSON.
       found = { path: '', value };
     }
     if (found) return { ok: false, issues: [issue('not_json', found.path, found.value)] };
-    check(value, '', out);
     return out.length ? { ok: false, issues: out } : { ok: true };
   };
   const refuse = (result: Validation): void => { if (!result.ok) throw new ContractError(result.issues[0]!); };
@@ -255,7 +255,12 @@ export function registry(entries: readonly SchemaEntry[]): Registry {
     },
     encode(name: string, value: unknown): string {
       const { seq } = get(name);
-      const wire = seq ? seq(value, true) : value;
+      let wire: unknown;
+      try {
+        wire = seq ? seq(value, true) : value;
+      } catch {
+        throw new ContractError(issue('not_json', '', value));
+      }
       refuse(validate(name, wire));
       return canonicalText(wire as JsonValue);
     },

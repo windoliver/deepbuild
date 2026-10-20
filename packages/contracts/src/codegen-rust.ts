@@ -1,5 +1,5 @@
 import { canonicalText } from './canonical.js';
-import { nameClaims, typeName } from './codegen-ts.js';
+import { nameClaims, RESERVED_TYPES, typeName } from './codegen-ts.js';
 import { isObject, segment, unionTag, type Schema, type SchemaEntry } from './json.js';
 
 const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
@@ -53,7 +53,7 @@ class Module {
       return name;
     }
     let unique = name;
-    for (let i = 2; taken.has(unique) || reserved.has(unique); i++) unique = `${name}${i}`;
+    for (let i = 2; taken.has(unique) || reserved.has(unique) || RESERVED_TYPES.has(unique); i++) unique = `${name}${i}`;
     taken.add(unique);
     return unique;
   }
