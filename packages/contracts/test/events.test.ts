@@ -57,7 +57,7 @@ describe('the design says', () => {
     expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, resource: { host: 'local', kind: 'port', key: '4317' } } })).toBe(true);
     expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, resource: 'port:4317' } })).toBe(false);
     for (const field of ['host', 'kind', 'key']) {
-      const { [field]: _dropped, ...resource } = { host: 'local', kind: 'port', key: '4317' };
+      const { [field]: _dropped, ...resource }: Record<string, string> = { host: 'local', kind: 'port', key: '4317' };
       expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, resource } }), `a resource without ${field}`).toBe(false);
     }
   });
@@ -92,7 +92,7 @@ describe('the design says', () => {
     expect(ok('note.opened@1', { ...note, data: { ...note.data, region: { x: 0, y: 0, w: 10, h: 10 } } })).toBe(true);
     expect(ok('note.opened@1', { ...note, data: { ...note.data, region: 'top left' } })).toBe(false);
     for (const field of ['x', 'y', 'w', 'h']) {
-      const { [field]: _dropped, ...region } = { x: 0, y: 0, w: 10, h: 10 };
+      const { [field]: _dropped, ...region }: Record<string, number> = { x: 0, y: 0, w: 10, h: 10 };
       expect(ok('note.opened@1', { ...note, data: { ...note.data, region } }), `a region without ${field}`).toBe(false);
     }
   });
@@ -128,7 +128,7 @@ describe('the design says', () => {
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, patch: '01K74G3A5C7E9G1J3M5P7R9T1V', achieved } })).toBe(true);
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: true } })).toBe(false);
     for (const field of ['created', 'updated', 'deleted', 'unchanged']) {
-      const { [field]: _dropped, ...partial } = achieved;
+      const { [field]: _dropped, ...partial }: Record<string, unknown> = achieved;
       expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: partial } }), `achieved without ${field}`).toBe(false);
     }
     const filed = first('suggestion.filed@1');
