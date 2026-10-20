@@ -2,7 +2,7 @@
 // generator can't serve them, and refusals that must stay in the one error shape.
 import { describe, expect, it } from 'vitest';
 import { canonicalize, checkViewBindings, contextBoundFor, decode, encode, fixtures, recordHash, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
-import type { Schema } from '../src/index.js';
+import type { JsonValue, Schema } from '../src/index.js';
 
 const record = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema =>
   ({ type: 'object', properties, required, additionalProperties: false });
@@ -313,4 +313,21 @@ it('a PASS verdict record has no requirement short of PASS', () => {
   for (const outcome of ['pending', 'FAIL']) {
     expect(validate('verdict@1', { ...pass, requirements: pass.requirements.map((r) => ({ ...r, outcome })) }).ok, outcome).toBe(false);
   }
+});
+
+it("canonical text reads an array by its indices, never through the array's own map or join", () => {
+  const own: JsonValue[] = [1, 2];
+  Object.defineProperty(own, 'map', { value: () => ['"forged"'] });
+  class Joined extends Array<JsonValue> { override join() { return '"x":1'; } }
+  const bare = [1];
+  Object.setPrototypeOf(bare, null);
+  for (const value of [own, Joined.from([1, 2]), bare]) expect(new TextDecoder().decode(canonicalize(value as JsonValue))).toBe(`[${[...Array.prototype.values.call(value)].join(',')}]`);
+});
+
+it('a record hash over what canonicalize accepts is a hash, not a clone error', () => {
+  const record = fixtures('verdict@1')[0] as JsonValue;
+  const extra = Object.assign(structuredClone(record) as Record<string, unknown>, {});
+  (extra.reasons as unknown as { note: unknown }).note = () => 1;
+  expect(recordHash('verdict@1', extra as JsonValue)).toBe(recordHash('verdict@1', record));
+  expect(recordHash('verdict@1', new Proxy(structuredClone(record) as object, {}) as JsonValue)).toBe(recordHash('verdict@1', record));
 });

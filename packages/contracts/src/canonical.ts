@@ -22,7 +22,12 @@ export function canonicalText(value: JsonValue): string {
 
 const text = (value: JsonValue): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(text).join(',')}]`;
+  if (Array.isArray(value)) {
+    // By index, as the not-JSON walk read it: never through the array's own map or join.
+    const items: string[] = [];
+    for (let i = 0; i < value.length; i++) items.push(text(value[i]!));
+    return `[${items.join(',')}]`;
+  }
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${text(value[key]!)}`).join(',')}}`;
 };
 
