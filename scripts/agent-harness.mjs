@@ -320,11 +320,8 @@ async function budgets(options) {
   let base = null;
   if (spawnSync('git', ['cat-file', '-e', `${lane.baseCommit}:scripts/agent-harness.mjs`], { cwd: root }).status === 0) {
     const copy = mkdtempSync(join(tmpdir(), 'deep-harness-base-'));
-    // The archive goes through a file: the repo's archive is tens of MB, past a child's output buffer.
-    const archive = `${copy}.tar`;
     try {
-      execFileSync('git', ['archive', '--output', archive, lane.baseCommit], { cwd: root });
-      execFileSync('tar', ['-xf', archive, '-C', copy]);
+      execFileSync('tar', ['-xf', '-', '-C', copy], { input: execFileSync('git', ['archive', lane.baseCommit], { cwd: root, encoding: null, maxBuffer: 128 * 1024 * 1024 }) });
       const binaries = ['claude', 'codex'].flatMap((agent) => { const path = binary(agent, options[agent]); return path ? [`--${agent}`, path] : []; });
       const started = performance.now();
       const result = spawnSync(process.execPath, ['scripts/agent-harness.mjs', 'all', ...binaries, '--out', join(options.out, 'base')], { cwd: copy, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -333,7 +330,6 @@ async function budgets(options) {
       base = { wholeMs: Math.round(performance.now() - started), sessions: sessions({ results: runs }) };
     } finally {
       rmSync(copy, { recursive: true, force: true });
-      rmSync(archive, { force: true });
     }
   }
   lane.base = base;
