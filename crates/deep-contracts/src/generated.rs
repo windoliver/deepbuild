@@ -305,6 +305,18 @@ impl Contract for AgentStopKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct AgentStopWriter;
+
+impl Contract for AgentStopWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"hook\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"hook\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct AgentStopData {
     pub turn: i64,
     pub did_work: bool,
@@ -332,7 +344,7 @@ pub struct AgentStop {
     pub id: String,
     pub kind: AgentStopKind,
     pub subject: String,
-    pub writer: String,
+    pub writer: AgentStopWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -8562,6 +8574,28 @@ impl Contract for SessionStartKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionStartWriter {
+    App,
+    Hook,
+}
+
+impl Contract for SessionStartWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            "hook" => Ok(Self::Hook),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+            Self::Hook => "hook",
+        }.to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionStartData {
     pub agent: String,
@@ -8596,7 +8630,7 @@ pub struct SessionStart {
     pub id: String,
     pub kind: SessionStartKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: SessionStartWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -9204,6 +9238,18 @@ impl Contract for ToolAfterKind {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolAfterWriter;
+
+impl Contract for ToolAfterWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"hook\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"hook\"").expect("a constant is JSON")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolAfterDataKind {
     Shell,
@@ -9285,7 +9331,7 @@ pub struct ToolAfter {
     pub id: String,
     pub kind: ToolAfterKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: ToolAfterWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -9360,6 +9406,18 @@ impl Contract for ToolBeforeKind {
     }
     fn to_json(&self) -> Value {
         deep_contracts::parse("\"tool.before\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolBeforeWriter;
+
+impl Contract for ToolBeforeWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"hook\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"hook\"").expect("a constant is JSON")
     }
 }
 
@@ -9444,7 +9502,7 @@ pub struct ToolBefore {
     pub id: String,
     pub kind: ToolBeforeKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: ToolBeforeWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,

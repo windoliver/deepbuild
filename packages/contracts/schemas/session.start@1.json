@@ -25,8 +25,11 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "app",
+        "hook"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",

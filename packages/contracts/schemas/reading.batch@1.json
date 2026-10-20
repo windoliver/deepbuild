@@ -23,8 +23,8 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "pattern": "^(core|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection: an extension through the API, or the core; never an agent."
     },
     "actor": {
       "type": "string",
