@@ -21,8 +21,11 @@ let published: CatalogueEntry[] | undefined;
 export const catalogue = (): CatalogueEntry[] => structuredClone((published ??= buildCatalogue(listSchemas())));
 
 const KIND = /`([a-z][a-z_]*)\.([a-z][a-z_]*)`/g;
-/** "event kind `a.b`", or a list of backticked names, joined by commas, "and" or "or", after "event kinds". */
-const CALLED_KINDS = /\bevent kinds?\s+((?:`[^`\n]+`(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)?)+)/gi;
+/**
+ * "event kind `a.b`", or a list of backticked names, joined by commas, "and" or "or", after "event kinds",
+ * directly or after a colon, "named", "called", "such as", "like" or "including".
+ */
+const CALLED_KINDS = /\bevent kinds?(?:\s*:|\s+(?:named|called|such as|like|including))?\s+((?:`[^`\n]+`(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)?)+)/gi;
 
 /**
  * The event kinds a text names in backticks that the catalogue lacks. A backticked `<family>.<name>` is
