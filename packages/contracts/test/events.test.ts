@@ -105,7 +105,7 @@ describe('the design says', () => {
 
   it("a patch is named by its ULID, and says what it achieved in counts", () => {
     const patched = first('doc.patched@1');
-    const achieved = { created: { rect: 1 }, updated: 0, deleted: {}, unchanged: false };
+    const achieved = { created: { 'rect@1': 1 }, updated: 0, deleted: {}, unchanged: false };
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, patch: '01K74G3A5C7E9G1J3M5P7R9T1V', achieved } })).toBe(true);
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: true } })).toBe(false);
     const filed = first('suggestion.filed@1');
@@ -129,6 +129,53 @@ describe('the design says', () => {
       expect(ok(name, { ...event, data: { ...event.data, applied_by: null } }), `${name} by no one`).toBe(false);
     }
     expect(ok('learn.proposed@1', { ...first('learn.proposed@1'), writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' })).toBe(true);
+  });
+
+  it("a patch counts what it made by kind, as family.name@major", () => {
+    const patched = first('doc.patched@1');
+    const achieved = { created: { 'slab@1': 1 }, updated: 0, deleted: { 'village.house@1': 2 }, unchanged: false };
+    expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved } })).toBe(true);
+  });
+
+  it("a worktree's owner is its task, with its base commit, and only you remove one", () => {
+    const created = first('worktree.created@1');
+    expect(ok('worktree.created@1', created)).toBe(true);
+    expect(ok('worktree.created@1', { ...created, data: { ...created.data, owner: 'not a task at all' } })).toBe(false);
+    const { base: _base, ...noBase } = created.data;
+    expect(ok('worktree.created@1', { ...created, data: noBase })).toBe(false);
+    for (const writer of ['mcp:01K74G1Z3X5V7T9R1P3N5M7K9H', 'ext:shop']) expect(ok('worktree.removed@1', { ...first('worktree.removed@1'), writer }), writer).toBe(false);
+  });
+
+  it('a lease always expires', () => {
+    const lease = first('lease.acquired@1');
+    expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, expires: null } })).toBe(false);
+  });
+
+  it('a reading may be below zero', () => {
+    const reading = first('reading.recorded@1');
+    expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value: -3.5 } })).toBe(true);
+  });
+
+  it("an item is named by the document's item ID grammar", () => {
+    for (const name of ['note.opened@1', 'suggestion.filed@1']) {
+      expect(ok(name, { ...first(name), data: { ...first(name).data, item: 'Bad Item/#x:@~' } }), name).toBe(false);
+    }
+  });
+
+  it('an event keeps at most the read cap of any text field', () => {
+    const long = 'x'.repeat(8193);
+    const before = first('tool.before@1');
+    expect(ok('tool.before@1', { ...before, data: { ...before.data, command: long } })).toBe(false);
+    expect(ok('tool.before@1', { ...before, data: { ...before.data, command: long.slice(1) } })).toBe(true);
+    const ask = first('user.ask@1');
+    expect(ok('user.ask@1', { ...ask, data: { ...ask.data, text: long } })).toBe(false);
+  });
+
+  it('a patch or a suggestion names its writer as the envelope does', () => {
+    for (const name of ['doc.patched@1', 'suggestion.filed@1']) {
+      expect(ok(name, { ...first(name), data: { ...first(name).data, writer: 'any thing' } }), name).toBe(false);
+      expect(ok(name, { ...first(name), data: { ...first(name).data, writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' } }), name).toBe(true);
+    }
   });
 });
 
