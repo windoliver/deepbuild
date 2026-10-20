@@ -1,0 +1,69 @@
+Acceptance tests for #568 on the base 6acd16c (no implementation), run on 2026-10-19:
+
+  node --test 'tests/acceptance/568/*.test.mjs'
+
+Trimmed to one failure reason per test. No local path appears below, so nothing needed
+redacting beyond the scratch repository's commit hash. Each lane test ran perf.mjs in a scratch
+repository whose fingerprint() answered the planted fingerprint.
+
+# tests 27
+# pass 0
+# fail 27
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - the live fingerprint on this Mac has every field, and its macOS build is sw_vers -buildVersion
+    scripts/benchmark.mjs exports no fingerprint()
+not ok 2 - on the reference Mac, five runs all within the limit pass
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 3 - on the reference Mac, five runs all over the limit by more than the 5% floor fail
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 4 - on the reference Mac, five runs all over the limit by more than their spread fail
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 5 - a mixed set is INCONCLUSIVE with all five runs attached
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 6 - the 5% floor decides: all five over the limit but within 5% is INCONCLUSIVE, not FAIL
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 7 - the spread decides: all five over the limit and over 5%, but not over the 13% spread, is INCONCLUSIVE, not FAIL
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 8 - a set where any one run alone would pass or fail is INCONCLUSIVE: the lane judges all five
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 9 - fewer than five runs never pass and never fail
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 10 - a missing or broken reading among the five never passes
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 11 - model alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 12 - chip alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 13 - memory alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 14 - battery power alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 15 - Low Power Mode on alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 16 - thermal state fair alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 17 - thermal state serious alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 18 - thermal state critical alone makes a budget INCONCLUSIVE: a passing set and a failing set are readings, with all five attached and the reason named
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 19 - the recorded fingerprint of another Mac makes a budget INCONCLUSIVE, while the reference Mac's counts
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 20 - a fingerprint missing any field, the macOS build included, never passes or fails
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 21 - a memory budget counts only on the reference Mac, under the same five-run rule
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 22 - property (seed 0x568): over 1000 integer five-run sets, the status and margin follow the rule in any order
+    scripts/benchmark.mjs exports no judgeLimit()
+not ok 23 - every result perf prints records the whole fingerprint, the macOS build included, on and off the reference Mac
+    preflight records the fingerprint it ran under (Mac15,7): {"task":"preflight","baseCommit":"<scratch base>","status":"INITIAL","reason":"Fixture preflight.","samples":1,"current":{"elapsedMs":1,"cpuMs":1,"peakBytes":1},"base":null}
+not ok 24 - on the reference Mac, a task within its limits passes on five runs taken after an unmeasured warm-up
+    p50Ms carries its five runs: undefined (the task line has no limits; perf compares a single p50 of 20 samples with the cap)
+not ok 25 - on the reference Mac, a task over its limit in all five runs by more than the margin fails the lane
+    no result line for the task: perf compares a single p50 with the cap, prints FAIL perf: slow: p50Ms 68.1… reached cap 10, and no task line
+not ok 26 - off the reference Mac, a task within its limits is a reading: INCONCLUSIVE with its five runs, and the lane does not pass
+    p50Ms carries its five runs: undefined (the task line has no limits; perf compares a single p50 of 20 samples with the cap)
+not ok 27 - off the reference Mac, a task over its limit is a reading too: INCONCLUSIVE, never FAIL
+    no result line for the task: perf compares a single p50 with the cap, prints FAIL perf: slow: p50Ms 68.1… reached cap 10, and no task line
