@@ -1,0 +1,109 @@
+Acceptance tests for #47 on the base 0c5e145 (no corpus, no scripts/corpus.mjs, no deep explain),
+run on 2026-10-19 with Node 23.9.0 on macOS, in a clean `git archive 0c5e145` export with only
+this folder added (regenerated after the redrafts of the desktop-app test and the corpus location):
+
+  node --test tests/acceptance/47/{corpus,replay,explain,lifecycle,preflight}.test.mjs
+
+Trimmed to one failure reason per test: the stack frames and node's own error fields are cut,
+and node's install path reads "node". Every test fails because a part #47 adds is missing, never
+on a typo or a TypeError in the test.
+
+ℹ tests 26
+ℹ pass 0
+ℹ fail 26
+ℹ skipped 0
+
+not ok 1 - #47.fc36112e every hook event a facts file lists for a covered version has a recorded payload …
+    corpus.test.mjs:16:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 2 - #47.fc36112e Claude Code's corpus holds sessions recorded in the terminal and in the desktop a…
+    corpus.test.mjs:30:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 3 - #47.fc36112e each recorded session is tagged with the agent version it ran, and its transcript…
+    corpus.test.mjs:44:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 4 - #47.8f0e2354 a secret scan over the corpus finds nothing, and the same scan finds a key plante…
+    corpus.test.mjs:78:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 5 - #47.8f0e2354 no corpus file holds this machine's home folder or the git user's email
+    corpus.test.mjs:100:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 6 - #47.fc65f49c every recorded payload is stored with the events it must map to, where they were …
+    corpus.test.mjs:111:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 7 - #47.827e6ab1 the corpus holds a Claude Code /loop iteration, a background subagent's report an…
+    corpus.test.mjs:142:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 8 - #47.827e6ab1 the corpus holds a Codex patch with indented markers and one sent through the she…
+    corpus.test.mjs:148:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 9 - #47.8ebea6b5 the corpus holds a Codex goal's continuation, a Codex heartbeat and the Claude de…
+    corpus.test.mjs:168:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 10 - #47.3f704ae4 the corpus stays under 200 MB
+    corpus.test.mjs:176:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 11 - #47.9e03b1e8 deep explain <session> names, for each event, the facts rule that mapped it and t…
+    explain.test.mjs:18:1: deep explain is not a command yet / exit 2
+not ok 12 - #47.d948ef8c a planted log that moves an ask from defaulted to answered fails, naming the even…
+    lifecycle.test.mjs:28:1: scripts/corpus.mjs does not exist: no corpus replay, check or lifecycle entry
+not ok 13 - #47.d948ef8c every recorded session in the corpus and each seeded run of the hub's simulation …
+    lifecycle.test.mjs:38:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 14 - #47.e19749bc the preflight runs the corpus check as a lane, on the repo's own corpus and facts
+    preflight.test.mjs:12:1: one preflight lane runs node scripts/corpus.mjs check: [{"name":"typecheck","run":[["node","node_modules/typescript/bin/tsc","--noEmit"],["npm","run", …
+not ok 15 - #47.3f704ae4 the full replay is a perf task with a limit of 2 minutes, compared with the merge…
+    preflight.test.mjs:20:1: benchmarks/budgets.json has no task running node scripts/corpus.mjs replay
+not ok 16 - #47.fc65f49c the whole corpus replays through the adapters and matches its stored events, payl…
+    replay.test.mjs:27:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 17 - #47.fc65f49c the replay compares the stored events with the adapter's field by field: a change…
+    replay.test.mjs:45:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 18 - #47.827e6ab1 the recorded /loop iteration, subagent report, other session's message and both C…
+    replay.test.mjs:74:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 19 - #47.8ebea6b5 a Codex goal's continuation, a Codex heartbeat and the desktop app's resume promp…
+    replay.test.mjs:94:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 20 - #47.1597fbec a changed payload shape fails the adapter's replay, naming the field, for each ad…
+    replay.test.mjs:133:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 21 - #47.59eef887 for each adapter, a recorded PreToolUse with a renamed, removed or retyped field …
+    replay.test.mjs:142:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 22 - #47.e19749bc a recorded Stop with stop_hook_active removed, replayed as a live event of a cove…
+    replay.test.mjs:159:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 23 - #47.fc36112e the check passes the recorded corpus, and fails a covered version whose set lacks…
+    replay.test.mjs:181:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 24 - #47.13b96768 the facts range widens only to a version whose recorded set replays clean, naming…
+    replay.test.mjs:198:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 25 - #47.e19749bc the check fails a facts range that covers a version with no recorded set, naming …
+    replay.test.mjs:229:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+not ok 26 - #47.3f704ae4 the check fails a corpus of 200 MB or more, naming the size
+    replay.test.mjs:244:1: adapters/corpus does not exist: no recorded corpus (adapters/corpus/<agent>/<version>/<session>/)
+
+The live file, without its opt-in, on the same base:
+
+  node --test tests/acceptance/47/corpus.live.test.mjs
+
+ℹ tests 4
+ℹ pass 0
+ℹ fail 4
+ℹ skipped 0
+
+not ok 1 - #47.13b96768 live: recording a fresh claude-code set tags it with the installed version, cover…
+    corpus.live.test.mjs:39:3: BLOCKED: live tests spend plan usage; run them by hand with DEEP_CORPUS_LIVE=1
+not ok 2 - #47.13b96768 live: recording a fresh codex set tags it with the installed version, covers ever…
+    corpus.live.test.mjs:39:3: BLOCKED: live tests spend plan usage; run them by hand with DEEP_CORPUS_LIVE=1
+not ok 3 - #47.2ac9ccf2 live: without the standing approval, the first session on an uncovered Claude Cod…
+    corpus.live.test.mjs:109:1: BLOCKED: live tests spend plan usage; run them by hand with DEEP_CORPUS_LIVE=1
+not ok 4 - #47.2ac9ccf2 live: with the standing approval, the first session on an uncovered Claude Code s…
+    corpus.live.test.mjs:119:1: BLOCKED: live tests spend plan usage; run them by hand with DEEP_CORPUS_LIVE=1
+
+Next layer: the same base with only a synthetic corpus added (a throwaway in a scratch copy, not
+part of this change: one Claude Code set for 2.1.304 and one Codex set for 0.144.0, built to the
+layout in README.md). The data tests over the corpus files then pass, and each other test fails
+on the next missing part: the facts' per-version event lists, scripts/corpus.mjs, deep explain,
+the preflight lane and the perf task. Reasons, grouped:
+
+ℹ tests 26
+ℹ pass 9
+ℹ fail 17
+ℹ skipped 0
+
+adapters/claude-code.facts.json lists no events for 2.1.302 (events.versions["2.1.302"]: the hook events the adapter handles, each with the fields it  …
+    1 test: #47.fc36112e 
+deep explain is not a command yet / exit 2
+    1 test: #47.9e03b1e8 
+scripts/corpus.mjs does not exist: no corpus replay, check or lifecycle entry
+    11 tests: #47.d948ef8c , #47.fc65f49c , #47.827e6ab1 , #47.8ebea6b5 , #47.1597fbec , #47.59eef887 , #47.e19749bc , #47.fc36112e , #47.3f704ae4 
+one preflight lane runs node scripts/corpus.mjs check: [{"name":"typecheck","run":[["node","node_modules/typescript/bin/tsc","--noEmit"],["npm","run", …
+    1 test: #47.e19749bc 
+benchmarks/budgets.json has no task running node scripts/corpus.mjs replay
+    1 test: #47.3f704ae4 
+adapters/claude-code.facts.json lists no events for 2.1.304 (events.versions["2.1.304"]: the hook events the adapter handles, each with the fields it  …
+    2 tests: #47.13b96768 , #47.e19749bc 
