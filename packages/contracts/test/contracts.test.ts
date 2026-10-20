@@ -356,3 +356,7 @@ describe('a value is read once, so what is checked is what is written or hashed'
     }
   });
 });
+
+it('every verdict outcome has a fixture', () => {
+  expect(new Set(fixtures('verdict@1').map((f) => (f as { outcome: string }).outcome))).toEqual(new Set(['PASS', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE']));
+});
