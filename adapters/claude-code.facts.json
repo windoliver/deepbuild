@@ -2,46 +2,93 @@
   "schema": "adapter.facts@1",
   "versions": ["2.1.299", "2.1.304"],
   "agent": "claude",
-  "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
+  "hookTimeouts": {
+    "readBy": "a hold waits no longer than the agent lets a hook run",
+    "conformance": "claude/hookTimeouts/hold-within-timeout",
+    "defaultMs": 60000,
+    "perHook": { "Stop": 600000, "UserPromptSubmit": 30000 }
+  },
+  "continuation": {
+    "readBy": "a stop hold continues a turn only while the payload says no stop hook already did; the cap is the design's",
+    "conformance": "claude/continuation/stop-hook-active",
+    "field": "stop_hook_active"
+  },
   "signIn": {
     "readBy": "a run is BLOCKED until the agent is signed in",
+    "conformance": "claude/signIn/auth-status",
     "args": ["auth", "status"],
     "signedIn": "stdout is JSON with loggedIn true"
   },
   "launch": {
+    "readBy": "how DeepBuild starts the agent headless: a scripted session in a pseudo-terminal, a read-only job on stdin",
+    "conformance": "claude/launch/flags",
     "session": {
       "readBy": "scripted sessions run interactively in a pseudo-terminal, never with -p, which ends async hooks at teardown",
       "args": ["--model", "haiku", "--setting-sources", "project", "--strict-mcp-config", "--settings", "{settings}"]
     },
     "readOnlyJob": {
       "readBy": "DeepBuild's own jobs: only the MCP servers they need, none of the checkout's settings, no bypass flag, prompt on stdin",
-      "args": ["-p", "--output-format", "stream-json", "--verbose", "--model", "haiku", "--strict-mcp-config", "--setting-sources", "user", "--permission-mode", "dontAsk"],
+      "args": [
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--model",
+        "haiku",
+        "--strict-mcp-config",
+        "--setting-sources",
+        "user",
+        "--permission-mode",
+        "dontAsk"
+      ],
       "prompt": "stdin"
     }
   },
+  "modelFamily": {
+    "readBy": "which rate card and context window a model name belongs to",
+    "conformance": "claude/modelFamily/known-names",
+    "families": { "claude-opus-5-5": "opus", "claude-sonnet-5-5": "sonnet", "claude-haiku-5-5": "haiku", "claude-fable-5-1": "fable" }
+  },
+  "billing": {
+    "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
+    "conformance": "claude/billing/api-key-variables",
+    "apiKeyVariables": ["ANTHROPIC_API_KEY"]
+  },
   "usage": {
     "readBy": "every run prints its cost and is held to its cap",
+    "conformance": "claude/usage/counting",
     "cost": "reported",
     "costFrom": "the status line's cost.total_cost_usd in a session, the result event's total_cost_usd in a job",
     "tokens": "assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens"
   },
+  "questionTools": {
+    "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
+    "conformance": "claude/questionTools/question-is-a-request",
+    "tools": ["AskUserQuestion"]
+  },
   "transcripts": {
     "readBy": "a run keeps its session's own transcript",
+    "conformance": "claude/transcripts/folder",
     "home": ["CLAUDE_CONFIG_DIR", "~/.claude"],
     "path": "projects/{cwd with each non-alphanumeric character as -}/{session}.jsonl"
   },
+  "appLinks": {
+    "readBy": "Open on a session's row",
+    "conformance": "claude/appLinks/open",
+    "open": "none: the Claude desktop app publishes no link that opens a session"
+  },
+  "errorTexts": {
+    "readBy": "a stop's cause from the texts the agent writes, never from its words about them; Claude Code's StopFailure payload carries the error as a code instead, mapped by mapping.StopFailure.cause, so no text is matched",
+    "conformance": "claude/errorTexts/unknown-otherwise",
+    "causes": {}
+  },
   "events": {
     "readBy": "each hook's strict payload schema per covered version, from Claude Code's hooks reference (code.claude.com/docs/en/hooks), which publishes no schema: the fields it names as always sent are required, the rest it names optional, and a Bash call's tool_input.command a string; a missing or retyped field, or an event not listed, reads unverified and the session's holds go watch-only, naming the field; an unlisted field is only a reading (#47)",
+    "conformance": "claude/events/strict-payloads",
     "versions": {
       "2.1.299": {
         "SessionStart": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "source": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "source": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -58,13 +105,7 @@
           }
         },
         "UserPromptSubmit": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "prompt": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "prompt": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -94,7 +135,12 @@
             "agent_type": "string"
           },
           "tools": {
-            "Bash": { "tool_input.command": "string" }
+            "Bash": { "tool_input.command": "string" },
+            "Read": { "tool_input.file_path": "string" },
+            "Edit": { "tool_input.file_path": "string" },
+            "MultiEdit": { "tool_input.file_path": "string" },
+            "Write": { "tool_input.file_path": "string" },
+            "NotebookEdit": { "tool_input.notebook_path": "string" }
           }
         },
         "PermissionRequest": {
@@ -117,7 +163,12 @@
             "mcp_server": "object"
           },
           "tools": {
-            "Bash": { "tool_input.command": "string" }
+            "Bash": { "tool_input.command": "string" },
+            "Read": { "tool_input.file_path": "string" },
+            "Edit": { "tool_input.file_path": "string" },
+            "MultiEdit": { "tool_input.file_path": "string" },
+            "Write": { "tool_input.file_path": "string" },
+            "NotebookEdit": { "tool_input.notebook_path": "string" }
           }
         },
         "PostToolUse": {
@@ -186,13 +237,7 @@
           }
         },
         "StopFailure": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "error": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "error": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -205,13 +250,7 @@
           }
         },
         "SessionEnd": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "reason": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "reason": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -224,13 +263,7 @@
       },
       "2.1.304": {
         "SessionStart": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "source": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "source": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -247,13 +280,7 @@
           }
         },
         "UserPromptSubmit": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "prompt": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "prompt": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -283,7 +310,12 @@
             "agent_type": "string"
           },
           "tools": {
-            "Bash": { "tool_input.command": "string" }
+            "Bash": { "tool_input.command": "string" },
+            "Read": { "tool_input.file_path": "string" },
+            "Edit": { "tool_input.file_path": "string" },
+            "MultiEdit": { "tool_input.file_path": "string" },
+            "Write": { "tool_input.file_path": "string" },
+            "NotebookEdit": { "tool_input.notebook_path": "string" }
           }
         },
         "PermissionRequest": {
@@ -306,7 +338,12 @@
             "mcp_server": "object"
           },
           "tools": {
-            "Bash": { "tool_input.command": "string" }
+            "Bash": { "tool_input.command": "string" },
+            "Read": { "tool_input.file_path": "string" },
+            "Edit": { "tool_input.file_path": "string" },
+            "MultiEdit": { "tool_input.file_path": "string" },
+            "Write": { "tool_input.file_path": "string" },
+            "NotebookEdit": { "tool_input.notebook_path": "string" }
           }
         },
         "PostToolUse": {
@@ -375,13 +412,7 @@
           }
         },
         "StopFailure": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "error": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "error": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -394,13 +425,7 @@
           }
         },
         "SessionEnd": {
-          "required": {
-            "session_id": "string",
-            "transcript_path": "string",
-            "cwd": "string",
-            "hook_event_name": "string",
-            "reason": "string"
-          },
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "reason": "string" },
           "optional": {
             "prompt_id": "string",
             "scratchpad_dir": "string",
@@ -415,6 +440,7 @@
   },
   "mapping": {
     "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant",
+    "conformance": "claude/mapping/explain",
     "common": { "session": "session_id", "subagent": "agent_id" },
     "SessionStart": {
       "kind": "session.start",
@@ -494,6 +520,7 @@
   },
   "toolKinds": {
     "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "conformance": "claude/toolKinds/unknown-otherwise",
     "tools": {
       "Bash": "shell",
       "Read": "read",
@@ -511,6 +538,7 @@
   },
   "toolDetail": {
     "readBy": "what a call of each kind carries: a shell call's command, a file call's paths",
+    "conformance": "claude/toolDetail/paths-and-command",
     "command": { "shell": "tool_input.command" },
     "paths": {
       "Read": "tool_input.file_path",
@@ -518,6 +546,11 @@
       "MultiEdit": "tool_input.file_path",
       "Write": "tool_input.file_path",
       "NotebookEdit": "tool_input.notebook_path"
-    }
+    },
+    "mcp": { "tool": "tool" }
+  },
+  "readUsage": {
+    "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
+    "conformance": "claude/readUsage/model-switch"
   }
 }

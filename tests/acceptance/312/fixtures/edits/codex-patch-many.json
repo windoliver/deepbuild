@@ -1,0 +1,17 @@
+{
+  "version": "0.160.0",
+  "why": "a patch with every marker the design names (Add, Update, Delete File and Move to), one path through .., so the edit's paths are all four, resolved and sorted",
+  "paths": ["/work/a.txt", "/work/b.txt", "/work/c.txt", "/work/d.txt"],
+  "payload": {
+    "session_id": "01a15800-0000-7000-8000-000000000001",
+    "turn_id": "01a15800-0000-7000-8000-000000000004",
+    "transcript_path": "~/.codex/sessions/2026/10/20/rollout-2026-10-20T00-00-00-01a15800-0000-7000-8000-000000000001.jsonl",
+    "cwd": "/work",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-reserve",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "apply_patch",
+    "tool_input": { "command": "*** Begin Patch\n*** Add File: a.txt\n+a\n*** Update File: sub/../b.txt\n*** Move to: c.txt\n@@\n-b\n+c\n*** Delete File: /work/d.txt\n*** End Patch" },
+    "tool_use_id": "exec-00000000-0000-4000-8000-000000000003"
+  }
+}

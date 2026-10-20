@@ -1,0 +1,28 @@
+{
+  "name": "pre-tool-use with tool_input renamed to tool_inputs",
+  "version": "0.160.0",
+  "hook": "PreToolUse",
+  "field": "tool_input",
+  "schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": { "NullableString": { "type": ["string", "null"] } },
+    "properties": {
+      "agent_id": { "type": "string" },
+      "agent_type": { "type": "string" },
+      "cwd": { "type": "string" },
+      "hook_event_name": { "const": "PreToolUse", "type": "string" },
+      "model": { "type": "string" },
+      "permission_mode": { "enum": ["default", "acceptEdits", "plan", "dontAsk", "bypassPermissions"], "type": "string" },
+      "session_id": { "type": "string" },
+      "tool_inputs": true,
+      "tool_name": { "type": "string" },
+      "tool_use_id": { "type": "string" },
+      "transcript_path": { "$ref": "#/definitions/NullableString" },
+      "turn_id": { "type": "string" }
+    },
+    "required": ["cwd", "hook_event_name", "model", "permission_mode", "session_id", "tool_inputs", "tool_name", "tool_use_id", "transcript_path", "turn_id"],
+    "title": "pre-tool-use.command.input",
+    "type": "object"
+  }
+}

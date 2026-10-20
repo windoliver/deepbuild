@@ -1,0 +1,58 @@
+{
+  "source": "https://github.com/openai/codex/tree/<tag>/codex-rs/hooks/schema/generated",
+  "fetched": "2026-10-20",
+  "versions": {
+    "0.144.0": {
+      "tag": "rust-v0.144.0",
+      "commit": "e0a9ff6938d85db1a7b11a693b6aa2bc31fe5a55",
+      "files": {
+        "permission-request.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/permission-request.command.input.schema.json",
+        "post-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/post-compact.command.input.schema.json",
+        "post-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/post-tool-use.command.input.schema.json",
+        "pre-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/pre-compact.command.input.schema.json",
+        "pre-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/pre-tool-use.command.input.schema.json",
+        "session-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/session-start.command.input.schema.json",
+        "stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/stop.command.input.schema.json",
+        "subagent-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/subagent-start.command.input.schema.json",
+        "subagent-stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/subagent-stop.command.input.schema.json",
+        "user-prompt-submit.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.144.0/codex-rs/hooks/schema/generated/user-prompt-submit.command.input.schema.json"
+      }
+    },
+    "0.160.0": {
+      "tag": "rust-v0.160.0",
+      "commit": "79b1b666f2e8551f8abbbca34957227f67f3f553",
+      "files": {
+        "interrupt.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/interrupt.command.input.schema.json",
+        "permission-request.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/permission-request.command.input.schema.json",
+        "post-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/post-compact.command.input.schema.json",
+        "post-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/post-tool-use.command.input.schema.json",
+        "pre-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/pre-compact.command.input.schema.json",
+        "pre-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/pre-tool-use.command.input.schema.json",
+        "session-end.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/session-end.command.input.schema.json",
+        "session-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/session-start.command.input.schema.json",
+        "stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/stop.command.input.schema.json",
+        "subagent-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/subagent-start.command.input.schema.json",
+        "subagent-stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/subagent-stop.command.input.schema.json",
+        "user-prompt-submit.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.160.0/codex-rs/hooks/schema/generated/user-prompt-submit.command.input.schema.json"
+      }
+    },
+    "0.163.0-alpha.10.2": {
+      "tag": "rust-v0.163.0-alpha.10.2",
+      "commit": "d9151c94a70013f176ff370fa93da02734662e41",
+      "files": {
+        "interrupt.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/interrupt.command.input.schema.json",
+        "permission-request.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/permission-request.command.input.schema.json",
+        "post-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/post-compact.command.input.schema.json",
+        "post-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/post-tool-use.command.input.schema.json",
+        "pre-compact.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/pre-compact.command.input.schema.json",
+        "pre-tool-use.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/pre-tool-use.command.input.schema.json",
+        "session-end.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/session-end.command.input.schema.json",
+        "session-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/session-start.command.input.schema.json",
+        "stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/stop.command.input.schema.json",
+        "subagent-start.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/subagent-start.command.input.schema.json",
+        "subagent-stop.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/subagent-stop.command.input.schema.json",
+        "user-prompt-submit.command.input.schema.json": "https://github.com/openai/codex/blob/rust-v0.163.0-alpha.10.2/codex-rs/hooks/schema/generated/user-prompt-submit.command.input.schema.json"
+      }
+    }
+  }
+}

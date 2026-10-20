@@ -65,6 +65,29 @@
         },
         "did_work": {
           "type": "boolean"
+        },
+        "cause": {
+          "type": "string",
+          "enum": [
+            "sign_in_required",
+            "token_refresh_failed",
+            "plan_window_spent",
+            "rate_limited",
+            "refusal",
+            "max_turns",
+            "context_overflow",
+            "tool_schema_rejected",
+            "agent_crashed",
+            "timed_out",
+            "unknown"
+          ],
+          "description": "Why the turn stopped, read from the payload, never from the agent's text; a stop nothing explains is unknown, never a pass."
+        },
+        "reset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "With plan_window_spent: when the window resets, in ms since the Unix epoch."
         }
       },
       "required": [

@@ -1,0 +1,16 @@
+{
+  "version": "0.160.0",
+  "why": "the same patch sent through Codex's shell tool in a heredoc after a cd, with indented marker lines (the corpus's patch-via-shell and patch-indented-markers cases on one payload)",
+  "payload": {
+    "session_id": "01a15800-0000-7000-8000-000000000001",
+    "turn_id": "01a15800-0000-7000-8000-000000000003",
+    "transcript_path": "~/.codex/sessions/2026/10/20/rollout-2026-10-20T00-00-00-01a15800-0000-7000-8000-000000000001.jsonl",
+    "cwd": "/elsewhere",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-reserve",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "Bash",
+    "tool_input": { "command": "cd /work && apply_patch <<'EOF'\n  *** Begin Patch\n  *** Update File: notes.md\n  @@\n  -one\n  +two\n  *** End Patch\nEOF" },
+    "tool_use_id": "exec-00000000-0000-4000-8000-000000000002"
+  }
+}

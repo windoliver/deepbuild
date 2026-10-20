@@ -559,7 +559,9 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `task.created`, `task.closed` (closed is new) | `{task_ref, thread, owner, title}`; `{by_verdict}` | tasks | the first and last stations |
 | `definition.drafted`, `definition.locked`, `definition.revised` (new) | `{definition, task_ref, requirements, hash, base_commit, budget}`; revised adds `{dispute_ask}` | definitions | chips per requirement; the defining station |
 | `tool.before`, `tool.after` | `{kind: shell \| read \| edit \| write \| search \| fetch \| mcp \| unknown, paths, command}` | session_files, returns | the files a session touched, on the Map; a turn's parts, on its turn view |
-| `agent.stop` | `{turn, did_work}` | claims | where a stop was judged |
+| `agent.stop` | `{turn, did_work, cause: sign_in_required \| token_refresh_failed \| plan_window_spent \| rate_limited \| refusal \| max_turns \| context_overflow \| tool_schema_rejected \| agent_crashed \| timed_out \| unknown, reset}` | claims | where a stop was judged, and why; `reset` is when a spent plan window reopens |
+| `permission.request` (new) | `{kind: tool \| plan \| question \| mode, tool, command, paths}` | sessions, asks | a session waiting on a person, and what it asks about |
+| `turn.usage` (new) | `{turn, model, covers, tokens: {input, cached, output, exact}, cost: reported \| estimated \| unpriced, context: {used, window}}` | sessions | what a turn cost, where the adapter can read it; a cost basis stays visible, never a bare number |
 | `claim.made` | `{task_ref, attempt, commit, scope: session \| child \| task}` | claims | the says-done station |
 | `claim.sent_back`, `claim.stalled` (new) | `{claim, verdict, round, to}`; `{claim, rule}` | claims | "sent back, round n of 3"; stalled cards |
 | `delivery.outcome` (new) | `{delivery, via: steer \| interrupt \| stop_hold \| next_prompt, outcome}` | deliveries | whether a send-back or an answer arrived |

@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "permission.request",
+  "subject": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451124,
+  "data": {
+    "kind": "question"
+  }
+}

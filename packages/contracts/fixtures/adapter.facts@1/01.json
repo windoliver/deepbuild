@@ -1,0 +1,156 @@
+{
+  "schema": "adapter.facts@1",
+  "versions": ["1.0.0", "1.1.0-beta.2"],
+  "agent": "sample",
+  "hookTimeouts": {
+    "readBy": "a hold waits no longer than the agent lets a hook run",
+    "conformance": "sample/hookTimeouts/hold-within-timeout",
+    "defaultMs": 60000,
+    "perHook": { "Stop": 600000 }
+  },
+  "continuation": {
+    "readBy": "a stop hold continues at most this many times in one turn",
+    "conformance": "sample/continuation/cap",
+    "cap": 3,
+    "field": "stop_hook_active"
+  },
+  "launch": {
+    "readBy": "how DeepBuild starts the agent headless",
+    "conformance": "sample/launch/flags",
+    "session": { "readBy": "scripted sessions run in a pseudo-terminal", "args": ["--settings", "{settings}"] },
+    "readOnlyJob": { "args": ["-p", "--output-format", "json"], "prompt": "stdin" }
+  },
+  "modelFamily": {
+    "readBy": "which rate card and context window a model name belongs to",
+    "conformance": "sample/modelFamily/known-names",
+    "families": { "sample-large": "large", "sample-small": "small" }
+  },
+  "billing": {
+    "readBy": "whether a session bills a plan or an API account",
+    "conformance": "sample/billing/detection",
+    "apiKeyVariables": ["SAMPLE_API_KEY"]
+  },
+  "usage": {
+    "readBy": "every run prints its cost and is held to its cap",
+    "conformance": "sample/usage/counting",
+    "cost": "unpriced",
+    "costFrom": "nothing: on a plan the agent reports tokens only",
+    "tokens": "the transcript's usage entries, once per message id"
+  },
+  "questionTools": {
+    "readBy": "which tool calls are questions to the person",
+    "conformance": "sample/questionTools/ask-tool",
+    "tools": ["AskUser"]
+  },
+  "transcripts": {
+    "readBy": "a run keeps its session's own transcript",
+    "conformance": "sample/transcripts/folder",
+    "home": ["SAMPLE_HOME", "~/.sample"],
+    "path": "sessions/{session}.jsonl"
+  },
+  "appLinks": {
+    "readBy": "Open on a session's row",
+    "conformance": "sample/appLinks/open",
+    "open": "sample://session/{session}"
+  },
+  "errorTexts": {
+    "readBy": "a stop's cause from the texts the agent writes; a stop that matches none is unknown, never a pass",
+    "conformance": "sample/errorTexts/causes",
+    "causes": { "rate_limit": "rate_limited", "authentication_failed": "sign_in_required" }
+  },
+  "events": {
+    "readBy": "each hook's strict payload schema per covered version; a missing or retyped field reads unverified",
+    "conformance": "sample/events/strict-payloads",
+    "versions": {
+      "1.0.0": {
+        "SessionStart": {
+          "required": { "session_id": "string", "hook_event_name": "string", "cwd": "string", "source": "string" },
+          "optional": { "transcript_path": "string|null" }
+        },
+        "PreToolUse": {
+          "required": { "session_id": "string", "hook_event_name": "string", "cwd": "string", "tool_name": "string", "tool_input": "object", "tool_use_id": "string" },
+          "optional": { "agent_id": "string" },
+          "tools": { "Bash": { "tool_input.command": "string" } }
+        },
+        "StopFailure": {
+          "required": { "session_id": "string", "hook_event_name": "string", "cwd": "string", "error": "string" },
+          "optional": { "error_details": "any" }
+        }
+      },
+      "1.1.0-beta.2": {
+        "SessionStart": {
+          "required": { "session_id": "string", "hook_event_name": "string", "cwd": "string", "source": "string" },
+          "optional": {}
+        }
+      }
+    }
+  },
+  "mapping": {
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event",
+    "conformance": "sample/mapping/explain",
+    "common": { "session": "session_id", "subagent": "agent_id" },
+    "SessionStart": { "kind": "session.start", "data": { "source": "source" } },
+    "UserPromptSubmit": {
+      "kind": "user.ask",
+      "data": { "text": "prompt" },
+      "origin": {
+        "join": { "payload": "prompt_id", "transcript": "promptId" },
+        "rules": [
+          { "prompt": "<heartbeat>", "from": "continuation" },
+          { "match": { "turnOrigin": "human", "origin.handback": false }, "from": "person" }
+        ],
+        "otherwise": "unknown"
+      }
+    },
+    "PreToolUse": { "kind": "tool.before", "data": { "call": "tool_use_id", "tool": "tool_name" }, "call": "kind" },
+    "PermissionRequest": { "kind": "permission.request", "data": { "kind": "=tool", "tool": "tool_name" }, "call": "detail" },
+    "StopFailure": {
+      "kind": "agent.stop",
+      "data": { "outcome": "=failed" },
+      "cause": { "field": "error", "values": { "rate_limit": "rate_limited" }, "otherwise": "unknown" }
+    }
+  },
+  "toolKinds": {
+    "readBy": "a tool call's kind by tool name or name prefix; unknown is what guards treat as change",
+    "conformance": "sample/toolKinds/unknown-otherwise",
+    "tools": { "Bash": "shell", "Read": "read", "Edit": "edit" },
+    "prefixes": { "mcp__": "mcp" },
+    "otherwise": "unknown"
+  },
+  "toolDetail": {
+    "readBy": "what a call of each kind carries: a shell call's command, a file call's paths, an MCP call's tool under this field",
+    "conformance": "sample/toolDetail/paths",
+    "command": { "shell": "tool_input.command" },
+    "paths": { "Read": "tool_input.file_path", "Edit": "tool_input.file_path" },
+    "mcp": { "tool": "tool" }
+  },
+  "patch": {
+    "readBy": "a patch's paths from its marker lines, through apply_patch or a shell command that runs it",
+    "conformance": "sample/patch/paths",
+    "tools": ["apply_patch"],
+    "command": "tool_input.command",
+    "shell": "\\bapply_?patch\\b"
+  },
+  "turnWithoutPrompt": {
+    "readBy": "a turn no prompt hook started opens with a user.ask whose origin the transcript's opening user message names",
+    "conformance": "sample/turnWithoutPrompt/goal",
+    "payloadField": "turn_id",
+    "startedBy": ["UserPromptSubmit", "SessionStart"],
+    "turnEntry": "turn_context",
+    "turnField": "payload.turn_id",
+    "messageRole": { "path": "payload.role", "value": "user" },
+    "messageText": "payload.content",
+    "values": { "<goal>": "continuation" },
+    "otherwise": "unknown"
+  },
+  "signIn": {
+    "readBy": "a run is BLOCKED until the agent is signed in",
+    "conformance": "sample/signIn/status",
+    "args": ["auth", "status"],
+    "signedIn": "exit code 0"
+  },
+  "readUsage": {
+    "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
+    "conformance": "sample/readUsage/model-switch"
+  }
+}
