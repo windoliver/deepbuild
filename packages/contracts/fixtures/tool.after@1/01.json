@@ -9,11 +9,7 @@
   "seq": "1760013451123456789",
   "data": {
     "kind": "shell",
-    "paths": [
-      "src/index.ts"
-    ],
-    "command": "npm test",
-    "server": "deep",
-    "tool": "deep_ask"
+    "paths": [],
+    "command": "npm test"
   }
 }
