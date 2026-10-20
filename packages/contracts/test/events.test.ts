@@ -219,6 +219,13 @@ describe('the design says', () => {
     }
   });
 
+  it('the hub alone records what it made, ran or closed: an action and its report, layer rows, rollups, a dry merge, a closed task', () => {
+    for (const name of ['action.entered@1', 'action.reported@1', 'layer.rows@1', 'reading.rollup@1', 'merge.dry_run@1', 'task.closed@1']) {
+      for (const writer of ['mcp:s1', 'ext:infra', 'hook', 'app', 'cli']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
+      expect(ok(name, { ...first(name), writer: 'core' }), name).toBe(true);
+    }
+  });
+
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
