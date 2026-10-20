@@ -14,7 +14,7 @@ fn a_number_halfway_between_two_shortest_forms_prints_the_even_one_as_ecmascript
 #[test]
 fn a_unicode_escape_takes_four_hex_digits_and_nothing_else() {
     assert!(deep_contracts::parse(r#"["\u+041"]"#).is_err());
-    assert_eq!(canonical(r#"["A"]"#), r#"["A"]"#);
+    assert_eq!(canonical(r#"["\u0041"]"#), r#"["A"]"#);
 }
 
 #[test]

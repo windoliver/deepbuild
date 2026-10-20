@@ -8,6 +8,6 @@ export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
 export { lintSchemas, type LintProblem } from './lint.js';
 export { generateTypeScript } from './codegen-ts.js';
 export { generateRust } from './codegen-rust.js';
-export { buildCatalogue, catalogue, catalogueDrift, checkViewBindings, type CatalogueEntry } from './catalogue.js';
+export { catalogue, type CatalogueEntry } from './catalogue.js';
 export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles.js';
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';

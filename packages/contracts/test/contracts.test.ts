@@ -1,7 +1,7 @@
 // Regressions the acceptance suite doesn't reach: schemas the lint must refuse because the validator or a
 // generator can't serve them, and refusals that must stay in the one error shape.
 import { describe, expect, it } from 'vitest';
-import { canonicalize, checkViewBindings, contextBoundFor, decode, encode, fixtures, recordHash, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
+import { canonicalize, contextBoundFor, decode, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, parseHandle, recordHash, registry, sha256Hex, validate } from '../src/index.js';
 import type { JsonValue, Schema } from '../src/index.js';
 
 const record = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema =>
@@ -47,7 +47,8 @@ describe('the generators refuse names that would collide', () => {
   it('two properties with one Rust field, and enum values with one variant', () => {
     expect(() => generateRust([{ name: 'a@1', schema: record({ 'a-b': { type: 'string' }, a_b: { type: 'string' } }) }])).toThrow(/a_b/);
     const rust = generateRust([{ name: 'e@1', schema: record({ self: { type: 'string', enum: ['1-0', '1_0', 'self'] } }) }]);
-    expect(rust).not.toMatch(/r#self|\b102\b|^\s+Self,$/m);
+    for (const line of ['"1-0" => Ok(Self::V10)', '"1_0" => Ok(Self::V102)', '"self" => Ok(Self::Self_)', 'pub self_: ESelf']) expect(rust).toContain(line);
+    expect(rust).not.toMatch(/r#self|^\s+Self,$/m);
   });
 });
 
@@ -180,17 +181,16 @@ describe('one JSON both languages accept', () => {
 
 describe('the error shape', () => {
   it('a ContractError is exactly an error@1', () => {
-    try {
-      decode('hook.ack@1', '1');
-    } catch (error) {
-      expect(Object.keys(error as object).sort()).toEqual(['actual', 'code', 'evidence', 'path', 'remediation', 'retryable']);
-      expect(validate('error@1', JSON.parse(JSON.stringify(error))).ok).toBe(true);
-    }
+    let error: unknown;
+    try { decode('hook.ack@1', '1'); } catch (thrown) { error = thrown; }
+    expect(error).toMatchObject({ name: 'ContractError' });
+    expect(Object.keys(error as object).sort()).toEqual(['actual', 'code', 'evidence', 'path', 'remediation', 'retryable']);
+    expect(validate('error@1', JSON.parse(JSON.stringify(error))).ok).toBe(true);
   });
 
   it('a value under the read cap is kept whole, with half a surrogate pair shown as U+FFFD, never dropped', () => {
-    expect(checkViewBindings(['ab\ud800'])).toMatchObject({ ok: false, issues: [{ actual: 'ab\ufffd' }] });
-    expect(checkViewBindings(['a\ud800x\ud800'])).toMatchObject({ ok: false, issues: [{ actual: 'a\ufffdx\ufffd' }] });
+    expect(() => parseHandle('ab\ud800')).toThrow(expect.objectContaining({ code: 'handle_syntax', actual: 'ab\ufffd' }));
+    expect(() => parseHandle('a\ud800x\ud800')).toThrow(expect.objectContaining({ code: 'handle_syntax', actual: 'a\ufffdx\ufffd' }));
   });
 });
 
@@ -205,6 +205,7 @@ describe('the generators refuse type names that are not identifiers, and escape 
 
   it('a tag with braces or quotes stays inside its Rust string', () => {
     const rust = generateRust([{ name: 'u@1', schema: { oneOf: [tagged('a', {}), tagged('b', {})].map((b) => ({ ...b, properties: { 'k{x}"': (b.properties as Schema).t!, }, required: ['k{x}"'] })) } }]);
+    expect(rust).toContain('format!("{at}{}: {other} is not a listed tag", "/k{x}\\"")');
     expect(rust).not.toMatch(/format!\("[^"]*k\{x\}/);
   });
 });
@@ -224,15 +225,18 @@ describe('a value that cannot be read as JSON is refused in the error shape ever
     }
   });
 
-  it('a getter or proxy that throws, on the first read or a later one', () => {
-    let reads = 0;
-    const second = { ...request, get pid() { if (reads++) throw Error('second'); return 1; } };
+  it('a getter or proxy that throws when it is read', () => {
     const proxy = new Proxy({}, { ownKeys() { throw Error('boom'); } });
     const getter = { ...request, get seq(): string { throw Error('boom'); } };
-    // Read once: the second read, which would throw, never happens.
-    expect(validate('hook.request@1', second).ok).toBe(true);
     for (const value of [proxy, getter]) expect(() => encode('hook.request@1', value)).toThrow(contractError);
     expect(() => canonicalize({ get a(): number { throw Error('boom'); } } as never)).toThrow(contractError);
+  });
+
+  it('a getter is read once, so one that would throw on a second read never does', () => {
+    let reads = 0;
+    const second = { ...request, get pid() { if (reads++) throw Error('second'); return 1; } };
+    expect(validate('hook.request@1', second).ok).toBe(true);
+    expect(reads).toBe(1);
   });
 
   it('a record hash over a function or a symbol', () => {
@@ -269,7 +273,9 @@ describe('the fifth review', () => {
   });
 
   it("a schema name never closes the generated doc comment", () => {
-    expect(generateTypeScript([{ name: 'a*/b@1', schema: { type: 'string' } }])).not.toContain('a*/b');
+    const ts = generateTypeScript([{ name: 'a*/b@1', schema: { type: 'string' } }]);
+    expect(ts).toContain('/** a*\\/b@1 */');
+    expect(ts).not.toContain('a*/b');
   });
 
   it("an error's path is well-formed Unicode, so the error is an error@1", () => {
@@ -325,8 +331,15 @@ it("canonical text reads an array by its indices, never through the array's own 
   for (const value of [own, Joined.from([1, 2]), bare]) expect(new TextDecoder().decode(canonicalize(value as JsonValue))).toBe(`[${[...Array.prototype.values.call(value)].join(',')}]`);
 });
 
+// The hash AC20 defines: the SHA-256 of the RFC 8785 bytes, without the checkout verdict@1 leaves out.
+const verdictHash = (record: Record<string, unknown>): string => {
+  const { checkout: _checkout, ...hashed } = record;
+  return sha256Hex(canonicalize(hashed as JsonValue));
+};
+
 it('a record hash over what canonicalize accepts is a hash, not a clone error', () => {
   const record = fixtures('verdict@1')[0] as JsonValue;
+  expect(recordHash('verdict@1', record)).toBe(verdictHash(record as Record<string, unknown>));
   const extra = Object.assign(structuredClone(record) as Record<string, unknown>, {});
   (extra.reasons as unknown as { note: unknown }).note = () => 1;
   expect(recordHash('verdict@1', extra as JsonValue)).toBe(recordHash('verdict@1', record));
@@ -343,16 +356,18 @@ describe('a value is read once, so what is checked is what is written or hashed'
   };
 
   it('canonical text and a record hash never take a second, different read', () => {
-    const record = flipping('checkout', 'x', undefined);
-    expect(() => JSON.parse(new TextDecoder().decode(canonicalize(record)))).not.toThrow();
-    expect(() => recordHash('verdict@1', flipping('checkout', 'x', undefined))).not.toThrow();
+    const fixture = structuredClone(fixtures('verdict@1')[0]) as Record<string, unknown>;
+    const text = new TextDecoder().decode(canonicalize(flipping('checkout', 'x', undefined)));
+    expect(text).toBe(new TextDecoder().decode(canonicalize({ ...fixture, checkout: 'x' } as JsonValue)));
+    expect(recordHash('verdict@1', flipping('checkout', 'x', undefined))).toBe(verdictHash(fixture));
   });
 
   it('encode writes only the value it validated', () => {
+    // The fixture is a FAIL verdict; its outcome reads FAIL for the first `times` reads, then PASS.
     for (const times of [1, 2, 3, 4]) {
-      let out = '';
-      try { out = encode('verdict@1', flipping('outcome', 'FAIL', 'PASS', times)); } catch { continue; }
-      expect(validate('verdict@1', JSON.parse(out)).ok, `after ${times} reads`).toBe(true);
+      const out = JSON.parse(encode('verdict@1', flipping('outcome', 'FAIL', 'PASS', times))) as { outcome: string };
+      expect(out.outcome, `after ${times} reads`).toBe('FAIL');
+      expect(validate('verdict@1', out).ok, `after ${times} reads`).toBe(true);
     }
   });
 });
