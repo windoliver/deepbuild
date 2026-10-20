@@ -177,5 +177,16 @@ describe('the design says', () => {
       expect(ok(name, { ...first(name), data: { ...first(name).data, writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' } }), name).toBe(true);
     }
   });
+
+  it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
+    const lease = first('lease.acquired@1');
+    for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
+  });
+
+  it('every ask kind and every pin kind has a fixture', () => {
+    const asks = fixtures('ask.created@1') as Event[];
+    expect(new Set(asks.map((a) => a.data.kind))).toEqual(new Set(['authority', 'unblock', 'taste', 'exception', 'choice', 'definition']));
+    expect(new Set(asks.map((a) => (a.data.pinned_to as { kind: string }).kind))).toEqual(new Set(['commit', 'doc_revision', 'evidence']));
+  });
 });
 
