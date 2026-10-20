@@ -1,0 +1,66 @@
+Acceptance tests for #594 on the base fcf82f4 (no implementation), run on 2026-10-19 on a Mac15,12
+(Apple M3, 16 GB; not the reference Mac), Node 22.22.3, cargo and clippy 1.99.1:
+
+  node --test 'tests/acceptance/594/*.test.mjs'
+
+Trimmed to the failure reason of each test. Local paths are redacted: <sandbox> is the test's sandbox
+under the system temporary folder. "warm" lists the compiles before a side's measured run, "measured"
+those its measured check run paid for.
+
+# tests 4
+# pass 0
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - a second preflight builds no dependency in either copy: each side reuses a build directory of its own, kept between runs, outside the working tree's target/
+    the first preflight failed:
+    perf: the change's own tests (tests/added.test.mjs) account for ... ms of CPU; the checks without them are compared with the merge base
+    FAIL perf: preflight: cpuMs 2560 regressed beyond base 270 + 50%
+      Fix: Restore the regressed budget; budgets are frozen once they reach main.
+    --- compiles by side ---
+    working tree
+      warm: dep_b --emit=dep-info,metadata,link -> <sandbox>/repo/target/debug/deps; dep_a --emit=dep-info,metadata,link -> <sandbox>/repo/target/debug/deps; app ... (link)
+      measured: dep_a --emit=dep-info,metadata -> <sandbox>/repo/target/debug/deps; dep_b --emit=dep-info,metadata -> <sandbox>/repo/target/debug/deps; app ... (metadata)
+    merge base
+      warm: dep_a --emit=dep-info,metadata,link -> <sandbox>/tmp/deep-benchmark-base-YZPMNY/target/debug/deps; app ... (link)
+      measured: dep_a --emit=dep-info,metadata -> <sandbox>/tmp/deep-benchmark-base-YZPMNY/target/debug/deps; app ... (metadata)
+    without own tests
+      warm: dep_a --emit=dep-info,metadata,link -> <sandbox>/tmp/deep-benchmark-without-tests-YKvYuC/target/debug/deps; dep_b --emit=dep-info,metadata,link -> ...; app ... (link)
+      measured: dep_a --emit=dep-info,metadata -> <sandbox>/tmp/deep-benchmark-without-tests-YKvYuC/target/debug/deps; dep_b --emit=dep-info,metadata -> ...; app ... (metadata)
+    1 !== 0
+  (Expected: warm() never runs clippy, so every measured run check-compiles its dependencies cold, and
+  the copy without the change's own tests pays about 2 s for dep-b's check against the base's 0.27 s.
+  Each copy builds into its own fresh target/ inside the throwaway copy, which the second run's
+  assertions would also catch.)
+
+not ok 2 - criteria 2 and 3: a change that only adds a dependency passes perf within the margin; the same change slowed by 3 s of CPU fails perf on cpuMs
+    perf failed a change that only adds a dependency:
+    FAIL perf: preflight: cpuMs 2550 regressed beyond base 290 + 50%
+      Fix: Restore the regressed budget; budgets are frozen once they reach main.
+    working tree
+      measured: dep_a --emit=dep-info,metadata -> <sandbox>/repo/target/debug/deps; dep_b --emit=dep-info,metadata -> <sandbox>/repo/target/debug/deps; app ... (metadata)
+    1 !== 0
+  (Expected: preflight's warm-up builds dep-b but never checks it, so the working tree's measured
+  clippy pays for the cold check. The slowed half of the test is not reached.)
+
+not ok 3 - criterion 1: with the #337 branch's dependency tree, a second preflight on the reference Mac finishes in under 5 minutes, perf included
+    BLOCKED: not the reference Mac (Mac15,7, M3 Pro, 36 GB, mains power, Low Power Mode off, thermal state nominal): model is "Mac15,12", not "Mac15,7"; chip is "Apple M3", not "Apple M3 Pro"; memoryBytes is 17179869184, not 38654705664
+  (Expected on this machine, with or without the fix: the criterion can only be proven on the
+  reference Mac in a checkout of the #337 branch.)
+
+not ok 4 - after warm(), the lint lane's cargo clippy --workspace --all-targets --locked compiles no dependency, and warm() linted the workspace itself
+    warm() never check-compiled a dependency, as clippy does; it compiled: dep_a --emit=dep-info,metadata,link -> <sandbox>/repo/target/debug/deps; app --emit=dep-info,link -> <sandbox>/repo/target/debug/deps; app --emit=dep-info,link -> <sandbox>/repo/target/debug/deps
+  (Expected: warm() runs npm run build and cargo test --no-run only.)
+
+Planted programs, run once each against tests 1, 2 and 4 in a scratch copy (not committed):
+  a fix (warm() adds the clippy step; perf symlinks each copy's target/ to
+  <tmpdir>/deep-perf-targets/<checkout hash>/<side>)                       all three pass (24 s)
+  one build directory for both sides                                       1 fails: the copy without own tests did not build dep_a itself
+  each copy's target/ linked to the working tree's target/                 1 fails: the merge-base copy did not build its own dependencies
+  the build directories deleted at the end of each perf run                1 fails: the merge base copy's build directory is gone after the run
+  the fix's perf with today's warm() (clippy not warmed)                   1, 2 and 4 fail
+  warm() runs cargo check --workspace --all-targets instead of clippy      4 fails: clippy linted app again under both commands
+  perf compares no base when Cargo.lock changed                            1 fails: no run without own tests; 2 fails: no verdict with both sides
+  perf widens the margin to 100 when Cargo.lock changed                    2 fails: perf passed checks slowed by 3 s of CPU
