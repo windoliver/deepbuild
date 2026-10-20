@@ -287,6 +287,18 @@ describe('the design says', () => {
   });
 });
 
+describe('the learned layer', () => {
+  it('a change aimed at the base names you as its applier, never a rule, in every learn kind', () => {
+    for (const name of ['learn.proposed@1', 'learn.applied@1', 'learn.widened@1', 'learn.rolled_back@1']) {
+      const event = first(name);
+      const data = (layer: string, applied_by: string) => ({ ...event, data: { ...event.data, layer, applied_by } });
+      expect(ok(name, data('base', 'rule:abc')), `${name} base by a rule`).toBe(false);
+      expect(ok(name, data('learned', 'rule:abc')), `${name} learned by a rule`).toBe(true);
+      expect(ok(name, data('base', 'you')), `${name} base by you`).toBe(true);
+    }
+  });
+});
+
 describe('the drift check', () => {
   it('a kind of a family the catalogue lacks is drift where the text calls it an event kind, and other dotted names are not', () => {
     const text = 'Adds the event kind `telemetry.sampled`, and the event kinds `telemetry.dropped` and `telemetry.kept`. '
