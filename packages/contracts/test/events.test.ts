@@ -171,11 +171,33 @@ describe('the design says', () => {
     expect(ok('user.ask@1', { ...ask, data: { ...ask.data, text: long } })).toBe(false);
   });
 
-  it('a patch or a suggestion names its writer as the envelope does', () => {
-    for (const name of ['doc.patched@1', 'suggestion.filed@1']) {
-      expect(ok(name, { ...first(name), data: { ...first(name).data, writer: 'any thing' } }), name).toBe(false);
-      expect(ok(name, { ...first(name), data: { ...first(name).data, writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' } }), name).toBe(true);
+  it('a suggestion names its writer as the envelope does; a patch names its canvas writer kind', () => {
+    const filed = first('suggestion.filed@1');
+    expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, writer: 'any thing' } })).toBe(false);
+    expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' } })).toBe(true);
+    const patched = first('doc.patched@1');
+    for (const writer of ['you', 'shell', 'record', 'agent', 'plugin']) expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, writer } }), writer).toBe(true);
+    expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, writer: 'any thing' } })).toBe(false);
+  });
+
+  it('a PASS verdict has no requirement pending or short of PASS', () => {
+    const made = first('verdict.made@1');
+    const requirements = made.data.requirements as Record<string, unknown>[];
+    const pass = { ...made, data: { ...made.data, outcome: 'PASS', requirements: requirements.map((r) => ({ ...r, outcome: 'PASS' })) } };
+    expect(ok('verdict.made@1', pass)).toBe(true);
+    for (const outcome of ['pending', 'FAIL']) {
+      expect(ok('verdict.made@1', { ...pass, data: { ...pass.data, requirements: requirements.map((r) => ({ ...r, outcome })) } }), outcome).toBe(false);
     }
+    expect((fixtures('verdict.made@1') as Event[]).map((e) => e.data.outcome)).toContain('PASS');
+  });
+
+  it("an action's report says what it checked, and a note's time is optional", () => {
+    const reported = first('action.reported@1');
+    expect(ok('action.reported@1', { ...reported, data: { ...reported.data, checked: 'the forecast store after the write' } })).toBe(true);
+    expect(ok('action.reported@1', { ...reported, data: { ...reported.data, checked: true } })).toBe(false);
+    const note = first('note.opened@1');
+    const { t: _t, ...still } = note.data;
+    expect(ok('note.opened@1', { ...note, data: still })).toBe(true);
   });
 
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
