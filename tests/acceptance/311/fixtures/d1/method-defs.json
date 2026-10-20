@@ -1,0 +1,15 @@
+{
+  "$defs": {
+    "Mode": { "description": "How the guard acts.", "enum": ["watch", "warn"], "type": "string" }
+  },
+  "title": "planted.method@1",
+  "description": "A planted test method's params.",
+  "type": "object",
+  "properties": {
+    "mode": { "$ref": "#/$defs/Mode" },
+    "limit": { "type": "integer", "minimum": 0, "maximum": 10, "$comment": "kept small" },
+    "target": { "type": "string", "examples": ["main"] }
+  },
+  "required": ["mode", "limit"],
+  "additionalProperties": false
+}

@@ -1,0 +1,14 @@
+{
+  "name": "fixture.node.number@1",
+  "node": "A number with a range",
+  "schema": {
+    "type": "number",
+    "minimum": -1.5,
+    "maximum": 1.5
+  },
+  "instances": [
+    -1.5,
+    0.25,
+    1.5
+  ]
+}

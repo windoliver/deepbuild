@@ -1,0 +1,17 @@
+{
+  "name": "fixture.node.array@1",
+  "node": "An array of one item schema",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "string"
+    }
+  },
+  "instances": [
+    [
+      "x",
+      "y"
+    ],
+    []
+  ]
+}

@@ -1,0 +1,1 @@
+{ "exit": 2, "stdout": "", "stderr": "Blocked by guard no-kill-by-name: stop processes by PID." }

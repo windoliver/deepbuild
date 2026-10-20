@@ -1,0 +1,13 @@
+{
+  "name": "fixture.node.integer@1",
+  "node": "An integer with a range",
+  "schema": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 65535
+  },
+  "instances": [
+    0,
+    65535
+  ]
+}

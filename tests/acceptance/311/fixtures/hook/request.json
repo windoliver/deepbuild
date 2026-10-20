@@ -1,0 +1,4 @@
+{ "v": 1, "agent": "claude-code", "event": "PreToolUse", "seq": "1760013451123456789",
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W", "pid": 81234, "ppid": 81200,
+  "matched": ["no-kill-by-name"],
+  "payload": { "tool_name": "Bash" } }
