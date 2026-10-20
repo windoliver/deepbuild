@@ -742,7 +742,7 @@
       ],
       "decision": {
         "stopContinuationCap": 8,
-        "why": "Claude Code 2.1.303 continued 8 send-backs in a row and overrode the 9th (\"A hook blocked the turn from ending 9 consecutive times — overriding and ending turn\"); the count resets at a tool call; CLAUDE_CODE_STOP_HOOK_BLOCK_CAP raises it. The done gate plans for at most 8 consecutive send-backs without a tool call, and treats a 9th as never delivered."
+        "why": "Claude Code 2.1.303 continued 8 send-backs in a row and overrode the 9th (\"A hook blocked the turn from ending 9 consecutive times \u2014 overriding and ending turn\"); the count resets at a tool call; CLAUDE_CODE_STOP_HOOK_BLOCK_CAP raises it. The done gate plans for at most 8 consecutive send-backs without a tool call, and treats a 9th as never delivered."
       }
     },
     "#80.b11edf91": {
@@ -768,11 +768,10 @@
     },
     "#80.119fc62b": {
       "criterion": "Budgets, on the reference Mac in the local preflight, compared with the merge base: hook overhead at p95 is recorded in both desktop apps, and a held stop adds under 20 ms beyond its checks",
-      "status": "INCONCLUSIVE",
+      "status": "PASS",
       "findings": [],
       "decision": {
-        "why": "Reference Mac (Mac15,7). Claude desktop, on AC: held stops added 7.2 to 10.2 ms beyond their checks; hook overhead p95 81.7 ms, Node start included. Codex Desktop, on battery: 4 to 10.7 ms with one 50 ms outlier, and a 45-minute hold reads -36 ms because wall and monotonic clocks drift; overhead p95 152.3 ms. The Codex Desktop samples were not on AC, so the budget is INCONCLUSIVE until Codex Desktop is measured on AC.",
-        "blockedOn": "Codex Desktop samples on AC: on a rewritten hooks.json the app fired no spike entry, so none could be taken"
+        "why": "Reference Mac (Mac15,7); the owner ruled on Oct 19 that readings count on battery too. Held stops add 7.2 to 10.2 ms beyond their checks in the Claude desktop app and 2.5 to 4.3 ms in Codex Desktop, all under 20 ms. Hook overhead p95, Node start included: 52.873 ms in the Claude desktop app and 161.189 ms in Codex Desktop. Codex samples taken with the spike's transcript scan off (scanAsks: false), since that scan is the throwaway hook's cost, not a held stop's: with it on, two of five ran 31 and 35 ms."
       },
       "budgets": {
         "machine": {
@@ -780,7 +779,7 @@
           "chip": "Apple M3 Pro",
           "cpus": 12,
           "memoryBytes": 38654705664,
-          "power": "mixed: Claude desktop samples on AC, Codex Desktop samples on battery",
+          "power": "battery",
           "lowPowerMode": false,
           "thermal": "nominal",
           "macOS": "26.7.1 (25G241)"
@@ -791,6 +790,38 @@
         "hookOverheadMs": {
           "claude-desktop": {
             "samples": [
+              30.913,
+              22.011,
+              21.651,
+              25.602,
+              30.714,
+              32.513,
+              30.547,
+              34.561,
+              46.946,
+              33.782,
+              24.099,
+              26.427,
+              19.521,
+              22.896,
+              31.461,
+              22.614,
+              21.956,
+              33.031,
+              19.899,
+              18.048,
+              19.143,
+              22.221,
+              19.181,
+              20.021,
+              19.198,
+              18.479,
+              20.681,
+              21.418,
+              52.873,
+              32.11,
+              26.592,
+              27.366,
               34.161,
               47.725,
               39.745,
@@ -811,12 +842,10 @@
               32.164,
               26.018
             ],
-            "p95": 81.673
+            "p95": 52.873
           },
           "codex-desktop": {
             "samples": [
-              48.984,
-              29.826,
               42.768,
               25.764,
               27.883,
@@ -836,10 +865,23 @@
               23.423,
               24.095,
               21.875,
-              2695047.98,
-              20.566
+              31.763,
+              30.174,
+              108.619,
+              170.066,
+              46.947,
+              40.979,
+              49.04,
+              40.225,
+              24.109,
+              28.633,
+              27.657,
+              47.843,
+              161.189,
+              31.477,
+              17.846
             ],
-            "p95": 152.31
+            "p95": 161.189
           }
         },
         "heldStopExtraMs": {
@@ -872,39 +914,29 @@
           ],
           "codex-desktop": [
             {
-              "ms": 10.07,
+              "ms": 2.514,
               "log": "logs/codex-desktop.jsonl",
-              "invocation": "096f76157476"
+              "invocation": "e1370affffbf"
             },
             {
-              "ms": 50.041,
+              "ms": 3.289,
               "log": "logs/codex-desktop.jsonl",
-              "invocation": "0fbe87f63493"
+              "invocation": "f1c0ca920905"
             },
             {
-              "ms": 8.157,
+              "ms": 4.336,
               "log": "logs/codex-desktop.jsonl",
-              "invocation": "b75d559cc06e"
+              "invocation": "b61a7dea9836"
             },
             {
-              "ms": 10.679,
+              "ms": 4.278,
               "log": "logs/codex-desktop.jsonl",
-              "invocation": "ac4e78a76209"
+              "invocation": "8d2d7281c61e"
             },
             {
-              "ms": 7.818,
+              "ms": 3.292,
               "log": "logs/codex-desktop.jsonl",
-              "invocation": "ebe29bf26f73"
-            },
-            {
-              "ms": 4,
-              "log": "logs/codex-desktop.jsonl",
-              "invocation": "020c5bbb2e72"
-            },
-            {
-              "ms": -36.228,
-              "log": "logs/codex-desktop.jsonl",
-              "invocation": "3760700246e6"
+              "invocation": "2def186ee375"
             }
           ]
         }
@@ -1015,9 +1047,10 @@
     "Claude Code 2.1.303: a message typed mid-turn fires UserPromptSubmit at once and is queued; an asyncRewake wake starts its turn with a UserPromptSubmit whose prompt is a task-notification carrying the waiter's stderr; in auto mode a Bash call naming settings.json is denied as [Self-Modification].",
     "Sessions c2d0466d (a terminal session whose environment leaked CLAUDE_CODE_ENTRYPOINT=claude-desktop) and dry runs are dropped from the logs; payload tool_response fields are dropped.",
     "Oct 19 22:29 UTC, on AC: the fresh desktop session 4efa4b70 held 5 stops, woke on an answer, and fired FileChanged 3 times during a 65.5 s call; no message was typed during the call, and the window showed other sessions, so none of it is on a recording.",
-    "22:29–22:33 UTC, this spike's own desktop session on AC: 5 held stops with FAIL verdict lines, then a clean idle wake (wake9b7fff56ee); the window recording showed another session, so it was deleted.",
+    "22:29\u201322:33 UTC, this spike's own desktop session on AC: 5 held stops with FAIL verdict lines, then a clean idle wake (wake9b7fff56ee); the window recording showed another session, so it was deleted.",
     "Codex Desktop picks up ~/.codex/hooks.json again on a new turn (after the file was restored, a turn fired no hooks), unlike the CLI, which kept a session's hooks. At 22:43 UTC the reinstalled entries did not fire: the trusted hashes in ~/.codex/config.toml for those entry keys had changed since 20:26 by something outside this spike, and the app skipped them without a review prompt.",
-    "Oct 19, 23:12–23:19 UTC: two more desktop calls (60 s and 240 s) with the hooks armed received no typed message, and the throwaway session \"#80 spike: delete me\" (ee1496ed) was not deleted, so the typed and permanent-delete cases stay open.",
-    "Oct 19, 23:16 UTC: the Codex CLI listed every spike entry as trusted, yet Codex Desktop 0.160.0 fired none of them on two new turns after ~/.codex/hooks.json was rewritten. The adapter cannot assume the CLI's trust carries to the app; it needs the app's own health reading."
+    "Oct 19, 23:12\u201323:19 UTC: two more desktop calls (60 s and 240 s) with the hooks armed received no typed message, and the throwaway session \"#80 spike: delete me\" (ee1496ed) was not deleted, so the typed and permanent-delete cases stay open.",
+    "Oct 19, 23:16 UTC: the Codex CLI listed every spike entry as trusted, yet Codex Desktop 0.160.0 fired none of them on two new turns after ~/.codex/hooks.json was rewritten. The adapter cannot assume the CLI's trust carries to the app; it needs the app's own health reading.",
+    "Oct 20: Codex Desktop skipped the spike's entries because the app runs its bundled Codex 0.160.0, which hashes hook entries differently from the CLI (0.144.0): trust given in one does not carry to the other. Trusting the entries in the bundled 0.160 CLI's /hooks made Codex Desktop fire them again."
   ]
 }

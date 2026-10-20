@@ -129,7 +129,8 @@ if (event === 'UserPromptSubmit' && typeof p.prompt === 'string') {
 }
 if (event === 'PreToolUse') st.openCall = true;
 if (['PostToolUse', 'PostToolUseFailure', 'Stop'].includes(event)) st.openCall = false;
-const asks = ['PreToolUse', 'PostToolUse', 'Stop', 'UserPromptSubmit'].includes(event) ? newAsks() : [];
+// scanAsks: false skips the transcript scan, which is the spike's own cost, not a held stop's.
+const asks = ctl.scanAsks !== false && ['PreToolUse', 'PostToolUse', 'Stop', 'UserPromptSubmit'].includes(event) ? newAsks() : [];
 // Each ask gets a line of its own, so its nonce never stands in for a reply's.
 if (asks.length) log('beat', { ask: { text: asks.join(' / ') }, nonce: tokenOf(asks.join(' ')) });
 
