@@ -1,4 +1,5 @@
 import { isObject, resolveRef, segment, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { compilePattern } from './pattern.js';
 import { FORMATS } from './validate.js';
 
 export interface LintProblem { schema: string; path: string; reason: string }
@@ -19,13 +20,20 @@ const NUMBER_KEYWORDS = ['minLength', 'maxLength', 'minimum', 'maximum', 'minIte
 const COUNT_KEYWORDS = ['minLength', 'maxLength', 'minItems', 'maxItems'];
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 
-const compiles = (pattern: string): boolean => {
+/** Why a pattern can't be used, or undefined: it must compile in JavaScript with `u` and for the Rust matcher. */
+const unusable = (pattern: unknown): string | undefined => {
+  if (typeof pattern !== 'string') return 'a pattern is a string';
   try {
     new RegExp(pattern, 'u');
-    return true;
   } catch {
-    return false;
+    return 'a pattern compiles as a Unicode regular expression';
   }
+  try {
+    compilePattern(pattern);
+  } catch (error) {
+    return (error as Error).message;
+  }
+  return undefined;
 };
 
 /** The JSON Pointer of every string or key holding half a surrogate pair, which no Rust string can. */
@@ -122,7 +130,8 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       if (!keywords) return flag(path + '/type', `type ${type} is not a closed node type`);
       allowed(keywords);
       if (type === 'string') {
-        if ('pattern' in value && !(typeof value.pattern === 'string' && compiles(value.pattern))) flag(path + '/pattern', 'a pattern is a string that compiles as a Unicode regular expression');
+        const why = 'pattern' in value ? unusable(value.pattern) : undefined;
+        if (why) flag(path + '/pattern', why);
         if ('enum' in value && !(Array.isArray(value.enum) && value.enum.length && value.enum.every((v) => typeof v === 'string'))) flag(path + '/enum', 'an enum lists strings');
         else if (Array.isArray(value.enum) && new Set(value.enum).size !== value.enum.length) flag(path + '/enum', 'an enum lists each value once');
         if ('format' in value && !(typeof value.format === 'string' && Object.hasOwn(FORMATS, value.format))) flag(path + '/format', `format ${JSON.stringify(value.format)} is not a listed format`);
@@ -145,7 +154,8 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       } else if (isObject(value.propertyNames) && isObject(value.additionalProperties)) {
         allowed(NODE_KEYWORDS.map!);
         const names = value.propertyNames;
-        if (Object.keys(names).some((k) => k !== 'pattern') || typeof names.pattern !== 'string' || !compiles(names.pattern)) flag(path + '/propertyNames', "a map's keys take only a pattern, one that compiles as a Unicode regular expression");
+        const why = unusable(names.pattern);
+        if (Object.keys(names).some((k) => k !== 'pattern') || why) flag(path + '/propertyNames', `a map's keys take only a pattern: ${why ?? 'no other keyword'}`);
         node(value.additionalProperties, path + '/additionalProperties');
       } else {
         allowed([...NODE_KEYWORDS.record!, 'propertyNames']);

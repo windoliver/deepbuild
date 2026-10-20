@@ -612,3 +612,174 @@ impl<T: Contract> Contract for BTreeMap<String, T> {
         )
     }
 }
+
+/// One step of a schema pattern's program, which `@deepbuild/contracts` compiles from the pattern: a
+/// class of code point ranges, a fork, a jump, or the match.
+#[derive(Debug)]
+pub enum Inst {
+    Char(&'static [(u32, u32)]),
+    Split(usize, usize),
+    Jmp(usize),
+    Match,
+}
+
+/// Whether a pattern's program matches all of `text`. A Pike VM: it runs every thread in step over the
+/// code points, so it takes time linear in the text whatever the pattern.
+pub fn matches(program: &[Inst], text: &str) -> bool {
+    // seen[pc] is the step a thread last reached pc in, so each step runs each pc once.
+    let mut seen = vec![usize::MAX; program.len()];
+    let mut current = Vec::new();
+    let mut next = Vec::new();
+    let add = |list: &mut Vec<usize>, seen: &mut [usize], start: usize, step: usize| {
+        let mut stack = vec![start];
+        while let Some(pc) = stack.pop() {
+            if seen[pc] == step {
+                continue;
+            }
+            seen[pc] = step;
+            match program[pc] {
+                Inst::Jmp(to) => stack.push(to),
+                Inst::Split(x, y) => {
+                    stack.push(y);
+                    stack.push(x);
+                }
+                _ => list.push(pc),
+            }
+        }
+    };
+    add(&mut current, &mut seen, 0, 0);
+    for (step, c) in text.chars().enumerate() {
+        next.clear();
+        for &pc in &current {
+            if let Inst::Char(ranges) = program[pc] {
+                if ranges
+                    .iter()
+                    .any(|&(lo, hi)| (lo..=hi).contains(&(c as u32)))
+                {
+                    add(&mut next, &mut seen, pc + 1, step + 1);
+                }
+            }
+        }
+        std::mem::swap(&mut current, &mut next);
+        if current.is_empty() {
+            return false;
+        }
+    }
+    current.iter().any(|&pc| matches!(program[pc], Inst::Match))
+}
+
+/// A listed string format the Rust types check; `seq` is the `Seq` type's own.
+#[derive(Debug)]
+pub enum Format {
+    Ulid,
+}
+
+/// What a schema says of a value beyond its type: a string's length, format and pattern, a number's range,
+/// an array's length and items, a map's keys and values. A record, a union, an enum and a constant check
+/// themselves when they decode.
+#[derive(Debug)]
+pub enum Rule {
+    String {
+        min: Option<usize>,
+        max: Option<usize>,
+        format: Option<Format>,
+        pattern: Option<&'static [Inst]>,
+    },
+    Number {
+        min: Option<f64>,
+        max: Option<f64>,
+    },
+    Array {
+        min: Option<usize>,
+        max: Option<usize>,
+        items: Option<&'static Rule>,
+    },
+    Map {
+        keys: &'static [Inst],
+        values: Option<&'static Rule>,
+    },
+    Nullable(&'static Rule),
+}
+
+fn ulid(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() == 26
+        && (b'0'..=b'7').contains(&bytes[0])
+        && bytes[1..]
+            .iter()
+            .all(|b| b.is_ascii_digit() || (b.is_ascii_uppercase() && !b"ILOU".contains(b)))
+}
+
+/// Refuses a value its rule refuses, naming its JSON Pointer. A value of the wrong type passes here and is
+/// refused when it decodes.
+pub fn check(value: &Value, at: &str, rule: &Rule) -> Result<(), String> {
+    let refused = |what: &str| Err(format!("{}: {what}", here(at)));
+    match (rule, value) {
+        (Rule::Nullable(_), Value::Null) => Ok(()),
+        (Rule::Nullable(inner), _) => check(value, at, inner),
+        (
+            Rule::String {
+                min,
+                max,
+                format,
+                pattern,
+            },
+            Value::String(s),
+        ) => {
+            if matches!(format, Some(Format::Ulid)) && !ulid(s) {
+                return refused("not a ulid");
+            }
+            if pattern.is_some_and(|p| !matches(p, s)) {
+                return refused("does not match the pattern");
+            }
+            let length = s.chars().count();
+            if min.is_some_and(|m| length < m) || max.is_some_and(|m| length > m) {
+                return refused("length is out of range");
+            }
+            Ok(())
+        }
+        (Rule::Number { min, max }, Value::Number(n)) => {
+            if min.is_some_and(|m| *n < m) || max.is_some_and(|m| *n > m) {
+                return refused("out of range");
+            }
+            Ok(())
+        }
+        (Rule::Array { min, max, items }, Value::Array(values)) => {
+            if min.is_some_and(|m| values.len() < m) || max.is_some_and(|m| values.len() > m) {
+                return refused("item count is out of range");
+            }
+            match items {
+                Some(rule) => values
+                    .iter()
+                    .enumerate()
+                    .try_for_each(|(i, item)| check(item, &format!("{at}/{i}"), rule)),
+                None => Ok(()),
+            }
+        }
+        (Rule::Map { keys, values }, Value::Object(members)) => {
+            members.iter().try_for_each(|(key, item)| {
+                if !matches(keys, key) {
+                    return Err(format!(
+                        "{}: key does not match the pattern",
+                        pointer(at, key)
+                    ));
+                }
+                values.map_or(Ok(()), |rule| check(item, &pointer(at, key), rule))
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Checks a record's member against its rule, when the record has it.
+pub fn check_member(
+    members: &[(String, Value)],
+    at: &str,
+    key: &str,
+    rule: &Rule,
+) -> Result<(), String> {
+    match members.iter().find(|(k, _)| k == key) {
+        Some((_, value)) => check(value, &pointer(at, key), rule),
+        None => Ok(()),
+    }
+}
