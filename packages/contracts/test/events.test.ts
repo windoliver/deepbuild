@@ -1,6 +1,6 @@
 // Regressions for event kinds whose schemas read the design looser, or other, than it says.
 import { describe, expect, it } from 'vitest';
-import { catalogue, catalogueDrift, checkViewBindings, fixtures, getSchema, validate } from '../src/index.js';
+import { buildCatalogue, catalogue, catalogueDrift, checkViewBindings, fixtures, getSchema, listSchemas, validate } from '../src/index.js';
 
 type Event = Record<string, unknown> & { data: Record<string, unknown> };
 const first = (name: string): Event => structuredClone(fixtures(name)[0]) as Event;
@@ -296,9 +296,10 @@ it("the catalogue's checks read a list by its indices, never through its own fla
   };
   for (const kinds of forge(['learn.paused'])) expect(checkViewBindings(kinds).ok).toBe(false);
   for (const sources of forge([{ where: '#1', text: '`learn.paused`' }])) expect(catalogueDrift(sources)).toEqual([{ kind: 'learn.paused', where: '#1' }]);
+  for (const entries of forge(listSchemas())) expect(buildCatalogue(entries)).toEqual(catalogue());
 });
 
-it('an MCP tool call names its server and its tool', () => {
+it('an MCP tool call names its server and its tool, and no other call does', () => {
   for (const name of ['tool.before@1', 'tool.after@1']) {
     const mcp = fixtures(name).find((event) => (event as { data: { kind: string } }).data.kind === 'mcp') as { data: Record<string, unknown> } | undefined;
     expect(mcp, `${name} has an mcp fixture`).toBeDefined();
@@ -306,6 +307,9 @@ it('an MCP tool call names its server and its tool', () => {
     for (const field of ['server', 'tool']) {
       const { [field]: _dropped, ...data } = mcp!.data;
       expect(ok(name, { ...mcp!, data }), `${name} without ${field}`).toBe(false);
+    }
+    for (const call of fixtures(name) as { data: Record<string, unknown> }[]) {
+      if (call.data.kind !== 'mcp') expect(ok(name, { ...call, data: { ...call.data, server: 'deep', tool: 'deep_ask' } }), `${name} ${String(call.data.kind)} naming a server`).toBe(false);
     }
   }
 });
