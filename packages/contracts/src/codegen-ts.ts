@@ -3,10 +3,20 @@ import { isObject, type Schema, type SchemaEntry } from './json.js';
 const words = (text: string): string[] => text.split(/[^A-Za-z0-9]+/).filter(Boolean);
 const pascal = (text: string): string => words(text).map((w) => w[0]!.toUpperCase() + w.slice(1)).join('');
 
-/** A schema name's type name: `hook.request@1` is HookRequest, and a version past 1 is suffixed (`…V2`). */
+/** A schema name's type name: `hook.request@1` is HookRequest, and a version past 1 is suffixed (`…V2`, `…V1_1`). */
 export function typeName(name: string): string {
   const [base = '', version = '1'] = name.split('@');
-  return pascal(base) + (version === '1' ? '' : `V${pascal(version)}`);
+  return pascal(base) + (version === '1' ? '' : `V${words(version).join('_')}`);
+}
+
+/** Records which schema each generated type name came from, refusing a name two schemas would share. */
+export function nameClaims(): (type: string, schema: string) => void {
+  const owners = new Map<string, string>();
+  return (type, schema) => {
+    const owner = owners.get(type);
+    if (owner !== undefined) throw Error(`${schema}: its type ${type} is already ${owner}'s; rename one of them`);
+    owners.set(type, schema);
+  };
 }
 
 const key = (k: string): string => (/^[A-Za-z_$][\w$]*$/.test(k) ? k : JSON.stringify(k));
@@ -44,9 +54,12 @@ function tsType(schema: Schema, root: string, indent: string): string {
 /** The TypeScript types of the given schemas, type-only, one export per schema and per definition. */
 export function generateTypeScript(entries: readonly SchemaEntry[]): string {
   const out = ['// Generated from packages/contracts/schemas by generateTypeScript. Do not edit.\n'];
+  const claim = nameClaims();
   for (const { name, schema } of entries) {
     const root = typeName(name);
     const defs = isObject(schema.$defs) ? schema.$defs : {};
+    claim(root, name);
+    for (const def of Object.keys(defs)) claim(root + pascal(def), name);
     for (const [def, s] of Object.entries(defs)) out.push(`\nexport type ${root}${pascal(def)} = ${tsType(s as Schema, root, '')};\n`);
     const body = tsType(schema, root, '');
     const record = schema.type === 'object' && isObject(schema.properties);

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 /** How much of a refused value an error carries. */
-export const READ_CAP = 8192;
+const READ_CAP = 8192;
 
 const REMEDIATION: Record<string, string> = {
   unknown_schema: 'Name a published contract schema.',
@@ -43,12 +43,22 @@ export interface ContractIssue {
   evidence: string[];
 }
 
+/** A refused value as text; one that isn't JSON (a cycle, a bigint) still gets some text, never a throw. */
+function readable(actual: unknown): string {
+  if (typeof actual === 'string') return actual;
+  if (actual === undefined) return '';
+  try {
+    return JSON.stringify(actual, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)) ?? String(actual);
+  } catch {
+    return String(actual);
+  }
+}
+
 export function issue(code: string, path: string, actual: unknown): ContractIssue {
-  const text = typeof actual === 'string' ? actual
-    : actual === undefined ? ''
-    : typeof actual === 'bigint' ? actual.toString()
-    : JSON.stringify(actual) ?? String(actual);
-  return { code, retryable: false, remediation: REMEDIATION[code]!, path, actual: text.slice(0, READ_CAP), evidence: [] };
+  let text = readable(actual).slice(0, READ_CAP);
+  // Cut on a code point: never keep the first half of a surrogate pair.
+  if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
+  return { code, retryable: false, remediation: REMEDIATION[code]!, path, actual: text, evidence: [] };
 }
 
 export class ContractError extends Error implements ContractIssue {

@@ -40,7 +40,7 @@
     "actual": {
       "type": "string",
       "maxLength": 8192,
-      "description": "The value refused there, scrubbed and cut at the read cap."
+      "description": "The value refused there, cut at the read cap on a code point. Scrubbing secrets from it is not done yet."
     },
     "evidence": {
       "type": "array",

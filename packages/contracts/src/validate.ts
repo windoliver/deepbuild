@@ -31,6 +31,20 @@ function sameJson(value: unknown, want: string): boolean {
   }
 }
 
+/** True for a value JSON can carry: no undefined, bigint, function, or number that isn't finite; no cycle. */
+const isJson = (value: unknown, depth = 0): boolean => {
+  if (depth > 256) return false;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every((v) => isJson(v, depth + 1));
+  return isObject(value) && Object.values(value).every((v) => isJson(v, depth + 1));
+};
+
+/** The one required constant field that tells a union's branches apart, as the lint requires. */
+const unionTag = (branches: Schema[]): string => Object.keys(branches[0]!.properties as object)
+  .find((key) => branches.every((b) => isObject(b.properties) && isObject(b.properties[key]) && 'const' in b.properties[key]))!;
+const tagOf = (branch: Schema, tag: string): string => canonicalText(((branch.properties as Schema)[tag] as Schema).const!);
+
 const num = (schema: Schema, key: string): number | undefined => (typeof schema[key] === 'number' ? schema[key] : undefined);
 
 /** A check for one schema that pushes every refusal, each at the JSON Pointer it names. */
@@ -48,7 +62,7 @@ function compile(root: Schema): Check {
       }
       return check;
     }
-    if ('x-opaque' in schema) return () => {};
+    if ('x-opaque' in schema) return (value, at, out) => { if (!isJson(value)) out.push(issue('type', at, value)); };
     if ('const' in schema) {
       const want = canonicalText(schema.const!);
       return (value, at, out) => { if (!sameJson(value, want)) out.push(issue('const', at, value)); };
@@ -62,9 +76,8 @@ function compile(root: Schema): Check {
   };
 
   const union = (branches: Schema[]): Check => {
-    const tag = Object.keys(branches[0]!.properties as object)
-      .find((key) => branches.every((b) => isObject(b.properties) && isObject(b.properties[key]) && 'const' in b.properties[key]))!;
-    const byTag = new Map(branches.map((b) => [canonicalText(((b.properties as Schema)[tag] as Schema).const!), node(b)]));
+    const tag = unionTag(branches);
+    const byTag = new Map(branches.map((b) => [tagOf(b, tag), node(b)]));
     const at = segment(tag);
     return (value, path, out) => {
       if (!isObject(value)) return void out.push(issue('type', path, value));
@@ -155,16 +168,36 @@ function compile(root: Schema): Check {
 
 /** Moves every `seq` between its wire form (a decimal string) and a bigint; undefined when a schema has none. */
 function seqTransform(root: Schema): Transform | undefined {
+  // null while a definition is being built, so a $ref back into it waits for the finished transform.
+  const refs = new Map<string, Transform | undefined | null>();
   const node = (schema: Schema): Transform | undefined => {
-    if (typeof schema.$ref === 'string') return node(resolveRef(root, schema.$ref));
+    if (typeof schema.$ref === 'string') {
+      const ref = schema.$ref;
+      if (refs.has(ref)) {
+        const done = refs.get(ref);
+        return done !== null ? done : (value, toWire) => { const f = refs.get(ref); return f ? f(value, toWire) : value; };
+      }
+      refs.set(ref, null);
+      const built = node(resolveRef(root, ref));
+      refs.set(ref, built);
+      return built;
+    }
     if (schema.format === 'seq') {
       return (value, toWire) => (toWire ? (typeof value === 'bigint' ? value.toString() : value)
         : typeof value === 'string' && isSeq(value) ? BigInt(value) : value);
     }
     if (Array.isArray(schema.oneOf)) {
-      const branches = (schema.oneOf as Schema[]).map(node);
-      if (branches.every((b) => !b)) return undefined;
-      return (value, toWire) => branches.reduce((v, b) => (b ? b(v, toWire) : v), value);
+      const branches = schema.oneOf as Schema[];
+      const tag = unionTag(branches);
+      const byTag = new Map(branches.map((b) => [tagOf(b, tag), node(b)]));
+      if ([...byTag.values()].every((b) => !b)) return undefined;
+      // Only the branch the value's tag names; validation has already refused any other tag.
+      return (value, toWire) => {
+        if (!isObject(value) || !Object.hasOwn(value, tag)) return value;
+        let branch: Transform | undefined;
+        try { branch = byTag.get(canonicalText(value[tag]!)); } catch { /* not JSON: no branch */ }
+        return branch ? branch(value, toWire) : value;
+      };
     }
     if (isObject(schema.items)) {
       const item = node(schema.items);

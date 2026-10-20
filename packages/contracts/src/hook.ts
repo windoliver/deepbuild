@@ -12,7 +12,8 @@ export interface JoinedHookReply {
 /** Context characters a hook reply may carry per millisecond of the hook's time budget. */
 const CHARACTERS_PER_MS = 200;
 
-export const contextBoundFor = (timeBudgetMs: number): number => Math.max(1, Math.floor(timeBudgetMs * CHARACTERS_PER_MS));
+export const contextBoundFor = (timeBudgetMs: number): number =>
+  (Number.isFinite(timeBudgetMs) ? Math.max(1, Math.floor(timeBudgetMs * CHARACTERS_PER_MS)) : 1);
 
 const byId = (a: HookContribution, b: HookContribution) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0);
 
@@ -24,7 +25,8 @@ const byId = (a: HookContribution, b: HookContribution) => (a.extension < b.exte
 export function joinHookReplies(contributions: readonly HookContribution[], bound: number): JoinedHookReply {
   const groups = [contributions.filter((c) => c.firstParty).sort(byId), contributions.filter((c) => !c.firstParty).sort(byId)];
   const ordered = groups.flat();
-  let room = bound;
+  // A bound below zero, or not a number, leaves no room.
+  let room = bound > 0 ? bound : 0;
   const context: JoinedHookReply['context'] = [];
   for (const group of groups) {
     const blocks = group.flatMap((c) => c.context.map((text) => ({ extension: c.extension, text })));

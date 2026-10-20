@@ -1,5 +1,5 @@
 import { canonicalText } from './canonical.js';
-import { typeName } from './codegen-ts.js';
+import { nameClaims, typeName } from './codegen-ts.js';
 import { isObject, type Schema, type SchemaEntry } from './json.js';
 
 const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
@@ -9,9 +9,23 @@ const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', '
 
 const pascal = (text: string): string => text.split(/[^A-Za-z0-9]+/).filter(Boolean)
   .map((w) => w[0]!.toUpperCase() + (w === w.toUpperCase() ? w.slice(1).toLowerCase() : w.slice(1))).join('') || 'Empty';
+/** Names no raw identifier can take, so they get a trailing underscore instead. */
+const NOT_RAW = new Set(['self', 'Self', 'super', 'crate', '_']);
 const field = (key: string): string => {
   const ident = key.replace(/[^A-Za-z0-9_]/g, '_').replace(/^(?=[0-9])/, '_') || '_';
-  return KEYWORDS.has(ident) ? `r#${ident}` : ident;
+  return NOT_RAW.has(ident) ? `${ident}_` : KEYWORDS.has(ident) ? `r#${ident}` : ident;
+};
+/** One enum variant per value, each a valid identifier, numbered where two values read alike. */
+const variants = (values: string[]): string[] => {
+  const used = new Set<string>();
+  return values.map((value) => {
+    let base = pascal(value).replace(/^(?=[0-9])/, 'V');
+    if (base === 'Self') base = 'Self_';
+    let variant = base;
+    for (let i = 2; used.has(variant); i++) variant = `${base}${i}`;
+    used.add(variant);
+    return variant;
+  });
 };
 /** A Rust string literal for any text. */
 const literal = (text: string): string => `"${[...text].map((c) => {
@@ -20,19 +34,27 @@ const literal = (text: string): string => `"${[...text].map((c) => {
   return code < 0x20 || code > 0x7e ? `\\u{${code.toString(16)}}` : c;
 }).join('')}"`;
 
-/** Emits one generated Rust module: a type per schema, its Contract impl, and `roundtrip` over them all. */
+/** What every schema's types share: the items written so far and the type names they, or a schema, hold. */
+interface Output { items: string[]; taken: Set<string>; reserved: Set<string> }
+
+/** Emits one schema's Rust types and their Contract impls into the shared output. */
 class Module {
-  private readonly items: string[] = [];
-  private readonly taken = new Set<string>();
+  /** The schema's own or a definition's type name while it is being emitted, which takes that name exactly. */
+  private exact: string | undefined;
 
-  constructor(private readonly root: Schema, private readonly rootName: string, private readonly shared: Module | undefined = undefined) {}
+  constructor(private readonly root: Schema, private readonly rootName: string, private readonly schemaName: string, private readonly output: Output) {}
 
-  get out(): string[] { return this.shared ? this.shared.out : this.items; }
+  get out(): string[] { return this.output.items; }
   private claim(name: string): string {
-    const names = this.shared ? this.shared.taken : this.taken;
+    const { taken, reserved } = this.output;
+    if (name === this.exact) {
+      this.exact = undefined;
+      taken.add(name);
+      return name;
+    }
     let unique = name;
-    for (let i = 2; names.has(unique); i++) unique = `${name}${i}`;
-    names.add(unique);
+    for (let i = 2; taken.has(unique) || reserved.has(unique); i++) unique = `${name}${i}`;
+    taken.add(unique);
     return unique;
   }
 
@@ -82,26 +104,21 @@ impl Contract for ${name} {
 
   private enumeration(values: string[], wanted: string): string {
     const name = this.claim(wanted);
-    const used = new Set<string>();
-    const variants = values.map((value) => {
-      let variant = pascal(value).replace(/^(?=[0-9])/, 'V');
-      for (let i = 2; used.has(variant); i++) variant = `${pascal(value)}${i}`;
-      used.add(variant);
-      return { value, variant };
-    });
+    const names = variants(values);
+    const arms = values.map((value, i) => ({ value, variant: names[i]! }));
     this.out.push(`#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ${name} {
-${variants.map((v) => `    ${v.variant},\n`).join('')}}
+${arms.map((v) => `    ${v.variant},\n`).join('')}}
 
 impl Contract for ${name} {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::string(value, at)? {
-${variants.map((v) => `            ${literal(v.value)} => Ok(Self::${v.variant}),\n`).join('')}            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+${arms.map((v) => `            ${literal(v.value)} => Ok(Self::${v.variant}),\n`).join('')}            other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
     }
     fn to_json(&self) -> Value {
         Value::String(match self {
-${variants.map((v) => `            Self::${v.variant} => ${literal(v.value)},\n`).join('')}        }.to_string())
+${arms.map((v) => `            Self::${v.variant} => ${literal(v.value)},\n`).join('')}        }.to_string())
     }
 }
 `);
@@ -112,11 +129,11 @@ ${variants.map((v) => `            Self::${v.variant} => ${literal(v.value)},\n`
     const name = this.claim(wanted);
     const tag = Object.keys(branches[0]!.properties as Schema)
       .find((key) => branches.every((b) => isObject(b.properties) && isObject(b.properties[key]) && 'const' in b.properties[key]))!;
-    const arms = branches.map((branch) => {
-      const text = canonicalText(((branch.properties as Schema)[tag] as Schema).const!);
-      const variant = pascal(String(((branch.properties as Schema)[tag] as Schema).const));
-      return { text, variant, type: this.type(branch, `${name}${variant}`) };
-    });
+    const consts = branches.map((branch) => ((branch.properties as Schema)[tag] as Schema).const!);
+    const names = variants(consts.map(String));
+    const arms = branches.map((branch, i) => ({
+      text: canonicalText(consts[i]!), variant: names[i]!, type: this.type(branch, `${name}${names[i]}`),
+    }));
     this.out.push(`#[derive(Debug, Clone, PartialEq)]
 pub enum ${name} {
 ${arms.map((a) => `    ${a.variant}(${a.type}),\n`).join('')}}
@@ -139,9 +156,14 @@ ${arms.map((a) => `            Self::${a.variant}(inner) => inner.to_json(),\n`)
   private record(schema: Schema, wanted: string): string {
     const name = this.claim(wanted);
     const required = new Set((schema.required ?? []) as string[]);
+    const idents = new Map<string, string>();
     const fields = Object.entries(schema.properties as Schema).map(([key, s]) => {
+      const ident = field(key);
+      const other = idents.get(ident);
+      if (other !== undefined) throw Error(`${this.schemaName}: properties ${other} and ${key} would both be the Rust field ${ident}`);
+      idents.set(ident, key);
       const inner = this.type(s as Schema, name + pascal(key));
-      return { key, ident: field(key), required: required.has(key), type: required.has(key) ? inner : `Option<${inner}>` };
+      return { key, ident, required: required.has(key), type: required.has(key) ? inner : `Option<${inner}>` };
     });
     const keys = fields.map((f) => literal(f.key)).join(', ');
     this.out.push(`#[derive(Debug, Clone, PartialEq)]
@@ -173,15 +195,15 @@ ${fields.map((f) => (f.required
   }
 
   private named(schema: Schema, name: string): string {
+    this.exact = name;
     const type = this.type(schema, name);
     if (type !== name) {
+      if (this.exact !== name) throw Error(`${this.schemaName}: the type ${name} would be written twice`);
       this.claim(name);
       this.out.push(`pub type ${name} = ${type};\n`);
     }
     return name;
   }
-
-  static child(parent: Module, root: Schema, rootName: string): Module { return new Module(root, rootName, parent); }
 }
 
 /**
@@ -190,12 +212,21 @@ ${fields.map((f) => (f.required
  * and returning its RFC 8785 text.
  */
 export function generateRust(entries: readonly SchemaEntry[]): string {
-  const top = new Module({}, '');
-  const arms = entries.map(({ name, schema }) => ({ name, type: Module.child(top, schema, typeName(name)).emit() }));
+  // Each schema's own and definitions' names first, so no nested type takes one and two schemas never share one.
+  const output: Output = { items: [], taken: new Set(), reserved: new Set() };
+  const claim = nameClaims();
+  for (const { name, schema } of entries) {
+    const names = [typeName(name), ...Object.keys(isObject(schema.$defs) ? schema.$defs : {}).map((def) => typeName(name) + pascal(def))];
+    for (const type of names) {
+      claim(type, name);
+      output.reserved.add(type);
+    }
+  }
+  const arms = entries.map(({ name, schema }) => ({ name, type: new Module(schema, typeName(name), name, output).emit() }));
   return `// Generated from packages/contracts/schemas by generateRust. Do not edit.
 use deep_contracts::{Contract, Value};
 
-${top.out.join('\n')}
+${output.items.join('\n')}
 /// Decodes \`json\` into the generated type for \`schema\` and returns its RFC 8785 text.
 pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
     let value = deep_contracts::parse(json)?;

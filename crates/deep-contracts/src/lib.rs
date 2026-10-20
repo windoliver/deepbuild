@@ -4,7 +4,7 @@
 
 extern crate self as deep_contracts;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
 // Written by generateRust in @deepbuild/contracts; the acceptance tests hold it equal to the generator's output.
@@ -33,7 +33,18 @@ pub trait Contract: Sized {
 
 /// A `seq`: on the wire a canonical decimal string from 0 to 2^63 - 1, in code a 64-bit integer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Seq(pub i64);
+pub struct Seq(i64);
+
+impl Seq {
+    /// None for a negative number, which no seq is.
+    pub fn new(seq: i64) -> Option<Seq> {
+        (seq >= 0).then_some(Seq(seq))
+    }
+
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
 
 fn pointer(at: &str, key: &str) -> String {
     format!("{at}/{}", key.replace('~', "~0").replace('/', "~1"))
@@ -157,8 +168,9 @@ impl Parser<'_> {
         let text = self
             .bytes
             .get(self.at..self.at + 4)
+            .filter(|b| b.iter().all(u8::is_ascii_hexdigit))
             .and_then(|b| std::str::from_utf8(b).ok())
-            .ok_or_else(|| self.error("a short \\u escape"))?;
+            .ok_or_else(|| self.error("a \\u escape without four hex digits"))?;
         let code = u32::from_str_radix(text, 16).map_err(|_| self.error("a bad \\u escape"))?;
         self.at += 4;
         Ok(code)
@@ -241,6 +253,7 @@ impl Parser<'_> {
     fn object(&mut self, depth: usize) -> Result<Value, String> {
         self.expect(b'{')?;
         let mut members: Vec<(String, Value)> = Vec::new();
+        let mut index: HashMap<String, usize> = HashMap::new();
         self.space();
         if self.peek() == Some(b'}') {
             self.at += 1;
@@ -254,9 +267,12 @@ impl Parser<'_> {
             self.space();
             let value = self.value(depth + 1)?;
             // As JSON.parse does, a repeated key keeps its last value.
-            match members.iter_mut().find(|(k, _)| *k == key) {
-                Some(member) => member.1 = value,
-                None => members.push((key, value)),
+            match index.get(&key) {
+                Some(&i) => members[i].1 = value,
+                None => {
+                    index.insert(key.clone(), members.len());
+                    members.push((key, value));
+                }
             }
             self.space();
             match self.peek() {
@@ -331,20 +347,56 @@ fn write_string(text: &str, out: &mut String) {
     out.push('"');
 }
 
-/// ECMAScript's Number::toString for a finite double, from Rust's shortest round-trip digits.
-pub fn number(n: f64) -> String {
+fn scientific(text: &str) -> (String, i32) {
+    let (mantissa, exponent) = text.split_once('e').expect("LowerExp writes an exponent");
+    let exponent = exponent
+        .parse()
+        .expect("LowerExp writes an integer exponent");
+    (mantissa.chars().filter(|c| *c != '.').collect(), exponent)
+}
+
+/// The shortest digits that read back as `n`; of two equally near, the even one, as ECMAScript picks.
+fn shortest(n: f64) -> (String, i32) {
+    let (digits, exponent) = scientific(&format!("{n:e}"));
+    let k = digits.len();
+    if digits.as_bytes()[k - 1] % 2 == 0 || !format!("{n:.k$e}").contains("5e") {
+        return (digits, exponent);
+    }
+    // A tie only when the exact value has one more digit, a 5; 1100 places hold any double exactly.
+    let (exact, exact_exponent) = scientific(&format!("{n:.1100e}"));
+    let (head, tail) = exact.split_at(k);
+    if exact_exponent != exponent || !tail.starts_with('5') || tail[1..].bytes().any(|b| b != b'0')
+    {
+        return (digits, exponent);
+    }
+    let other = if digits == head {
+        let mut up = head.as_bytes().to_vec();
+        let mut i = k;
+        while i > 0 && up[i - 1] == b'9' {
+            up[i - 1] = b'0';
+            i -= 1;
+        }
+        if i == 0 {
+            return (digits, exponent);
+        }
+        up[i - 1] += 1;
+        String::from_utf8(up).expect("ASCII digits")
+    } else {
+        head.to_string()
+    };
+    match format!("{}.{}e{exponent}", &other[..1], &other[1..]).parse::<f64>() {
+        Ok(back) if back == n => (other, exponent),
+        _ => (digits, exponent),
+    }
+}
+
+/// ECMAScript's Number::toString for a finite double.
+fn number(n: f64) -> String {
     if n == 0.0 {
         return "0".to_string();
     }
     let sign = if n < 0.0 { "-" } else { "" };
-    let scientific = format!("{:e}", n.abs());
-    let (mantissa, exponent) = scientific
-        .split_once('e')
-        .expect("LowerExp writes an exponent");
-    let exponent: i32 = exponent
-        .parse()
-        .expect("LowerExp writes an integer exponent");
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
+    let (digits, exponent) = shortest(n.abs());
     let k = digits.len() as i32;
     let point = exponent + 1;
     let body = if k <= point && point <= 21 {
