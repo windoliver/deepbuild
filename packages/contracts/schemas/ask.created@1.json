@@ -56,151 +56,916 @@
       "description": "Its position in the event log, assigned by the hub at append."
     },
     "data": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "authority",
-            "unblock",
-            "taste",
-            "exception",
-            "choice",
-            "definition"
-          ]
-        },
-        "question": {
-          "type": "string",
-          "minLength": 1
-        },
-        "options": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "label": {
-                "type": "string",
-                "minLength": 1
-              },
-              "decision": {
-                "type": "string",
-                "enum": [
-                  "allow",
-                  "deny",
-                  "none"
-                ]
-              }
-            },
-            "required": [
-              "id",
-              "label",
-              "decision"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "recommended": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1
-        },
-        "deadline": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991,
-          "description": "Milliseconds since the Unix epoch."
-        },
-        "fallback": {
-          "type": "string",
-          "minLength": 1
-        },
-        "default": {
-          "type": "string",
-          "minLength": 1
-        },
-        "provisional": {
-          "type": "boolean"
-        },
-        "owner": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Who the ask is for."
-        },
-        "key": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$",
-          "description": "A SHA-256, in lower-case hex."
-        },
-        "pinned_to": {
+      "oneOf": [
+        {
           "type": "object",
           "properties": {
             "kind": {
+              "const": "authority"
+            },
+            "question": {
               "type": "string",
-              "enum": [
-                "commit",
-                "doc_revision",
-                "evidence"
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the Unix epoch."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1
+            },
+            "default": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provisional": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who the ask is for."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            },
+            "pinned_to": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "commit"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "doc_revision"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "evidence"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "question",
+            "options",
+            "recommended",
+            "deadline",
+            "fallback",
+            "default",
+            "provisional",
+            "owner",
+            "key",
+            "pinned_to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "unblock"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the Unix epoch."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1
+            },
+            "default": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provisional": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who the ask is for."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            },
+            "pinned_to": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "commit"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "doc_revision"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "evidence"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
               ]
             },
-            "ref": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "where": {
+              "type": "string",
+              "minLength": 1
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1
+            },
+            "unblocks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+                "description": "A record handle."
+              }
+            },
+            "proves": {
               "type": "string",
               "minLength": 1
             }
           },
           "required": [
             "kind",
-            "ref"
+            "question",
+            "options",
+            "recommended",
+            "deadline",
+            "fallback",
+            "default",
+            "provisional",
+            "owner",
+            "key",
+            "pinned_to",
+            "steps",
+            "where",
+            "why",
+            "unblocks",
+            "proves"
           ],
           "additionalProperties": false
         },
-        "steps": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "taste"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the Unix epoch."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1
+            },
+            "default": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provisional": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who the ask is for."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            },
+            "pinned_to": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "commit"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "doc_revision"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "evidence"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "question",
+            "options",
+            "recommended",
+            "deadline",
+            "fallback",
+            "default",
+            "provisional",
+            "owner",
+            "key",
+            "pinned_to"
+          ],
+          "additionalProperties": false
         },
-        "where": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "exception"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the Unix epoch."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1
+            },
+            "default": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provisional": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who the ask is for."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            },
+            "pinned_to": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "commit"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "doc_revision"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "evidence"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "question",
+            "options",
+            "recommended",
+            "deadline",
+            "fallback",
+            "default",
+            "provisional",
+            "owner",
+            "key",
+            "pinned_to"
+          ],
+          "additionalProperties": false
         },
-        "why": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "choice"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the Unix epoch."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1
+            },
+            "default": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provisional": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who the ask is for."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            },
+            "pinned_to": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "commit"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "doc_revision"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "evidence"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "question",
+            "options",
+            "recommended",
+            "deadline",
+            "fallback",
+            "default",
+            "provisional",
+            "owner",
+            "key",
+            "pinned_to"
+          ],
+          "additionalProperties": false
         },
-        "unblocks": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-            "description": "A record handle."
-          }
-        },
-        "proves": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "definition"
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "deadline": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Milliseconds since the Unix epoch."
+            },
+            "fallback": {
+              "type": "string",
+              "minLength": 1
+            },
+            "default": {
+              "type": "string",
+              "minLength": 1
+            },
+            "provisional": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Who the ask is for."
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex."
+            },
+            "pinned_to": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "commit"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{40}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "doc_revision"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "evidence"
+                    },
+                    "ref": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "ref"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "question",
+            "options",
+            "recommended",
+            "deadline",
+            "fallback",
+            "default",
+            "provisional",
+            "owner",
+            "key",
+            "pinned_to"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "kind",
-        "question",
-        "options",
-        "recommended",
-        "deadline",
-        "fallback",
-        "default",
-        "provisional",
-        "owner",
-        "key",
-        "pinned_to"
-      ],
-      "additionalProperties": false
+      ]
     },
     "evidence": {
       "type": "array",

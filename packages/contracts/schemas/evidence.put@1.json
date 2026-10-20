@@ -67,6 +67,20 @@
           "type": "string",
           "minLength": 1
         },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What made the file."
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "deepbuild",
+            "you",
+            "agent"
+          ],
+          "description": "From the writer's connection; a file made from others is agent when any input is."
+        },
         "redaction": {
           "type": "string",
           "enum": [
@@ -111,6 +125,8 @@
       "required": [
         "sha256",
         "kind",
+        "source",
+        "origin",
         "redaction",
         "license",
         "step_times"

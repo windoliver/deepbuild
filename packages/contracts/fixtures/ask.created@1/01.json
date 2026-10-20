@@ -26,15 +26,6 @@
     "pinned_to": {
       "kind": "commit",
       "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
-    },
-    "steps": [
-      "run deep env up"
-    ],
-    "where": "~/src/deepbuild",
-    "why": "the stack is down",
-    "unblocks": [
-      "task:01K74FX2B4D6F8H0K2M4P6R8T0"
-    ],
-    "proves": "the journey runs"
+    }
   }
 }

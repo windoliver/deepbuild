@@ -7,7 +7,7 @@
   "scope": "you",
   "ts": 1760013451123,
   "data": {
-    "layer": "rules",
+    "layer": "learned",
     "target": "guard:no-kill-by-name",
     "diff": "+ block pkill",
     "evidence": [
@@ -16,8 +16,11 @@
         "quote": "never kill by name"
       }
     ],
-    "scope": "repo",
-    "replay": "passed 12 of 12",
+    "scope": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "replay": {
+      "tasks": 20,
+      "regressions": 0
+    },
     "applied_by": null,
     "supersedes": null
   }

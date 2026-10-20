@@ -60,8 +60,8 @@
       "properties": {
         "task_ref": {
           "type": "string",
-          "pattern": "^task:[0-9A-Za-z]+$",
-          "description": "A task: handle."
+          "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>)."
         },
         "thread": {
           "type": "string",

@@ -49,7 +49,7 @@ export interface AgentStop {
   v: 1;
   id: string;
   kind: "agent.stop";
-  subject?: string;
+  subject: string;
   writer: string;
   actor: string;
   scope: string;
@@ -68,8 +68,8 @@ export interface AskAnswered {
   v: 1;
   id: string;
   kind: "ask.answered";
-  subject?: string;
-  writer: string;
+  subject: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -110,7 +110,7 @@ export interface AskCancelled {
   v: 1;
   id: string;
   kind: "ask.cancelled";
-  subject?: string;
+  subject: string;
   writer: string;
   actor: string;
   scope: string;
@@ -138,7 +138,7 @@ export interface AskCreated {
   seq?: bigint;
   log_pos?: number;
   data: {
-    kind: "authority" | "unblock" | "taste" | "exception" | "choice" | "definition";
+    kind: "authority";
     question: string;
     options: Array<{
       id: string;
@@ -153,14 +153,145 @@ export interface AskCreated {
     owner: string;
     key: string;
     pinned_to: {
-      kind: "commit" | "doc_revision" | "evidence";
+      kind: "commit";
+      ref: string;
+    } | {
+      kind: "doc_revision";
+      ref: string;
+    } | {
+      kind: "evidence";
       ref: string;
     };
-    steps?: Array<string>;
-    where?: string;
-    why?: string;
-    unblocks?: Array<string>;
-    proves?: string;
+  } | {
+    kind: "unblock";
+    question: string;
+    options: Array<{
+      id: string;
+      label: string;
+      decision: "allow" | "deny" | "none";
+    }>;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: {
+      kind: "commit";
+      ref: string;
+    } | {
+      kind: "doc_revision";
+      ref: string;
+    } | {
+      kind: "evidence";
+      ref: string;
+    };
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+  } | {
+    kind: "taste";
+    question: string;
+    options: Array<{
+      id: string;
+      label: string;
+      decision: "allow" | "deny" | "none";
+    }>;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: {
+      kind: "commit";
+      ref: string;
+    } | {
+      kind: "doc_revision";
+      ref: string;
+    } | {
+      kind: "evidence";
+      ref: string;
+    };
+  } | {
+    kind: "exception";
+    question: string;
+    options: Array<{
+      id: string;
+      label: string;
+      decision: "allow" | "deny" | "none";
+    }>;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: {
+      kind: "commit";
+      ref: string;
+    } | {
+      kind: "doc_revision";
+      ref: string;
+    } | {
+      kind: "evidence";
+      ref: string;
+    };
+  } | {
+    kind: "choice";
+    question: string;
+    options: Array<{
+      id: string;
+      label: string;
+      decision: "allow" | "deny" | "none";
+    }>;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: {
+      kind: "commit";
+      ref: string;
+    } | {
+      kind: "doc_revision";
+      ref: string;
+    } | {
+      kind: "evidence";
+      ref: string;
+    };
+  } | {
+    kind: "definition";
+    question: string;
+    options: Array<{
+      id: string;
+      label: string;
+      decision: "allow" | "deny" | "none";
+    }>;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: {
+      kind: "commit";
+      ref: string;
+    } | {
+      kind: "doc_revision";
+      ref: string;
+    } | {
+      kind: "evidence";
+      ref: string;
+    };
   };
   evidence?: Array<string>;
 }
@@ -170,8 +301,8 @@ export interface AskDefaulted {
   v: 1;
   id: string;
   kind: "ask.defaulted";
-  subject?: string;
-  writer: string;
+  subject: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -190,7 +321,7 @@ export interface AskEscalated {
   v: 1;
   id: string;
   kind: "ask.escalated";
-  subject?: string;
+  subject: string;
   writer: string;
   actor: string;
   scope: string;
@@ -210,7 +341,7 @@ export interface AskLater {
   v: 1;
   id: string;
   kind: "ask.later";
-  subject?: string;
+  subject: string;
   writer: string;
   actor: string;
   scope: string;
@@ -300,7 +431,7 @@ export interface DecisionApplied {
   id: string;
   kind: "decision.applied";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -319,7 +450,7 @@ export interface DecisionCreated {
   id: string;
   kind: "decision.created";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -372,7 +503,7 @@ export interface DefinitionLocked {
   id: string;
   kind: "definition.locked";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -404,7 +535,7 @@ export interface DefinitionRevised {
   id: string;
   kind: "definition.revised";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -498,6 +629,8 @@ export interface EvidencePut {
   data: {
     sha256: string;
     kind: string;
+    source: string;
+    origin: "deepbuild" | "you" | "agent";
     redaction: "complete" | "incomplete" | "unknown";
     license: string;
     step_times: Array<{
@@ -594,15 +727,18 @@ export interface LearnApplied {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: string;
+    layer: "learned" | "base";
     target: string;
     diff: string;
     evidence: Array<{
       at: string;
       quote: string;
     }>;
-    scope: "session" | "repo" | "all_repos";
-    replay: string | null;
+    scope: string;
+    replay: {
+      tasks: number;
+      regressions: number;
+    } | null;
     applied_by: string | null;
     supersedes: string | null;
   };
@@ -622,15 +758,18 @@ export interface LearnProposed {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: string;
+    layer: "learned" | "base";
     target: string;
     diff: string;
     evidence: Array<{
       at: string;
       quote: string;
     }>;
-    scope: "session" | "repo" | "all_repos";
-    replay: string | null;
+    scope: string;
+    replay: {
+      tasks: number;
+      regressions: number;
+    } | null;
     applied_by: string | null;
     supersedes: string | null;
   };
@@ -650,15 +789,18 @@ export interface LearnRolledBack {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: string;
+    layer: "learned" | "base";
     target: string;
     diff: string;
     evidence: Array<{
       at: string;
       quote: string;
     }>;
-    scope: "session" | "repo" | "all_repos";
-    replay: string | null;
+    scope: string;
+    replay: {
+      tasks: number;
+      regressions: number;
+    } | null;
     applied_by: string | null;
     supersedes: string | null;
   };
@@ -678,15 +820,18 @@ export interface LearnWidened {
   seq?: bigint;
   log_pos?: number;
   data: {
-    layer: string;
+    layer: "learned" | "base";
     target: string;
     diff: string;
     evidence: Array<{
       at: string;
       quote: string;
     }>;
-    scope: "session" | "repo" | "all_repos";
-    replay: string | null;
+    scope: string;
+    replay: {
+      tasks: number;
+      regressions: number;
+    } | null;
     applied_by: string | null;
     supersedes: string | null;
   };
@@ -706,7 +851,11 @@ export interface LeaseAcquired {
   seq?: bigint;
   log_pos?: number;
   data: {
-    resource: string;
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
     holder: string;
     mode: "exclusive" | "shared";
     expires: number | null;
@@ -727,7 +876,11 @@ export interface LeaseDenied {
   seq?: bigint;
   log_pos?: number;
   data: {
-    resource: string;
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
     holder: string;
     mode: "exclusive" | "shared";
     expires: number | null;
@@ -748,7 +901,11 @@ export interface LeaseReleased {
   seq?: bigint;
   log_pos?: number;
   data: {
-    resource: string;
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
     holder: string;
     mode: "exclusive" | "shared";
     expires: number | null;
@@ -769,7 +926,11 @@ export interface LeaseStale {
   seq?: bigint;
   log_pos?: number;
   data: {
-    resource: string;
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
     holder: string;
     mode: "exclusive" | "shared";
     expires: number | null;
@@ -1087,7 +1248,7 @@ export interface SessionAttention {
   v: 1;
   id: string;
   kind: "session.attention";
-  subject?: string;
+  subject: string;
   writer: string;
   actor: string;
   scope: string;
@@ -1190,7 +1351,7 @@ export interface TaskClosed {
   v: 1;
   id: string;
   kind: "task.closed";
-  subject?: string;
+  subject: string;
   writer: string;
   actor: string;
   scope: string;
@@ -1314,7 +1475,7 @@ export interface VerdictMade {
   id: string;
   kind: "verdict.made";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1324,6 +1485,7 @@ export interface VerdictMade {
     verdict: string;
     claim: string;
     outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE";
+    reasons: Array<string>;
     requirements: Array<{
       req: string;
       outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
@@ -1362,7 +1524,7 @@ export interface VerdictStale {
   id: string;
   kind: "verdict.stale";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;

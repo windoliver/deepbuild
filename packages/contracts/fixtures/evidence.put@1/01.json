@@ -9,6 +9,8 @@
   "data": {
     "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
     "kind": "screenshot",
+    "source": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "origin": "deepbuild",
     "redaction": "complete",
     "license": "Apache-2.0",
     "step_times": []

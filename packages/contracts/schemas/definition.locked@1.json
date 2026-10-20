@@ -24,9 +24,8 @@
       "description": "The record object this event is about."
     },
     "writer": {
-      "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "const": "core",
+      "description": "Only the core appends this kind."
     },
     "actor": {
       "type": "string",
@@ -65,8 +64,8 @@
         },
         "task_ref": {
           "type": "string",
-          "pattern": "^task:[0-9A-Za-z]+$",
-          "description": "A task: handle."
+          "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+          "description": "The task: a task handle, or the message that asked for it (session:<id>#<message>)."
         },
         "requirements": {
           "type": "array",

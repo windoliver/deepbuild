@@ -60,7 +60,11 @@
       "properties": {
         "layer": {
           "type": "string",
-          "minLength": 1
+          "enum": [
+            "learned",
+            "base"
+          ],
+          "description": "base only for changes you make; learning cannot write it."
         },
         "target": {
           "type": "string",
@@ -94,25 +98,39 @@
         },
         "scope": {
           "type": "string",
-          "enum": [
-            "session",
-            "repo",
-            "all_repos"
-          ]
+          "pattern": "^(session:[0-9A-Za-z]+|repo:[0-9A-Za-z]+|all)$",
+          "description": "Where it applies: session:<id>, then repo:<id>, then all."
         },
         "replay": {
           "type": [
-            "string",
+            "object",
             "null"
           ],
-          "minLength": 1
+          "properties": {
+            "tasks": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "regressions": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "tasks",
+            "regressions"
+          ],
+          "additionalProperties": false
         },
         "applied_by": {
           "type": [
             "string",
             "null"
           ],
-          "minLength": 1
+          "pattern": "^(you|rule:[0-9A-Za-z]+)$",
+          "description": "You, or the rule that applied it; never an agent."
         },
         "supersedes": {
           "type": [

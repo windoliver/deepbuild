@@ -2,7 +2,7 @@
   "v": 1,
   "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
   "kind": "definition.locked",
-  "writer": "app",
+  "writer": "core",
   "actor": "you",
   "scope": "you",
   "ts": 1760013451123,

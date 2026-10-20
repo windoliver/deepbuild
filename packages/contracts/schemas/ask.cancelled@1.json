@@ -20,8 +20,8 @@
     },
     "subject": {
       "type": "string",
-      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-      "description": "The record object this event is about."
+      "pattern": "^ask:[0-9A-Za-z]+$",
+      "description": "The ask this event is about."
     },
     "writer": {
       "type": "string",
@@ -99,6 +99,7 @@
     "v",
     "id",
     "kind",
+    "subject",
     "writer",
     "actor",
     "scope",
