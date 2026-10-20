@@ -1,7 +1,7 @@
 // Regressions the acceptance suite doesn't reach: schemas the lint must refuse because the validator or a
 // generator can't serve them, and refusals that must stay in the one error shape.
 import { describe, expect, it } from 'vitest';
-import { encode, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
+import { contextBoundFor, encode, fixtures, generateRust, generateTypeScript, joinHookReplies, lintSchemas, registry, validate } from '../src/index.js';
 import type { Schema } from '../src/index.js';
 
 const record = (properties: Record<string, Schema>, required = Object.keys(properties)): Schema =>
@@ -83,4 +83,72 @@ describe('seq and the one error shape', () => {
 
 it('a join with a bound below zero keeps no context', () => {
   expect(joinHookReplies([{ extension: 'a', firstParty: true, context: ['hello world'] }], -3).context).toEqual([]);
+});
+
+describe('names Object.prototype holds are not listed names', () => {
+  it('a format, a type, a required name or an x-hash exclude the schema does not list', () => {
+    for (const format of ['toString', 'constructor', '__proto__', 'valueOf']) {
+      expect(problemsOf(record({ a: { type: 'string', format } })).length, format).toBeGreaterThan(0);
+    }
+    for (const type of ['toString', 'constructor', '__proto__']) {
+      expect(problemsOf(record({ a: { type } })).length, type).toBeGreaterThan(0);
+    }
+    expect(problemsOf({ type: 'object', properties: { a: { type: 'string' } }, required: ['toString'], additionalProperties: false }).length).toBeGreaterThan(0);
+    const hashed = { 'x-hash': { excludes: ['/__proto__'] }, ...record({ a: { type: 'string' } }) };
+    expect(problemsOf(hashed)).toEqual([expect.objectContaining({ path: '/x-hash' })]);
+  });
+
+  it('a value checked against an unlisted format is refused in the error shape, never thrown', () => {
+    const reg = registry([{ name: 'f@1', schema: record({ a: { type: 'string', format: '__proto__' } }) }]);
+    expect(reg.validate('f@1', { a: 'x' }).ok).toBe(false);
+  });
+});
+
+it("a union is told apart by its required tag, not by another constant every branch shares", () => {
+  const branch = (kind: string, extra: Record<string, Schema>): Schema =>
+    ({ type: 'object', properties: { v: { const: 1 }, kind: { const: kind }, ...extra }, required: ['kind', ...Object.keys(extra)], additionalProperties: false });
+  const reg = registry([{ name: 'u@1', schema: { oneOf: [branch('a', { x: { type: 'string' } }), branch('b', { y: { type: 'integer' } })] } }]);
+  expect(reg.validate('u@1', { kind: 'a', x: 's' })).toEqual({ ok: true });
+  expect(reg.validate('u@1', { v: 1, kind: 'b', y: 2 })).toEqual({ ok: true });
+});
+
+it('an opaque value with a hole, or an object JSON does not carry, is refused', () => {
+  const request = { v: 1, agent: 'a', event: 'e', seq: '1', id: '01K74FKZVK8Q2X5R7M3N9P4T6W', pid: 1, ppid: 1, matched: [] };
+  // eslint-disable-next-line no-sparse-arrays
+  for (const payload of [{ a: [, 2] }, new Map(), new Date(0)]) {
+    expect(validate('hook.request@1', { ...request, payload }).ok).toBe(false);
+  }
+});
+
+describe('the join counts characters, as the schema bounds them', () => {
+  it('never cuts a character in half, and keeps a block that fits in characters', () => {
+    expect(joinHookReplies([{ extension: 'a', firstParty: true, context: ['😀😀'] }], 3).context).toEqual([{ extension: 'a', text: '😀😀' }]);
+    expect(joinHookReplies([{ extension: 'a', firstParty: true, context: ['😀😀😀'] }], 2).context).toEqual([{ extension: 'a', text: '😀😀' }]);
+  });
+
+  it('a reply the join or contextBoundFor gives is one its schema accepts', () => {
+    for (const ms of [0, 1, 1e14, 1e308, Infinity, Number.NaN, -5]) {
+      const bound = contextBoundFor(ms);
+      expect(validate('hook.joined@1', joinHookReplies([], bound)).ok, String(ms)).toBe(true);
+    }
+    for (const bound of [-1, 2.5, Number.NaN, Infinity]) expect(validate('hook.joined@1', joinHookReplies([], bound)).ok, String(bound)).toBe(true);
+    expect(contextBoundFor(1e308)).toBeGreaterThanOrEqual(contextBoundFor(1e14));
+  });
+});
+
+it('a fixture name that leaves the fixtures folder reads nothing', () => {
+  expect(fixtures('..')).toEqual([]);
+  expect(fixtures('.')).toEqual([]);
+});
+
+it('an integer is one both languages hold exactly: within ±(2^53 - 1)', () => {
+  const reg = registry([{ name: 'i@1', schema: record({ n: { type: 'integer' } }) }]);
+  for (const n of [0, -9007199254740991, 9007199254740991]) expect(reg.validate('i@1', { n }).ok, String(n)).toBe(true);
+  for (const n of [9007199254740992, -9007199254740992, 1e21]) expect(reg.validate('i@1', { n }).ok, String(n)).toBe(false);
+});
+
+it('a schema string holding half a surrogate pair, which no Rust literal can, is refused', () => {
+  expect(problemsOf(record({ e: { type: 'string', enum: ['\ud800'] } })).length).toBeGreaterThan(0);
+  expect(problemsOf(record({ '\udc00': { type: 'string' } })).length).toBeGreaterThan(0);
+  expect(problemsOf(record({ e: { const: 'a\ud83d' } })).length).toBeGreaterThan(0);
 });
