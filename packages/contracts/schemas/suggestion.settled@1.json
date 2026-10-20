@@ -1,6 +1,6 @@
 {
   "title": "suggestion.settled@1",
-  "description": "A suggestion was settled.",
+  "description": "A suggestion was settled: accepted by your gesture in the app, or superseded by a later change, which the core records.",
   "x-feeds": [
     "suggestions"
   ],
@@ -25,8 +25,11 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "app",
+        "core"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",

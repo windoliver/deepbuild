@@ -342,7 +342,7 @@ export interface AskLater {
   id: string;
   kind: "ask.later";
   subject: string;
-  writer: string;
+  writer: "app" | "cli" | "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1342,7 +1342,7 @@ export interface SuggestionSettled {
   id: string;
   kind: "suggestion.settled";
   subject?: string;
-  writer: string;
+  writer: "app" | "core";
   actor: string;
   scope: string;
   ts: number;

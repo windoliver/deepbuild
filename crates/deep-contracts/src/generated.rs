@@ -2625,6 +2625,31 @@ impl Contract for AskLaterKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskLaterWriter {
+    App,
+    Cli,
+    Core,
+}
+
+impl Contract for AskLaterWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            "cli" => Ok(Self::Cli),
+            "core" => Ok(Self::Core),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+            Self::Cli => "cli",
+            Self::Core => "core",
+        }.to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AskLaterData {
     pub until: i64,
@@ -2650,7 +2675,7 @@ pub struct AskLater {
     pub id: String,
     pub kind: AskLaterKind,
     pub subject: String,
-    pub writer: String,
+    pub writer: AskLaterWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,
@@ -8742,6 +8767,28 @@ impl Contract for SuggestionSettledKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SuggestionSettledWriter {
+    App,
+    Core,
+}
+
+impl Contract for SuggestionSettledWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "app" => Ok(Self::App),
+            "core" => Ok(Self::Core),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::App => "app",
+            Self::Core => "core",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SuggestionSettledDataOutcome {
     Accepted,
     Superseded,
@@ -8794,7 +8841,7 @@ pub struct SuggestionSettled {
     pub id: String,
     pub kind: SuggestionSettledKind,
     pub subject: Option<String>,
-    pub writer: String,
+    pub writer: SuggestionSettledWriter,
     pub actor: String,
     pub scope: String,
     pub ts: i64,

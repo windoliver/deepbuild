@@ -1,6 +1,6 @@
 {
   "title": "ask.later@1",
-  "description": "An ask was put off until a time before its deadline.",
+  "description": "An ask was put off until a time before its deadline, by you; never by an agent.",
   "x-feeds": [
     "asks"
   ],
@@ -25,8 +25,12 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection, never the payload."
+      "enum": [
+        "app",
+        "cli",
+        "core"
+      ],
+      "description": "Who wrote it, from the connection; only these writers append this kind."
     },
     "actor": {
       "type": "string",
