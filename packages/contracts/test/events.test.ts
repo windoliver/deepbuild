@@ -226,6 +226,13 @@ describe('the design says', () => {
     }
   });
 
+  it('no agent sends a notice or drafts a definition: only an extension, through the API, or the core', () => {
+    for (const name of ['notice.sent@1', 'definition.drafted@1']) {
+      for (const writer of ['mcp:01JZ0000000000000000000000', 'hook']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
+      for (const writer of ['ext:spec-draft', 'core']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(true);
+    }
+  });
+
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
