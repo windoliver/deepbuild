@@ -177,6 +177,8 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       flag('/x-hash', 'x-hash lists the JSON Pointers its hash leaves out, as excludes');
     } else if (isObject(marker) && Array.isArray(marker.excludes) && !cycles(defs).length) {
       for (const pointer of marker.excludes as string[]) {
+        // A trailing `*` names every item of an array, not a field; to leave the array out, exclude the array.
+        if (pointer.endsWith('/*')) { flag('/x-hash', `x-hash excludes ${pointer}, which ends in every item of an array, not at a field; exclude ${pointer.slice(0, -2)}`); continue; }
         let found = false;
         try { found = resolves(schema, pointer); } catch { /* a $ref already flagged */ }
         if (!found) flag('/x-hash', `x-hash excludes ${pointer}, which names no field the schema types`);
