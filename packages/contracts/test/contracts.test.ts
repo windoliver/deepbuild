@@ -305,6 +305,13 @@ it('a string length counts code points, whatever shortcut decides it', () => {
   expect(reg.validate('max@1', { s: 'ab' }).ok).toBe(false);
 });
 
+it('an x-hash exclude ends at a field: one ending in `*` names every item of an array, not a field, and is refused', () => {
+  const listed = record({ notes: { type: 'array', items: record({ title: { type: 'string' } }) } });
+  expect(problemsOf({ 'x-hash': { excludes: ['/notes/*/title'] }, ...listed })).toEqual([]);
+  expect(problemsOf({ 'x-hash': { excludes: ['/notes'] }, ...listed })).toEqual([]);
+  expect(problemsOf({ 'x-hash': { excludes: ['/notes/*'] }, ...listed })).toEqual([expect.objectContaining({ path: '/x-hash', reason: expect.stringContaining('/notes/*') })]);
+});
+
 it('an x-hash exclude resolves through a union, in every branch', () => {
   const branch = (tag: string, extra: Record<string, Schema>) => tagged(tag, { checkout: { type: 'string' }, ...extra });
   const hashed = { 'x-hash': { excludes: ['/checkout'] }, oneOf: [branch('a', {}), branch('b', {})] };
