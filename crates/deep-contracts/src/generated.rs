@@ -10056,38 +10056,7 @@ impl Contract for VerdictStale {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerdictOutcome {
-    Pass,
-    Fail,
-    Invalid,
-    Blocked,
-    Inconclusive,
-}
-
-impl Contract for VerdictOutcome {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "PASS" => Ok(Self::Pass),
-            "FAIL" => Ok(Self::Fail),
-            "INVALID" => Ok(Self::Invalid),
-            "BLOCKED" => Ok(Self::Blocked),
-            "INCONCLUSIVE" => Ok(Self::Inconclusive),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
-    }
-    fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Pass => "PASS",
-            Self::Fail => "FAIL",
-            Self::Invalid => "INVALID",
-            Self::Blocked => "BLOCKED",
-            Self::Inconclusive => "INCONCLUSIVE",
-        }.to_string())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerdictRequirementsItemOutcome {
+pub enum VerdictRequirementOutcome {
     Pass,
     Fail,
     Invalid,
@@ -10096,7 +10065,7 @@ pub enum VerdictRequirementsItemOutcome {
     Pending,
 }
 
-impl Contract for VerdictRequirementsItemOutcome {
+impl Contract for VerdictRequirementOutcome {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::string(value, at)? {
             "PASS" => Ok(Self::Pass),
@@ -10121,13 +10090,13 @@ impl Contract for VerdictRequirementsItemOutcome {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerdictRequirementsItemOracle {
+pub enum VerdictRequirementOracle {
     Code,
     Model,
     Person,
 }
 
-impl Contract for VerdictRequirementsItemOracle {
+impl Contract for VerdictRequirementOracle {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::string(value, at)? {
             "code" => Ok(Self::Code),
@@ -10146,13 +10115,13 @@ impl Contract for VerdictRequirementsItemOracle {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VerdictRequirementsItemRuns {
+pub struct VerdictRequirementRuns {
     pub clean: i64,
     pub needed: i64,
     pub counted: Vec<String>,
 }
 
-impl Contract for VerdictRequirementsItemRuns {
+impl Contract for VerdictRequirementRuns {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["clean", "needed", "counted"])?;
         Ok(Self {
@@ -10171,7 +10140,7 @@ impl Contract for VerdictRequirementsItemRuns {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VerdictRequirementsItemProof {
+pub enum VerdictRequirementProof {
     Statement,
     StaticCheck,
     TestRun,
@@ -10179,7 +10148,7 @@ pub enum VerdictRequirementsItemProof {
     Decision,
 }
 
-impl Contract for VerdictRequirementsItemProof {
+impl Contract for VerdictRequirementProof {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match deep_contracts::string(value, at)? {
             "statement" => Ok(Self::Statement),
@@ -10202,21 +10171,165 @@ impl Contract for VerdictRequirementsItemProof {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VerdictRequirementsItem {
+pub struct VerdictRequirement {
     pub req: String,
-    pub outcome: VerdictRequirementsItemOutcome,
+    pub outcome: VerdictRequirementOutcome,
     pub check: String,
     pub depth: String,
-    pub oracle: VerdictRequirementsItemOracle,
-    pub runs: VerdictRequirementsItemRuns,
+    pub oracle: VerdictRequirementOracle,
+    pub runs: VerdictRequirementRuns,
     pub smallest: Option<String>,
     pub points_to: Option<String>,
     pub evidence: Vec<String>,
-    pub proof: VerdictRequirementsItemProof,
+    pub proof: VerdictRequirementProof,
     pub ask: Option<String>,
 }
 
-impl Contract for VerdictRequirementsItem {
+impl Contract for VerdictRequirement {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["req", "outcome", "check", "depth", "oracle", "runs", "smallest", "points_to", "evidence", "proof", "ask"])?;
+        Ok(Self {
+            req: deep_contracts::required(members, at, "req")?,
+            outcome: deep_contracts::required(members, at, "outcome")?,
+            check: deep_contracts::required(members, at, "check")?,
+            depth: deep_contracts::required(members, at, "depth")?,
+            oracle: deep_contracts::required(members, at, "oracle")?,
+            runs: deep_contracts::required(members, at, "runs")?,
+            smallest: deep_contracts::required(members, at, "smallest")?,
+            points_to: deep_contracts::required(members, at, "points_to")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            proof: deep_contracts::required(members, at, "proof")?,
+            ask: deep_contracts::optional(members, at, "ask")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("req".to_string(), self.req.to_json()));
+        members.push(("outcome".to_string(), self.outcome.to_json()));
+        members.push(("check".to_string(), self.check.to_json()));
+        members.push(("depth".to_string(), self.depth.to_json()));
+        members.push(("oracle".to_string(), self.oracle.to_json()));
+        members.push(("runs".to_string(), self.runs.to_json()));
+        members.push(("smallest".to_string(), self.smallest.to_json()));
+        members.push(("points_to".to_string(), self.points_to.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("proof".to_string(), self.proof.to_json()));
+        if let Some(value) = &self.ask {
+            members.push(("ask".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictPassedOutcome;
+
+impl Contract for VerdictPassedOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"PASS\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"PASS\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerdictPassedOracle {
+    Code,
+    Model,
+    Person,
+}
+
+impl Contract for VerdictPassedOracle {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "code" => Ok(Self::Code),
+            "model" => Ok(Self::Model),
+            "person" => Ok(Self::Person),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Code => "code",
+            Self::Model => "model",
+            Self::Person => "person",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictPassedRuns {
+    pub clean: i64,
+    pub needed: i64,
+    pub counted: Vec<String>,
+}
+
+impl Contract for VerdictPassedRuns {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["clean", "needed", "counted"])?;
+        Ok(Self {
+            clean: deep_contracts::required(members, at, "clean")?,
+            needed: deep_contracts::required(members, at, "needed")?,
+            counted: deep_contracts::required(members, at, "counted")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("clean".to_string(), self.clean.to_json()));
+        members.push(("needed".to_string(), self.needed.to_json()));
+        members.push(("counted".to_string(), self.counted.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerdictPassedProof {
+    Statement,
+    StaticCheck,
+    TestRun,
+    Journey,
+    Decision,
+}
+
+impl Contract for VerdictPassedProof {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "statement" => Ok(Self::Statement),
+            "static_check" => Ok(Self::StaticCheck),
+            "test_run" => Ok(Self::TestRun),
+            "journey" => Ok(Self::Journey),
+            "decision" => Ok(Self::Decision),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Statement => "statement",
+            Self::StaticCheck => "static_check",
+            Self::TestRun => "test_run",
+            Self::Journey => "journey",
+            Self::Decision => "decision",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictPassed {
+    pub req: String,
+    pub outcome: VerdictPassedOutcome,
+    pub check: String,
+    pub depth: String,
+    pub oracle: VerdictPassedOracle,
+    pub runs: VerdictPassedRuns,
+    pub smallest: Option<String>,
+    pub points_to: Option<String>,
+    pub evidence: Vec<String>,
+    pub proof: VerdictPassedProof,
+    pub ask: Option<String>,
+}
+
+impl Contract for VerdictPassed {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["req", "outcome", "check", "depth", "oracle", "runs", "smallest", "points_to", "evidence", "proof", "ask"])?;
         Ok(Self {
@@ -10287,12 +10400,24 @@ impl Contract for VerdictKey {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Verdict {
+pub struct VerdictPassOutcome;
+
+impl Contract for VerdictPassOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"PASS\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"PASS\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictPass {
     pub verdict: String,
     pub claim: String,
-    pub outcome: VerdictOutcome,
+    pub outcome: VerdictPassOutcome,
     pub reasons: Vec<String>,
-    pub requirements: Vec<VerdictRequirementsItem>,
+    pub requirements: Vec<VerdictPassed>,
     pub smallest: Option<String>,
     pub points_to: Option<String>,
     pub commit: String,
@@ -10300,7 +10425,7 @@ pub struct Verdict {
     pub checkout: String,
 }
 
-impl Contract for Verdict {
+impl Contract for VerdictPass {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["verdict", "claim", "outcome", "reasons", "requirements", "smallest", "points_to", "commit", "key", "checkout"])?;
         Ok(Self {
@@ -10329,6 +10454,269 @@ impl Contract for Verdict {
         members.push(("key".to_string(), self.key.to_json()));
         members.push(("checkout".to_string(), self.checkout.to_json()));
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictFailOutcome;
+
+impl Contract for VerdictFailOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"FAIL\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"FAIL\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictFail {
+    pub verdict: String,
+    pub claim: String,
+    pub outcome: VerdictFailOutcome,
+    pub reasons: Vec<String>,
+    pub requirements: Vec<VerdictRequirement>,
+    pub smallest: Option<String>,
+    pub points_to: Option<String>,
+    pub commit: String,
+    pub key: VerdictKey,
+    pub checkout: String,
+}
+
+impl Contract for VerdictFail {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["verdict", "claim", "outcome", "reasons", "requirements", "smallest", "points_to", "commit", "key", "checkout"])?;
+        Ok(Self {
+            verdict: deep_contracts::required(members, at, "verdict")?,
+            claim: deep_contracts::required(members, at, "claim")?,
+            outcome: deep_contracts::required(members, at, "outcome")?,
+            reasons: deep_contracts::required(members, at, "reasons")?,
+            requirements: deep_contracts::required(members, at, "requirements")?,
+            smallest: deep_contracts::required(members, at, "smallest")?,
+            points_to: deep_contracts::required(members, at, "points_to")?,
+            commit: deep_contracts::required(members, at, "commit")?,
+            key: deep_contracts::required(members, at, "key")?,
+            checkout: deep_contracts::required(members, at, "checkout")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("verdict".to_string(), self.verdict.to_json()));
+        members.push(("claim".to_string(), self.claim.to_json()));
+        members.push(("outcome".to_string(), self.outcome.to_json()));
+        members.push(("reasons".to_string(), self.reasons.to_json()));
+        members.push(("requirements".to_string(), self.requirements.to_json()));
+        members.push(("smallest".to_string(), self.smallest.to_json()));
+        members.push(("points_to".to_string(), self.points_to.to_json()));
+        members.push(("commit".to_string(), self.commit.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("checkout".to_string(), self.checkout.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictInvalidOutcome;
+
+impl Contract for VerdictInvalidOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"INVALID\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"INVALID\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictInvalid {
+    pub verdict: String,
+    pub claim: String,
+    pub outcome: VerdictInvalidOutcome,
+    pub reasons: Vec<String>,
+    pub requirements: Vec<VerdictRequirement>,
+    pub smallest: Option<String>,
+    pub points_to: Option<String>,
+    pub commit: String,
+    pub key: VerdictKey,
+    pub checkout: String,
+}
+
+impl Contract for VerdictInvalid {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["verdict", "claim", "outcome", "reasons", "requirements", "smallest", "points_to", "commit", "key", "checkout"])?;
+        Ok(Self {
+            verdict: deep_contracts::required(members, at, "verdict")?,
+            claim: deep_contracts::required(members, at, "claim")?,
+            outcome: deep_contracts::required(members, at, "outcome")?,
+            reasons: deep_contracts::required(members, at, "reasons")?,
+            requirements: deep_contracts::required(members, at, "requirements")?,
+            smallest: deep_contracts::required(members, at, "smallest")?,
+            points_to: deep_contracts::required(members, at, "points_to")?,
+            commit: deep_contracts::required(members, at, "commit")?,
+            key: deep_contracts::required(members, at, "key")?,
+            checkout: deep_contracts::required(members, at, "checkout")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("verdict".to_string(), self.verdict.to_json()));
+        members.push(("claim".to_string(), self.claim.to_json()));
+        members.push(("outcome".to_string(), self.outcome.to_json()));
+        members.push(("reasons".to_string(), self.reasons.to_json()));
+        members.push(("requirements".to_string(), self.requirements.to_json()));
+        members.push(("smallest".to_string(), self.smallest.to_json()));
+        members.push(("points_to".to_string(), self.points_to.to_json()));
+        members.push(("commit".to_string(), self.commit.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("checkout".to_string(), self.checkout.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictBlockedOutcome;
+
+impl Contract for VerdictBlockedOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"BLOCKED\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"BLOCKED\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictBlocked {
+    pub verdict: String,
+    pub claim: String,
+    pub outcome: VerdictBlockedOutcome,
+    pub reasons: Vec<String>,
+    pub requirements: Vec<VerdictRequirement>,
+    pub smallest: Option<String>,
+    pub points_to: Option<String>,
+    pub commit: String,
+    pub key: VerdictKey,
+    pub checkout: String,
+}
+
+impl Contract for VerdictBlocked {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["verdict", "claim", "outcome", "reasons", "requirements", "smallest", "points_to", "commit", "key", "checkout"])?;
+        Ok(Self {
+            verdict: deep_contracts::required(members, at, "verdict")?,
+            claim: deep_contracts::required(members, at, "claim")?,
+            outcome: deep_contracts::required(members, at, "outcome")?,
+            reasons: deep_contracts::required(members, at, "reasons")?,
+            requirements: deep_contracts::required(members, at, "requirements")?,
+            smallest: deep_contracts::required(members, at, "smallest")?,
+            points_to: deep_contracts::required(members, at, "points_to")?,
+            commit: deep_contracts::required(members, at, "commit")?,
+            key: deep_contracts::required(members, at, "key")?,
+            checkout: deep_contracts::required(members, at, "checkout")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("verdict".to_string(), self.verdict.to_json()));
+        members.push(("claim".to_string(), self.claim.to_json()));
+        members.push(("outcome".to_string(), self.outcome.to_json()));
+        members.push(("reasons".to_string(), self.reasons.to_json()));
+        members.push(("requirements".to_string(), self.requirements.to_json()));
+        members.push(("smallest".to_string(), self.smallest.to_json()));
+        members.push(("points_to".to_string(), self.points_to.to_json()));
+        members.push(("commit".to_string(), self.commit.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("checkout".to_string(), self.checkout.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictInconclusiveOutcome;
+
+impl Contract for VerdictInconclusiveOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"INCONCLUSIVE\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"INCONCLUSIVE\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VerdictInconclusive {
+    pub verdict: String,
+    pub claim: String,
+    pub outcome: VerdictInconclusiveOutcome,
+    pub reasons: Vec<String>,
+    pub requirements: Vec<VerdictRequirement>,
+    pub smallest: Option<String>,
+    pub points_to: Option<String>,
+    pub commit: String,
+    pub key: VerdictKey,
+    pub checkout: String,
+}
+
+impl Contract for VerdictInconclusive {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["verdict", "claim", "outcome", "reasons", "requirements", "smallest", "points_to", "commit", "key", "checkout"])?;
+        Ok(Self {
+            verdict: deep_contracts::required(members, at, "verdict")?,
+            claim: deep_contracts::required(members, at, "claim")?,
+            outcome: deep_contracts::required(members, at, "outcome")?,
+            reasons: deep_contracts::required(members, at, "reasons")?,
+            requirements: deep_contracts::required(members, at, "requirements")?,
+            smallest: deep_contracts::required(members, at, "smallest")?,
+            points_to: deep_contracts::required(members, at, "points_to")?,
+            commit: deep_contracts::required(members, at, "commit")?,
+            key: deep_contracts::required(members, at, "key")?,
+            checkout: deep_contracts::required(members, at, "checkout")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("verdict".to_string(), self.verdict.to_json()));
+        members.push(("claim".to_string(), self.claim.to_json()));
+        members.push(("outcome".to_string(), self.outcome.to_json()));
+        members.push(("reasons".to_string(), self.reasons.to_json()));
+        members.push(("requirements".to_string(), self.requirements.to_json()));
+        members.push(("smallest".to_string(), self.smallest.to_json()));
+        members.push(("points_to".to_string(), self.points_to.to_json()));
+        members.push(("commit".to_string(), self.commit.to_json()));
+        members.push(("key".to_string(), self.key.to_json()));
+        members.push(("checkout".to_string(), self.checkout.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Verdict {
+    Pass(VerdictPass),
+    Fail(VerdictFail),
+    Invalid(VerdictInvalid),
+    Blocked(VerdictBlocked),
+    Inconclusive(VerdictInconclusive),
+}
+
+impl Contract for Verdict {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "outcome")?.as_str() {
+            "\"PASS\"" => Ok(Self::Pass(<VerdictPass as Contract>::from_json(value, at)?)),
+            "\"FAIL\"" => Ok(Self::Fail(<VerdictFail as Contract>::from_json(value, at)?)),
+            "\"INVALID\"" => Ok(Self::Invalid(<VerdictInvalid as Contract>::from_json(value, at)?)),
+            "\"BLOCKED\"" => Ok(Self::Blocked(<VerdictBlocked as Contract>::from_json(value, at)?)),
+            "\"INCONCLUSIVE\"" => Ok(Self::Inconclusive(<VerdictInconclusive as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/outcome")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Pass(inner) => inner.to_json(),
+            Self::Fail(inner) => inner.to_json(),
+            Self::Invalid(inner) => inner.to_json(),
+            Self::Blocked(inner) => inner.to_json(),
+            Self::Inconclusive(inner) => inner.to_json(),
+        }
     }
 }
 
