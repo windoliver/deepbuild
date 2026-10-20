@@ -1,0 +1,19 @@
+{
+  "name": "@deepbuild/spike-hub-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Issue #56: the hold, lease and cleanup slice built twice, in plain TypeScript and in Effect 4",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "effect": "4.0.5"
+  },
+  "devDependencies": {
+    "@effect/language-service": "0.87.5",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}
