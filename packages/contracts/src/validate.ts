@@ -194,7 +194,8 @@ function seqTransform(root: Schema): Transform | undefined {
     }
     if (isObject(schema.items)) {
       const item = node(schema.items);
-      return item && ((value, toWire) => (Array.isArray(value) ? value.map((v) => item(v, toWire)) : value));
+      // By index, never through the array's own map, which a caller could override.
+      return item && ((value, toWire) => (Array.isArray(value) ? Array.from({ length: value.length }, (_, i) => item(value[i], toWire)) : value));
     }
     if (isObject(schema.properties)) {
       const fields = Object.entries(schema.properties).flatMap(([key, s]) => {
