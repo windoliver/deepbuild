@@ -298,6 +298,18 @@ it("the catalogue's checks read a list by its indices, never through its own fla
   for (const sources of forge([{ where: '#1', text: '`learn.paused`' }])) expect(catalogueDrift(sources)).toEqual([{ kind: 'learn.paused', where: '#1' }]);
 });
 
+it('an MCP tool call names its server and its tool', () => {
+  for (const name of ['tool.before@1', 'tool.after@1']) {
+    const mcp = fixtures(name).find((event) => (event as { data: { kind: string } }).data.kind === 'mcp') as { data: Record<string, unknown> } | undefined;
+    expect(mcp, `${name} has an mcp fixture`).toBeDefined();
+    expect(ok(name, mcp!), name).toBe(true);
+    for (const field of ['server', 'tool']) {
+      const { [field]: _dropped, ...data } = mcp!.data;
+      expect(ok(name, { ...mcp!, data }), `${name} without ${field}`).toBe(false);
+    }
+  }
+});
+
 describe('the learned layer', () => {
   it('a change aimed at the base names you as its applier, never a rule, in every learn kind', () => {
     for (const name of ['learn.proposed@1', 'learn.applied@1', 'learn.widened@1', 'learn.rolled_back@1']) {
