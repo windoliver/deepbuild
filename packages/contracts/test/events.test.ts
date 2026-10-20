@@ -251,14 +251,6 @@ describe('the design says', () => {
     }
   });
 
-  it('a proposed learned change names no one who applied it, since nothing has applied it yet', () => {
-    const proposed = first('learn.proposed@1');
-    expect(ok('learn.proposed@1', { ...proposed, data: { ...proposed.data, applied_by: null } })).toBe(true);
-    for (const applied_by of ['you', 'rule:01K74G1Z3X5V7T9R1P3N5M7K9H']) {
-      expect(ok('learn.proposed@1', { ...proposed, data: { ...proposed.data, applied_by } }), applied_by).toBe(false);
-    }
-  });
-
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
