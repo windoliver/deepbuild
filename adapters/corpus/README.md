@@ -39,9 +39,9 @@ Each event is reduced to the fields an adapter decides, `kind` and `data`. The h
 
 A Codex turn that no prompt started, such as a goal's continuation, opens with a `user.ask` {session, from, turn} before the first event of its first hook, `turn` being the payload's `turn_id`, since Codex fires no prompt hook for it.
 
-**Tool kinds** (the design's shared shapes: shell, read, edit, write, search, fetch, mcp, or unknown, which guards treat as change). Claude Code: Bash shell; Read read; Edit, MultiEdit and NotebookEdit edit; Write write; Glob and Grep search; WebFetch and WebSearch fetch; `mcp__<server>__<tool>` mcp; anything else unknown. Codex: Bash shell, unless its command runs `apply_patch` or `applypatch`, which makes it an edit; apply_patch edit; anything else unknown. A Codex patch's `paths` are every `*** Add File`, `*** Update File`, `*** Delete File` and `*** Move to` line, indented or not, resolved against the payload's `cwd` (or the folder a leading `cd <dir> &&` names), sorted.
+**Tool kinds** (the design's shared shapes: shell, read, edit, write, search, fetch, mcp, or unknown, which guards treat as change). Claude Code: Bash shell; Read read; Edit, MultiEdit and NotebookEdit edit; Write write; Glob and Grep search; WebFetch and WebSearch fetch; `mcp__<server>__<tool>` mcp; anything else unknown. Codex: Bash shell, unless its command runs `apply_patch` or `applypatch`, which makes it an edit carrying `paths` and no `command`; apply_patch edit; `mcp__<server>__<tool>` mcp; anything else unknown. A Codex patch's `paths` are every `*** Add File`, `*** Update File`, `*** Delete File` and `*** Move to` line, indented or not, resolved against the payload's `cwd` (or the folder a leading `cd <dir> &&` names), sorted.
 
-**Prompt origins** (`from`; the design's ask rule): `person` for what you typed, `scheduled` for a `/loop` or cron prompt, `subagent` for a background subagent's report, `session` for another session's message, `continuation` for a goal's continuation, a heartbeat or the desktop app's resume prompt, `app` for what DeepBuild's app sent, and `unknown` when nothing says. Claude Code marks each prompt's origin on its transcript entry (the user entry whose `promptId` is the payload's `prompt_id`), and the first match decides: a subagent's hand-back (`origin.handback` true) is `subagent`, though its `turnOrigin` is `peer`; `turnOrigin` `task_notification` is `subagent`; `peer`, another session's message, is `session`; `scheduled` is `scheduled`; `human` is `person`; anything else, such as `sdk` with no origin, is `unknown`. A Stop hold's feedback in the desktop app also arrives as `task_notification`, so it would read `subagent`; the corpus holds none, and the adapter issue (#18) has to tell the two apart. Codex marks a goal's continuation in its rollout as a user message that opens with `<codex_internal_context source="goal">`.
+**Prompt origins** (`from`; the design's ask rule): `person` for what you typed, `scheduled` for a `/loop` or cron prompt, `subagent` for a background subagent's report, `session` for another session's message, `continuation` for a goal's continuation, a heartbeat or the desktop app's resume prompt, `app` for what DeepBuild's app sent, and `unknown` when nothing says. Two prompts are marked only by the text the agent's own app writes, and that text decides first: the Claude desktop app's resume prompt opens with "The app was quit while you were working.", and a Codex heartbeat's prompt opens with `<heartbeat>`; both are `continuation`. Otherwise Claude Code marks each prompt's origin on its transcript entry (the user entry whose `promptId` is the payload's `prompt_id`), and the first match decides: a subagent's hand-back (`origin.handback` true) is `subagent`, though its `turnOrigin` is `peer`; `turnOrigin` `task_notification` is `subagent`; `peer`, another session's message, is `session`; `scheduled` is `scheduled`; `human` is `person`; anything else, such as `sdk` with no origin, is `unknown`. A Stop hold's feedback in the desktop app also arrives as `task_notification`, so it would read `subagent`; the corpus holds none, and the adapter issue (#18) has to tell the two apart. Codex marks a goal's continuation in its rollout as a user message that opens with `<codex_internal_context source="goal">`.
 
 **Stop causes** (the closed set of #312's stop causes, as slugs): `sign_in_required`, `token_refresh_failed`, `plan_window_spent`, `rate_limited`, `refusal`, `max_turns`, `context_overflow`, `tool_schema_rejected`, `agent_crashed`, `timed_out`, `unknown`. Claude Code's StopFailure `error` (its hooks reference lists the values) maps `rate_limit` and `overloaded` to `rate_limited`, and `authentication_failed` and `oauth_org_not_allowed` to `sign_in_required`; any other value, such as `model_not_found`, is `unknown`.
 
@@ -58,13 +58,15 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code 2.1.299 `desktop-peer` | the desktop app: a session another session started, and messages from that session |
 | codex `tools` | shell calls, an `apply_patch` add, and a failing command, which Codex reports through PostToolUse |
 | codex `patches` | a patch through the shell tool, then a resume with a patch whose markers are indented |
-| codex `permission` | a permission request from the terminal UI under `-a untrusted` |
+| codex `permission` | a permission request from the terminal UI: a write in a read-only sandbox under `-a on-request` |
 | codex `goal` | a goal and its two continuation turns, which fire no prompt hook |
 | codex `crash` | the agent killed in the middle of a tool call |
+| claude-code 2.1.299 `desktop-resume` | the desktop app quit mid-call and reopened: SessionEnd, SessionStart from `resume`, and its resume prompt; also another session's message |
+| codex 0.160.0 `desktop-heartbeat` | Codex Desktop (the ChatGPT app's Codex, 0.160.0): a heartbeat set up on a thread, its run as a `<heartbeat>` prompt, and its removal |
 
 The subagent, resume, compact and crash sessions are also the usage-counting fixtures: their transcripts carry each turn's usage as the agent wrote it.
 
-Not recorded yet: a Codex heartbeat, which only the Codex desktop app runs, and the Claude desktop app's resume prompt ("The app was quit while you were working…"), which the app sends only after it is quit mid-turn.
+Codex versions: 0.144.0 is the CLI on PATH, 0.160.0 the Codex in the ChatGPT desktop app (whose app-server ran the heartbeat), and 0.163.0-alpha.10.2 the Codex in Codex.app; each covered version has its own full set. Desktop sessions record the hooks of their folder's own config: `.claude/settings.json` in a scratch folder for Claude, and `.codex/hooks.json` in the trusted `/private/tmp` for Codex, trusted once in the app and removed after.
 
 ## Tags
 
@@ -75,6 +77,6 @@ Not recorded yet: a Codex heartbeat, which only the Codex desktop app runs, and 
 | `other-session-message` | another session's message as a UserPromptSubmit |
 | `desktop-resume-prompt` | the Claude desktop app's resume prompt as a UserPromptSubmit |
 | `goal-continuation` | the first hook of a Codex goal's continuation turn |
-| `heartbeat` | a Codex heartbeat's prompt |
+| `heartbeat` | a Codex heartbeat's prompt, a UserPromptSubmit opening with `<heartbeat>` |
 | `patch-indented-markers` | a Codex patch whose marker lines are indented |
 | `patch-via-shell` | a Codex patch sent through the shell tool |

@@ -1,6 +1,6 @@
 {
   "schema": "adapter.facts@1",
-  "versions": ["0.144.0"],
+  "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2"],
   "agent": "codex",
   "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
   "signIn": {
@@ -122,6 +122,194 @@
           },
           "optional": {}
         }
+      },
+      "0.160.0": {
+        "SessionStart": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "source": "string",
+            "transcript_path": "string|null"
+          },
+          "optional": {}
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "prompt": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "PreToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_response": "any",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "Stop": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        }
+      },
+      "0.163.0-alpha.10.2": {
+        "SessionStart": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "source": "string",
+            "transcript_path": "string|null"
+          },
+          "optional": {}
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "prompt": "string",
+            "session_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "PreToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "apply_patch": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "tool_input": "object",
+            "tool_name": "string",
+            "tool_response": "any",
+            "tool_use_id": "string",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": { "agent_id": "string", "agent_type": "string" }
+        },
+        "Stop": {
+          "required": {
+            "cwd": "string",
+            "hook_event_name": "string",
+            "last_assistant_message": "string|null",
+            "model": "string",
+            "permission_mode": "string",
+            "session_id": "string",
+            "stop_hook_active": "boolean",
+            "transcript_path": "string|null",
+            "turn_id": "string"
+          },
+          "optional": {}
+        }
       }
     }
   },
@@ -135,7 +323,12 @@
     "UserPromptSubmit": {
       "kind": "user.ask",
       "data": { "text": "prompt" },
-      "origin": { "otherwise": "person" }
+      "origin": {
+        "rules": [
+          { "prompt": "<heartbeat>", "from": "continuation" }
+        ],
+        "otherwise": "person"
+      }
     },
     "PreToolUse": {
       "kind": "tool.before",

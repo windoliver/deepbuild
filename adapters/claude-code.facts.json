@@ -426,6 +426,7 @@
       "origin": {
         "join": { "payload": "prompt_id", "transcript": "promptId" },
         "rules": [
+          { "prompt": "The app was quit while you were working.", "from": "continuation" },
           {
             "match": { "origin.handback": true },
             "from": "subagent"

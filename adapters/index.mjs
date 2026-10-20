@@ -73,13 +73,15 @@ function call(facts, payload) {
   return { kind, detail, rule: tool in kinds.tools ? pointer('toolKinds', 'tools', tool) : pointer('toolKinds', 'otherwise') };
 }
 
-// The transcript entry a prompt joins to, and the first of the facts' rules it matches names its origin.
+// A prompt's origin: the first of the facts' rules that holds, either a prefix of the prompt text the
+// agent's own app writes, or a field of the transcript entries the prompt joins to.
 function origin(rule, payload, transcript) {
-  const otherwise = { from: rule.otherwise, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'otherwise') };
-  if (!rule.join) return otherwise;
-  const entry = transcript.find((one) => one[rule.join.transcript] !== undefined && one[rule.join.transcript] === payload[rule.join.payload]);
-  const index = entry ? rule.rules.findIndex(({ match }) => Object.entries(match).every(([path, value]) => get(entry, path) === value)) : -1;
-  return index < 0 ? otherwise : { from: rule.rules[index].from, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'rules', index) };
+  const entries = rule.join ? transcript.filter((one) => get(one, rule.join.transcript) !== undefined && get(one, rule.join.transcript) === payload[rule.join.payload]) : [];
+  const holds = ({ prompt, match }) => (prompt !== undefined ? typeof payload.prompt === 'string' && payload.prompt.startsWith(prompt)
+    : entries.some((entry) => Object.entries(match).every(([path, value]) => get(entry, path) === value)));
+  const index = (rule.rules ?? []).findIndex(holds);
+  return index < 0 ? { from: rule.otherwise, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'otherwise') }
+    : { from: rule.rules[index].from, rule: pointer('mapping', 'UserPromptSubmit', 'origin', 'rules', index) };
 }
 
 // A turn no prompt started (a Codex goal's continuation): the user message that opens it in the

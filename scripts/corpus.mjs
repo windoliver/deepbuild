@@ -105,14 +105,6 @@ async function checkCommand(options) {
   return failures.length ? 1 : 0;
 }
 
-// The lifecycle tables (ask.machine@1, lease.machine@1 …) land with the core schemas (#311) and the
-// seeded runs with the hub's simulation harness (#16); until both exist nothing is read, so BLOCKED.
-function lifecycleCommand() {
-  console.log('BLOCKED lifecycle: no lifecycle tables (ask.machine@1, lease.machine@1) in the contracts yet (#311) and no hub simulation harness (#16)\n  Fix: Land the core schemas and the hub, then read every recorded session and seeded run back against their tables.');
-  say({ type: 'summary', verdict: 'BLOCKED', sessions: 0, simulationRuns: 0, moves: 0 });
-  return 1;
-}
-
 // ---- Recording -----------------------------------------------------------------------------------
 
 // The hook every recorded session runs: it keeps the payload byte for byte and answers a permission
@@ -320,16 +312,21 @@ async function recordCodex(out, bin, facts) {
     rmSync(files, { recursive: true, force: true });
   }
   // Two sessions need Codex's terminal UI: exec never asks for approval, so a permission request
-  // comes from a command `-a untrusted` must ask about, and a goal's continuation needs a live
+  // comes from a write a read-only sandbox must ask to escalate, and a goal's continuation needs a live
   // thread. A goal's later turns fire no prompt hook, only their tool calls and Stop.
+  // The terminal UI announces each newly available model and counts the notice in your config;
+  // marking every model in Codex's own model cache as already announced keeps it out of both.
+  let models = [];
+  try { models = JSON.parse(readFileSync(join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'models_cache.json'), 'utf8')).models.map(({ slug }) => slug); } catch {}
+  const quiet = models.length ? ['-c', `tui.model_availability_nux={ ${models.map((slug) => `${JSON.stringify(slug)} = 100`).join(', ')} }`] : [];
   const tui = async (name, args, prompt, stops) => {
     const dir = join(out, name);
     mkdirSync(dir, { recursive: true });
-    const argv = [bin, ...model, ...hookArgs(dir), '-s', 'workspace-write', ...args, '-c', 'check_for_update_on_startup=false'];
+    const argv = [bin, ...model, ...hookArgs(dir), ...(args.includes('-s') ? [] : ['-s', 'workspace-write']), ...args, '-c', 'check_for_update_on_startup=false', ...quiet];
     results.push({ scenario: name, dir, ...(await session({ argv, cwd: trusted, dir, terminal: true, steps: Object.assign([{ type: prompt }, ...(stops ? [{ stops }] : [])], { exit: '/quit' }), startAfter: (text) => /›/.test(text) && text.length > 200 })) });
   };
   const made = join(trusted, `deep-corpus-permission-${Date.now()}.txt`), goal = join(trusted, `deep-corpus-goal-${Date.now()}.txt`);
-  await tui('permission', ['-a', 'untrusted'], `Run the shell command: touch ${made}. Then reply done.`);
+  await tui('permission', ['-s', 'read-only', '-a', 'on-request'], `Run the shell command: touch ${made}. The sandbox is read-only, so request escalated permissions for it. Then reply done.`);
   await tui('goal', ['-a', 'never'], `Create a goal with your create_goal tool: write the numbers 1, 2 and 3 into ${goal}, one number per turn, ending each turn after writing one number. Then write 1 and end your turn.`, 2);
   for (const file of [made, goal]) rmSync(file, { force: true });
   return results;
@@ -342,7 +339,7 @@ async function recordCommand(options) {
   const factsFile = join(root, 'adapters', `${agent}.facts.json`);
   const facts = JSON.parse(readFileSync(factsFile, 'utf8'));
   if (!bin) { say({ type: 'summary', verdict: 'BLOCKED', reason: `${agent} is not on PATH` }); return 1; }
-  const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+/)?.[0];
+  const version = spawnSync(bin, ['--version'], { encoding: 'utf8' }).stdout.match(/\d+\.\d+\.\d+(?:[-+][\w.]+)?/)?.[0];
   const scratch = mkdtempSync('/private/tmp/deep-corpus-');
   const results = agent === 'codex' ? await recordCodex(scratch, bin, facts) : await recordClaude(scratch, bin, facts);
   const redact = redactor();
@@ -372,12 +369,12 @@ const options = { corpus: join(root, 'adapters/corpus'), facts: join(root, 'adap
 for (let index = 0; index < rest.length; index += 2) {
   const [flag, value] = [rest[index], rest[index + 1]];
   if (command === 'hook') { options.dir = flag; break; }
-  if (!['--corpus', '--facts', '--log', '--agent', '--out'].includes(flag) || value === undefined) { console.error(`unknown or incomplete option ${flag}`); process.exit(2); }
+  if (!['--corpus', '--facts', '--agent', '--out'].includes(flag) || value === undefined) { console.error(`unknown or incomplete option ${flag}`); process.exit(2); }
   options[flag.slice(2)] = flag === '--agent' ? value : resolve(value);
 }
-const commands = { replay: replayCommand, check: checkCommand, lifecycle: lifecycleCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
+const commands = { replay: replayCommand, check: checkCommand, record: recordCommand, hook: () => hookCommand(options.dir) };
 if (!commands[command] || (command === 'record' && !(options.agent && options.out))) {
-  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs lifecycle [--log <events.jsonl>]\n       node scripts/corpus.mjs record --agent claude-code|codex --out <dir>');
+  console.error('Usage: node scripts/corpus.mjs replay|check [--corpus <dir>] [--facts <dir>]\n       node scripts/corpus.mjs record --agent claude-code|codex --out <dir>');
   process.exit(2);
 }
 process.exitCode = await commands[command](options);
