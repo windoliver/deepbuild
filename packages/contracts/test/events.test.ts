@@ -233,6 +233,18 @@ describe('the design says', () => {
     }
   });
 
+  it("no agent records its own stop, tool call, session start or a reading: deep-hook does, or the hub's calls", () => {
+    const allowed: Record<string, string[]> = {
+      'tool.before@1': ['hook'], 'tool.after@1': ['hook'], 'agent.stop@1': ['hook'], 'session.start@1': ['app', 'hook'],
+      'reading.recorded@1': ['core', 'ext:prices'], 'reading.batch@1': ['core', 'ext:prices'],
+    };
+    for (const [name, writers] of Object.entries(allowed)) {
+      for (const writer of ['hook', 'app', 'cli', 'core', 'mcp:s1', 'ext:prices']) {
+        expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(writers.includes(writer));
+      }
+    }
+  });
+
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
