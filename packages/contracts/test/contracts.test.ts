@@ -331,3 +331,27 @@ it('a record hash over what canonicalize accepts is a hash, not a clone error', 
   expect(recordHash('verdict@1', extra as JsonValue)).toBe(recordHash('verdict@1', record));
   expect(recordHash('verdict@1', new Proxy(structuredClone(record) as object, {}) as JsonValue)).toBe(recordHash('verdict@1', record));
 });
+
+describe('a value is read once, so what is checked is what is written or hashed', () => {
+  // A field that reads as `first` the first `times` reads, then as `then`.
+  const flipping = (key: string, first: unknown, then: unknown, times = 1) => {
+    const record = structuredClone(fixtures('verdict@1')[0]) as Record<string, unknown>;
+    let reads = 0;
+    Object.defineProperty(record, key, { enumerable: true, get: () => (reads++ < times ? first : then) });
+    return record as JsonValue;
+  };
+
+  it('canonical text and a record hash never take a second, different read', () => {
+    const record = flipping('checkout', 'x', undefined);
+    expect(() => JSON.parse(new TextDecoder().decode(canonicalize(record)))).not.toThrow();
+    expect(() => recordHash('verdict@1', flipping('checkout', 'x', undefined))).not.toThrow();
+  });
+
+  it('encode writes only the value it validated', () => {
+    for (const times of [1, 2, 3, 4]) {
+      let out = '';
+      try { out = encode('verdict@1', flipping('outcome', 'FAIL', 'PASS', times)); } catch { continue; }
+      expect(validate('verdict@1', JSON.parse(out)).ok, `after ${times} reads`).toBe(true);
+    }
+  });
+});
