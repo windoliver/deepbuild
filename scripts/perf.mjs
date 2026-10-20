@@ -280,7 +280,7 @@ try {
       if (status === 'PASS') continue;
       const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'
         : status === 'FAIL' ? `Bring ${budget.id} back under its ${metric} limit; budgets are frozen once they reach main.`
-        : /reference Mac/.test(reason) ? 'Run perf on the reference Mac (Mac15,7, M3 Pro, 36 GB) on mains power, with Low Power Mode off and the thermal state nominal.'
+        : /reference Mac/.test(reason) ? 'Run perf on a reference Mac (Mac15,7, M3 Pro, 36 GB, or Mac15,12, M3, 16 GB) on mains power, with Low Power Mode off and the thermal state nominal.'
         : 'Rerun perf on a quiet reference Mac; the five runs straddle the limit.';
       verdicts.push([status, `${budget.id}: ${metric}: ${reason}`, fix]);
     }
