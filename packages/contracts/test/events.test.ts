@@ -268,6 +268,18 @@ describe('the design says', () => {
     }
   });
 
+  it('every kind shares one envelope; only its kind, subject, writer and data differ', () => {
+    const envelope = (name: string) => {
+      const { properties, required, ...rest } = getSchema(name) as { properties: Record<string, unknown>; required: string[] };
+      const { kind: _kind, subject: _subject, writer: _writer, data: _data, ...shared } = properties;
+      const { title: _title, description: _description, $defs: _defs, 'x-feeds': _feeds, ...root } = rest as Record<string, unknown>;
+      return { root, shared, required: required.filter((key) => key !== 'subject') };
+    };
+    const kinds = catalogue().map((e) => e.schema);
+    expect(kinds).toHaveLength(59);
+    for (const name of kinds) expect(envelope(name), name).toEqual(envelope(kinds[0]!));
+  });
+
   it('every ask kind and every pin kind has a fixture', () => {
     const asks = fixtures('ask.created@1') as Event[];
     expect(new Set(asks.map((a) => a.data.kind))).toEqual(new Set(['authority', 'unblock', 'taste', 'exception', 'choice', 'definition']));
