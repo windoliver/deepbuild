@@ -1,0 +1,32 @@
+[package]
+name = "deep-app"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+# gpui-kit uses `std::hint::cold_path`, stable since 1.95.
+rust-version = "1.95"
+
+# Issue #337: the gpui-kit spike. Pinned to one gpui-kit commit, since gpui-shell is at
+# milestone M0 and unpublished. No `webview` feature: the app has no web view.
+[dependencies]
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
+serde_json = "1"
+
+# The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder"] }
+
+[dev-dependencies]
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+
+# Real pixels from GPUI's offscreen Metal renderer; AppKit needs the main thread, so no libtest
+# harness. Outside tests/ because a [[test]] entry must find its file: preflight's perf run drops
+# a change's own tests/ files, so this suite counts in its measured workload instead.
+[[test]]
+name = "screens"
+path = "screens.rs"
+harness = false

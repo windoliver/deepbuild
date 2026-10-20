@@ -1,0 +1,337 @@
+{
+  "spike": 337,
+  "draft": {
+    "status": "Draft from a Mac that is not the reference Mac; not record.json, and no decision. The acceptance tests count every budget here as INCONCLUSIVE, which would force a native verdict this evidence does not support.",
+    "machine": {
+      "start": {
+        "model": "Mac15,12",
+        "chip": "Apple M3",
+        "memoryBytes": 17179869184,
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "23H723"
+      },
+      "end": {
+        "model": "Mac15,12",
+        "chip": "Apple M3",
+        "memoryBytes": 17179869184,
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "fair",
+        "macosBuild": "23H723"
+      }
+    },
+    "gaps": [
+      "Budgets must be rerun on the reference Mac (Mac15,7, M3 Pro, 36 GB, mains, thermal nominal), then the decision written.",
+      "The five preflightMs runs predate windoliver/deepbuild#594, when perf rebuilt the Rust tree cold in temp copies. With that fix applied here, two preflights took 114 s and 108 s, with every perf comparison passing; the five runs are to be taken again.",
+      "Perf flagged repo-rules p50 (+50%) because the merge-base copy had no origin/main, so repo-rules skipped its size check there; #594's fix gives the copy one, and repo-rules then reads 265 ms against the base's 257 ms."
+    ],
+    "findings": [
+      "Both agents wrote their panels from gpui-shell's docs and the brief alone, with no generated type declarations: Codex passed on round 0, Claude Code after one fix.",
+      "Claude Code's chart is a row of dots, not a line chart; the headless test checks texts and clicks, not the chart's form.",
+      "gpui-shell writes gpui-kit.d.ts and jsconfig.json into a panel's directory each time it loads it.",
+      "gpui-shell's release builds JIT hot functions to native code with no switch; debug builds, so the tests, stay on the interpreter.",
+      "Codex's panel keeps one alert on screen: a later symbol's crossing replaces an earlier one, where the brief says each alert stays shown. The headless test arms one symbol, so it passes; a test that arms two would catch it.",
+      "A binary's first launch after it is built or copied took 0.85-1.01 s here, against 150-310 ms after: macOS checks a new binary once. That is at or just over the 1 s budget, off the reference Mac; the budget runs follow one untimed launch."
+    ]
+  },
+  "mergeBase": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+  "machine": {
+    "model": "Mac15,12",
+    "chip": "Apple M3",
+    "memoryBytes": 17179869184,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "23H723"
+  },
+  "window": {
+    "screen": "window",
+    "sessionRows": 1000
+  },
+  "menuBar": {
+    "captured": false,
+    "reason": "gpui-kit has no menu-bar item, so the count is an AppKit NSStatusItem the app creates; GPUI's offscreen renderer captures only GPUI windows.",
+    "count": 143,
+    "test": "menu_bar_count",
+    "checks": [
+      "menu_bar_title(sessions()), the title main.rs gives the status item, is 143",
+      "the window's count text, read back from its accessibility label, is the same 143",
+      "no test reads the NSStatusItem itself back: it is AppKit, not a GPUI element"
+    ]
+  },
+  "screens": [
+    {
+      "id": "window",
+      "test": "window_screen",
+      "snapshot": "docs/spikes/337/screens/window.png",
+      "clicks": [
+        "session row 4"
+      ]
+    },
+    {
+      "id": "claude-code",
+      "test": "claude_code_panel_screen",
+      "snapshot": "docs/spikes/337/screens/claude-code.png",
+      "clicks": [
+        "next",
+        "row-NVDA"
+      ]
+    },
+    {
+      "id": "codex",
+      "test": "codex_panel_screen",
+      "snapshot": "docs/spikes/337/screens/codex.png",
+      "clicks": [
+        "next",
+        "row-NVDA"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "agent": "claude-code",
+      "agentVersion": "Claude Code 2.1.142 (claude-opus-4-7)",
+      "file": "crates/deep-app/panels/claude-code/main.js",
+      "sha256": "3795c21e188efeb65ffdccf7f3e1366fd3a9c7ba6510e711074cc191fa01ffe3",
+      "screen": "claude-code",
+      "inputs": [
+        "issue#337",
+        {
+          "doc": "docs/spikes/337/panel-brief.md",
+          "sha256": "1087529caa37eef650d1d39d9ffc0350435a0fd7c65395742ee3fc205f6d77d8"
+        },
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/crates/shell/README.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/api.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/capabilities.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dependencies.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dock.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/elements.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/engine.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/examples.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/getting-started.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/host-module.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/hosting.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/index.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/overlays.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/packaging.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/performance.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/state.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/styling.md"
+      ],
+      "rounds": [
+        {
+          "result": "fail",
+          "fix": "Round 0 stopped at Tick 99: its chart was a column of dots that grew a row per tick and pushed the next button below the 640 px window. Given the test's failure output, Claude Code laid the dots out horizontally."
+        },
+        {
+          "result": "pass"
+        }
+      ],
+      "runtime": {
+        "origin": "agent_built",
+        "runtime": "in_process",
+        "thread": "ui_main",
+        "policy": "empty",
+        "update_budget_ms": 4,
+        "limits": {
+          "interrupt": true,
+          "heap": 268435456,
+          "stack": 1048576,
+          "microtasks": 100000,
+          "pending": 1024
+        },
+        "output": "element_tree",
+        "jit": "on",
+        "deviation": {
+          "fields": [
+            "runtime",
+            "thread",
+            "jit"
+          ],
+          "reason": "gpui-shell at M0 has no out-of-process panel host, and its release builds tier hot functions up to native code with no switch (shell_jit_config); debug builds, so the headless tests, stay on the interpreter. The spike loads the panel in the app through gpui-shell, as its Scope says. The heap, stack, microtask and pending limits and the 4 ms budget are the Fields' values, not enforced by this spike.",
+          "until": "panel_host"
+        }
+      }
+    },
+    {
+      "agent": "codex",
+      "agentVersion": "codex-cli 0.150.1",
+      "file": "crates/deep-app/panels/codex/main.js",
+      "sha256": "0787e9ade568988aa8177e52de8eb117c0cbd7f86792c891f19b1877dd3ee07e",
+      "screen": "codex",
+      "inputs": [
+        "issue#337",
+        {
+          "doc": "docs/spikes/337/panel-brief.md",
+          "sha256": "1087529caa37eef650d1d39d9ffc0350435a0fd7c65395742ee3fc205f6d77d8"
+        },
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/crates/shell/README.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/api.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/capabilities.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dependencies.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dock.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/elements.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/engine.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/examples.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/getting-started.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/host-module.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/hosting.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/index.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/overlays.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/packaging.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/performance.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/state.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/styling.md"
+      ],
+      "rounds": [
+        {
+          "result": "pass"
+        }
+      ],
+      "runtime": {
+        "origin": "agent_built",
+        "runtime": "in_process",
+        "thread": "ui_main",
+        "policy": "empty",
+        "update_budget_ms": 4,
+        "limits": {
+          "interrupt": true,
+          "heap": 268435456,
+          "stack": 1048576,
+          "microtasks": 100000,
+          "pending": 1024
+        },
+        "output": "element_tree",
+        "jit": "on",
+        "deviation": {
+          "fields": [
+            "runtime",
+            "thread",
+            "jit"
+          ],
+          "reason": "gpui-shell at M0 has no out-of-process panel host, and its release builds tier hot functions up to native code with no switch (shell_jit_config); debug builds, so the headless tests, stay on the interpreter. The spike loads the panel in the app through gpui-shell, as its Scope says. The heap, stack, microtask and pending limits and the 4 ms budget are the Fields' values, not enforced by this spike.",
+          "until": "panel_host"
+        }
+      }
+    }
+  ],
+  "stocks": {
+    "quotes": "crates/deep-app/fixtures/quotes.json",
+    "test": "codex_stocks_panel",
+    "result": "pass",
+    "alsoPassed": [
+      "claude_code_stocks_panel"
+    ]
+  },
+  "report": {
+    "test": "session_list_count_and_report",
+    "result": "pass",
+    "sample": "docs/spikes/337/report-sample.html"
+  },
+  "headless": {
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--locked"
+    ]
+  },
+  "build": {
+    "kind": "clean",
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "deep-app",
+      "--release",
+      "--locked"
+    ],
+    "ms": 280348,
+    "display": "4.7 min",
+    "note": "git dependencies already fetched"
+  },
+  "budgets": {
+    "coldStartMs": {
+      "runs": [
+        152.1,
+        180.2,
+        311.5,
+        194.9,
+        179.3
+      ],
+      "display": "311.5 ms",
+      "method": "From spawning the app to it reporting its first frame callback, with the Codex panel mounted; five runs after one untimed launch (docs/spikes/337/measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac",
+      "firstLaunchMs": 853.4,
+      "firstLaunchNote": "The untimed launch of a binary that was just built or copied, which macOS checks on its first launch: 853.4 ms here, and 1008.2 ms in an earlier run. A user pays it once after installing; the budget runs follow it."
+    },
+    "idleCpuPercent": {
+      "runs": [
+        0.2,
+        0.55,
+        0.05,
+        0.45,
+        0
+      ],
+      "display": "0.55%",
+      "method": "CPU time over 20 s after 5 s settling, percent of one core (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "memoryBytes": {
+      "runs": [
+        58163200,
+        54575104,
+        58343424,
+        58523648,
+        44793856
+      ],
+      "display": "58.5 MB",
+      "method": "Resident set size at the end of the idle window (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "appBytes": {
+      "runs": [
+        49826856,
+        49826856,
+        49826856,
+        49826856,
+        49826856
+      ],
+      "display": "49.8 MB",
+      "method": "The release binary after strip (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "preflightMs": {
+      "runs": [
+        393135,
+        377151,
+        414432,
+        387220,
+        397189
+      ],
+      "display": "6.9 min",
+      "method": "npm run preflight, wall time, five runs after one untimed warm-up on each side.",
+      "base": {
+        "runs": [
+          64361,
+          66716,
+          64400,
+          65412,
+          65505
+        ]
+      },
+      "thisMac": "FAIL on this Mac (all five over the limit by more than the 9.9% margin); INCONCLUSIVE as a budget, off the reference Mac",
+      "note": "Taken at 5b56adf, before the docs-only panel rerun; the checks changed by one test and two panels since."
+    }
+  }
+}
