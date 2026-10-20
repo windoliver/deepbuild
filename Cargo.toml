@@ -1,3 +1,8 @@
 [workspace]
-members = ["crates/deep-hook"]
+members = ["crates/deep-hook", "crates/deep-app"]
 resolver = "2"
+
+# Issue #337: gpui-kit's own workspace patch, which a dependency's [patch] can't carry.
+# LLRT names `rquickjs`; this routes it to gpui-shell's facade so both share one VM.
+[patch.crates-io]
+rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }

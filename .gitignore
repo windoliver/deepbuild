@@ -8,3 +8,7 @@ test-results/
 .DS_Store
 .env
 .env.*
+
+# gpui-shell writes these into a panel directory each time it loads one.
+crates/deep-app/panels/*/gpui-kit.d.ts
+crates/deep-app/panels/*/jsconfig.json
