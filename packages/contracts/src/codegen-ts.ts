@@ -13,6 +13,7 @@ export function typeName(name: string): string {
 export function nameClaims(): (type: string, schema: string) => void {
   const owners = new Map<string, string>();
   return (type, schema) => {
+    if (!/^[A-Z][A-Za-z0-9_]*$/.test(type) || type === 'Self') throw Error(`${schema}: its type name ${JSON.stringify(type)} is not an identifier; rename the schema`);
     const owner = owners.get(type);
     if (owner !== undefined) throw Error(`${schema}: its type ${type} is already ${owner}'s; rename one of them`);
     owners.set(type, schema);

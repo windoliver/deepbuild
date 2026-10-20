@@ -55,8 +55,8 @@ function readable(actual: unknown): string {
 }
 
 export function issue(code: string, path: string, actual: unknown): ContractIssue {
-  let text = readable(actual).slice(0, READ_CAP);
-  // Cut on a code point: never keep the first half of a surrogate pair.
+  // Half a surrogate pair shows as U+FFFD, so the text is JSON; then the cut keeps whole code points.
+  let text = readable(actual).replace(/\p{Surrogate}/gu, '\uFFFD').slice(0, READ_CAP);
   if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
   return { code, retryable: false, remediation: REMEDIATION[code]!, path, actual: text, evidence: [] };
 }
@@ -71,7 +71,6 @@ export class ContractError extends Error implements ContractIssue {
 
   constructor(found: ContractIssue) {
     super(`${found.code} at ${found.path || '/'}: ${found.actual}`);
-    this.name = 'ContractError';
     this.code = found.code;
     this.retryable = found.retryable;
     this.remediation = found.remediation;
@@ -80,3 +79,6 @@ export class ContractError extends Error implements ContractIssue {
     this.evidence = found.evidence;
   }
 }
+
+// On the prototype, so an error's own fields are exactly error@1's.
+Object.defineProperty(ContractError.prototype, 'name', { value: 'ContractError' });

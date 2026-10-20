@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { ContractError, issue, type ContractIssue } from './errors.js';
-import { isObject, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { isObject, notJson, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 
 export type Validation = { ok: true } | { ok: false; issues: ContractIssue[] };
 
@@ -31,22 +31,6 @@ function sameJson(value: unknown, want: string): boolean {
   }
 }
 
-/**
- * True for a value JSON carries as it is: null, a string, a boolean, a finite number, an array with no
- * holes, or a plain object, all the way down and with no cycle.
- */
-const isJson = (value: unknown, depth = 0): boolean => {
-  if (depth > 256) return false;
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) if (!Object.hasOwn(value, i) || !isJson(value[i], depth + 1)) return false;
-    return true;
-  }
-  if (!isObject(value)) return false;
-  const proto = Object.getPrototypeOf(value) as unknown;
-  return (proto === Object.prototype || proto === null) && Object.values(value).every((v) => isJson(v, depth + 1));
-};
 const tagOf = (branch: Schema, tag: string): string => canonicalText(((branch.properties as Schema)[tag] as Schema).const!);
 
 const num = (schema: Schema, key: string): number | undefined => (typeof schema[key] === 'number' ? schema[key] : undefined);
@@ -66,7 +50,8 @@ function compile(root: Schema): Check {
       }
       return check;
     }
-    if ('x-opaque' in schema) return (value, at, out) => { if (!isJson(value)) out.push(issue('type', at, value)); };
+    // Validation has checked the whole value is JSON first, so an opaque one is any JSON.
+    if ('x-opaque' in schema) return () => {};
     if ('const' in schema) {
       const want = canonicalText(schema.const!);
       return (value, at, out) => { if (!sameJson(value, want)) out.push(issue('const', at, value)); };
@@ -245,8 +230,17 @@ export function registry(entries: readonly SchemaEntry[]): Registry {
     return found;
   };
   const validate = (name: string, value: unknown): Validation => {
+    const { check } = get(name);
     const out: ContractIssue[] = [];
-    get(name).check(value, '', out);
+    let found: ReturnType<typeof notJson>;
+    try {
+      found = notJson(value);
+    } catch {
+      // A getter that throws: the value can't be read as JSON.
+      found = { path: '', value };
+    }
+    if (found) return { ok: false, issues: [issue('not_json', found.path, found.value)] };
+    check(value, '', out);
     return out.length ? { ok: false, issues: out } : { ok: true };
   };
   const refuse = (result: Validation): void => { if (!result.ok) throw new ContractError(result.issues[0]!); };
