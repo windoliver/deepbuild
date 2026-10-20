@@ -70,39 +70,105 @@ export interface HookRequest {
   payload: unknown;
 }
 
+export type VerdictRequirement = {
+  req: string;
+  outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+  check: string;
+  depth: string;
+  oracle: "code" | "model" | "person";
+  runs: {
+    clean: number;
+    needed: number;
+    counted: Array<string>;
+  };
+  smallest: string | null;
+  points_to: string | null;
+  evidence: Array<string>;
+  proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+  ask?: string;
+};
+
+export type VerdictPassed = {
+  req: string;
+  outcome: "PASS";
+  check: string;
+  depth: string;
+  oracle: "code" | "model" | "person";
+  runs: {
+    clean: number;
+    needed: number;
+    counted: Array<string>;
+  };
+  smallest: string | null;
+  points_to: string | null;
+  evidence: Array<string>;
+  proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+  ask?: string;
+};
+
+export type VerdictKey = {
+  commit: string;
+  doc_revisions: Array<string>;
+  check_digests: Array<string>;
+  state_digests: Array<string>;
+  environment: string;
+  tools: Array<string>;
+};
+
 /** verdict@1 */
-export interface Verdict {
+export type Verdict = {
   verdict: string;
   claim: string;
-  outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE";
+  outcome: "PASS";
   reasons: Array<string>;
-  requirements: Array<{
-    req: string;
-    outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
-    check: string;
-    depth: string;
-    oracle: "code" | "model" | "person";
-    runs: {
-      clean: number;
-      needed: number;
-      counted: Array<string>;
-    };
-    smallest: string | null;
-    points_to: string | null;
-    evidence: Array<string>;
-    proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
-    ask?: string;
-  }>;
+  requirements: Array<VerdictPassed>;
   smallest: string | null;
   points_to: string | null;
   commit: string;
-  key: {
-    commit: string;
-    doc_revisions: Array<string>;
-    check_digests: Array<string>;
-    state_digests: Array<string>;
-    environment: string;
-    tools: Array<string>;
-  };
+  key: VerdictKey;
   checkout: string;
-}
+} | {
+  verdict: string;
+  claim: string;
+  outcome: "FAIL";
+  reasons: Array<string>;
+  requirements: Array<VerdictRequirement>;
+  smallest: string | null;
+  points_to: string | null;
+  commit: string;
+  key: VerdictKey;
+  checkout: string;
+} | {
+  verdict: string;
+  claim: string;
+  outcome: "INVALID";
+  reasons: Array<string>;
+  requirements: Array<VerdictRequirement>;
+  smallest: string | null;
+  points_to: string | null;
+  commit: string;
+  key: VerdictKey;
+  checkout: string;
+} | {
+  verdict: string;
+  claim: string;
+  outcome: "BLOCKED";
+  reasons: Array<string>;
+  requirements: Array<VerdictRequirement>;
+  smallest: string | null;
+  points_to: string | null;
+  commit: string;
+  key: VerdictKey;
+  checkout: string;
+} | {
+  verdict: string;
+  claim: string;
+  outcome: "INCONCLUSIVE";
+  reasons: Array<string>;
+  requirements: Array<VerdictRequirement>;
+  smallest: string | null;
+  points_to: string | null;
+  commit: string;
+  key: VerdictKey;
+  checkout: string;
+};

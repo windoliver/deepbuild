@@ -64,15 +64,16 @@ function cycles(defs: Schema): string[] {
 
 /** Whether a JSON Pointer names a place the schema types: a listed property, or `*` for every item. */
 function resolves(root: Schema, pointer: string): boolean {
-  let at: Schema = root;
-  for (const raw of pointer.split('/').slice(1)) {
-    const key = raw.replace(/~1/g, '/').replace(/~0/g, '~');
+  const walk = (at: Schema, keys: string[]): boolean => {
     while (typeof at.$ref === 'string') at = resolveRef(root, at.$ref);
+    // A union types the field only if every branch does.
+    if (Array.isArray(at.oneOf)) return at.oneOf.length > 0 && at.oneOf.every((branch) => isObject(branch) && walk(branch, keys));
+    if (!keys.length) return true;
+    const [key, ...rest] = keys as [string, ...string[]];
     const next = key === '*' ? at.items : isObject(at.properties) && Object.hasOwn(at.properties, key) ? at.properties[key] : undefined;
-    if (!isObject(next)) return false;
-    at = next;
-  }
-  return true;
+    return isObject(next) && walk(next, rest);
+  };
+  return walk(root, pointer.split('/').slice(1).map((raw) => raw.replace(/~1/g, '/').replace(/~0/g, '~')));
 }
 
 /**
