@@ -1,0 +1,129 @@
+Base commit: f346706378d9eaabb1965df1167535fac5a9c285
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/604 --reporter=verbose
+Date: 2026-10-20T22:31:28Z  Node v23.9.0  vitest/5.0.5 darwin-arm64 node-v23.9.0
+Note: package.json asks for Node >=24.22.0; this run used the local Node v23.9.0, left as it is.
+Before it: npm ci; the suite's own beforeAll ran cargo build --locked -p deep-contracts --bin deep-contracts.
+Exit code: 1
+Local paths redacted to <checkout>; durations cut.
+
+Result on the base: 21 failed, 10 passed, each failure for the expected reason.
+- AC1, TypeScript (7 failing): every one of the seven kinds still takes the wider writer set. The five hook
+  kinds accept core, app, cli and ext:x; the two readings accept hook, app, cli and ext:x. mcp:x is already
+  refused on the base, so it never shows in the lists.
+- AC1, Rust (7 failing): `deep-contracts check` takes the same writers, for the same reason (the generated
+  Rust types follow the base schemas).
+- AC1, accepted with the named writer (7 passing): on the base each first fixture already validates with
+  writer hook (the five) or core (the readings), since the wide pattern includes both. These hold the fix
+  to keeping the named writer, not to changing anything on the base.
+- AC3 (7 failing): each of the seven entries in digests.json is still the base's digest.
+- AC3 (3 passing): the base copy matches its pinned SHA-256; the names are the base's; the other 60
+  entries and their schemas' d1 equal the base's. These hold the fix to touching nothing else.
+
+------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/604
+
+ ✓ digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 the base copy is the base commit's digests.json
+ ✓ digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 digests.json names the same schemas as on the base, and the package reads that file
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 tool.before@1 is refrozen: its digest changed and is the d1 of its current schema
+   → tool.before@1: still the base digest: expected 'd1:ac08f143a47abe73532bdef405f29fc5f7…' not to be 'd1:ac08f143a47abe73532bdef405f29fc5f7…' // Object.is equality
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 tool.after@1 is refrozen: its digest changed and is the d1 of its current schema
+   → tool.after@1: still the base digest: expected 'd1:38b9776c0e0550b9fcd6817aab7f36b2c2…' not to be 'd1:38b9776c0e0550b9fcd6817aab7f36b2c2…' // Object.is equality
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 agent.stop@1 is refrozen: its digest changed and is the d1 of its current schema
+   → agent.stop@1: still the base digest: expected 'd1:19afe1534d9ceb89b7c497c93603a0b968…' not to be 'd1:19afe1534d9ceb89b7c497c93603a0b968…' // Object.is equality
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 session.start@1 is refrozen: its digest changed and is the d1 of its current schema
+   → session.start@1: still the base digest: expected 'd1:83cd3ca54e74915fc3c1d3a5fb4d59d0d2…' not to be 'd1:83cd3ca54e74915fc3c1d3a5fb4d59d0d2…' // Object.is equality
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 user.ask@1 is refrozen: its digest changed and is the d1 of its current schema
+   → user.ask@1: still the base digest: expected 'd1:eea16eb6e80004a43daf2ca2254b283be6…' not to be 'd1:eea16eb6e80004a43daf2ca2254b283be6…' // Object.is equality
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 reading.recorded@1 is refrozen: its digest changed and is the d1 of its current schema
+   → reading.recorded@1: still the base digest: expected 'd1:ac55bd71a2a0e71967e5496fd974464573…' not to be 'd1:ac55bd71a2a0e71967e5496fd974464573…' // Object.is equality
+ × digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 reading.batch@1 is refrozen: its digest changed and is the d1 of its current schema
+   → reading.batch@1: still the base digest: expected 'd1:96baab0cda8a28220018c590c595138ab8…' not to be 'd1:96baab0cda8a28220018c590c595138ab8…' // Object.is equality
+ ✓ digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 every other entry is byte-identical to the base, and its schema still has that digest
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 tool.before@1: its first fixture validates with writer hook
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 tool.after@1: its first fixture validates with writer hook
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 agent.stop@1: its first fixture validates with writer hook
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 session.start@1: its first fixture validates with writer hook
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 user.ask@1: its first fixture validates with writer hook
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 reading.recorded@1: its first fixture validates with writer core
+ ✓ writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 reading.batch@1: its first fixture validates with writer core
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 tool.before@1: refused, at /writer, with every writer form but hook
+   → tool.before@1: writers it should refuse but accepts: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 tool.after@1: refused, at /writer, with every writer form but hook
+   → tool.after@1: writers it should refuse but accepts: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 agent.stop@1: refused, at /writer, with every writer form but hook
+   → agent.stop@1: writers it should refuse but accepts: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 session.start@1: refused, at /writer, with every writer form but hook
+   → session.start@1: writers it should refuse but accepts: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 user.ask@1: refused, at /writer, with every writer form but hook
+   → user.ask@1: writers it should refuse but accepts: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 reading.recorded@1: refused, at /writer, with every writer form but core
+   → reading.recorded@1: writers it should refuse but accepts: expected [ 'hook', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 a hook kind is written only by the hook, a reading only by the core (TypeScript validate) > AC1 reading.batch@1: refused, at /writer, with every writer form but core
+   → reading.batch@1: writers it should refuse but accepts: expected [ 'hook', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 tool.before@1: Rust takes writer hook and refuses every other form
+   → tool.before@1: writers the Rust types should refuse but take: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 tool.after@1: Rust takes writer hook and refuses every other form
+   → tool.after@1: writers the Rust types should refuse but take: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 agent.stop@1: Rust takes writer hook and refuses every other form
+   → agent.stop@1: writers the Rust types should refuse but take: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 session.start@1: Rust takes writer hook and refuses every other form
+   → session.start@1: writers the Rust types should refuse but take: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 user.ask@1: Rust takes writer hook and refuses every other form
+   → user.ask@1: writers the Rust types should refuse but take: expected [ 'core', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 reading.recorded@1: Rust takes writer core and refuses every other form
+   → reading.recorded@1: writers the Rust types should refuse but take: expected [ 'hook', 'app', 'cli', 'ext:x' ] to deeply equal []
+ × writers.test.ts > AC1 the same writers through the Rust types (deep-contracts check) > AC1 reading.batch@1: Rust takes writer core and refuses every other form
+   → reading.batch@1: writers the Rust types should refuse but take: expected [ 'hook', 'app', 'cli', 'ext:x' ] to deeply equal []
+
+ Test Files  2 failed (2)
+      Tests  21 failed | 10 passed (31)
+
+------------------------------------------------------------------------------------------------------------
+Planted programs (same command, Oct 20, in this worktree; each planted by editing the schemas and
+packages/contracts/digests.json, then `npm run generate -w @deepbuild/contracts`, which writes
+src/generated/types.ts and crates/deep-contracts/src/generated.rs and freezes the entries it finds missing;
+every plant was reverted with `git checkout -- packages/contracts crates/deep-contracts`, and the worktree's
+non-test files end equal to f346706)
+
+R. The fix as the issue describes it: the seven writer patterns narrowed (^hook$ for the five, ^core$ for
+   the two readings), their seven digests deleted and regenerated.
+   -> 31 passed (31).
+   With the four package fixtures whose writer is app (session.start@1/01, user.ask@1/01,
+   reading.recorded@1/01, reading.batch@1/01) also set to hook or core, tests/acceptance/311 ran
+   313 passed (313) (criterion 2 can hold). Without that fixture change 311 fails 12 tests (the fixtures
+   no longer validate); the issue doesn't name the fixtures, but criterion 2 needs them to follow.
+
+P1. Only six narrowed: reading.batch@1 left at hook|app|cli|core|ext:<id>, its digest not refrozen.
+   -> 3 failed | 28 passed:
+      AC3 reading.batch@1 is refrozen: still the base digest
+      AC1 reading.batch@1 (TypeScript): writers it should refuse but accepts: [ 'hook', 'app', 'cli', 'ext:x' ]
+      AC1 reading.batch@1 (Rust): writers the Rust types should refuse but take: [ 'hook', 'app', 'cli', 'ext:x' ]
+
+P2. R plus an extra refrozen digest: lease.acquired@1's holder pattern loses `hook` (the issue says it stays)
+   and its digest is deleted and regenerated.
+   -> 1 failed | 30 passed:
+      AC3 every other entry is byte-identical: entries other than the seven that changed: [ 'lease.acquired@1' ]
+
+P3. R with the Rust types left stale (crates/deep-contracts/src/generated.rs restored to the base after
+   generating).
+   -> 7 failed | 24 passed: every AC1 Rust test, e.g.
+      tool.before@1: writers the Rust types should refuse but take: [ 'core', 'app', 'cli', 'ext:x' ]
+      reading.batch@1: writers the Rust types should refuse but take: [ 'hook', 'app', 'cli', 'ext:x' ]
+
+P4. The readings narrowed to the wrong writer, ^hook$ (the five hook kinds right), all seven refrozen.
+   -> 6 failed | 25 passed:
+      AC1 reading.recorded@1 / reading.batch@1: its first fixture validates with writer core
+          (refused: code pattern, path /writer, actual core)
+      AC1 reading.recorded@1 / reading.batch@1 (TypeScript): writers it should refuse but accepts: [ 'hook' ]
+      AC1 reading.recorded@1 / reading.batch@1 (Rust): Rust should take it: got 'refused /writer: does not match the p…'
+
+P5. R without refreezing: the seven schemas narrowed and regenerated, digests.json left as on the base.
+   -> 7 failed | 24 passed: AC3 <each of the seven> is refrozen: still the base digest
+
+P6+P7. R, then digests.json hand-edited: reading.batch@1 set to d1:000…0 (not its d1), and the unrelated
+   pr.merged@1 entry deleted.
+   -> 3 failed | 28 passed:
+      AC3 digests.json names the same schemas as on the base: 66 names, the base has 67
+      AC3 reading.batch@1 is refrozen: the frozen digest is its current schema's d1: expected 'd1:0000…' to be 'd1:85cd37e5…'
+      AC3 every other entry is byte-identical: entries other than the seven that changed: [ 'pr.merged@1' ]
