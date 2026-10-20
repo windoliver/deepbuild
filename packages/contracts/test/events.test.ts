@@ -70,7 +70,31 @@ describe('the design says', () => {
 
   it('a time in flicks fits an i64', () => {
     const note = first('note.opened@1');
-    for (const t of ['9223372036854775807', '-9223372036854775807']) expect(ok('note.opened@1', { ...note, data: { ...note.data, t } }), t).toBe(true);
+    for (const t of ['9223372036854775807', '-9223372036854775807', '-9223372036854775808']) expect(ok('note.opened@1', { ...note, data: { ...note.data, t } }), t).toBe(true);
     for (const t of ['9223372036854775808', '9999999999999999999', '-9999999999999999999']) expect(ok('note.opened@1', { ...note, data: { ...note.data, t } }), t).toBe(false);
+  });
+
+  it("a note's region is a rectangle of the frame", () => {
+    const note = first('note.opened@1');
+    expect(ok('note.opened@1', { ...note, data: { ...note.data, region: { x: 0, y: 0, w: 10, h: 10 } } })).toBe(true);
+    expect(ok('note.opened@1', { ...note, data: { ...note.data, region: 'top left' } })).toBe(false);
+  });
+
+  it('a task asked for by a message closes by that same handle', () => {
+    expect(ok('task.closed@1', { ...first('task.closed@1'), subject: 'session:01K74G1Z3X5V7T9R1P3N5M7K9H#msg3' })).toBe(true);
+  });
+
+  it("a decision's scope is the learned layer's ladder, written the same way", () => {
+    const decision = first('decision.created@1');
+    for (const scope of ['session:01J9ABC', 'repo:shop', 'all']) expect(ok('decision.created@1', { ...decision, data: { ...decision.data, scope } }), scope).toBe(true);
+    expect(ok('decision.created@1', { ...decision, data: { ...decision.data, scope: 'all_repos' } })).toBe(false);
+  });
+
+  it("a lease's holder is a session, or a document prefix's writer", () => {
+    const lease = first('lease.acquired@1');
+    for (const holder of ['session:01K74G1Z3X5V7T9R1P3N5M7K9H', 'ext:shop', 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H']) {
+      expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
+    }
+    expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder: 'verdict:01K74G4B6D8F0H2K4M6P8R0T2V' } })).toBe(false);
   });
 });
