@@ -21,16 +21,20 @@ let published: CatalogueEntry[] | undefined;
 export const catalogue = (): CatalogueEntry[] => structuredClone((published ??= buildCatalogue(listSchemas())));
 
 const KIND = /`([a-z][a-z_]*)\.([a-z][a-z_]*)`/g;
+/** "event kind `a.b`", or a list of backticked names, joined by commas, "and" or "or", after "event kinds". */
+const CALLED_KINDS = /\bevent kinds?\s+((?:`[^`\n]+`(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)?)+)/gi;
 
 /**
  * The event kinds a text names in backticks that the catalogue lacks. A backticked `<family>.<name>` is
- * read as an event kind when its family is the family of a catalogued kind, so `rules.json` is not one.
+ * read as an event kind when its family is the family of a catalogued kind, or when the text calls it an
+ * event kind, so `rules.json` and a preset such as `art.ink_wash` are not ones.
  */
 export function catalogueDrift(sources: readonly { where: string; text: string }[]): { kind: string; where: string }[] {
   const kinds = new Set(catalogue().map((e) => e.kind));
   const families = new Set([...kinds].map((kind) => kind.split('.')[0]));
   return sources.flatMap(({ where, text }) => {
-    const named = new Set([...text.matchAll(KIND)].filter((m) => families.has(m[1]!)).map((m) => `${m[1]}.${m[2]}`));
+    const called = new Set([...text.matchAll(CALLED_KINDS)].flatMap((m) => [...m[1]!.matchAll(KIND)].map((k) => k[0])));
+    const named = new Set([...text.matchAll(KIND)].filter((m) => families.has(m[1]!) || called.has(m[0])).map((m) => `${m[1]}.${m[2]}`));
     return [...named].filter((kind) => !kinds.has(kind)).map((kind) => ({ kind, where }));
   });
 }
