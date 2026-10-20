@@ -309,7 +309,10 @@ it('an MCP tool call names its server and its tool, and no other call does', () 
       expect(ok(name, { ...mcp!, data }), `${name} without ${field}`).toBe(false);
     }
     for (const call of fixtures(name) as { data: Record<string, unknown> }[]) {
-      if (call.data.kind !== 'mcp') expect(ok(name, { ...call, data: { ...call.data, server: 'deep', tool: 'deep_ask' } }), `${name} ${String(call.data.kind)} naming a server`).toBe(false);
+      if (call.data.kind === 'mcp') continue;
+      for (const [field, value] of [['server', 'deep'], ['tool', 'deep_ask']]) {
+        expect(ok(name, { ...call, data: { ...call.data, [field!]: value } }), `${name} ${String(call.data.kind)} naming a ${field}`).toBe(false);
+      }
     }
   }
 });
