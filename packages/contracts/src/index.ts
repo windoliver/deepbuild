@@ -1,0 +1,13 @@
+export type { JsonValue, Schema, SchemaEntry } from './json.js';
+export { ContractError, ERROR_CODES, type ContractIssue } from './errors.js';
+export { registry, type Registry, type Validation } from './validate.js';
+export { decode, encode, fixtures, frozenDigests, getSchema, listSchemas, validate } from './schemas.js';
+export type { HookAck, HookRequest } from './generated/types.js';
+export { canonicalize, sha256Hex } from './canonical.js';
+export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
+export { lintSchemas, type LintProblem } from './lint.js';
+export { generateTypeScript } from './codegen-ts.js';
+export { generateRust } from './codegen-rust.js';
+export { catalogue, type CatalogueEntry } from './catalogue.js';
+export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles.js';
+export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';

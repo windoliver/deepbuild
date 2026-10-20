@@ -1,0 +1,55 @@
+{
+  "name": "fixture.node.union@1",
+  "node": "A union of objects told apart by one constant field",
+  "schema": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "shell"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "mcp"
+          },
+          "server": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "server",
+          "tool"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  },
+  "instances": [
+    {
+      "kind": "shell",
+      "command": "ls"
+    },
+    {
+      "kind": "mcp",
+      "server": "deep",
+      "tool": "deep_ask"
+    }
+  ]
+}

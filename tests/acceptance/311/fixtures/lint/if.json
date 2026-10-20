@@ -1,0 +1,34 @@
+{
+  "name": "planted.lint.if@1",
+  "path": "/properties/value",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "if": {
+          "properties": {
+            "kind": {
+              "const": "a"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "kind"
+          ]
+        }
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  }
+}

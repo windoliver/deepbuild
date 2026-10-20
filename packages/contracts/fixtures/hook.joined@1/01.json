@@ -1,0 +1,19 @@
+{
+  "order": [
+    "core-guards",
+    "done-gate"
+  ],
+  "bound": 10000,
+  "denies": [
+    {
+      "extension": "core-guards",
+      "reason": "no killing processes by name"
+    }
+  ],
+  "context": [
+    {
+      "extension": "done-gate",
+      "text": "checks pending"
+    }
+  ]
+}

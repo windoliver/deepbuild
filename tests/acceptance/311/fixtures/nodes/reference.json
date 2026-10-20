@@ -1,0 +1,22 @@
+{
+  "name": "fixture.node.reference@1",
+  "node": "A reference to a named definition",
+  "schema": {
+    "$defs": {
+      "Name": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "type": "array",
+    "items": {
+      "$ref": "#/$defs/Name"
+    }
+  },
+  "instances": [
+    [
+      "a",
+      "b"
+    ]
+  ]
+}

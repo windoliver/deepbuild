@@ -1,0 +1,11 @@
+{
+  "name": "fixture.node.string-pattern@1",
+  "node": "A string with a pattern",
+  "schema": {
+    "type": "string",
+    "pattern": "^[a-z]+-[0-9]+$"
+  },
+  "instances": [
+    "abc-12"
+  ]
+}

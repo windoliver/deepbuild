@@ -1,0 +1,10 @@
+{
+  "name": "fixture.node.constant@1",
+  "node": "A constant",
+  "schema": {
+    "const": "fixed"
+  },
+  "instances": [
+    "fixed"
+  ]
+}

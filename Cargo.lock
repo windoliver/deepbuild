@@ -1717,6 +1717,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-contracts"
+version = "0.0.0"
+
+[[package]]
 name = "deep-hook"
 version = "0.0.0"
 

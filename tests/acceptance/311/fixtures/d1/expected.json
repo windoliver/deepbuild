@@ -1,0 +1,6 @@
+{
+  "about": "d1 of the planted method in method.json, computed outside the repo before any digest code existed: annotations (title, description, examples, $comment) dropped in schema positions, every #/$defs $ref replaced by its definition and $defs dropped, then RFC 8785 bytes (the Python encoder that made rfc8785-kernel.json) and SHA-256. method-defs.json (mode moved into $defs) and method-reordered.json (keys reordered) give the same digest; the SHA-256 of each file's own bytes differs from it.",
+  "method": "planted.method@1",
+  "canonical": "{\"additionalProperties\":false,\"properties\":{\"limit\":{\"maximum\":10,\"minimum\":0,\"type\":\"integer\"},\"mode\":{\"enum\":[\"watch\",\"warn\"],\"type\":\"string\"},\"target\":{\"type\":\"string\"}},\"required\":[\"mode\",\"limit\"],\"type\":\"object\"}",
+  "d1": "d1:0e65b328696d45c7f257f5331125a796b25a5b32356418879816c368daa1cbe6"
+}

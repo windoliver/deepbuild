@@ -1,0 +1,11 @@
+{
+  "name": "fixture.node.string-format@1",
+  "node": "A string with a format from the schemas' own closed list (ulid)",
+  "schema": {
+    "type": "string",
+    "format": "ulid"
+  },
+  "instances": [
+    "01K74FKZVK8Q2X5R7M3N9P4T6W"
+  ]
+}

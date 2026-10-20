@@ -1,0 +1,12 @@
+{
+  "title": "planted.method@1",
+  "description": "A planted test method's params.",
+  "type": "object",
+  "properties": {
+    "mode": { "type": "string", "enum": ["watch", "warn"], "description": "How the guard acts." },
+    "limit": { "type": "integer", "minimum": 0, "maximum": 10, "$comment": "kept small" },
+    "target": { "type": "string", "examples": ["main"] }
+  },
+  "required": ["mode", "limit"],
+  "additionalProperties": false
+}

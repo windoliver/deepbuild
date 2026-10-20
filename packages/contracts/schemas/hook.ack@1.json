@@ -1,0 +1,26 @@
+{
+  "title": "hook.ack@1",
+  "description": "The hub's first line back, within 20 ms of reading the request.",
+  "type": "object",
+  "properties": {
+    "ack": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The request's id."
+    },
+    "hold_until_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "When a reply that waits is due, in ms since the epoch, or null."
+    }
+  },
+  "required": [
+    "ack",
+    "hold_until_ms"
+  ],
+  "additionalProperties": false
+}

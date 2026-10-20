@@ -1,0 +1,16 @@
+{
+  "name": "fixture.node.string-enum@1",
+  "node": "A string with an enum",
+  "schema": {
+    "type": "string",
+    "enum": [
+      "watch",
+      "warn",
+      "block"
+    ]
+  },
+  "instances": [
+    "watch",
+    "block"
+  ]
+}
