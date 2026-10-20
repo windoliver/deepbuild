@@ -83,9 +83,16 @@ try {
     // the merge base, and the full run only with the caps.
     if (rest) console.log(`perf: the change's own tests (${ownTests.join(', ')}) account for ${observed.cpuMs - rest.cpuMs} ms of CPU; the checks without them are compared with the merge base`);
     const workload = { id: 'preflight', ...current.preflight };
-    const outcome = compare(workload, rest ?? observed, workloadBase, ['cpuMs', 'peakBytes']);
-    if (rest) compare(workload, observed, null, ['cpuMs', 'peakBytes']);
-    console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(rest ?? observed), base: workloadBase && reading(workloadBase),
+    // Each run is judged on its own, so a regression against the base never hides the full run's cap.
+    const [outcome, full = outcome] = [[rest ?? observed, workloadBase], ...rest ? [[observed, null]] : []].map(([run, against]) => {
+      try {
+        return compare(workload, run, against, ['cpuMs', 'peakBytes']);
+      } catch (error) {
+        verdicts.push(['FAIL', error.message, regressed]);
+        return null;
+      }
+    });
+    if (outcome && full) console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(rest ?? observed), base: workloadBase && reading(workloadBase),
       ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs }, fingerprint: fingerprint() }));
   } catch (error) {
     verdicts.push(['FAIL', error.message, regressed]);
