@@ -97,4 +97,38 @@ describe('the design says', () => {
     }
     expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder: 'verdict:01K74G4B6D8F0H2K4M6P8R0T2V' } })).toBe(false);
   });
+
+  it("a prompt links to a task by any task_ref, as every other kind does", () => {
+    const ask = first('user.ask@1');
+    expect(ok('user.ask@1', { ...ask, data: { ...ask.data, tasks: ['session:01K74G1Z3X5V7T9R1P3N5M7K9H#m214'] } })).toBe(true);
+  });
+
+  it("a patch is named by its ULID, and says what it achieved in counts", () => {
+    const patched = first('doc.patched@1');
+    const achieved = { created: { rect: 1 }, updated: 0, deleted: {}, unchanged: false };
+    expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, patch: '01K74G3A5C7E9G1J3M5P7R9T1V', achieved } })).toBe(true);
+    expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: true } })).toBe(false);
+    const filed = first('suggestion.filed@1');
+    const ops = [{ set: { id: 'row.m14', path: 'params/label', value: 'x' } }];
+    expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, patch: '01K74G3A5C7E9G1J3M5P7R9T1V', ops } })).toBe(true);
+  });
+
+  it('no agent or plug-in writes or closes a note, and a note is named by its ULID', () => {
+    for (const name of ['note.opened@1', 'note.closed@1']) {
+      expect(ok(name, first(name)), name).toBe(true);
+      for (const writer of ['mcp:01K74G1Z3X5V7T9R1P3N5M7K9H', 'ext:x', 'hook']) expect(ok(name, { ...first(name), writer }), `${name} by ${writer}`).toBe(false);
+      expect(ok(name, { ...first(name), data: { ...first(name).data, note: 'x' } }), `${name} note x`).toBe(false);
+    }
+  });
+
+  it('agents cannot apply or widen a learned change, and an applied one names who applied it', () => {
+    for (const name of ['learn.applied@1', 'learn.widened@1']) {
+      const event = first(name);
+      expect(ok(name, event), name).toBe(true);
+      expect(ok(name, { ...event, writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' }), `${name} by an agent`).toBe(false);
+      expect(ok(name, { ...event, data: { ...event.data, applied_by: null } }), `${name} by no one`).toBe(false);
+    }
+    expect(ok('learn.proposed@1', { ...first('learn.proposed@1'), writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' })).toBe(true);
+  });
 });
+
