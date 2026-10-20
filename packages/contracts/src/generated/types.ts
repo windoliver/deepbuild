@@ -50,7 +50,7 @@ export interface AgentStop {
   id: string;
   kind: "agent.stop";
   subject: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1141,7 +1141,7 @@ export interface ReadingBatch {
   id: string;
   kind: "reading.batch";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1161,7 +1161,7 @@ export interface ReadingRecorded {
   id: string;
   kind: "reading.recorded";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1296,7 +1296,7 @@ export interface SessionStart {
   id: string;
   kind: "session.start";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1400,7 +1400,7 @@ export interface ToolAfter {
   id: string;
   kind: "tool.after";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1450,7 +1450,7 @@ export interface ToolBefore {
   id: string;
   kind: "tool.before";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1519,7 +1519,7 @@ export interface UserAsk {
   id: string;
   kind: "user.ask";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
