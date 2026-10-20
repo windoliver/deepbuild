@@ -54,7 +54,12 @@ function readable(actual: unknown): string {
       return String(actual);
     } catch {
       // An object with no prototype, or a proxy, may have no text at all.
-      return Object.prototype.toString.call(actual);
+      try {
+        return Object.prototype.toString.call(actual);
+      } catch {
+        // A revoked proxy has no text of any kind.
+        return '';
+      }
     }
   }
 }
@@ -63,7 +68,8 @@ export function issue(code: string, path: string, actual: unknown): ContractIssu
   // Half a surrogate pair shows as U+FFFD, so the text is JSON; then the cut keeps whole code points.
   let text = readable(actual).replace(/\p{Surrogate}/gu, '\uFFFD').slice(0, READ_CAP);
   if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
-  return { code, retryable: false, remediation: REMEDIATION[code]!, path, actual: text, evidence: [] };
+  // A path names keys, and a key may hold half a pair too.
+  return { code, retryable: false, remediation: REMEDIATION[code]!, path: path.replace(/\p{Surrogate}/gu, '\uFFFD'), actual: text, evidence: [] };
 }
 
 export class ContractError extends Error implements ContractIssue {

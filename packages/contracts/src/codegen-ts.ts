@@ -67,7 +67,8 @@ export function generateTypeScript(entries: readonly SchemaEntry[]): string {
     for (const [def, s] of Object.entries(defs)) out.push(`\nexport type ${root}${pascal(def)} = ${tsType(s as Schema, root, '')};\n`);
     const body = tsType(schema, root, '');
     const record = schema.type === 'object' && isObject(schema.properties);
-    out.push(record ? `\n/** ${name} */\nexport interface ${root} ${body}\n` : `\n/** ${name} */\nexport type ${root} = ${body};\n`);
+    const doc = name.replace(/\*\//g, '*\\/');
+    out.push(record ? `\n/** ${doc} */\nexport interface ${root} ${body}\n` : `\n/** ${doc} */\nexport type ${root} = ${body};\n`);
   }
   return out.join('');
 }
