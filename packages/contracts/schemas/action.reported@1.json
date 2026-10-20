@@ -80,7 +80,12 @@
           ]
         },
         "checked": {
-          "type": "boolean"
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192
         },
         "error": {
           "type": [

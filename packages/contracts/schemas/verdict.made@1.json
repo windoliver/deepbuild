@@ -55,253 +55,1210 @@
       "description": "Its position in the event log, assigned by the hub at append."
     },
     "data": {
-      "type": "object",
-      "properties": {
-        "verdict": {
-          "type": "string",
-          "pattern": "^verdict:[0-9A-Za-z]+$",
-          "description": "A verdict: handle.",
-          "maxLength": 8192
-        },
-        "claim": {
-          "type": "string",
-          "pattern": "^claim:[0-9A-Za-z]+$",
-          "description": "A claim: handle.",
-          "maxLength": 8192
-        },
-        "outcome": {
-          "type": "string",
-          "enum": [
-            "PASS",
-            "FAIL",
-            "INVALID",
-            "BLOCKED",
-            "INCONCLUSIVE"
-          ]
-        },
-        "reasons": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 8192
-          }
-        },
-        "requirements": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "req": {
-                "type": "string",
-                "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
-                "description": "A requirement: req:<definition>#R<n>.",
-                "maxLength": 8192
-              },
-              "outcome": {
-                "type": "string",
-                "enum": [
-                  "PASS",
-                  "FAIL",
-                  "INVALID",
-                  "BLOCKED",
-                  "INCONCLUSIVE",
-                  "pending"
-                ]
-              },
-              "check": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "PASS"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 8192
-              },
-              "depth": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 8192
-              },
-              "oracle": {
-                "type": "string",
-                "enum": [
-                  "code",
-                  "model",
-                  "person"
-                ],
-                "description": "Who judges it: code, a model or a person."
-              },
-              "runs": {
-                "type": "object",
-                "properties": {
-                  "clean": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 65535
-                  },
-                  "needed": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 65535
-                  },
-                  "counted": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^run:[0-9A-Za-z]+$",
-                      "description": "A run: handle.",
-                      "maxLength": 8192
-                    }
-                  }
-                },
-                "required": [
-                  "clean",
-                  "needed",
-                  "counted"
-                ],
-                "additionalProperties": false
-              },
-              "smallest": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 8192
-              },
-              "points_to": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "maxLength": 8192
-              },
-              "evidence": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^[0-9a-f]{64}$",
-                  "description": "A SHA-256, in lower-case hex.",
-                  "maxLength": 8192
-                }
-              },
-              "proof": {
-                "type": "string",
-                "enum": [
-                  "statement",
-                  "static_check",
-                  "test_run",
-                  "journey",
-                  "decision"
-                ]
-              },
-              "ask": {
-                "type": "string",
-                "pattern": "^ask:[0-9A-Za-z]+$",
-                "description": "A ask: handle.",
                 "maxLength": 8192
               }
             },
-            "required": [
-              "req",
-              "outcome",
-              "check",
-              "depth",
-              "oracle",
-              "runs",
-              "smallest",
-              "points_to",
-              "evidence",
-              "proof"
-            ],
-            "additionalProperties": false
-          }
-        },
-        "smallest": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 8192
-        },
-        "points_to": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 8192
-        },
-        "commit": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{40}$",
-          "maxLength": 8192
-        },
-        "key": {
-          "type": "object",
-          "properties": {
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "req": {
+                    "type": "string",
+                    "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+                    "description": "A requirement: req:<definition>#R<n>.",
+                    "maxLength": 8192
+                  },
+                  "outcome": {
+                    "const": "PASS"
+                  },
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "depth": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "oracle": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "model",
+                      "person"
+                    ],
+                    "description": "Who judges it: code, a model or a person."
+                  },
+                  "runs": {
+                    "type": "object",
+                    "properties": {
+                      "clean": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "needed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "counted": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^run:[0-9A-Za-z]+$",
+                          "description": "A run: handle.",
+                          "maxLength": 8192
+                        }
+                      }
+                    },
+                    "required": [
+                      "clean",
+                      "needed",
+                      "counted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "smallest": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "points_to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex.",
+                      "maxLength": 8192
+                    }
+                  },
+                  "proof": {
+                    "type": "string",
+                    "enum": [
+                      "statement",
+                      "static_check",
+                      "test_run",
+                      "journey",
+                      "decision"
+                    ]
+                  },
+                  "ask": {
+                    "type": "string",
+                    "pattern": "^ask:[0-9A-Za-z]+$",
+                    "description": "A ask: handle.",
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "req",
+                  "outcome",
+                  "check",
+                  "depth",
+                  "oracle",
+                  "runs",
+                  "smallest",
+                  "points_to",
+                  "evidence",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
             "commit": {
               "type": "string",
               "pattern": "^[0-9a-f]{40}$",
               "maxLength": 8192
             },
-            "doc_revisions": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 8192
-              }
-            },
-            "check_digests": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^d1:[0-9a-f]{64}$",
-                "maxLength": 8192
-              }
-            },
-            "state_digests": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^[0-9a-f]{64}$",
-                "description": "A SHA-256, in lower-case hex.",
-                "maxLength": 8192
-              }
-            },
-            "environment": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 8192
-            },
-            "tools": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 8192
-              }
+            "key": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$",
+                  "maxLength": 8192
+                },
+                "doc_revisions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "check_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^d1:[0-9a-f]{64}$",
+                    "maxLength": 8192
+                  }
+                },
+                "state_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "A SHA-256, in lower-case hex.",
+                    "maxLength": 8192
+                  }
+                },
+                "environment": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                }
+              },
+              "required": [
+                "commit",
+                "doc_revisions",
+                "check_digests",
+                "state_digests",
+                "environment",
+                "tools"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
             "commit",
-            "doc_revisions",
-            "check_digests",
-            "state_digests",
-            "environment",
-            "tools"
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "FAIL"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "req": {
+                    "type": "string",
+                    "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+                    "description": "A requirement: req:<definition>#R<n>.",
+                    "maxLength": 8192
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "PASS",
+                      "FAIL",
+                      "INVALID",
+                      "BLOCKED",
+                      "INCONCLUSIVE",
+                      "pending"
+                    ]
+                  },
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "depth": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "oracle": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "model",
+                      "person"
+                    ],
+                    "description": "Who judges it: code, a model or a person."
+                  },
+                  "runs": {
+                    "type": "object",
+                    "properties": {
+                      "clean": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "needed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "counted": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^run:[0-9A-Za-z]+$",
+                          "description": "A run: handle.",
+                          "maxLength": 8192
+                        }
+                      }
+                    },
+                    "required": [
+                      "clean",
+                      "needed",
+                      "counted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "smallest": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "points_to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex.",
+                      "maxLength": 8192
+                    }
+                  },
+                  "proof": {
+                    "type": "string",
+                    "enum": [
+                      "statement",
+                      "static_check",
+                      "test_run",
+                      "journey",
+                      "decision"
+                    ]
+                  },
+                  "ask": {
+                    "type": "string",
+                    "pattern": "^ask:[0-9A-Za-z]+$",
+                    "description": "A ask: handle.",
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "req",
+                  "outcome",
+                  "check",
+                  "depth",
+                  "oracle",
+                  "runs",
+                  "smallest",
+                  "points_to",
+                  "evidence",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$",
+                  "maxLength": 8192
+                },
+                "doc_revisions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "check_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^d1:[0-9a-f]{64}$",
+                    "maxLength": 8192
+                  }
+                },
+                "state_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "A SHA-256, in lower-case hex.",
+                    "maxLength": 8192
+                  }
+                },
+                "environment": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                }
+              },
+              "required": [
+                "commit",
+                "doc_revisions",
+                "check_digests",
+                "state_digests",
+                "environment",
+                "tools"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "INVALID"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "req": {
+                    "type": "string",
+                    "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+                    "description": "A requirement: req:<definition>#R<n>.",
+                    "maxLength": 8192
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "PASS",
+                      "FAIL",
+                      "INVALID",
+                      "BLOCKED",
+                      "INCONCLUSIVE",
+                      "pending"
+                    ]
+                  },
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "depth": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "oracle": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "model",
+                      "person"
+                    ],
+                    "description": "Who judges it: code, a model or a person."
+                  },
+                  "runs": {
+                    "type": "object",
+                    "properties": {
+                      "clean": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "needed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "counted": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^run:[0-9A-Za-z]+$",
+                          "description": "A run: handle.",
+                          "maxLength": 8192
+                        }
+                      }
+                    },
+                    "required": [
+                      "clean",
+                      "needed",
+                      "counted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "smallest": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "points_to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex.",
+                      "maxLength": 8192
+                    }
+                  },
+                  "proof": {
+                    "type": "string",
+                    "enum": [
+                      "statement",
+                      "static_check",
+                      "test_run",
+                      "journey",
+                      "decision"
+                    ]
+                  },
+                  "ask": {
+                    "type": "string",
+                    "pattern": "^ask:[0-9A-Za-z]+$",
+                    "description": "A ask: handle.",
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "req",
+                  "outcome",
+                  "check",
+                  "depth",
+                  "oracle",
+                  "runs",
+                  "smallest",
+                  "points_to",
+                  "evidence",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$",
+                  "maxLength": 8192
+                },
+                "doc_revisions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "check_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^d1:[0-9a-f]{64}$",
+                    "maxLength": 8192
+                  }
+                },
+                "state_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "A SHA-256, in lower-case hex.",
+                    "maxLength": 8192
+                  }
+                },
+                "environment": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                }
+              },
+              "required": [
+                "commit",
+                "doc_revisions",
+                "check_digests",
+                "state_digests",
+                "environment",
+                "tools"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "BLOCKED"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "req": {
+                    "type": "string",
+                    "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+                    "description": "A requirement: req:<definition>#R<n>.",
+                    "maxLength": 8192
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "PASS",
+                      "FAIL",
+                      "INVALID",
+                      "BLOCKED",
+                      "INCONCLUSIVE",
+                      "pending"
+                    ]
+                  },
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "depth": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "oracle": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "model",
+                      "person"
+                    ],
+                    "description": "Who judges it: code, a model or a person."
+                  },
+                  "runs": {
+                    "type": "object",
+                    "properties": {
+                      "clean": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "needed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "counted": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^run:[0-9A-Za-z]+$",
+                          "description": "A run: handle.",
+                          "maxLength": 8192
+                        }
+                      }
+                    },
+                    "required": [
+                      "clean",
+                      "needed",
+                      "counted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "smallest": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "points_to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex.",
+                      "maxLength": 8192
+                    }
+                  },
+                  "proof": {
+                    "type": "string",
+                    "enum": [
+                      "statement",
+                      "static_check",
+                      "test_run",
+                      "journey",
+                      "decision"
+                    ]
+                  },
+                  "ask": {
+                    "type": "string",
+                    "pattern": "^ask:[0-9A-Za-z]+$",
+                    "description": "A ask: handle.",
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "req",
+                  "outcome",
+                  "check",
+                  "depth",
+                  "oracle",
+                  "runs",
+                  "smallest",
+                  "points_to",
+                  "evidence",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$",
+                  "maxLength": 8192
+                },
+                "doc_revisions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "check_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^d1:[0-9a-f]{64}$",
+                    "maxLength": 8192
+                  }
+                },
+                "state_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "A SHA-256, in lower-case hex.",
+                    "maxLength": 8192
+                  }
+                },
+                "environment": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                }
+              },
+              "required": [
+                "commit",
+                "doc_revisions",
+                "check_digests",
+                "state_digests",
+                "environment",
+                "tools"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "const": "INCONCLUSIVE"
+            },
+            "verdict": {
+              "type": "string",
+              "pattern": "^verdict:[0-9A-Za-z]+$",
+              "description": "A verdict: handle.",
+              "maxLength": 8192
+            },
+            "claim": {
+              "type": "string",
+              "pattern": "^claim:[0-9A-Za-z]+$",
+              "description": "A claim: handle.",
+              "maxLength": 8192
+            },
+            "reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192
+              }
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "req": {
+                    "type": "string",
+                    "pattern": "^req:[0-9A-Za-z]+#R[1-9][0-9]*$",
+                    "description": "A requirement: req:<definition>#R<n>.",
+                    "maxLength": 8192
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "PASS",
+                      "FAIL",
+                      "INVALID",
+                      "BLOCKED",
+                      "INCONCLUSIVE",
+                      "pending"
+                    ]
+                  },
+                  "check": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "depth": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  },
+                  "oracle": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "model",
+                      "person"
+                    ],
+                    "description": "Who judges it: code, a model or a person."
+                  },
+                  "runs": {
+                    "type": "object",
+                    "properties": {
+                      "clean": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "needed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 65535
+                      },
+                      "counted": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^run:[0-9A-Za-z]+$",
+                          "description": "A run: handle.",
+                          "maxLength": 8192
+                        }
+                      }
+                    },
+                    "required": [
+                      "clean",
+                      "needed",
+                      "counted"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "smallest": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "points_to": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 8192
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$",
+                      "description": "A SHA-256, in lower-case hex.",
+                      "maxLength": 8192
+                    }
+                  },
+                  "proof": {
+                    "type": "string",
+                    "enum": [
+                      "statement",
+                      "static_check",
+                      "test_run",
+                      "journey",
+                      "decision"
+                    ]
+                  },
+                  "ask": {
+                    "type": "string",
+                    "pattern": "^ask:[0-9A-Za-z]+$",
+                    "description": "A ask: handle.",
+                    "maxLength": 8192
+                  }
+                },
+                "required": [
+                  "req",
+                  "outcome",
+                  "check",
+                  "depth",
+                  "oracle",
+                  "runs",
+                  "smallest",
+                  "points_to",
+                  "evidence",
+                  "proof"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "smallest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "points_to": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 8192
+            },
+            "commit": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            },
+            "key": {
+              "type": "object",
+              "properties": {
+                "commit": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$",
+                  "maxLength": 8192
+                },
+                "doc_revisions": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                },
+                "check_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^d1:[0-9a-f]{64}$",
+                    "maxLength": 8192
+                  }
+                },
+                "state_digests": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "description": "A SHA-256, in lower-case hex.",
+                    "maxLength": 8192
+                  }
+                },
+                "environment": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8192
+                },
+                "tools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192
+                  }
+                }
+              },
+              "required": [
+                "commit",
+                "doc_revisions",
+                "check_digests",
+                "state_digests",
+                "environment",
+                "tools"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "outcome",
+            "verdict",
+            "claim",
+            "reasons",
+            "requirements",
+            "smallest",
+            "points_to",
+            "commit",
+            "key"
           ],
           "additionalProperties": false
         }
-      },
-      "required": [
-        "verdict",
-        "claim",
-        "outcome",
-        "reasons",
-        "requirements",
-        "smallest",
-        "points_to",
-        "commit",
-        "key"
-      ],
-      "additionalProperties": false
+      ]
     },
     "evidence": {
       "type": "array",

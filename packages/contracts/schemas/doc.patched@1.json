@@ -76,9 +76,14 @@
         },
         "writer": {
           "type": "string",
-          "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
-          "description": "Who wrote it, from the connection, as the envelope writes a writer.",
-          "maxLength": 8192
+          "enum": [
+            "you",
+            "shell",
+            "record",
+            "agent",
+            "plugin"
+          ],
+          "description": "The canvas writer's kind: you, shell, record, agent or plugin."
         },
         "achieved": {
           "type": "object",

@@ -38,7 +38,7 @@ export interface ActionReported {
     call: string;
     changed: Array<string>;
     verified: "true" | "false" | "unverified";
-    checked: boolean;
+    checked: string | null;
     error: string | null;
   };
   evidence?: Array<string>;
@@ -598,7 +598,7 @@ export interface DocPatched {
     doc: string;
     rev: number;
     patch: string;
-    writer: string;
+    writer: "you" | "shell" | "record" | "agent" | "plugin";
     achieved: {
       created: { [key: string]: number };
       updated: number;
@@ -1001,7 +1001,7 @@ export interface NoteOpened {
     doc: string;
     item: string;
     rev: number;
-    t: string | null;
+    t?: string;
     region: {
       x: number;
       y: number;
@@ -1492,9 +1492,141 @@ export interface VerdictMade {
   seq?: bigint;
   log_pos?: number;
   data: {
+    outcome: "PASS";
     verdict: string;
     claim: string;
-    outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE";
+    reasons: Array<string>;
+    requirements: Array<{
+      req: string;
+      outcome: "PASS";
+      check: string;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      runs: {
+        clean: number;
+        needed: number;
+        counted: Array<string>;
+      };
+      smallest: string | null;
+      points_to: string | null;
+      evidence: Array<string>;
+      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+      ask?: string;
+    }>;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: {
+      commit: string;
+      doc_revisions: Array<string>;
+      check_digests: Array<string>;
+      state_digests: Array<string>;
+      environment: string;
+      tools: Array<string>;
+    };
+  } | {
+    outcome: "FAIL";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: Array<{
+      req: string;
+      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+      check: string;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      runs: {
+        clean: number;
+        needed: number;
+        counted: Array<string>;
+      };
+      smallest: string | null;
+      points_to: string | null;
+      evidence: Array<string>;
+      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+      ask?: string;
+    }>;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: {
+      commit: string;
+      doc_revisions: Array<string>;
+      check_digests: Array<string>;
+      state_digests: Array<string>;
+      environment: string;
+      tools: Array<string>;
+    };
+  } | {
+    outcome: "INVALID";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: Array<{
+      req: string;
+      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+      check: string;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      runs: {
+        clean: number;
+        needed: number;
+        counted: Array<string>;
+      };
+      smallest: string | null;
+      points_to: string | null;
+      evidence: Array<string>;
+      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+      ask?: string;
+    }>;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: {
+      commit: string;
+      doc_revisions: Array<string>;
+      check_digests: Array<string>;
+      state_digests: Array<string>;
+      environment: string;
+      tools: Array<string>;
+    };
+  } | {
+    outcome: "BLOCKED";
+    verdict: string;
+    claim: string;
+    reasons: Array<string>;
+    requirements: Array<{
+      req: string;
+      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+      check: string;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      runs: {
+        clean: number;
+        needed: number;
+        counted: Array<string>;
+      };
+      smallest: string | null;
+      points_to: string | null;
+      evidence: Array<string>;
+      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+      ask?: string;
+    }>;
+    smallest: string | null;
+    points_to: string | null;
+    commit: string;
+    key: {
+      commit: string;
+      doc_revisions: Array<string>;
+      check_digests: Array<string>;
+      state_digests: Array<string>;
+      environment: string;
+      tools: Array<string>;
+    };
+  } | {
+    outcome: "INCONCLUSIVE";
+    verdict: string;
+    claim: string;
     reasons: Array<string>;
     requirements: Array<{
       req: string;

@@ -12,7 +12,7 @@
       "store:forecast"
     ],
     "verified": "unverified",
-    "checked": false,
+    "checked": "the forecast store after the write",
     "error": null
   }
 }
