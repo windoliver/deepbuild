@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const scripts = new URL('../scripts/', import.meta.url);
@@ -224,5 +225,33 @@ test('perf runs racing for a killed run\'s lock never check at the same time', a
   const spans = readFileSync(join(cwd, 'base-spans'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)).sort((a, b) => a[0] - b[0]);
   assert.ok(spans.length >= 1);
   for (let i = 1; i < spans.length; i++) assert.ok(spans[i][0] >= spans[i - 1][1], `two runs checked at once: ${JSON.stringify(spans)}`);
+  assert.equal(existsSync(join(kept, 'lock')), false, 'a run left the lock behind');
+});
+
+// Held at chosen points by a preload, three runs take the interleaving that a busy machine gives by
+// chance: A takes the killed run's lock at once; C read the killed pid before that, acts 150 ms later
+// on what is now A's live lock and holds it aside for 500 ms; D acts at 300 ms, in C's gap.
+test('perf runs racing for a killed run\'s lock never check at the same time, however they interleave', async (t) => {
+  const { cwd, cache } = repository(t, (root) => `
+    import { appendFileSync } from 'node:fs';
+    const start = Date.now();
+    await new Promise((done) => setTimeout(done, 1000));
+    appendFileSync(${JSON.stringify(join(root, 'base-spans'))}, JSON.stringify([start, Date.now()]) + '\\n');
+  `);
+  const kept = keptRoot(cwd, cache);
+  mkdirSync(kept, { recursive: true, mode: 0o700 });
+  writeFileSync(join(kept, 'lock'), String(spawnSync(process.execPath, ['-e', '']).pid));
+  const preload = fileURLToPath(new URL('fixtures/slow-lock.cjs', import.meta.url));
+  const held = (readMs, renameMs) => new Promise((done) => {
+    const child = spawn(process.execPath, ['-r', preload, 'scripts/perf.mjs', JSON.stringify({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 })],
+      { cwd, env: { ...process.env, XDG_CACHE_HOME: cache, SLOW_LOCK_READ_MS: String(readMs), SLOW_LOCK_RENAME_MS: String(renameMs) } });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    child.on('close', (status) => done({ status, output }));
+  });
+  const results = await Promise.all([held(0, 0), held(150, 500), held(300, 0)]);
+  for (const { status, output } of results) if (status !== 0) assert.match(output, /BLOCKED perf: (another perf run|could not take)/, output);
+  const spans = readFileSync(join(cwd, 'base-spans'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(spans.length, 1, `${spans.length} runs checked: ${JSON.stringify(spans)}`);
   assert.equal(existsSync(join(kept, 'lock')), false, 'a run left the lock behind');
 });
