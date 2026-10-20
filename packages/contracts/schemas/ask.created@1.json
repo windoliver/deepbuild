@@ -1,6 +1,99 @@
 {
   "title": "ask.created@1",
   "description": "An ask was created. It always ends: it has a deadline, a fallback and a default.",
+  "$defs": {
+    "pinned_to": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "commit"
+            },
+            "ref": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "ref"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "doc_revision"
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "ref"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "evidence"
+            },
+            "ref": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "A SHA-256, in lower-case hex.",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "kind",
+            "ref"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny",
+              "none"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "decision"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
   "x-feeds": [
     "asks"
   ],
@@ -69,36 +162,7 @@
               "maxLength": 8192
             },
             "options": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow",
-                      "deny",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "label",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
+              "$ref": "#/$defs/options"
             },
             "recommended": {
               "type": [
@@ -140,63 +204,7 @@
               "maxLength": 8192
             },
             "pinned_to": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "commit"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{40}$",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "doc_revision"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "evidence"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "A SHA-256, in lower-case hex.",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
+              "$ref": "#/$defs/pinned_to"
             }
           },
           "required": [
@@ -226,36 +234,7 @@
               "maxLength": 8192
             },
             "options": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow",
-                      "deny",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "label",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
+              "$ref": "#/$defs/options"
             },
             "recommended": {
               "type": [
@@ -297,63 +276,7 @@
               "maxLength": 8192
             },
             "pinned_to": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "commit"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{40}$",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "doc_revision"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "evidence"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "A SHA-256, in lower-case hex.",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
+              "$ref": "#/$defs/pinned_to"
             },
             "steps": {
               "type": "array",
@@ -420,36 +343,7 @@
               "maxLength": 8192
             },
             "options": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow",
-                      "deny",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "label",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
+              "$ref": "#/$defs/options"
             },
             "recommended": {
               "type": [
@@ -491,63 +385,7 @@
               "maxLength": 8192
             },
             "pinned_to": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "commit"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{40}$",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "doc_revision"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "evidence"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "A SHA-256, in lower-case hex.",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
+              "$ref": "#/$defs/pinned_to"
             }
           },
           "required": [
@@ -577,36 +415,7 @@
               "maxLength": 8192
             },
             "options": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow",
-                      "deny",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "label",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
+              "$ref": "#/$defs/options"
             },
             "recommended": {
               "type": [
@@ -648,63 +457,7 @@
               "maxLength": 8192
             },
             "pinned_to": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "commit"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{40}$",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "doc_revision"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "evidence"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "A SHA-256, in lower-case hex.",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
+              "$ref": "#/$defs/pinned_to"
             }
           },
           "required": [
@@ -734,36 +487,7 @@
               "maxLength": 8192
             },
             "options": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow",
-                      "deny",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "label",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
+              "$ref": "#/$defs/options"
             },
             "recommended": {
               "type": [
@@ -805,63 +529,7 @@
               "maxLength": 8192
             },
             "pinned_to": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "commit"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{40}$",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "doc_revision"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "evidence"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "A SHA-256, in lower-case hex.",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
+              "$ref": "#/$defs/pinned_to"
             }
           },
           "required": [
@@ -891,36 +559,7 @@
               "maxLength": 8192
             },
             "options": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "label": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8192
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow",
-                      "deny",
-                      "none"
-                    ]
-                  }
-                },
-                "required": [
-                  "id",
-                  "label",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
+              "$ref": "#/$defs/options"
             },
             "recommended": {
               "type": [
@@ -962,63 +601,7 @@
               "maxLength": 8192
             },
             "pinned_to": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "commit"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{40}$",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "doc_revision"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "evidence"
-                    },
-                    "ref": {
-                      "type": "string",
-                      "pattern": "^[0-9a-f]{64}$",
-                      "description": "A SHA-256, in lower-case hex.",
-                      "maxLength": 8192
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "ref"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
+              "$ref": "#/$defs/pinned_to"
             }
           },
           "required": [

@@ -61,7 +61,7 @@
         "ask": {
           "type": "string",
           "pattern": "^ask:[0-9A-Za-z]+$",
-          "description": "A ask: handle.",
+          "description": "An ask: handle.",
           "maxLength": 8192
         },
         "steps": {

@@ -125,6 +125,23 @@ export interface AskCancelled {
   evidence?: Array<string>;
 }
 
+export type AskCreatedPinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedOptions = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
 /** ask.created@1 */
 export interface AskCreated {
   v: 1;
@@ -140,11 +157,7 @@ export interface AskCreated {
   data: {
     kind: "authority";
     question: string;
-    options: Array<{
-      id: string;
-      label: string;
-      decision: "allow" | "deny" | "none";
-    }>;
+    options: AskCreatedOptions;
     recommended: string | null;
     deadline: number;
     fallback: string;
@@ -152,24 +165,11 @@ export interface AskCreated {
     provisional: boolean;
     owner: string;
     key: string;
-    pinned_to: {
-      kind: "commit";
-      ref: string;
-    } | {
-      kind: "doc_revision";
-      ref: string;
-    } | {
-      kind: "evidence";
-      ref: string;
-    };
+    pinned_to: AskCreatedPinnedTo;
   } | {
     kind: "unblock";
     question: string;
-    options: Array<{
-      id: string;
-      label: string;
-      decision: "allow" | "deny" | "none";
-    }>;
+    options: AskCreatedOptions;
     recommended: string | null;
     deadline: number;
     fallback: string;
@@ -177,16 +177,7 @@ export interface AskCreated {
     provisional: boolean;
     owner: string;
     key: string;
-    pinned_to: {
-      kind: "commit";
-      ref: string;
-    } | {
-      kind: "doc_revision";
-      ref: string;
-    } | {
-      kind: "evidence";
-      ref: string;
-    };
+    pinned_to: AskCreatedPinnedTo;
     steps: Array<string>;
     where: string;
     why: string;
@@ -195,11 +186,7 @@ export interface AskCreated {
   } | {
     kind: "taste";
     question: string;
-    options: Array<{
-      id: string;
-      label: string;
-      decision: "allow" | "deny" | "none";
-    }>;
+    options: AskCreatedOptions;
     recommended: string | null;
     deadline: number;
     fallback: string;
@@ -207,24 +194,11 @@ export interface AskCreated {
     provisional: boolean;
     owner: string;
     key: string;
-    pinned_to: {
-      kind: "commit";
-      ref: string;
-    } | {
-      kind: "doc_revision";
-      ref: string;
-    } | {
-      kind: "evidence";
-      ref: string;
-    };
+    pinned_to: AskCreatedPinnedTo;
   } | {
     kind: "exception";
     question: string;
-    options: Array<{
-      id: string;
-      label: string;
-      decision: "allow" | "deny" | "none";
-    }>;
+    options: AskCreatedOptions;
     recommended: string | null;
     deadline: number;
     fallback: string;
@@ -232,24 +206,11 @@ export interface AskCreated {
     provisional: boolean;
     owner: string;
     key: string;
-    pinned_to: {
-      kind: "commit";
-      ref: string;
-    } | {
-      kind: "doc_revision";
-      ref: string;
-    } | {
-      kind: "evidence";
-      ref: string;
-    };
+    pinned_to: AskCreatedPinnedTo;
   } | {
     kind: "choice";
     question: string;
-    options: Array<{
-      id: string;
-      label: string;
-      decision: "allow" | "deny" | "none";
-    }>;
+    options: AskCreatedOptions;
     recommended: string | null;
     deadline: number;
     fallback: string;
@@ -257,24 +218,11 @@ export interface AskCreated {
     provisional: boolean;
     owner: string;
     key: string;
-    pinned_to: {
-      kind: "commit";
-      ref: string;
-    } | {
-      kind: "doc_revision";
-      ref: string;
-    } | {
-      kind: "evidence";
-      ref: string;
-    };
+    pinned_to: AskCreatedPinnedTo;
   } | {
     kind: "definition";
     question: string;
-    options: Array<{
-      id: string;
-      label: string;
-      decision: "allow" | "deny" | "none";
-    }>;
+    options: AskCreatedOptions;
     recommended: string | null;
     deadline: number;
     fallback: string;
@@ -282,16 +230,7 @@ export interface AskCreated {
     provisional: boolean;
     owner: string;
     key: string;
-    pinned_to: {
-      kind: "commit";
-      ref: string;
-    } | {
-      kind: "doc_revision";
-      ref: string;
-    } | {
-      kind: "evidence";
-      ref: string;
-    };
+    pinned_to: AskCreatedPinnedTo;
   };
   evidence?: Array<string>;
 }
@@ -1479,6 +1418,33 @@ export interface UserAsk {
   evidence?: Array<string>;
 }
 
+export type VerdictMadeRequirements = Array<{
+  req: string;
+  outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
+  check: string;
+  depth: string;
+  oracle: "code" | "model" | "person";
+  runs: {
+    clean: number;
+    needed: number;
+    counted: Array<string>;
+  };
+  smallest: string | null;
+  points_to: string | null;
+  evidence: Array<string>;
+  proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
+  ask?: string;
+}>;
+
+export type VerdictMadeKey = {
+  commit: string;
+  doc_revisions: Array<string>;
+  check_digests: Array<string>;
+  state_digests: Array<string>;
+  environment: string;
+  tools: Array<string>;
+};
+
 /** verdict.made@1 */
 export interface VerdictMade {
   v: 1;
@@ -1516,146 +1482,47 @@ export interface VerdictMade {
     smallest: string | null;
     points_to: string | null;
     commit: string;
-    key: {
-      commit: string;
-      doc_revisions: Array<string>;
-      check_digests: Array<string>;
-      state_digests: Array<string>;
-      environment: string;
-      tools: Array<string>;
-    };
+    key: VerdictMadeKey;
   } | {
     outcome: "FAIL";
     verdict: string;
     claim: string;
     reasons: Array<string>;
-    requirements: Array<{
-      req: string;
-      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
-      check: string;
-      depth: string;
-      oracle: "code" | "model" | "person";
-      runs: {
-        clean: number;
-        needed: number;
-        counted: Array<string>;
-      };
-      smallest: string | null;
-      points_to: string | null;
-      evidence: Array<string>;
-      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
-      ask?: string;
-    }>;
+    requirements: VerdictMadeRequirements;
     smallest: string | null;
     points_to: string | null;
     commit: string;
-    key: {
-      commit: string;
-      doc_revisions: Array<string>;
-      check_digests: Array<string>;
-      state_digests: Array<string>;
-      environment: string;
-      tools: Array<string>;
-    };
+    key: VerdictMadeKey;
   } | {
     outcome: "INVALID";
     verdict: string;
     claim: string;
     reasons: Array<string>;
-    requirements: Array<{
-      req: string;
-      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
-      check: string;
-      depth: string;
-      oracle: "code" | "model" | "person";
-      runs: {
-        clean: number;
-        needed: number;
-        counted: Array<string>;
-      };
-      smallest: string | null;
-      points_to: string | null;
-      evidence: Array<string>;
-      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
-      ask?: string;
-    }>;
+    requirements: VerdictMadeRequirements;
     smallest: string | null;
     points_to: string | null;
     commit: string;
-    key: {
-      commit: string;
-      doc_revisions: Array<string>;
-      check_digests: Array<string>;
-      state_digests: Array<string>;
-      environment: string;
-      tools: Array<string>;
-    };
+    key: VerdictMadeKey;
   } | {
     outcome: "BLOCKED";
     verdict: string;
     claim: string;
     reasons: Array<string>;
-    requirements: Array<{
-      req: string;
-      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
-      check: string;
-      depth: string;
-      oracle: "code" | "model" | "person";
-      runs: {
-        clean: number;
-        needed: number;
-        counted: Array<string>;
-      };
-      smallest: string | null;
-      points_to: string | null;
-      evidence: Array<string>;
-      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
-      ask?: string;
-    }>;
+    requirements: VerdictMadeRequirements;
     smallest: string | null;
     points_to: string | null;
     commit: string;
-    key: {
-      commit: string;
-      doc_revisions: Array<string>;
-      check_digests: Array<string>;
-      state_digests: Array<string>;
-      environment: string;
-      tools: Array<string>;
-    };
+    key: VerdictMadeKey;
   } | {
     outcome: "INCONCLUSIVE";
     verdict: string;
     claim: string;
     reasons: Array<string>;
-    requirements: Array<{
-      req: string;
-      outcome: "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE" | "pending";
-      check: string;
-      depth: string;
-      oracle: "code" | "model" | "person";
-      runs: {
-        clean: number;
-        needed: number;
-        counted: Array<string>;
-      };
-      smallest: string | null;
-      points_to: string | null;
-      evidence: Array<string>;
-      proof: "statement" | "static_check" | "test_run" | "journey" | "decision";
-      ask?: string;
-    }>;
+    requirements: VerdictMadeRequirements;
     smallest: string | null;
     points_to: string | null;
     commit: string;
-    key: {
-      commit: string;
-      doc_revisions: Array<string>;
-      check_digests: Array<string>;
-      state_digests: Array<string>;
-      environment: string;
-      tools: Array<string>;
-    };
+    key: VerdictMadeKey;
   };
   evidence?: Array<string>;
 }
