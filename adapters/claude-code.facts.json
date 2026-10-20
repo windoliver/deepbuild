@@ -1,6 +1,6 @@
 {
   "schema": "adapter.facts@1",
-  "versions": ["2.1.302", "2.1.303", "2.1.304"],
+  "versions": ["2.1.299", "2.1.304"],
   "agent": "claude",
   "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
   "signIn": {
@@ -29,5 +29,495 @@
     "readBy": "a run keeps its session's own transcript",
     "home": ["CLAUDE_CONFIG_DIR", "~/.claude"],
     "path": "projects/{cwd with each non-alphanumeric character as -}/{session}.jsonl"
+  },
+  "events": {
+    "readBy": "each hook's strict payload schema per covered version, from Claude Code's hooks reference (code.claude.com/docs/en/hooks), which publishes no schema: the fields it names as always sent are required, the rest it names optional, and a Bash call's tool_input.command a string; a missing or retyped field, or an event not listed, reads unverified and the session's holds go watch-only, naming the field; an unlisted field is only a reading (#47)",
+    "versions": {
+      "2.1.299": {
+        "SessionStart": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "source": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "model": "string",
+            "session_title": "string",
+            "seconds_since_last_response": "number",
+            "context_tokens": "number",
+            "prompt_cache_likely_expired": "boolean",
+            "estimated_cache_write_usd": "number"
+          }
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "prompt": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "session_title": "string"
+          }
+        },
+        "PreToolUse": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_use_id": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          },
+          "tools": {
+            "Bash": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "permission_suggestions": "array",
+            "mcp_server": "object"
+          },
+          "tools": {
+            "Bash": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_response": "any",
+            "tool_use_id": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "duration_ms": "number",
+            "mcp_server": "object"
+          }
+        },
+        "PostToolUseFailure": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_use_id": "string",
+            "error": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "is_interrupt": "boolean",
+            "duration_ms": "number",
+            "mcp_server": "object"
+          }
+        },
+        "Stop": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "stop_hook_active": "boolean",
+            "last_assistant_message": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "background_tasks": "array",
+            "session_crons": "array"
+          }
+        },
+        "StopFailure": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "error": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "error_details": "any",
+            "last_assistant_message": "string"
+          }
+        },
+        "SessionEnd": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "reason": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        }
+      },
+      "2.1.304": {
+        "SessionStart": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "source": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "model": "string",
+            "session_title": "string",
+            "seconds_since_last_response": "number",
+            "context_tokens": "number",
+            "prompt_cache_likely_expired": "boolean",
+            "estimated_cache_write_usd": "number"
+          }
+        },
+        "UserPromptSubmit": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "prompt": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "session_title": "string"
+          }
+        },
+        "PreToolUse": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_use_id": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          },
+          "tools": {
+            "Bash": { "tool_input.command": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "permission_suggestions": "array",
+            "mcp_server": "object"
+          },
+          "tools": {
+            "Bash": { "tool_input.command": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_response": "any",
+            "tool_use_id": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "duration_ms": "number",
+            "mcp_server": "object"
+          }
+        },
+        "PostToolUseFailure": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_use_id": "string",
+            "error": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "is_interrupt": "boolean",
+            "duration_ms": "number",
+            "mcp_server": "object"
+          }
+        },
+        "Stop": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "stop_hook_active": "boolean",
+            "last_assistant_message": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "background_tasks": "array",
+            "session_crons": "array"
+          }
+        },
+        "StopFailure": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "error": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "error_details": "any",
+            "last_assistant_message": "string"
+          }
+        },
+        "SessionEnd": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "reason": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        }
+      }
+    }
+  },
+  "mapping": {
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant",
+    "common": { "session": "session_id", "subagent": "agent_id" },
+    "SessionStart": {
+      "kind": "session.start",
+      "data": { "source": "source" }
+    },
+    "UserPromptSubmit": {
+      "kind": "user.ask",
+      "data": { "text": "prompt" },
+      "origin": {
+        "join": { "payload": "prompt_id", "transcript": "promptId" },
+        "rules": [
+          { "prompt": "The app was quit while you were working.", "from": "continuation" },
+          {
+            "match": { "origin.handback": true },
+            "from": "subagent"
+          },
+          {
+            "match": { "turnOrigin": "task_notification" },
+            "from": "subagent"
+          },
+          {
+            "match": { "turnOrigin": "peer" },
+            "from": "session"
+          },
+          {
+            "match": { "turnOrigin": "scheduled" },
+            "from": "scheduled"
+          },
+          {
+            "match": { "turnOrigin": "human" },
+            "from": "person"
+          }
+        ],
+        "otherwise": "unknown"
+      }
+    },
+    "PreToolUse": {
+      "kind": "tool.before",
+      "data": { "call": "tool_use_id", "tool": "tool_name" },
+      "call": "kind"
+    },
+    "PermissionRequest": {
+      "kind": "permission.request",
+      "data": { "kind": "=tool", "tool": "tool_name" },
+      "call": "detail"
+    },
+    "PostToolUse": {
+      "kind": "tool.after",
+      "data": { "call": "tool_use_id", "tool": "tool_name", "outcome": "=ok" }
+    },
+    "PostToolUseFailure": {
+      "kind": "tool.after",
+      "data": { "call": "tool_use_id", "tool": "tool_name", "outcome": "=failed" }
+    },
+    "Stop": {
+      "kind": "agent.stop",
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" }
+    },
+    "StopFailure": {
+      "kind": "agent.stop",
+      "data": { "outcome": "=failed" },
+      "cause": {
+        "field": "error",
+        "values": {
+          "rate_limit": "rate_limited",
+          "overloaded": "rate_limited",
+          "authentication_failed": "sign_in_required",
+          "oauth_org_not_allowed": "sign_in_required"
+        },
+        "otherwise": "unknown"
+      }
+    },
+    "SessionEnd": {
+      "kind": "session.end",
+      "data": { "reason": "reason" }
+    }
+  },
+  "toolKinds": {
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "tools": {
+      "Bash": "shell",
+      "Read": "read",
+      "Edit": "edit",
+      "MultiEdit": "edit",
+      "NotebookEdit": "edit",
+      "Write": "write",
+      "Glob": "search",
+      "Grep": "search",
+      "WebFetch": "fetch",
+      "WebSearch": "fetch"
+    },
+    "prefixes": { "mcp__": "mcp" },
+    "otherwise": "unknown"
+  },
+  "toolDetail": {
+    "readBy": "what a call of each kind carries: a shell call's command, a file call's paths",
+    "command": { "shell": "tool_input.command" },
+    "paths": {
+      "Read": "tool_input.file_path",
+      "Edit": "tool_input.file_path",
+      "MultiEdit": "tool_input.file_path",
+      "Write": "tool_input.file_path",
+      "NotebookEdit": "tool_input.notebook_path"
+    }
   }
 }
