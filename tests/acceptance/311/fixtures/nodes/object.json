@@ -1,0 +1,28 @@
+{
+  "name": "fixture.node.object@1",
+  "node": "An object with listed properties and no others",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "count": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "instances": [
+    {
+      "name": "a",
+      "count": 3
+    },
+    {
+      "name": "b"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "about": "RFC 8785 kernel fixture for #311, written before any encoder existed. Each record's canonical bytes (UTF-8 of 'canonical') and SHA-256 were computed by two independent throwaway encoders outside the repo (a Python one: keys sorted by their UTF-16-BE bytes, numbers by ECMA-262 Number::toString over repr's shortest digits; and a Node one: Object.keys().sort() and JSON.stringify), which agreed on every record. 'input' is the record as a JSON text, keys out of order and with whitespace.",
+  "records": [
+    {
+      "kind": "verdict record",
+      "input": "{\n  \"smallest\": \"seq \\\"01\\\" accepted\",\n  \"requirements\": [\n    { \"runs\": { \"counted\": [\"run:01K74G3A5C7E9G1J3M5P7R9T1V\"], \"needed\": 3, \"clean\": 0 },\n      \"req\": \"req:01K74G0A1B2C3D4E5F6G7H8J9K#R2\", \"outcome\": \"FAIL\", \"oracle\": \"code\",\n      \"evidence\": [\"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\"] }\n  ],\n  \"points_to\": \"packages/contracts/src/seq.ts:12\",\n  \"outcome\": \"FAIL\",\n  \"commit\": \"0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46\",\n  \"claim\": \"claim:01K74G1Z3X5V7T9R1P3N5M7K9H\",\n  \"verdict\": \"verdict:01K74G2M8D3Q5W7Y9A1C3E5G7J\"\n}",
+      "canonical": "{\"claim\":\"claim:01K74G1Z3X5V7T9R1P3N5M7K9H\",\"commit\":\"0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46\",\"outcome\":\"FAIL\",\"points_to\":\"packages/contracts/src/seq.ts:12\",\"requirements\":[{\"evidence\":[\"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\"],\"oracle\":\"code\",\"outcome\":\"FAIL\",\"req\":\"req:01K74G0A1B2C3D4E5F6G7H8J9K#R2\",\"runs\":{\"clean\":0,\"counted\":[\"run:01K74G3A5C7E9G1J3M5P7R9T1V\"],\"needed\":3}}],\"smallest\":\"seq \\\"01\\\" accepted\",\"verdict\":\"verdict:01K74G2M8D3Q5W7Y9A1C3E5G7J\"}",
+      "sha256": "0a1a3fbef1c1888529287b77332eeb34c0397de8392136d1f6e5833e13e92270"
+    },
+    {
+      "kind": "definition of done",
+      "input": "{ \"task_ref\": \"task:01K74FX2B4D6F8H0K2M4P6R8T0\",\n  \"requirements\": [ { \"text\": \"A seq sent as a JSON number fails the hook request schema\", \"oracle\": \"code\", \"id\": \"R1\", \"depth\": \"unit\", \"on_base\": \"fails\" },\n                    { \"id\": \"R2\", \"text\": \"Budgets hold on the reference Mac\", \"oracle\": \"code\", \"depth\": \"perf\", \"on_base\": \"fails\" } ],\n  \"issue_rev\": 7, \"base_commit\": \"0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46\",\n  \"budget\": { \"runs\": 12, \"cap_usd\": 2.5 } }",
+      "canonical": "{\"base_commit\":\"0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46\",\"budget\":{\"cap_usd\":2.5,\"runs\":12},\"issue_rev\":7,\"requirements\":[{\"depth\":\"unit\",\"id\":\"R1\",\"on_base\":\"fails\",\"oracle\":\"code\",\"text\":\"A seq sent as a JSON number fails the hook request schema\"},{\"depth\":\"perf\",\"id\":\"R2\",\"on_base\":\"fails\",\"oracle\":\"code\",\"text\":\"Budgets hold on the reference Mac\"}],\"task_ref\":\"task:01K74FX2B4D6F8H0K2M4P6R8T0\"}",
+      "sha256": "5d136b6c260c8fa328ab538ab56525fe9d4d6390a14afb5c048b0b8781919d9a"
+    },
+    {
+      "kind": "approval's plan",
+      "input": "{\"steps\":[{\"undo\":\"git revert --no-edit HEAD\",\"public\":true,\"does\":\"merge PR 42 into main\",\"cost\":0,\"changes\":[\"main\"]},\n {\"cost\":0.75,\"does\":\"tag v0.1.0\",\"public\":true,\"undo\":\"delete tag v0.1.0\",\"changes\":[\"refs/tags/v0.1.0\"]}],\n \"diff\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"ask\":\"ask:01K74G4B6D8F0H2K4M6P8R0T2V\"}",
+      "canonical": "{\"ask\":\"ask:01K74G4B6D8F0H2K4M6P8R0T2V\",\"diff\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"steps\":[{\"changes\":[\"main\"],\"cost\":0,\"does\":\"merge PR 42 into main\",\"public\":true,\"undo\":\"git revert --no-edit HEAD\"},{\"changes\":[\"refs/tags/v0.1.0\"],\"cost\":0.75,\"does\":\"tag v0.1.0\",\"public\":true,\"undo\":\"delete tag v0.1.0\"}]}",
+      "sha256": "9110519c227aa62820f50884c8f3a4a66d33ea67f6c48261ea8b814e6562a7f0"
+    },
+    {
+      "kind": "ask's key",
+      "input": "{ \"target\": { \"owner\": \"you\", \"kind\": \"pull_request\" }, \"kind\": \"authority\", \"effect\": \"merge\",\n   \"bounds\": { \"kinds\": [\"fix\"], \"max_files\": 20 } }",
+      "canonical": "{\"bounds\":{\"kinds\":[\"fix\"],\"max_files\":20},\"effect\":\"merge\",\"kind\":\"authority\",\"target\":{\"kind\":\"pull_request\",\"owner\":\"you\"}}",
+      "sha256": "05bbb7dd590ac421ef06c214210671e6f59ff0b32438268af576ed4ae7f57c42"
+    },
+    {
+      "kind": "open item's ID",
+      "input": "{\"text\":\"caf\\u00e9 menu: \\\"later\\\"\\ttab\\nnew line \\u001f unit sep \\u007f del / slash \\\\ back\",\n   \"task_ref\":\"task:01K74FX2B4D6F8H0K2M4P6R8T0\"}",
+      "canonical": "{\"task_ref\":\"task:01K74FX2B4D6F8H0K2M4P6R8T0\",\"text\":\"café menu: \\\"later\\\"\\ttab\\nnew line \\u001f unit sep  del / slash \\\\ back\"}",
+      "sha256": "7fe7bc1f987c9347c6bb87d4ed7a4ee28846c202edd8551037fb69016205496f"
+    },
+    {
+      "kind": "package envelope",
+      "input": "{\n  \"version\": \"1.2.0\",\n  \"name\": \"ext.weather.panel\",\n  \"files\": { \"\\ue000\": \"sha256:private-use key\", \"\\ud83d\\ude00\": \"sha256:emoji key\", \"a\": \"ascii key\" },\n  \"size\": \"9007199254740993\",\n  \"since\": \"0.1.0\"\n}",
+      "canonical": "{\"files\":{\"a\":\"ascii key\",\"😀\":\"sha256:emoji key\",\"\":\"sha256:private-use key\"},\"name\":\"ext.weather.panel\",\"since\":\"0.1.0\",\"size\":\"9007199254740993\",\"version\":\"1.2.0\"}",
+      "sha256": "6e0837922bd67883fff61b8b7a237ebb50392facb2e997d09935bb6fdefda76c"
+    },
+    {
+      "kind": "numbers (not a hashed kind)",
+      "input": "[0, -0, 1, -1, 4.50, 2e-3, 1e21, 1E30, 1e-7, 0.000001, 1e20, 123456789012,\n 9007199254740991, 333333333.33333329, 0.1, 5e-324, 1.7976931348623157e308, 123e-20]",
+      "canonical": "[0,0,1,-1,4.5,0.002,1e+21,1e+30,1e-7,0.000001,100000000000000000000,123456789012,9007199254740991,333333333.3333333,0.1,5e-324,1.7976931348623157e+308,1.23e-18]",
+      "sha256": "74cf6ea4d84c0ba9a7771782b5eb4efd58924189b1b333a2d636151681a6f08a"
+    }
+  ]
+}

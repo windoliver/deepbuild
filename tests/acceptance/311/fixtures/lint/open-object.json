@@ -1,0 +1,21 @@
+{
+  "name": "planted.lint.open-object@1",
+  "path": "/properties/value",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,4 @@
+{"additionalProperties":false,"required":["mode","limit"],
+ "properties":{"target":{"examples":["main"],"type":"string"},"limit":{"$comment":"kept small","maximum":10,"type":"integer","minimum":0},
+   "mode":{"enum":["watch","warn"],"description":"How the guard acts.","type":"string"}},
+ "description":"A planted test method's params.","type":"object","title":"planted.method@1"}

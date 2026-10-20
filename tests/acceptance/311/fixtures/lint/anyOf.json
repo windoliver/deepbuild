@@ -1,0 +1,23 @@
+{
+  "name": "planted.lint.anyOf@1",
+  "path": "/properties/value",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          }
+        ]
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  }
+}

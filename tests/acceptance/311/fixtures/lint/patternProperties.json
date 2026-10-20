@@ -1,0 +1,22 @@
+{
+  "name": "planted.lint.patternProperties@1",
+  "path": "/properties/value",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "object",
+        "patternProperties": {
+          "^x-": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  }
+}

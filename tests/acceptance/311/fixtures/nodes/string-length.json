@@ -1,0 +1,13 @@
+{
+  "name": "fixture.node.string-length@1",
+  "node": "A string with a length",
+  "schema": {
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 8
+  },
+  "instances": [
+    "a",
+    "abcdefgh"
+  ]
+}

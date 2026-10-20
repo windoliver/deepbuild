@@ -1,0 +1,20 @@
+{
+  "name": "fixture.node.map@1",
+  "node": "A map from a string key, with its key's pattern, to one value schema",
+  "schema": {
+    "type": "object",
+    "propertyNames": {
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "additionalProperties": {
+      "type": "integer"
+    }
+  },
+  "instances": [
+    {
+      "alpha": 1,
+      "beta_2": 2
+    },
+    {}
+  ]
+}

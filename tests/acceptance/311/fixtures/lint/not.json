@@ -1,0 +1,19 @@
+{
+  "name": "planted.lint.not@1",
+  "path": "/properties/value",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "string",
+        "not": {
+          "const": "x"
+        }
+      }
+    },
+    "required": [
+      "value"
+    ],
+    "additionalProperties": false
+  }
+}
