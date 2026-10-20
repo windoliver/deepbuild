@@ -25,8 +25,8 @@
     },
     "writer": {
       "type": "string",
-      "pattern": "^(core|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection: an extension through the API, or the core; never an agent."
+      "pattern": "^(hook|app|cli|core|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection; never an agent through MCP, since no deep_* tool produces this kind."
     },
     "actor": {
       "type": "string",

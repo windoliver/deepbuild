@@ -25,11 +25,8 @@
     },
     "writer": {
       "type": "string",
-      "enum": [
-        "app",
-        "hook"
-      ],
-      "description": "Who wrote it, from the connection; only these writers append this kind."
+      "pattern": "^(hook|app|cli|core|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection; never an agent through MCP, since no deep_* tool produces this kind."
     },
     "actor": {
       "type": "string",

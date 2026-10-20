@@ -24,8 +24,9 @@
       "description": "The session this event is about."
     },
     "writer": {
-      "const": "hook",
-      "description": "Only deep-hook appends this kind, from the agent's hook; never an agent through MCP."
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection; never an agent through MCP, since no deep_* tool produces this kind."
     },
     "actor": {
       "type": "string",
