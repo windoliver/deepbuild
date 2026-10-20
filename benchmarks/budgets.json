@@ -58,6 +58,13 @@
       "margin": 0.5,
       "limits": { "peakBytes": 250000000 },
       "initialReason": "Issue #56 first measurement: the merge base has no hub core. The bench starts the Effect 4 spike hub, holds one hook in each of 50 sessions on a check that passes at once, and prints hold latency, the hub's peak memory and its leaked handles; perf times the whole bench in 20 rounds and caps its peak memory at 250 MB, about twice what the hub and its bench use together. p50 and peak memory get a 50% margin against a later merge base, since a run that starts processes moves with machine load."
+    },
+    {
+      "id": "corpus-replay",
+      "command": ["node", "scripts/corpus.mjs", "replay"],
+      "margin": 0.5,
+      "limits": { "p50Ms": 120000 },
+      "initialReason": "Issue #47 first measurement: the merge base has no fixture corpus. One process replays every recorded payload under adapters/corpus through its adapter and compares it with its stored events, field by field. Issue #47 caps the full replay at 2 minutes on the reference Mac; later merge bases hold p50 and peak memory to a 50% margin."
     }
   ]
 }
