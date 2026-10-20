@@ -367,8 +367,11 @@ export const checks = {
     const c = context(spike, 'budgets');
     const b = c.entry?.budgets ?? {};
     const m = b.machine ?? {};
-    if (!(m.model === 'Mac15,7' && /M3 Pro/.test(m.chip ?? '') && m.cpus === 12 && m.memoryBytes === 36 * 2 ** 30 && m.power === 'AC' && m.lowPowerMode === false && m.thermal === 'nominal' && typeof m.macOS === 'string' && m.macOS))
-      c.fail(`budgets count only on the reference Mac (Mac15,7, M3 Pro, 12 cores, 36 GB) on AC power, Low Power Mode off, thermal nominal, with its macOS build: ${text(m)}`);
+    // Owner decision, October 19: readings count on battery or AC. Only the hardware fingerprint
+    // must match, with Low Power Mode off; the power and thermal states are named, not gated.
+    if (!(m.model === 'Mac15,7' && /M3 Pro/.test(m.chip ?? '') && m.cpus === 12 && m.memoryBytes === 36 * 2 ** 30 && m.lowPowerMode === false
+      && ['AC', 'battery'].includes(m.power) && typeof m.thermal === 'string' && m.thermal.trim() && typeof m.macOS === 'string' && m.macOS))
+      c.fail(`budgets count only on the reference Mac (Mac15,7, M3 Pro, 12 cores, 36 GB) with Low Power Mode off, naming its power state (AC or battery), thermal state and macOS build: ${text(m)}`);
     if (!/^[0-9a-f]{40}$/.test(b.baseCommit ?? '') || spawnSync('git', ['merge-base', '--is-ancestor', b.baseCommit, 'HEAD'], { cwd: root }).status !== 0) c.fail(`the budgets name the merge base they compare with, an ancestor of HEAD: ${text(b.baseCommit)}`);
     if (b.base === null ? !(typeof b.initialReason === 'string' && b.initialReason.trim()) : !DESKTOP.every((surface) => finite(b.base?.hookOverheadMs?.[surface]?.p95))) c.fail('the budgets compare with the merge base: its readings, or base: null with an initialReason when it has none');
     for (const surface of DESKTOP) {
