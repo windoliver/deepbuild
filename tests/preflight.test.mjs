@@ -172,7 +172,8 @@ test('the lint lane fails Rust code that clippy warns about', (t) => {
   const clippy = checks.find(({ name }) => name === 'lint').commands.find((parts) => parts.includes('clippy'));
   assert.ok(clippy, 'the lint lane runs clippy');
   const [command, ...args] = clippy;
-  const result = spawnSync(command, args, { cwd, encoding: 'utf8' });
+  // Inside a perf copy CARGO_TARGET_DIR names that side's kept builds; the fixture builds in its own.
+  const result = spawnSync(command, args, { cwd, encoding: 'utf8', env: { ...process.env, CARGO_TARGET_DIR: undefined } });
   assert.notEqual(result.status, 0, result.stderr);
   assert.match(result.stderr, /function `unused` is never used/);
 });

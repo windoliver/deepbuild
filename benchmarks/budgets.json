@@ -44,6 +44,20 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #15 first measurement: the merge base has no evidence store. One process runs one retention pass over 36 days of records at 500 a day against a temp store, so p50 includes Node's start and the per-call limits stay in tests/acceptance/15/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-core-plain",
+      "command": ["node", "spikes/hub-core/bench.mjs", "--variant", "plain"],
+      "margin": 0.5,
+      "limits": { "peakBytes": 250000000 },
+      "initialReason": "Issue #56 first measurement: the merge base has no hub core. The bench starts the plain TypeScript spike hub, holds one hook in each of 50 sessions on a check that passes at once, and prints hold latency, the hub's peak memory and its leaked handles; perf times the whole bench in 20 rounds and caps its peak memory at 250 MB, about twice what the hub and its bench use together. p50 and peak memory get a 50% margin against a later merge base, since a run that starts processes moves with machine load."
+    },
+    {
+      "id": "hub-core-effect",
+      "command": ["node", "spikes/hub-core/bench.mjs", "--variant", "effect"],
+      "margin": 0.5,
+      "limits": { "peakBytes": 250000000 },
+      "initialReason": "Issue #56 first measurement: the merge base has no hub core. The bench starts the Effect 4 spike hub, holds one hook in each of 50 sessions on a check that passes at once, and prints hold latency, the hub's peak memory and its leaked handles; perf times the whole bench in 20 rounds and caps its peak memory at 250 MB, about twice what the hub and its bench use together. p50 and peak memory get a 50% margin against a later merge base, since a run that starts processes moves with machine load."
     }
   ]
 }

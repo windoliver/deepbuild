@@ -1,0 +1,48 @@
+Acceptance tests for #80 on the base 6acd16c (origin/main; it has no spikes/80/), run on 2026-10-19
+with DEEP_SPIKE80_RECORDINGS unset. One failure reason per test. No local path appears in the output.
+
+  node --test tests/acceptance/80/spike.test.mjs
+
+# tests 15
+# pass 0
+# fail 15
+
+not ok 1 - #80.373518b6 #80.6231c088 #80.9492ec1f #80.8c6cf36a #80.1af2fb72 #80.014d1b64 #80.9b528e55 #80.b11edf91 #80.119fc62b #80.15c33f50 #80.661b1ddf the decision record names every criterion once, each surface with the versions tested, and only throwaway hook scripts
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 2 - #80.373518b6 a Stop held with decision: block reaches the agent with its reason, in the Claude desktop app and in Codex Desktop
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 3 - #80.6231c088 an idle interactive Claude Code session, never claude -p, wakes on an answer from its waiter in the terminal and in the desktop app, or its fallback shows the delay the record states
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 4 - #80.9492ec1f a message typed while a tool call runs in the Claude desktop app shows up as an ask at the next hook, not as a new prompt
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 5 - #80.8c6cf36a a one-line verdict from a hook reply shows in the Claude desktop app and in Codex Desktop, with the recording
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 6 - #80.1af2fb72 whether the Claude desktop app runs the status line command and Codex Desktop writes token events with rate_limits is shown by the logs, and an app that does neither has its first window reading named
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 7 - #80.014d1b64 a Codex stop held by a hook with a 45-minute timeout continues with its reason after 45 minutes in the CLI and in Codex Desktop, or the cut is recorded, and the slow lane holds at least 5 s less
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 8 - #80.9b528e55 nine send-backs in a row with no tool call show where Claude Code ends the turn, and the decision plans around at most that cap
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 9 - #80.b11edf91 whether any ~/.codex/hooks.json entry fires in Codex Desktop agrees with its log, and when none fires its sessions are watch-only
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 10 - #80.119fc62b hook overhead p95 in both desktop apps matches its samples, and each held stop adds under 20 ms beyond its checks, on the reference Mac against the merge base
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 11 - #80.15c33f50 for the terminal and each app, a line during a 60 s tool call and anything fired before a session was deleted are shown by the log and a recording, or recorded as none
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 12 - #80.661b1ddf whether ConfigChange fires when a Bash call's child edits ~/.claude/settings.json agrees with the logs, in the terminal and the desktop app
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 13 - #80.373518b6 #80.6231c088 #80.9492ec1f #80.8c6cf36a #80.1af2fb72 #80.014d1b64 #80.9b528e55 #80.b11edf91 #80.119fc62b #80.15c33f50 #80.661b1ddf nothing unproven is PASS: a criterion whose evidence doesn't hold is FAIL, BLOCKED, INVALID or INCONCLUSIVE
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+not ok 14 - #80.373518b6 #80.6231c088 #80.9492ec1f #80.8c6cf36a #80.1af2fb72 #80.014d1b64 #80.9b528e55 #80.b11edf91 #80.119fc62b #80.15c33f50 #80.661b1ddf the spike's files hold no personal data, and its recordings stay outside the repo, named by hash
+    BLOCKED: there is no spikes/80/ folder
+not ok 15 - #80.661b1ddf the Claude Code adapter adds a ConfigChange entry only where the decision says ConfigChange fires
+    BLOCKED: the spike left no decision record at spikes/80/decision.json
+
+  node --test tests/acceptance/80/spike.live.test.mjs
+
+# tests 1
+# pass 0
+# fail 1
+
+not ok 1 - #80.373518b6 #80.6231c088 #80.9492ec1f #80.8c6cf36a #80.1af2fb72 #80.014d1b64 #80.9b528e55 #80.b11edf91 #80.15c33f50 every recording the decision names is kept outside the repo, whole, with the hash and size the record gives
+    "BLOCKED: set DEEP_SPIKE80_RECORDINGS to the folder that holds the spike's recordings

@@ -55,6 +55,16 @@
           "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
         }
       }
+    },
+    "spikes/hub-core/package.json": {
+      "dependencies": {
+        "effect": { "spec": "4.0.5", "why": "Issue #56: the Effect 4 build of the hub-core spike, and the import(\"effect/Effect\") timing." }
+      },
+      "devDependencies": {
+        "@effect/language-service": { "spec": "0.87.5", "why": "Issue #56: the Effect diagnostics the Effect build must pass." },
+        "@types/node": { "spec": "22.20.5", "why": "Issue #56: Node's types the spike's builds were written and typechecked against, on Node 22 as the issue times it." },
+        "typescript": { "spec": "5.9.3", "why": "Issue #56: tsc over both builds, and the compiler the Effect diagnostics run on." }
+      }
     }
   },
   "allowedFindings": []
