@@ -211,6 +211,14 @@ describe('the design says', () => {
     for (const value of [6.02214076e23, -1e16]) expect(ok('reading.recorded@1', { ...reading, data: { ...reading.data, value } }), String(value)).toBe(true);
   });
 
+  it('only you settle a suggestion, or the core when a later change supersedes it; only you put an ask off', () => {
+    const agents = ['mcp:01K74G1Z3X5V7T9R1P3N5M7K9H', 'ext:acme.panel', 'hook'];
+    for (const name of ['suggestion.settled@1', 'ask.later@1']) {
+      for (const writer of agents) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
+      for (const writer of ['app', 'core']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(true);
+    }
+  });
+
   it("a lease's holder is a session or any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
