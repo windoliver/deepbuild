@@ -33,6 +33,11 @@ describe('the lint refuses schemas the validator or a generator cannot serve', (
     expect(problemsOf(record({ a: { type: 'string', pattern: '^(x|y[0-9]{1,3})+[^\\s]*$' } }))).toEqual([]);
   });
 
+  it('a final $ is the anchor after an even run of backslashes, and escaped after an odd one', () => {
+    for (const pattern of [String.raw`^\\$`, String.raw`^a\\\\$`]) expect(problemsOf(record({ a: { type: 'string', pattern } })), pattern).toEqual([]);
+    for (const pattern of [String.raw`^a\$`, String.raw`^a\\\$`]) expect(problemsOf(record({ a: { type: 'string', pattern } })), pattern).toEqual([expect.objectContaining({ path: '/properties/a/pattern' })]);
+  });
+
   it('an opaque value in a hashed schema, and an x-hash exclude that names no field', () => {
     expect(problemsOf({ 'x-hash': { excludes: [] }, ...record({ a: { 'x-opaque': 'any' } }) }).length).toBeGreaterThan(0);
     expect(problemsOf({ 'x-hash': { excludes: ['/checkuot'] }, ...record({ checkout: { type: 'string' } }) })).toEqual([expect.objectContaining({ path: '/x-hash' })]);
