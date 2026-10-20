@@ -38,3 +38,15 @@ fn a_seq_is_never_negative() {
         Some(7)
     );
 }
+
+#[test]
+fn an_integer_is_one_both_languages_hold_exactly() {
+    use deep_contracts::Contract;
+    let int =
+        |text: &str| <i64 as Contract>::from_json(&deep_contracts::parse(text).expect("JSON"), "");
+    assert_eq!(int("9007199254740991"), Ok(9007199254740991));
+    assert_eq!(int("-9007199254740991"), Ok(-9007199254740991));
+    for wide in ["9007199254740992", "-9007199254740992", "1e21", "9.3e18"] {
+        assert!(int(wide).is_err(), "{wide}");
+    }
+}

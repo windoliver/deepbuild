@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { ContractError, issue, type ContractIssue } from './errors.js';
-import { isObject, resolveRef, segment, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { isObject, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 
 export type Validation = { ok: true } | { ok: false; issues: ContractIssue[] };
 
@@ -31,18 +31,22 @@ function sameJson(value: unknown, want: string): boolean {
   }
 }
 
-/** True for a value JSON can carry: no undefined, bigint, function, or number that isn't finite; no cycle. */
+/**
+ * True for a value JSON carries as it is: null, a string, a boolean, a finite number, an array with no
+ * holes, or a plain object, all the way down and with no cycle.
+ */
 const isJson = (value: unknown, depth = 0): boolean => {
   if (depth > 256) return false;
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
-  if (Array.isArray(value)) return value.every((v) => isJson(v, depth + 1));
-  return isObject(value) && Object.values(value).every((v) => isJson(v, depth + 1));
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) if (!Object.hasOwn(value, i) || !isJson(value[i], depth + 1)) return false;
+    return true;
+  }
+  if (!isObject(value)) return false;
+  const proto = Object.getPrototypeOf(value) as unknown;
+  return (proto === Object.prototype || proto === null) && Object.values(value).every((v) => isJson(v, depth + 1));
 };
-
-/** The one required constant field that tells a union's branches apart, as the lint requires. */
-const unionTag = (branches: Schema[]): string => Object.keys(branches[0]!.properties as object)
-  .find((key) => branches.every((b) => isObject(b.properties) && isObject(b.properties[key]) && 'const' in b.properties[key]))!;
 const tagOf = (branch: Schema, tag: string): string => canonicalText(((branch.properties as Schema)[tag] as Schema).const!);
 
 const num = (schema: Schema, key: string): number | undefined => (typeof schema[key] === 'number' ? schema[key] : undefined);
@@ -94,7 +98,7 @@ function compile(root: Schema): Check {
       case 'string': {
         const values = Array.isArray(schema.enum) ? new Set(schema.enum) : undefined;
         const pattern = typeof schema.pattern === 'string' ? new RegExp(schema.pattern, 'u') : undefined;
-        const format = typeof schema.format === 'string' ? FORMATS[schema.format] : undefined;
+        const format = typeof schema.format === 'string' ? (Object.hasOwn(FORMATS, schema.format) ? FORMATS[schema.format] : () => false) : undefined;
         const min = num(schema, 'minLength');
         const max = num(schema, 'maxLength');
         return (value, at, out) => {
@@ -114,7 +118,8 @@ function compile(root: Schema): Check {
         const max = num(schema, 'maximum');
         const whole = type === 'integer';
         return (value, at, out) => {
-          if (typeof value !== 'number' || !Number.isFinite(value) || (whole && !Number.isInteger(value))) return void out.push(issue('type', at, value));
+          // An integer is one both languages hold exactly: a JavaScript safe integer.
+          if (typeof value !== 'number' || !Number.isFinite(value) || (whole && !Number.isSafeInteger(value))) return void out.push(issue('type', at, value));
           if ((min !== undefined && value < min) || (max !== undefined && value > max)) out.push(issue('range', at, value));
         };
       }
