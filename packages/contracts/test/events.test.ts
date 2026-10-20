@@ -302,8 +302,9 @@ describe('the learned layer', () => {
   it('a change aimed at the base names you as its applier, never a rule, in every learn kind', () => {
     for (const name of ['learn.proposed@1', 'learn.applied@1', 'learn.widened@1', 'learn.rolled_back@1']) {
       const event = first(name);
-      const data = (layer: string, applied_by: string) => ({ ...event, data: { ...event.data, layer, applied_by } });
+      const data = (layer: string, applied_by: string | null) => ({ ...event, data: { ...event.data, layer, applied_by } });
       expect(ok(name, data('base', 'rule:abc')), `${name} base by a rule`).toBe(false);
+      expect(ok(name, data('base', null)), `${name} base by no one`).toBe(false);
       expect(ok(name, data('learned', 'rule:abc')), `${name} learned by a rule`).toBe(true);
       expect(ok(name, data('base', 'you')), `${name} base by you`).toBe(true);
     }
