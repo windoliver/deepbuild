@@ -20,9 +20,11 @@ describe('the design says', () => {
     const unblock = asks.find((a) => a.data.kind === 'unblock')!;
     const other = asks.find((a) => a.data.kind !== 'unblock')!;
     expect(ok('ask.created@1', unblock)).toBe(true);
-    const { steps: _steps, ...withoutSteps } = unblock.data;
-    expect(ok('ask.created@1', { ...unblock, data: withoutSteps })).toBe(false);
-    expect(ok('ask.created@1', { ...other, data: { ...other.data, steps: ['x'] } })).toBe(false);
+    for (const field of ['steps', 'where', 'why', 'unblocks', 'proves']) {
+      const { [field]: value, ...without } = unblock.data;
+      expect(ok('ask.created@1', { ...unblock, data: without }), `an unblock without ${field}`).toBe(false);
+      expect(ok('ask.created@1', { ...other, data: { ...other.data, [field]: value } }), `a ${String(other.data.kind)} ask with ${field}`).toBe(false);
+    }
   });
 
   it('an ask is pinned to a commit, or an evidence hash, in its form', () => {
