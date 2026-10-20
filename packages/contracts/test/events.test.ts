@@ -1,6 +1,6 @@
 // Regressions for event kinds whose schemas read the design looser, or other, than it says.
 import { describe, expect, it } from 'vitest';
-import { catalogue, fixtures, getSchema, validate } from '../src/index.js';
+import { catalogue, catalogueDrift, fixtures, getSchema, validate } from '../src/index.js';
 
 type Event = Record<string, unknown> & { data: Record<string, unknown> };
 const first = (name: string): Event => structuredClone(fixtures(name)[0]) as Event;
@@ -284,6 +284,14 @@ describe('the design says', () => {
     const asks = fixtures('ask.created@1') as Event[];
     expect(new Set(asks.map((a) => a.data.kind))).toEqual(new Set(['authority', 'unblock', 'taste', 'exception', 'choice', 'definition']));
     expect(new Set(asks.map((a) => (a.data.pinned_to as { kind: string }).kind))).toEqual(new Set(['commit', 'doc_revision', 'evidence']));
+  });
+});
+
+describe('the drift check', () => {
+  it('a kind of a family the catalogue lacks is drift where the text calls it an event kind, and other dotted names are not', () => {
+    const text = 'Adds the event kind `telemetry.sampled`, and the event kinds `telemetry.dropped` and `telemetry.kept`. '
+      + 'It reads `rules.json`, the preset `art.ink_wash` and the code `grid.out_of_range`.';
+    expect(catalogueDrift([{ where: '#1', text }])).toEqual(['telemetry.sampled', 'telemetry.dropped', 'telemetry.kept'].map((kind) => ({ kind, where: '#1' })));
   });
 });
 
