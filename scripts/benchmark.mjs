@@ -67,7 +67,8 @@ export function measure(command, cwd, base) {
 // Builds unmeasured, so a checkout and its merge base are both timed warm. The check lanes run
 // the same builds and report their errors, so a failure here is left for them.
 export function warm(cwd) {
-  const steps = [['npm', 'run', 'build'], ['cargo', 'test', '--workspace', '--locked', '--no-run']];
+  // Clippy keeps its own check artifacts, so the lint lane's exact command is warmed too (#594).
+  const steps = [['npm', 'run', 'build'], ['cargo', 'test', '--workspace', '--locked', '--no-run'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings']];
   // The #56 spike keeps its dependencies apart from the root's, and its benches are perf tasks.
   if (existsSync(join(cwd, 'spikes/hub-core/package-lock.json'))) steps.unshift(['npm', 'ci', '--prefix', 'spikes/hub-core', '--no-audit', '--no-fund']);
   for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore' });

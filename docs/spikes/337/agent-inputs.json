@@ -1,0 +1,202 @@
+{
+  "gpuiKitCommit": "1676826d9d49b90f4d7b6808b69924f58796f6f1",
+  "agents": {
+    "claude-code": {
+      "round0": [
+        {
+          "file": "BRIEF.md",
+          "sha256": "1087529caa37eef650d1d39d9ffc0350435a0fd7c65395742ee3fc205f6d77d8",
+          "source": "docs/spikes/337/panel-brief.md"
+        },
+        {
+          "file": "docs/api.md",
+          "sha256": "f7d464e10c21c37921bee0287c9de1b63d93d1497366907da0bf034bfa2fa51f",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/api.md"
+        },
+        {
+          "file": "docs/capabilities.md",
+          "sha256": "9c6f65263f1a514a85e8f24d22bd36fb7908353f261f58eff98efa918ac7b9ac",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/capabilities.md"
+        },
+        {
+          "file": "docs/dependencies.md",
+          "sha256": "1af4952f1734f4f3ea239af5acfd9843285c37d6bf94fe8d9c661f43a259c4e5",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dependencies.md"
+        },
+        {
+          "file": "docs/dock.md",
+          "sha256": "06a56ace0b12d0f4519f633132b976222a6e62577d6982ef8a7ae4d1a2f67cfc",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dock.md"
+        },
+        {
+          "file": "docs/elements.md",
+          "sha256": "d6021f992e324050c96c9b8e3488d208d60ab9f759507d122ed6c172b3bdc0fb",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/elements.md"
+        },
+        {
+          "file": "docs/engine.md",
+          "sha256": "fa2203f4130b319cb3bdcd4d49e99bd36ef0c12aa0b378d4683bf541ce73f88e",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/engine.md"
+        },
+        {
+          "file": "docs/examples.md",
+          "sha256": "67fbfc6f02f5a63d6e6c501f9e483cf063463862c681a26550a7b1317d979cbe",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/examples.md"
+        },
+        {
+          "file": "docs/getting-started.md",
+          "sha256": "77f24abeb6f88f2e03cb19d812534310ccfb6abcaf73f6487e305edaf26b7815",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/getting-started.md"
+        },
+        {
+          "file": "docs/gpui-shell-README.md",
+          "sha256": "84c765d387a0f81e227ac58111024df4d2b11c3ff524bac48c0ad15bae50bf9b",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/crates/shell/README.md"
+        },
+        {
+          "file": "docs/host-module.md",
+          "sha256": "d00dcf4f6fa88f6f69c75855a0d8071ba9453f4da10873a24011de392f5b824c",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/host-module.md"
+        },
+        {
+          "file": "docs/hosting.md",
+          "sha256": "cc8dc34ddb512035788678624944867d26ebb8f241d619e9ab7b03bc0196697e",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/hosting.md"
+        },
+        {
+          "file": "docs/index.md",
+          "sha256": "9b4b7310f606ade809ca677984b48776317f32171cb4d3d1fe1e3c904f15f39b",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/index.md"
+        },
+        {
+          "file": "docs/overlays.md",
+          "sha256": "3c7efff016e0da365475c50ce4ea6c6604972d158c2c28f9a60a50301a837416",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/overlays.md"
+        },
+        {
+          "file": "docs/packaging.md",
+          "sha256": "61af4393714d852f9eb04ebaa996aecbda6f57be927710dadc63a0d79be20f35",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/packaging.md"
+        },
+        {
+          "file": "docs/performance.md",
+          "sha256": "0a9d73188b968f6495064892538336262dba29429a0658f8eb132b9bceeb0bdf",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/performance.md"
+        },
+        {
+          "file": "docs/state.md",
+          "sha256": "4d8bc716efadccacc661a8df8d0eaae47e96015aa01fb684e32ba6061f475e8a",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/state.md"
+        },
+        {
+          "file": "docs/styling.md",
+          "sha256": "6a8a9d7f835c4c588b810bf9494e5b366a374ae2eeaf130d833f45d5155946b0",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/styling.md"
+        }
+      ],
+      "round1": {
+        "added": [
+          {
+            "file": "FAILURE.txt",
+            "sha256": "85d1c74f803fafb72fb79b9fe39ca165721025505780bc1ddaca26f11d35ecae",
+            "source": "the headless test's failure output from round 0 (cargo test -p deep-app --test headless -- claude)"
+          }
+        ]
+      }
+    },
+    "codex": {
+      "round0": [
+        {
+          "file": "BRIEF.md",
+          "sha256": "1087529caa37eef650d1d39d9ffc0350435a0fd7c65395742ee3fc205f6d77d8",
+          "source": "docs/spikes/337/panel-brief.md"
+        },
+        {
+          "file": "docs/api.md",
+          "sha256": "f7d464e10c21c37921bee0287c9de1b63d93d1497366907da0bf034bfa2fa51f",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/api.md"
+        },
+        {
+          "file": "docs/capabilities.md",
+          "sha256": "9c6f65263f1a514a85e8f24d22bd36fb7908353f261f58eff98efa918ac7b9ac",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/capabilities.md"
+        },
+        {
+          "file": "docs/dependencies.md",
+          "sha256": "1af4952f1734f4f3ea239af5acfd9843285c37d6bf94fe8d9c661f43a259c4e5",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dependencies.md"
+        },
+        {
+          "file": "docs/dock.md",
+          "sha256": "06a56ace0b12d0f4519f633132b976222a6e62577d6982ef8a7ae4d1a2f67cfc",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dock.md"
+        },
+        {
+          "file": "docs/elements.md",
+          "sha256": "d6021f992e324050c96c9b8e3488d208d60ab9f759507d122ed6c172b3bdc0fb",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/elements.md"
+        },
+        {
+          "file": "docs/engine.md",
+          "sha256": "fa2203f4130b319cb3bdcd4d49e99bd36ef0c12aa0b378d4683bf541ce73f88e",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/engine.md"
+        },
+        {
+          "file": "docs/examples.md",
+          "sha256": "67fbfc6f02f5a63d6e6c501f9e483cf063463862c681a26550a7b1317d979cbe",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/examples.md"
+        },
+        {
+          "file": "docs/getting-started.md",
+          "sha256": "77f24abeb6f88f2e03cb19d812534310ccfb6abcaf73f6487e305edaf26b7815",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/getting-started.md"
+        },
+        {
+          "file": "docs/gpui-shell-README.md",
+          "sha256": "84c765d387a0f81e227ac58111024df4d2b11c3ff524bac48c0ad15bae50bf9b",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/crates/shell/README.md"
+        },
+        {
+          "file": "docs/host-module.md",
+          "sha256": "d00dcf4f6fa88f6f69c75855a0d8071ba9453f4da10873a24011de392f5b824c",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/host-module.md"
+        },
+        {
+          "file": "docs/hosting.md",
+          "sha256": "cc8dc34ddb512035788678624944867d26ebb8f241d619e9ab7b03bc0196697e",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/hosting.md"
+        },
+        {
+          "file": "docs/index.md",
+          "sha256": "9b4b7310f606ade809ca677984b48776317f32171cb4d3d1fe1e3c904f15f39b",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/index.md"
+        },
+        {
+          "file": "docs/overlays.md",
+          "sha256": "3c7efff016e0da365475c50ce4ea6c6604972d158c2c28f9a60a50301a837416",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/overlays.md"
+        },
+        {
+          "file": "docs/packaging.md",
+          "sha256": "61af4393714d852f9eb04ebaa996aecbda6f57be927710dadc63a0d79be20f35",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/packaging.md"
+        },
+        {
+          "file": "docs/performance.md",
+          "sha256": "0a9d73188b968f6495064892538336262dba29429a0658f8eb132b9bceeb0bdf",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/performance.md"
+        },
+        {
+          "file": "docs/state.md",
+          "sha256": "4d8bc716efadccacc661a8df8d0eaae47e96015aa01fb684e32ba6061f475e8a",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/state.md"
+        },
+        {
+          "file": "docs/styling.md",
+          "sha256": "6a8a9d7f835c4c588b810bf9494e5b366a374ae2eeaf130d833f45d5155946b0",
+          "source": "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/styling.md"
+        }
+      ]
+    }
+  }
+}

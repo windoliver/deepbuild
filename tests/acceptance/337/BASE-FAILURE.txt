@@ -1,0 +1,45 @@
+Acceptance tests for #337 on the base 0c5e145 (no implementation), run on 2026-10-19 with node 22.22
+in a clean checkout of the base with only tests/acceptance/337/ added:
+
+  node --test tests/acceptance/337/spike.test.mjs tests/acceptance/337/spike.live.test.mjs
+
+Trimmed to each test's result and error; the stack frames, which name local paths, are left out.
+Every test fails for the expected reason: the base has no spike record at docs/spikes/337/record.json.
+
+not ok 1 - \#337.05b344ec both agents' panels load and pass their headless render and click test, run now
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 2 - \#337.e2f507ac the stocks panel's test on recorded quotes and the report's test that opens it in the browser pass, run now
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 3 - scope: every screen renders and is clicked headlessly with no display, run now
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 4 - \#337.05b344ec Claude Code's and Codex's JavaScript panels, written from the docs alone, each pass the headless test within two rounds of fixes
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 5 - \#337.9e506bd8 the decision is gpui-kit only when every criterion passed, and otherwise a small native app per platform (Swift on macOS) with no web view while extension panels wait; it says which, with its numbers, in the technical design
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 6 - \#337.e2f507ac the stocks panel loads from recorded quotes, and a report from them opens in the browser
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 7 - \#337.649cb21e cold start, idle CPU, memory, app size and the local preflight are each five runs on the reference Mac, beside the merge base's
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 8 - \#337.649cb21e the toolkit passes only with cold start under 1 s, idle CPU under 1%, memory under 200 MB, an app under 60 MB and the local preflight under 5 minutes
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 9 - scope: a window with a 1,000-row session list and the menu-bar count
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 10 - scope: every screen is rendered to a snapshot and clicked headlessly, the window, the count and both panels among them
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 11 - scope: the headless renders and clicks run in the local preflight, and nothing runs in CI
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+not ok 12 - scope: the build time is recorded
+  error: "no spike record at docs/spikes/337/record.json: the spike hasn't been recorded"
+# tests 12
+# pass 0
+# fail 12
+# cancelled 0
+# skipped 0
+# todo 0
+
+The validator's own tests, which plant wrong spikes, pass at the base as they must:
+
+  node --test tests/acceptance/337/validator.test.mjs
+# tests 101
+# pass 101
+# fail 0
