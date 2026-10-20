@@ -171,13 +171,12 @@ describe('the design says', () => {
     expect(ok('user.ask@1', { ...ask, data: { ...ask.data, text: long } })).toBe(false);
   });
 
-  it('a suggestion names its writer as the envelope does; a patch names its canvas writer kind', () => {
-    const filed = first('suggestion.filed@1');
-    expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, writer: 'any thing' } })).toBe(false);
-    expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, writer: 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H' } })).toBe(true);
-    const patched = first('doc.patched@1');
-    for (const writer of ['you', 'shell', 'record', 'agent', 'plugin']) expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, writer } }), writer).toBe(true);
-    expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, writer: 'any thing' } })).toBe(false);
+  it("a patch and the suggestion filed from it name the patch's canvas writer kind", () => {
+    for (const name of ['doc.patched@1', 'suggestion.filed@1']) {
+      const event = first(name);
+      for (const writer of ['you', 'shell', 'record', 'agent', 'plugin']) expect(ok(name, { ...event, data: { ...event.data, writer } }), `${name} ${writer}`).toBe(true);
+      for (const writer of ['any thing', 'mcp:01K74G1Z3X5V7T9R1P3N5M7K9H']) expect(ok(name, { ...event, data: { ...event.data, writer } }), `${name} ${writer}`).toBe(false);
+    }
   });
 
   it('a PASS verdict has no requirement pending or short of PASS', () => {
@@ -188,7 +187,7 @@ describe('the design says', () => {
     for (const outcome of ['pending', 'FAIL']) {
       expect(ok('verdict.made@1', { ...pass, data: { ...pass.data, requirements: requirements.map((r) => ({ ...r, outcome })) } }), outcome).toBe(false);
     }
-    expect((fixtures('verdict.made@1') as Event[]).map((e) => e.data.outcome)).toContain('PASS');
+    expect(new Set((fixtures('verdict.made@1') as Event[]).map((e) => e.data.outcome))).toEqual(new Set(['PASS', 'FAIL', 'INVALID', 'BLOCKED', 'INCONCLUSIVE']));
   });
 
   it("an action's report says what it checked, and a note's time is optional", () => {
