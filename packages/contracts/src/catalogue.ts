@@ -3,25 +3,25 @@ import { isObject, type SchemaEntry } from './json.js';
 import { listSchemas } from './schemas.js';
 import type { Validation } from './validate.js';
 
+/** A caller's list, read by its indices into a plain array, so its own methods never run. */
+const byIndex = <T>(list: readonly T[]): T[] => Array.from({ length: list.length }, (_, i) => list[i]!);
+
 export interface CatalogueEntry { kind: string; version: number; schema: string; feeds: string[] }
 
 /** One entry per event kind schema: a schema whose root lists the projections it feeds in `x-feeds`. */
 export function buildCatalogue(entries: readonly SchemaEntry[]): CatalogueEntry[] {
-  return entries.flatMap(({ name, schema }) => {
+  return byIndex(entries).flatMap(({ name, schema }) => {
     const properties = isObject(schema.properties) ? schema.properties : {};
     const kind = isObject(properties.kind) ? properties.kind.const : undefined;
     const version = isObject(properties.v) ? properties.v.const : undefined;
     const feeds = schema['x-feeds'];
     if (!Array.isArray(feeds) || typeof kind !== 'string' || typeof version !== 'number') return [];
-    return [{ kind, version, schema: name, feeds: feeds.map(String) }];
+    return [{ kind, version, schema: name, feeds: byIndex(feeds).map(String) }];
   });
 }
 
 let published: CatalogueEntry[] | undefined;
 export const catalogue = (): CatalogueEntry[] => structuredClone((published ??= buildCatalogue(listSchemas())));
-
-/** A caller's list, read by its indices into a plain array, so its own methods never run. */
-const byIndex = <T>(list: readonly T[]): T[] => Array.from({ length: list.length }, (_, i) => list[i]!);
 
 const KIND = /`([a-z][a-z_]*)\.([a-z][a-z_]*)`/g;
 /**
