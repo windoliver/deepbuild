@@ -20,8 +20,8 @@
     },
     "subject": {
       "type": "string",
-      "pattern": "^task:[0-9A-Za-z]+$",
-      "description": "The task this event is about."
+      "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+      "description": "The task this event is about, by its task_ref."
     },
     "writer": {
       "type": "string",

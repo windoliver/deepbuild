@@ -64,11 +64,8 @@
         },
         "scope": {
           "type": "string",
-          "enum": [
-            "session",
-            "repo",
-            "all_repos"
-          ]
+          "pattern": "^(session:[0-9A-Za-z]+|repo:[0-9A-Za-z]+|all)$",
+          "description": "Where it applies: session:<id>, then repo:<id>, then all."
         },
         "answer": {
           "type": "string",

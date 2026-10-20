@@ -3319,35 +3319,10 @@ impl Contract for DecisionCreatedWriter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DecisionCreatedDataScope {
-    Session,
-    Repo,
-    AllRepos,
-}
-
-impl Contract for DecisionCreatedDataScope {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "session" => Ok(Self::Session),
-            "repo" => Ok(Self::Repo),
-            "all_repos" => Ok(Self::AllRepos),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
-    }
-    fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Session => "session",
-            Self::Repo => "repo",
-            Self::AllRepos => "all_repos",
-        }.to_string())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct DecisionCreatedData {
     pub key: String,
-    pub scope: DecisionCreatedDataScope,
+    pub scope: String,
     pub answer: String,
     pub ask: String,
 }
@@ -6633,13 +6608,41 @@ impl Contract for NoteOpenedKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct NoteOpenedDataRegion {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl Contract for NoteOpenedDataRegion {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["x", "y", "w", "h"])?;
+        Ok(Self {
+            x: deep_contracts::required(members, at, "x")?,
+            y: deep_contracts::required(members, at, "y")?,
+            w: deep_contracts::required(members, at, "w")?,
+            h: deep_contracts::required(members, at, "h")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("x".to_string(), self.x.to_json()));
+        members.push(("y".to_string(), self.y.to_json()));
+        members.push(("w".to_string(), self.w.to_json()));
+        members.push(("h".to_string(), self.h.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct NoteOpenedData {
     pub note: String,
     pub doc: String,
     pub item: String,
     pub rev: i64,
     pub t: Option<String>,
-    pub region: Option<String>,
+    pub region: NoteOpenedDataRegion,
     pub text: String,
 }
 

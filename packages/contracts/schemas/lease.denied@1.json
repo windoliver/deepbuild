@@ -83,8 +83,8 @@
         },
         "holder": {
           "type": "string",
-          "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
-          "description": "A record handle."
+          "pattern": "^(session:[0-9A-Za-z]+|mcp:[^\\s]+|ext:[^\\s]+)$",
+          "description": "A session, or a document prefix's writer."
         },
         "mode": {
           "type": "string",

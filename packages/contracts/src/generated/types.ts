@@ -458,7 +458,7 @@ export interface DecisionCreated {
   log_pos?: number;
   data: {
     key: string;
-    scope: "session" | "repo" | "all_repos";
+    scope: string;
     answer: string;
     ask: string;
   };
@@ -997,7 +997,12 @@ export interface NoteOpened {
     item: string;
     rev: number;
     t: string | null;
-    region: string | null;
+    region: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    };
     text: string;
   };
   evidence?: Array<string>;
