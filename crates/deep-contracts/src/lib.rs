@@ -512,8 +512,12 @@ impl Contract for bool {
 impl Contract for i64 {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         match value {
-            Value::Number(n) if n.fract() == 0.0 && n.abs() < 9.2e18 => Ok(*n as i64),
-            _ => Err(format!("{}: expected an integer", here(at))),
+            // As the TypeScript validator does: an integer both languages hold exactly, within ±(2^53 - 1).
+            Value::Number(n) if n.fract() == 0.0 && n.abs() <= 9007199254740991.0 => Ok(*n as i64),
+            _ => Err(format!(
+                "{}: expected an integer within ±(2^53 - 1)",
+                here(at)
+            )),
         }
     }
     fn to_json(&self) -> Value {

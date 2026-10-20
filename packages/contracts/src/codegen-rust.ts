@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { nameClaims, typeName } from './codegen-ts.js';
-import { isObject, type Schema, type SchemaEntry } from './json.js';
+import { isObject, unionTag, type Schema, type SchemaEntry } from './json.js';
 
 const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
   'let', 'loop', 'match', 'mod', 'move', 'mut', 'pub', 'ref', 'return', 'self', 'static', 'struct', 'super', 'trait', 'true', 'type',
@@ -127,8 +127,7 @@ ${arms.map((v) => `            Self::${v.variant} => ${literal(v.value)},\n`).jo
 
   private union(branches: Schema[], wanted: string): string {
     const name = this.claim(wanted);
-    const tag = Object.keys(branches[0]!.properties as Schema)
-      .find((key) => branches.every((b) => isObject(b.properties) && isObject(b.properties[key]) && 'const' in b.properties[key]))!;
+    const tag = unionTag(branches);
     const consts = branches.map((branch) => ((branch.properties as Schema)[tag] as Schema).const!);
     const names = variants(consts.map(String));
     const arms = branches.map((branch, i) => ({

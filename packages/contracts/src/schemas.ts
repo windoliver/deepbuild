@@ -22,6 +22,7 @@ export function getSchema(name: string): Schema {
 
 /** A schema's valid fixtures, fixtures/<name>/*.json, by file name. */
 export function fixtures(name: string): JsonValue[] {
+  if (!byName.has(name)) return [];
   const dir = new URL(`${encodeURIComponent(name)}/`, FIXTURES);
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter((file) => file.endsWith('.json')).sort().map((file) => readJson(new URL(file, dir)));

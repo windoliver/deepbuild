@@ -28,6 +28,15 @@ const compiles = (pattern: string): boolean => {
   }
 };
 
+/** The JSON Pointer of every string or key holding half a surrogate pair, which no Rust string can. */
+const halfPairs = (value: JsonValue | undefined, path: string): string[] => {
+  const half = (text: string) => /\p{Surrogate}/u.test(text);
+  if (typeof value === 'string') return half(value) ? [path] : [];
+  if (Array.isArray(value)) return value.flatMap((v, i) => halfPairs(v, path + segment(i)));
+  if (!isObject(value)) return [];
+  return Object.entries(value).flatMap(([key, child]) => (half(key) ? [path + segment(key)] : halfPairs(child, path + segment(key))));
+};
+
 /** Every `$ref` anywhere under a value. */
 const refsUnder = (value: JsonValue | undefined): string[] => {
   if (Array.isArray(value)) return value.flatMap(refsUnder);
@@ -59,7 +68,7 @@ function resolves(root: Schema, pointer: string): boolean {
   for (const raw of pointer.split('/').slice(1)) {
     const key = raw.replace(/~1/g, '/').replace(/~0/g, '~');
     while (typeof at.$ref === 'string') at = resolveRef(root, at.$ref);
-    const next = key === '*' ? at.items : isObject(at.properties) ? at.properties[key] : undefined;
+    const next = key === '*' ? at.items : isObject(at.properties) && Object.hasOwn(at.properties, key) ? at.properties[key] : undefined;
     if (!isObject(next)) return false;
     at = next;
   }
@@ -108,14 +117,14 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       }
       if (typeof type !== 'string') return flag(path, 'no closed node type: give type, const, oneOf or $ref');
       if (type === 'object') return object(value, path, allowed);
-      const keywords = NODE_KEYWORDS[type];
+      const keywords = Object.hasOwn(NODE_KEYWORDS, type) ? NODE_KEYWORDS[type] : undefined;
       if (!keywords) return flag(path + '/type', `type ${type} is not a closed node type`);
       allowed(keywords);
       if (type === 'string') {
         if ('pattern' in value && !(typeof value.pattern === 'string' && compiles(value.pattern))) flag(path + '/pattern', 'a pattern is a string that compiles as a Unicode regular expression');
         if ('enum' in value && !(Array.isArray(value.enum) && value.enum.length && value.enum.every((v) => typeof v === 'string'))) flag(path + '/enum', 'an enum lists strings');
         else if (Array.isArray(value.enum) && new Set(value.enum).size !== value.enum.length) flag(path + '/enum', 'an enum lists each value once');
-        if ('format' in value && !(typeof value.format === 'string' && value.format in FORMATS)) flag(path + '/format', `format ${JSON.stringify(value.format)} is not a listed format`);
+        if ('format' in value && !(typeof value.format === 'string' && Object.hasOwn(FORMATS, value.format))) flag(path + '/format', `format ${JSON.stringify(value.format)} is not a listed format`);
       }
       if (type === 'array') node(value.items, path + '/items');
       const safe = typeof value.maximum === 'number' && value.maximum <= MAX_SAFE && typeof value.minimum === 'number' && value.minimum >= -MAX_SAFE;
@@ -130,7 +139,7 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
         if (value.additionalProperties !== false) flag(path + ('additionalProperties' in value ? '/additionalProperties' : ''), 'an object lists its properties and allows no others');
         const required = Array.isArray(value.required) ? value.required : [];
         if ('required' in value && !Array.isArray(value.required)) flag(path + '/required', 'required is a list');
-        for (const key of required) if (typeof key !== 'string' || !(key in value.properties)) flag(path + '/required', `required names ${JSON.stringify(key)}, which is not a listed property`);
+        for (const key of required) if (typeof key !== 'string' || !Object.hasOwn(value.properties, key)) flag(path + '/required', `required names ${JSON.stringify(key)}, which is not a listed property`);
         for (const [key, child] of Object.entries(value.properties)) node(child, path + '/properties' + segment(key));
       } else if (isObject(value.propertyNames) && isObject(value.additionalProperties)) {
         allowed(NODE_KEYWORDS.map!);
@@ -147,7 +156,7 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       allowed(['oneOf']);
       if (!Array.isArray(branches) || branches.length < 2) return flag(path + '/oneOf', 'a union has two or more branches');
       branches.forEach((branch, i) => node(branch, `${path}/oneOf/${i}`));
-      const tagged = (b: JsonValue, key: string) => isObject(b) && isObject(b.properties) && isObject(b.properties[key]) && 'const' in b.properties[key]
+      const tagged = (b: JsonValue, key: string) => isObject(b) && isObject(b.properties) && Object.hasOwn(b.properties, key) && isObject(b.properties[key]) && 'const' in b.properties[key]
         && Array.isArray(b.required) && b.required.includes(key);
       const first = branches[0];
       const tags = isObject(first) && isObject(first.properties) ? Object.keys(first.properties).filter((key) => branches.every((b) => tagged(b, key))) : [];
@@ -157,6 +166,7 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       else if (new Set(values).size !== values.length) flag(path + '/oneOf', "a union's branches each take their own tag");
     };
 
+    for (const path of halfPairs(schema, '')) flag(path, 'half a surrogate pair: every string in a schema is well-formed Unicode');
     node(schema, '', true);
     for (const [key, def] of Object.entries(defs)) node(def, '/$defs' + segment(key));
     for (const key of cycles(defs)) flag('/$defs' + segment(key), 'a $ref cycle: a definition reaches itself');
