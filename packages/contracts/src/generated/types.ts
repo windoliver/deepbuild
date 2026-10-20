@@ -744,7 +744,7 @@ export interface LearnProposed {
     evidence: LearnProposedEvidence;
     scope: string;
     replay: LearnProposedReplay;
-    applied_by: string | null;
+    applied_by: string;
     supersedes: LearnProposedSupersedes;
   };
   evidence?: Array<string>;
@@ -790,7 +790,7 @@ export interface LearnRolledBack {
     evidence: LearnRolledBackEvidence;
     scope: string;
     replay: LearnRolledBackReplay;
-    applied_by: string | null;
+    applied_by: string;
     supersedes: LearnRolledBackSupersedes;
   };
   evidence?: Array<string>;

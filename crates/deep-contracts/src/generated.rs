@@ -4612,7 +4612,7 @@ pub struct LearnProposedDataBase {
     pub evidence: LearnProposedEvidence,
     pub scope: String,
     pub replay: LearnProposedReplay,
-    pub applied_by: Option<String>,
+    pub applied_by: String,
     pub supersedes: LearnProposedSupersedes,
 }
 
@@ -4872,7 +4872,7 @@ pub struct LearnRolledBackDataBase {
     pub evidence: LearnRolledBackEvidence,
     pub scope: String,
     pub replay: LearnRolledBackReplay,
-    pub applied_by: Option<String>,
+    pub applied_by: String,
     pub supersedes: LearnRolledBackSupersedes,
 }
 
