@@ -4182,6 +4182,56 @@ impl Contract for LayerRows {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LearnAppliedEvidenceItem {
+    pub at: String,
+    pub quote: String,
+}
+
+impl Contract for LearnAppliedEvidenceItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["at", "quote"])?;
+        Ok(Self {
+            at: deep_contracts::required(members, at, "at")?,
+            quote: deep_contracts::required(members, at, "quote")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("at".to_string(), self.at.to_json()));
+        members.push(("quote".to_string(), self.quote.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnAppliedEvidence = Vec<LearnAppliedEvidenceItem>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnAppliedReplayValue {
+    pub tasks: i64,
+    pub regressions: i64,
+}
+
+impl Contract for LearnAppliedReplayValue {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
+        Ok(Self {
+            tasks: deep_contracts::required(members, at, "tasks")?,
+            regressions: deep_contracts::required(members, at, "regressions")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("tasks".to_string(), self.tasks.to_json()));
+        members.push(("regressions".to_string(), self.regressions.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnAppliedReplay = Option<LearnAppliedReplayValue>;
+
+pub type LearnAppliedSupersedes = Option<String>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LearnAppliedV;
 
 impl Contract for LearnAppliedV {
@@ -4230,85 +4280,31 @@ impl Contract for LearnAppliedWriter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LearnAppliedDataLayer {
-    Learned,
-    Base,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnAppliedDataLearnedLayer;
 
-impl Contract for LearnAppliedDataLayer {
+impl Contract for LearnAppliedDataLearnedLayer {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "learned" => Ok(Self::Learned),
-            "base" => Ok(Self::Base),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
+        deep_contracts::constant(value, at, "\"learned\"").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Learned => "learned",
-            Self::Base => "base",
-        }.to_string())
+        deep_contracts::parse("\"learned\"").expect("a constant is JSON")
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LearnAppliedDataEvidenceItem {
-    pub at: String,
-    pub quote: String,
-}
-
-impl Contract for LearnAppliedDataEvidenceItem {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["at", "quote"])?;
-        Ok(Self {
-            at: deep_contracts::required(members, at, "at")?,
-            quote: deep_contracts::required(members, at, "quote")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("at".to_string(), self.at.to_json()));
-        members.push(("quote".to_string(), self.quote.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnAppliedDataReplay {
-    pub tasks: i64,
-    pub regressions: i64,
-}
-
-impl Contract for LearnAppliedDataReplay {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
-        Ok(Self {
-            tasks: deep_contracts::required(members, at, "tasks")?,
-            regressions: deep_contracts::required(members, at, "regressions")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("tasks".to_string(), self.tasks.to_json()));
-        members.push(("regressions".to_string(), self.regressions.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnAppliedData {
-    pub layer: LearnAppliedDataLayer,
+pub struct LearnAppliedDataLearned {
+    pub layer: LearnAppliedDataLearnedLayer,
     pub target: String,
     pub diff: String,
-    pub evidence: Vec<LearnAppliedDataEvidenceItem>,
+    pub evidence: LearnAppliedEvidence,
     pub scope: String,
-    pub replay: Option<LearnAppliedDataReplay>,
+    pub replay: LearnAppliedReplay,
     pub applied_by: String,
-    pub supersedes: Option<String>,
+    pub supersedes: LearnAppliedSupersedes,
 }
 
-impl Contract for LearnAppliedData {
+impl Contract for LearnAppliedDataLearned {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
         Ok(Self {
@@ -4333,6 +4329,80 @@ impl Contract for LearnAppliedData {
         members.push(("applied_by".to_string(), self.applied_by.to_json()));
         members.push(("supersedes".to_string(), self.supersedes.to_json()));
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnAppliedDataBaseLayer;
+
+impl Contract for LearnAppliedDataBaseLayer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"base\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"base\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnAppliedDataBase {
+    pub layer: LearnAppliedDataBaseLayer,
+    pub target: String,
+    pub diff: String,
+    pub evidence: LearnAppliedEvidence,
+    pub scope: String,
+    pub replay: LearnAppliedReplay,
+    pub applied_by: String,
+    pub supersedes: LearnAppliedSupersedes,
+}
+
+impl Contract for LearnAppliedDataBase {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
+        Ok(Self {
+            layer: deep_contracts::required(members, at, "layer")?,
+            target: deep_contracts::required(members, at, "target")?,
+            diff: deep_contracts::required(members, at, "diff")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            replay: deep_contracts::required(members, at, "replay")?,
+            applied_by: deep_contracts::required(members, at, "applied_by")?,
+            supersedes: deep_contracts::required(members, at, "supersedes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("layer".to_string(), self.layer.to_json()));
+        members.push(("target".to_string(), self.target.to_json()));
+        members.push(("diff".to_string(), self.diff.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("replay".to_string(), self.replay.to_json()));
+        members.push(("applied_by".to_string(), self.applied_by.to_json()));
+        members.push(("supersedes".to_string(), self.supersedes.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LearnAppliedData {
+    Learned(LearnAppliedDataLearned),
+    Base(LearnAppliedDataBase),
+}
+
+impl Contract for LearnAppliedData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "layer")?.as_str() {
+            "\"learned\"" => Ok(Self::Learned(<LearnAppliedDataLearned as Contract>::from_json(value, at)?)),
+            "\"base\"" => Ok(Self::Base(<LearnAppliedDataBase as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/layer")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Learned(inner) => inner.to_json(),
+            Self::Base(inner) => inner.to_json(),
+        }
     }
 }
 
@@ -4397,6 +4467,56 @@ impl Contract for LearnApplied {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LearnProposedEvidenceItem {
+    pub at: String,
+    pub quote: String,
+}
+
+impl Contract for LearnProposedEvidenceItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["at", "quote"])?;
+        Ok(Self {
+            at: deep_contracts::required(members, at, "at")?,
+            quote: deep_contracts::required(members, at, "quote")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("at".to_string(), self.at.to_json()));
+        members.push(("quote".to_string(), self.quote.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnProposedEvidence = Vec<LearnProposedEvidenceItem>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnProposedReplayValue {
+    pub tasks: i64,
+    pub regressions: i64,
+}
+
+impl Contract for LearnProposedReplayValue {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
+        Ok(Self {
+            tasks: deep_contracts::required(members, at, "tasks")?,
+            regressions: deep_contracts::required(members, at, "regressions")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("tasks".to_string(), self.tasks.to_json()));
+        members.push(("regressions".to_string(), self.regressions.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnProposedReplay = Option<LearnProposedReplayValue>;
+
+pub type LearnProposedSupersedes = Option<String>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LearnProposedV;
 
 impl Contract for LearnProposedV {
@@ -4420,85 +4540,31 @@ impl Contract for LearnProposedKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LearnProposedDataLayer {
-    Learned,
-    Base,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnProposedDataLearnedLayer;
 
-impl Contract for LearnProposedDataLayer {
+impl Contract for LearnProposedDataLearnedLayer {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "learned" => Ok(Self::Learned),
-            "base" => Ok(Self::Base),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
+        deep_contracts::constant(value, at, "\"learned\"").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Learned => "learned",
-            Self::Base => "base",
-        }.to_string())
+        deep_contracts::parse("\"learned\"").expect("a constant is JSON")
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LearnProposedDataEvidenceItem {
-    pub at: String,
-    pub quote: String,
-}
-
-impl Contract for LearnProposedDataEvidenceItem {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["at", "quote"])?;
-        Ok(Self {
-            at: deep_contracts::required(members, at, "at")?,
-            quote: deep_contracts::required(members, at, "quote")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("at".to_string(), self.at.to_json()));
-        members.push(("quote".to_string(), self.quote.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnProposedDataReplay {
-    pub tasks: i64,
-    pub regressions: i64,
-}
-
-impl Contract for LearnProposedDataReplay {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
-        Ok(Self {
-            tasks: deep_contracts::required(members, at, "tasks")?,
-            regressions: deep_contracts::required(members, at, "regressions")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("tasks".to_string(), self.tasks.to_json()));
-        members.push(("regressions".to_string(), self.regressions.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnProposedData {
-    pub layer: LearnProposedDataLayer,
+pub struct LearnProposedDataLearned {
+    pub layer: LearnProposedDataLearnedLayer,
     pub target: String,
     pub diff: String,
-    pub evidence: Vec<LearnProposedDataEvidenceItem>,
+    pub evidence: LearnProposedEvidence,
     pub scope: String,
-    pub replay: Option<LearnProposedDataReplay>,
+    pub replay: LearnProposedReplay,
     pub applied_by: Option<String>,
-    pub supersedes: Option<String>,
+    pub supersedes: LearnProposedSupersedes,
 }
 
-impl Contract for LearnProposedData {
+impl Contract for LearnProposedDataLearned {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
         Ok(Self {
@@ -4523,6 +4589,80 @@ impl Contract for LearnProposedData {
         members.push(("applied_by".to_string(), self.applied_by.to_json()));
         members.push(("supersedes".to_string(), self.supersedes.to_json()));
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnProposedDataBaseLayer;
+
+impl Contract for LearnProposedDataBaseLayer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"base\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"base\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnProposedDataBase {
+    pub layer: LearnProposedDataBaseLayer,
+    pub target: String,
+    pub diff: String,
+    pub evidence: LearnProposedEvidence,
+    pub scope: String,
+    pub replay: LearnProposedReplay,
+    pub applied_by: Option<String>,
+    pub supersedes: LearnProposedSupersedes,
+}
+
+impl Contract for LearnProposedDataBase {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
+        Ok(Self {
+            layer: deep_contracts::required(members, at, "layer")?,
+            target: deep_contracts::required(members, at, "target")?,
+            diff: deep_contracts::required(members, at, "diff")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            replay: deep_contracts::required(members, at, "replay")?,
+            applied_by: deep_contracts::required(members, at, "applied_by")?,
+            supersedes: deep_contracts::required(members, at, "supersedes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("layer".to_string(), self.layer.to_json()));
+        members.push(("target".to_string(), self.target.to_json()));
+        members.push(("diff".to_string(), self.diff.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("replay".to_string(), self.replay.to_json()));
+        members.push(("applied_by".to_string(), self.applied_by.to_json()));
+        members.push(("supersedes".to_string(), self.supersedes.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LearnProposedData {
+    Learned(LearnProposedDataLearned),
+    Base(LearnProposedDataBase),
+}
+
+impl Contract for LearnProposedData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "layer")?.as_str() {
+            "\"learned\"" => Ok(Self::Learned(<LearnProposedDataLearned as Contract>::from_json(value, at)?)),
+            "\"base\"" => Ok(Self::Base(<LearnProposedDataBase as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/layer")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Learned(inner) => inner.to_json(),
+            Self::Base(inner) => inner.to_json(),
+        }
     }
 }
 
@@ -4587,6 +4727,56 @@ impl Contract for LearnProposed {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LearnRolledBackEvidenceItem {
+    pub at: String,
+    pub quote: String,
+}
+
+impl Contract for LearnRolledBackEvidenceItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["at", "quote"])?;
+        Ok(Self {
+            at: deep_contracts::required(members, at, "at")?,
+            quote: deep_contracts::required(members, at, "quote")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("at".to_string(), self.at.to_json()));
+        members.push(("quote".to_string(), self.quote.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnRolledBackEvidence = Vec<LearnRolledBackEvidenceItem>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnRolledBackReplayValue {
+    pub tasks: i64,
+    pub regressions: i64,
+}
+
+impl Contract for LearnRolledBackReplayValue {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
+        Ok(Self {
+            tasks: deep_contracts::required(members, at, "tasks")?,
+            regressions: deep_contracts::required(members, at, "regressions")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("tasks".to_string(), self.tasks.to_json()));
+        members.push(("regressions".to_string(), self.regressions.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnRolledBackReplay = Option<LearnRolledBackReplayValue>;
+
+pub type LearnRolledBackSupersedes = Option<String>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LearnRolledBackV;
 
 impl Contract for LearnRolledBackV {
@@ -4610,85 +4800,31 @@ impl Contract for LearnRolledBackKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LearnRolledBackDataLayer {
-    Learned,
-    Base,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnRolledBackDataLearnedLayer;
 
-impl Contract for LearnRolledBackDataLayer {
+impl Contract for LearnRolledBackDataLearnedLayer {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "learned" => Ok(Self::Learned),
-            "base" => Ok(Self::Base),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
+        deep_contracts::constant(value, at, "\"learned\"").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Learned => "learned",
-            Self::Base => "base",
-        }.to_string())
+        deep_contracts::parse("\"learned\"").expect("a constant is JSON")
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LearnRolledBackDataEvidenceItem {
-    pub at: String,
-    pub quote: String,
-}
-
-impl Contract for LearnRolledBackDataEvidenceItem {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["at", "quote"])?;
-        Ok(Self {
-            at: deep_contracts::required(members, at, "at")?,
-            quote: deep_contracts::required(members, at, "quote")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("at".to_string(), self.at.to_json()));
-        members.push(("quote".to_string(), self.quote.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnRolledBackDataReplay {
-    pub tasks: i64,
-    pub regressions: i64,
-}
-
-impl Contract for LearnRolledBackDataReplay {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
-        Ok(Self {
-            tasks: deep_contracts::required(members, at, "tasks")?,
-            regressions: deep_contracts::required(members, at, "regressions")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("tasks".to_string(), self.tasks.to_json()));
-        members.push(("regressions".to_string(), self.regressions.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnRolledBackData {
-    pub layer: LearnRolledBackDataLayer,
+pub struct LearnRolledBackDataLearned {
+    pub layer: LearnRolledBackDataLearnedLayer,
     pub target: String,
     pub diff: String,
-    pub evidence: Vec<LearnRolledBackDataEvidenceItem>,
+    pub evidence: LearnRolledBackEvidence,
     pub scope: String,
-    pub replay: Option<LearnRolledBackDataReplay>,
+    pub replay: LearnRolledBackReplay,
     pub applied_by: Option<String>,
-    pub supersedes: Option<String>,
+    pub supersedes: LearnRolledBackSupersedes,
 }
 
-impl Contract for LearnRolledBackData {
+impl Contract for LearnRolledBackDataLearned {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
         Ok(Self {
@@ -4713,6 +4849,80 @@ impl Contract for LearnRolledBackData {
         members.push(("applied_by".to_string(), self.applied_by.to_json()));
         members.push(("supersedes".to_string(), self.supersedes.to_json()));
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnRolledBackDataBaseLayer;
+
+impl Contract for LearnRolledBackDataBaseLayer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"base\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"base\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnRolledBackDataBase {
+    pub layer: LearnRolledBackDataBaseLayer,
+    pub target: String,
+    pub diff: String,
+    pub evidence: LearnRolledBackEvidence,
+    pub scope: String,
+    pub replay: LearnRolledBackReplay,
+    pub applied_by: Option<String>,
+    pub supersedes: LearnRolledBackSupersedes,
+}
+
+impl Contract for LearnRolledBackDataBase {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
+        Ok(Self {
+            layer: deep_contracts::required(members, at, "layer")?,
+            target: deep_contracts::required(members, at, "target")?,
+            diff: deep_contracts::required(members, at, "diff")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            replay: deep_contracts::required(members, at, "replay")?,
+            applied_by: deep_contracts::required(members, at, "applied_by")?,
+            supersedes: deep_contracts::required(members, at, "supersedes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("layer".to_string(), self.layer.to_json()));
+        members.push(("target".to_string(), self.target.to_json()));
+        members.push(("diff".to_string(), self.diff.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("replay".to_string(), self.replay.to_json()));
+        members.push(("applied_by".to_string(), self.applied_by.to_json()));
+        members.push(("supersedes".to_string(), self.supersedes.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LearnRolledBackData {
+    Learned(LearnRolledBackDataLearned),
+    Base(LearnRolledBackDataBase),
+}
+
+impl Contract for LearnRolledBackData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "layer")?.as_str() {
+            "\"learned\"" => Ok(Self::Learned(<LearnRolledBackDataLearned as Contract>::from_json(value, at)?)),
+            "\"base\"" => Ok(Self::Base(<LearnRolledBackDataBase as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/layer")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Learned(inner) => inner.to_json(),
+            Self::Base(inner) => inner.to_json(),
+        }
     }
 }
 
@@ -4777,6 +4987,56 @@ impl Contract for LearnRolledBack {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LearnWidenedEvidenceItem {
+    pub at: String,
+    pub quote: String,
+}
+
+impl Contract for LearnWidenedEvidenceItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["at", "quote"])?;
+        Ok(Self {
+            at: deep_contracts::required(members, at, "at")?,
+            quote: deep_contracts::required(members, at, "quote")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("at".to_string(), self.at.to_json()));
+        members.push(("quote".to_string(), self.quote.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnWidenedEvidence = Vec<LearnWidenedEvidenceItem>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnWidenedReplayValue {
+    pub tasks: i64,
+    pub regressions: i64,
+}
+
+impl Contract for LearnWidenedReplayValue {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
+        Ok(Self {
+            tasks: deep_contracts::required(members, at, "tasks")?,
+            regressions: deep_contracts::required(members, at, "regressions")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("tasks".to_string(), self.tasks.to_json()));
+        members.push(("regressions".to_string(), self.regressions.to_json()));
+        Value::Object(members)
+    }
+}
+
+pub type LearnWidenedReplay = Option<LearnWidenedReplayValue>;
+
+pub type LearnWidenedSupersedes = Option<String>;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LearnWidenedV;
 
 impl Contract for LearnWidenedV {
@@ -4825,85 +5085,31 @@ impl Contract for LearnWidenedWriter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LearnWidenedDataLayer {
-    Learned,
-    Base,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnWidenedDataLearnedLayer;
 
-impl Contract for LearnWidenedDataLayer {
+impl Contract for LearnWidenedDataLearnedLayer {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "learned" => Ok(Self::Learned),
-            "base" => Ok(Self::Base),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
+        deep_contracts::constant(value, at, "\"learned\"").map(|()| Self)
     }
     fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::Learned => "learned",
-            Self::Base => "base",
-        }.to_string())
+        deep_contracts::parse("\"learned\"").expect("a constant is JSON")
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LearnWidenedDataEvidenceItem {
-    pub at: String,
-    pub quote: String,
-}
-
-impl Contract for LearnWidenedDataEvidenceItem {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["at", "quote"])?;
-        Ok(Self {
-            at: deep_contracts::required(members, at, "at")?,
-            quote: deep_contracts::required(members, at, "quote")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("at".to_string(), self.at.to_json()));
-        members.push(("quote".to_string(), self.quote.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnWidenedDataReplay {
-    pub tasks: i64,
-    pub regressions: i64,
-}
-
-impl Contract for LearnWidenedDataReplay {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["tasks", "regressions"])?;
-        Ok(Self {
-            tasks: deep_contracts::required(members, at, "tasks")?,
-            regressions: deep_contracts::required(members, at, "regressions")?,
-        })
-    }
-    fn to_json(&self) -> Value {
-        let mut members = Vec::new();
-        members.push(("tasks".to_string(), self.tasks.to_json()));
-        members.push(("regressions".to_string(), self.regressions.to_json()));
-        Value::Object(members)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LearnWidenedData {
-    pub layer: LearnWidenedDataLayer,
+pub struct LearnWidenedDataLearned {
+    pub layer: LearnWidenedDataLearnedLayer,
     pub target: String,
     pub diff: String,
-    pub evidence: Vec<LearnWidenedDataEvidenceItem>,
+    pub evidence: LearnWidenedEvidence,
     pub scope: String,
-    pub replay: Option<LearnWidenedDataReplay>,
+    pub replay: LearnWidenedReplay,
     pub applied_by: String,
-    pub supersedes: Option<String>,
+    pub supersedes: LearnWidenedSupersedes,
 }
 
-impl Contract for LearnWidenedData {
+impl Contract for LearnWidenedDataLearned {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
         Ok(Self {
@@ -4928,6 +5134,80 @@ impl Contract for LearnWidenedData {
         members.push(("applied_by".to_string(), self.applied_by.to_json()));
         members.push(("supersedes".to_string(), self.supersedes.to_json()));
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnWidenedDataBaseLayer;
+
+impl Contract for LearnWidenedDataBaseLayer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"base\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"base\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnWidenedDataBase {
+    pub layer: LearnWidenedDataBaseLayer,
+    pub target: String,
+    pub diff: String,
+    pub evidence: LearnWidenedEvidence,
+    pub scope: String,
+    pub replay: LearnWidenedReplay,
+    pub applied_by: String,
+    pub supersedes: LearnWidenedSupersedes,
+}
+
+impl Contract for LearnWidenedDataBase {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["layer", "target", "diff", "evidence", "scope", "replay", "applied_by", "supersedes"])?;
+        Ok(Self {
+            layer: deep_contracts::required(members, at, "layer")?,
+            target: deep_contracts::required(members, at, "target")?,
+            diff: deep_contracts::required(members, at, "diff")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            replay: deep_contracts::required(members, at, "replay")?,
+            applied_by: deep_contracts::required(members, at, "applied_by")?,
+            supersedes: deep_contracts::required(members, at, "supersedes")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("layer".to_string(), self.layer.to_json()));
+        members.push(("target".to_string(), self.target.to_json()));
+        members.push(("diff".to_string(), self.diff.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("replay".to_string(), self.replay.to_json()));
+        members.push(("applied_by".to_string(), self.applied_by.to_json()));
+        members.push(("supersedes".to_string(), self.supersedes.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LearnWidenedData {
+    Learned(LearnWidenedDataLearned),
+    Base(LearnWidenedDataBase),
+}
+
+impl Contract for LearnWidenedData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::tag(value, at, "layer")?.as_str() {
+            "\"learned\"" => Ok(Self::Learned(<LearnWidenedDataLearned as Contract>::from_json(value, at)?)),
+            "\"base\"" => Ok(Self::Base(<LearnWidenedDataBase as Contract>::from_json(value, at)?)),
+            other => Err(format!("{at}{}: {other} is not a listed tag", "/layer")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Learned(inner) => inner.to_json(),
+            Self::Base(inner) => inner.to_json(),
+        }
     }
 }
 
