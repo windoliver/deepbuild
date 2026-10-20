@@ -98,11 +98,14 @@ export class Holds extends Context.Service<Holds, {
           )
 
         const hold = Effect.fn("Holds.hold")(function*(request: HoldRequest, send: Send) {
-          const now = yield* Clock.currentTimeMillis
-          yield* send({ ack: request.id, hold_until_ms: now + HOLD_MS })
-          const attempts = yield* Ref.make(0)
           const settled = yield* Deferred.make<Outcome>()
           yield* track(request.session, settled)
+          const deadline = (yield* Clock.currentTimeMillis) + HOLD_MS
+          yield* send({ ack: request.id, hold_until_ms: deadline })
+          // The rest waits a scheduler turn, so the other holds of a burst are read and acknowledged
+          // first instead of queueing behind this one's setup and its extensions' onHold calls.
+          yield* Effect.yieldNow
+          const attempts = yield* Ref.make(0)
           yield* notify({ id: request.id, session: request.session })
           const work = yield* Effect.forkScoped(
             outcome(request, attempts).pipe(Effect.flatMap((result) => Deferred.succeed(settled, result)))
@@ -110,8 +113,9 @@ export class Holds extends Context.Service<Holds, {
           // The 2 s cover the wait for a port and every attempt. The hook stops waiting at the deadline,
           // so a timeout is answered at once: the check is interrupted, so it starts no further attempt,
           // and the hold's scope waits for its group to go before the port goes back.
+          const left = Math.max(0, deadline - (yield* Clock.currentTimeMillis))
           yield* Effect.forkScoped(
-            Effect.sleep(Duration.millis(HOLD_MS)).pipe(
+            Effect.sleep(Duration.millis(left)).pipe(
               Effect.andThen(Deferred.succeed(settled, { outcome: "timeout" })),
               Effect.andThen(Fiber.interrupt(work))
             )
