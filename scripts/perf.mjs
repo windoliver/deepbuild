@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compare, fingerprint, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
 
@@ -12,14 +13,131 @@ const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
 // BLOCKED: perf could not compare. FAIL: a measurement broke its budget.
 const blocked = (message, fix) => Object.assign(Error(message), { fix });
 const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
+// Each side's copy lives at the same path every run, in this user's cache directory under a name
+// for this checkout, with its Cargo builds kept beside it, so a preflight doesn't rebuild the
+// dependency tree cold (#594). The path has to stay put: Cargo doesn't rebuild a crate whose
+// workspace moved, so absolute paths baked into earlier builds (CARGO_MANIFEST_DIR, CARGO_BIN_EXE_*)
+// would point at a deleted copy. Nothing removes a checkout's directory; deleting it only makes the
+// next preflight build cold.
+let kept, lock;
+function keptRoot() {
+  if (kept) return kept;
+  const cache = process.env.XDG_CACHE_HOME || join(homedir(), process.platform === 'darwin' ? 'Library/Caches' : '.cache');
+  const checkout = createHash('sha256').update(realpathSync(root)).digest('hex').slice(0, 16);
+  const directory = join(cache, 'deepbuild-perf', checkout);
+  // Perf runs what it builds there, so the directory is this user's alone: anyone else who could
+  // write to it could plant artifacts Cargo reads as fresh.
+  mkdirSync(dirname(directory), { recursive: true });
+  try {
+    mkdirSync(directory, { mode: 0o700 });
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  const stat = lstatSync(directory);
+  if (!stat.isDirectory() || stat.uid !== process.getuid() || stat.mode & 0o077) {
+    throw blocked(`${directory} is not a directory only this user can use`, `Remove it and perf makes a new one: rm -rf ${directory}`);
+  }
+  lock = takeLock(join(directory, 'lock'));
+  return (kept = directory);
+}
+// One perf run per checkout at a time: a second would delete the first's copies under it. The lock
+// appears whole, number and all, by linking a file already written. A lock whose process is gone,
+// or that names none, was left by a run that was killed: it is moved aside under a name of this
+// run's own and checked to be the one read, so a lock another run took meanwhile is put back.
+function takeLock(file) {
+  const mine = `${file}.${process.pid}`;
+  writeFileSync(mine, String(process.pid));
+  try {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        linkSync(mine, file);
+        return file;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+      }
+      let content;
+      try {
+        content = readFileSync(file, 'utf8');
+      } catch (error) {
+        // Released between the link and the read.
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
+      const holder = Number(content);
+      // A killed run's number can come back as this run's own.
+      if (Number.isInteger(holder) && holder > 0 && holder !== process.pid) {
+        let alive;
+        try {
+          process.kill(holder, 0);
+          alive = true;
+        } catch (gone) {
+          alive = gone.code === 'EPERM';
+        }
+        if (alive) throw blocked(`another perf run (process ${holder}) is using ${dirname(file)}`, `Wait for that preflight to finish. If none is running, the process took over a killed run's number: rm ${file}`);
+      }
+      const stale = `${file}.stale.${process.pid}`;
+      try {
+        renameSync(file, stale);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
+      if (readFileSync(stale, 'utf8') !== content) {
+        try {
+          linkSync(stale, file);
+        } catch (error) {
+          if (error.code !== 'EEXIST') throw error;
+        }
+      }
+      rmSync(stale, { force: true });
+    }
+    throw blocked(`could not take ${file}: other perf runs kept taking it`, 'Run one preflight at a time in this checkout.');
+  } finally {
+    rmSync(mine, { force: true });
+  }
+}
+// Whether the lock still names this run. Runs racing for a killed run's lock can, rarely, both
+// believe they took it; checking before each deletion keeps one from removing the other's copy.
+function ownsLock() {
+  try {
+    return readFileSync(lock, 'utf8') === String(process.pid);
+  } catch {
+    return false;
+  }
+}
+function keptCopy(side) {
+  const directory = join(keptRoot(), side, 'copy');
+  if (!ownsLock()) throw blocked(`another perf run took ${lock}`, 'Run one preflight at a time in this checkout.');
+  // A run that was killed leaves its copy behind.
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(directory, { recursive: true });
+  mkdirSync(join(dirname(directory), 'target'), { recursive: true });
+  return directory;
+}
+// CARGO_TARGET_DIR names the kept build directory, so Cargo resolves it to the same path every run.
+function checkRun(directory) {
+  const previous = process.env.CARGO_TARGET_DIR;
+  process.env.CARGO_TARGET_DIR = join(dirname(directory), 'target');
+  try {
+    return checkCopy(directory);
+  } finally {
+    if (previous === undefined) delete process.env.CARGO_TARGET_DIR;
+    else process.env.CARGO_TARGET_DIR = previous;
+  }
+}
 // A directory of npm ci, warm builds and the check workload, timed once like the merge base. The checks
 // read git, so each disposable copy gets its own throwaway repository, committed without the user's
-// hooks or signing.
-function checkRun(directory) {
+// hooks or signing. Its origin/main is that commit, as on main itself, so checks that compare with
+// main (repo-rules' size) do the same work on both sides instead of skipping it in the copy.
+function checkCopy(directory) {
   const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], directory, { stdio: 'pipe' });
   git('init', '-q');
   git('add', '-A');
   git('commit', '-qm', 'perf copy');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  // target/ links to the kept builds, so ./target/debug binaries stay where the lanes and budgets run
+  // them. It is made after the commit: .gitignore's target/ matches a directory, not a link.
+  symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
   run('npm', ['ci', '--no-audit', '--no-fund'], directory);
   warm(directory);
   return measureOnce([process.execPath, 'scripts/checks.mjs'], directory);
@@ -44,9 +162,11 @@ try {
   if (!current.preflight) throw Error('missing preflight budget');
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
-    archive = mkdtempSync(join(tmpdir(), 'deep-benchmark-base-'));
-    // Git reads stay in this checkout; checkRun gives the disposable copy a repository of its own.
-    run('tar', ['-xf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
+    archive = keptCopy('base');
+    // Git reads stay in this checkout; checkRun gives the disposable copy a repository of its own. -m
+    // stamps the files now: Cargo goes by mtime, and a merge base committed before the kept build
+    // would otherwise look fresh.
+    run('tar', ['-mxf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
     baseline = checkRun(archive);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
@@ -63,11 +183,18 @@ try {
   const ownTests = changed.filter((file) => testPattern.test(file));
   let rest = null;
   if (ownTests.length) {
-    without = mkdtempSync(join(tmpdir(), 'deep-benchmark-without-tests-'));
+    without = keptCopy('without-tests');
     for (const file of files(['ls-files', '--cached', '--others', '--exclude-standard'])) {
-      if (ownTests.includes(file) || !existsSync(join(root, file))) continue;
+      // target is the copy's link to its kept builds; a checkout's own target link isn't copied.
+      if (ownTests.includes(file) || file === 'target' || !existsSync(join(root, file))) continue;
       mkdirSync(dirname(join(without, file)), { recursive: true });
-      copyFileSync(join(root, file), join(without, file));
+      // A relative link into the checkout is copied as a link, so it points into the copy. Any other
+      // link is copied as what it points at, a directory whole.
+      const source = join(root, file), link = lstatSync(source).isSymbolicLink() && readlinkSync(source);
+      const inside = link && !isAbsolute(link) && !/^\.\.(?:[\\/]|$)/.test(relative(root, resolve(dirname(source), link)));
+      if (inside) symlinkSync(link, join(without, file));
+      else if (statSync(source).isDirectory()) cpSync(source, join(without, file), { recursive: true, dereference: true });
+      else copyFileSync(source, join(without, file));
     }
     rest = checkRun(without);
     if (rest.status !== 0) {
@@ -136,7 +263,20 @@ try {
 } catch (error) {
   verdicts.push(['BLOCKED', error.message, error.fix ?? 'Resolve the named cause; budgets in benchmarks/budgets.json are frozen once they reach main.']);
 } finally {
-  for (const directory of [archive, without]) if (directory) rmSync(directory, { recursive: true, force: true });
+  // A side that built nothing (a checkout without Rust, or a test fixture) leaves nothing behind. This
+  // runs before the lock goes, so no other run is using the sides.
+  if (lock && ownsLock()) {
+    for (const directory of [archive, without]) if (directory) rmSync(directory, { recursive: true, force: true });
+    for (const side of ['base', 'without-tests']) {
+      const target = join(kept, side, 'target');
+      try {
+        if (!readdirSync(target).length) rmSync(join(kept, side), { recursive: true, force: true });
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+    rmSync(lock, { force: true });
+  }
 }
 for (const [state, message, fix] of verdicts) console.log(`${state} perf: ${message}\n  Fix: ${fix}`);
 if (verdicts.length) process.exitCode = 1;
