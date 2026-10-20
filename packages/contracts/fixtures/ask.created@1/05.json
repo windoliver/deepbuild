@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.created",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "choice",
+    "question": "Merge PR 42 into main?",
+    "options": [
+      {
+        "id": "merge",
+        "label": "Merge it",
+        "decision": "allow"
+      }
+    ],
+    "recommended": "merge",
+    "deadline": 1760017051123,
+    "fallback": "hold the merge",
+    "default": "hold the merge",
+    "provisional": false,
+    "owner": "you",
+    "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pinned_to": {
+      "kind": "doc_revision",
+      "ref": "doc:01K74G0A1B2C3D4E5F6G7H8J9K#rev3"
+    }
+  }
+}

@@ -86,8 +86,8 @@
         },
         "holder": {
           "type": "string",
-          "pattern": "^(session:[0-9A-Za-z]+|mcp:[^\\s]+|ext:[^\\s]+)$",
-          "description": "A session, or a document prefix's writer.",
+          "pattern": "^(session:[0-9A-Za-z]+|hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+          "description": "A session, or a writer as the envelope writes one, such as a document prefix's.",
           "maxLength": 8192
         },
         "mode": {
