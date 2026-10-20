@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -71,6 +71,59 @@ export function warm(cwd) {
   // The #56 spike keeps its dependencies apart from the root's, and its benches are perf tasks.
   if (existsSync(join(cwd, 'spikes/hub-core/package-lock.json'))) steps.unshift(['npm', 'ci', '--prefix', 'spikes/hub-core', '--no-audit', '--no-fund']);
   for (const [command, ...args] of steps) spawnSync(command, args, { cwd, stdio: 'ignore' });
+}
+
+// A timing or memory budget counts only on the reference Mac, on mains power, with Low Power Mode
+// off and the thermal state nominal (design: The reference Mac).
+const reference = [
+  ['model', 'Mac15,7', 'model'],
+  ['chip', 'Apple M3 Pro', 'chip'],
+  ['memoryBytes', 36 * 2 ** 30, 'memory (36 GB)'],
+  ['power', 'ac', 'power (mains)'],
+  ['lowPowerMode', false, 'Low Power Mode'],
+  ['thermalState', 'nominal', 'thermal state'],
+];
+
+// The machine a result ran under. A field this machine can't report, as off macOS, is null, so the
+// result is a reading.
+export function fingerprint() {
+  const read = (command, ...args) => {
+    try {
+      return execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 }).trim();
+    } catch {
+      return null;
+    }
+  };
+  const memory = Number(read('sysctl', '-n', 'hw.memsize'));
+  const source = read('pmset', '-g', 'ps');
+  const lowPower = read('pmset', '-g')?.match(/^\s*lowpowermode\s+([01])\s*$/m)?.[1];
+  // NSProcessInfo's thermalState: 0 nominal, 1 fair, 2 serious, 3 critical.
+  const thermal = read('osascript', '-l', 'JavaScript', '-e', 'ObjC.import("Foundation"); $.NSProcessInfo.processInfo.thermalState');
+  return {
+    model: read('sysctl', '-n', 'hw.model') || null,
+    chip: read('sysctl', '-n', 'machdep.cpu.brand_string') || null,
+    memoryBytes: Number.isSafeInteger(memory) && memory > 0 ? memory : null,
+    power: /'AC Power'/.test(source) ? 'ac' : /'Battery Power'/.test(source) ? 'battery' : null,
+    lowPowerMode: lowPower === undefined ? null : lowPower === '1',
+    thermalState: ['nominal', 'fair', 'serious', 'critical'][thermal] ?? null,
+    macosBuild: read('sw_vers', '-buildVersion') || null,
+  };
+}
+
+// Judges one limit on five runs taken after warm-up. On the reference Mac it passes when all five
+// are within the limit and fails when all five are over it by more than the margin, the larger of
+// 5% and the five runs' spread, both as fractions of the limit. Anything else, and every result off
+// the reference Mac, is INCONCLUSIVE with the five runs attached.
+export function judgeLimit({ limit, runs, fingerprint: machine }) {
+  if (!Array.isArray(runs) || runs.length !== 5 || runs.some((run) => !Number.isFinite(run) || run < 0))
+    return { status: 'BLOCKED', limit, runs, reason: `a limit is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}` };
+  const margin = Math.max(0.05, (Math.max(...runs) - Math.min(...runs)) / limit);
+  const off = reference.filter(([key, value]) => machine?.[key] !== value).map(([key, value, label]) => `${label} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`);
+  if (!machine?.macosBuild) off.push('the macOS build is missing');
+  if (off.length) return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `a reading, not a budget result: off the reference Mac Mac15,7 (M3 Pro, 36 GB, mains power, Low Power Mode off, thermal state nominal): ${off.join('; ')}` };
+  if (runs.every((run) => run <= limit)) return { status: 'PASS', limit, runs, margin };
+  if (runs.every((run) => run > limit * (1 + margin))) return { status: 'FAIL', limit, runs, margin, reason: `all five runs are over ${limit} by more than the ${(margin * 100).toFixed(1)}% margin` };
+  return { status: 'INCONCLUSIVE', limit, runs, margin, reason: `the five runs are neither all within ${limit} nor all over it by more than the ${(margin * 100).toFixed(1)}% margin` };
 }
 
 export function validateBudgets(current, base) {

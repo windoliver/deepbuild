@@ -18,6 +18,34 @@
       "initialReason": "Issue #12 first measurement: the merge base has no executable benchmark. Measure skeleton process startup, not issue #17 hook overhead, in 20 rounds interleaved with the merge base. p50 and peak memory get a 50% relative margin and the design's 10 MB peak-memory ceiling; p95 is reported, since its tail moves past that margin between identical binaries. Established definitions are frozen."
     },
     {
+      "id": "repo-rules",
+      "command": ["node", "scripts/repo-rules.mjs"],
+      "margin": 0.5,
+      "limits": { "p50Ms": 1000, "p95Ms": 2000, "peakBytes": 128000000 },
+      "initialReason": "Issue #246 first measurement: the merge base has no repo-rules check. Time the lint lane's rules on this repo in 20 rounds: one read of every file git lists, one cargo metadata call and the size diff against the merge base. Issue #246 caps p50 at 1 s, p95 at 2 s and peak memory at 128 MB; later merge bases hold p50 and peak memory to a 50% margin."
+    },
+    {
+      "id": "evidence-put-5mb",
+      "command": ["node", "benchmarks/evidence.mjs", "put-5mb"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #15 first measurement: the merge base has no evidence store. One process runs one put of a 5 MB PNG screenshot against a temp store, so p50 includes Node's start and the per-call limits stay in tests/acceptance/15/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "evidence-redact-text",
+      "command": ["node", "benchmarks/evidence.mjs", "redact-8mb"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #15 first measurement: the merge base has no evidence store. One process runs one text put of 8 MB of output, scrubbed by pattern and by 16 held values against a temp store, so p50 includes Node's start and the per-call limits stay in tests/acceptance/15/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "evidence-retain-30d",
+      "command": ["node", "benchmarks/evidence.mjs", "retain-30d"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #15 first measurement: the merge base has no evidence store. One process runs one retention pass over 36 days of records at 500 a day against a temp store, so p50 includes Node's start and the per-call limits stay in tests/acceptance/15/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "hub-core-plain",
       "command": ["node", "spikes/hub-core/bench.mjs", "--variant", "plain"],
       "margin": 0.5,
