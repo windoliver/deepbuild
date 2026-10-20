@@ -66,8 +66,7 @@
         },
         "value": {
           "type": "number",
-          "minimum": -9007199254740991,
-          "maximum": 9007199254740991
+          "description": "Any finite number, in its unit; not hashed, so not held to 2^53."
         },
         "unit": {
           "type": "string",

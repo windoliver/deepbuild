@@ -98,7 +98,8 @@
               "quote"
             ],
             "additionalProperties": false
-          }
+          },
+          "minItems": 1
         },
         "scope": {
           "type": "string",
