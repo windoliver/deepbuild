@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use deep_app::{menu_bar_title, sessions, stocks, waiting_count, Spike, SESSION_COUNT};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    px, size, AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, Point, TestAppContext,
-    WindowBounds, WindowOptions,
+    point, px, size, AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, Point,
+    ScrollDelta, TestAppContext, WindowBounds, WindowOptions,
 };
 use gpui_shell::ScriptView;
 
@@ -90,7 +90,12 @@ fn session_list_count_and_report(cx: &mut TestAppContext) {
 
     cx.update_window(window, |_, window, cx| {
         window.render_frame(cx);
-        assert!(window.find("count").visible());
+        let count = window.find("count");
+        assert!(count.visible());
+        assert_eq!(
+            count.label(),
+            Some(format!("{expected} waiting on you").as_str())
+        );
         // The list is virtualized: the first rows are drawn and the 1,000th is not yet.
         assert!(window.try_find(("session", 0usize)).is_some());
         assert!(window.try_find(("session", SESSION_COUNT - 1)).is_none());
@@ -98,12 +103,26 @@ fn session_list_count_and_report(cx: &mut TestAppContext) {
         window.click("open-report", cx);
     })
     .unwrap();
+    // Scrolled to the end, the list draws its 1,000th row and no longer its first.
+    cx.update_window(window, |_, window, cx| {
+        // The wheel goes to the list under a drawn row.
+        window.scroll(
+            ("session", 5usize),
+            ScrollDelta::Pixels(point(px(0.), px(-28. * SESSION_COUNT as f32))),
+            cx,
+        );
+        assert!(window.try_find(("session", SESSION_COUNT - 1)).is_some());
+        assert!(window.try_find(("session", 0usize)).is_none());
+    })
+    .unwrap();
     cx.update(|cx| {
         let spike = spike.read(cx);
         assert_eq!(spike.waiting(), expected);
         assert_eq!(spike.selected(), Some(3));
         let report = spike.report().expect("the report was written");
-        let html = std::fs::read_to_string(report.trim_start_matches("file://")).unwrap();
+        let path = report.trim_start_matches("file://");
+        let html = std::fs::read_to_string(path).unwrap();
+        std::fs::remove_file(path).unwrap();
         if std::env::var_os("DEEP_APP_WRITE_SCREENS").is_some() {
             let sample = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../docs/spikes/337/report-sample.html");
@@ -122,23 +141,21 @@ fn session_list_count_and_report(cx: &mut TestAppContext) {
     );
 }
 
-/// The menu-bar item is an NSStatusItem, which gpui's offscreen renderer can't capture; its
-/// title comes from `menu_bar_title`, checked here against the count the window shows.
+/// The menu-bar item is an NSStatusItem, which gpui's offscreen renderer can't capture and no
+/// test reads back; main.rs gives it `menu_bar_title`, checked here against the count the window
+/// draws.
 #[gpui_kit::test]
 fn menu_bar_count(cx: &mut TestAppContext) {
-    let (window, spike, _) = open(cx, None);
+    let (window, _, _) = open(cx, None);
     let title = menu_bar_title(&sessions());
     assert_eq!(title, "143");
-    cx.update_window(window, |_, window, cx| {
-        window.render_frame(cx);
-        assert!(window.find("count").visible());
-    })
-    .unwrap();
-    // The window's count and the menu bar's come from the same sessions.
-    assert_eq!(
-        spike.read_with(cx, |spike, _| spike.waiting()).to_string(),
-        title
-    );
+    let drawn = cx
+        .update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            window.find("count").label().map(str::to_owned)
+        })
+        .unwrap();
+    assert_eq!(drawn, Some(format!("{title} waiting on you")));
 }
 
 fn stocks_panel(agent: &str, cx: &mut TestAppContext) {
@@ -149,7 +166,8 @@ fn stocks_panel(agent: &str, cx: &mut TestAppContext) {
     let (window, _, panel) = open(cx, Some(agent));
     let panel = panel.unwrap();
     let percent = |prices: &[f64], tick: usize| {
-        let change = (prices[tick] / prices[0] - 1.0) * 100.0;
+        // The brief's change from tick 0, computed as the panels do.
+        let change = (prices[tick] - prices[0]) / prices[0] * 100.0;
         format!("{}{change:.2}%", if change >= 0.0 { "+" } else { "" })
     };
 
@@ -171,9 +189,12 @@ fn stocks_panel(agent: &str, cx: &mut TestAppContext) {
         assert_has(&later, &percent(prices, 2));
     }
 
-    // Select the stock whose replay first crosses +0.1% after tick 2, then arm and cross.
+    // Select the stock whose replay first crosses +0.1% after tick 2, then arm and cross. It is
+    // never the first symbol, which is selected already, so a row click that does nothing or an
+    // alert that ignores the selection fails.
     let (symbol, prices, crossing) = quotes
         .iter()
+        .skip(1)
         .filter_map(|(symbol, prices)| {
             let target = prices[2] * 1.001;
             let at = (3..prices.len()).find(|&tick| prices[tick] >= target)?;
@@ -182,7 +203,12 @@ fn stocks_panel(agent: &str, cx: &mut TestAppContext) {
         .min_by_key(|(_, _, at)| *at)
         .expect("some stock crosses its target in the recording");
     click(cx, window, &format!("row-{symbol}"));
-    assert_has(&tree(cx, window, &panel), &format!("Selected: {symbol}"));
+    let selected = tree(cx, window, &panel);
+    assert_has(&selected, &format!("Selected: {symbol}"));
+    assert!(
+        !selected.contains(&format!("Selected: {}", quotes[0].0)),
+        "the first symbol is still selected:\n{selected}"
+    );
     click(cx, window, "alert-above");
     let target = prices[2] * 1.001;
     let armed = tree(cx, window, &panel);

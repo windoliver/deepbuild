@@ -250,6 +250,7 @@ impl Render for Spike {
         )
         .h_full();
 
+        let count = format!("{} waiting on you", self.waiting());
         div()
             .id("spike")
             .size_full()
@@ -274,7 +275,9 @@ impl Render for Spike {
                                 div()
                                     .id("count")
                                     .test_support()
-                                    .child(format!("{} waiting on you", self.waiting())),
+                                    // The label is the drawn text, so a test can read the count back.
+                                    .aria_label(count.clone())
+                                    .child(count),
                             )
                             .child(
                                 div()
