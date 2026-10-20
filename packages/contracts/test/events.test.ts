@@ -1,6 +1,6 @@
 // Regressions for event kinds whose schemas read the design looser, or other, than it says.
 import { describe, expect, it } from 'vitest';
-import { catalogue, catalogueDrift, fixtures, getSchema, validate } from '../src/index.js';
+import { catalogue, catalogueDrift, checkViewBindings, fixtures, getSchema, validate } from '../src/index.js';
 
 type Event = Record<string, unknown> & { data: Record<string, unknown> };
 const first = (name: string): Event => structuredClone(fixtures(name)[0]) as Event;
@@ -285,6 +285,17 @@ describe('the design says', () => {
     expect(new Set(asks.map((a) => a.data.kind))).toEqual(new Set(['authority', 'unblock', 'taste', 'exception', 'choice', 'definition']));
     expect(new Set(asks.map((a) => (a.data.pinned_to as { kind: string }).kind))).toEqual(new Set(['commit', 'doc_revision', 'evidence']));
   });
+});
+
+it("the catalogue's checks read a list by its indices, never through its own flatMap", () => {
+  const forge = <T>(items: T[]): T[][] => {
+    const own = [...items];
+    Object.defineProperty(own, 'flatMap', { value: () => [] });
+    class Flat<U> extends Array<U> { override flatMap<V>(): V[] { return []; } }
+    return [own, Flat.from(items)];
+  };
+  for (const kinds of forge(['learn.paused'])) expect(checkViewBindings(kinds).ok).toBe(false);
+  for (const sources of forge([{ where: '#1', text: '`learn.paused`' }])) expect(catalogueDrift(sources)).toEqual([{ kind: 'learn.paused', where: '#1' }]);
 });
 
 describe('the learned layer', () => {
