@@ -91,7 +91,10 @@ function compile(root: Schema): Check {
           if (values && !values.has(value)) return void out.push(issue('enum', at, value));
           if (format && !format(value)) return void out.push(issue('format', at, value));
           if (pattern && !pattern.test(value)) return void out.push(issue('pattern', at, value));
-          if (min !== undefined || max !== undefined) {
+          // Lengths count code points, which lie between half the UTF-16 length and all of it; count them
+          // only when those bounds don't decide.
+          const units = value.length;
+          if ((min !== undefined && Math.ceil(units / 2) < min) || (max !== undefined && units > max)) {
             const length = [...value].length;
             if ((min !== undefined && length < min) || (max !== undefined && length > max)) out.push(issue('length', at, value));
           }
