@@ -20,9 +20,11 @@ describe('the design says', () => {
     const unblock = asks.find((a) => a.data.kind === 'unblock')!;
     const other = asks.find((a) => a.data.kind !== 'unblock')!;
     expect(ok('ask.created@1', unblock)).toBe(true);
-    const { steps: _steps, ...withoutSteps } = unblock.data;
-    expect(ok('ask.created@1', { ...unblock, data: withoutSteps })).toBe(false);
-    expect(ok('ask.created@1', { ...other, data: { ...other.data, steps: ['x'] } })).toBe(false);
+    for (const field of ['steps', 'where', 'why', 'unblocks', 'proves']) {
+      const { [field]: value, ...without } = unblock.data;
+      expect(ok('ask.created@1', { ...unblock, data: without }), `an unblock without ${field}`).toBe(false);
+      expect(ok('ask.created@1', { ...other, data: { ...other.data, [field]: value } }), `a ${String(other.data.kind)} ask with ${field}`).toBe(false);
+    }
   });
 
   it('an ask is pinned to a commit, or an evidence hash, in its form', () => {
@@ -46,12 +48,18 @@ describe('the design says', () => {
     expect(ok('learn.proposed@1', { ...learn, data: example })).toBe(true);
     expect(ok('learn.proposed@1', { ...learn, data: { ...example, layer: 'rules' } })).toBe(false);
     expect(ok('learn.proposed@1', { ...learn, data: { ...example, applied_by: 'agent' } })).toBe(false);
+    expect(ok('learn.proposed@1', { ...learn, data: { ...example, scope: 'everywhere' } })).toBe(false);
+    for (const replay of [{ tasks: 20 }, { regressions: 0 }, 'twenty']) expect(ok('learn.proposed@1', { ...learn, data: { ...example, replay } }), JSON.stringify(replay)).toBe(false);
   });
 
   it('a lease names its resource by host, kind and key', () => {
     const lease = first('lease.acquired@1');
     expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, resource: { host: 'local', kind: 'port', key: '4317' } } })).toBe(true);
     expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, resource: 'port:4317' } })).toBe(false);
+    for (const field of ['host', 'kind', 'key']) {
+      const { [field]: _dropped, ...resource } = { host: 'local', kind: 'port', key: '4317' };
+      expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, resource } }), `a resource without ${field}`).toBe(false);
+    }
   });
 
   it("a task's task_ref may be the message that asked for it", () => {
@@ -83,6 +91,10 @@ describe('the design says', () => {
     const note = first('note.opened@1');
     expect(ok('note.opened@1', { ...note, data: { ...note.data, region: { x: 0, y: 0, w: 10, h: 10 } } })).toBe(true);
     expect(ok('note.opened@1', { ...note, data: { ...note.data, region: 'top left' } })).toBe(false);
+    for (const field of ['x', 'y', 'w', 'h']) {
+      const { [field]: _dropped, ...region } = { x: 0, y: 0, w: 10, h: 10 };
+      expect(ok('note.opened@1', { ...note, data: { ...note.data, region } }), `a region without ${field}`).toBe(false);
+    }
   });
 
   it('a task asked for by a message closes by that same handle', () => {
@@ -115,6 +127,10 @@ describe('the design says', () => {
     const achieved = { created: { 'rect@1': 1 }, updated: 0, deleted: {}, unchanged: false };
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, patch: '01K74G3A5C7E9G1J3M5P7R9T1V', achieved } })).toBe(true);
     expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: true } })).toBe(false);
+    for (const field of ['created', 'updated', 'deleted', 'unchanged']) {
+      const { [field]: _dropped, ...partial } = achieved;
+      expect(ok('doc.patched@1', { ...patched, data: { ...patched.data, achieved: partial } }), `achieved without ${field}`).toBe(false);
+    }
     const filed = first('suggestion.filed@1');
     const ops = [{ set: { id: 'row.m14', path: 'params/label', value: 'x' } }];
     expect(ok('suggestion.filed@1', { ...filed, data: { ...filed.data, patch: '01K74G3A5C7E9G1J3M5P7R9T1V', ops } })).toBe(true);
@@ -309,7 +325,10 @@ it('an MCP tool call names its server and its tool, and no other call does', () 
       expect(ok(name, { ...mcp!, data }), `${name} without ${field}`).toBe(false);
     }
     for (const call of fixtures(name) as { data: Record<string, unknown> }[]) {
-      if (call.data.kind !== 'mcp') expect(ok(name, { ...call, data: { ...call.data, server: 'deep', tool: 'deep_ask' } }), `${name} ${String(call.data.kind)} naming a server`).toBe(false);
+      if (call.data.kind === 'mcp') continue;
+      for (const [field, value] of [['server', 'deep'], ['tool', 'deep_ask']]) {
+        expect(ok(name, { ...call, data: { ...call.data, [field!]: value } }), `${name} ${String(call.data.kind)} naming a ${field}`).toBe(false);
+      }
     }
   }
 });
