@@ -1,0 +1,275 @@
+{
+  "decision": "plain",
+  "prompt": "spikes/hub-core/PROMPT.md",
+  "variants": {
+    "plain": {
+      "agent": "Claude Code (Agent tool, general-purpose subagent)",
+      "model": "claude-opus-5-5",
+      "fixRounds": 0,
+      "reviewMinutes": null,
+      "failed": [],
+      "behaviorFixes": [
+        "After the first full suite on the reference Mac under endpoint-security load, one round: the ledger stays open and is written with writeSync, replies no longer wait for a stopped group to be gone, and a group whose member escaped the first SIGKILL is killed again."
+      ]
+    },
+    "effect": {
+      "agent": "Claude Code (Agent tool, general-purpose subagent)",
+      "model": "claude-opus-5-5",
+      "fixRounds": 0,
+      "reviewMinutes": null,
+      "failed": [
+        "#56.80ab2a58",
+        "#56.31f12028"
+      ],
+      "behaviorFixes": [
+        "While building, the agent profiled and removed per-line ledger appends and repeated signal delivery.",
+        "After the full suite on the reference Mac, one round: a hold acknowledges before its setup, so a burst of 50 is acknowledged within 250 ms."
+      ],
+      "failedNote": "#56.80ab2a58: its 1,000 randomized runs leak no lease, but in three of the four full suite runs on the reference Mac (load 10 to 57), the last after its fix round, its first acknowledgements to a burst of 50 holds on a fresh hub came 257 to 265 ms after the requests, past the test's 250 ms; the plain build met it in the same runs once its own fix round was in. #56.31f12028: hold latency 17% and hub memory 168% over plain."
+    }
+  },
+  "reviewNote": "Not timed: Effect failed #56.31f12028 (hold latency 17% and hub memory 168% over plain) and #56.80ab2a58 by the measured numbers, so by the issue's rule the decision is plain whatever the review times would be.",
+  "startup": {
+    "node": "v22.19.0",
+    "module": "effect/Effect",
+    "effect": "4.0.5",
+    "samples": 20,
+    "p50Ms": 29.8,
+    "p95Ms": 31.57,
+    "firstMs": 78.32
+  },
+  "startupNode24": {
+    "node": "v24.22.0",
+    "module": "effect/Effect",
+    "effect": "4.0.5",
+    "samples": 20,
+    "p50Ms": 26.28,
+    "p95Ms": 27.58,
+    "firstMs": 102.02
+  },
+  "budgets": {
+    "machine": {
+      "model": "Mac15,7",
+      "chip": "Apple M3 Pro",
+      "memoryBytes": 38654705664,
+      "power": "ac",
+      "lowPowerMode": false,
+      "thermalState": "nominal",
+      "macosBuild": "25G241",
+      "reference": true
+    },
+    "node": "v24.22.0",
+    "commit": "260399aa40d1438cd8c6b0d37e6f83395dc8be09",
+    "perf": [
+      {
+        "task": "hub-core-plain",
+        "baseCommit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+        "status": "INITIAL",
+        "reason": "Issue #56 first measurement: the merge base has no hub core. The bench starts the plain TypeScript spike hub, holds one hook in each of 50 sessions on a check that passes at once, and prints hold latency, the hub's peak memory and its leaked handles; perf times the whole bench in 20 rounds and caps its peak memory at 250 MB, about twice what the hub and its bench use together. p50 and peak memory get a 50% margin against a later merge base, since a run that starts processes moves with machine load.",
+        "current": {
+          "p50Ms": 183.47304099996109,
+          "p95Ms": 236.2604580000043,
+          "peakBytes": 90767360
+        },
+        "base": null,
+        "fingerprint": {
+          "model": "Mac15,7",
+          "chip": "Apple M3 Pro",
+          "memoryBytes": 38654705664,
+          "power": "ac",
+          "lowPowerMode": false,
+          "thermalState": "nominal",
+          "macosBuild": "25G241"
+        },
+        "limits": {
+          "peakBytes": {
+            "status": "PASS",
+            "limit": 250000000,
+            "runs": [
+              90505216,
+              90259456,
+              90652672,
+              90587136,
+              90341376
+            ],
+            "margin": 0.05
+          }
+        }
+      },
+      {
+        "task": "hub-core-effect",
+        "baseCommit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+        "status": "INITIAL",
+        "reason": "Issue #56 first measurement: the merge base has no hub core. The bench starts the Effect 4 spike hub, holds one hook in each of 50 sessions on a check that passes at once, and prints hold latency, the hub's peak memory and its leaked handles; perf times the whole bench in 20 rounds and caps its peak memory at 250 MB, about twice what the hub and its bench use together. p50 and peak memory get a 50% margin against a later merge base, since a run that starts processes moves with machine load.",
+        "current": {
+          "p50Ms": 278.9947500000126,
+          "p95Ms": 333.8096249999944,
+          "peakBytes": 243515392
+        },
+        "base": null,
+        "fingerprint": {
+          "model": "Mac15,7",
+          "chip": "Apple M3 Pro",
+          "memoryBytes": 38654705664,
+          "power": "ac",
+          "lowPowerMode": false,
+          "thermalState": "nominal",
+          "macosBuild": "25G241"
+        },
+        "limits": {
+          "peakBytes": {
+            "status": "PASS",
+            "limit": 250000000,
+            "runs": [
+              242696192,
+              243040256,
+              243367936,
+              242712576,
+              242761728
+            ],
+            "margin": 0.05
+          }
+        }
+      }
+    ],
+    "bench": {
+      "plain": {
+        "bench": "hold",
+        "variant": "plain",
+        "holds": 50,
+        "runs": 5,
+        "holdP50Ms": 27.19,
+        "holdP95Ms": 38.18,
+        "hubPeakBytes": 90537984,
+        "leakedHandles": 1
+      },
+      "effect": {
+        "bench": "hold",
+        "variant": "effect",
+        "holds": 50,
+        "runs": 5,
+        "holdP50Ms": 31.79,
+        "holdP95Ms": 48.9,
+        "hubPeakBytes": 242892800,
+        "leakedHandles": 0
+      }
+    },
+    "benchRuns": {
+      "plain": [
+        {
+          "bench": "hold",
+          "variant": "plain",
+          "holds": 50,
+          "holdP50Ms": 41.06,
+          "holdP95Ms": 61.43,
+          "hubPeakBytes": 90406912,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "plain",
+          "holds": 50,
+          "holdP50Ms": 26.09,
+          "holdP95Ms": 37.28,
+          "hubPeakBytes": 90537984,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "plain",
+          "holds": 50,
+          "holdP50Ms": 23.11,
+          "holdP95Ms": 37.06,
+          "hubPeakBytes": 90177536,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "plain",
+          "holds": 50,
+          "holdP50Ms": 27.19,
+          "holdP95Ms": 38.18,
+          "hubPeakBytes": 90800128,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "plain",
+          "holds": 50,
+          "holdP50Ms": 43.72,
+          "holdP95Ms": 62.46,
+          "hubPeakBytes": 90685440,
+          "leakedHandles": 1
+        },
+        {
+          "bench": "hold",
+          "variant": "plain",
+          "holds": 50,
+          "runs": 5,
+          "holdP50Ms": 27.19,
+          "holdP95Ms": 38.18,
+          "hubPeakBytes": 90537984,
+          "leakedHandles": 1
+        }
+      ],
+      "effect": [
+        {
+          "bench": "hold",
+          "variant": "effect",
+          "holds": 50,
+          "holdP50Ms": 31.79,
+          "holdP95Ms": 48.9,
+          "hubPeakBytes": 242958336,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "effect",
+          "holds": 50,
+          "holdP50Ms": 32.97,
+          "holdP95Ms": 56.56,
+          "hubPeakBytes": 242892800,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "effect",
+          "holds": 50,
+          "holdP50Ms": 31.14,
+          "holdP95Ms": 43.74,
+          "hubPeakBytes": 242794496,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "effect",
+          "holds": 50,
+          "holdP50Ms": 131.98,
+          "holdP95Ms": 154.36,
+          "hubPeakBytes": 243040256,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "effect",
+          "holds": 50,
+          "holdP50Ms": 26.98,
+          "holdP95Ms": 45.81,
+          "hubPeakBytes": 236896256,
+          "leakedHandles": 0
+        },
+        {
+          "bench": "hold",
+          "variant": "effect",
+          "holds": 50,
+          "runs": 5,
+          "holdP50Ms": 31.79,
+          "holdP95Ms": 48.9,
+          "hubPeakBytes": 242892800,
+          "leakedHandles": 0
+        }
+      ]
+    },
+    "benchNote": "Each bench line is the median of five runs, plain and effect alternating, on the reference Mac on Node 24.22, before the preflight on the same commit's spike sources."
+  }
+}
