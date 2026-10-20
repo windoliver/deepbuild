@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compare, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
+import { compare, fingerprint, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
@@ -86,24 +86,44 @@ try {
     const outcome = compare(workload, rest ?? observed, workloadBase, ['cpuMs', 'peakBytes']);
     if (rest) compare(workload, observed, null, ['cpuMs', 'peakBytes']);
     console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(rest ?? observed), base: workloadBase && reading(workloadBase),
-      ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs } }));
+      ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs }, fingerprint: fingerprint() }));
   } catch (error) {
     verdicts.push(['FAIL', error.message, regressed]);
   }
   for (const budget of current.tasks) {
     const established = base?.tasks?.find(({ id }) => id === budget.id);
-    let samples;
+    let samples, runs;
     try {
       samples = measure(budget.command, root, established && { command: established.command, cwd: archive });
+      // Each limit is judged on five timed runs after one untimed warm-up run.
+      const once = () => {
+        const result = measureOnce(budget.command, root);
+        if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
+        return result;
+      };
+      runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
     } catch (error) {
       verdicts.push(['BLOCKED', `${budget.id}: ${error.message}`, 'Build the measured command; the check lanes build it.']);
       continue;
     }
     const [now, then = null] = samples;
+    const machine = fingerprint();
+    const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
+    let outcome;
     try {
-      console.log(JSON.stringify({ task: budget.id, baseCommit, ...compare(budget, now, then), current: now, base: then }));
+      // compare holds only the merge-base regression here; the limits are judged above.
+      outcome = compare({ ...budget, limits: {} }, now, then);
     } catch (error) {
       verdicts.push(['FAIL', error.message, regressed]);
+    }
+    console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: now, base: then, fingerprint: machine, limits }));
+    for (const [metric, { status, reason }] of Object.entries(limits)) {
+      if (status === 'PASS') continue;
+      const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'
+        : status === 'FAIL' ? `Bring ${budget.id} back under its ${metric} limit; budgets are frozen once they reach main.`
+        : /reference Mac/.test(reason) ? 'Run perf on the reference Mac (Mac15,7, M3 Pro, 36 GB) on mains power, with Low Power Mode off and the thermal state nominal.'
+        : 'Rerun perf on a quiet reference Mac; the five runs straddle the limit.';
+      verdicts.push([status, `${budget.id}: ${metric}: ${reason}`, fix]);
     }
   }
 } catch (error) {

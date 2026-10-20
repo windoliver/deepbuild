@@ -1,0 +1,9 @@
+{
+  "model": "Mac15,7",
+  "chip": "Apple M3 Pro",
+  "memoryBytes": 38654705664,
+  "power": "ac",
+  "lowPowerMode": false,
+  "thermalState": "nominal",
+  "macosBuild": "25G104"
+}

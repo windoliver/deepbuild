@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="3" errors="0" time="0.004906625">
+    <testsuite name="tests/samp/deep-draft-samp.test.ts" timestamp="2026-10-19T18:00:08.964Z" hostname="KWN9VC2WN4" tests="3" failures="3" errors="0" skipped="0" time="0.004906625">
+        <testcase classname="tests/samp/deep-draft-samp.test.ts" name="assertion" time="0.003193292">
+            <failure message="expected 2 to be 3 // Object.is equality" type="AssertionError">
+AssertionError: expected 2 to be 3 // Object.is equality
+
+- Expected
++ Received
+
+- 3
++ 2
+
+ ❯ tests/samp/deep-draft-samp.test.ts:3:17
+            </failure>
+        </testcase>
+        <testcase classname="tests/samp/deep-draft-samp.test.ts" name="typeerror" time="0.000308">
+            <failure message="m.missing is not a function" type="TypeError">
+TypeError: m.missing is not a function
+ ❯ tests/samp/deep-draft-samp.test.ts:7:12
+            </failure>
+        </testcase>
+        <testcase classname="tests/samp/deep-draft-samp.test.ts" name="nothrow" time="0.000788">
+            <failure message="expected [Function] to not throw an error but &apos;TypeError: m.missing is not a function&apos; was thrown" type="AssertionError">
+AssertionError: expected [Function] to not throw an error but &apos;TypeError: m.missing is not a function&apos; was thrown
+
+- Expected:
+undefined
+
++ Received:
+&quot;TypeError: m.missing is not a function&quot;
+
+ ❯ tests/samp/deep-draft-samp.test.ts:11:33
+            </failure>
+        </testcase>
+    </testsuite>
+</testsuites>
