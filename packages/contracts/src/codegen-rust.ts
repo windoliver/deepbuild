@@ -195,7 +195,10 @@ ${fields.map((f) => (f.required
 
   private named(schema: Schema, name: string): string {
     this.exact = name;
-    const type = this.type(schema, name);
+    // A nullable root is an alias of Option over its own type, which takes the name `…Value`.
+    const type = Array.isArray(schema.type)
+      ? `Option<${this.type({ ...schema, type: schema.type.find((t) => t !== 'null')! }, `${name}Value`)}>`
+      : this.type(schema, name);
     if (type !== name) {
       if (this.exact !== name) throw Error(`${this.schemaName}: the type ${name} would be written twice`);
       this.claim(name);

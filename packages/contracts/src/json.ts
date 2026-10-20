@@ -10,32 +10,48 @@ export const isObject = (value: unknown): value is JsonObject =>
 /** How deep a document may nest, counted from its root, as deep-contracts' parser counts it. */
 const MAX_DEPTH = 256;
 
+/** An object JSON writes as an object: one whose prototype is Object's, or none. */
+export const isPlainObject = (value: unknown): value is JsonObject => {
+  if (!isObject(value)) return false;
+  const proto = Object.getPrototypeOf(value) as unknown;
+  return proto === Object.prototype || proto === null;
+};
+
+// A cheap test first, since nearly every string holds no surrogate at all.
+const halfPair = (text: string): boolean => /[\uD800-\uDFFF]/.test(text) && /\p{Surrogate}/u.test(text);
+
+/** The keys from the root down to the first value that isn't JSON, deepest last; built only on a refusal. */
+type Found = { keys: (string | number)[]; value: unknown };
+
+function walk(value: unknown, depth: number): Found | undefined {
+  if (depth > MAX_DEPTH) return { keys: [], value };
+  if (value === null || typeof value === 'boolean') return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? undefined : { keys: [], value };
+  if (typeof value === 'string') return halfPair(value) ? { keys: [], value } : undefined;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const found = Object.hasOwn(value, i) ? walk(value[i], depth + 1) : { keys: [], value: undefined };
+      if (found) return found.keys.unshift(i), found;
+    }
+    return undefined;
+  }
+  if (!isPlainObject(value)) return { keys: [], value };
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) continue;
+    const found = halfPair(key) ? { keys: [], value: key } : walk(value[key], depth + 1);
+    if (found) return found.keys.unshift(key), found;
+  }
+  return undefined;
+}
+
 /**
  * The first place a value isn't JSON both languages read alike, or undefined: JSON is null, a boolean, a
  * finite number, a well-formed Unicode string (I-JSON's), an array without holes or a plain object with
  * well-formed keys, nested at most 256 deep. A getter that throws throws here.
  */
-export function notJson(value: unknown, path = '', depth = 0): { path: string; value: unknown } | undefined {
-  if (depth > MAX_DEPTH) return { path, value };
-  if (value === null || typeof value === 'boolean') return undefined;
-  if (typeof value === 'number') return Number.isFinite(value) ? undefined : { path, value };
-  if (typeof value === 'string') return /\p{Surrogate}/u.test(value) ? { path, value } : undefined;
-  if (Array.isArray(value)) {
-    for (let i = 0; i < value.length; i++) {
-      const found = Object.hasOwn(value, i) ? notJson(value[i], `${path}/${i}`, depth + 1) : { path: `${path}/${i}`, value: undefined };
-      if (found) return found;
-    }
-    return undefined;
-  }
-  if (!isObject(value)) return { path, value };
-  const proto = Object.getPrototypeOf(value) as unknown;
-  if (proto !== Object.prototype && proto !== null) return { path, value };
-  for (const key of Object.keys(value)) {
-    const at = path + segment(key);
-    const found = /\p{Surrogate}/u.test(key) ? { path: at, value: key } : notJson(value[key], at, depth + 1);
-    if (found) return found;
-  }
-  return undefined;
+export function notJson(value: unknown): { path: string; value: unknown } | undefined {
+  const found = walk(value, 0);
+  return found && { path: found.keys.map(segment).join(''), value: found.value };
 }
 
 /** One JSON Pointer segment, escaped. */

@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { ContractError, issue, type ContractIssue } from './errors.js';
-import { isObject, notJson, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { isObject, isPlainObject, notJson, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 
 export type Validation = { ok: true } | { ok: false; issues: ContractIssue[] };
 
@@ -183,7 +183,7 @@ function seqTransform(root: Schema): Transform | undefined {
       if ([...byTag.values()].every((b) => !b)) return undefined;
       // Only the branch the value's tag names; validation has already refused any other tag.
       return (value, toWire) => {
-        if (!isObject(value) || !Object.hasOwn(value, tag)) return value;
+        if (!isPlainObject(value) || !Object.hasOwn(value, tag)) return value;
         let branch: Transform | undefined;
         try { branch = byTag.get(canonicalText(value[tag]!)); } catch { /* not JSON: no branch */ }
         return branch ? branch(value, toWire) : value;
@@ -200,7 +200,8 @@ function seqTransform(root: Schema): Transform | undefined {
       });
       if (!fields.length) return undefined;
       return (value, toWire) => {
-        if (!isObject(value)) return value;
+        // Not a plain object: left as it is, so validation refuses it as it would without a seq.
+        if (!isPlainObject(value)) return value;
         const copy: Record<string, unknown> = { ...value };
         for (const [key, f] of fields) if (Object.hasOwn(copy, key)) copy[key] = f(copy[key], toWire);
         return copy;
@@ -208,7 +209,7 @@ function seqTransform(root: Schema): Transform | undefined {
     }
     if (isObject(schema.additionalProperties)) {
       const item = node(schema.additionalProperties);
-      return item && ((value, toWire) => (isObject(value)
+      return item && ((value, toWire) => (isPlainObject(value)
         ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, item(v, toWire)])) : value));
     }
     return undefined;
