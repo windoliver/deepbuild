@@ -7,8 +7,8 @@ import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import test from 'node:test';
 import {
-  AGENTS, allCases, apparentBytes, CORPUS, DESIGN_HOOKS, factsEvents, ID, patchPaths, readFacts, requireCorpus, root, scratch, sessions, sets,
-  setDir, SIZE_LIMIT, taggedCases, userAsks,
+  AGENTS, allCases, apparentBytes, CORPUS, DESIGN_HOOKS, factsEvents, ID, opensTurn, patchPaths, readFacts, requireCorpus, root, scratch, sessions, sets,
+  setDir, SIZE_LIMIT, taggedCases, TURN_BOUNDARIES, userAsks,
 } from './helpers.mjs';
 
 const coveredSets = () => AGENTS.flatMap((agent) => readFacts(agent).facts.versions.map((version) => ({ agent, version, dir: setDir(agent, version) })));
@@ -125,16 +125,37 @@ test(`${ID.expected} every recorded payload is stored with the events it must ma
 
 // The prompt cases: each is a UserPromptSubmit with its session's transcript, stored with exactly
 // one user.ask carrying the origin the design's ask rule gives it, and no ask event.
+function assertStoredAsk(ref, recorded, from) {
+  const asks = userAsks(recorded);
+  assert.equal(asks.length, 1, `${ref}: stored with exactly one user.ask: ${JSON.stringify(recorded.expect)}`);
+  assert.equal(asks[0].data.from, from, `${ref}: user.ask from`);
+  for (const event of recorded.expect) assert.doesNotMatch(event.kind, /^ask\./, `${ref}: a ${from} prompt opens no ask`);
+}
+
 function assertPrompt(tag, agent, from) {
   const found = taggedCases(tag, agent);
   assert.ok(found.length > 0, `the corpus holds no ${agent} payload tagged "${tag}"`);
   for (const { ref, session, case: recorded } of found) {
     assert.equal(recorded.payload.hook_event_name, 'UserPromptSubmit', `${ref} is a prompt payload`);
     assert.ok(existsSync(session.transcriptPath) && statSync(session.transcriptPath).size > 0, `${ref}: its session has no transcript`);
-    const asks = userAsks(recorded);
-    assert.equal(asks.length, 1, `${ref}: stored with exactly one user.ask: ${JSON.stringify(recorded.expect)}`);
-    assert.equal(asks[0].data.from, from, `${ref}: user.ask from`);
-    for (const event of recorded.expect) assert.doesNotMatch(event.kind, /^ask\./, `${ref}: a ${from} prompt opens no ask`);
+    assertStoredAsk(ref, recorded, from);
+  }
+  return found;
+}
+
+// The continuation cases: each is the hook payload that opens its turn, whatever hook that is (a
+// prompt payload where the agent fires one; Codex fires none for a goal's continuation), with its
+// session's transcript, stored with one user.ask from continuation and no ask event. Being the first
+// hook call of its turn is what makes it the opener: had the agent fired a prompt hook for the turn,
+// that prompt payload would come first.
+function assertTurnOpener(tag, agent) {
+  const found = taggedCases(tag, agent);
+  assert.ok(found.length > 0, `the corpus holds no ${agent} payload tagged "${tag}"`);
+  for (const { ref, session, case: recorded } of found) {
+    assert.ok(!['SessionStart', 'SessionEnd'].includes(recorded.payload.hook_event_name), `${ref}: a ${recorded.payload.hook_event_name} payload opens no turn`);
+    assert.ok(opensTurn(session, recorded), `${ref} (${recorded.payload.hook_event_name}) is not the first hook call of its turn: the payload before it in its session isn't one of ${TURN_BOUNDARIES.join(', ')}`);
+    assert.ok(existsSync(session.transcriptPath) && statSync(session.transcriptPath).size > 0, `${ref}: its session has no transcript`);
+    assertStoredAsk(ref, recorded, 'continuation');
   }
   return found;
 }
@@ -165,10 +186,10 @@ test(`${ID.prompts} the corpus holds a Codex patch with indented markers and one
   }
 });
 
-test(`${ID.continuation} the corpus holds a Codex goal's continuation, a Codex heartbeat and the Claude desktop app's resume prompt, each stored with a user.ask from continuation`, () => {
-  assertPrompt('goal-continuation', 'codex', 'continuation');
-  assertPrompt('heartbeat', 'codex', 'continuation');
-  for (const { ref, session } of assertPrompt('desktop-resume-prompt', 'claude-code', 'continuation')) {
+test(`${ID.continuation} the corpus holds a Codex goal's continuation, a Codex heartbeat and the Claude desktop app's resume prompt, each as the hook payload that opens its turn, stored with a user.ask from continuation`, () => {
+  assertTurnOpener('goal-continuation', 'codex');
+  assertTurnOpener('heartbeat', 'codex');
+  for (const { ref, session } of assertTurnOpener('desktop-resume-prompt', 'claude-code')) {
     assert.equal(session.meta.surface, 'desktop', `${ref} was recorded in the desktop app`);
   }
 });

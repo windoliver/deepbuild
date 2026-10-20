@@ -91,7 +91,7 @@ test(`${ID.prompts} the recorded /loop iteration, subagent report, other session
   }
 });
 
-test(`${ID.continuation} a Codex goal's continuation, a Codex heartbeat and the desktop app's resume prompt replay as continuations, and an adapter that reads any as yours fails the replay, naming the payload`, (t) => {
+test(`${ID.continuation} the payloads opening a Codex goal's continuation, a Codex heartbeat and the desktop app's resume prompt replay as continuations, and an adapter that reads any as yours fails the replay, naming the payload`, (t) => {
   requireCorpus();
   const run = replay();
   for (const [tag, agent] of [['goal-continuation', 'codex'], ['heartbeat', 'codex'], ['desktop-resume-prompt', 'claude-code']]) {

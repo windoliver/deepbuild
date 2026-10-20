@@ -1,5 +1,5 @@
-// Shared by the #47 acceptance tests. The corpus is read as files under adapters/corpus/; the replay,
-// check and lifecycle run are reached only as `node scripts/corpus.mjs <command>`, the preflight only
+// Shared by the #47 acceptance tests. The corpus is read as files under adapters/corpus/; the replay
+// and check are reached only as `node scripts/corpus.mjs <command>`, the preflight only
 // through scripts/lanes.mjs's `checks`, and `deep explain` only as the CLI entry
 // (packages/cli/src/main.ts, run with node as packages/cli/test/cli.test.ts does). See README.md.
 import assert from 'node:assert/strict';
@@ -36,9 +36,7 @@ export const ID = {
   expected: '#47.fc65f49c',
   drift: '#47.59eef887',
   range: '#47.e19749bc',
-  lifecycle: '#47.d948ef8c',
-  continuation: '#47.8ebea6b5',
-  update: '#47.2ac9ccf2',
+  continuation: '#47.c249bd52',
 };
 
 export function scratch(t, prefix = 'deep-corpus-47-') {
@@ -187,7 +185,7 @@ export function apparentBytes(directory) {
 // ---- scripts/corpus.mjs --------------------------------------------------------------------------
 
 export function corpusScript(args, { timeout = 300_000 } = {}) {
-  if (!existsSync(join(root, SCRIPT))) assert.fail(`${SCRIPT} does not exist: no corpus replay, check or lifecycle entry`);
+  if (!existsSync(join(root, SCRIPT))) assert.fail(`${SCRIPT} does not exist: no corpus replay or check entry`);
   const result = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: 'utf8', timeout, maxBuffer: 256 * 1024 * 1024 });
   if (result.error) assert.fail(`${SCRIPT} ${args.join(' ')} did not finish: ${result.error.message}`);
   const lines = result.stdout.split('\n').map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter((value) => value && typeof value === 'object' && !Array.isArray(value));
@@ -222,7 +220,17 @@ export function assertReplayPasses(run, what) {
 
 export const userAsks = (recorded) => (recorded.expect ?? []).filter((event) => event?.kind === 'user.ask');
 
-/** The first case in the corpus whose tag is this one, in a covered version's set. */
+/** Every case in the corpus with this tag, optionally for one agent. */
+// Hooks after which the next hook call belongs to a new turn: the last turn ended, or the session just
+// started (Codex fires SessionStart at its first turn).
+export const TURN_BOUNDARIES = ['SessionStart', 'Stop', 'StopFailure', 'Interrupt'];
+
+/** True when this case is the first hook call of its turn: nothing before it in its session, or a turn boundary just before it. */
+export function opensTurn(session, recorded) {
+  const before = session.cases.filter(({ line }) => line < recorded.line).at(-1);
+  return !before || TURN_BOUNDARIES.includes(before.payload?.hook_event_name);
+}
+
 export function taggedCases(tag, agent) {
   return allCases().filter((found) => found.case.tag === tag && (!agent || found.agent === agent));
 }
