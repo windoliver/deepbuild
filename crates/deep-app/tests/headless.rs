@@ -104,6 +104,11 @@ fn session_list_count_and_report(cx: &mut TestAppContext) {
         assert_eq!(spike.selected(), Some(3));
         let report = spike.report().expect("the report was written");
         let html = std::fs::read_to_string(report.trim_start_matches("file://")).unwrap();
+        if std::env::var_os("DEEP_APP_WRITE_SCREENS").is_some() {
+            let sample = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../docs/spikes/337/report-sample.html");
+            std::fs::write(sample, &html).unwrap();
+        }
         assert!(html.contains(&format!(
             "{SESSION_COUNT} sessions, {expected} waiting on you"
         )));

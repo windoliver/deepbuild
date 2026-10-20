@@ -1,0 +1,287 @@
+{
+  "spike": 337,
+  "draft": {
+    "status": "Draft from a Mac that is not the reference Mac; not record.json, and no decision. The acceptance tests count every budget here as INCONCLUSIVE, which would force a native verdict this evidence does not support.",
+    "machine": {
+      "start": {
+        "model": "Mac15,12",
+        "chip": "Apple M3",
+        "memoryBytes": 17179869184,
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "nominal",
+        "macosBuild": "23H723"
+      },
+      "end": {
+        "model": "Mac15,12",
+        "chip": "Apple M3",
+        "memoryBytes": 17179869184,
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "fair",
+        "macosBuild": "23H723"
+      }
+    },
+    "gaps": [
+      "Budgets must be rerun on the reference Mac (Mac15,7, M3 Pro, 36 GB, mains, thermal nominal).",
+      "preflightMs exceeds 5 minutes on every run because the perf step rebuilds the Rust tree cold in temp copies: windoliver/deepbuild#594. Checks alone took 24-26 s.",
+      "Panel inputs include docs/spikes/337/panel-brief.md, which is new in this change, and gpui-kit's docs, which are outside this repo; the acceptance tests accept only issue#337 and docs/ paths at the merge base.",
+      "The menu-bar screen captures the window's count; the NSStatusItem itself cannot be captured offscreen, so its PNG matches window.png.",
+      "Perf also flags repo-rules p50 (+50%) on both the branch and the merge base worktree; the base-side reading looks environmental."
+    ]
+  },
+  "mergeBase": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+  "machine": {
+    "model": "Mac15,12",
+    "chip": "Apple M3",
+    "memoryBytes": 17179869184,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "23H723"
+  },
+  "window": {
+    "screen": "window",
+    "sessionRows": 1000
+  },
+  "menuBar": {
+    "screen": "menu-bar-count",
+    "count": 143
+  },
+  "screens": [
+    {
+      "id": "window",
+      "test": "window_screen",
+      "snapshot": "docs/spikes/337/screens/window.png",
+      "clicks": [
+        "session row 4"
+      ]
+    },
+    {
+      "id": "menu-bar-count",
+      "test": "menu_bar_count_screen",
+      "snapshot": "docs/spikes/337/screens/menu-bar-count.png",
+      "clicks": [
+        "count"
+      ]
+    },
+    {
+      "id": "claude-code",
+      "test": "claude_code_panel_screen",
+      "snapshot": "docs/spikes/337/screens/claude-code.png",
+      "clicks": [
+        "next",
+        "row-NVDA"
+      ]
+    },
+    {
+      "id": "codex",
+      "test": "codex_panel_screen",
+      "snapshot": "docs/spikes/337/screens/codex.png",
+      "clicks": [
+        "next",
+        "row-NVDA"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "agent": "claude-code",
+      "agentVersion": "Claude Code 2.1.142 (claude-opus-4-7)",
+      "file": "crates/deep-app/panels/claude-code/main.js",
+      "sha256": "501cf85f3bd03514df38765a50c6e6960b49a648b9b49b090e7032b04aaca53e",
+      "screen": "claude-code",
+      "inputs": [
+        "issue#337",
+        "docs/spikes/337/panel-brief.md",
+        "gpui-kit@1676826d: website/shell/*.md, crates/shell/README.md, gpui-kit.d.ts"
+      ],
+      "rounds": [
+        {
+          "result": "pass"
+        }
+      ],
+      "runtime": {
+        "origin": "agent_built",
+        "runtime": "in_process",
+        "thread": "ui_main",
+        "policy": "empty",
+        "update_budget_ms": 4,
+        "limits": {
+          "interrupt": true,
+          "heap": 268435456,
+          "stack": 1048576,
+          "microtasks": 100000,
+          "pending": 1024
+        },
+        "output": "element_tree",
+        "jit": "on",
+        "deviation": {
+          "fields": [
+            "runtime",
+            "thread",
+            "jit"
+          ],
+          "reason": "gpui-shell at M0 has no out-of-process panel host, and its release builds tier hot functions up to native code with no switch (shell_jit_config); debug builds, so the headless tests, stay on the interpreter. The spike loads the panel in the app through gpui-shell, as its Scope says. The heap, stack, microtask and pending limits and the 4 ms budget are the Fields' values, not enforced by this spike.",
+          "until": "panel_host"
+        }
+      }
+    },
+    {
+      "agent": "codex",
+      "agentVersion": "codex-cli 0.150.1",
+      "file": "crates/deep-app/panels/codex/main.js",
+      "sha256": "303e0a55d4712d419f8251298faa158075cba29118e8bfb188c1575655cb0fad",
+      "screen": "codex",
+      "inputs": [
+        "issue#337",
+        "docs/spikes/337/panel-brief.md",
+        "gpui-kit@1676826d: website/shell/*.md, crates/shell/README.md, gpui-kit.d.ts"
+      ],
+      "rounds": [
+        {
+          "result": "pass"
+        }
+      ],
+      "runtime": {
+        "origin": "agent_built",
+        "runtime": "in_process",
+        "thread": "ui_main",
+        "policy": "empty",
+        "update_budget_ms": 4,
+        "limits": {
+          "interrupt": true,
+          "heap": 268435456,
+          "stack": 1048576,
+          "microtasks": 100000,
+          "pending": 1024
+        },
+        "output": "element_tree",
+        "jit": "on",
+        "deviation": {
+          "fields": [
+            "runtime",
+            "thread",
+            "jit"
+          ],
+          "reason": "gpui-shell at M0 has no out-of-process panel host, and its release builds tier hot functions up to native code with no switch (shell_jit_config); debug builds, so the headless tests, stay on the interpreter. The spike loads the panel in the app through gpui-shell, as its Scope says. The heap, stack, microtask and pending limits and the 4 ms budget are the Fields' values, not enforced by this spike.",
+          "until": "panel_host"
+        }
+      }
+    }
+  ],
+  "stocks": {
+    "quotes": "crates/deep-app/fixtures/quotes.json",
+    "test": "codex_stocks_panel",
+    "result": "pass",
+    "alsoPassed": [
+      "claude_code_stocks_panel"
+    ]
+  },
+  "report": {
+    "test": "session_list_count_and_report",
+    "result": "pass",
+    "sample": "docs/spikes/337/report-sample.html"
+  },
+  "headless": {
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--locked"
+    ]
+  },
+  "build": {
+    "kind": "clean",
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "deep-app",
+      "--release",
+      "--locked"
+    ],
+    "ms": 280348,
+    "display": "4.7 min",
+    "note": "git dependencies already fetched"
+  },
+  "budgets": {
+    "coldStartMs": {
+      "runs": [
+        383.7,
+        192.9,
+        170.8,
+        157.1,
+        142.9
+      ],
+      "display": "383.7 ms",
+      "method": "Process start to the window's first drawn frame with the Codex panel mounted (docs/spikes/337/measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "idleCpuPercent": {
+      "runs": [
+        0,
+        0,
+        0,
+        0,
+        0.05
+      ],
+      "display": "0.05%",
+      "method": "CPU time over 20 s after 5 s settling, percent of one core (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "memoryBytes": {
+      "runs": [
+        60784640,
+        49135616,
+        54837248,
+        58245120,
+        62619648
+      ],
+      "display": "62.6 MB",
+      "method": "Resident set size at the end of the idle window (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "appBytes": {
+      "runs": [
+        49826872,
+        49826872,
+        49826872,
+        49826872,
+        49826872
+      ],
+      "display": "49.8 MB",
+      "method": "The release binary after strip (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "thisMac": "PASS on this Mac; INCONCLUSIVE as a budget, off the reference Mac"
+    },
+    "preflightMs": {
+      "runs": [
+        393135,
+        377151,
+        414432,
+        387220,
+        397189
+      ],
+      "display": "6.9 min",
+      "method": "npm run preflight, wall time, five runs after one untimed warm-up on each side.",
+      "base": {
+        "runs": [
+          64361,
+          66716,
+          64400,
+          65412,
+          65505
+        ]
+      },
+      "thisMac": "FAIL on this Mac (all five over the limit by more than the 9.9% margin); INCONCLUSIVE as a budget, off the reference Mac"
+    }
+  }
+}
