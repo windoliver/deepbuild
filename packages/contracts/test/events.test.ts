@@ -1,6 +1,6 @@
 // Regressions for event kinds whose schemas read the design looser, or other, than it says.
 import { describe, expect, it } from 'vitest';
-import { fixtures, validate } from '../src/index.js';
+import { catalogue, fixtures, validate } from '../src/index.js';
 
 type Event = Record<string, unknown> & { data: Record<string, unknown> };
 const first = (name: string): Event => structuredClone(fixtures(name)[0]) as Event;
@@ -233,15 +233,21 @@ describe('the design says', () => {
     }
   });
 
-  it("no agent records its own stop, tool call, session start or a reading: deep-hook does, or the hub's calls", () => {
-    const allowed: Record<string, string[]> = {
-      'tool.before@1': ['hook'], 'tool.after@1': ['hook'], 'agent.stop@1': ['hook'], 'session.start@1': ['app', 'hook'],
-      'reading.recorded@1': ['core', 'ext:prices'], 'reading.batch@1': ['core', 'ext:prices'],
-    };
-    for (const [name, writers] of Object.entries(allowed)) {
-      for (const writer of ['hook', 'app', 'cli', 'core', 'mcp:s1', 'ext:prices']) {
-        expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(writers.includes(writer));
-      }
+  // The kinds a deep_* MCP tool produces (technical-design.md:429): ask.created and plan.proposed from deep_ask,
+  // claim.made from deep_claim, learn.proposed from deep_propose, run.started from deep_run, open items from
+  // deep_open_item, evidence.put from deep_evidence, a lease from deep_env, a patch and its suggestion from deep_show.
+  const FROM_AGENTS = ['ask.created', 'plan.proposed', 'claim.made', 'learn.proposed', 'run.started', 'open_item.opened', 'open_item.closed',
+    'evidence.put', 'lease.acquired', 'lease.released', 'doc.patched', 'suggestion.filed'];
+
+  it('an agent, through MCP, appends only the kinds a deep_* tool produces', () => {
+    for (const { kind, schema } of catalogue()) {
+      expect(ok(schema, { ...first(schema), writer: 'mcp:s1' }), schema).toBe(FROM_AGENTS.includes(kind));
+    }
+  });
+
+  it('a hook kind, a session start or a reading also comes from an adapter without hooks, or the hub', () => {
+    for (const name of ['tool.before@1', 'tool.after@1', 'agent.stop@1', 'session.start@1', 'user.ask@1', 'reading.recorded@1', 'reading.batch@1']) {
+      for (const writer of ['hook', 'core', 'ext:codex']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(true);
     }
   });
 
