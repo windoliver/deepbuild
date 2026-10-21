@@ -399,6 +399,14 @@ mod suite {
             });
             let replica = replica_snapshot(view);
             let verdict = match first_difference(&replica, &live) {
+                None if replica.items != live.items => {
+                    let why = format!(
+                        "the canvas items differ: replica {:?} vs live {:?}",
+                        replica.items, live.items
+                    );
+                    failures.push(format!("{view}: {why}"));
+                    json!({ "result": "fail", "why": why })
+                }
                 None => json!({ "result": "pass" }),
                 Some((index, why)) => {
                     failures.push(format!("{view}: {why}"));

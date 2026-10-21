@@ -34,7 +34,9 @@ pub const SIDEBAR_WIDTH: f32 = 260.;
 pub const LINE_HEIGHT: f32 = 120.;
 const ROW_HEIGHT: f32 = 18.;
 
-/// What the views draw: the inbox projection at a log position on the virtual clock.
+/// What the views draw: the inbox projection at a log position on the virtual clock. The replica,
+/// the live capture and the registry checks set it before opening the shell; the shipped app's
+/// root is still #337's window, and the shell becomes its root when the panel host lands.
 #[derive(Clone, Debug)]
 pub struct AppState {
     pub inbox: Inbox,

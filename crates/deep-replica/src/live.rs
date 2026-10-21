@@ -73,7 +73,10 @@ mod live {
     }
 
     /// After the first frame: fix the content size, activate accessibility, then give the window
-    /// a few frames so the tree it hands AccessKit is the one drawn at the reference size.
+    /// a few frames so the tree it hands AccessKit is the one drawn at the reference size. A
+    /// next-frame callback runs before that frame draws, so each callback clears the canvas items
+    /// and asks for a frame, and the one after the last asked-for frame captures what that frame
+    /// drew: its tree and its items, both.
     fn settle(window: &mut Window, cx: &mut App, out: PathBuf, frame: usize) {
         if frame == 0 {
             if window.viewport_size() != window_size() {
@@ -81,9 +84,9 @@ mod live {
             }
             activate_accessibility();
         }
-        deep_app::canvas::clear_items();
-        window.refresh();
-        if frame + 1 < FRAMES {
+        if frame < FRAMES {
+            deep_app::canvas::clear_items();
+            window.refresh();
             window.on_next_frame(move |window, cx| settle(window, cx, out, frame + 1));
             return;
         }
