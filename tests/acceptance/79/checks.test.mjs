@@ -183,17 +183,17 @@ const legitSearch = {
 test('privacyProblems: the kit\'s @2x rasters, a register\'s URL with a home segment, a ~ path and example.* addresses hold; a home path on any OS or a personal address, however written, is named with its person cut short', () => {
   assert.deepEqual(planted({ 'surfaces.json': legitManifest, 'trademark-search.json': legitSearch }), []);
   const withShot = (shot) => ({ ...legitManifest, surfaces: [{ ...legitManifest.surfaces[0], shots: [shot] }] });
-  for (const shot of ['/Users/sophia/deepbuild/docs/evidence/79/menu-bar.png', '/home/sophia/deepbuild/docs/evidence/79/menu-bar.png', 'C:\\Users\\sophia\\deepbuild\\menu-bar.png', 'file:///Users/sophia/menu-bar.png']) {
+  for (const shot of ['/Users/someone/deepbuild/docs/evidence/79/menu-bar.png', '/home/someone/deepbuild/docs/evidence/79/menu-bar.png', 'C:\\Users\\someone\\deepbuild\\menu-bar.png', 'file:///Users/someone/menu-bar.png']) {
     const problems = planted({ 'surfaces.json': withShot(shot) });
     assert.ok(problems.some((problem) => /holds a home path/.test(problem)), shot);
-    assert.ok(problems.every((problem) => !problem.includes('sophia')), `the person is cut short: ${problems.join('; ')}`);
+    assert.ok(problems.every((problem) => !problem.includes('someone')), `the person is cut short: ${problems.join('; ')}`);
   }
   if (process.env.HOME) assert.ok(planted({ 'surfaces.json': withShot(`${process.env.HOME}/menu-bar.png`) }).some((problem) => /home/.test(problem)), 'this machine\'s home folder');
   const withSearcher = (searchedBy) => ({ ...legitSearch, searchedBy });
-  for (const searcher of ['sophia.w@gmail.com', 'Sophia <sophia@corp.co.uk>', 'mailto:sophia@fastmail.fm', 'sophia@example.com.evil.net', 'sophia@examples.com', 'sophia+brand@proton.me.']) {
+  for (const searcher of ['someone.w@gmail.com', 'Someone <someone@corp.co.uk>', 'mailto:someone@fastmail.fm', 'someone@example.com.evil.net', 'someone@examples.com', 'someone+brand@proton.me.']) {
     const problems = planted({ 'trademark-search.json': withSearcher(searcher) });
     assert.ok(problems.some((problem) => /holds an email address: s…@/.test(problem)), `${searcher}: ${problems.join('; ')}`);
-    assert.ok(problems.every((problem) => !problem.includes('sophia')), `the local part is cut short: ${problems.join('; ')}`);
+    assert.ok(problems.every((problem) => !problem.includes('someone')), `the local part is cut short: ${problems.join('; ')}`);
   }
   assert.deepEqual(planted({ 'trademark-search.json': withSearcher('a search service; questions to brand@sub.example.net') }), [], 'an address under a subdomain of example.*');
   assert.deepEqual(planted({ 'surfaces.json': { ...legitManifest, note: 'the menu bar takes trayTemplate@2x.png and trayTemplate@3x.png' } }), [], 'bare raster names with a scale suffix');
