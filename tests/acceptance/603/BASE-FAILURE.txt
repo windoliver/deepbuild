@@ -1,0 +1,97 @@
+Acceptance tests for #603 on the base f346706 (origin/main, no implementation), run on 2026-10-20 on a
+Mac15,12 (Apple M3, 16 GB), Node 23.9.0, cargo 1.95.0, offline:
+
+  npx vitest run --root tests/acceptance/603
+
+Trimmed to each test's first failing assertion. No local path appears in the output; the corpus refs are
+relative to adapters/corpus/.
+
+ Test Files  5 failed (5)
+      Tests  29 failed (29)
+
+AC1 causes.test.ts (4 tests) and AC2 usage.test.ts (9 tests): each fails at its first check, before any
+validation, because the schema doesn't exist:
+  AssertionError: agent.stop@2 is a published schema: expected [ 'action.entered@1', …(66) ] to include 'agent.stop@2'
+  (Expected: the base publishes agent.stop@1 only, {turn, did_work}.)
+
+AC3 corpus.test.ts (5 tests):
+ FAIL  every recorded stop of both adapters replays to a cause from the closed set and a usage that make a valid agent.stop@2
+  AssertionError: claude-code/2.1.299/compact/events.jsonl:5: cause undefined is one of the closed set:
+  expected [ 'sign_in_required', …(10) ] to include undefined
+ FAIL  usage is captured where the transcript records it: some stop of each adapter carries a usage, and its model is one the transcript names
+  AssertionError: some recorded claude-code stop carries a usage: expected 0 to be greater than 0
+ FAIL  node scripts/corpus.mjs replay passes, and every recorded stop's stored events carry cause and usage
+  (the replay itself passes on the base; the stored events don't carry them)
+  AssertionError: claude-code/2.1.299/compact/events.jsonl:5 (stored): cause undefined is one of the closed set:
+  expected [ 'sign_in_required', …(10) ] to include undefined
+ FAIL  replacing every word the agent wrote, in the hook payloads and the transcripts, changes no stop's cause or usage; the replay still passes
+  AssertionError: claude-code/2.1.299/compact/events.jsonl:5: cause undefined is one of the closed set:
+  expected [ 'sign_in_required', …(10) ] to include undefined
+ FAIL  changing the hook payload's error record changes the cause, as Claude Code's facts map it, and the replay names the change
+  AssertionError: claude-code/2.1.299/stop-failure/events.jsonl:3: the stop writes usage (null when not captured);
+  its data is {"session":"bc074711-83e0-4300-bebb-e77ee3f9f81d","outcome":"failed","cause":"rate_limited"}: expected false to be true
+  (Expected: the base adapter writes a cause only for Claude Code's StopFailure, from its error field, and never
+  writes usage; a Stop gets {session, outcome, continued}.)
+
+AC4 codegen.test.ts (7 tests):
+ FAIL  the committed TypeScript and Rust files are the generators' output over the published schemas, both versions among them
+  AssertionError: agent.stop@2 is a published schema: expected [ 'action.entered@1', …(66) ] to include 'agent.stop@2'
+ FAIL  the TypeScript type of agent.stop@2 is a union on cause, exactly the closed set, …
+  AssertionError: packages/contracts/src/generated/types.ts has a type for agent.stop@2: expected undefined to be defined
+ FAIL  Rust round-trips a stop with usage null, a stop with a usage and a plan_window_spent stop to the same JSON
+ FAIL  every planted stop gets its expected verdict from the TypeScript validator, and the same verdict from the generated Rust from_json
+ FAIL  the rust-checks differential reaches agent.stop@2: its fixtures validate and hold a usage, a usage null and a plan_window_spent stop
+ FAIL  agent.stop@1 keeps its schema and frozen digest from the base; agent.stop@2 has a frozen digest of its own; nothing drifts
+  AssertionError (each of these four): agent.stop@2 is a published schema: expected [ 'action.entered@1', …(66) ] to include 'agent.stop@2'
+ FAIL  the catalogue lists agent.stop at versions 1 and 2, each with its schema
+  AssertionError: expected [ { version: 1, …(1) } ] to deeply equal [ { version: 1, …(1) }, …(1) ]
+
+AC5 claims.test.ts (4 tests):
+ FAIL  both versions are catalogued as feeding claims, and a view bound to agent.stop is accepted
+  AssertionError: agent.stop@2 is catalogued; it feeds: expected [] to include 'claims'
+ FAIL  a stop of either version decodes with the same turn and did_work
+ FAIL  agent.stop@2 requires turn and did_work under every cause
+  AssertionError (both): agent.stop@2 is a published schema: expected [ 'action.entered@1', …(66) ] to include 'agent.stop@2'
+ FAIL  one projection function reads turn and did_work from the generated types of both versions
+  AssertionError: packages/contracts/src/generated/types.ts has a type for agent.stop@2: expected undefined to be defined
+
+Every test fails on an assertion; none fails to load.
+
+Planted programs, in a scratch copy of the checkout outside the repo (not committed, deleted after):
+
+A planted fix, to show the tests can pass: agent.stop@2.json with data a oneOf of 11 closed branches tagged
+by cause (plan_resets required in plan_window_spent's branch and listed in no other), usage a nullable object
+in $defs, each count a union tagged by exact (true: value >= 0; false: value >= 1 or null), cost a union
+tagged by basis (estimated requires rate_card; unpriced has usd null), three fixtures (usage null; a reported
+usage; plan_window_spent with an estimated usage), types and digests regenerated without the lint (the base
+lint takes only string union tags, so a boolean tag on exact is outside its closed forms; how the real fix
+expresses it is its own call). The adapter writes cause on every stop through the facts (a Stop's cause
+otherwise unknown) and usage from transcript records the facts name (Claude Code's assistant message.usage
+once per message.id, Codex's last token_count), null when none; stored stop events rewritten from it.
+                                                                                      29 of 29 pass (7 s)
+
+Mutants, each on top of the planted fix (schema mutants with their own digest frozen and types regenerated):
+  a 12th branch, cause "overloaded"                             3 fail: AC1 outside the set; AC4 tsc (cause set
+                                                                not exactly the eleven); AC4 TypeScript verdicts
+  plan_resets also listed (optional) on cause refusal           2 fail: AC1 every other cause refuses plan_resets;
+                                                                AC4 TypeScript verdicts
+  exact false takes value 0                                     2 fail: AC2 count of 0 with exact false;
+                                                                AC4 TypeScript verdicts
+  estimated cost with rate_card optional                        2 fail: AC2 estimated without rate_card;
+                                                                AC4 TypeScript verdicts
+  usage not required                                            3 fail: AC2 a stop without usage; AC4 tsc (unused
+                                                                @ts-expect-error on the missing usage); AC4 verdicts
+  agent.stop@2 feeding returns, not claims                      1 fails: AC5 both versions feed claims
+  agent.stop@1 widened with optional cause and usage            1 fails: AC4 agent.stop@1 keeps the base's digest
+  the Rust generator treats usage as optional (generated.rs     1 fails: AC4 Rust and TypeScript disagree:
+  regenerated from it, so the committed file still matches)     "no usage: TypeScript refuses, Rust accepts"
+  the adapter sets rate_limited when the agent's last message   1 fails: AC3 replacing the agent's words:
+  matches /rate.?limit/i                                        claude-code/2.1.299/compact/events.jsonl:5
+                                                                { cause: 'rate_limited' } vs { cause: 'unknown' }
+  the adapter writes usage null on every stop (stored events    1 fails: AC3 some recorded claude-code stop
+  rewritten to match, so the replay passes)                     carries a usage: expected 0 to be greater than 0
+  the adapter writes 0-token counts with exact false where no   1 fails: AC3 every recorded stop as agent.stop@2:
+  usage is recorded (stored events rewritten to match)          claude-code/2.1.299/stop-failure/events.jsonl:3
+                                                                refused with range issues
+  Claude Code's StopFailure error mapping emptied (every error  1 fails: AC3 the payload's error record changes
+  reads unknown; stored events still match)                     the cause: rate_limit gives 'unknown'
