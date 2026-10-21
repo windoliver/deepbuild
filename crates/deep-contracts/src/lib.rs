@@ -8,7 +8,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
 // Written by generateRust in @deepbuild/contracts; the acceptance tests hold it equal to the generator's output.
-#[allow(clippy::all)]
+// Its struct fields spell the schemas' keys as written (readBy, SessionStart), so a key and its field never differ.
+#[allow(clippy::all, non_snake_case)]
 #[rustfmt::skip]
 pub mod generated;
 pub use generated::roundtrip;
@@ -712,7 +713,7 @@ fn ulid(text: &str) -> bool {
 
 /// Refuses a value its rule refuses, naming its JSON Pointer. A value of the wrong type passes here and is
 /// refused when it decodes.
-fn check(value: &Value, at: &str, rule: &Rule) -> Result<(), String> {
+pub fn check(value: &Value, at: &str, rule: &Rule) -> Result<(), String> {
     let refused = |what: &str| Err(format!("{}: {what}", here(at)));
     match (rule, value) {
         (Rule::Nullable(_), Value::Null) => Ok(()),

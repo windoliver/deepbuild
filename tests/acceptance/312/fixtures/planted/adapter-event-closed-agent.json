@@ -1,0 +1,17 @@
+{
+  "name": "planted.adapter.event@1",
+  "field": "/agent",
+  "why": "an adapter event schema whose agent is a closed list of the two shipped agents: it refuses cursor, and fails AC7",
+  "schema": {
+    "title": "planted.adapter.event@1",
+    "type": "object",
+    "properties": {
+      "agent": { "type": "string", "enum": ["claude", "codex", "deep"] },
+      "kind": { "type": "string", "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$" },
+      "data": { "x-opaque": "the kind's fields" },
+      "rule": { "type": "string", "pattern": "^(/[^/]*)*$" }
+    },
+    "required": ["agent", "kind", "data", "rule"],
+    "additionalProperties": false
+  }
+}

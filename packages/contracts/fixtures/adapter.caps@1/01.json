@@ -1,0 +1,13 @@
+{
+  "holdStop": true,
+  "wakeIdle": false,
+  "steer": false,
+  "followUp": false,
+  "answerPermission": true,
+  "nativeTools": true,
+  "mcp": true,
+  "rewrite": true,
+  "editInput": true,
+  "errorTurnHook": true,
+  "startTurn": false
+}

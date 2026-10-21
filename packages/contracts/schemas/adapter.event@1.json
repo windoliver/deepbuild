@@ -1,0 +1,33 @@
+{
+  "title": "adapter.event@1",
+  "description": "One event an adapter mapped from a hook payload, before the hub stamps its own fields.",
+  "type": "object",
+  "properties": {
+    "agent": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The registry name the request named, or deep for the hub's own events; never a closed list, so a new agent needs no schema change."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$",
+      "description": "The event kind."
+    },
+    "data": {
+      "x-opaque": "the kind's fields, judged by the kind's own schema",
+      "description": "The kind's data."
+    },
+    "rule": {
+      "type": "string",
+      "pattern": "^(/[^/]*)*$",
+      "description": "The JSON Pointer of the facts entry that decided the event, for deep explain."
+    }
+  },
+  "required": [
+    "agent",
+    "kind",
+    "data",
+    "rule"
+  ],
+  "additionalProperties": false
+}

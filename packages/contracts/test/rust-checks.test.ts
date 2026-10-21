@@ -27,7 +27,7 @@ function nodeAt(root: Schema, schema: Schema, value: JsonValue): Schema {
   for (;;) {
     if (typeof schema.$ref === 'string') schema = (root.$defs as Record<string, Schema>)[schema.$ref.slice('#/$defs/'.length)]!;
     else if (Array.isArray(schema.oneOf)) {
-      const branch = (schema.oneOf as Schema[]).find((b) => Object.entries(b.properties as Record<string, Schema>)
+      const branch = (schema.oneOf as Schema[]).find((b) => Object.entries((b.properties ?? {}) as Record<string, Schema>)
         .some(([key, s]) => 'const' in s && typeof value === 'object' && value !== null && !Array.isArray(value) && value[key] === s.const));
       if (!branch) return schema;
       schema = branch;
