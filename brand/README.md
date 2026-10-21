@@ -108,7 +108,14 @@ CMYK values come from a naive conversion. Proof them in print before use.
 | macOS app | `DeepBuild.icns`, built from `DeepBuild.iconset/` (master `app-icon.svg`; `app-icon-small.svg` for 16 and 32 px) |
 | Menu bar | `menubar-template.svg`, `png/trayTemplate.png`, `png/trayTemplate@2x.png` (black on transparent; macOS tints it) |
 | Web | `favicon.svg`, `png/favicon.ico` (16, 32, 48), `png/apple-touch-icon.png`, `png/icon-192.png`, `png/icon-512.png` |
+| Terminal | `png/favicon-32.png`: the small cut on its Ink tile, shown at 16 pt by `deep --help` where the terminal shows images |
+| Social preview | `social-preview.svg`, `png/social-preview.png` (1280 × 640, the colour lockup on Ink; upload it by hand in the repository's settings) |
 | Colours | `palette.json` |
 | Presentation | `board.html`, `board.png` |
+| Where each file is used | `surfaces.json`: every surface of the app, CLI, README, docs and site with its kit file, checked by hash in `tests/acceptance/79` |
 
-`build.py` writes every SVG. `render_png.py` renders the PNGs through headless Chrome, then builds the `.icns` with `iconutil` and the `.ico`. No trademark search has been done; get a professional one before launch.
+`build.py` writes every SVG. `render_png.py` renders the PNGs through headless Chrome, then builds the `.icns` with `iconutil` and the `.ico`.
+
+## Trademark
+
+`trademark-search.json` records the search done before the mark went outside the repo: the registers, terms, classes, hits and the conclusion. It is a word-mark screening, not a professional clearance; get one, covering the device too, before launch.

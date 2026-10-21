@@ -21,8 +21,10 @@ serde_json = "1"
 # NSWindow) and the frame's pixels as a gpui image (image).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow"] }
+# Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
+# menu-bar template from the kit's bytes.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFCGTypes", "CFData"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
 block2 = "0.6"

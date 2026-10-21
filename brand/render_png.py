@@ -15,7 +15,8 @@ jobs += [("menubar-template.svg", 16, 16, "png/trayTemplate.png"), ("menubar-tem
          ("app-icon.svg", 180, 180, "png/apple-touch-icon.png"), ("app-icon.svg", 192, 192, "png/icon-192.png"), ("app-icon.svg", 512, 512, "png/icon-512.png"),
          ("symbol-ink.svg", 512, 512, "png/symbol-ink-512.png"), ("symbol-color-dark.svg", 512, 512, "png/symbol-color-dark-512.png"),
          ("lockup-horizontal-ink.svg", 1200, None, "png/lockup-horizontal-ink-1200.png"),
-         ("lockup-horizontal-color-dark.svg", 1200, None, "png/lockup-horizontal-color-dark-1200.png")]
+         ("lockup-horizontal-color-dark.svg", 1200, None, "png/lockup-horizontal-color-dark-1200.png"),
+         ("social-preview.svg", 1280, 640, "png/social-preview.png")]
 items = []
 for svgf, w, h, out in jobs:
     s = open(os.path.join(K, svgf), encoding="utf-8").read()
