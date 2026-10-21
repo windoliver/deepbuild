@@ -60,9 +60,15 @@ mod replica {
         let layout = Layout::shipped(&view);
         let (handle, _) = cx.update(|cx| open_shell(&layout, cx, |_, _| {}));
         phase("window");
+        // The first frame is the launch; the line goes out as soon as it is drawn. The second
+        // frame, over cleared canvas items, is the one the snapshot reads.
+        cx.update_window(handle, |_, window, cx| window.render_frame(cx))
+            .expect("the window draws");
+        println!("{}", deep_replica::FIRST_FRAME);
+        std::io::Write::flush(&mut std::io::stdout()).expect("stdout flushes");
+        phase("first frame");
         let snapshot = cx
             .update_window(handle, |_, window, cx| {
-                window.render_frame(cx);
                 deep_app::canvas::clear_items();
                 window.render_frame(cx);
                 from_observed(window)
@@ -70,8 +76,6 @@ mod replica {
             .expect("the window draws");
         cx.run_until_parked();
         phase("frames");
-        println!("{}", deep_replica::FIRST_FRAME);
-        std::io::Write::flush(&mut std::io::stdout()).expect("stdout flushes");
         let image = cx
             .capture_screenshot(handle)
             .expect("offscreen rendering is available");

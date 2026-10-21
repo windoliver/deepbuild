@@ -7,8 +7,8 @@
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::views::{set_state, AppState, Layout, Shell};
-use deep_app::{init, menu_bar_title, mount_panel, sessions};
+use deep_app::views::{set_state, Layout, Shell};
+use deep_app::{init, menu_bar_title, mount_panel, sessions, shell_state};
 use gpui_kit::base::dock::DockPlacement;
 use gpui_kit::*;
 use gpui_shell::dock::ScriptPanel;
@@ -19,17 +19,13 @@ fn main() {
     application().run(move |cx| {
         gpui_kit::init(cx);
         init(cx);
-        menu_bar::show_title(&menu_bar_title(&sessions()));
-        // No record is wired yet: the shell opens on an empty inbox at this clock.
-        set_state(AppState {
-            inbox: Default::default(),
-            now: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|since| since.as_millis() as u64)
-                .unwrap_or_default(),
-            sessions: Vec::new(),
-            held: None,
-        });
+        let sessions = sessions();
+        menu_bar::show_title(&menu_bar_title(&sessions));
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|since| since.as_millis() as u64)
+            .unwrap_or_default();
+        set_state(shell_state(&sessions, now));
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
         let options = WindowOptions {

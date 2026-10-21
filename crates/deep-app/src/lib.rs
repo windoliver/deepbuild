@@ -96,6 +96,36 @@ pub fn menu_bar_title(sessions: &[Session]) -> String {
     waiting_count(sessions).to_string()
 }
 
+/// What the shell draws over the spike's session list: every session in the sidebar, and one open
+/// ask per session waiting on you, so the home count and the menu-bar count are the same number.
+/// No record is wired yet; `now` is the clock the asks' deadlines are an hour past.
+pub fn shell_state(sessions: &[Session], now: u64) -> views::AppState {
+    let open = sessions
+        .iter()
+        .filter(|session| session.state == SessionState::Waiting)
+        .map(|session| events::Ask {
+            handle: format!("ask:{}", session.title.replace(' ', "-").to_lowercase()),
+            session: session.title.to_string(),
+            created: 0,
+            deadline: now + 3_600_000,
+            closed: None,
+            later_until: None,
+        })
+        .collect();
+    views::AppState {
+        inbox: events::Inbox {
+            open,
+            ..Default::default()
+        },
+        now,
+        sessions: sessions
+            .iter()
+            .map(|session| session.title.to_string())
+            .collect(),
+        held: None,
+    }
+}
+
 /// DeepBuild's module for panels: the recorded quotes and the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
     HostModule::new("deepbuild")

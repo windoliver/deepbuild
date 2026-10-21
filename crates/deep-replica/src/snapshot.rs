@@ -127,45 +127,51 @@ impl Snapshot {
 }
 
 /// The first node, in pre-order, where two snapshots differ, with why; `None` when they are equal
-/// node for node on role, name, value and bounds.
+/// node for node on role, name, value, bounds and children, so a node moved under another parent
+/// is a difference even when the pre-order list of nodes is the same.
 pub fn first_difference(a: &Snapshot, b: &Snapshot) -> Option<(usize, String)> {
-    let left = a.flatten();
-    let right = b.flatten();
-    for index in 0..left.len().max(right.len()) {
-        let (Some(x), Some(y)) = (left.get(index), right.get(index)) else {
-            return Some((
-                index,
+    let mut index = 0;
+    differ(&a.tree, &b.tree, &mut index).err()
+}
+
+fn differ(x: &Node, y: &Node, index: &mut usize) -> Result<(), (usize, String)> {
+    let at = *index;
+    *index += 1;
+    for (field, same) in [
+        ("role", x.role == y.role),
+        ("name", x.name == y.name),
+        ("value", x.value == y.value),
+        ("bounds", x.bounds == y.bounds),
+    ] {
+        if !same {
+            return Err((
+                at,
                 format!(
-                    "{} tree ends at node {index}",
-                    if left.len() <= index {
-                        "the first"
-                    } else {
-                        "the second"
-                    }
+                    "node {at} ({} {:?}) differs in {field}: {} vs {}",
+                    x.role,
+                    x.name,
+                    describe(x, field),
+                    describe(y, field)
                 ),
             ));
-        };
-        for (field, same) in [
-            ("role", x.role == y.role),
-            ("name", x.name == y.name),
-            ("value", x.value == y.value),
-            ("bounds", x.bounds == y.bounds),
-        ] {
-            if !same {
-                return Some((
-                    index,
-                    format!(
-                        "node {index} ({} {:?}) differs in {field}: {} vs {}",
-                        x.role,
-                        x.name,
-                        describe(x, field),
-                        describe(y, field)
-                    ),
-                ));
-            }
         }
     }
-    None
+    if x.children.len() != y.children.len() {
+        return Err((
+            at,
+            format!(
+                "node {at} ({} {:?}) has {} children in the first tree and {} in the second",
+                x.role,
+                x.name,
+                x.children.len(),
+                y.children.len()
+            ),
+        ));
+    }
+    for (child_x, child_y) in x.children.iter().zip(&y.children) {
+        differ(child_x, child_y, index)?;
+    }
+    Ok(())
 }
 
 fn describe(node: &Node, field: &str) -> String {
@@ -355,7 +361,36 @@ mod tests {
         assert_eq!(index, 2);
         assert!(why.contains("bounds"), "{why}");
         let shorter = snapshot(vec![leaf("label", "x", [0, 0, 10, 10])]);
-        assert_eq!(first_difference(&a, &shorter).unwrap().0, 2);
+        let (index, why) = first_difference(&a, &shorter).unwrap();
+        assert_eq!(index, 0);
+        assert!(why.contains("2 children in the first tree and 1"), "{why}");
+    }
+
+    #[test]
+    fn a_node_moved_under_another_parent_differs_though_the_preorder_is_the_same() {
+        let flat = snapshot(vec![
+            leaf("button", "x", [0, 0, 10, 10]),
+            leaf("label", "y", [0, 20, 10, 10]),
+        ]);
+        let mut nested = snapshot(vec![leaf("button", "x", [0, 0, 10, 10])]);
+        nested.tree.children[0]
+            .children
+            .push(leaf("label", "y", [0, 20, 10, 10]));
+        assert_eq!(flat.flatten().len(), nested.flatten().len());
+        assert_eq!(
+            flat.flatten()
+                .iter()
+                .map(|node| &node.name)
+                .collect::<Vec<_>>(),
+            nested
+                .flatten()
+                .iter()
+                .map(|node| &node.name)
+                .collect::<Vec<_>>()
+        );
+        let (index, why) = first_difference(&flat, &nested).unwrap();
+        assert_eq!(index, 0);
+        assert!(why.contains("children"), "{why}");
     }
 
     #[test]

@@ -89,8 +89,13 @@ pub fn script_tree(view: &ScriptView) -> String {
         .debug_tree()
 }
 
-/// The ask handles a script view drew, top to bottom: every text node in its tree whose whole
-/// text is an `ask:<id>` handle. An element's id is not a row.
+/// The ask handles a script view described, top to bottom: every text node in its published
+/// description whose whole text is an `ask:<id>` handle. An element's id is not a row.
+///
+/// This reads the description the script published, not pixels: gpui-shell's elements are not
+/// gpui-base observed elements, so their drawn bounds and visibility are not readable headless at
+/// this milestone, and a panel that described a handle inside a hidden or zero-size element would
+/// still count it as a row. The kit's planted faults are list faults, which this does catch.
 pub fn rows_of(tree: &str) -> Vec<String> {
     tree.lines()
         .filter_map(|line| {

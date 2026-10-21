@@ -158,6 +158,50 @@ fn menu_bar_count(cx: &mut TestAppContext) {
     assert_eq!(drawn, Some(format!("{title} waiting on you")));
 }
 
+/// Issue #338: the app's root is the registry shell over `shell_state`, and its home count is the
+/// menu bar's number.
+#[gpui_kit::test]
+fn shell_home_count_matches_menu_bar(cx: &mut TestAppContext) {
+    use deep_app::views::{set_state, Layout, Shell};
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        deep_app::init(cx);
+    });
+    let sessions = sessions();
+    set_state(deep_app::shell_state(&sessions, 1_800_000_000_000));
+    let (window, _shell) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds {
+                    origin: Point::default(),
+                    size: size(px(960.), px(640.)),
+                })),
+                ..Default::default()
+            },
+            cx,
+            |window, cx| cx.new(|cx| Shell::new(&Layout::shipped("home"), window, cx)),
+        )
+        .expect("open window")
+    });
+    let (home, first_session) = cx
+        .update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            (
+                window.find("home-needs-you").label().map(str::to_owned),
+                window
+                    .find(("sidebar-session", 0usize))
+                    .label()
+                    .map(str::to_owned),
+            )
+        })
+        .unwrap();
+    assert_eq!(
+        home,
+        Some(format!("{} asks need you", menu_bar_title(&sessions)))
+    );
+    assert_eq!(first_session, Some("Session 1 · Session ".to_owned()));
+}
+
 fn stocks_panel(agent: &str, cx: &mut TestAppContext) {
     let quotes: Vec<_> = stocks()
         .into_iter()

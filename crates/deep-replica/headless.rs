@@ -6,8 +6,12 @@
 fn main() {
     #[cfg(target_os = "macos")]
     std::process::exit(suite::run());
+    // Unrun is not passed: off macOS the suite is INCONCLUSIVE, and says so with a failing exit.
     #[cfg(not(target_os = "macos"))]
-    println!("headless: skipped; the replica renders pixels on macOS only");
+    {
+        println!("headless: INCONCLUSIVE; the replica renders pixels on macOS only, so none of the #338 checks ran");
+        std::process::exit(1);
+    }
 }
 
 #[cfg(target_os = "macos")]
