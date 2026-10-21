@@ -1,0 +1,119 @@
+{
+  "items": {
+    "z9": {
+      "params": {
+        "corner": 0,
+        "label": "ünï",
+        "width": 1000
+      },
+      "order": "a4",
+      "name": "Z",
+      "layer": "main",
+      "kind": "test.slab@3",
+      "id": "z9"
+    },
+    "cap-1": {
+      "params": {
+        "corner": 0.75,
+        "height": 2.25,
+        "width": 33.3
+      },
+      "order": "a3",
+      "visible": false,
+      "name": "Cap",
+      "layer": "main",
+      "kind": "test.slab@3",
+      "id": "cap-1"
+    },
+    "base": {
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      },
+      "params": {},
+      "order": "a2",
+      "pickable": false,
+      "name": "Base",
+      "layer": "main",
+      "kind": "test.slab@3",
+      "id": "base"
+    },
+    "post": {
+      "params": {
+        "height": 10,
+        "label": "Post",
+        "width": 8
+      },
+      "order": "a1",
+      "parent": "sign",
+      "role": "decoration",
+      "name": "Post",
+      "layer": "main",
+      "kind": "test.slab@3",
+      "id": "post"
+    },
+    "sign": {
+      "at": {
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "rot": [
+          0,
+          0,
+          45
+        ],
+        "pos": [
+          12,
+          8,
+          0
+        ]
+      },
+      "params": {
+        "height": 0.1000000015,
+        "width": 120.5
+      },
+      "pickable": true,
+      "visible": true,
+      "parent": null,
+      "order": "a0",
+      "role": "part",
+      "name": "Sign",
+      "layer": "main",
+      "kind": "test.slab@3",
+      "id": "sign"
+    }
+  },
+  "channels": {
+    "grow": {
+      "target": "items/sign/params/width"
+    }
+  },
+  "layers": {
+    "main": {
+      "order": "a0",
+      "title": "Main",
+      "writer": "agent-a"
+    }
+  },
+  "data": {
+    "steps": [
+      1,
+      2.5
+    ],
+    "ratio": 0.1
+  },
+  "size": [
+    640,
+    360
+  ],
+  "description": "Five items for the canonical fixture.",
+  "title": "Café sign",
+  "profile": "figure",
+  "id": "doc-389",
+  "format": 1
+}

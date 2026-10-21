@@ -1,0 +1,153 @@
+# The canvas lint's clippy configuration (technical design: Seeded and replayable). scripts/canvas-lint.mjs
+# points CLIPPY_CONF_DIR here for every crate in its scope, so a workspace's own clippy.toml is never
+# read in its place. Anything a check reads is computed in f64 or scalar code with every transcendental
+# through the ops module on pinned libm, never std's platform libm, glam's f32 SIMD, a clock or a
+# thread RNG. Each entry says why. Paths outside std carry allow-invalid, since a scope crate that
+# doesn't depend on that crate can't resolve them and clippy would otherwise refuse the config.
+
+# std's float methods whose docs carry the "unspecified precision" note: they call the platform's libm,
+# whose results differ across arm64, x86_64 and wasm32. Left out: floor/ceil/round/trunc/fract/abs/
+# signum/copysign/rem_euclid/div_euclid (exact), to_degrees/to_radians (a constant multiply, exact),
+# and the nightly-only gamma, ln_gamma, erf and erfc (stable toolchains can't resolve them). sqrt is
+# correctly rounded by IEEE 754 and mul_add by contract, but both are listed so the ops module stays
+# the one path a reader has to pin for every function on the design's closed list.
+disallowed-methods = [
+  { path = "f64::sqrt", reason = "use the ops module's sqrt so one module pins every math path" },
+  { path = "f32::sqrt", reason = "use the ops module's sqrt in f64 so one module pins every math path" },
+  { path = "f64::sin", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::cos", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::tan", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::sin_cos", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::asin", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::acos", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::atan", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::atan2", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::sinh", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::cosh", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::tanh", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::asinh", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::acosh", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::atanh", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::exp", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::exp2", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::exp_m1", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::ln", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::log", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::log2", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::log10", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::ln_1p", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::powf", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::powi", reason = "compiler intrinsic with unspecified precision; use the ops module's integer power" },
+  { path = "f64::cbrt", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::hypot", reason = "platform libm; use the ops module on pinned libm" },
+  { path = "f64::mul_add", reason = "use the ops module's multiply-add so one module pins every math path" },
+  { path = "f32::sin", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::cos", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::tan", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::sin_cos", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::asin", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::acos", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::atan", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::atan2", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::sinh", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::cosh", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::tanh", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::asinh", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::acosh", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::atanh", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::exp", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::exp2", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::exp_m1", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::ln", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::log", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::log2", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::log10", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::ln_1p", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::powf", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::powi", reason = "compiler intrinsic with unspecified precision, and f32; use the ops module's integer power" },
+  { path = "f32::cbrt", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::hypot", reason = "platform libm, and f32; use the ops module on pinned libm in f64" },
+  { path = "f32::mul_add", reason = "use the ops module's multiply-add in f64 so one module pins every math path" },
+  # Clocks: a frame is a pure function of the document and its input track; time is a flick on that track.
+  { path = "std::time::Instant::now", reason = "no clock in checked code; time comes from the input track in flicks" },
+  { path = "std::time::SystemTime::now", reason = "no clock in checked code; time comes from the input track in flicks" },
+  { path = "std::time::SystemTime::elapsed", reason = "reads the clock (UNIX_EPOCH.elapsed() is now); time comes from the input track in flicks" },
+  # `Error::last_os_error` is not matched by clippy's path lookup (tested); the text scan refuses it.
+  { path = "std::io::Error::raw_os_error", reason = "an OS error code is host state; a check reads the document, not the platform's errno" },
+  { path = "std::io::IsTerminal::is_terminal", reason = "what a stream is attached to is host state a check never reads" },
+  { path = "std::time::Instant::elapsed", reason = "reads the clock against an Instant handed in; time comes from the input track in flicks" },
+  # The random hasher: its keys differ per process, so anything hashed by it differs run to run.
+  { path = "std::hash::RandomState::new", reason = "randomly keyed per process; hash through hash@1" },
+  { path = "std::hash::BuildHasher::hash_one", reason = "a hasher's keys may be random; hash through hash@1" },
+  # Thread RNG: every random choice is seeded from the document's seed and stable IDs (hash@1).
+  { path = "rand::thread_rng", reason = "unseeded; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand::rng", reason = "unseeded; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand::random", reason = "unseeded; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand::SeedableRng::from_entropy", reason = "seeded from the OS; seed from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand::SeedableRng::from_os_rng", reason = "seeded from the OS; seed from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand::SeedableRng::try_from_os_rng", reason = "seeded from the OS; seed from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand_core::SeedableRng::from_entropy", reason = "seeded from the OS; seed from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand_core::SeedableRng::from_os_rng", reason = "seeded from the OS; seed from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand_core::SeedableRng::try_from_os_rng", reason = "seeded from the OS; seed from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "getrandom::getrandom", reason = "OS entropy; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "getrandom::fill", reason = "OS entropy; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "getrandom::u32", reason = "OS entropy; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "getrandom::u64", reason = "OS entropy; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  # Hash-map iteration: its order depends on the hasher's random seed, so anything built from it (an
+  # array, a draw list, a hash) differs run to run. clippy::iter_over_hash_type catches a `for` loop;
+  # these catch the iterator methods a chain starts from. Iterate a BTreeMap or a sorted Vec instead.
+  { path = "std::collections::HashMap::iter", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::iter_mut", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::keys", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::values", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::values_mut", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::into_keys", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::into_values", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::drain", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashMap::retain", reason = "hash order is random; iterate a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashSet::iter", reason = "hash order is random; iterate a BTreeSet or a sorted Vec" },
+  { path = "std::collections::HashSet::drain", reason = "hash order is random; iterate a BTreeSet or a sorted Vec" },
+  { path = "std::collections::HashSet::retain", reason = "hash order is random; iterate a BTreeSet or a sorted Vec" },
+]
+
+# glam's f32 types take SIMD paths that add in a different order on x86_64 and ARM; std::arch's vector
+# types are those paths spelled out. The arch modules exist only on their own architecture, so each
+# carries allow-invalid and the lint catches the host's own types on each of the three reference
+# architectures.
+disallowed-types = [
+  # The hash collections themselves: the method list above names the borrowing iterators, and a `for`
+  # loop is iter_over_hash_type's, but a consuming chain (`map.into_iter().map(..).collect()`) goes
+  # through IntoIterator, which a method path can't single out, so the types are refused outright.
+  { path = "std::collections::HashMap", reason = "hash order is random; use a BTreeMap or a sorted Vec" },
+  { path = "std::collections::HashSet", reason = "hash order is random; use a BTreeSet or a sorted Vec" },
+  { path = "std::hash::RandomState", reason = "randomly keyed per process; hash through hash@1" },
+  # An OS path asks the filesystem (`Path::exists`, `metadata`, `canonicalize`) without naming `fs`;
+  # a document's paths are strings of its own grammar.
+  { path = "std::path::Path", reason = "an OS path reads the filesystem; a check reads the document's own path strings" },
+  { path = "std::path::PathBuf", reason = "an OS path reads the filesystem; a check reads the document's own path strings" },
+  # A clock reading as a value: anything built on one differs run to run, however it is read.
+  { path = "std::time::Instant", reason = "a clock reading; time comes from the input track in flicks" },
+  { path = "std::time::SystemTime", reason = "a clock reading; time comes from the input track in flicks" },
+  { path = "glam::Vec2", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Vec3", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Vec3A", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Vec4", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Quat", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Mat2", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Mat3", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Mat3A", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Mat4", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Affine2", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "glam::Affine3A", reason = "f32 SIMD; checked math runs in f64 scalar code" },
+  { path = "core::arch::aarch64::float32x4_t", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::aarch64::float32x2_t", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::aarch64::float64x2_t", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::x86_64::__m128", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::x86_64::__m128d", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::x86_64::__m256", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::x86_64::__m256d", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "core::arch::wasm32::v128", reason = "SIMD lane order differs by architecture; checked math runs in f64 scalar code", allow-invalid = true },
+  { path = "rand::rngs::ThreadRng", reason = "unseeded; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand::rngs::OsRng", reason = "OS entropy; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+  { path = "rand_core::OsRng", reason = "OS entropy; draw from the document's seed and stable IDs through hash@1", allow-invalid = true },
+]

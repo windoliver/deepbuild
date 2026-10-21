@@ -15,14 +15,22 @@ export const testGlobs = (extension) => testPaths
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above and fix the clippy warnings.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/canvas-lint.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings or follow the Fix line under each canvas-lint finding.' },
   { name: 'unit', commands: [
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run'],
+    // The canvas acceptance files each build the deep-canvas binary before spawning it, and cargo
+    // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
+    // while a sibling file builds finds it gone or half-written: those files run one at a time, after
+    // every other file has run in parallel.
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**'],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/'],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.
     [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
+  // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
+  // contracts package the typecheck lane builds.
+  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
@@ -60,10 +68,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
         const error = result.error?.message
           ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
-          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b/i.test(line))
+          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
           ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
-        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not FAIL.
-        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED)\s+(.+)/) ?? [];
+        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
+        // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
+        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
         failure = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
       }
     }

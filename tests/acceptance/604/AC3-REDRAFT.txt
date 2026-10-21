@@ -1,0 +1,95 @@
+# AC3 blind redraft: the dispute and the proof (October 20)
+
+## 1. The first draft's AC3 test on main (2307398): fails, for a reason outside the criterion
+
+     FAIL  digests.test.ts > AC3 the seven digests are refrozen and no other digest changes (against f346706) > AC3 digests.json names the same schemas as on the base, and the package reads that file
+    AssertionError: schema names in digests.json: expected [ 'access@1', …(70) ] to deeply equal [ 'action.entered@1', …(66) ]
+    
+    - Expected
+    + Received
+    
+    @@ -1,16 +1,19 @@
+      [
+    +   "access@1",
+        "action.entered@1",
+        "action.reported@1",
+        "agent.stop@1",
+        "ask.answered@1",
+        "ask.batched@1",
+        "ask.cancelled@1",
+        "ask.created@1",
+        "ask.defaulted@1",
+        "ask.escalated@1",
+        "ask.later@1",
+    +   "ask.moot@1",
+    +   "ask.superseded@1",
+        "check@1",
+        "claim.made@1",
+        "claim.sent_back@1",
+        "claim.stalled@1",
+        "decision.applied@1",
+    @@ -54,10 +57,11 @@
+
+## 2. The redraft on main (2307398): passes
+
+     Test Files  1 passed (1)
+          Tests  69 passed (69)
+
+## 2a. The redraft on the base f346706 (the suite's files copied in; the base has no tests/acceptance/604): fails, the seven refrozen tests only, each for the expected reason
+
+         × AC3 tool.before@1 is refrozen: differs from the base and equals its schema's digest now 2ms
+         × AC3 tool.after@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 agent.stop@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 session.start@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 user.ask@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 reading.recorded@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 reading.batch@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+          Tests  7 failed | 62 passed (69)
+    AssertionError: tool.before@1 still carries its base digest; it was not refrozen: expected 'd1:ac08f143a47abe73532bdef405f29fc5f7…' not to be 'd1:ac08f143a47abe73532bdef405f29fc5f7…' // Object.is equality
+
+## 3. The redraft on PR #624's branch feat/14-record (e75c776), which adds evidence.stored@1 and evidence.removed@1: passes
+
+     Test Files  1 passed (1)
+          Tests  69 passed (69)
+
+## 4. Mutant: tool.before@1 restored to its base digest in packages/contracts/digests.json: fails
+
+         × AC3 tool.before@1 is refrozen: differs from the base and equals its schema's digest now 2ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    AssertionError: tool.before@1 still carries its base digest; it was not refrozen: expected 'd1:ac08f143a47abe73532bdef405f29fc5f7…' not to be 'd1:ac08f143a47abe73532bdef405f29fc5f7…' // Object.is equality
+          Tests  1 failed | 68 passed (69)
+
+## 5. Mutant: check@1 (a base digest outside the seven) altered by one hex digit: fails
+
+         × AC3 check@1 is unchanged: same digest as the base, and its schema still matches 2ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    AssertionError: check@1's digest changed from the base's value: expected 'd1:a03991e1499e75f1ab18c4b366cbaa80d6…' to be 'd1:a03991e1499e75f1ab18c4b366cbaa80d6…' // Object.is equality
+          Tests  1 failed | 68 passed (69)
+
+## 6. Mutant: check@1 (a base name outside the seven) dropped from packages/contracts/digests.json while its schema stays: fails
+
+         × AC3 check@1 is unchanged: same digest as the base, and its schema still matches 3ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    AssertionError: check@1 was in digests.json at the base and is missing now: expected undefined to be type of 'string'
+          Tests  1 failed | 68 passed (69)
+
+## 7. Mutant: frozenDigests() returns a hard-coded table instead of reading digests.json (the table is today's file without access@1): fails
+
+         × AC3 frozenDigests() reads packages/contracts/digests.json 3ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    AssertionError: frozenDigests()[access@1] differs from digests.json: expected undefined to be 'd1:d870bc18ea2241218c18e46815d9e28466…' // Object.is equality
+          Tests  1 failed | 68 passed (69)
+
+    Note: a hard-coded table that equals the file byte for byte is not told apart by behavior; the test
+    catches it the moment the table and the file diverge, as here, which is the only observable wrong program.
+
+## 8. Known shape of a failure: a base schema's file deleted (schemas/check@1.json) while its digests.json row stays
+
+    The test fails, but through getSchema's throw before the named assertion runs, not the "schema was reshaped"
+    message. Recorded as is; the test is the blind job's and is not edited.
+
+         × AC3 check@1 is unchanged: same digest as the base, and its schema still matches 67ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    ContractError: unknown_schema at /: check@1
+         19|   if (!schema) throw new ContractError(issue('unknown_schema', '', nam…
