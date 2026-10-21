@@ -5,7 +5,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { catalogue, fixtures, getSchema } from '../../../packages/contracts/src/index.ts';
+import { getSchema } from '../../../packages/contracts/src/index.ts';
 import type { JsonValue, Schema, SchemaEntry } from '../../../packages/contracts/src/index.ts';
 import { openEvidenceStore } from '../../../packages/evidence/src/index.ts';
 import type { Evidence } from '../../../packages/evidence/src/index.ts';
@@ -13,70 +13,14 @@ import { openRecord, PROJECTIONS, testStorage } from '../../../packages/record/s
 import type { EventInput, Migration, RecordStore, Table } from '../../../packages/record/src/index.ts';
 import {
   agentStop, allEvents, app, canon, claimMade, clone, core, DAY, evidenceRemoved, evidenceStored, filesContaining, firstTableDifference,
-  fixtureWriter, fromFixture, hook, isObject, kindSchema, makeClock, removeRoots, SECOND, seqAt, sessionStart, sha256, snapshot, T0,
+  hook, kindSchema, makeClock, removeRoots, SECOND, seqAt, sessionStart, snapshot, T0,
   tempRoot, toolAfter, ulidAt, userAsk, utf8, verdictMade,
 } from './helpers.ts';
 import type { JsonObject } from './helpers.ts';
 
 afterEach(removeRoots);
 
-const ISSUE_PROJECTIONS = [
-  'sessions', 'commits', 'claims', 'checks', 'runs', 'verdicts', 'asks', 'decisions', 'leases', 'definitions', 'attempts',
-  'tasks', 'open_items', 'notices', 'readings', 'plans', 'dry_merges', 'session_files', 'evidence',
-];
-/** The kinds that create a row in the projection they feed (a sent-back of an unknown claim may create none). */
-const CREATES: Record<string, string> = {
-  'session.start': 'sessions', 'claim.made': 'claims', 'task.created': 'tasks', 'definition.locked': 'definitions',
-  'run.started': 'runs', 'verdict.made': 'verdicts', 'ask.created': 'asks', 'decision.created': 'decisions',
-  'lease.acquired': 'leases', 'open_item.opened': 'open_items', 'notice.subscribed': 'notices', 'reading.recorded': 'readings',
-  'plan.proposed': 'plans', 'merge.dry_run': 'dry_merges', 'tool.after': 'session_files', 'evidence.stored': 'evidence',
-};
-
-describe('AC6 every projection rebuilds from the catalogue\'s events', () => {
-  it('AC6 the record lists the issue\'s projections, each is a table, and after every catalogued kind\'s fixtures each equals its rebuild', async () => {
-    for (const name of ISSUE_PROJECTIONS) expect(PROJECTIONS, `${name} is a projection`).toContain(name);
-    const clock = makeClock();
-    const record = await openRecord({ path: 'record.db', now: clock.now, storage: testStorage() });
-    const S = ulidAt(T0 - SECOND);
-    let n = 0;
-    for (const entry of catalogue()) {
-      const all = fixtures(entry.schema);
-      for (const [i, f] of all.entries()) {
-        if (!isObject(f)) continue;
-        const at = clock.tick(10);
-        const input = fromFixture(entry.kind, at, {}, i);
-        const writer = fixtureWriter(entry.kind, i);
-        const connection = writer === 'hook' ? hook(S) : { writer, actor: 'you', scope: 'you', session: S };
-        await record.append(connection, input);
-        n++;
-      }
-    }
-    // The two kinds the issue adds for the evidence store.
-    const ev: Evidence = { sha256: sha256('a log'), size: 5, type: 'text', kind: 'log', source: 'run:1', origin: 'deepbuild', redaction: 'complete', license: { name: 'CC0-1.0', allows: ['export', 'report', 'post'] }, derivedFrom: [], intake: 'captured' };
-    await record.append(core(), evidenceStored(clock.tick(10), ev));
-    await record.append(core(), evidenceRemoved(clock.tick(10), sha256('gone')));
-    expect(await allEvents(record).then((e) => e.length)).toBe(n + 2);
-
-    const live = await snapshot(record, PROJECTIONS);
-    for (const [kind, table] of Object.entries(CREATES)) {
-      const feeds = kind.startsWith('evidence.') ? ['evidence'] : catalogue().find((e) => e.kind === kind)?.feeds ?? [];
-      expect(feeds, `${kind} feeds ${table} in the catalogue`).toContain(table);
-      expect(live.get(table)!.rows.length, `${table} has a row after ${kind}`).toBeGreaterThan(0);
-    }
-    for (const name of PROJECTIONS) {
-      const table = live.get(name)!;
-      expect(table.name).toBe(name);
-      expect(table.primaryKey.length, `${name} names its primary key`).toBeGreaterThan(0);
-      const keys = table.rows.map((r) => table.primaryKey.map((k) => canon(r[k])).join('|'));
-      expect([...keys].sort(), `${name}: rows come in primary-key order`).toEqual(keys);
-    }
-    clock.tick(DAY);
-    await record.rebuild();
-    const rebuilt = await snapshot(record, PROJECTIONS);
-    // A projection not rebuilt from the log is empty or differs here.
-    expect(firstTableDifference(live, rebuilt)).toBeUndefined();
-  }, 120_000);
-});
+// AC6 is in ac6-redraft.test.ts, a blind redraft against b82d234 (see AC6-REDRAFT.md).
 
 describe('AC22 forward-only migrations', () => {
   /** A planted tool.after@2: v1 with a required `cwd` in every data shape. */
