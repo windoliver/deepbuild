@@ -41,6 +41,10 @@
         "serde": {
           "spec": "^1",
           "why": "Issue #339: derives the probe report's event shapes and synthetic forms. Already in gpui-kit's tree."
+        },
+        "deep-text-gpui": {
+          "spec": "* path=../deep-text-gpui",
+          "why": "Issue #390: the canvas's labels and readouts, drawn from the canvas's atlas through the GPUI patch's mask sprite, never GPUI's text system."
         }
       },
       "dev-dependencies": {

@@ -9,7 +9,8 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use deep_text::{Align, Atlas, Role, Shaped, Shaper, Spec, PAGE};
+pub use deep_text::Shaped;
+use deep_text::{Align, Atlas, Role, Shaper, Spec, PAGE};
 use gpui_kit::*;
 
 /// The atlas number GPUI knows this atlas's pages under.

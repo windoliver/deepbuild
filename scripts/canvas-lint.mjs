@@ -55,7 +55,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stripRust } from './lib/rust-source.mjs';
+import { stripRust } from './rust-source.mjs';
 
 const repo = realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const configDir = join(repo, 'lint', 'canvas');

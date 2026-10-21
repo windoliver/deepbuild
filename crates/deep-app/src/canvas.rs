@@ -41,7 +41,7 @@ pub fn items() -> Vec<(String, Value)> {
     })
 }
 
-fn record(id: &str, value: Value) {
+pub(crate) fn record(id: &str, value: Value) {
     DRAWN.with(|drawn| {
         drawn.borrow_mut().insert(id.to_owned(), value);
     });

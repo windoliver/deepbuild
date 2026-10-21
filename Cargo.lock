@@ -1718,6 +1718,7 @@ name = "deep-app"
 version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
+ "deep-text-gpui",
  "gpui-kit",
  "gpui-shell",
  "image",

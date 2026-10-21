@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stripRust } from './lib/rust-source.mjs';
+import { stripRust } from './rust-source.mjs';
 
 const scopePrefix = 'deep-text';
 const scopeMarker = 'canvas_text';
