@@ -2,16 +2,16 @@
 //! the keyboard, shown in a small window that follows the cursor, and a count of every press
 //! the gate refused.
 //!
-//! The gate judges a press by what macOS attaches to it. An `NSEvent` carries its `CGEvent`,
-//! whose field 45 (`kCGEventSourceStateID`) names the state table the event's source writes
-//! and whose field 41 (`kCGEventSourceUnixProcessID`) names the process that posted it
-//! (CoreGraphics' CGEventTypes.h). Hardware input comes from the HID system state table (1)
-//! and no posting process (0); a chord the gate takes as held must also be down in that table
-//! right now, Space by `CGEventSourceKeyState` and Option by `CGEventSourceFlagsState`, which
-//! an event alone can't claim, whatever its own flags say. An event this
-//! process builds and sends through `NSApplication.sendEvent` or `postEvent:` carries its own
-//! pid and the combined session state (0), and a `CGEventPost` from a process without
-//! Accessibility permission never arrives (docs/spikes/339/record.json has the readings).
+//! The gate is held exactly while the HID system state table reads the chord down, Space by
+//! `CGEventSourceKeyState` and Option by `CGEventSourceFlagsState`, re-read on every tick.
+//! No event moves it. Events are judged for the record by what macOS attaches to them: an
+//! `NSEvent` carries its `CGEvent`, whose field 45 (`kCGEventSourceStateID`) names the state
+//! table the event's source writes and whose field 41 (`kCGEventSourceUnixProcessID`) names
+//! the process that posted it (CoreGraphics' CGEventTypes.h); hardware carries the HID table
+//! (1) and no posting process (0). What the spike measured: nothing this process builds, and
+//! nothing a process without Accessibility permission posts, writes the table or arrives
+//! (docs/spikes/339/record.json). What it didn't: a poster with Accessibility permission, or
+//! a virtual HID device, both of which Apple's CGEventSource.h routes through that table.
 //!
 //! The pure part, [`Gate`], runs on every platform and is what the unit tests cover. The
 //! macOS part installs the monitor, reads the fields, captures the frame and moves the window.
@@ -171,7 +171,7 @@ mod macos {
     use super::{Gate, Key, Provenance, SHORTCUT_KEY_CODE};
 
     /// One event the monitor saw, for the record.
-    #[derive(Clone, Debug, serde::Serialize)]
+    #[derive(Clone, Debug)]
     pub struct Seen {
         pub kind: &'static str,
         pub key_code: u16,
@@ -464,6 +464,7 @@ mod macos {
 
         /// One tick: follow the cursor, and capture if the gate is held.
         pub fn tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+            self.access = capture_access();
             let cursor = cursor_position();
             move_window(
                 window,
@@ -554,8 +555,7 @@ mod macos {
         SyntheticForm::CgForgedHid,
     ];
 
-    fn ns_key_event(mtm: MainThreadMarker, down: bool) -> Retained<NSEvent> {
-        let _ = mtm;
+    fn ns_key_event(down: bool) -> Retained<NSEvent> {
         let space = objc2_foundation::NSString::from_str(" ");
         NSEvent::keyEventWithType_location_modifierFlags_timestamp_windowNumber_context_characters_charactersIgnoringModifiers_isARepeat_keyCode(
             if down { NSEventType::KeyDown } else { NSEventType::KeyUp },
@@ -594,12 +594,12 @@ mod macos {
         let app = NSApplication::sharedApplication(mtm);
         match form {
             SyntheticForm::NsSend => {
-                app.sendEvent(&ns_key_event(mtm, true));
-                app.sendEvent(&ns_key_event(mtm, false));
+                app.sendEvent(&ns_key_event(true));
+                app.sendEvent(&ns_key_event(false));
             }
             SyntheticForm::NsPost => {
-                app.postEvent_atStart(&ns_key_event(mtm, true), false);
-                app.postEvent_atStart(&ns_key_event(mtm, false), false);
+                app.postEvent_atStart(&ns_key_event(true), false);
+                app.postEvent_atStart(&ns_key_event(false), false);
             }
             SyntheticForm::CgPost => {
                 app.postEvent_atStart(&cg_key_event(false, true), false);
@@ -614,6 +614,11 @@ mod macos {
 
     pub fn main_thread() -> MainThreadMarker {
         MainThreadMarker::new().expect("the trusted-input layer runs on the main thread")
+    }
+
+    /// Whether this app is the active one, the only one whose keys a local monitor sees.
+    pub fn app_is_active(mtm: MainThreadMarker) -> bool {
+        NSApplication::sharedApplication(mtm).isActive()
     }
 
     #[link(name = "ApplicationServices", kind = "framework")]
@@ -636,10 +641,11 @@ mod macos {
     }
 
     /// The forged form from another process: `count` chords posted at the HID event tap, each
-    /// Option down, Space down, Space up, Option up, from a `CGEventSource` that claims the
-    /// HID system state table with the posting pid set to 0. Without the Accessibility
-    /// permission macOS delivers none of them. What arrives, and whether such a post writes
-    /// the HID state table the gate reads, is what the record of the run finds out.
+    /// Option down, Space down, held 100 ms, Space up, Option up, from a `CGEventSource` that
+    /// claims the HID system state table with the posting pid set to 0. Without the
+    /// Accessibility permission macOS delivers none of them. What arrives, and whether such
+    /// a post writes the HID state table the gate reads, is what the probe's ticks read
+    /// while this runs.
     pub fn post_forged_chords(count: u64) -> Posted {
         let source =
             CGEventSource::new(CGEventSourceStateID::HIDSystemState).expect("an event source");
@@ -656,11 +662,13 @@ mod macos {
         };
         const OPTION: u16 = 58; // kVK_Option
         for _ in 0..count {
+            // Held across several 16 ms ticks, so the probe's table readings cover it.
             key(OPTION, true, CGEventFlags::MaskAlternate);
             key(SHORTCUT_KEY_CODE, true, CGEventFlags::MaskAlternate);
+            std::thread::sleep(std::time::Duration::from_millis(100));
             key(SHORTCUT_KEY_CODE, false, CGEventFlags::MaskAlternate);
             key(OPTION, false, CGEventFlags::empty());
-            std::thread::sleep(std::time::Duration::from_millis(8));
+            std::thread::sleep(std::time::Duration::from_millis(20));
         }
         Posted {
             pid: std::process::id(),

@@ -5,13 +5,12 @@
 //!
 //! Issue #339 adds the cursor window: a small window that follows the cursor and shows one
 //! screen frame, captured only while ⌥Space is held on the keyboard. The modes:
-//! - `--cursor-window`: the window, until the app quits.
 //! - `--cursor-demo SECONDS`: the window while the cursor is moved on a circle, for a
 //!   recording; quits after SECONDS.
 //! - `--probe-synthetic N`: presses the shortcut N times without a keyboard, in every
 //!   synthetic form the app knows, then has a second process post 50 forged chords at the
 //!   HID event tap (which macOS delivers only from a process with the Accessibility
-//!   permission), and quits.
+//!   permission) while the ticks keep reading the HID table, and quits.
 //! - `--probe-held SECONDS [--frame PATH]`: waits up to SECONDS for a person to hold the
 //!   shortcut, keeps the first frame captured (written to PATH as PNG), and quits.
 //! - `--post-forged N`: the second process of the synthetic probe: posts N forged chords
@@ -29,7 +28,6 @@ use gpui_kit::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Mode {
     Window,
-    CursorWindow,
     CursorDemo {
         seconds: u64,
     },
@@ -97,7 +95,6 @@ fn args() -> (Option<PathBuf>, Mode) {
                     args.next().expect("--panel takes a directory"),
                 ))
             }
-            "--cursor-window" => mode = Mode::CursorWindow,
             "--cursor-demo" => {
                 mode = Mode::CursorDemo {
                     seconds: number(args.next(), "--cursor-demo takes seconds"),
@@ -138,9 +135,9 @@ mod trusted {
     use std::{cell::RefCell, rc::Rc, time::Duration};
 
     use deep_app::trusted_input::{
-        capture_access, cursor_position, install_monitor, main_display_bounds, main_thread,
-        post_forged_chords, press_synthetically, warp_cursor, CursorWindow, Gate, Posted, Seen,
-        SYNTHETIC_FORMS,
+        app_is_active, capture_access, cursor_position, install_monitor, main_display_bounds,
+        main_thread, post_forged_chords, press_synthetically, warp_cursor, Counts, CursorWindow,
+        Gate, Posted, Seen, SYNTHETIC_FORMS,
     };
     use gpui_kit::*;
     use objc2_core_foundation::CGPoint;
@@ -161,15 +158,44 @@ mod trusted {
         println!("{}", serde_json::to_string(&posted).expect("a report"));
     }
 
-    /// Runs this binary again as the poster and reads its report; None when it couldn't run.
-    fn spawn_poster() -> Option<Posted> {
+    /// Starts this binary again as the poster, beside the tick loop; None when it couldn't
+    /// start. Its report is read once it has exited.
+    fn spawn_poster() -> Option<std::process::Child> {
         let exe = std::env::current_exe().ok()?;
-        let output = std::process::Command::new(exe)
+        std::process::Command::new(exe)
             .arg("--post-forged")
             .arg(POSTED_CHORDS.to_string())
-            .output()
-            .ok()?;
-        serde_json::from_slice(&output.stdout).ok()
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .ok()
+    }
+
+    /// What the poster's window showed: the poster's own report, whether this app was the
+    /// active one (a local monitor sees only the active app's keys), and what the gate and
+    /// the HID table read while the chords were posted.
+    fn posting_window(
+        child: std::process::Child,
+        before: &Counts,
+        after: &Counts,
+        active_at_post: bool,
+    ) -> serde_json::Value {
+        let posted: Option<Posted> = child
+            .wait_with_output()
+            .ok()
+            .and_then(|output| serde_json::from_slice(&output.stdout).ok());
+        serde_json::json!({
+            "pid": posted.as_ref().map(|posted| posted.pid),
+            "chords_posted": posted.as_ref().map(|posted| posted.posted),
+            "accessibility_trusted": posted.as_ref().map(|posted| posted.accessibility_trusted),
+            "app_active_at_post": active_at_post,
+            "while_posting": {
+                "presses_arrived": after.presses - before.presses,
+                "holds": after.holds - before.holds,
+                "frames": after.frames - before.frames,
+                "ticks_with_hid_key": after.ticks_with_hid_key - before.ticks_with_hid_key,
+                "ticks_with_hid_option": after.ticks_with_hid_option - before.ticks_with_hid_option,
+            },
+        })
     }
 
     /// Opens the cursor window, installs the monitor, and runs the mode on a 16 ms tick.
@@ -215,8 +241,11 @@ mod trusted {
             let mut tick = 0u64;
             let mut sent = 0u64;
             let mut ever_held = false;
-            let mut poster: Option<Option<Posted>> = None;
-            let mut judged_before_poster = 0u64;
+            let mut poster: Option<std::process::Child> = None;
+            let mut poster_started = false;
+            let mut poster_exited_at: Option<u64> = None;
+            let mut before_posting = Counts::default();
+            let mut active_at_post = false;
             loop {
                 cx.background_executor().timer(TICK).await;
                 tick += 1;
@@ -229,7 +258,7 @@ mod trusted {
                 ever_held |= gate.borrow().held();
                 let elapsed = started.elapsed().as_secs_f64();
                 let done = match &mode {
-                    Mode::CursorWindow | Mode::Window => false,
+                    Mode::Window => false,
                     Mode::CursorDemo { seconds } => {
                         let bounds = main_display_bounds();
                         let (x0, y0) = (bounds.size.width / 2.0, bounds.size.height / 2.0);
@@ -243,7 +272,8 @@ mod trusted {
                     Mode::ProbeSynthetic { presses } => {
                         // One press per tick, rotating the forms, once the window has shown;
                         // then a second of ticks so every queued event is delivered and
-                        // judged; then the poster process, and another second for its events.
+                        // judged; then the poster process, with the ticks reading the HID
+                        // table while it posts, and another second after it exits.
                         if tick > 10 && sent < *presses {
                             press_synthetically(
                                 main_thread(),
@@ -252,11 +282,23 @@ mod trusted {
                             sent += 1;
                             false
                         } else if sent == *presses && tick == 10 + presses + 60 {
-                            judged_before_poster = gate.borrow().counts.presses;
-                            poster = Some(spawn_poster());
+                            before_posting = gate.borrow().counts.clone();
+                            active_at_post = app_is_active(main_thread());
+                            poster = spawn_poster();
+                            poster_started = true;
                             false
+                        } else if let Some(child) = poster.as_mut() {
+                            match poster_exited_at {
+                                None => {
+                                    if child.try_wait().ok().flatten().is_some() {
+                                        poster_exited_at = Some(tick);
+                                    }
+                                    false
+                                }
+                                Some(exited) => tick > exited + 60,
+                            }
                         } else {
-                            sent == *presses && tick > 10 + presses + 120
+                            poster_started && tick > 10 + presses + 120
                         }
                     }
                     Mode::PostForged { .. } => unreachable!("the poster has no window"),
@@ -279,14 +321,9 @@ mod trusted {
                         Mode::ProbeHeld { .. } => "held",
                         _ => "cursor-demo",
                     };
-                    let posted_from_process = poster.flatten().map(|posted| {
-                        let arrived = gate.borrow().counts.presses - judged_before_poster;
-                        serde_json::json!({
-                            "pid": posted.pid,
-                            "chords_posted": posted.posted,
-                            "accessibility_trusted": posted.accessibility_trusted,
-                            "presses_arrived": arrived,
-                        })
+                    let posted_from_process = poster.take().map(|child| {
+                        let after = gate.borrow().counts.clone();
+                        posting_window(child, &before_posting, &after, active_at_post)
                     });
                     let outcome = Outcome {
                         probe,
