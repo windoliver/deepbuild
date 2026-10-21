@@ -1,0 +1,8 @@
+{
+  "schema": "corpus.session@1",
+  "agent": "claude-code",
+  "version": "2.1.304",
+  "surface": "terminal",
+  "recorded": "2026-10-20",
+  "scenario": "child-gates"
+}

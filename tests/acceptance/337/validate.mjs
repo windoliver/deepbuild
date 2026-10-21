@@ -36,8 +36,17 @@ export const LIMITS = {
   preflightMs: { limit: 5 * 60_000, units: { ms: 1, s: 1000, min: 60_000 }, label: 'local preflight' },
 };
 const BUILD_UNITS = { ms: 1, s: 1000, min: 60_000 };
-// The design's reference Mac (The reference Mac), in the field names of scripts/benchmark.mjs's fingerprint().
-export const REFERENCE = { model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30, power: 'ac', lowPowerMode: false, thermalState: 'nominal' };
+// The design's two reference Macs (The reference Macs), in the field names of scripts/benchmark.mjs's
+// fingerprint(). A budget holds on each, so a run on either counts.
+export const REFERENCES = [
+  { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 },
+  { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 },
+];
+const HARDWARE = ['model', 'chip', 'memoryBytes'];
+// The conditions a budget result needs on either machine: mains power, Low Power Mode off, thermal state nominal.
+export const CONDITIONS = { power: 'ac', lowPowerMode: false, thermalState: 'nominal' };
+// The first reference Mac's fingerprint, conditions met; a record on it or on the second counts.
+export const REFERENCE = { model: REFERENCES[0].model, chip: REFERENCES[0].chip, memoryBytes: REFERENCES[0].memoryBytes, ...CONDITIONS };
 // The issue's Fields for an agent-built panel (Panel runtime and panel host).
 export const PANEL_LIMITS = { interrupt: true, heap: 256 * 2 ** 20, stack: 2 ** 20, microtasks: 100_000, pending: 1024 };
 // Web view crates a Rust app would pull in to show web content.
@@ -84,8 +93,12 @@ export function displayProblem(display, value, units) {
 
 // ------------------------------------------------------------------ budget verdicts
 
+// Why a machine's fingerprint isn't a budget result's: its hardware matches neither reference Mac, or a
+// condition isn't met, or no macOS build is recorded. Empty when the run counts.
 const offReference = (machine) => {
-  const off = Object.entries(REFERENCE).filter(([key, value]) => machine?.[key] !== value).map(([key, value]) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`);
+  const off = REFERENCES.some((reference) => HARDWARE.every((key) => machine?.[key] === reference[key])) ? []
+    : [`${HARDWARE.map((key) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}`).join(', ')}: neither ${REFERENCES.map(({ name }) => name).join(' nor ')}`];
+  off.push(...Object.entries(CONDITIONS).filter(([key, value]) => machine?.[key] !== value).map(([key, value]) => `${key} is ${JSON.stringify(machine?.[key] ?? null)}, not ${JSON.stringify(value)}`));
   if (!nonEmpty(machine?.macosBuild)) off.push('the macOS build is missing');
   return off;
 };
@@ -93,7 +106,7 @@ const offReference = (machine) => {
 // The design's rule (Every task carries its own budgets): five runs after warm-up pass when all five
 // are within the limit (here strictly under it, as the issue says), fail when all five are over it by
 // more than the margin, the larger of 5% and the runs' spread, and are otherwise INCONCLUSIVE, as is
-// every result off the reference Mac.
+// every result off both reference Macs.
 export function judge(runs, limit, machine) {
   if (!finiteRuns(runs)) return 'BLOCKED';
   if (offReference(machine).length) return 'INCONCLUSIVE';
@@ -325,7 +338,7 @@ export function stocksProblems(record, repo = root) {
 export function budgetProblems(record, repo = root) {
   const problems = [];
   const off = offReference(record?.machine);
-  if (off.length) problems.push(`not measured on the reference Mac: ${off.join('; ')}`);
+  if (off.length) problems.push(`not measured on a reference Mac: ${off.join('; ')}`);
   if (!/^[0-9a-f]{40}$/.test(record?.mergeBase ?? '')) problems.push('mergeBase is not a full commit hash');
   else if (git(repo, 'merge-base', '--is-ancestor', record.mergeBase, 'HEAD').status !== 0) problems.push(`mergeBase ${record.mergeBase} isn't an ancestor of HEAD`);
   const judged = verdicts(record);

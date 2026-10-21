@@ -36,6 +36,8 @@ Each event is reduced to the fields an adapter decides, `kind` and `data`. The h
 | Stop | `agent.stop` {session, outcome: "finished", continued, cause, usage}: `continued` is `stop_hook_active`; `cause` and `usage` as below |
 | StopFailure | `agent.stop` {session, outcome: "failed", cause, usage}: `cause` and `usage` as below |
 | SessionEnd | `session.end` {session, reason} |
+| SubagentStop | `agent.stop` {session, subagent, outcome: "finished", continued, cause, usage}: a child's stop is a stop of its own, named by `subagent`; it ran in the child's own transcript, which the set doesn't hold, so its cause is the payload's alone and its usage `null` |
+| TaskCompleted | `task.completed` {session, agent_task, title}: `agent_task` is `task_id`, `title` is `task_subject`; the agent's word, never a closed task |
 
 A Codex turn that no prompt started, such as a goal's continuation, opens with a `user.ask` {session, from, turn} before the first event of its first hook, `turn` being the payload's `turn_id`, since Codex fires no prompt hook for it.
 
@@ -57,6 +59,7 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code `compact` | `/compact` mid-session: SessionStart from `compact` and the summary turn |
 | claude-code `stop-failure` | a turn that ends on an API error (`model_not_found`) |
 | claude-code `crash` | the agent killed in the middle of a tool call: a PreToolUse with no PostToolUse or Stop |
+| claude-code 2.1.304 `child-gates` | a task created and marked completed (TaskCompleted), and a background subagent that runs, stops (SubagentStop) and reports back |
 | claude-code 2.1.299 `desktop-peer` | the desktop app: a session another session started, and messages from that session |
 | codex `tools` | shell calls, an `apply_patch` add, and a failing command, which Codex reports through PostToolUse |
 | codex `patches` | a patch through the shell tool, then a resume with a patch whose markers are indented |

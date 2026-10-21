@@ -95,8 +95,10 @@ function startedBy(rule, turn, transcript) {
 }
 
 // Where the turn a payload names lies in the transcript: from the first entry that carries its join value
-// to the next entry that carries another.
+// to the next entry that carries another. A payload carrying the `elsewhere` field ran in another
+// transcript, so none of this one's entries is its turn.
 function turnOf(turn, payload, transcript) {
+  if (turn.elsewhere && payload[turn.elsewhere] !== undefined) return { start: 0, end: 0 };
   const value = payload[turn.payload];
   const start = value === undefined ? -1 : transcript.findIndex((entry) => get(entry, turn.transcript) === value);
   if (start < 0) return { start: 0, end: 0 };
