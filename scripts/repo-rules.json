@@ -56,6 +56,40 @@
         }
       }
     },
+    "crates/deep-replica/Cargo.toml": {
+      "dependencies": {
+        "deep-app": {
+          "spec": "* path=../deep-app",
+          "why": "Issue #338: the app the replica is a headless copy of; its shell, views and fixture projection."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #338: the headless app context, the observed elements the snapshot reads, and the dock the slots live in."
+        },
+        "gpui-shell": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #338: mounts the registry's script panels into the shell's slots and reads their trees back."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #338: the snapshot, kit, parity and canvas files the record points at; already in gpui-kit's tree."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "objc2": {
+          "spec": "^0.6",
+          "why": "Issue #338: the live capture asks the window's accessibility elements for their frames. Already in gpui's tree."
+        },
+        "objc2-app-kit": {
+          "spec": "^0.3",
+          "why": "Issue #338: NSApplication, NSWindow and NSView for the live window's accessibility tree. Already in gpui's tree."
+        },
+        "objc2-foundation": {
+          "spec": "^0.3",
+          "why": "Issue #338: NSArray, NSRect and NSString for the live tree's children, frames and roles. Already in gpui's tree."
+        }
+      }
+    },
     "spikes/hub-core/package.json": {
       "dependencies": {
         "effect": { "spec": "4.0.5", "why": "Issue #56: the Effect 4 build of the hub-core spike, and the import(\"effect/Effect\") timing." }

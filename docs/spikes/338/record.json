@@ -1,0 +1,112 @@
+{
+  "spike": "#338: the replica and the registries. The app headless on GPUI's virtual clock, the panel registry against the app's slots, and the canvas mounted through gpui-shell's component registry with no fork.",
+  "date": "2026-10-20",
+  "machine": {
+    "model": "Mac15,12",
+    "chip": "Apple M3",
+    "memoryBytes": 17179869184,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "23H723"
+  },
+  "out": "docs/spikes/338/out",
+  "window": { "size": [1512, 982], "scale": 2 },
+  "clock": "virtual",
+  "headless": {
+    "command": ["cargo", "test", "-p", "deep-replica", "--test", "headless"],
+    "note": "crates/deep-replica/headless.rs, a libtest-free target since AppKit's offscreen Metal renderer needs the main thread; the unit lane's `cargo test --workspace --locked` runs it. It writes every file under record.out into $DEEP_338_OUT."
+  },
+  "launch": {
+    "test": "replica_launch_under_two_seconds",
+    "method": "Wall clock in the headless test from spawning the deep-replica binary, a debug build as the unit lane runs it, to the first-frame line it prints on stdout once the shell's first frame is drawn on the virtual clock (deep_replica::FIRST_FRAME). The screenshot and the files written after that line are the replica's own work and don't count. One unrecorded warm-up launch pages the freshly linked binary in; then five launches, each a new process, all recorded in launch-ms.json."
+  },
+  "views": [
+    { "id": "needs-you", "test": "needs_you_view_snapshot" },
+    { "id": "sidebar", "test": "sidebar_view_snapshot" },
+    { "id": "session", "test": "session_view_snapshot" }
+  ],
+  "needsYou": {
+    "fixture": "docs/spikes/338/fixtures/needs-you.events.jsonl",
+    "generator": "docs/spikes/338/make-fixture.mjs",
+    "log_pos": 52,
+    "now": 1800000000000,
+    "held": "ask:01MCBKEP00AF27SH36Z7R1YMBQ",
+    "panel": {
+      "file": "crates/deep-app/panels/338-needs-you/main.js",
+      "sha256": "49dd0d7c3aadf1d5f53dd5b550fa6d60e9e809b51fa8dac0114dcff00c94f550",
+      "test": "fixture_panel_rows_match_projection"
+    },
+    "kit": { "test": "fixture_panel_passes_needs_you_kit" },
+    "planted": {
+      "cap20": {
+        "file": "crates/deep-app/panels/338-cap20/main.js",
+        "sha256": "fccec903167db20abd0de9d1ed0580930385dea42fe25ea217979657278c1f0d",
+        "test": "planted_cap20_fails_kit"
+      },
+      "drop-folded": {
+        "file": "crates/deep-app/panels/338-drop-folded/main.js",
+        "sha256": "22881465490df1fec7e9654bc05a382ba3bae84b7f78407784002ad0de9e7dca",
+        "test": "planted_drop_folded_fails_kit"
+      },
+      "list-superseded": {
+        "file": "crates/deep-app/panels/338-list-superseded/main.js",
+        "sha256": "3f65271ae3d00b2ad72c0dbac17ecc41c3d28745a51bee9665f2768a6e4e60d9",
+        "test": "planted_list_superseded_fails_kit"
+      },
+      "hide-newest": {
+        "file": "crates/deep-app/panels/338-hide-newest/main.js",
+        "sha256": "cd4d339fca768730d8682f411fec0467b9b530045c3962f547caf3501ecfcbaf",
+        "test": "planted_hide_newest_fails_kit"
+      }
+    }
+  },
+  "parity": {
+    "test": "replica_equals_live_tree",
+    "scale1": { "test": "scale1_replica_differs_at_first_node" },
+    "liveCapture": "deep-live (crates/deep-replica/src/live.rs) opens the real app window at the reference window on this Mac, over the same fixture record the replica draws, and asks the window's content view for its accessibilityChildren as an assistive client would, which makes GPUI's AccessKit adapter build the tree. Eight frames later it reads GPUI's own tree (Window::debug_a11y_tree_json) for the roles, names, values and order, and walks AppKit's accessibility elements in the same pre-order for each node's accessibilityFrame, converted from screen to the content view's coordinates and to whole device pixels; the two counts must agree. The result is written to record.out/live/<view>.json and tracked; the headless parity test compares a fresh replica snapshot against it node for node."
+  },
+  "registry": {
+    "slots": {
+      "sidebar": {
+        "file": "crates/deep-app/panels/338-sidebar/main.js",
+        "sha256": "34ccf7c079dc4884a6d16b6a32af941c04cb9dec35b3a2cb07d91e35d5d92646",
+        "test": "slot_sidebar_from_registry"
+      },
+      "home": {
+        "file": "crates/deep-app/panels/338-home/main.js",
+        "sha256": "0274fedc2f61a747ea275571b55210b6d8ee53b1b40e5a0f66994b91d193e5eb",
+        "test": "slot_home_from_registry"
+      },
+      "tab": {
+        "file": "crates/deep-app/panels/338-tab/main.js",
+        "sha256": "f5f8b6219e0d54c2f253341b5e8198ed8009dce3c06eed6aad01997580026c7d",
+        "test": "slot_tab_from_registry"
+      },
+      "line": {
+        "file": "crates/deep-app/panels/338-line/main.js",
+        "sha256": "0af19d8bf5260c74242e604e0d3b30a919b518cb3337689e59769f87e9a4b69b",
+        "test": "slot_line_from_registry"
+      },
+      "replace": {
+        "file": "crates/deep-app/panels/338-needs-you/main.js",
+        "sha256": "49dd0d7c3aadf1d5f53dd5b550fa6d60e9e809b51fa8dac0114dcff00c94f550",
+        "test": "slot_replace_needs_you_from_registry",
+        "view": "needs-you"
+      }
+    },
+    "how": "Every shipped view is a gpui-base dock panel the shell's DockArea rebuilds by name from the panel registry (crates/deep-app/src/views.rs). A script's DockArea.register_panel fills the same registry under shell:deepbuild-panel/<name>, so a layout that names it in any slot is drawn through the same load path."
+  },
+  "canvas": {
+    "test": "canvas_component_in_registry",
+    "file": "crates/deep-app/panels/338-canvas/main.js",
+    "sha256": "68458a5a64fb288d8ceef86c9b257854f8e2b7d8dc298743ecaad030c8b72a34",
+    "how": "crates/deep-app/src/canvas.rs registers the Canvas component and its CanvasScene retained state into gpui-shell's component registry beside its own catalog (deep_app::components); the script creates the scene, sets an item and mounts new Canvas(scene), and the item it drew is in the replica's canvas items. No fork: gpui-kit and gpui-shell come from upstream at one commit; the only patch, rquickjs to the same commit, is in .cargo/config.toml."
+  },
+  "decision": {
+    "registryCovers": true,
+    "fork": false,
+    "row": "| The app's toolkit |",
+    "text": "#338 confirmed the choice on October 20, 2026, on the same Air. The panel registry covers every slot the issue names: a script panel registered through gpui-shell's `DockArea.register_panel` fills the sidebar, home, a tab beside a shipped view and the line, and a script Needs you replaces the shipped one, all through the one gpui-base panel registry the shipped views are themselves rebuilt from, so a layout names a script panel in any slot and the same load path draws it there. The canvas is a `Canvas` component over a retained `CanvasScene` state, registered in gpui-shell's component registry beside its own catalog and drawn from a script, with no fork: gpui-kit and gpui-shell stay upstream at one commit, and the only patch, rquickjs to that same commit, sits in `.cargo/config.toml` outside every crate manifest. The replica, `deep-replica`, opens the app headless at the reference window on GPUI's virtual clock, draws a shipped view over the fixture record of 40 open asks, and hands back a text snapshot of accessibility roles, names, values and bounds in device pixels plus the canvas items drawn, with a screenshot; its first frame is drawn 214–274 ms after spawn in a debug build, and its snapshots of Needs you, the sidebar and a session page equal the live window's accessibility tree node for node, read through AppKit on this Air, while the same views laid out at scale 1 differ at node 0. The needs-you@1 kit passed the fixture panel and failed each of the four planted faults, naming the ask each got wrong. The canvas's GPU layer stays as its own row decided, with the IOSurface handoff at 0.7–0.9 ms per frame on macOS, so nothing in the toolkit choice waits on it. The record is `docs/spikes/338/record.json`."
+  }
+}

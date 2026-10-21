@@ -1,0 +1,23 @@
+{
+  "fixture": {
+    "result": "pass"
+  },
+  "planted": {
+    "cap20": {
+      "result": "fail",
+      "names": "ask:01MCBK0180861FYX1QB7D4FH40"
+    },
+    "drop-folded": {
+      "result": "fail",
+      "names": "ask:01MCBHX7Z0FNAJRF955NVKMG9M"
+    },
+    "list-superseded": {
+      "result": "fail",
+      "names": "ask:01MCBJ6CY0S5TFRN0HAK47E2C4"
+    },
+    "hide-newest": {
+      "result": "fail",
+      "names": "ask:01MCBM4N40Z3CSTTRFF8PNDT8E"
+    }
+  }
+}

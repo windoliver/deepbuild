@@ -1,0 +1,37 @@
+[package]
+name = "deep-replica"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #338: the replica, a headless copy of the app on a virtual clock that checks run in, and
+# the live capture that reads the real app's accessibility tree. Both are tools beside the app,
+# so the app binary carries no test support.
+[dependencies]
+deep-app = { path = "../deep-app" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
+serde_json = "1"
+
+# The live capture asks AppKit for the window's accessibility children and their frames.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString", "NSGeometry"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSApplication", "NSWindow", "NSView", "NSResponder"] }
+
+[[bin]]
+name = "deep-replica"
+path = "src/main.rs"
+
+[[bin]]
+name = "deep-live"
+path = "src/live.rs"
+
+# AppKit needs the main thread for the offscreen Metal renderer, so no libtest harness; the
+# suite prints libtest's result lines. Outside tests/ for the same reason as deep-app's screens.
+[[test]]
+name = "headless"
+path = "headless.rs"
+harness = false

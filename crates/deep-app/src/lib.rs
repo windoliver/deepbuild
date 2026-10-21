@@ -3,11 +3,22 @@
 //!
 //! The panel runs under an empty gpui-shell policy plus DeepBuild's one module, `deepbuild`,
 //! which serves recorded quotes. It has no network, files, programs or storage.
+//!
+//! Issue #338 adds the app's shell with its shipped views as dock panels ([`views`]), the fixture
+//! record and inbox projection they draw ([`events`]), the canvas as a registered component
+//! ([`canvas`]), and `needs_you` in the `deepbuild` module for the fixture panels.
+
+pub mod canvas;
+pub mod events;
+pub mod views;
 
 use std::{path::Path, rc::Rc};
 
 use gpui_kit::{prelude::FluentBuilder as _, *};
-use gpui_shell::{anyhow, policy::Policy, HostModule, HostValue, ScriptView, ShellRuntime};
+use gpui_shell::{
+    anyhow, policy::Policy, FrozenComponentRegistry, HostError, HostModule, HostValue,
+    RegistryError, ScriptView, ShellRuntime,
+};
 
 pub const SESSION_COUNT: usize = 1_000;
 
@@ -85,28 +96,63 @@ pub fn menu_bar_title(sessions: &[Session]) -> String {
     waiting_count(sessions).to_string()
 }
 
-/// DeepBuild's module for panels: the recorded quotes, as plain data.
+/// DeepBuild's module for panels: the recorded quotes and the Needs you inbox, as plain data.
 pub fn deepbuild_module() -> HostModule {
-    HostModule::new("deepbuild").function("quotes", |_| {
-        let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
-        let symbols = stocks()
-            .into_iter()
-            .map(|stock| {
-                HostValue::Object(vec![
-                    ("symbol".into(), HostValue::Str(stock.symbol)),
-                    ("name".into(), HostValue::Str(stock.name)),
-                    (
-                        "prices".into(),
-                        HostValue::Array(stock.prices.into_iter().map(HostValue::Number).collect()),
-                    ),
-                ])
-            })
-            .collect();
-        Ok(HostValue::Object(vec![
-            ("interval_s".into(), json_to_host(&interval["interval_s"])),
-            ("symbols".into(), HostValue::Array(symbols)),
-        ]))
-    })
+    HostModule::new("deepbuild")
+        .function("needs_you", |_| needs_you())
+        .function("quotes", |_| {
+            let interval: serde_json::Value = serde_json::from_str(QUOTES).expect("valid JSON");
+            let symbols = stocks()
+                .into_iter()
+                .map(|stock| {
+                    HostValue::Object(vec![
+                        ("symbol".into(), HostValue::Str(stock.symbol)),
+                        ("name".into(), HostValue::Str(stock.name)),
+                        (
+                            "prices".into(),
+                            HostValue::Array(
+                                stock.prices.into_iter().map(HostValue::Number).collect(),
+                            ),
+                        ),
+                    ])
+                })
+                .collect();
+            Ok(HostValue::Object(vec![
+                ("interval_s".into(), json_to_host(&interval["interval_s"])),
+                ("symbols".into(), HostValue::Array(symbols)),
+            ]))
+        })
+}
+
+/// The inbox projection's list for Needs you, as the fixture panels read it: the rows oldest
+/// first, which of them are folded or in Later, and the asks that left the list.
+fn needs_you() -> Result<HostValue, HostError> {
+    let state = views::current_state().ok_or_else(|| {
+        HostError::new("no fixture record is loaded; the host sets one before a panel draws")
+    })?;
+    let handles = |handles: &[String]| {
+        HostValue::Array(handles.iter().cloned().map(HostValue::Str).collect())
+    };
+    Ok(HostValue::Object(vec![
+        ("now".into(), HostValue::Number(state.now as f64)),
+        (
+            "log_pos".into(),
+            HostValue::Number(state.inbox.log_pos as f64),
+        ),
+        ("rows".into(), handles(&state.inbox.rows())),
+        ("folded".into(), handles(&state.inbox.folded)),
+        ("later".into(), handles(&state.inbox.later)),
+        ("superseded".into(), handles(&state.inbox.superseded)),
+        ("moot".into(), handles(&state.inbox.moot)),
+        (
+            "held".into(),
+            state
+                .held
+                .clone()
+                .map(HostValue::Str)
+                .unwrap_or(HostValue::Null),
+        ),
+    ]))
 }
 
 fn json_to_host(value: &serde_json::Value) -> HostValue {
@@ -126,9 +172,23 @@ fn json_to_host(value: &serde_json::Value) -> HostValue {
     }
 }
 
-/// Registers gpui-shell's component catalog and DeepBuild's empty-policy default.
+/// gpui-shell's component catalog with DeepBuild's canvas beside it.
+pub fn components() -> Result<FrozenComponentRegistry, RegistryError> {
+    let mut registry = gpui_shell::components::registry()?;
+    canvas::register(&mut registry)?;
+    registry.freeze()
+}
+
+/// An isolated script runtime over [`components`].
+pub fn new_runtime() -> anyhow::Result<Rc<ShellRuntime>> {
+    ShellRuntime::new_isolated_with_components(components()?)
+}
+
+/// Registers gpui-shell's component catalog, the shipped views and DeepBuild's empty-policy
+/// default.
 pub fn init(cx: &mut App) {
     gpui_shell::components::init(cx);
+    views::register_views(cx);
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")

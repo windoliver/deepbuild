@@ -16,7 +16,7 @@ fn main() {
         init(cx);
         menu_bar::show_title(&menu_bar_title(&sessions()));
 
-        let runtime = gpui_shell::components::new_isolated_runtime().expect("panel runtime");
+        let runtime = deep_app::new_runtime().expect("panel runtime");
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::centered(size(px(960.), px(640.)), cx)),
             ..Default::default()
