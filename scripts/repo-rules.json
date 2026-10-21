@@ -33,6 +33,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #337: reads the recorded quotes the panels replay; already in gpui-kit's tree."
+        },
+        "serde": {
+          "spec": "^1",
+          "why": "Issue #339: derives the probe report's event shapes and synthetic forms. Already in gpui-kit's tree."
         }
       },
       "dev-dependencies": {
@@ -53,6 +57,26 @@
         "objc2-foundation": {
           "spec": "^0.3",
           "why": "Issue #337: NSString for the menu-bar title. Already in gpui's tree."
+        },
+        "objc2-core-foundation": {
+          "spec": "^0.3",
+          "why": "Issue #339: CGPoint, CGRect and CGSize for the capture rect and the cursor, and CFData for the frame's bytes. Already in gpui's tree."
+        },
+        "objc2-core-graphics": {
+          "spec": "^0.3",
+          "why": "Issue #339: the key event's source fields and the HID key-state table, the Screen Recording preflight and request, the one-frame capture, and the cursor warp for the recording. Already in gpui's tree."
+        },
+        "raw-window-handle": {
+          "spec": "^0.6",
+          "why": "Issue #339: reaches the cursor window's NSWindow to move it, since gpui has no window-move call. Already in gpui's tree."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #339: the captured frame as gpui's RenderImage, and the held run's frame written as a PNG. Already in gpui's tree."
+        },
+        "block2": {
+          "spec": "^0.6",
+          "why": "Issue #339: the block the NSEvent local monitor takes. Already in gpui's tree."
         }
       }
     },

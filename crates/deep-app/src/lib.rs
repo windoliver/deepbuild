@@ -7,6 +7,8 @@
 use std::{path::Path, rc::Rc};
 
 use gpui_kit::{prelude::FluentBuilder as _, *};
+
+pub mod trusted_input;
 use gpui_shell::{anyhow, policy::Policy, HostModule, HostValue, ScriptView, ShellRuntime};
 
 pub const SESSION_COUNT: usize = 1_000;
