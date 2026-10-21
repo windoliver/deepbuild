@@ -16,7 +16,7 @@
 // not this reference.
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -228,20 +228,37 @@ function runCommand(spec: CheckSpec, given: CheckContext, fault: Fault = 'none')
 }
 
 type Run = (spec: CheckSpec, ctx: CheckContext, fault?: Fault) => CheckResult;
-/** The checkout's tree as the run sees it: every path with its kind and bytes (a link, its target), in one digest. */
+/**
+ * The checkout's tree as the run sees it, in one digest: every path with its kind, its mode bits and its bytes; a
+ * link, its target text and what the target holds (a file's bytes, wherever it lies; a folder's tree), since the
+ * run reads through it.
+ */
 function snapshot(checkout: string): string {
   const hash = createHash('sha256');
-  const walk = (dir: string): void => {
+  const file = (path: string): void => {
+    hash.update(`file ${(lstatSync(path).mode & 0o777).toString(8)} `);
+    // A file the runner can't read, the run can't either; the digest records that rather than failing here.
+    try { hash.update(readFileSync(path)); } catch { hash.update('unreadable'); }
+  };
+  const walk = (dir: string, seen: Set<string>): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(dir, entry.name);
       hash.update(`\0${relative(checkout, path)}\0`);
-      if (entry.isSymbolicLink()) hash.update(`link ${readlinkSync(path)}`);
-      else if (entry.isDirectory()) { hash.update('dir'); walk(path); }
-      else if (entry.isFile()) { hash.update('file '); hash.update(readFileSync(path)); }
+      if (entry.isSymbolicLink()) {
+        hash.update(`link ${readlinkSync(path)} `);
+        let real: string | null = null;
+        try { real = realpathSync(path); } catch { hash.update('dangling'); }
+        if (real !== null && !seen.has(real)) {
+          const target = statSync(real);
+          if (target.isFile()) file(real);
+          else if (target.isDirectory()) walk(real, new Set([...seen, real]));
+        }
+      } else if (entry.isDirectory()) { hash.update(`dir ${(lstatSync(path).mode & 0o777).toString(8)}`); walk(path, seen); }
+      else if (entry.isFile()) file(path);
       else hash.update('other');
     }
   };
-  walk(checkout);
+  walk(checkout, new Set([realpathSync(checkout)]));
   return hash.digest('hex');
 }
 
@@ -255,6 +272,8 @@ function snapshot(checkout: string): string {
 function remembered(): Run {
   const runs = new Map<string, { deadline: number; result: CheckResult }>();
   return (spec, ctx, fault = 'none') => {
+    // A checkout that isn't there is the runner's `missing`, not a remembered run.
+    if (!existsSync(ctx.checkout)) return runCommand(spec, ctx, fault);
     const key = `${fault}\n${ctx.checkout}\n${snapshot(ctx.checkout)}\n${JSON.stringify(spec)}`;
     const had = runs.get(key);
     const stands = had !== undefined && (had.result.outcome === 'overran' ? ctx.deadline <= had.deadline : ctx.deadline >= had.deadline);
