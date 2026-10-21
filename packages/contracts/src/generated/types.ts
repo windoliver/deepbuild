@@ -586,6 +586,54 @@ export interface EvidencePut {
   evidence?: Array<string>;
 }
 
+/** evidence.removed@1 */
+export interface EvidenceRemoved {
+  v: 1;
+  id: string;
+  kind: "evidence.removed";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    sha256: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** evidence.stored@1 */
+export interface EvidenceStored {
+  v: 1;
+  id: string;
+  kind: "evidence.stored";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    sha256: string;
+    kind: string;
+    type: "png" | "jpeg" | "mp4" | "text" | "binary";
+    size: number;
+    origin: "deepbuild" | "you" | "agent";
+    redaction: "complete" | "incomplete" | "unknown";
+    license: string;
+    derived_from: Array<string>;
+    step_times: Array<{
+      step: string;
+      start_ms: number;
+      end_ms: number;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** guard@1 */
 export interface Guard {
   match: string;
