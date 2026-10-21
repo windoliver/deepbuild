@@ -1,0 +1,37 @@
+Acceptance tests for #339 on the base 2307398 (no implementation), run on 2026-10-20 with node 24.22.0
+in a worktree checked out at the base with only tests/acceptance/339/ added:
+
+  node --test --test-reporter=tap tests/acceptance/339/spike.test.mjs tests/acceptance/339/spike.live.test.mjs
+
+Trimmed to each test's result and error; the stack frames, which name local paths, are left out.
+Every test fails for the expected reason: the base has no spike record at docs/spikes/339/record.json.
+
+not ok 1 - \#339.8d46a78e at least 200 synthetic presses of the shortcut capture no frame, run now
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 2 - \#339.8d46a78e one frame is captured while a person holds the shortcut, run now
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 3 - \#339.8d46a78e the recorded run of at least 200 synthetic presses captured no frame, with the permission granted and the shortcut never held, as its kept output says
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 4 - \#339.8d46a78e one frame was captured while a person held the shortcut, kept as a PNG with its hash, so zero frames without the hold mean something
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 5 - \#339.da6a6508 the decision says whether macOS names an accessibility action's sender, cites the API or its documented absence, and the question card's rule for VoiceOver follows it
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 6 - \#339.da6a6508 the written answer is in the technical design's Decided row "Clicks on the question card", which no longer waits on the spike
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 7 - scope: the frame is taken through the macOS Screen Recording permission flow
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+not ok 8 - scope: a small window follows the cursor, in a kept screen recording
+  error: "no spike record at docs/spikes/339/record.json: the spike hasn't been recorded"
+# tests 8
+# pass 0
+# fail 8
+# cancelled 0
+# skipped 0
+# todo 0
+
+The validator's own tests, which plant wrong spikes in a temporary git repo, pass at the base as they must:
+
+  node --test tests/acceptance/339/validator.test.mjs
+# tests 77
+# pass 77
+# fail 0
