@@ -409,6 +409,48 @@
             "agent_id": "string",
             "agent_type": "string"
           }
+        },
+        "SubagentStop": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "stop_hook_active": "boolean",
+            "agent_id": "string",
+            "agent_type": "string",
+            "agent_transcript_path": "string",
+            "last_assistant_message": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "background_tasks": "array",
+            "session_crons": "array"
+          }
+        },
+        "TaskCompleted": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "task_id": "string",
+            "task_subject": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "task_description": "string",
+            "teammate_name": "string",
+            "team_name": "string",
+            "agent_id": "string",
+            "agent_type": "string"
+          }
         }
       }
     }
@@ -490,6 +532,14 @@
     "SessionEnd": {
       "kind": "session.end",
       "data": { "reason": "reason" }
+    },
+    "SubagentStop": {
+      "kind": "agent.stop",
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" }
+    },
+    "TaskCompleted": {
+      "kind": "task.completed",
+      "data": { "agent_task": "task_id", "title": "task_subject" }
     }
   },
   "toolKinds": {

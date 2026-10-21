@@ -24,9 +24,8 @@
       "description": "The record object this event is about."
     },
     "writer": {
-      "type": "string",
-      "pattern": "^(hook|app|cli|core|ext:[^\\s]+)$",
-      "description": "Who wrote it, from the connection; never an agent through MCP, since no deep_* tool produces this kind."
+      "const": "hook",
+      "description": "Only the hook appends this kind: an adapter maps its agent's events from hook payloads."
     },
     "actor": {
       "type": "string",
