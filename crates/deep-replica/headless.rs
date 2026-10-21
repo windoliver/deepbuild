@@ -381,12 +381,12 @@ mod suite {
 
     // Parity with the live tree.
 
+    /// A fresh replica snapshot of `view`: the replica runs every time, so a check never reads a
+    /// snapshot an earlier build left behind.
     fn replica_snapshot(view: &str) -> Snapshot {
-        let path = out().join("snapshots").join(format!("{view}.json"));
-        if !path.exists() {
-            replica(view, &out());
-        }
-        Snapshot::read(&path).expect("the replica's snapshot")
+        replica(view, &out());
+        Snapshot::read(&out().join("snapshots").join(format!("{view}.json")))
+            .expect("the replica's snapshot")
     }
 
     fn replica_equals_live_tree() {
