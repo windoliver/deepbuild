@@ -431,3 +431,22 @@ describe('table() reads rows in SQLite primary-key order', () => {
     expect((await r.table('attempts')).rows.map((x) => Number(x.attempt))).toEqual([2, 10]);
   });
 });
+
+describe('a removed worktree leaves its session', () => {
+  it('worktree.removed clears the worktree worktree.created set, live and after a rebuild', async () => {
+    const { record: r, S } = await record();
+    const app = (s: string): Connection => ({ ...core(s), writer: 'app' });
+    const owner = `session:${S}#m1`;
+    await r.append(app(S), event('worktree.created', T0 + 10, undefined, { path: '~/src/app-14', branch: 'feat/14', owner }));
+    // The owner names a message of the session; a record that keeps "#m1" in the ID writes to a session that isn't there.
+    const created = (await r.table('sessions')).rows;
+    expect(created.map((x) => [x.id, x.worktree])).toEqual([[S, '~/src/app-14']]);
+    await r.append(app(S), event('worktree.removed', T0 + 20, undefined, { path: '~/src/app-14', branch: 'feat/14', owner }));
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      const row = (await r.table('sessions')).rows.find((x) => x.id === S);
+      // A record that ignores worktree.removed still shows the removed path on the session.
+      expect([when, row?.worktree, row?.branch]).toEqual([when, null, null]);
+    }
+  });
+});

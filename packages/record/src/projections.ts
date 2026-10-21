@@ -81,7 +81,8 @@ const int = (v: unknown): number | null => (typeof v === 'number' && Number.isSa
 const json = (v: unknown): string | null => (v === undefined ? null : JSON.stringify(v));
 /** A handle's ID: `claim:01K…` reads as `01K…`. */
 const bare = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/^[a-z_]+:/, '') : null);
-const sessionOf = (v: unknown): string | null => (typeof v === 'string' && v.startsWith('session:') ? v.slice(8) : null);
+/** The session a handle names: session:<id>, or session:<id>#<message> for a message of it. */
+const sessionOf = (v: unknown): string | null => (typeof v === 'string' && v.startsWith('session:') ? v.slice(8).split('#')[0]! : null);
 const TOOL = new Set(['tool.before', 'tool.after']);
 const ENDED = new Set(['finished', 'failed']);
 
@@ -159,6 +160,12 @@ export class Projector {
       case 'worktree.created': {
         const owner = sessionOf(d.owner);
         if (owner) this.up('sessions', { id: owner, worktree: str(d.path), branch: str(d.branch) });
+        break;
+      }
+      case 'worktree.removed': {
+        // Only the worktree it names: the session may have moved to another since.
+        const owner = sessionOf(d.owner);
+        if (owner) this.stmt('UPDATE sessions SET worktree = NULL, branch = NULL WHERE id = ? AND worktree = ?').run(owner, str(d.path));
         break;
       }
       case 'transcript.archived': {
