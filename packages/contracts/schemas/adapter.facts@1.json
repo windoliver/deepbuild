@@ -190,7 +190,12 @@
             "estimated",
             "unpriced"
           ],
-          "description": "The basis a cost reading can have at best."
+          "description": "The basis a cost reading can have at best.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
         },
         "costFrom": {
           "$ref": "#/$defs/text"
@@ -754,7 +759,12 @@
               "enum": [
                 "turn",
                 "session"
-              ]
+              ],
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
             },
             "records": {
               "type": "object",
@@ -784,7 +794,12 @@
               "enum": [
                 "sum",
                 "last"
-              ]
+              ],
+              "x-closure": {
+                "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
             },
             "counts": {
               "type": "object",
@@ -981,7 +996,12 @@
         "fetch",
         "mcp",
         "unknown"
-      ]
+      ],
+      "x-closure": {
+        "closed": "the values come from agents and tools that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
+        "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
+        "mark": "extensible"
+      }
     },
     "stopCause": {
       "type": "string",
@@ -997,7 +1017,12 @@
         "agent_crashed",
         "timed_out",
         "unknown"
-      ]
+      ],
+      "x-closure": {
+        "closed": "the values come from agents and tools that add new ones; a reader at an earlier minor reads a value it does not know as unknown",
+        "reopens": "a minor that adds a member; a reader at the earlier minor takes it for unknown",
+        "mark": "extensible"
+      }
     },
     "causeMap": {
       "type": "object",
@@ -1086,7 +1111,12 @@
             "kind",
             "detail"
           ],
-          "description": "The event carries the tool call's kind and detail, or its detail alone."
+          "description": "The event carries the tool call's kind and detail, or its detail alone.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
         },
         "stop": {
           "type": "boolean",
@@ -1145,5 +1175,47 @@
       },
       "description": "A marker text, as the transcript carries it, to what it names."
     }
-  }
+  },
+  "x-rules": [
+    {
+      "id": "who-is-calling",
+      "rule": "Who is calling: a subagent's stop or permission request is not its parent's, and another tool running the agent's hooks is not the agent; a session is owned by the adapter that bound its ID first."
+    },
+    {
+      "id": "order-by-seq",
+      "rule": "Order by seq with ties by ID: a session's events sort by the seq deep-hook stamped, two with one seq by their IDs, and no two events share an ID."
+    },
+    {
+      "id": "clock-stepped-back",
+      "rule": "A clock stepped back never moves an event before its turn started: the event keeps its arrival place, stamped no earlier than the turn's first event."
+    },
+    {
+      "id": "late-event-in-stopped-turn",
+      "rule": "A late event in a stopped turn is recorded in that turn and reopens nothing: a PostToolUse after its turn's Stop changes nothing about how the turn ended."
+    },
+    {
+      "id": "unknown-not-finished",
+      "rule": "When hooks go quiet the session reads unknown rather than finished; a wait is a lease, never a finish."
+    },
+    {
+      "id": "threads-across-rotated-ids",
+      "rule": "The session map threads across rotated IDs: a start after /clear, /compact or a fork names the thread it continues."
+    },
+    {
+      "id": "one-owner-per-session",
+      "rule": "One owner per session: an answer reaches the session it was asked for and no other; another adapter only relays."
+    },
+    {
+      "id": "allow-only-from-decision",
+      "rule": "A permission answer takes allow only from decision, never from a suggestion or the text beside it."
+    },
+    {
+      "id": "unparsed-stop-reads-unknown",
+      "rule": "A stop that can't be parsed read as unknown: a cause the facts don't list is unknown, never a listed cause and never a success."
+    },
+    {
+      "id": "delivery-confirmed-from-transcript",
+      "rule": "Delivery confirmed from the transcript: an acknowledgement counts only with the transcript's sign of it."
+    }
+  ]
 }

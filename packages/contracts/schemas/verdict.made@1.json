@@ -22,7 +22,12 @@
               "BLOCKED",
               "INCONCLUSIVE",
               "pending"
-            ]
+            ],
+            "x-closure": {
+              "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+              "reopens": "a new major of this schema",
+              "mark": "exhaustive"
+            }
           },
           "check": {
             "type": "string",
@@ -41,7 +46,12 @@
               "model",
               "person"
             ],
-            "description": "Who judges it: code, a model or a person."
+            "description": "Who judges it: code, a model or a person.",
+            "x-closure": {
+              "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+              "reopens": "a new major of this schema",
+              "mark": "exhaustive"
+            }
           },
           "runs": {
             "type": "object",
@@ -104,7 +114,12 @@
               "test_run",
               "journey",
               "decision"
-            ]
+            ],
+            "x-closure": {
+              "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+              "reopens": "a new major of this schema",
+              "mark": "exhaustive"
+            }
           },
           "ask": {
             "type": "string",
@@ -298,7 +313,12 @@
                       "model",
                       "person"
                     ],
-                    "description": "Who judges it: code, a model or a person."
+                    "description": "Who judges it: code, a model or a person.",
+                    "x-closure": {
+                      "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                      "reopens": "a new major of this schema",
+                      "mark": "exhaustive"
+                    }
                   },
                   "runs": {
                     "type": "object",
@@ -361,7 +381,12 @@
                       "test_run",
                       "journey",
                       "decision"
-                    ]
+                    ],
+                    "x-closure": {
+                      "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+                      "reopens": "a new major of this schema",
+                      "mark": "exhaustive"
+                    }
                   },
                   "ask": {
                     "type": "string",

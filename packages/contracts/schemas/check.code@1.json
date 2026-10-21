@@ -1,0 +1,18 @@
+{
+  "title": "check.code@1",
+  "description": "The check catalog's codes: the one source of the findings a check run can carry about how it ran, each mapped to a verdict. exit_masked: the command's exit status is masked, so it can't fail. no_tests_ran: a run of zero tests. crashed_before_first_assertion: the suite crashed before its first assertion ran. reported_after_deadline: a result reported after the run's deadline. output_dropped: a crashed run's output was dropped. type_error_as_assertion: a TypeError thrown before the first assertion was reported as an assertion failure.",
+  "type": "string",
+  "enum": [
+    "exit_masked",
+    "no_tests_ran",
+    "crashed_before_first_assertion",
+    "reported_after_deadline",
+    "output_dropped",
+    "type_error_as_assertion"
+  ],
+  "x-closure": {
+    "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+    "reopens": "a new major of the check catalog; each code names a row of the verdict table",
+    "mark": "exhaustive"
+  }
+}

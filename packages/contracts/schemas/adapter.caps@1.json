@@ -61,5 +61,10 @@
     "errorTurnHook",
     "startTurn"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "x-closure": {
+    "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+    "reopens": "a new major of adapter.caps that adds a flag",
+    "mark": "exhaustive"
+  }
 }

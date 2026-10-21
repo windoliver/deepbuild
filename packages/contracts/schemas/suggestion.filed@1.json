@@ -84,7 +84,12 @@
             "agent",
             "plugin"
           ],
-          "description": "The canvas writer's kind: you, shell, record, agent or plugin."
+          "description": "The canvas writer's kind: you, shell, record, agent or plugin.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
         },
         "patch": {
           "type": "string",

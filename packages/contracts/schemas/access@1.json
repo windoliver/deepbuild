@@ -9,7 +9,12 @@
         "type": "string",
         "pattern": "^(files|programs|hosts|run_as_you|screen|sound|microphone|camera|clipboard|window|agent|edit_as_you|record|device:(ext\\.[a-z0-9][a-z0-9_-]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*)$",
         "description": "One access word.",
-        "maxLength": 8192
+        "maxLength": 8192,
+        "x-closure": {
+          "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+          "reopens": "a new major of access that adds a word",
+          "mark": "exhaustive"
+        }
       }
     }
   },

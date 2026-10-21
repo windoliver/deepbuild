@@ -1,11 +1,12 @@
 export type { JsonValue, Schema, SchemaEntry } from './json.js';
 export { ContractError, ERROR_CODES, type ContractIssue } from './errors.js';
 export { registry, type Registry, type Validation } from './validate.js';
-export { decode, encode, fixtures, frozenDigests, getSchema, listSchemas, validate } from './schemas.js';
+export { decode, encode, fixtures, frozenDigests, getSchema, isUntouched, listSchemas, validate } from './schemas.js';
 export type { HookAck, HookRequest } from './generated/types.js';
 export { canonicalize, sha256Hex } from './canonical.js';
 export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
 export { lintSchemas, type LintProblem } from './lint.js';
+export { compilePattern, type Inst } from './pattern.js';
 export { generateTypeScript } from './codegen-ts.js';
 export { generateRust } from './codegen-rust.js';
 export { buildCatalogue, catalogue, catalogueDrift, checkViewBindings, type CatalogueEntry } from './catalogue.js';
