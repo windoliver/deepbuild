@@ -74,10 +74,12 @@ pub enum Verdict {
 /// Counts the record keeps. A frame is counted only when a capture returned pixels.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Counts {
-    /// Presses of the shortcut delivered to this app as key events, by provenance.
+    /// Presses of the shortcut delivered to this app as key events: judged hardware (the
+    /// two fields and the chord down in the table) or refused (anything else, a real key
+    /// whose Option the table hadn't yet read included).
     pub presses: u64,
     pub hardware_presses: u64,
-    pub synthetic_presses: u64,
+    pub refused_presses: u64,
     /// Ticks on which the HID table armed the gate, and on which it released it.
     pub holds: u64,
     pub releases: u64,
@@ -112,7 +114,7 @@ impl Gate {
                     self.counts.hardware_presses += 1;
                     Verdict::Hardware
                 } else {
-                    self.counts.synthetic_presses += 1;
+                    self.counts.refused_presses += 1;
                     Verdict::Refused
                 }
             }
@@ -305,16 +307,13 @@ mod macos {
     }
 
     /// The display under a point in CG global coordinates, with its bounds in that space;
-    /// the main display when the point is on none.
-    pub fn display_at(point: CGPoint) -> (CGDirectDisplayID, CGRect) {
+    /// None when no display holds the point.
+    pub fn display_at(point: CGPoint) -> Option<(CGDirectDisplayID, CGRect)> {
         let mut display: CGDirectDisplayID = 0;
         let mut count: u32 = 0;
         // SAFETY: one slot is passed with its capacity, and both pointers outlive the call.
         let error = unsafe { CGGetDisplaysWithPoint(point, 1, &mut display, &mut count) };
-        if error != CGError::Success || count == 0 {
-            display = CGMainDisplayID();
-        }
-        (display, CGDisplayBounds(display))
+        (error == CGError::Success && count > 0).then(|| (display, CGDisplayBounds(display)))
     }
 
     /// Moves the cursor, for the recording of the cursor window. CG coordinates.
@@ -344,6 +343,9 @@ mod macos {
             }
             let buffer = image::RgbaImage::from_raw(self.width, self.height, rgba)
                 .ok_or_else(|| "the frame's size and bytes disagree".to_owned())?;
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
             buffer.save(path).map_err(|error| error.to_string())
         }
     }
@@ -354,7 +356,7 @@ mod macos {
     /// other app's windows, which would count as a frame.
     pub fn capture_around(center: CGPoint, size: Size<Pixels>) -> Option<Frame> {
         let (width, height) = (f64::from(size.width), f64::from(size.height));
-        let (display, bounds) = display_at(center);
+        let (display, bounds) = display_at(center)?;
         let (left, top) = (bounds.origin.x, bounds.origin.y);
         let x = (center.x - width / 2.0).clamp(left, left + (bounds.size.width - width).max(0.0));
         let y = (center.y - height / 2.0).clamp(top, top + (bounds.size.height - height).max(0.0));
@@ -526,7 +528,7 @@ mod macos {
                 ))
                 .child(div().px_1().h(px(16.)).child(format!(
                     "presses {} · refused {} · frames {}",
-                    counts.presses, counts.synthetic_presses, counts.frames
+                    counts.presses, counts.refused_presses, counts.frames
                 )))
         }
     }
@@ -802,7 +804,7 @@ mod tests {
                 "{provenance:?}"
             );
             assert!(!gate.held(), "{provenance:?}");
-            assert_eq!(gate.counts.synthetic_presses, 1);
+            assert_eq!(gate.counts.refused_presses, 1);
             assert_eq!(gate.counts.hardware_presses, 0);
             // The tick arms only from the HID table: the event's fields never do, and a
             // table that reads the chord down is a chord on the keyboard whatever arrived.
@@ -833,7 +835,7 @@ mod tests {
             );
         }
         assert_eq!(gate.counts.presses, 200);
-        assert_eq!(gate.counts.synthetic_presses, 200);
+        assert_eq!(gate.counts.refused_presses, 200);
         assert_eq!(gate.counts.capture_attempts, 0);
         assert_eq!(gate.counts.frames, 0);
     }

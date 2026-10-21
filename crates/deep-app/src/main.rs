@@ -253,6 +253,20 @@ mod trusted {
                     view.update(cx, |view, cx| view.tick(window, cx));
                 });
                 if updated.is_err() {
+                    // The window closed before the run ended: nothing to report as a run,
+                    // so the last line says so, and no poster is left running.
+                    if let Some(mut child) = poster.take() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "spike": 339,
+                            "blocked": "the cursor window closed before the run ended",
+                        })
+                    );
+                    cx.update(|cx| cx.quit());
                     break;
                 }
                 ever_held |= gate.borrow().held();
@@ -371,6 +385,7 @@ mod trusted {
             let shape = serde_json::json!({
                 "kind": event.kind,
                 "key_code": event.key_code,
+                "repeat": event.repeat,
                 "option": event.option,
                 "has_cg_event": event.has_cg_event,
                 "source_state": event.source_state,
@@ -406,7 +421,7 @@ mod trusted {
             "counts": {
                 "presses": counts.presses,
                 "hardware_presses": counts.hardware_presses,
-                "synthetic_presses": counts.synthetic_presses,
+                "refused_presses": counts.refused_presses,
                 "holds": counts.holds,
                 "releases": counts.releases,
                 "capture_attempts": counts.capture_attempts,
