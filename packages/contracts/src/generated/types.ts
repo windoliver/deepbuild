@@ -465,6 +465,27 @@ export interface AgentStopV2 {
   evidence?: Array<string>;
 }
 
+/** answer.refused@1 */
+export interface AnswerRefused {
+  v: 1;
+  id: string;
+  kind: "answer.refused";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    outcome: "answered" | "decided_for_you" | "escalated" | "defaulted" | "unanswerable" | "cancelled" | "superseded" | "moot" | "unanswered";
+    closed_at: number;
+    via: "card" | "inbox";
+    option: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.answered@1 */
 export interface AskAnswered {
   v: 1;
@@ -481,6 +502,41 @@ export interface AskAnswered {
     answer: string;
     plan_hash: string | null;
     decision: "allow" | "deny" | "none";
+  };
+  evidence?: Array<string>;
+}
+
+export type AskAnsweredV2PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@2 */
+export interface AskAnsweredV2 {
+  v: 2;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session";
+    verified: boolean;
+    on: AskAnsweredV2PinnedTo;
+    token: string | null;
   };
   evidence?: Array<string>;
 }
@@ -716,6 +772,114 @@ export interface AskMoot {
   };
   evidence?: Array<string>;
 }
+
+export type AskSourcesPinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskSourcesOptions = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskSourcesAsk = {
+  kind: "authority";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "unblock";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+  steps: Array<string>;
+  where: string;
+  why: string;
+  unblocks: Array<string>;
+  proves: string;
+} | {
+  kind: "taste";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "exception";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "choice";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "definition";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+};
+
+/** ask.sources@1 */
+export type AskSources = Array<{
+  source: string;
+  kind: "authority" | "unblock" | "taste" | "exception" | "choice" | "definition";
+  fixture: {
+    ask: AskSourcesAsk;
+    at_deadline: {
+      decision: "allow" | "deny" | "none";
+    };
+  };
+}>;
 
 /** ask.superseded@1 */
 export interface AskSuperseded {

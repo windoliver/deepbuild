@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "id": "doc-372-scene",
+  "profile": "scene",
+  "title": "Extend scene",
+  "description": "A still 3D scene of flat-colored dots in a plane facing the camera, with one dot above and one below the 16:9 view.",
+  "size": [1920, 1080],
+  "aspect": "extend",
+  "camera": "cam",
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
+      "params": { "projection": "perspective", "position": [0, 0, 10], "target": [0, 0, 0], "fov": 40 }
+    },
+    "a": { "id": "a", "kind": "test.dot@1", "layer": "main", "name": "Dot A", "order": "a1",
+      "params": { "radius": 0.2, "fill": [220, 60, 60] }, "at": { "pos": [0, 0, 0] } },
+    "b": { "id": "b", "kind": "test.dot@1", "layer": "main", "name": "Dot B", "order": "a2",
+      "params": { "radius": 0.2, "fill": [60, 200, 90] }, "at": { "pos": [1.5, 1, 0] } },
+    "c": { "id": "c", "kind": "test.dot@1", "layer": "main", "name": "Dot C", "order": "a3",
+      "params": { "radius": 0.2, "fill": [70, 110, 230] }, "at": { "pos": [-2, -1.25, 0] } },
+    "tl": { "id": "tl", "kind": "test.dot@1", "layer": "main", "name": "Top left dot", "order": "a4",
+      "params": { "radius": 0.15, "fill": [250, 210, 40] }, "at": { "pos": [-3.25, 1.75, 0] } },
+    "tr": { "id": "tr", "kind": "test.dot@1", "layer": "main", "name": "Top right dot", "order": "a5",
+      "params": { "radius": 0.15, "fill": [40, 220, 230] }, "at": { "pos": [3.25, 1.75, 0] } },
+    "bl": { "id": "bl", "kind": "test.dot@1", "layer": "main", "name": "Bottom left dot", "order": "a6",
+      "params": { "radius": 0.15, "fill": [230, 70, 200] }, "at": { "pos": [-3.25, -1.75, 0] } },
+    "br": { "id": "br", "kind": "test.dot@1", "layer": "main", "name": "Bottom right dot", "order": "a7",
+      "params": { "radius": 0.15, "fill": [245, 245, 245] }, "at": { "pos": [3.25, -1.75, 0] } },
+    "sky": { "id": "sky", "kind": "test.dot@1", "layer": "main", "name": "Sky dot", "order": "a8",
+      "params": { "radius": 0.2, "fill": [120, 200, 255] }, "at": { "pos": [0, 3, 0] } },
+    "floor": { "id": "floor", "kind": "test.dot@1", "layer": "main", "name": "Floor dot", "order": "a9",
+      "params": { "radius": 0.2, "fill": [140, 100, 60] }, "at": { "pos": [0, -3, 0] } }
+  }
+}

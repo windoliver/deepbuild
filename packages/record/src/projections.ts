@@ -243,7 +243,9 @@ export class Projector {
       case 'ask.cancelled':
       case 'ask.moot':
       case 'ask.superseded': {
-        // An ask closed without an answer is never asked again; one already decided keeps its answer.
+        // An ask closed without an answer is never asked again; one already decided keeps its answer. No
+        // agent closes an ask: a hook's or an MCP server's close leaves it as it was.
+        if (e.writer === 'hook' || e.writer.startsWith('mcp:')) break;
         const status = e.kind.slice(4);
         this.stmt("UPDATE asks SET status = ?, outcome = ? WHERE id = ? AND status NOT IN ('answered', 'defaulted', 'decided')").run(status, status, bare(e.subject));
         break;

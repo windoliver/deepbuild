@@ -1,0 +1,79 @@
+[
+  {
+    "source": "effect.push",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Push feature/login to origin?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Push it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Hold the push",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "d2d8657f71c5081497de05489d87e82d95083fa201453bd9297aa4a1959715e5",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "asks.fold",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "This session keeps asking: answer its asks together, pause it, or leave them to their defaults?",
+        "options": [
+          {
+            "id": "together",
+            "label": "Answer them together",
+            "decision": "none"
+          },
+          {
+            "id": "pause",
+            "label": "Pause the session",
+            "decision": "none"
+          },
+          {
+            "id": "defaults",
+            "label": "Leave them to their defaults",
+            "decision": "none"
+          }
+        ],
+        "recommended": "defaults",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "defaults",
+        "provisional": false,
+        "owner": "you",
+        "key": "85805858a6fa78bb25d6a1188b9f4fa0bc4c8e212716402f702a89d1766c481e",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "aa81be425bcb3e51ffd2e109a8597b229be4efdecf9c3687cafa308ae926c994"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  }
+]
