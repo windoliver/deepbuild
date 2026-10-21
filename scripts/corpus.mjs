@@ -244,6 +244,11 @@ const CLAUDE_SCENARIOS = [
   { name: 'subagent', steps: [
     { type: 'Use the Agent tool with a general-purpose subagent, in the background, to run the Bash command echo from-subagent. Then end your turn; report its output when it finishes.' },
     { stops: 1 }] },
+  // The task tools are on only for the models Claude Code lists, such as claude-haiku-4-5.
+  { name: 'child-gates', model: 'claude-haiku-4-5', steps: [
+    { type: 'Use the TaskCreate tool to add a task titled corpus-task, then use the TaskUpdate tool to mark it completed.' },
+    { type: 'Use the Agent tool with a general-purpose subagent to run the Bash command echo from-child. Then end your turn; report its output when it finishes.' },
+    { stops: 1 }] },
   { name: 'loop', steps: [{ type: '/loop 1m Reply with only the word tick. Do not use tools.' }, { stops: 1, ms: 150_000 }, { type: '/loop stop' }] },
   { name: 'compact', steps: [{ type: 'Use the Bash tool to run: echo before-compact' }, { type: '/compact', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'compact' }, { type: 'Reply with only the word after.' }] },
   { name: 'stop-failure', model: 'claude-nonexistent-model', steps: [{ type: 'Reply with only the word hi.' }] },

@@ -2,7 +2,7 @@
   "v": 1,
   "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
   "kind": "session.start",
-  "writer": "app",
+  "writer": "hook",
   "actor": "you",
   "scope": "you",
   "ts": 1760013451123,
