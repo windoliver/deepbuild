@@ -276,8 +276,12 @@ export class Projector {
         this.up('definitions', { ...this.definition(d, 'revised', e.ts), dispute_ask: str(d.dispute_ask) });
         break;
       case 'run.started':
-        // A run's claim, check and commit are its first start's, whichever of its start and finish came first.
-        this.once('runs', { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts }, 'started');
+      {
+        // A run's claim, check and commit are the core's start, whenever it lands; until then the first start's.
+        const start = { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts };
+        if (e.writer === 'core') this.up('runs', start);
+        else this.once('runs', start, 'started');
+      }
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'run.finished':

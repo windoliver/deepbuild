@@ -867,3 +867,41 @@ describe('a session\'s last_seen only moves forward', () => {
     }
   });
 });
+
+describe('an agent cannot hold a run\'s identity', () => {
+  it('the core\'s start of a run replaces an agent\'s earlier one, live and after a rebuild', async () => {
+    const { record: r, S } = await record();
+    await r.append(mcp(S), event('run.started', T0 + 10, undefined, { claim: `claim:${ulidAt(T0 + 1)}`, commit: 'f'.repeat(40) }));
+    await r.append(core(S), event('run.started', T0 + 20, undefined));
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      const row = (await r.table('runs')).rows[0];
+      // A record whose first start wins keeps the agent's claim and commit.
+      expect([when, row?.claim_id, row?.commit_sha]).toEqual([when, '01K74G1Z3X5V7T9R1P3N5M7K9H', '0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46']);
+    }
+  });
+});
+
+describe('a finish that lands after the session resumed', () => {
+  it('does not exempt the session at recovery: its open claim reads INVALID', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(S), event('user.ask', T0 + 20, seqAt(T0 + 20)));
+    // The finish of the turn before reaches the hub after the new prompt.
+    await r.append(app(S), { ...event('session.attention', T0 + 10, undefined, { state: 'finished' }), subject: `session:${S}` });
+    const claim = event('claim.made', T0 + 30, undefined);
+    await r.append(app(S), claim);
+    const B = ulidAt(T0 + 35);
+    await r.append(hook(B), event('session.start', T0 + 35, undefined));
+    const v = data('verdict.made') as Record<string, string>;
+    await r.append(core(B), { v: 1, id: ulidAt(T0 + 36), kind: 'verdict.made', ts: T0 + 36, subject: v.claim!, data: v as unknown as JsonValue });
+    await Promise.all(Array.from({ length: 50 }, (_, j) => r.append(hook(S), event('tool.after', T0 + 40 + j, seqAt(T0 + 40 + j)))));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    // A recovery that trusts the session's last status reads it ended and leaves the claim open.
+    expect((await r.table('claims')).rows.find((x) => x.id === claim.id)?.verdict_id ?? null).not.toBeNull();
+  });
+});
