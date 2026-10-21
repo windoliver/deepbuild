@@ -197,7 +197,11 @@ fn session_line(input: &Map<String, Value>) -> Value {
     if viewport[0] <= 0.0 || viewport[1] <= 0.0 {
         return bad_input();
     }
-    match session::run(doc, viewport, inputs) {
+    let reduced_motion = input
+        .get("reduced_motion")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    match session::run(doc, viewport, inputs, reduced_motion) {
         Ok(out) => out,
         Err(refused) => refused.to_json(),
     }

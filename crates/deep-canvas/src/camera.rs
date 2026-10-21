@@ -41,6 +41,26 @@ pub type Vec3 = [f64; 3];
 pub enum Projection {
     Perspective,
     Orthographic,
+    /// Orthographic from the isometric elevation, atan(1/√2), the house style for figures.
+    Isometric,
+}
+
+/// The isometric view's elevation in degrees: every world axis foreshortens alike.
+pub const ISOMETRIC_ELEVATION: f64 = 35.264_389_682_754_654;
+
+/// Flicks in one second, the session's clock unit.
+pub const FLICKS_PER_SECOND: i64 = crate::grammar::FLICKS_PER_SECOND;
+
+/// The eased share of a move at `s` of its span (in_out_cubic, the design's default ease),
+/// clamped to the move.
+pub fn ease_in_out_cubic(s: f64) -> f64 {
+    let s = s.clamp(0.0, 1.0);
+    if s < 0.5 {
+        4.0 * s * s * s
+    } else {
+        let r = -2.0 * s + 2.0;
+        1.0 - r * r * r / 2.0
+    }
 }
 
 /// What the camera turns about under the viewer's drag.
@@ -60,8 +80,29 @@ pub enum ZoomAt {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Orbit {
     pub azimuth: f64,
-    pub elevation: f64,
+    /// Absent: 30°, or the isometric elevation under that projection.
+    pub elevation: Option<f64>,
     pub distance: Option<f64>,
+}
+
+/// `user.pan.edge`: a pan while the pointer rests within `margin` px of the view's edge, at
+/// `rate` view widths a second.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Edge {
+    pub margin: f64,
+    pub rate: f64,
+}
+
+/// `fit`: framing the kept items once, in closed form from their bounds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fit {
+    pub keep: Vec<String>,
+    /// Each side of the bounds widened by this share of their extent.
+    pub pad: f64,
+    /// Where the kept items' centre lands, as fractions of the frame.
+    pub place: [f64; 2],
+    /// The share of the shorter side the kept items span.
+    pub fill: f64,
 }
 
 /// The `user` field (viewer class): how the viewer's input moves the camera.
@@ -81,6 +122,10 @@ pub struct User {
     pub pan_bounds_content: bool,
     pub pan_margin: f64,
     pub zoom_at: ZoomAt,
+    /// Log zoom per px of scroll: a scroll of `delta` px zooms by exp(−delta · zoom_rate), so
+    /// a wheel up (negative) zooms in.
+    pub zoom_rate: f64,
+    pub pan_edge: Option<Edge>,
 }
 
 /// A `camera@1` item's fields as read from its params.
@@ -95,6 +140,9 @@ pub struct Spec {
     pub fov: f64,
     pub shift: [f64; 2],
     pub user: User,
+    pub fit: Option<Fit>,
+    /// `yield.ease_back`: the seconds a reset takes to ease the offsets out.
+    pub ease_back: f64,
 }
 
 /// The authored pose the viewer's offsets apply to: the orbit angles and distance of the eye
@@ -265,8 +313,6 @@ impl Spec {
     /// `orbit`, `user` and `user.pan` have no registry schema, so their defaults live here.
     pub fn read(params: &Map<String, Value>, path: &str) -> Result<Spec, Refused> {
         let at = |field: &str| format!("{path}/{field}");
-        // An isometric view has fixed angles the design does not state yet: refused, not
-        // guessed, as `fit` is.
         let projection = match choice(
             params.get("projection"),
             &at("projection"),
@@ -274,13 +320,7 @@ impl Spec {
             "perspective",
         )? {
             "orthographic" => Projection::Orthographic,
-            "isometric" => {
-                return Err(Refused::new(
-                    "out_of_range",
-                    at("projection"),
-                    "isometric is not evaluated in this build; use orthographic with an orbit",
-                ))
-            }
+            "isometric" => Projection::Isometric,
             _ => Projection::Perspective,
         };
         let target = vector(params.get("target").unwrap_or(&Value::Null), &at("target"))?;
@@ -297,9 +337,13 @@ impl Spec {
                     None | Some(Value::Null) => None,
                     some => Some(number(some, &at("orbit/distance"))?),
                 };
+                let elevation = match fields.get("elevation") {
+                    None | Some(Value::Null) => None,
+                    some => Some(number(some, &at("orbit/elevation"))?),
+                };
                 Some(Orbit {
                     azimuth: number_or(fields.get("azimuth"), &at("orbit/azimuth"), 45.0)?,
-                    elevation: number_or(fields.get("elevation"), &at("orbit/elevation"), 30.0)?,
+                    elevation,
                     distance,
                 })
             }
@@ -310,6 +354,23 @@ impl Spec {
                 at("orbit"),
                 "a camera has a position or an orbit, not both",
             ));
+        }
+        // The isometric elevation is fixed; a heading (the orbit's azimuth) is still a choice.
+        if projection == Projection::Isometric {
+            if position.is_some() {
+                return Err(Refused::new(
+                    "out_of_range",
+                    at("position"),
+                    "an isometric camera has a fixed elevation; give an orbit azimuth",
+                ));
+            }
+            if orbit.is_some_and(|o| o.elevation.is_some()) {
+                return Err(Refused::new(
+                    "out_of_range",
+                    at("orbit/elevation"),
+                    "fixed by the isometric projection",
+                ));
+            }
         }
         let roll = number(params.get("roll"), &at("roll"))?;
         let view_width = match params.get("view_width") {
@@ -325,16 +386,134 @@ impl Spec {
         }
         let fov = number(params.get("fov"), &at("fov"))?;
         let shift = vector(params.get("shift").unwrap_or(&Value::Null), &at("shift"))?;
-        // Framing (Camera `camera@1`: framing) is solved from the kept items' bounds, which
-        // this slice does not evaluate: a document asking for it is refused, never framed by
-        // the authored pose as if it had not asked.
-        if params.get("fit").is_some_and(|v| !v.is_null()) {
-            return Err(Refused::new(
-                "out_of_range",
-                at("fit"),
-                "framing is not evaluated in this build; leave fit unset",
-            ));
+        // Framing (Camera `camera@1`: framing) sets the distance or view width and the target
+        // from the kept items' bounds, so a position, a view width or an orbit distance
+        // beside it would contradict it.
+        let fit = match params.get("fit") {
+            None | Some(Value::Null) => None,
+            Some(v) => {
+                let fit_path = at("fit");
+                let f = object(Some(v), &fit_path)?;
+                closed(&f, &fit_path, &["keep", "pad", "avoid", "place", "fill"])?;
+                let keep = f
+                    .get("keep")
+                    .and_then(Value::as_array)
+                    .filter(|k| !k.is_empty() && k.iter().all(Value::is_string))
+                    .ok_or_else(|| {
+                        Refused::new("out_of_range", format!("{fit_path}/keep"), "not item IDs")
+                    })?
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect();
+                // An overlay to avoid is the app's chrome, whose geometry no frame here has:
+                // asked to avoid it, framing refuses rather than frames as if it were not asked.
+                if choice(
+                    f.get("avoid"),
+                    &format!("{fit_path}/avoid"),
+                    &["overlay", "none"],
+                    "none",
+                )? == "overlay"
+                {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        format!("{fit_path}/avoid"),
+                        "no overlay is evaluated in this build; use none",
+                    ));
+                }
+                let place_path = format!("{fit_path}/place");
+                let place = match f.get("place") {
+                    None | Some(Value::Null) => [0.5, 0.5],
+                    Some(Value::String(s)) => match s.as_str() {
+                        "thirds_left" => [1.0 / 3.0, 0.5],
+                        "thirds_right" => [2.0 / 3.0, 0.5],
+                        _ => {
+                            return Err(Refused::new(
+                                "out_of_range",
+                                place_path,
+                                "two fractions, thirds_left or thirds_right",
+                            ))
+                        }
+                    },
+                    Some(v) => vector(v, &place_path)?,
+                };
+                if !place.iter().all(|f| (0.0..=1.0).contains(f)) {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        place_path,
+                        "fractions of the frame, 0 to 1",
+                    ));
+                }
+                let pad = number_or(f.get("pad"), &format!("{fit_path}/pad"), 0.08)?;
+                let fill = number_or(f.get("fill"), &format!("{fit_path}/fill"), 0.6)?;
+                if pad < 0.0 {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        format!("{fit_path}/pad"),
+                        "below 0",
+                    ));
+                }
+                if !(fill > 0.0 && fill <= 1.0) {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        format!("{fit_path}/fill"),
+                        "a share above 0, up to 1",
+                    ));
+                }
+                if position.is_some() {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        at("position"),
+                        "framing sets the distance; give an orbit without one",
+                    ));
+                }
+                if view_width.is_some() {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        at("view_width"),
+                        "framing sets the view width",
+                    ));
+                }
+                if orbit.is_some_and(|o| o.distance.is_some()) {
+                    return Err(Refused::new(
+                        "out_of_range",
+                        at("orbit/distance"),
+                        "framing sets the distance",
+                    ));
+                }
+                Some(Fit {
+                    keep,
+                    pad,
+                    place,
+                    fill,
+                })
+            }
+        };
+        let yield_path = at("yield");
+        let y = object(params.get("yield"), &yield_path)?;
+        closed(&y, &yield_path, &["resume_after", "ease_back", "ease"])?;
+        // A shot resumes after `resume_after`; no shot plays here, so it is read and held.
+        let resume_after = number_or(
+            y.get("resume_after"),
+            &format!("{yield_path}/resume_after"),
+            4.0,
+        )?;
+        let ease_back = number_or(y.get("ease_back"), &format!("{yield_path}/ease_back"), 1.2)?;
+        if resume_after < 0.0 || ease_back < 0.0 {
+            return Err(Refused::new("out_of_range", yield_path, "seconds below 0"));
         }
+        choice(
+            y.get("ease"),
+            &format!("{yield_path}/ease"),
+            &["in_out_cubic"],
+            "in_out_cubic",
+        )?;
+        choice(
+            params.get("reduced_motion"),
+            &at("reduced_motion"),
+            &["hold"],
+            "hold",
+        )?;
 
         let user_path = at("user");
         let u = object(params.get("user"), &user_path)?;
@@ -346,7 +525,6 @@ impl Spec {
                 "tilt",
                 "pitch",
                 "zoom",
-                // Zoom per px of scroll: accepted, but no scroll input reaches this slice.
                 "zoom_rate",
                 "pivot",
                 "yaw",
@@ -356,9 +534,30 @@ impl Spec {
         )?;
         let pan_path = format!("{user_path}/pan");
         let pan = object(u.get("pan"), &pan_path)?;
-        // `pan.edge` (goto and edge pan) needs the session's clock and focus, which this slice
-        // has no surface for, so a document that sets it is refused rather than read and ignored.
-        closed(&pan, &pan_path, &["bounds", "margin"])?;
+        closed(&pan, &pan_path, &["bounds", "margin", "edge"])?;
+        let edge_path = format!("{pan_path}/edge");
+        let pan_edge = match pan.get("edge") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) if s == "none" => None,
+            Some(Value::Object(e)) => {
+                closed(e, &edge_path, &["margin", "rate"])?;
+                let edge = Edge {
+                    margin: number_or(e.get("margin"), &format!("{edge_path}/margin"), 8.0)?,
+                    rate: number_or(e.get("rate"), &format!("{edge_path}/rate"), 0.5)?,
+                };
+                if edge.margin < 0.0 || edge.rate < 0.0 {
+                    return Err(Refused::new("out_of_range", edge_path, "below 0"));
+                }
+                Some(edge)
+            }
+            Some(_) => {
+                return Err(Refused::new(
+                    "out_of_range",
+                    edge_path,
+                    "{margin, rate} or none",
+                ))
+            }
+        };
         let user = User {
             turn: number_or(u.get("turn"), &format!("{user_path}/turn"), 0.25)?,
             tilt: number_or(u.get("tilt"), &format!("{user_path}/tilt"), 0.25)?,
@@ -390,12 +589,30 @@ impl Spec {
                 "center" => ZoomAt::Center,
                 _ => ZoomAt::Pointer,
             },
+            zoom_rate: number_or(u.get("zoom_rate"), &format!("{user_path}/zoom_rate"), 0.005)?,
+            pan_edge,
         };
         if user.zoom[0] <= 0.0 {
             return Err(Refused::new(
                 "out_of_range",
                 format!("{user_path}/zoom"),
                 "not above 0",
+            ));
+        }
+        // Pivot eye never moves the eye, and an edge pan moves the target with it.
+        if user.pivot == Pivot::Eye && user.pan_edge.is_some() {
+            return Err(Refused::new(
+                "out_of_range",
+                edge_path,
+                "pivot eye never moves the eye; an edge pan needs pivot target",
+            ));
+        }
+        // A rate below 0 would turn a wheel up into a zoom out; 0 is a wheel that zooms nothing.
+        if user.zoom_rate < 0.0 {
+            return Err(Refused::new(
+                "out_of_range",
+                format!("{user_path}/zoom_rate"),
+                "below 0",
             ));
         }
         if user.pan_margin < 0.0 {
@@ -415,6 +632,8 @@ impl Spec {
             fov,
             shift,
             user,
+            fit,
+            ease_back,
         })
     }
 
@@ -426,8 +645,14 @@ impl Spec {
         let flat = self.projection == Projection::Orthographic
             && self.position.is_none()
             && self.orbit.is_none();
+        let default_elevation = if self.projection == Projection::Isometric {
+            ISOMETRIC_ELEVATION
+        } else {
+            30.0
+        };
+        // Framing fills the view width and the distance in (Spec::frame); 1 holds their place.
         if flat {
-            let Some(view_width) = self.view_width else {
+            let Some(view_width) = self.view_width.or(self.fit.as_ref().map(|_| 1.0)) else {
                 return Err(Refused::new(
                     "out_of_range",
                     format!("{path}/view_width"),
@@ -472,11 +697,13 @@ impl Spec {
         } else {
             let orbit = self.orbit.unwrap_or(Orbit {
                 azimuth: 45.0,
-                elevation: 30.0,
+                elevation: None,
                 distance: None,
             });
+            let elevation = orbit.elevation.unwrap_or(default_elevation);
             let distance = match (orbit.distance, self.view_width) {
                 (Some(d), _) => d,
+                (None, None) if self.fit.is_some() => 1.0,
                 (None, Some(w)) if self.perspective() => w / (2.0 * tan(rad(self.fov) / 2.0)),
                 (None, Some(_)) => 1.0,
                 (None, None) => {
@@ -487,7 +714,7 @@ impl Spec {
                     ))
                 }
             };
-            (orbit.azimuth, orbit.elevation, distance)
+            (orbit.azimuth, elevation, distance)
         };
         if distance <= 0.0 {
             return Err(Refused::new(
@@ -499,6 +726,7 @@ impl Spec {
         let view_width = match self.view_width {
             Some(w) => w,
             None if self.perspective() => 2.0 * distance * tan(rad(self.fov) / 2.0),
+            None if self.fit.is_some() => 1.0,
             None => {
                 return Err(Refused::new(
                     "out_of_range",
@@ -538,6 +766,134 @@ impl Spec {
     /// authored one, copied and never recomputed, and the zoom narrows the field of view; about
     /// the target the zoom brings the eye nearer. A flat camera pans its target and divides its
     /// view width by the zoom.
+    /// Framing (Camera `camera@1`: framing): from the kept items' bounds, widened by
+    /// `pad`, the view width (flat, orthographic) or the distance (perspective) that makes
+    /// them span `fill` of the frame's shorter side, then the target that puts their centre
+    /// at `place`. Closed form: in perspective the nearest corner sets the distance, so the
+    /// bounds never spill past the fill and a symmetric box meets it exactly.
+    pub fn frame(
+        &mut self,
+        rig: &mut Rig,
+        bounds: [Vec3; 2],
+        frame: [f64; 2],
+        path: &str,
+    ) -> Result<(), Refused> {
+        let Some(fit) = self.fit.clone() else {
+            return Ok(());
+        };
+        // The kept span, as a fraction of each side, must fit about `place`: framing never
+        // pushes the subject out of the frame.
+        let shorter = frame[0].min(frame[1]);
+        let span = fit.fill * shorter;
+        for (place, side) in fit.place.iter().zip(frame) {
+            let half = span / 2.0 / side;
+            if *place < half || *place > 1.0 - half {
+                return Err(Refused::new(
+                    "out_of_range",
+                    format!("{path}/fit/place"),
+                    "the kept items would leave the frame; move place in or lower fill",
+                ));
+            }
+        }
+        let extent = sub(bounds[1], bounds[0]);
+        let low = sub(bounds[0], scale(extent, fit.pad));
+        let high = add(bounds[1], scale(extent, fit.pad));
+        let centre = scale(add(low, high), 0.5);
+        let corners: Vec<Vec3> = (0..8)
+            .map(|i| {
+                [
+                    if i & 1 == 0 { low[0] } else { high[0] },
+                    if i & 2 == 0 { low[1] } else { high[1] },
+                    if i & 4 == 0 { low[2] } else { high[2] },
+                ]
+            })
+            .collect();
+        // The screen basis: a flat page, or the view from the orbit's direction, turned by
+        // the roll as the projector turns the frame (Projector::project).
+        let (right, up, toward_eye) = if rig.flat {
+            ([1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0])
+        } else {
+            let direction = orbit_direction(rig.azimuth, rig.elevation);
+            let (right, up) = screen_basis(scale(direction, -1.0));
+            (right, up, direction)
+        };
+        let (cos_roll, sin_roll) = (cos(rad(self.roll)), sin(rad(self.roll)));
+        let (right, up) = (
+            add(scale(right, cos_roll), scale(up, sin_roll)),
+            add(scale(right, -sin_roll), scale(up, cos_roll)),
+        );
+        let coords: Vec<(f64, f64, f64)> = corners
+            .iter()
+            .map(|c| {
+                let d = sub(*c, centre);
+                (dot(d, right), dot(d, up), dot(d, toward_eye))
+            })
+            .collect();
+        let half = span / 2.0;
+        let (mut target, px_per_unit);
+        if self.perspective() {
+            let focal = (frame[0].max(frame[1]) / 2.0) / tan(rad(self.fov) / 2.0);
+            // Each corner projects within the half span about the centre's image:
+            // |r|·focal ÷ (d − depth) ≤ half. Then, the target moved by k·side·d ÷ focal to
+            // put the centre at place, each corner's image (r − k·side·d ÷ focal)·focal ÷
+            // (d − depth) must stay inside the frame, [−(½ + shift)·side, (½ − shift)·side]
+            // about the frame's centre: linear in d, so the farthest corner sets it.
+            let k = [
+                0.5 + self.shift[0] - fit.place[0],
+                fit.place[1] - 0.5 - self.shift[1],
+            ];
+            let inside = |value: f64, depth: f64, axis: usize| -> f64 {
+                let side = frame[axis];
+                let (lo, hi) = (
+                    -(0.5 + self.shift[axis]) * side,
+                    (0.5 - self.shift[axis]) * side,
+                );
+                // Screen y runs down while the target moves up by k·side·d ÷ focal, so the
+                // offset enters the y image with the other sign.
+                let k = if axis == 0 { k[0] } else { -k[1] };
+                let under_hi = (value * focal + hi * depth) / (hi + k * side);
+                let over_lo = (value * focal + lo * depth) / (lo + k * side);
+                under_hi.max(over_lo)
+            };
+            let distance = coords
+                .iter()
+                .map(|(r, u, depth)| {
+                    (depth + r.abs().max(u.abs()) * focal / half)
+                        .max(inside(*r, *depth, 0))
+                        .max(inside(-u, *depth, 1))
+                })
+                .fold(f64::MIN, f64::max)
+                .max(f64::MIN_POSITIVE);
+            rig.distance = distance;
+            rig.view_width = 2.0 * distance * tan(rad(self.fov) / 2.0);
+            target = centre;
+            px_per_unit = focal / distance;
+        } else {
+            let (mut r0, mut r1, mut u0, mut u1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+            for (r, u, _) in &coords {
+                r0 = r0.min(*r);
+                r1 = r1.max(*r);
+                u0 = u0.min(*u);
+                u1 = u1.max(*u);
+            }
+            let widest = (r1 - r0).max(u1 - u0).max(f64::MIN_POSITIVE);
+            rig.view_width = frame[0] * widest / span;
+            px_per_unit = frame[0] / rig.view_width;
+            // The projected box's centre, not the bounds', is what lands at place.
+            target = add(
+                centre,
+                add(scale(right, (r0 + r1) / 2.0), scale(up, (u0 + u1) / 2.0)),
+            );
+        }
+        // Moving the target by a view-plane offset moves the centre's image the other way;
+        // the shift moves the frame's centre, and place is a fraction of the frame itself.
+        let dx = (0.5 + self.shift[0] - fit.place[0]) * frame[0] / px_per_unit;
+        let dy = (fit.place[1] - 0.5 - self.shift[1]) * frame[1] / px_per_unit;
+        target = add(target, add(scale(right, dx), scale(up, dy)));
+        self.target = target;
+        Ok(())
+    }
+
     pub fn pose(&self, rig: &Rig, offsets: &Offsets) -> Pose {
         if rig.flat {
             let target = [
@@ -646,6 +1002,16 @@ pub fn cross(a: Vec3, b: Vec3) -> Vec3 {
     ]
 }
 
+/// Screen right and up for a view looking along `forward`, +Y up; straight up or down keeps
+/// +X as right.
+pub fn screen_basis(forward: Vec3) -> (Vec3, Vec3) {
+    let mut right = normalize(cross(forward, [0.0, 1.0, 0.0]));
+    if length(right) == 0.0 {
+        right = [1.0, 0.0, 0.0];
+    }
+    (right, cross(right, forward))
+}
+
 pub fn length(a: Vec3) -> f64 {
     sqrt(dot(a, a))
 }
@@ -700,12 +1066,7 @@ impl Projector {
             ([1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0])
         } else {
             let forward = normalize(sub(pose.target, pose.position));
-            let mut right = normalize(cross(forward, [0.0, 1.0, 0.0]));
-            if length(right) == 0.0 {
-                // Looking straight up or down: keep +X as right.
-                right = [1.0, 0.0, 0.0];
-            }
-            let up = cross(right, forward);
+            let (right, up) = screen_basis(forward);
             (right, up, forward)
         };
         let centre = [
@@ -727,6 +1088,16 @@ impl Projector {
 
     pub fn pose(&self) -> &Pose {
         &self.pose
+    }
+
+    /// A step of screen right and screen down, as the frame is rolled, in the document's
+    /// space on the view plane.
+    pub fn screen_step(&self, right: f64, down: f64) -> Vec3 {
+        let (ux, uy) = (
+            right * self.cos_roll + down * self.sin_roll,
+            -right * self.sin_roll + down * self.cos_roll,
+        );
+        sub(scale(self.right, ux), scale(self.up, uy))
     }
 
     /// Where a point of the document lands, or `None` behind a perspective eye.
@@ -838,18 +1209,22 @@ mod tests {
     }
 
     #[test]
-    fn a_fit_a_negative_pan_margin_and_an_edge_pan_are_refused() {
-        let params = json!({"projection": "orthographic", "view_width": 100, "fit": {"keep": []}});
+    fn an_empty_fit_a_negative_pan_margin_and_a_negative_edge_rate_are_refused() {
+        let params = json!({"projection": "orthographic", "fit": {"keep": []}});
         let err = read(params).unwrap_err();
-        assert_eq!(err.path, "items/cam/params/fit");
+        assert_eq!(err.path, "items/cam/params/fit/keep");
         for (user, path) in [
             (
                 json!({"pan": {"margin": -0.6}}),
                 "items/cam/params/user/pan/margin",
             ),
             (
-                json!({"pan": {"edge": {"margin": 8, "rate": 0.5}}}),
+                json!({"pan": {"edge": {"margin": 8, "rate": -0.5}}}),
                 "items/cam/params/user/pan/edge",
+            ),
+            (
+                json!({"zoom_rate": -0.01}),
+                "items/cam/params/user/zoom_rate",
             ),
         ] {
             let params = json!({"projection": "orthographic", "view_width": 100, "user": user});
@@ -882,5 +1257,47 @@ mod tests {
         let params = json!({"position": [0, 0, 1], "orbit": {"distance": 1}});
         let err = read(params).unwrap_err();
         assert_eq!(err.path, "items/cam/params/orbit");
+    }
+
+    #[test]
+    fn a_fit_avoiding_an_overlay_is_refused_where_no_overlay_is_evaluated() {
+        let err =
+            read(json!({"projection": "orthographic", "fit": {"keep": ["r"], "avoid": "overlay"}}))
+                .unwrap_err();
+        assert_eq!(err.path, "items/cam/params/fit/avoid");
+    }
+
+    #[test]
+    fn an_edge_pan_under_pivot_eye_is_refused() {
+        let err =
+            read(json!({"orbit": {"distance": 5}, "user": {"pivot": "eye", "pan": {"edge": {}}}}))
+                .unwrap_err();
+        assert_eq!(err.path, "items/cam/params/user/pan/edge");
+    }
+
+    #[test]
+    fn an_isometric_camera_is_orthographic_at_the_isometric_elevation_and_takes_no_position() {
+        let rig = spec(json!({"projection": "isometric", "view_width": 10}))
+            .rig("items/cam/params")
+            .unwrap();
+        assert!(!rig.flat);
+        assert_eq!(rig.azimuth, 45.0);
+        assert!(
+            (rig.elevation - 35.264_389_682_754_654).abs() < 1e-9,
+            "{}",
+            rig.elevation
+        );
+        let turned =
+            spec(json!({"projection": "isometric", "view_width": 10, "orbit": {"azimuth": 135}}))
+                .rig("items/cam/params")
+                .unwrap();
+        assert_eq!(turned.azimuth, 135.0);
+        let err = read(json!({"projection": "isometric", "view_width": 10, "position": [1, 1, 1]}))
+            .unwrap_err();
+        assert_eq!(err.path, "items/cam/params/position");
+        let err =
+            read(json!({"projection": "isometric", "view_width": 10, "orbit": {"elevation": 10}}))
+                .unwrap_err();
+        assert_eq!(err.path, "items/cam/params/orbit/elevation");
     }
 }
