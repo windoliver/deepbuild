@@ -15,7 +15,8 @@
 // suite under a tracer it can't write to (another user, a container, OS tracing); that is an extension's runner,
 // not this reference.
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -151,11 +152,14 @@ interface Ended { status: number | null; signal: string | null; timedOut: boolea
 type Fault = 'none' | 'ignores-mask' | 'host-env';
 
 /** Runs the command as the reference runner does, or with one planted fault. */
-function runCommand(spec: CheckSpec, ctx: CheckContext, fault: Fault = 'none'): CheckResult {
+function runCommand(spec: CheckSpec, given: CheckContext, fault: Fault = 'none'): CheckResult {
   const result = (outcome: RunOutcome, rest: Partial<CheckResult> = {}): CheckResult => ({ outcome, testsRun: 0, failures: [], evidence: [], read: [], mask: null, ...rest });
   const mask = fault === 'ignores-mask' ? null : maskIn(spec.runner);
   if (mask !== null) return result('uncounted', { mask });
-  if (!existsSync(ctx.checkout)) return result('missing');
+  if (!existsSync(given.checkout)) return result('missing');
+  // The tracer and the test reporter name files by their real paths; a checkout reached through a link (macOS's
+  // temp folder, say) is compared by its real path too, or nothing the run read would count as under it.
+  const ctx: CheckContext = { ...given, checkout: realpathSync(given.checkout) };
   // A cleared environment: the allowlisted host variables, a home of its own, DO_NOT_TRACK, and the runner's own.
   const kept = Object.fromEntries(ALLOWED.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]!]));
   const hidden = untraced(spec.runner, ctx.checkout, kept);
@@ -224,16 +228,34 @@ function runCommand(spec: CheckSpec, ctx: CheckContext, fault: Fault = 'none'): 
 }
 
 type Run = (spec: CheckSpec, ctx: CheckContext, fault?: Fault) => CheckResult;
+/** The checkout's tree as the run sees it: every path with its kind and bytes (a link, its target), in one digest. */
+function snapshot(checkout: string): string {
+  const hash = createHash('sha256');
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(dir, entry.name);
+      hash.update(`\0${relative(checkout, path)}\0`);
+      if (entry.isSymbolicLink()) hash.update(`link ${readlinkSync(path)}`);
+      else if (entry.isDirectory()) { hash.update('dir'); walk(path); }
+      else if (entry.isFile()) { hash.update('file '); hash.update(readFileSync(path)); }
+      else hash.update('other');
+    }
+  };
+  walk(checkout);
+  return hash.digest('hex');
+}
+
 /**
  * One kit's runs, remembered: the planted runners are the reference's result with one fault applied after the
- * run, so a case the reference already ran on the same checkout, command and fault is answered from that run
- * rather than run again (a run that ended within its deadline ends the same under a longer one; a run that
- * overran its deadline overruns a shorter one). Each caller gets its own copy to bend.
+ * run, so a case the reference already ran is answered from that run rather than run again. A run stands for
+ * the same spec and fault on a checkout whose every byte is the same, under a deadline it would end the same
+ * under (a run that ended within its deadline ends the same under a longer one; a run that overran its deadline
+ * overruns a shorter one); anything else is another run. Each caller gets its own copy to bend.
  */
 function remembered(): Run {
   const runs = new Map<string, { deadline: number; result: CheckResult }>();
   return (spec, ctx, fault = 'none') => {
-    const key = `${fault}\n${ctx.checkout}\n${spec.runner}`;
+    const key = `${fault}\n${ctx.checkout}\n${snapshot(ctx.checkout)}\n${JSON.stringify(spec)}`;
     const had = runs.get(key);
     const stands = had !== undefined && (had.result.outcome === 'overran' ? ctx.deadline <= had.deadline : ctx.deadline >= had.deadline);
     if (had !== undefined && stands) return structuredClone(had.result);

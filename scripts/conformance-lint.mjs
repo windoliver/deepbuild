@@ -19,11 +19,17 @@ report('enum closures', lintSchemas(listSchemas()).map((p) => `${p.schema}${p.pa
 report('code mappings', unmappedCodes().map((u) => `${u.family} ${u.code} maps to no verdict`), 'every family code maps to a verdict');
 for (const kit of kits()) report(`kit ${kit.name}`, kitProblems(kit).map((p) => `${p.check} ${p.name}: ${p.reason}`), `${kit.fakes.length} fakes killed, ${kit.planted.length} planted codes raised alone`);
 // The slot kits run beside each other, each in a worker (conformance-lint-slot.mjs), and report in order.
+// A kit's check counts only when its worker posted one list of problems and then exited 0.
 const slotProblems = (slot) => new Promise((resolve, reject) => {
   const worker = new Worker(new URL('./conformance-lint-slot.mjs', import.meta.url), { workerData: slot });
-  worker.once('message', resolve);
+  const posted = [];
+  worker.on('message', (m) => posted.push(m));
   worker.once('error', reject);
-  worker.once('exit', (code) => { if (code !== 0) reject(Error(`the ${slot} kit check exited ${code}`)); });
+  worker.once('exit', (code) => {
+    if (code !== 0) reject(Error(`the ${slot} kit check exited ${code}`));
+    else if (posted.length !== 1 || !Array.isArray(posted[0])) reject(Error(`the ${slot} kit check posted ${posted.length} results, not one list`));
+    else resolve(posted[0]);
+  });
 });
 const slots = slotKits();
 const problems = await Promise.all(slots.map((kit) => slotProblems(kit.slot)));
