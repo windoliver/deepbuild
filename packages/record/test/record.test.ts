@@ -905,3 +905,65 @@ describe('a finish that lands after the session resumed', () => {
     expect((await r.table('claims')).rows.find((x) => x.id === claim.id)?.verdict_id ?? null).not.toBeNull();
   });
 });
+
+describe('round 15: run results, resumed sessions, answered plans and agent puts', () => {
+  const cli = (session: string): Connection => ({ writer: 'cli', actor: 'you', scope: 'you', session });
+  const RUN = 'run:01K74G3A5C7E9G1J3M5P7R9T1V';
+  it('the core\'s finish of a run sets its result over a cli finish that landed first', async () => {
+    const { record: r, S } = await record();
+    await r.append(core(S), event('run.started', T0 + 1, undefined, { run: RUN }));
+    await r.append(cli(S), event('run.finished', T0 + 2, undefined, { run: RUN, outcome: 'passed', tests_run: 29, passed: 29 }));
+    await r.append(core(S), event('run.finished', T0 + 3, undefined, { run: RUN, outcome: 'failed', tests_run: 29, passed: 17 }));
+    const row = (await r.table('runs')).rows[0]!;
+    expect(row.outcome).toBe('failed');
+  });
+
+  it('a finished session that resumes and loses its new events in a cut: its next claim reads INVALID', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const A = ulidAt(T0 - 1000);
+    await r.append(hook(A), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(A), event('user.ask', T0 - 900, seqAt(T0 - 900)));
+    await r.append(hook(A), { ...event('agent.stop', T0 - 800, seqAt(T0 - 800), { turn: 1 }), subject: `session:${A}` });
+    await r.append(app(A), { ...event('session.attention', T0 - 700, undefined, { state: 'finished' }), subject: `session:${A}` });
+    // a FULL commit: some core verdict on an unrelated claim
+    const B = ulidAt(T0 - 600);
+    await r.append(hook(B), event('session.start', T0 - 600, undefined));
+    const cb = event('claim.made', T0 - 500, undefined);
+    await r.append(hook(B), cb);
+    const vid = ulidAt(T0 - 400);
+    await r.append(core(B), { ...event('verdict.made', T0 - 400, undefined, { claim: `claim:${cb.id}`, verdict: `verdict:${vid}` }, 1), id: vid });
+    // A resumes: prompt + 5 tool calls, all NORMAL, acknowledged, then lost
+    await r.append(hook(A), event('user.ask', T0, seqAt(T0)));
+    for (let i = 1; i <= 5; i++) await r.append(hook(A), event('tool.after', T0 + i, seqAt(T0 + i)));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    // A goes on after the restart and claims done
+    await r.append(hook(A), event('tool.after', T0 + 6000, seqAt(T0 + 6000)));
+    await r.append(hook(A), { ...event('agent.stop', T0 + 6001, seqAt(T0 + 6001), { turn: 2 }), subject: `session:${A}` });
+    const claim = event('claim.made', T0 + 6002, undefined);
+    await r.append(hook(A), claim);
+    const verdicts = (await r.table('verdicts')).rows.filter((v) => v.claim_id === claim.id);
+    expect(verdicts[0]?.outcome, 'claim after lost resume reads INVALID').toBe('INVALID');
+  });
+
+  it('an answered plan keeps the steps your yes bound', async () => {
+    const { record: r, S } = await record();
+    const H = '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08';
+    await r.append(mcp(S), event('plan.proposed', T0 + 1, undefined, {}));
+    await r.append(core(S), { ...event('ask.answered', T0 + 2, undefined, { plan_hash: H }), subject: 'ask:01K74G4B6D8F0H2K4M6P8R0T2V' });
+    await r.append(mcp(S), event('plan.proposed', T0 + 3, undefined, { steps: [{ does: 'force-push main and delete the release branch', changes: ['main'], undo: 'cannot be undone', public: true, cost: 0 }] }));
+    const row = (await r.table('plans')).rows[0]!;
+    expect(row.hash === row.answered_hash && String(row.steps).includes('force-push'), 'the yes now reads as binding steps you never saw').toBe(false);
+  });
+
+  it('an agent\'s evidence.put never brings back a removed file', async () => {
+    const { record: r, S } = await record();
+    await r.append(core(S), event('evidence.stored', T0 + 1, undefined, {}));
+    await r.append(core(S), event('evidence.removed', T0 + 2, undefined, {}));
+    await r.append(mcp(S), event('evidence.put', T0 + 3, undefined, {}));
+    const rows = (await r.table('evidence')).rows;
+    expect(rows.length, 'a removed file stays removed').toBe(0);
+  });
+});

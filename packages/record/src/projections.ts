@@ -286,7 +286,12 @@ export class Projector {
         break;
       case 'run.finished':
         // A run finishes once: a later finish of the same run changes nothing.
-        this.once('runs', { id: bare(d.run), check_id: str(d.check), ended: e.ts, outcome: str(d.outcome), tests_run: int(d.tests_run), passed: int(d.passed), evidence: json(d.evidence), assertion: str(d.assertion), expected: str(d.expected), actual: str(d.actual), step: str(d.step), points_to: str(d.points_to) }, 'ended', ['check_id']);
+      {
+        // The core's finish is the run's result, whenever it lands; until then the first finish's.
+        const finish = { id: bare(d.run), check_id: str(d.check), ended: e.ts, outcome: str(d.outcome), tests_run: int(d.tests_run), passed: int(d.passed), evidence: json(d.evidence), assertion: str(d.assertion), expected: str(d.expected), actual: str(d.actual), step: str(d.step), points_to: str(d.points_to) };
+        if (e.writer === 'core') this.up('runs', finish);
+        else this.once('runs', finish, 'ended', ['check_id']);
+      }
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'task.created':
@@ -320,7 +325,11 @@ export class Projector {
         this.up('layer_rows', { layer: str(d.layer), project: str(d.project), parent: str(d.parent) ?? '', level: int(d.level), evidence: str(d.file), log_pos: e.log_pos });
         break;
       case 'plan.proposed':
-        this.up('plans', { ask: bare(d.ask), steps: json(d.steps), hash: str(d.hash), diff: str(d.diff) });
+        // Once your yes bound a plan, a later proposal for its ask fills only what is still empty: it never
+        // replaces the steps the answer saw.
+        this.stmt('INSERT INTO plans (ask, steps, hash, diff) VALUES (?, ?, ?, ?) ON CONFLICT (ask) DO UPDATE SET '
+          + ['steps', 'hash', 'diff'].map((c) => `${c} = CASE WHEN plans.answered_hash IS NULL THEN excluded.${c} ELSE COALESCE(plans.${c}, excluded.${c}) END`).join(', '))
+          .run(bare(d.ask), json(d.steps), str(d.hash), str(d.diff));
         break;
       case 'delivery.outcome':
         this.up('deliveries', { delivery: bare(d.delivery), via: str(d.via), outcome: str(d.outcome) });
@@ -329,8 +338,8 @@ export class Projector {
         this.up('dry_merges', { a: str(d.a), b: str(d.b), conflicts: json(d.conflicts), as_of: e.ts });
         break;
       case 'evidence.put':
-        // A put never relabels a file already recorded: the core's evidence.stored is the store's own record.
-        this.add('evidence', { hash: str(d.sha256), kind: str(d.kind), source: str(d.source), origin: str(d.origin), redaction: str(d.redaction), license: str(d.license), step_times: json(d.step_times) });
+        // An agent's put is a citation: the evidence rows come from the store's own events alone, so a put
+        // never lists a file the store doesn't hold.
         break;
       case 'evidence.stored':
         this.up('evidence', { hash: str(d.sha256), kind: str(d.kind), type: str(d.type), size: int(d.size), origin: str(d.origin), redaction: str(d.redaction), license: str(d.license), step_times: json(d.step_times), derived_from: json(d.derived_from) });

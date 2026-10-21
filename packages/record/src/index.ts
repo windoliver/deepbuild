@@ -462,7 +462,11 @@ class SqliteRecord implements RecordStore {
     if (!batch.length) return;
     let outcomes: Outcome[];
     try {
-      outcomes = this.commit(batch.map((p) => p.prepared), 'normal');
+      // A prompt that resumes an ended session commits FULL: recovery then sees the session active again,
+      // though every event after it is lost in a cut.
+      const ended = this.db.prepare("SELECT 1 FROM sessions WHERE id = ? AND status IN ('finished', 'failed')");
+      const resumes = batch.some(({ prepared: p }) => p.input.kind === 'user.ask' && p.session !== null && p.session !== undefined && ended.get(p.session));
+      outcomes = this.commit(batch.map((p) => p.prepared), resumes ? 'full' : 'normal');
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
       return;
