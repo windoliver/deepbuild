@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "id": "doc-372-pinch",
+  "profile": "board",
+  "title": "Board zoomed at the pointer",
+  "description": "A 2D board of two blocks whose camera zooms toward the pointer, with no pan bounds.",
+  "size": [1600, 900],
+  "camera": "cam",
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
+      "params": {
+        "projection": "orthographic", "target": [800, 450, 0], "view_width": 1600,
+        "user": { "zoom": [0.5, 4], "zoom_rate": 0.005, "pan": { "bounds": "none" } }
+      }
+    },
+    "left": { "id": "left", "kind": "test.rect@1", "layer": "main", "name": "Left block", "order": "a1",
+      "params": { "w": 800, "h": 400, "fill": [200, 40, 40] }, "at": { "pos": [200, 100, 0] } },
+    "right": { "id": "right", "kind": "test.rect@1", "layer": "main", "name": "Right block", "order": "a2",
+      "params": { "w": 400, "h": 300, "fill": [40, 180, 80] }, "at": { "pos": [1200, 600, 0] } }
+  }
+}

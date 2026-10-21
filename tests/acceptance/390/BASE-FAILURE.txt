@@ -1,0 +1,167 @@
+Base commit: 554bebb6cc8e5693a887bdeac45771e046fcac5e
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/390 --no-file-parallelism
+Run in a detached worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: no crates/deep-text, no deep-text-render bin target and no scripts/text-lint.mjs exist there, and the base's Cargo.lock holds no parley or vello_cpu.
+Date: 2026-10-21T09:03:51Z  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/390
+
+ ❯ fit.test.ts (7 tests | 7 failed) 396ms
+   ❯ AC2 bound numbers use tabular figures and are never cut short, and text that does not fit its widest string fails the fit check (4)
+     × AC2 the fit fixtures: a number never fits by being cut, a widest string that does not fit fails, plain text is ellipsized 4ms
+     × AC2 the widest string governs: a box one pixel narrower than the widest string fails the fit check that the text alone passes 0ms
+     × AC2 tabular figures: every digit has one advance in a bound number, at 13 px and at 24 px 0ms
+     × AC2 numerals tabular on plain text gives the same one advance per digit, and the width scales with the count 0ms
+   ❯ It can never: use a system font, or shape text in a face the look does not bundle (3)
+     × fonts lists the body role with a font file bundled in the repo 0ms
+     × a font role the look does not bundle is refused with bad_font, never resolved from the system 0ms
+     × a line that is not JSON, or lacks text, is answered with bad_input and no panic 1ms
+ ❯ atlas.test.ts (4 tests | 4 failed) 391ms
+   ❯ AC3 two labels in two colors from one shaped run share one atlas page and draw through the patch's tinted mask sprite (1)
+     × AC3 the two labels have one coverage mask tinted per instance: equal red channels, different green 3ms
+   ❯ AC3 no call into GPUI's text system, checked from the dependency tree and the call-site lint (3)
+     × AC3 the dependency tree: deep-text reaches parley, skrifa and vello_cpu, and never swash or any gpui crate 0ms
+     × AC3 the crate that draws the labels is in the call-site lint's scope 0ms
+     × AC3 the call-site lint passes the repo: no scope crate calls GPUI's text system 0ms
+ ❯ smoothing.test.ts (2 tests | 2 failed) 346ms
+   ❯ AC1 a white label on a dark card draws the same pixels with macOS font smoothing on and with AppleFontSmoothing set to 0 (2)
+     × AC1 the two renders are identical pixel for pixel, and each shows the label inside its box 3ms
+     × AC1 the render draws the text it is given: two labels with different text give different pixels 0ms
+ ❯ lint.test.ts (2 tests | 2 failed) 30ms
+   ❯ AC3 the call-site lint refuses every call into GPUI's text system in the text crate and in a crate that draws canvas text, and passes their clean twins (2)
+     × AC3 each of the eight forms, planted once in each scope crate, fails the lint naming its file and line; the chrome crate outside the scope is not named 3ms
+     × AC3 the clean twins pass the lint 24ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  atlas.test.ts > AC3 two labels in two colors from one shaped run share one atlas page and draw through the patch's tinted mask sprite > AC3 the two labels have one coverage mask tinted per instance: equal red channels, different green
+ FAIL  atlas.test.ts > AC3 no call into GPUI's text system, checked from the dependency tree and the call-site lint > AC3 the dependency tree: deep-text reaches parley, skrifa and vello_cpu, and never swash or any gpui crate
+ FAIL  atlas.test.ts > AC3 no call into GPUI's text system, checked from the dependency tree and the call-site lint > AC3 the crate that draws the labels is in the call-site lint's scope
+ FAIL  atlas.test.ts > AC3 no call into GPUI's text system, checked from the dependency tree and the call-site lint > AC3 the call-site lint passes the repo: no scope crate calls GPUI's text system
+ FAIL  smoothing.test.ts > AC1 a white label on a dark card draws the same pixels with macOS font smoothing on and with AppleFontSmoothing set to 0 > AC1 the two renders are identical pixel for pixel, and each shows the label inside its box
+ FAIL  smoothing.test.ts > AC1 a white label on a dark card draws the same pixels with macOS font smoothing on and with AppleFontSmoothing set to 0 > AC1 the render draws the text it is given: two labels with different text give different pixels
+AssertionError: the binaries build: deep-text-render: expected 'cargo build --bin deep-text-render fa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-text-render failed:
++ error: no bin target named `deep-text-render` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-contracts
++     deep-hook
++     deep-live
++     deep-replica
++
+
+ ❯ helpers.ts:43:79
+     41|   let error = '';
+     42|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     43|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+     44| }
+     45|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  fit.test.ts > AC2 bound numbers use tabular figures and are never cut short, and text that does not fit its widest string fails the fit check > AC2 the fit fixtures: a number never fits by being cut, a widest string that does not fit fails, plain text is ellipsized
+ FAIL  fit.test.ts > AC2 bound numbers use tabular figures and are never cut short, and text that does not fit its widest string fails the fit check > AC2 the widest string governs: a box one pixel narrower than the widest string fails the fit check that the text alone passes
+ FAIL  fit.test.ts > AC2 bound numbers use tabular figures and are never cut short, and text that does not fit its widest string fails the fit check > AC2 tabular figures: every digit has one advance in a bound number, at 13 px and at 24 px
+ FAIL  fit.test.ts > AC2 bound numbers use tabular figures and are never cut short, and text that does not fit its widest string fails the fit check > AC2 numerals tabular on plain text gives the same one advance per digit, and the width scales with the count
+ FAIL  fit.test.ts > It can never: use a system font, or shape text in a face the look does not bundle > fonts lists the body role with a font file bundled in the repo
+ FAIL  fit.test.ts > It can never: use a system font, or shape text in a face the look does not bundle > a font role the look does not bundle is refused with bad_font, never resolved from the system
+ FAIL  fit.test.ts > It can never: use a system font, or shape text in a face the look does not bundle > a line that is not JSON, or lacks text, is answered with bad_input and no panic
+AssertionError: the binaries build: deep-text: expected 'cargo build --bin deep-text failed:\n…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-text failed:
++ error: no bin target named `deep-text` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-contracts
++     deep-hook
++     deep-live
++     deep-replica
++
+
+ ❯ helpers.ts:43:79
+     41|   let error = '';
+     42|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     43|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+     44| }
+     45|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  lint.test.ts > AC3 the call-site lint refuses every call into GPUI's text system in the text crate and in a crate that draws canvas text, and passes their clean twins > AC3 each of the eight forms, planted once in each scope crate, fails the lint naming its file and line; the chrome crate outside the scope is not named
+AssertionError: scripts/text-lint.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lint.test.ts:149:62
+    147| describe('AC3 the call-site lint refuses every call into GPUI\'s text …
+    148|   it('AC3 each of the eight forms, planted once in each scope crate, f…
+    149|     expect(existsSync(LINT), 'scripts/text-lint.mjs exists').toBe(true…
+       |                                                              ^
+    150|     const root = workspace(PLANTED);
+    151|     scratch.push(root);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  lint.test.ts > AC3 the call-site lint refuses every call into GPUI's text system in the text crate and in a crate that draws canvas text, and passes their clean twins > AC3 the clean twins pass the lint
+AssertionError: the lint failed the clean twins:
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/text-lint.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ lint.test.ts:172:81
+    170|     scratch.push(root);
+    171|     const result = lint(root);
+    172|     expect(result.status, `the lint failed the clean twins:\n${result.…
+       |                                                                                 ^
+    173|     expect(result.output.split('\n').filter((line) => /^FAIL\b/.test(l…
+    174|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  15 failed (15)
+   Start at  02:03:25
+   Duration  1.48s (tests 96%, import 2%, transform 1%, worker 1%)
+
+

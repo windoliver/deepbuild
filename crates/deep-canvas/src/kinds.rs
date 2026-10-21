@@ -1,12 +1,15 @@
 //! The kind registry (canvas primitives: Item and kind): each kind's versions, one per major, with
 //! its param schema, and the migrations between majors as data, one major a step.
 //!
-//! This slice registers one kind, `test.slab`, at major 3 minor 1 with its two earlier majors,
-//! exactly as the #389 acceptance README's table says. A kind's text in a document is
-//! `family.name@major`; `requires.kinds` names `family.name@major.minor`.
+//! This slice registers `test.slab` at major 3 minor 1 with its two earlier majors, exactly as
+//! the #389 acceptance README's table says; the core's `camera` (#372, canvas primitives:
+//! Camera `camera@1`), whose structured params the camera module reads; and the two flat test
+//! kinds the #372 acceptance README draws, `test.rect` and `test.dot`. A kind's text in a
+//! document is `family.name@major` (a core kind has no family: `camera@1`); `requires.kinds`
+//! names `family.name@major.minor`.
 
 use crate::grammar::Id;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// A param's type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,6 +18,9 @@ pub enum ParamType {
     F32,
     /// A string.
     Str,
+    /// A structured value (a vector, an object, a choice) the kind's own reader checks when it
+    /// evaluates the item; the document check reads only its presence.
+    Json,
 }
 
 /// One param of a kind's schema.
@@ -29,6 +35,10 @@ pub struct Param {
     pub max: Option<f64>,
     /// The minor this param was added in.
     pub minor: u32,
+    /// The canvas module that evaluates the param through `contributes_to`, or empty for the
+    /// kind's own; a document that sets a field of a module this build lacks is refused with
+    /// `module_missing` (technical design: Canvas modules).
+    pub module: &'static str,
 }
 
 /// One major of a kind: its minor and its params.
@@ -72,9 +82,13 @@ pub struct Entry {
 }
 
 impl Entry {
-    /// `family.name`.
+    /// `family.name`, or the bare name of a core kind, which has no family.
     pub fn full_name(&self) -> String {
-        format!("{}.{}", self.family, self.name)
+        if self.family.is_empty() {
+            self.name.to_string()
+        } else {
+            format!("{}.{}", self.family, self.name)
+        }
     }
 
     /// The build's version of the kind (its highest major).
@@ -134,6 +148,7 @@ fn f32_param(
         min: Some(min),
         max: Some(max),
         minor,
+        module: "",
     }
 }
 
@@ -146,10 +161,107 @@ fn str_param(name: &'static str, default: &str) -> Param {
         min: None,
         max: None,
         minor: 0,
+        module: "",
     }
 }
 
+fn json_param(name: &'static str, default: Value) -> Param {
+    Param {
+        name,
+        ty: ParamType::Json,
+        unit: "",
+        default,
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+    }
+}
+
+/// A field another canvas module evaluates into the kind's array (Array and table).
+fn module_param(name: &'static str, module: &'static str, default: Value) -> Param {
+    Param {
+        module,
+        ..json_param(name, default)
+    }
+}
+
+/// The core's camera (Camera `camera@1`), every field at the design's default. The pose, the
+/// projection and the camera you move are evaluated here. `yield` eases back on a stage change
+/// or `camera.reset` and `reduced_motion` holds a move: no input of this slice's session
+/// (drag, pinch, hover, control) starts either, so they are read and kept. `fit` would frame
+/// every still, and the camera module refuses it set until framing is evaluated. The lens,
+/// exposure, depth of field, near and far are scene3d's contribution, which this build lacks,
+/// so setting one is `module_missing`.
+fn camera() -> Entry {
+    Entry {
+        family: "",
+        name: "camera",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: vec![
+                json_param("projection", json!("perspective")),
+                json_param("target", json!([0, 0, 0])),
+                json_param("position", Value::Null),
+                json_param("orbit", Value::Null),
+                f32_param("roll", "deg", 0.0, -360.0, 360.0, 0),
+                json_param("view_width", Value::Null),
+                f32_param("fov", "deg", 40.0, 0.0, 179.0, 0),
+                json_param("shift", json!([0, 0])),
+                json_param("user", json!({})),
+                json_param("fit", Value::Null),
+                json_param("yield", Value::Null),
+                json_param("reduced_motion", json!("hold")),
+                module_param("near", "scene3d", json!("auto")),
+                module_param("far", "scene3d", json!("auto")),
+                module_param("dof", "scene3d", Value::Null),
+                module_param("exposure", "scene3d", Value::Null),
+                module_param("lens", "scene3d", Value::Null),
+                module_param("aperture", "scene3d", Value::Null),
+                module_param("shutter", "scene3d", Value::Null),
+                module_param("iso", "scene3d", Value::Null),
+            ],
+        }],
+        migrations: vec![],
+    }
+}
+
+/// The two flat test kinds of the #372 acceptance README: a 2D rectangle from its top-left
+/// corner and a 3D disc about its position, each with an sRGB fill.
+fn test_shapes() -> [Entry; 2] {
+    let rect = Entry {
+        family: "test",
+        name: "rect",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: vec![
+                f32_param("w", "u", 100.0, 0.0, 100_000.0, 0),
+                f32_param("h", "u", 100.0, 0.0, 100_000.0, 0),
+                json_param("fill", json!([255, 255, 255])),
+            ],
+        }],
+        migrations: vec![],
+    };
+    let dot = Entry {
+        family: "test",
+        name: "dot",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: vec![
+                f32_param("radius", "m", 0.1, 0.0, 1000.0, 0),
+                json_param("fill", json!([255, 255, 255])),
+            ],
+        }],
+        migrations: vec![],
+    };
+    [rect, dot]
+}
+
 fn build() -> Registry {
+    let [rect, dot] = test_shapes();
     let slab = Entry {
         family: "test",
         name: "slab",
@@ -203,7 +315,7 @@ fn build() -> Registry {
         ],
     };
     Registry {
-        entries: vec![slab],
+        entries: vec![slab, camera(), rect, dot],
     }
 }
 
@@ -211,6 +323,22 @@ fn build() -> Registry {
 /// state between runs through, and the lint refuses every one.
 pub fn registry() -> Registry {
     build()
+}
+
+/// The params with the kind's registry defaults filled in where a field is absent, so a
+/// reader has one source of defaults; an unregistered kind's params pass through as they are.
+pub fn with_defaults(kind_text: &str, params: &Map<String, Value>) -> Map<String, Value> {
+    let mut out = params.clone();
+    let registry = registry();
+    if let Lookup::Known { entry, saved } = lookup(&registry, kind_text) {
+        if let Some(version) = entry.version(saved) {
+            for param in &version.params {
+                out.entry(param.name.to_string())
+                    .or_insert_with(|| param.default.clone());
+            }
+        }
+    }
+    out
 }
 
 /// A whole number with no leading zero, as a version part is written.
@@ -222,10 +350,11 @@ fn parse_part(s: &str) -> Option<u32> {
     s.parse().ok()
 }
 
-/// `family.name`: an ID of two or more segments (canvas primitives: Item and kind), so every
-/// build writes the same grammar and text outside it is no build's kind.
+/// `family.name`, or a core kind's bare `name`: an ID (canvas primitives: Item and kind, whose
+/// examples are `slab@1` and `village.house@1`), so every build writes the same grammar and
+/// text outside it is no build's kind.
 fn kind_name(name: &str) -> Option<String> {
-    (name.contains('.') && Id::parse(name).is_ok()).then(|| name.to_string())
+    Id::parse(name).ok().map(|_| name.to_string())
 }
 
 /// `family.name@major` → (`family.name`, major).
@@ -301,6 +430,11 @@ mod tests {
             Lookup::UnknownKind
         ));
         assert!(matches!(lookup(&registry, "slab"), Lookup::Malformed));
+        assert!(matches!(lookup(&registry, "slab@1"), Lookup::UnknownKind));
+        assert!(matches!(
+            lookup(&registry, "camera@1"),
+            Lookup::Known { .. }
+        ));
         assert!(matches!(
             lookup(&registry, "test.slab@01"),
             Lookup::Malformed

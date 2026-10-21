@@ -164,8 +164,12 @@ function checkDeps(files, listed) {
     for (const section of npmSections)
       for (const [name, spec] of Object.entries(json[section] ?? {})) declared.set(JSON.stringify([manifest, section, name]), typeof spec === 'string' ? spec : JSON.stringify(spec));
   }
-  // Workspace roots come first, so a member that one run already read isn't read again.
-  const cargoManifests = files.filter((path) => posix.basename(path) === 'Cargo.toml' && existsSync(join(root, path))).sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+  // Workspace roots come first, so a member that one run already read isn't read again. A manifest
+  // under vendor/ is an upstream crate's own, copied whole to carry a patch (#390: gpui-pre); its
+  // dependencies are upstream's, not this repo's, so the rule names the copy and reads nothing from it.
+  const vendored = files.filter((path) => posix.basename(path) === 'Cargo.toml' && path.startsWith('vendor/') && path.split('/').length === 3);
+  for (const manifest of vendored) report('NOTE', 'deps', `${manifest} is a vendored upstream crate; its dependencies are upstream's`);
+  const cargoManifests = files.filter((path) => posix.basename(path) === 'Cargo.toml' && !path.startsWith('vendor/') && existsSync(join(root, path))).sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
   for (const manifest of cargoManifests) {
     if (read.has(manifest)) continue;
     if (cargoBlocked) {

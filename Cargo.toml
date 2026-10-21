@@ -1,3 +1,12 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-replica"]
+members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
+
+# Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
+# (hundreds of 250 px glyphs) run in seconds, not minutes; nothing else is optimized.
+[profile.dev.package.vello_cpu]
+opt-level = 3
+[profile.dev.package.vello_common]
+opt-level = 3
+[profile.dev.package.fearless_simd]
+opt-level = 3

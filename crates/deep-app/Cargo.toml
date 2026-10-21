@@ -14,6 +14,11 @@ gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Issue #390: the canvas's text (a label, a readout) shaped by deep-text and drawn from its atlas
+# through the GPUI patch's mask sprite. The chrome keeps GPUI's own text, and the screens harness
+# builds its headless context on the platform's text system, so this crate stays outside the
+# canvas text lint's scope: its canvas text goes through deep-text-gpui, which is in it.
+deep-text-gpui = { path = "../deep-text-gpui" }
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
 # Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the

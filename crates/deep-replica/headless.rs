@@ -20,7 +20,6 @@ mod suite {
         path::{Path, PathBuf},
         process::Command,
         rc::Rc,
-        sync::Arc,
         time::Instant,
     };
 
@@ -34,8 +33,7 @@ mod suite {
     use gpui_kit::base::dock::DockPlacement;
     use gpui_kit::test::TestWindowExt;
     use gpui_kit::{
-        assets::Assets, AnyWindowHandle, AppContext as _, HeadlessAppContext, TestAppContext,
-        TestDispatcher,
+        AnyWindowHandle, AppContext as _, HeadlessAppContext, TestAppContext, TestDispatcher,
     };
     use gpui_shell::{ScriptView, ShellRuntime};
     use serde_json::{json, Value};
@@ -216,22 +214,89 @@ mod suite {
             "the session page's canvas drew its line: {:?}",
             snapshot.items
         );
+        // Issue #390: the line's caption and its readout are the canvas's text, shaped by the
+        // one shaper and drawn from its atlas; each item says what it showed and its box.
+        let item = |id: &str| {
+            snapshot
+                .items
+                .iter()
+                .find(|(item, _)| item == id)
+                .map(|(_, value)| value.clone())
+                .unwrap_or_else(|| panic!("no {id} item in {:?}", snapshot.items))
+        };
+        let caption = item("session-caption");
+        assert_eq!(caption["text"], "Hours to each deadline", "{caption}");
+        assert!(caption["sprites"].as_u64().unwrap() > 0, "{caption}");
+        let readout = item("session-readout");
+        // The page counts the first session's open asks, as its line does.
+        let state = deep_replica::load_state();
+        let session = state.sessions.first().cloned().unwrap_or_default();
+        let points = state
+            .inbox
+            .open
+            .iter()
+            .filter(|ask| ask.session == session)
+            .count();
+        assert_eq!(readout["text"], points.to_string(), "{readout}");
+        assert_eq!(readout["bound"], true, "{readout}");
+        assert_eq!(readout["widest"], "9999", "{readout}");
+        // The box holds the widest value, so the readout keeps its place as the count changes.
+        let widest = deep_app::text::measure(&deep_app::text::Label {
+            bound: true,
+            ..deep_app::text::Label::new("9999")
+        })
+        .width;
+        assert!(
+            readout["box"][0].as_f64().unwrap() >= f64::from(f32::from(widest)),
+            "the readout's box holds 9999 ({widest:?}): {readout}"
+        );
+        assert_eq!(readout["ellipsized"], false, "{readout}");
+        assert!(readout["sprites"].as_u64().unwrap() > 0, "{readout}");
+    }
+
+    /// The readout's pixels: the item says what was asked to be drawn and where; the pixels say
+    /// it was painted, inside that box, in the readout's own amber, #b45309, which nothing else
+    /// in the shell is drawn in. That the paint went through the atlas is deep-text-gpui's proof
+    /// (tests/acceptance/390), not this one's.
+    fn session_readout_in_pixels() {
+        let mut opened = open_with(&[], &Layout::shipped("session"));
+        let items = deep_app::canvas::items();
+        let (_, readout) = items
+            .iter()
+            .find(|(id, _)| id == "session-readout")
+            .unwrap_or_else(|| panic!("no session-readout item in {items:?}"));
+        let corner = |value: &Value, index: usize| value[index].as_f64().unwrap() * SCALE as f64;
+        let (x0, y0) = (corner(&readout["at"], 0), corner(&readout["at"], 1));
+        let (x1, y1) = (
+            x0 + corner(&readout["box"], 0),
+            y0 + corner(&readout["box"], 1),
+        );
+        let image = opened
+            .cx
+            .capture_screenshot(opened.handle)
+            .expect("offscreen rendering is available");
+        let amber = |inside: bool| {
+            image
+                .enumerate_pixels()
+                .filter(|(x, y, pixel)| {
+                    let [r, g, b, _] = pixel.0;
+                    let (x, y) = (f64::from(*x), f64::from(*y));
+                    (x >= x0 && x < x1 && y >= y0 && y < y1) == inside
+                        && r.abs_diff(0xb4) < 40
+                        && g.abs_diff(0x53) < 40
+                        && b.abs_diff(0x09) < 40
+                })
+                .count()
+        };
+        assert!(
+            amber(true) > 30,
+            "the session page painted its readout in amber inside its box {readout}: {} amber pixels",
+            amber(true)
+        );
+        assert_eq!(amber(false), 0, "amber outside the readout's box {readout}");
     }
 
     // Script panels in the shell.
-
-    fn context() -> HeadlessAppContext {
-        let mut cx = HeadlessAppContext::with_platform(
-            gpui_kit::platform::current_platform(true).text_system(),
-            Arc::new(Assets),
-            gpui_kit::platform::current_headless_renderer,
-        );
-        cx.update(|cx| {
-            gpui_kit::init(cx);
-            deep_app::init(cx);
-        });
-        cx
-    }
 
     struct Opened {
         cx: HeadlessAppContext,
@@ -245,7 +310,7 @@ mod suite {
 
     /// Opens the shell on `layout` with the script panels under `panels` registered first.
     fn open_with(panels: &[&str], layout: &Layout) -> Opened {
-        let mut cx = context();
+        let mut cx = deep_replica::headless_context();
         let runtime = deep_app::new_runtime().expect("the panel runtime");
         let dirs: Vec<PathBuf> = panels.iter().map(|panel| panel_dir(panel)).collect();
         let mut mounted = Vec::new();
@@ -573,7 +638,7 @@ mod suite {
 
     pub fn run() -> i32 {
         deep_app::views::set_state(deep_replica::load_state());
-        let cases: [(&str, fn()); 17] = [
+        let cases: [(&str, fn()); 18] = [
             (
                 "replica_launch_under_two_seconds",
                 replica_launch_under_two_seconds,
@@ -581,6 +646,7 @@ mod suite {
             ("needs_you_view_snapshot", needs_you_view_snapshot),
             ("sidebar_view_snapshot", sidebar_view_snapshot),
             ("session_view_snapshot", session_view_snapshot),
+            ("session_readout_in_pixels", session_readout_in_pixels),
             (
                 "fixture_panel_rows_match_projection",
                 fixture_panel_rows_match_projection,

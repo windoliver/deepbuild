@@ -1,0 +1,50 @@
+{
+  "source": "Written by the blind job for #390 before any shaper ran. Boxes are chosen so that the verdict holds for any text face at 13 px: nine digits and commas never fit 10 px, two digits always fit 26 px, and ten characters never fit 26 px.",
+  "cases": [
+    {
+      "name": "a bound number in a box too narrow for it fails the fit check and is shown whole on one line",
+      "input": { "text": "1,234,567", "number": true, "box": { "w": 10, "h": 40 } },
+      "expect": { "fits": false, "shown": "1,234,567", "lines": 1 }
+    },
+    {
+      "name": "a bound number in a box too narrow for it, with room for more lines, still never wraps",
+      "input": { "text": "1,234,567", "number": true, "box": { "w": 10, "h": 400 }, "max_lines": 20 },
+      "expect": { "fits": false, "shown": "1,234,567", "lines": 1 }
+    },
+    {
+      "name": "a bound number with overflow spelled out as ellipsis is still shown whole",
+      "input": { "text": "1,234,567", "number": true, "overflow": "ellipsis", "box": { "w": 10, "h": 40 } },
+      "expect": { "fits": false, "shown": "1,234,567", "lines": 1 }
+    },
+    {
+      "name": "a bound number in a wide box fits",
+      "input": { "text": "1,234,567", "number": true, "box": { "w": 2000, "h": 40 } },
+      "expect": { "fits": true, "shown": "1,234,567", "lines": 1 }
+    },
+    {
+      "name": "text that fits its box but not its widest string fails the fit check",
+      "input": { "text": "42", "number": true, "widest": "100,000.00", "box": { "w": 26, "h": 40 } },
+      "expect": { "fits": false, "shown": "42", "lines": 1 }
+    },
+    {
+      "name": "the same text without the widest string fits the same box",
+      "input": { "text": "42", "number": true, "box": { "w": 26, "h": 40 } },
+      "expect": { "fits": true, "shown": "42", "lines": 1 }
+    },
+    {
+      "name": "the widest string governs plain text too",
+      "input": { "text": "On", "widest": "Blocked by review", "box": { "w": 26, "h": 40 }, "max_lines": 1 },
+      "expect": { "fits": false, "lines": 1 }
+    },
+    {
+      "name": "plain text over its one line is cut with an ellipsis and does not fit",
+      "input": { "text": "Hello wonderful world of text", "box": { "w": 26, "h": 40 }, "max_lines": 1 },
+      "expect": { "fits": false, "lines": 1, "ellipsized": true }
+    },
+    {
+      "name": "plain text in a wide box fits whole",
+      "input": { "text": "Hello wonderful world of text", "box": { "w": 2000, "h": 40 } },
+      "expect": { "fits": true, "shown": "Hello wonderful world of text", "lines": 1 }
+    }
+  ]
+}

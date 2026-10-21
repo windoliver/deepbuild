@@ -1,0 +1,14 @@
+[package]
+name = "deep-text-gpui"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #390: the canvas's text where GPUI draws a 2D writer layer. A label is shaped once by
+# deep-text, its glyphs rasterized into the canvas's atlas, and drawn through the GPUI patch's
+# tinted mask sprite. Named deep-text* so scripts/text-lint.mjs reads every call here.
+[dependencies]
+deep-text = { path = "../deep-text" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }

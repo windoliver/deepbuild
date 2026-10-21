@@ -22,7 +22,7 @@ use serde_json::{json, Map, Value};
 
 pub use apply::{apply, ApplyResult};
 pub use check::{check, CheckResult};
-pub use shape::{canonical, Canonical, DocShape};
+pub use shape::{canonical, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
 pub const CHECK: &str = "document.validate";
@@ -204,6 +204,7 @@ fn fix_for(code: &str) -> String {
         "unknown_field" => "Remove the field, or require the kind's minor that defines it.",
         "unknown_kind" => "Register the kind, or remove the item.",
         "kind_too_new" => "Save the item at a major this build knows.",
+        "module_missing" => "Open the document in a build with the module, or remove the field.",
         "out_of_range" => "Give the field a value of its type inside its range.",
         "ref_unresolved" => "Name an ID the document holds, or remove the reference.",
         "cycle" => "Give the item a parent that does not descend from it.",
@@ -247,7 +248,7 @@ pub(crate) fn as_object(value: &Value) -> Option<&Map<String, Value>> {
 }
 
 /// The object member `key` of `value`, if `value` is an object holding it.
-pub(crate) fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+pub fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     value.as_object().and_then(|o| o.get(key))
 }
 
@@ -323,6 +324,24 @@ mod tests {
         let mut doc = base();
         doc["layers"] = json!({});
         doc["items"] = json!({});
+        assert!(check(&doc).ok);
+    }
+
+    #[test]
+    fn a_camera_field_of_a_module_this_build_lacks_is_module_missing_and_a_core_one_is_kept() {
+        let mut doc = base();
+        doc["items"]["cam"] = json!({
+            "id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+            "params": {"fit": {"keep": ["cam"]}, "dof": {"f_stop": 2.8}}
+        });
+        let result = check(&doc);
+        let codes: Vec<(&str, &str)> = result
+            .issues
+            .iter()
+            .map(|i| (i.code, i.path.as_str()))
+            .collect();
+        assert_eq!(codes, [("module_missing", "items/cam/params/dof")]);
+        doc["items"]["cam"]["params"] = json!({"fit": {"keep": ["cam"]}, "dof": null});
         assert!(check(&doc).ok);
     }
 
