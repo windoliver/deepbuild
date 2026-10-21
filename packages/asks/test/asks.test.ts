@@ -16,7 +16,6 @@ const T0 = Date.UTC(2026, 9, 20, 12, 0, 0);
 const HOUR = 3_600_000;
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 const who = { actor: 'you', scope: 'you' };
-const core = (session: string): Connection => ({ writer: 'core', ...who, session });
 const hook = (session: string): Connection => ({ writer: 'hook', ...who, session });
 const agent = (session: string): Connection => ({ writer: `mcp:${session}`, ...who, session });
 const card: Connection = { writer: 'app', ...who };
