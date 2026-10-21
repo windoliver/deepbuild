@@ -1,0 +1,990 @@
+{
+  "spike": 337,
+  "mergeBase": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+  "mergeBaseNote": "The spike branch's fork point from main, 0c5e145, the merge base the draft record used and an ancestor of HEAD. Main gained #592, #590 and #598 (fixing #594: perf keeping its Cargo builds between runs) before the app landed in #599, so the preflight comparison carries those too, not the app alone. The branch that records the decision has a later merge base with main, f346706, which already holds the app.",
+  "measuredOn": "2026-10-20",
+  "appMeasurement": {
+    "startedAt": "2026-10-20T21:59:10.946Z",
+    "node": "v24.22.0",
+    "before": {
+      "power": "ac",
+      "lowPowerMode": false,
+      "thermalState": "nominal"
+    },
+    "after": {
+      "power": "ac",
+      "lowPowerMode": false,
+      "thermalState": "nominal"
+    },
+    "note": "docs/spikes/337/measure.mjs ran twice after the clean release build. The first run, under Node 22, began with the thermal state fair, so it is not counted under the fingerprint rule; its numbers are under abandoned. The second, under Node 24, began and ended nominal and is the one the budgets report; this is the fingerprint before and after it.",
+    "abandoned": {
+      "startedAt": "2026-10-20T21:25:22.106Z",
+      "node": "v22.22.3",
+      "before": {
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "fair"
+      },
+      "after": {
+        "power": "ac",
+        "lowPowerMode": false,
+        "thermalState": "nominal"
+      },
+      "why": "Began with the thermal state fair, right after the build; every value is under its limit, but a budget counts only on a nominal run.",
+      "firstLaunchMs": 1198.7,
+      "coldStartMs": [
+        135,
+        177.1,
+        163,
+        179,
+        189.4
+      ],
+      "idleCpuPercent": [
+        0.5,
+        0.75,
+        0.8,
+        0.85,
+        0.75
+      ],
+      "memoryBytes": [
+        53280768,
+        53624832,
+        56573952,
+        54362112,
+        49037312
+      ],
+      "appBytes": [
+        49826856,
+        49826856,
+        49826856,
+        49826856,
+        49826856
+      ]
+    }
+  },
+  "machine": {
+    "model": "Mac15,12",
+    "chip": "Apple M3",
+    "memoryBytes": 17179869184,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "23H723"
+  },
+  "window": {
+    "screen": "window",
+    "sessionRows": 1000
+  },
+  "menuBar": {
+    "captured": false,
+    "reason": "gpui-kit has no menu-bar item, so the count is an AppKit NSStatusItem the app creates; GPUI's offscreen renderer captures only GPUI windows.",
+    "count": 143,
+    "test": "menu_bar_count",
+    "checks": [
+      "menu_bar_title(sessions()), the title main.rs gives the status item, is 143",
+      "the window's count text, read back from its accessibility label, is the same 143",
+      "no test reads the NSStatusItem itself back: it is AppKit, not a GPUI element"
+    ]
+  },
+  "screens": [
+    {
+      "id": "window",
+      "test": "window_screen",
+      "snapshot": "docs/spikes/337/screens/window.png",
+      "clicks": [
+        "session row 4"
+      ]
+    },
+    {
+      "id": "claude-code",
+      "test": "claude_code_panel_screen",
+      "snapshot": "docs/spikes/337/screens/claude-code.png",
+      "clicks": [
+        "next",
+        "row-NVDA"
+      ]
+    },
+    {
+      "id": "codex",
+      "test": "codex_panel_screen",
+      "snapshot": "docs/spikes/337/screens/codex.png",
+      "clicks": [
+        "next",
+        "row-NVDA"
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "agent": "claude-code",
+      "agentVersion": "Claude Code 2.1.142 (claude-opus-4-7)",
+      "file": "crates/deep-app/panels/claude-code/main.js",
+      "sha256": "3795c21e188efeb65ffdccf7f3e1366fd3a9c7ba6510e711074cc191fa01ffe3",
+      "screen": "claude-code",
+      "inputs": [
+        "issue#337",
+        {
+          "doc": "docs/spikes/337/panel-brief.md",
+          "sha256": "1087529caa37eef650d1d39d9ffc0350435a0fd7c65395742ee3fc205f6d77d8"
+        },
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/crates/shell/README.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/api.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/capabilities.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dependencies.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dock.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/elements.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/engine.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/examples.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/getting-started.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/host-module.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/hosting.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/index.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/overlays.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/packaging.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/performance.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/state.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/styling.md"
+      ],
+      "rounds": [
+        {
+          "result": "fail",
+          "fix": "Round 0 stopped at Tick 99: its chart was a column of dots that grew a row per tick and pushed the next button below the 640 px window. Given the test's failure output, Claude Code laid the dots out horizontally."
+        },
+        {
+          "result": "pass"
+        }
+      ],
+      "runtime": {
+        "origin": "agent_built",
+        "runtime": "in_process",
+        "thread": "ui_main",
+        "policy": "empty",
+        "update_budget_ms": 4,
+        "limits": {
+          "interrupt": true,
+          "heap": 268435456,
+          "stack": 1048576,
+          "microtasks": 100000,
+          "pending": 1024
+        },
+        "output": "element_tree",
+        "jit": "on",
+        "deviation": {
+          "fields": [
+            "runtime",
+            "thread",
+            "jit"
+          ],
+          "reason": "gpui-shell at M0 has no out-of-process panel host, and its release builds tier hot functions up to native code with no switch (shell_jit_config); debug builds, so the headless tests, stay on the interpreter. The spike loads the panel in the app through gpui-shell, as its Scope says. The heap, stack, microtask and pending limits and the 4 ms budget are the Fields' values, not enforced by this spike.",
+          "until": "panel_host"
+        }
+      }
+    },
+    {
+      "agent": "codex",
+      "agentVersion": "codex-cli 0.150.1",
+      "file": "crates/deep-app/panels/codex/main.js",
+      "sha256": "0787e9ade568988aa8177e52de8eb117c0cbd7f86792c891f19b1877dd3ee07e",
+      "screen": "codex",
+      "inputs": [
+        "issue#337",
+        {
+          "doc": "docs/spikes/337/panel-brief.md",
+          "sha256": "1087529caa37eef650d1d39d9ffc0350435a0fd7c65395742ee3fc205f6d77d8"
+        },
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/crates/shell/README.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/api.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/capabilities.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dependencies.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/dock.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/elements.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/engine.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/examples.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/getting-started.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/host-module.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/hosting.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/index.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/overlays.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/packaging.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/performance.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/state.md",
+        "https://github.com/longbridge/gpui-kit/blob/1676826d9d49b90f4d7b6808b69924f58796f6f1/website/shell/styling.md"
+      ],
+      "rounds": [
+        {
+          "result": "pass"
+        }
+      ],
+      "runtime": {
+        "origin": "agent_built",
+        "runtime": "in_process",
+        "thread": "ui_main",
+        "policy": "empty",
+        "update_budget_ms": 4,
+        "limits": {
+          "interrupt": true,
+          "heap": 268435456,
+          "stack": 1048576,
+          "microtasks": 100000,
+          "pending": 1024
+        },
+        "output": "element_tree",
+        "jit": "on",
+        "deviation": {
+          "fields": [
+            "runtime",
+            "thread",
+            "jit"
+          ],
+          "reason": "gpui-shell at M0 has no out-of-process panel host, and its release builds tier hot functions up to native code with no switch (shell_jit_config); debug builds, so the headless tests, stay on the interpreter. The spike loads the panel in the app through gpui-shell, as its Scope says. The heap, stack, microtask and pending limits and the 4 ms budget are the Fields' values, not enforced by this spike.",
+          "until": "panel_host"
+        }
+      }
+    }
+  ],
+  "stocks": {
+    "quotes": "crates/deep-app/fixtures/quotes.json",
+    "test": "codex_stocks_panel",
+    "result": "pass",
+    "alsoPassed": [
+      "claude_code_stocks_panel"
+    ]
+  },
+  "report": {
+    "test": "session_list_count_and_report",
+    "result": "pass",
+    "sample": "docs/spikes/337/report-sample.html"
+  },
+  "headless": {
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--locked"
+    ]
+  },
+  "build": {
+    "kind": "clean",
+    "command": [
+      "cargo",
+      "build",
+      "-p",
+      "deep-app",
+      "--release",
+      "--locked"
+    ],
+    "ms": 262110,
+    "display": "4.4 min",
+    "note": "A fresh worktree with no target directory, timed with /usr/bin/time; git dependencies already fetched."
+  },
+  "budgets": {
+    "coldStartMs": {
+      "runs": [
+        118.5,
+        204.7,
+        192.2,
+        176.8,
+        143.3
+      ],
+      "display": "204.7 ms",
+      "method": "From spawning the unstripped release binary (target/release/deep-app) to it reporting its first frame callback, with the Codex panel mounted; five runs after one untimed launch (docs/spikes/337/measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app.",
+      "firstLaunchMs": 381.3,
+      "firstLaunchNote": "The untimed launch before the five runs. macOS checks a new binary once on its first launch: that was the 1,198.7 ms before the abandoned run (appMeasurement.abandoned), the first launch after the build, and the draft record's 853.4 and 1,008.2 ms. The counted run's 381.3 ms was the first launch of that same, already-checked binary 34 minutes later, with the Node 22 preflight series (series.abandoned[0]) having run in between. A user pays the check once after installing; the budget runs follow the untimed launch."
+    },
+    "idleCpuPercent": {
+      "runs": [
+        0.05,
+        0,
+        0,
+        0,
+        0
+      ],
+      "display": "0.05%",
+      "method": "CPU time of the unstripped release binary over 20 s after 5 s settling, percent of one core (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app."
+    },
+    "memoryBytes": {
+      "runs": [
+        51642368,
+        48234496,
+        51347456,
+        47251456,
+        47038464
+      ],
+      "display": "51.6 MB",
+      "method": "Resident set size of the unstripped release binary at the end of the idle window (measure.mjs).",
+      "base": null,
+      "baseReason": "The merge base has no app."
+    },
+    "appBytes": {
+      "runs": [
+        49826856,
+        49826856,
+        49826856,
+        49826856,
+        49826856
+      ],
+      "display": "49.8 MB",
+      "method": "A copy of the release binary after strip (measure.mjs); the other three budgets run the unstripped binary.",
+      "base": null,
+      "baseReason": "The merge base has no app."
+    },
+    "preflightMs": {
+      "runs": [
+        155721,
+        166941,
+        158113,
+        153077,
+        153039
+      ],
+      "display": "2.8 min",
+      "method": "npm run preflight (Node v24.22.0), wall time from spawn to exit, on each side's own checkout, driven by a script with no other user work running. A run counts only when the fingerprint was nominal, on mains, Low Power Mode off, before and after it, and its own perf lane fingerprinted nominal throughout, so it exited 0 on the head side; the base's exit status is its own, see base.note. Three series were taken on October 20, all in series below: the first under Node 22 by mistake, abandoned, whose head warm-up built the head checkout's kept merge-base copy cold and so warmed every head run after it, perf's kept copies being per checkout, not per Node version, while the base checkout predates #594 and keeps none, rebuilding a temporary copy every run; the second under Node 24, whose head runs 3 to 5 turned fair, abandoned; the third with the driver idling until nominal and 3 minutes longer before each run, which is the counted one. The driver of the third series counted a run on its before-and-after fingerprints alone and stopped at five; the rule was tightened afterwards to perf's own fingerprint, which dropped one of those five (164,468 ms, perf saw fair mid-run), and a sixth run was taken under the same idle rule. The worst counted run is unchanged by that. The counted runs predate this branch's test redraft, so perf ran one check copy; see branchAsCommitted for a run with the redraft in place.",
+      "base": {
+        "runs": [
+          62388,
+          63132,
+          63878,
+          64193,
+          62613
+        ],
+        "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+        "exitStatus": 1,
+        "note": "The merge base predates #594 and #608, so its own perf lane flags repo-rules against its copy and judges off the reference Mac; its checks pass and the wall time is its preflight."
+      },
+      "series": {
+        "note": "Every preflight attempt of the day in order, with the fingerprint before and after it. counted marks the five head runs and five base runs above.",
+        "abandoned": [
+          {
+            "why": "Under Node 22.22.3, below the engines field; the head warm-up built the head checkout's kept merge-base copy cold, with its check lanes at 295 s and perf at 344 s against 36-40 s and 117-127 s warm. Not counted.",
+            "startedAt": "2026-10-20T21:25:22.106Z",
+            "endedAt": "2026-10-20T21:57:37.247Z",
+            "runs": [
+              {
+                "label": "head-preflight-warmup",
+                "ms": 639380,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-1",
+                "ms": 153553,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-2",
+                "ms": 156022,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-3",
+                "ms": 158233,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-4",
+                "ms": 156486,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-5",
+                "ms": 153611,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-warmup",
+                "ms": 65949,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-1",
+                "ms": 64038,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-2",
+                "ms": 64092,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-3",
+                "ms": 63986,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-4",
+                "ms": 65155,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-5",
+                "ms": 65389,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              }
+            ]
+          },
+          {
+            "why": "Under Node 24.22.0 with the driver waiting for nominal but no idle past it between runs; head runs 3 to 5 turned fair and the last two were throttled, and three of the five base runs ended fair, one at 2.3 min, so the series was abandoned. Not counted.",
+            "startedAt": "2026-10-20T21:59:10.946Z",
+            "endedAt": "2026-10-20T22:45:46.644Z",
+            "runs": [
+              {
+                "label": "head-preflight-warmup",
+                "ms": 156059,
+                "exit": 0,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-1",
+                "ms": 153180,
+                "exit": 0,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-2",
+                "ms": 155426,
+                "exit": 0,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-3",
+                "ms": 162870,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-4",
+                "ms": 320642,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "head-preflight-5",
+                "ms": 420159,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-warmup",
+                "ms": 65610,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-1",
+                "ms": 64711,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-2",
+                "ms": 68887,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-3",
+                "ms": 139539,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-4",
+                "ms": 68537,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "counted": false
+              },
+              {
+                "label": "base-preflight-5",
+                "ms": 77481,
+                "exit": 1,
+                "before": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "nominal"
+                },
+                "after": {
+                  "power": "ac",
+                  "lowPowerMode": false,
+                  "thermalState": "fair"
+                },
+                "counted": false
+              }
+            ]
+          }
+        ],
+        "counted": {
+          "startedAt": "2026-10-20T22:49:29.749Z",
+          "endedAt": "2026-10-20T23:50:25.904Z",
+          "idleMs": 180000,
+          "head": [
+            {
+              "ms": 155721,
+              "exit": 0,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 166941,
+              "exit": 0,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 164497,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "fair"
+              },
+              "counted": false
+            },
+            {
+              "ms": 164468,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": false
+            },
+            {
+              "ms": 158113,
+              "exit": 0,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 153077,
+              "exit": 0,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 153039,
+              "exit": 0,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            }
+          ],
+          "base": [
+            {
+              "ms": 62388,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 63132,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 63878,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 64193,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            },
+            {
+              "ms": 62613,
+              "exit": 1,
+              "before": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "after": {
+                "power": "ac",
+                "lowPowerMode": false,
+                "thermalState": "nominal"
+              },
+              "counted": true
+            }
+          ]
+        }
+      },
+      "branchAsCommitted": {
+        "note": "The counted head runs were taken before this branch's blind redraft of tests/acceptance/337 existed, so the head checkout had no own test files changed, as main has after merge, and perf ran one check copy. A checkout that changes test files, as this branch does, also runs perf's second copy without them; this is one such run, after the idle rule, as a reading beside the budget, with the code and tests as committed; the record and the design row were amended once more after it, docs only. The first such run on this branch, in the fair thermal state and, by its perf time, with that copy built cold, took 452.3 s.",
+        "ms": 201216,
+        "display": "3.4 min",
+        "exit": 0,
+        "before": {
+          "power": "ac",
+          "lowPowerMode": false,
+          "thermalState": "nominal"
+        },
+        "after": {
+          "power": "ac",
+          "lowPowerMode": false,
+          "thermalState": "nominal"
+        },
+        "startedAt": "2026-10-21T00:37:03.911Z"
+      }
+    }
+  },
+  "decision": {
+    "toolkit": "gpui-kit",
+    "failed": [],
+    "native": {
+      "macos": "Swift"
+    },
+    "extensionPanels": "gpui-shell",
+    "agentPanels": "in_process",
+    "webView": false,
+    "text": "gpui-kit: the two-day spike passed every must-have on the reference MacBook Air (Mac15,12, M3, 16 GB, macOS 23H723) on October 20, 2026. The window with its 1,000-row session list renders and is clicked headlessly; the menu-bar count, 143 waiting, is an AppKit status item that GPUI's offscreen renderer can't capture, checked by its title against the window's count. Both agents' JavaScript stocks panels, written from gpui-shell's docs and the brief alone, load through gpui-shell and pass the headless test, Codex's on round 0 and Claude Code's after one fix, the stocks panel runs on recorded quotes, and the app's report, listing the recorded quotes, opens in the browser. Worst of five runs after warm-up: cold start 204.7 ms, idle CPU 0.05%, memory 51.6 MB, the stripped app 49.8 MB, and the local preflight with its snapshot renders 2.8 min against 1.1 min at the spike branch's fork point from main, 0c5e145; a clean release build took 4.4 min. A budget counts only with the thermal state nominal: the fanless Air reaches fair after about three back-to-back preflights, and a throttled run took up to 7.0 min, so the driver idled until nominal and three minutes longer before each counted run. Both agents' panels ran in process through gpui-shell on the UI thread: Codex's in the release app, where gpui-shell's JIT is on, and both in the debug headless tests, which stay on the interpreter. The panel host isn't tested by this spike; it lands in R2. gpui-shell is at its first milestone and not yet a stable interface; extension panels run in it, with its registry's coverage of the app checked by #338, and the app has no web view: web output opens in your browser."
+  },
+  "findings": [
+    "Both agents wrote their panels from gpui-shell's docs and the brief alone, with no generated type declarations: Codex passed on round 0, Claude Code after one fix.",
+    "Claude Code's chart is a row of dots, not a line chart; the headless test checks texts and clicks, not the chart's form.",
+    "gpui-shell writes gpui-kit.d.ts and jsconfig.json into a panel's directory each time it loads it.",
+    "gpui-shell's release builds JIT hot functions to native code with no switch; debug builds, so the tests, stay on the interpreter.",
+    "Codex's panel keeps one alert on screen: a later symbol's crossing replaces an earlier one, where the brief says each alert stays shown. The headless test arms one symbol, so it passes; a test that arms two would catch it.",
+    "A binary's first launch after it is built is slower, since macOS checks a new binary once: 1,198.7 ms before the abandoned app measurement, the first launch after the build, and 853.4 and 1,008.2 ms in the draft record's runs on this Mac, against cold starts of 118.5-204.7 ms after it; the counted measurement's untimed launch of the already-checked binary took 381.3 ms 34 minutes later, with the Node 22 preflight series having run in between. A user pays the check once after installing; the budget runs follow one untimed launch.",
+    "The fanless MacBook Air reaches the fair thermal state after about three back-to-back preflights. Perf then judges its budgets INCONCLUSIVE, and the preflight slows: in an earlier series on October 20 two throttled runs took 320.6 s and 420.2 s, with the check lanes at 41 s of each and the rest in perf. The counted runs each began and ended nominal after the machine idled three minutes past nominal.",
+    "The spike's base, 0c5e145, is the spike branch's fork point from main, not the commit before the app landed (#599 merged onto 0c024ce, after #592, #590 and #598) and not this branch's merge base with main (f346706, which already holds the app). So the preflight comparison, 1.1 min to 2.8 min, carries #592, #590 and #598 as well as the app and its headless renders. The check lanes go from 12-13 s to 36-40 s, and perf from about 50 s (inferred from the base's wall time, since its perf lane fails and logs no time) to 117-127 s.",
+    "The draft record's 6.9 min preflight, taken at 5b56adf before #594, had perf rebuilding the Rust tree cold in temporary copies on every run; with #594 keeping each side's Cargo builds between runs, the same preflight reads 2.8 min here. The preflight once read over the limit on this Mac for that reason, not the app's."
+  ]
+}

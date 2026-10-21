@@ -274,17 +274,23 @@ async function all(options) {
   return { results, wholeMs: Math.round(performance.now() - started) };
 }
 
-// The design's one reference Mac (Numbers version 0 has to hold): a 16-inch MacBook Pro with a
-// 12-core M3 Pro and 36 GB, on mains power, Low Power Mode off, with no thermal or performance warning.
+// The design's reference Macs (Numbers version 0 has to hold): a 16-inch MacBook Pro with a 12-core
+// M3 Pro and 36 GB, or a 13-inch MacBook Air with an 8-core M3 and 16 GB, on mains power, Low Power
+// Mode off, with no thermal or performance warning.
+const referenceMacs = {
+  'Mac15,7': { memoryGb: 36, cores: '12', chip: /M3 Pro/, name: 'M3 Pro' },
+  'Mac15,12': { memoryGb: 16, cores: '8', chip: /Apple M3$/, name: 'M3' },
+};
 function machine() {
   if (process.platform !== 'darwin') return { model: process.platform, reference: false, why: 'not a Mac' };
   const sysctl = (key) => spawnSync('sysctl', ['-n', key], { encoding: 'utf8' }).stdout.trim();
   const model = sysctl('hw.model');
+  const mac = Object.hasOwn(referenceMacs, model) ? referenceMacs[model] : null;
   const why = [
-    model !== 'Mac15,7' && `model ${model}, not Mac15,7`,
-    sysctl('hw.memsize') !== String(36 * 2 ** 30) && 'memory is not 36 GB',
-    sysctl('hw.ncpu') !== '12' && 'not 12 cores',
-    !/M3 Pro/.test(sysctl('machdep.cpu.brand_string')) && 'not an M3 Pro',
+    !mac && `model ${model}, not ${Object.keys(referenceMacs).join(' or ')}`,
+    mac && sysctl('hw.memsize') !== String(mac.memoryGb * 2 ** 30) && `memory is not ${mac.memoryGb} GB`,
+    mac && sysctl('hw.ncpu') !== mac.cores && `not ${mac.cores} cores`,
+    mac && !mac.chip.test(sysctl('machdep.cpu.brand_string')) && `not an ${mac.name}`,
     !/'AC Power'/.test(spawnSync('pmset', ['-g', 'ps'], { encoding: 'utf8' }).stdout) && 'on battery',
     /lowpowermode\s+1/.test(spawnSync('pmset', ['-g'], { encoding: 'utf8' }).stdout) && 'Low Power Mode is on',
     /level\s*=\s*[1-9]|CPU_Speed_Limit\s*=\s*(?!100\b)\d+/.test(spawnSync('pmset', ['-g', 'therm'], { encoding: 'utf8' }).stdout) && 'the thermal state is not nominal',
