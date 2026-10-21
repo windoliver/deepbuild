@@ -1,0 +1,45 @@
+{
+  "doc": {
+    "format": 1,
+    "id": "doc-corpus-1",
+    "profile": "figure",
+    "title": "Corpus slab 1",
+    "description": "Corpus slab 1.",
+    "size": [
+      320,
+      200
+    ],
+    "layers": {
+      "main": {
+        "writer": "agent-a",
+        "title": "Main",
+        "order": "a0"
+      }
+    },
+    "items": {
+      "slab": {
+        "id": "slab",
+        "kind": "test.slab@1",
+        "layer": "main",
+        "name": "Slab",
+        "order": "a0",
+        "params": {
+          "w": 20,
+          "h": 7,
+          "label": "one"
+        }
+      }
+    }
+  },
+  "saved_at": "test.slab@1",
+  "expect": {
+    "slab": {
+      "kind": "test.slab@3",
+      "params": {
+        "width": 20,
+        "height": 7,
+        "label": "one"
+      }
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "id": "doc-broken",
+  "profile": "figure",
+  "title": "Broken reference",
+  "description": "Broken reference.",
+  "size": [
+    320,
+    200
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "slab": {
+      "id": "slab",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Slab",
+      "order": "a0",
+      "params": {
+        "width": 20
+      }
+    },
+    "sign": {
+      "id": "sign",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Sign",
+      "order": "a1",
+      "parent": "ghost",
+      "params": {}
+    }
+  }
+}
