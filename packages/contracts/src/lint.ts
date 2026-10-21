@@ -1,4 +1,4 @@
-import { isObject, resolveRef, segment, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { isNullBranch, isObject, resolveRef, segment, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 import { compilePattern } from './pattern.js';
 import { FORMATS } from './validate.js';
 
@@ -163,18 +163,23 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       }
     };
 
-    const union = (branches: JsonValue | undefined, path: string, allowed: (keys: string[]) => void): void => {
+    const union = (all: JsonValue | undefined, path: string, allowed: (keys: string[]) => void): void => {
       allowed(['oneOf']);
-      if (!Array.isArray(branches) || branches.length < 2) return flag(path + '/oneOf', 'a union has two or more branches');
-      branches.forEach((branch, i) => node(branch, `${path}/oneOf/${i}`));
+      // One branch may be `{"type": "null"}`, which makes the union nullable, as a type list does a type.
+      const nulls = Array.isArray(all) ? all.flatMap((b, i) => (isNullBranch(b) ? [i] : [])) : [];
+      const branches = Array.isArray(all) ? all.filter((b) => !isNullBranch(b)) : [];
+      if (!Array.isArray(all) || branches.length < 2) return flag(path + '/oneOf', 'a union has two or more branches besides null');
+      if (nulls.length > 1) flag(path + '/oneOf', 'a union has at most one null branch');
+      for (const i of nulls) for (const key of Object.keys(all[i] as Schema)) if (key !== 'type' && !ANNOTATIONS.includes(key)) flag(`${path}/oneOf/${i}${segment(key)}`, 'a null branch takes only its type');
+      all.forEach((branch, i) => { if (!nulls.includes(i)) node(branch, `${path}/oneOf/${i}`); });
       const tagged = (b: JsonValue, key: string) => isObject(b) && isObject(b.properties) && Object.hasOwn(b.properties, key) && isObject(b.properties[key]) && 'const' in b.properties[key]
         && Array.isArray(b.required) && b.required.includes(key);
       const first = branches[0];
       const tags = isObject(first) && isObject(first.properties) ? Object.keys(first.properties).filter((key) => branches.every((b) => tagged(b, key))) : [];
       if (tags.length !== 1) return flag(path + '/oneOf', 'a union is told apart by exactly one required constant field');
       const values = branches.map((b) => ((b as Schema).properties as Schema)[tags[0]!] as Schema).map((s) => s.const);
-      if (!values.every((v) => typeof v === 'string')) flag(path + '/oneOf', "a union's tag is a string in every branch");
-      else if (new Set(values).size !== values.length) flag(path + '/oneOf', "a union's branches each take their own tag");
+      if (!(values.every((v) => typeof v === 'string') || values.every((v) => typeof v === 'boolean'))) flag(path + '/oneOf', "a union's tag is a string in every branch, or a boolean in every branch");
+      else if (new Set<JsonValue | undefined>(values).size !== values.length) flag(path + '/oneOf', "a union's branches each take their own tag");
     };
 
     for (const path of halfPairs(schema, '')) flag(path, 'half a surrogate pair: every string in a schema is well-formed Unicode');
