@@ -55,9 +55,10 @@ Only what the issue and the existing contract tests name; nothing new is asked o
 - **"Refrozen"** is read as: the entry differs from the base's and equals `d1Digest` of the schema as it now
   is. A narrowed pattern reshapes the schema (the issue says so), so a refrozen entry can't keep the base
   value.
-- **"No other digest changes"** is read as both: every other entry in `digests.json` is the same string as
-  on the base, and every other schema's `d1Digest` is still that string, so no other schema was reshaped
-  either. The names in `digests.json` must be the base's names, and `frozenDigests()` must equal the file.
+- **"No other digest changes"** is read as: every entry `digests.json` had at the base is the same string now, and
+  that schema's `d1Digest` is still that string, so no other schema was reshaped either; a base name missing from the
+  file counts as changed. A name added since the base is not a change and is allowed: the criterion says nothing may
+  change, not that nothing may be added. `frozenDigests()` must equal the file, entry for entry.
 - **The package fixtures.** The base's first fixtures of `session.start@1`, `user.ask@1`, `reading.recorded@1`
   and `reading.batch@1` carry writer `app`, which the narrowed schemas refuse. These tests set the writer
   themselves, so they don't care; `tests/acceptance/311` (AC2) and the package's contract tests validate
