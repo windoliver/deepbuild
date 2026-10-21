@@ -40,8 +40,13 @@ impl Node {
                 .as_str()
                 .ok_or("a node without a role")?
                 .to_owned(),
-            name: value["name"].as_str().map(str::to_owned),
-            value: match &value["value"] {
+            // An unnamed or unvalued node says so with `null`; a missing key is missing evidence.
+            name: match value.get("name").ok_or("a node without a name key")? {
+                Value::Null => None,
+                Value::String(name) => Some(name.clone()),
+                other => return Err(format!("a node whose name is not text: {other}")),
+            },
+            value: match value.get("value").ok_or("a node without a value key")? {
                 Value::Null => None,
                 other => Some(other.clone()),
             },
@@ -133,8 +138,18 @@ impl Snapshot {
 /// The first node, in pre-order, where two snapshots differ, with why; `None` when they are equal
 /// node for node on role, name, value, bounds and children, so a node moved under another parent
 /// is a difference even when the pre-order list of nodes is the same, and their canvas items are
-/// equal too. Equal trees with different items differ at the index one past the last node.
+/// equal too. Equal trees with different items differ at the index one past the last node. Two
+/// snapshots of different windows, by size or scale, differ at node 0, the window.
 pub fn first_difference(a: &Snapshot, b: &Snapshot) -> Option<(usize, String)> {
+    if (a.size, a.scale) != (b.size, b.scale) {
+        return Some((
+            0,
+            format!(
+                "the window differs: {:?} at {}x vs {:?} at {}x",
+                a.size, a.scale, b.size, b.scale
+            ),
+        ));
+    }
     let mut index = 0;
     differ(&a.tree, &b.tree, &mut index).err().or_else(|| {
         (a.items != b.items).then(|| {
@@ -407,6 +422,16 @@ mod tests {
         let (index, why) = first_difference(&a, &b).expect("changed items went unseen");
         assert_eq!(index, 3);
         assert!(why.contains("canvas items"), "{why}");
+        for change in [
+            |s: &mut Snapshot| s.size[0] = 1511,
+            |s: &mut Snapshot| s.scale = 1,
+        ] {
+            let mut b = a.clone();
+            change(&mut b);
+            let (index, why) = first_difference(&a, &b).expect("a changed window went unseen");
+            assert_eq!(index, 0);
+            assert!(why.contains("the window differs"), "{why}");
+        }
     }
 
     #[test]
@@ -436,8 +461,8 @@ mod tests {
         assert!(why.contains("children"), "{why}");
     }
 
-    /// A snapshot missing a node's children, its items, or an item's id or value does not read as
-    /// an empty one.
+    /// A snapshot missing a node's children, name or value key, its items, or an item's id or
+    /// value does not read as an empty or unnamed one, and a name that is not text is refused.
     #[test]
     fn missing_lists_and_item_fields_are_refused() {
         let mut with_item = snapshot(vec![leaf("label", "x", [0, 0, 10, 10])]);
@@ -445,7 +470,19 @@ mod tests {
         let whole = with_item.to_json();
         assert_eq!(Snapshot::from_json(&whole).unwrap(), with_item);
         type Removal = (&'static str, fn(&mut Value));
-        let removals: [Removal; 5] = [
+        let removals: [Removal; 8] = [
+            ("without a name key", |json| {
+                json["tree"].as_object_mut().unwrap().remove("name");
+            }),
+            ("without a value key", |json| {
+                json["tree"]["children"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("value");
+            }),
+            ("name is not text", |json| {
+                json["tree"]["children"][0]["name"] = json!(7)
+            }),
             ("children list", |json| {
                 json["tree"]["children"][0]
                     .as_object_mut()

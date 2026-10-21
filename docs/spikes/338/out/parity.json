@@ -14,21 +14,21 @@
       "firstNode": {
         "index": 0
       },
-      "why": "node 0 (window None) differs in bounds: [0, 0, 3024, 1964] vs [0, 0, 1512, 982]"
+      "why": "the window differs: [1512, 982] at 2x vs [1512, 982] at 1x"
     },
     "sidebar": {
       "result": "fail",
       "firstNode": {
         "index": 0
       },
-      "why": "node 0 (window None) differs in bounds: [0, 0, 3024, 1964] vs [0, 0, 1512, 982]"
+      "why": "the window differs: [1512, 982] at 2x vs [1512, 982] at 1x"
     },
     "session": {
       "result": "fail",
       "firstNode": {
         "index": 0
       },
-      "why": "node 0 (window None) differs in bounds: [0, 0, 3024, 1964] vs [0, 0, 1512, 982]"
+      "why": "the window differs: [1512, 982] at 2x vs [1512, 982] at 1x"
     }
   }
 }
