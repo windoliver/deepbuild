@@ -131,17 +131,16 @@ exists and names its `conformance` case (`/facts/readUsage`, `/facts/readUsage/c
 | `permission.answer@1` | `{decision: allow \| deny \| cancel, for: call \| session, input?}`, closed; `input` is the edited input, opaque. |
 | `permission.request` (an event kind, catalogued) | `data.kind` one of `tool \| plan \| question \| mode`, with the call's `tool`, `command` or `paths` beside it; at least one fixture. |
 | `turn.usage` (an event kind, catalogued) | `data` as `TurnUsage` above: `cost` a union on `basis` (`reported` needs `usd ≥ 0`; `estimated` needs `usd ≥ 0` and a non-empty `rate_card`; `unpriced` carries neither), `tokens` all required (`input`, `cached`, `output` whole numbers ≥ 0, `exact`), `context` optional with `window ≥ 1`, `model` non-empty, `covers` the two values. Fixtures include one per cost basis. |
-| `agent.stop` (the catalogued kind) | `data.cause` an enum of exactly the eleven slugs above, `data.reset` a whole number ≥ 0; a published fixture names `plan_window_spent` with its `reset`. Whether `cause` is required is not pinned (Readings). |
+| `agent.stop@2` (the catalogued kind at version 2) | `data.cause` required, exactly the eleven slugs above; `data.plan_resets` a whole number ≥ 0 (ms since the epoch), required with `plan_window_spent` and refused beside every other cause; `data` closed, so no field holds the agent's text; a published fixture names `plan_window_spent` with its `plan_resets`. As main ships it since #603 (Redraft of AC2, below). |
 | `tool.before`, `session.attention`, `error@1`, `hook.request@1` | as #311 published them; unchanged. |
 
 Every new shape is a new name, so no frozen digest moves: `frozenDrift(listSchemas(), frozenDigests())` must
-stay empty with the cursor adapter registered (AC7), and `lintSchemas(listSchemas())` empty. `agent.stop` is the
-one published shape that grows. The design's "What a minor may change" allows an optional field whose absence
-means what it meant before and a member of an extensible set; the tests therefore name it through
-`catalogue()` (`kindSchema('agent.stop')`) and pin neither its file name nor its digest: it may land as a new
-minor of `agent.stop@1` (with that minor's own frozen digest in `digests.json`, as the design asks, or the
-one digest the repo keeps today updated with it) or as a new name the catalogue points at. Making `cause`
-required would retype the stop and is a new major under that rule; the tests don't require it.
+stay empty with the cursor adapter registered (AC7), and `lintSchemas(listSchemas())` empty. The stop's cause
+landed on main before this suite did, as the new major `agent.stop@2` (#603), with `cause` required and
+`agent.stop@1` frozen at its base shape and digest (`tests/acceptance/603/`). The stop tests therefore name
+that version through `catalogue()` (`kindSchema('agent.stop', 2)`) and hold it as main ships it (Redraft of
+AC2, below). Their first draft, written at base `f346706`, named the kind without a version and allowed either
+a minor of `agent.stop@1` or a new name; that reading is superseded.
 
 ### Files the tests read
 
@@ -178,8 +177,8 @@ required would retype the stop and is a new major under that rule; the tests don
   it; the contract still leaves it optional for a third adapter.
 - **Cost basis names** are `reported`, `estimated` (with `rate_card`) and `unpriced`, the issue's words as slugs;
   a reported cost may be exactly 0 (a free tier reports it), an unpriced one carries no amount at all.
-- **Stop causes** are the corpus README's slugs for the issue's eleven causes; `reset` rides beside
-  `plan_window_spent` as ms since the epoch. The adapters' mapping of Claude Code's `StopFailure.error`
+- **Stop causes** are the corpus README's slugs for the issue's eleven causes; the reset rides beside
+  `plan_window_spent` as ms since the epoch, at `data.plan_resets` in `agent.stop@2`. The adapters' mapping of Claude Code's `StopFailure.error`
   (`rate_limit`, `overloaded` → `rate_limited`; `authentication_failed`, `oauth_org_not_allowed` →
   `sign_in_required`; else `unknown`) is the corpus README's, written from Claude Code's hooks reference.
 - **Facts sections** are named by this job from the issue's list: `hookTimeouts`, `continuation`, `launch`,
@@ -216,9 +215,10 @@ required would retype the stop and is a new major under that rule; the tests don
    `{session, call, tool, kind, paths, command}`; `tool.before@1`'s data is closed to `{kind, paths, command,
    server?, tool?}`. The tests read `kind`, `paths`, `command`, `server` and `tool` on mapped events and validate
    whole events only through the published fixtures' envelopes, never a mapped event against its kind schema.
-3. **`agent.stop`'s data.** The catalogue gives `{turn, did_work}`; the corpus stores `{session, outcome,
-   continued, cause}`; the issue needs `cause` (with `reset`). The tests hold the catalogued schema to `cause`
-   and `reset` and the adapters to recording a cause, and nothing else of the two data shapes.
+3. **`agent.stop`'s data.** `agent.stop@1` gives `{turn, did_work}`; the corpus stores `{session, outcome,
+   continued, cause}`; the issue needs `cause` (with its reset). The tests hold the catalogued `agent.stop@2` to
+   `cause` and `plan_resets` (as main ships it) and the adapters to recording a cause, and nothing else of the
+   two data shapes.
 4. **The hook request's `agent`.** #311's request fixture says `claude-code`; the facts files say `claude`. The
    registry name here is the facts'.
 5. **A permission request's kinds.** The design's four (`tool, plan, question, mode`) have one source today, the
@@ -236,7 +236,7 @@ property.
 | ID | Criterion (short) | Tests |
 |---|---|---|
 | AC1 | Codex's `apply_patch` and Claude Code's Edit both record as an edit with the same paths | `edits.test.ts` AC1: the two calls on one file; a patch through the shell tool, after a `cd`, indented; every marker line, `..` folded; a relative or dotted Edit path; a 1,000-case property over relative paths; the corpus's recorded calls; the edit fits `tool.before` |
-| AC2 | a stop whose cause isn't in the closed set fails its schema | `stop.test.ts` AC2: each of the eleven passes; strangers fail at `/data/cause` (fixed and a 1,000-case property); `reset` with `plan_window_spent`; the adapters' causes from `StopFailure.error` (fixed, recorded, and a 1,000-case property, with the agent's words ignored); every recorded stop names a cause |
+| AC2 | a stop whose cause isn't in the closed set fails its schema | `stop.test.ts` AC2, on `agent.stop@2`: the catalogue lists it; each of the eleven passes; strangers, non-strings and a missing cause fail at `/data/cause` (fixed and a 1,000-case property); `plan_resets` with `plan_window_spent` (required, a whole number of ms, text, negative and fraction refused, fixed and a 1,000-case property), refused beside every other cause; the published fixture; no text field beside the cause. `stop.adapters.test.ts` AC2: the adapters' causes from `StopFailure.error` (fixed, recorded, and a 1,000-case property, with the agent's words ignored); every recorded stop names a cause |
 | AC3 | an answer names allow, deny or cancel and this call or this session; anything else fails | `permission.test.ts` AC3: six combinations with and without edited input; `/decision` and `/for` refusals (fixed and a 1,000-case property); no rule-writing field; plus `permission.request` kinds and both agents' recorded requests |
 | AC4 | a cost without its basis fails; an unpriced cost is never stored as zero | `usage.test.ts` AC4: the three bases; no basis at `/data/cost/basis`; unpriced with 0 or any amount at `/data/cost/usd` (fixed and a 1,000-case property); reported and estimated needs; the Codex adapter's reading is unpriced with no amount |
 | AC5 | each turn records the model that actually answered | `usage.test.ts` AC5: `/data/model` required; Claude Code's second turn on haiku though opus was chosen; Codex's per-turn and session models; published fixtures name a model |
@@ -280,3 +280,47 @@ own redacted ones.
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run on the base commit, where every suite fails because the adapters package doesn't
   exist, with the Node version in its header.
+- `stop.adapters.test.ts`: the adapters' half of AC2, moved as it stood out of `stop.test.ts` by the redraft
+  below, so the published-shape half runs where only the contracts exist.
+
+## Redraft of AC2 (2026-10-20, against main at `f037d9a`)
+
+`stop.test.ts` was redrafted blind, per AGENTS.md (Proof), by a job that read only issue #312, the design, this
+README, `helpers.ts`, the first draft of `stop.test.ts`, `agent.stop@1.json`, `agent.stop@2.json`, their
+fixtures and `digests.json` on main, and never the implementing PR or its branch.
+
+- **Why.** The first draft (base `f346706`) read the catalogued `agent.stop` through `kindSchema('agent.stop')`,
+  which returns the catalogue's first entry for the kind, and held that schema to `cause` and `reset` at
+  `/data/reset`, with a published fixture under it naming `plan_window_spent` and a numeric `reset`. Main has
+  since merged #603, which settled the shape: `agent.stop@2` carries a required `cause`, the reset at
+  `/data/plan_resets` and a nullable required `usage`, while `agent.stop@1` stays frozen at its base shape and
+  digest and refuses a `cause` (`tests/acceptance/603/ac4-digest-redraft.test.ts`). The first draft could pass
+  only by widening `agent.stop@1`, which that frozen test refuses. The owner sent the dispute to this redraft:
+  AC2 is held against `agent.stop@2` as main ships it.
+- **What changed.** `stop.test.ts`: the published-shape tests now name `agent.stop@2` through
+  `kindSchema('agent.stop', 2)`; every member of the closed set is accepted and every non-member, non-string
+  and missing cause refused at `/data/cause`; `plan_window_spent` carries its reset at `/data/plan_resets`
+  (a whole number of ms since the epoch; text, a numeric string, a negative and a fraction refused; required
+  there, refused beside every other cause); the published `agent.stop@2` fixture shows it; and `data` has no
+  room for the agent's text. The adapters' readings (an unexplained stop is `unknown`, never a pass; no rule
+  reads the agent's words; every recorded stop names a cause) moved unchanged to `stop.adapters.test.ts`,
+  since they import `packages/adapters`, which the shape tests don't need and main doesn't have yet.
+  `helpers.ts`: `kindSchema` takes an optional version; nothing else in it changed. No schema, fixture, digest
+  or implementation changed.
+- **Proof it still fails on a wrong program.** On main, `stop.test.ts` passes (29 tests). Against a scratch
+  copy of `agent.stop@2.json` with one planted fault at a time, restored after each run, it fails naming the
+  fault: the cause set widened with `overloaded` → 1 fails ("cause "overloaded" fails, naming /data/cause");
+  `plan_resets` dropped from `plan_window_spent`'s required → 1 fails ("plan_window_spent without its reset:
+  should be refused"); `plan_resets` retyped to `number` → 1 fails ("reset as a fraction of a ms"); `plan_resets`
+  allowed beside every cause → 1 fails ("cause sign_in_required with a reset"); a `message` field allowed beside
+  the cause → 1 fails ("a message beside the cause"). At the first draft's base, `agent.stop@2` isn't catalogued,
+  so every test fails at `kindSchema('agent.stop', 2)`.
+- **On main**, `stop.adapters.test.ts` fails at its import of `packages/adapters/src/index.ts`, as every other
+  suite here does at the base (BASE-FAILURE.txt); that is expected until #312's implementation lands. The
+  preflight unit lane runs `tests/**/*.test.ts` (`scripts/lanes.mjs`), so this redraft must land together with
+  or after the implementation, never before it on its own; its PR is held as a draft that names #623 until
+  then. The root typecheck lane includes only `packages/**`, so the folder's `tsconfig.json`, which also needs
+  `packages/adapters`, is run by hand as above and is not what holds a release.
+- **Surface note.** `StopReading.reset` in the surface above is the adapters' TypeScript reading, left as the
+  first draft named it; the published field it maps onto is `agent.stop@2`'s `data.plan_resets`. No test here
+  reads `StopReading`, so the redraft doesn't rename it.

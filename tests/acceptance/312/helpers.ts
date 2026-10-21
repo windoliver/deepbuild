@@ -109,10 +109,10 @@ export function expectThrown(run: () => unknown, path: string, why: string): Con
   return error;
 }
 
-/** The schema name the catalogue gives an event kind, failing the test when the kind isn't catalogued. */
-export function kindSchema(kind: string): string {
-  const entry = catalogue().find((e) => e.kind === kind);
-  expect(entry, `event kind ${kind} is in the catalogue`).toBeDefined();
+/** The schema name the catalogue gives an event kind (at one version, when given), failing the test when it isn't catalogued. */
+export function kindSchema(kind: string, version?: number): string {
+  const entry = catalogue().find((e) => e.kind === kind && (version === undefined || e.version === version));
+  expect(entry, `event kind ${kind}${version === undefined ? '' : `@${version}`} is in the catalogue`).toBeDefined();
   return entry!.schema;
 }
 /** The implementation's first valid fixture for a schema, as a fresh copy. */
