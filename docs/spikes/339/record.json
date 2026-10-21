@@ -10,7 +10,7 @@
   "capture": {
     "api": "CGDisplayCreateImageForRect (CoreGraphics/CGDirectDisplay.h) on the display under the cursor, found with CGGetDisplaysWithPoint and falling back to CGMainDisplayID: one 240 by 160 point rect around the cursor in the global display space CGDisplayBounds uses, kept inside that display, its BGRA rows copied through CGDataProvider into a gpui RenderImage the cursor window draws",
     "shortcut": "Option+Space (Option held with virtual key 49, kVK_Space)",
-    "holdSource": "Three readings, all from macOS, never from the event's own word alone: an NSEvent local monitor (NSEvent.addLocalMonitorForEventsMatchingMask) takes each key event's CGEvent and reads field 45, kCGEventSourceStateID, which must be the HID system state table (1), and field 41, kCGEventSourceUnixProcessID, which must be 0, no posting process (CoreGraphics/CGEventTypes.h); and the gate arms only if the whole chord is down in the HID system state table at that moment, Space by CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, 49) and Option by CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) carrying kCGEventFlagMaskAlternate, re-read together on every 16 ms capture tick; the event's own Option flag is never what decides, since a forged CGEvent can carry the two fields and any flags, but no event this process builds or posts writes the HID table",
+    "holdSource": "The HID system state table, read fresh on every 16 ms capture tick and never any event's own word: the gate is held exactly while Space reads down by CGEventSourceKeyState(kCGEventSourceStateHIDSystemState, 49) and Option reads down in CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) as kCGEventFlagMaskAlternate (CoreGraphics/CGEventSource.h). No event this process builds or posts writes that table, and the table is readable whichever app is key, which the shortcut needs since it is held while the person is in another app. Key events that do reach the app are read for the record only: an NSEvent local monitor (NSEvent.addLocalMonitorForEventsMatchingMask) takes each key event's CGEvent and logs field 45, kCGEventSourceStateID, and field 41, kCGEventSourceUnixProcessID (CoreGraphics/CGEventTypes.h), and the gate's verdict on it: a press is counted hardware only with state 1, pid 0 and the chord down in the table, else refused",
     "command": ["cargo", "run", "-p", "deep-app", "--locked", "--", "--probe-synthetic", "200"],
     "presses": {
       "count": 200,
@@ -25,23 +25,23 @@
     "heldCommand": ["cargo", "run", "-p", "deep-app", "--locked", "--", "--probe-held", "120", "--frame", "docs/spikes/339/held-frame.png"],
     "held": {
       "log": "docs/spikes/339/held-run.txt",
-      "frames": 1,
+      "frames": 0,
       "frame": "docs/spikes/339/held-frame.png",
-      "sha256": "PENDING: the held run needs a person at the keyboard"
+      "sha256": "PENDING: four held runs on 2026-10-20 (two from the in-app terminal, two from Terminal.app with Screen Recording granted) each ended with no key read down in the HID table at any tick and no key event delivered, so nothing was held on this Mac's keyboard during them; the run needs a person at the keyboard"
     }
   },
   "permission": {
     "api": "CGPreflightScreenCaptureAccess, read before the run and on every capture tick, and CGRequestScreenCaptureAccess, called once per run when the preflight reads false (CoreGraphics/CGWindow.h, macOS 10.15 and later)",
-    "prompt": "PENDING: what the system prompt showed",
-    "state": "denied",
+    "prompt": "macOS showed no prompt in any run: CGRequestScreenCaptureAccess returned without one, both from the Claude desktop app's terminal (the responsible process for a probe started there, with no grant) and from Terminal.app, and the system log (subsystem com.apple.TCC) shows only preflight queries for kTCCServiceScreenCapture. The grant was made by hand in System Settings > Privacy & Security > Screen Recording for Terminal, then Terminal was quit and reopened; the probe, started from Terminal, read the preflight true from then on",
+    "state": "granted",
     "whenDenied": "No capture is tried: a held tick counts as ticks_without_access, the cursor window says Screen Recording not granted, and the report line says permission denied (after the request was made) or undetermined (before it)"
   },
   "cursorWindow": {
-    "recording": "PENDING: docs/spikes/339/cursor-window.mov",
-    "sha256": "PENDING",
-    "durationMs": 0,
+    "recording": "docs/spikes/339/cursor-window.mov",
+    "sha256": "b5faaff1965dcdd60dd621dc16776607d6b83b53f04d70a72eca9596e0731b4a",
+    "durationMs": 4500,
     "sizePoints": { "width": 240, "height": 160 },
-    "follows": "A gpui PopUp window (WindowKind::PopUp, no title bar, never focused) of 240 by 160 points. A 16 ms timer on gpui's foreground executor reads NSEvent.mouseLocation and moves the window to 24 points right of and below the cursor with NSWindow.setFrameOrigin; gpui 0.3 has no window-move call, so the NSWindow is reached through the view's raw window handle (raw-window-handle's AppKitWindowHandle). The window shows the last captured frame while the shortcut is held and a hint otherwise, with the gate's counts in its footer"
+    "follows": "Recorded with screencapture -V 5 from Terminal.app while deep-app --cursor-demo 9 warped the cursor around a circle on the main display (CGWarpMouseCursorPosition), the window following 24 points right of and below it; no key was held, so the window shows its hint and no frame. A gpui PopUp window (WindowKind::PopUp, no title bar, never focused) of 240 by 160 points. A 16 ms timer on gpui's foreground executor reads NSEvent.mouseLocation and moves the window to 24 points right of and below the cursor with NSWindow.setFrameOrigin; gpui 0.3 has no window-move call, so the NSWindow is reached through the view's raw window handle (raw-window-handle's AppKitWindowHandle). The window shows the last captured frame while the shortcut is held and a hint otherwise, with the gate's counts in its footer"
   },
   "sender": {
     "named": false,
@@ -62,6 +62,7 @@
     "CGEventPost from a process without Accessibility permission delivers nothing: the synthetic run's second process posted 50 forged chords (Option and Space, HID-state source, pid 0) at the HID event tap with AXIsProcessTrusted false, and none arrived at the gate (posted_from_process in the run log: chords_posted 50, presses_arrived 0). A Swift probe on this Mac found the same for CGEventPostToPid and for the session tap. A process that does hold Accessibility permission can post at the HID tap, and Apple documents that such events go through the HID system state (CGEventSource.h: kCGEventSourceStateHIDSystemState); whether that writes the key-state table the gate reads is the one reading this spike couldn't take, since no process in this session is trusted. The record's run must be repeated with Accessibility granted to the built binary before the gate is relied on against a trusted poster; until then the gate's claim is: nothing a process without that permission posts arms it.",
     "macOS 10.15 and later answer CGDisplayCreateImageForRect without Screen Recording access with an image of the desktop that holds no other app's windows, so a frame is counted only when CGPreflightScreenCaptureAccess reads true on that tick; without it the tick is counted as ticks_without_access and nothing is captured.",
     "gpui 0.3 has no call to move a window; the cursor window is moved through its NSWindow, reached through the raw window handle. gpui's own screen capture (App::screen_capture_sources) is a ScreenCaptureKit stream, not one frame, so the one frame comes from CGDisplayCreateImageForRect, deprecated in macOS 15 for ScreenCaptureKit.",
+    "A local NSEvent monitor sees only keys delivered to this app, and the shortcut is held while the person is in another app, so no event can be the hold's source: the first held runs saw no event at all while the probe wasn't the key app. The HID system state table is readable from any process whichever app is key, so the gate arms and releases from the table alone on each tick, and events only add provenance to the record. Whether CGEventSourceKeyState reads hardware keys without the Input Monitoring permission is answered by the held run, which also counts ticks on which any key or Option alone reads down (ticks_with_hid_key, ticks_with_hid_option).",
     "The key events gpui hands a view carry no provenance (its KeyDownEvent has is_held from isARepeat and nothing from the CGEvent), so the gate reads the NSEvent before gpui does, through a local event monitor, which gpui's AppKit event loop leaves in place."
   ]
 }

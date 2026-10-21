@@ -84,6 +84,9 @@ pub struct Counts {
     pub frames: u64,
     /// Ticks on which the gate was held but Screen Recording access was missing.
     pub ticks_without_access: u64,
+    /// Ticks on which the HID table read any key down, and Option down, chord or not.
+    pub ticks_with_hid_key: u64,
+    pub ticks_with_hid_option: u64,
 }
 
 /// The shortcut's held state, armed by hardware alone.
@@ -130,10 +133,17 @@ impl Gate {
         self.held
     }
 
-    /// Whether a capture may happen on this tick: held, and the HID table still reports the
-    /// chord down. A table that says up releases the gate, whatever events said.
+    /// Whether a capture may happen on this tick: whether the HID system state table reports
+    /// the chord down. The table is the hold's one source, read every tick: it arms the gate
+    /// when it reads down, whether or not any event reached this app (the shortcut is global,
+    /// and keys go to whichever app is key), and releases it when it reads up, whatever
+    /// events said. Events only add their provenance to the record.
     pub fn may_capture(&mut self, hid_chord_down: bool) -> bool {
-        if self.held && !hid_chord_down {
+        if hid_chord_down && !self.held {
+            self.counts.presses += 1;
+            self.counts.hardware_presses += 1;
+            self.held = true;
+        } else if self.held && !hid_chord_down {
             self.release();
         }
         self.held
@@ -189,6 +199,16 @@ mod macos {
         let hid = CGEventSourceStateID::HIDSystemState;
         CGEventSource::key_state(hid, SHORTCUT_KEY_CODE)
             && CGEventSource::flags_state(hid).contains(CGEventFlags::MaskAlternate)
+    }
+
+    /// What else the HID system table reads right now: any key at all down, and Option
+    /// down. The record keeps these so a held run with no chord says whether the table
+    /// reads hardware in this process at all, or only nothing was held.
+    pub fn hid_any_key_down() -> (bool, bool) {
+        let hid = CGEventSourceStateID::HIDSystemState;
+        let any = (0u16..128).any(|key_code| CGEventSource::key_state(hid, key_code));
+        let option = CGEventSource::flags_state(hid).contains(CGEventFlags::MaskAlternate);
+        (any, option)
     }
 
     /// Reads the event's provenance fields through its `CGEvent`.
@@ -456,6 +476,12 @@ mod macos {
                 CGPoint::new(cursor.x + 24.0, cursor.y + 24.0),
                 self.size,
             );
+            let (any_key, option) = hid_any_key_down();
+            {
+                let mut gate = self.gate.borrow_mut();
+                gate.counts.ticks_with_hid_key += u64::from(any_key);
+                gate.counts.ticks_with_hid_option += u64::from(option);
+            }
             let may_capture = self.gate.borrow_mut().may_capture(hid_shortcut_down());
             if may_capture {
                 self.request();
@@ -754,12 +780,15 @@ mod tests {
                 "{provenance:?}"
             );
             assert!(!gate.held(), "{provenance:?}");
-            assert!(
-                !gate.may_capture(provenance.hid_chord_down),
-                "{provenance:?}"
-            );
             assert_eq!(gate.counts.synthetic_presses, 1);
             assert_eq!(gate.counts.hardware_presses, 0);
+            // The tick arms only from the HID table: the event's fields never do, and a
+            // table that reads the chord down is a chord on the keyboard whatever arrived.
+            assert_eq!(
+                gate.may_capture(provenance.hid_chord_down),
+                provenance.hid_chord_down,
+                "{provenance:?}"
+            );
         }
     }
 
@@ -785,6 +814,21 @@ mod tests {
         assert_eq!(gate.counts.synthetic_presses, 200);
         assert_eq!(gate.counts.capture_attempts, 0);
         assert_eq!(gate.counts.frames, 0);
+    }
+
+    #[test]
+    fn a_chord_the_hid_table_reads_down_arms_without_any_event() {
+        // The shortcut is global: when another app is key no event reaches this one, and
+        // the HID table is the only reading. It alone arms the gate.
+        let mut gate = Gate::default();
+        assert!(gate.may_capture(true));
+        assert!(gate.held());
+        assert_eq!(gate.counts.presses, 1);
+        assert_eq!(gate.counts.hardware_presses, 1);
+        assert!(gate.may_capture(true));
+        assert_eq!(gate.counts.presses, 1, "a held chord is one press");
+        assert!(!gate.may_capture(false));
+        assert_eq!(gate.counts.releases, 1);
     }
 
     #[test]

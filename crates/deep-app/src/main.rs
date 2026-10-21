@@ -199,6 +199,11 @@ mod trusted {
             // A probe's report names the permission's state, so ask for it at the start.
             view.update(cx, |view, _| view.request());
         }
+        if matches!(mode, Mode::ProbeHeld { .. }) {
+            // A local monitor sees only keys delivered to this app, so the held run needs it
+            // frontmost once the windows are up.
+            cx.activate(true);
+        }
 
         let started = std::time::Instant::now();
         cx.spawn(async move |cx| {
@@ -365,6 +370,8 @@ mod trusted {
                 "capture_attempts": counts.capture_attempts,
                 "frames": counts.frames,
                 "ticks_without_access": counts.ticks_without_access,
+                "ticks_with_hid_key": counts.ticks_with_hid_key,
+                "ticks_with_hid_option": counts.ticks_with_hid_option,
             },
             "frame_shown": has_frame,
             "posted_from_process": posted_from_process,
