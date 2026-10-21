@@ -1,0 +1,126 @@
+Base commit: c8837eab0a3f21a69f6b16e863195d418a2f92e0 (origin/main, no implementation)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/313   (node = ~/.nvm/versions/node/v24.22.0/bin/node, the repo's .node-version; the same as npx vitest run --root tests/acceptance/313 with that node first on PATH)
+Date: 2026-10-21T05:37:42Z  Node v24.22.0  vitest 5.0.5  darwin-arm64
+Exit code: 1
+Why every suite fails: packages/conformance/src/index.ts, the surface the README defines, does not exist at the base; each of the eight suites imports it (directly or through helpers.ts) and fails at that import, before any test runs. Nothing else in the import graph is missing: packages/contracts, packages/adapters and scripts/lanes.mjs exist at the base.
+Checked beside this run (not at the base): the tests type-check against a declaration-only copy of the surface, kept outside the repo and placed at packages/conformance/src/index.ts only for the check (node node_modules/typescript/bin/tsc -p tests/acceptance/313/tsconfig.json: no errors), then removed. Run against that same copy as a runtime stub, whose declared functions compile to nothing so every call throws, four files (runner, fakes, revisions, facts) fail at their top-level kits() call and the other four read 47 failed | 0 passed of 47 (closures 15, codes 16, generator 6, packaging 10). No test passes at the base or against the stub. The whole suite holds 98 tests (README, Criteria to tests).
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/313
+
+ ❯ fakes.test.ts (0 test)
+ ❯ generator.test.ts (0 test)
+ ❯ revisions.test.ts (0 test)
+ ❯ packaging.test.ts (0 test)
+ ❯ codes.test.ts (0 test)
+ ❯ closures.test.ts (0 test)
+ ❯ facts.test.ts (0 test)
+ ❯ runner.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  closures.test.ts [ closures.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/closures.test.ts
+ ❯ closures.test.ts:9:1
+      7| import { getSchema, lintSchemas, listSchemas, validate } from '../../.…
+      8| import type { JsonValue, Schema } from '../../../packages/contracts/sr…
+      9| import { codeFamilies, contractStep, judge, serveAt } from '../../../p…
+       | ^
+     10| import type { Closure } from '../../../packages/conformance/src/index.…
+     11| import { allEnums, asJson, deleteAt, enumNodes, expectAccepted, FACTS,…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  codes.test.ts [ codes.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/codes.test.ts
+ ❯ codes.test.ts:9:1
+      7| import { ERROR_CODES, getSchema, listSchemas } from '../../../packages…
+      8| import type { Schema } from '../../../packages/contracts/src/index.ts';
+      9| import { codeFamilies, codesPage, exitCode, judge, kitProblems, kits, …
+       | ^
+     10| import type { CodeFamily, FamilyName, PlantedEntry, Verdict } from '..…
+     11| import { adapterKit, EXIT_CODES, expectThrown, FAMILIES, familyEnum, f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  facts.test.ts [ facts.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/helpers.ts
+ ❯ helpers.ts:14:1
+     12| import type { JsonValue, Schema, SchemaEntry, Validation } from '../..…
+     13| import type { Adapter, AdapterCaps, HookRequestLine } from '../../../p…
+     14| import { cleanFill, kits, proveFake, runKit } from '../../../packages/…
+       | ^
+     15| import type {
+     16|   Case, CaseResult, Closure, Fake, FakeProof, FamilyName, Fill, Harnes…
+ ❯ facts.test.ts:8:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  fakes.test.ts [ fakes.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/fakes.test.ts
+ ❯ fakes.test.ts:7:1
+      5| import fc from 'fast-check';
+      6| import { describe, expect, it } from 'vitest';
+      7| import { kitProblems, proveFake } from '../../../packages/conformance/…
+       | ^
+      8| import type { Fake, Fill, Kit, Report } from '../../../packages/confor…
+      9| import {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  generator.test.ts [ generator.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/generator.test.ts
+ ❯ generator.test.ts:9:1
+      7| import { listSchemas, validate } from '../../../packages/contracts/src…
+      8| import type { JsonValue, Schema, SchemaEntry, Validation } from '../..…
+      9| import { draw, RECORDED_SEED } from '../../../packages/conformance/src…
+       | ^
+     10| import type { Drawn, Mutation, MutationKind } from '../../../packages/…
+     11| import { isObject, lenientValidate, REPO } from './helpers.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  packaging.test.ts [ packaging.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/helpers.ts
+ ❯ helpers.ts:14:1
+     12| import type { JsonValue, Schema, SchemaEntry, Validation } from '../..…
+     13| import type { Adapter, AdapterCaps, HookRequestLine } from '../../../p…
+     14| import { cleanFill, kits, proveFake, runKit } from '../../../packages/…
+       | ^
+     15| import type {
+     16|   Case, CaseResult, Closure, Fake, FakeProof, FamilyName, Fill, Harnes…
+ ❯ packaging.test.ts:7:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  revisions.test.ts [ revisions.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/helpers.ts
+ ❯ helpers.ts:14:1
+     12| import type { JsonValue, Schema, SchemaEntry, Validation } from '../..…
+     13| import type { Adapter, AdapterCaps, HookRequestLine } from '../../../p…
+     14| import { cleanFill, kits, proveFake, runKit } from '../../../packages/…
+       | ^
+     15| import type {
+     16|   Case, CaseResult, Closure, Fake, FakeProof, FamilyName, Fill, Harnes…
+ ❯ revisions.test.ts:6:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  runner.test.ts [ runner.test.ts ]
+Error: Cannot find module '../../../packages/conformance/src/index.ts' imported from <checkout>/tests/acceptance/313/runner.test.ts
+ ❯ runner.test.ts:10:1
+      8| import { registry } from '../../../packages/adapters/src/index.ts';
+      9| import type { Adapter, Mapped } from '../../../packages/adapters/src/i…
+     10| import { runKit } from '../../../packages/conformance/src/index.ts';
+       | ^
+     11| import type { Driven, Fill, Operation, Report } from '../../../package…
+     12| import {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  no tests
+   Start at  22:37:42
+   Duration  285ms (worker 97%, environment 3%)
+

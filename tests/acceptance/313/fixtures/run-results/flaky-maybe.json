@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "run.finished",
+  "writer": "cli",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74G3A5C7E9G1J3M5P7R9T1V",
+    "outcome": "flaky_maybe",
+    "tests_run": 29,
+    "passed": 29,
+    "runs": 1,
+    "evidence": [],
+    "check": "planted.unit",
+    "assertion": null,
+    "expected": null,
+    "actual": null,
+    "step": null,
+    "points_to": null,
+    "findings": [],
+    "environment": "node-24.22.0/darwin-arm64"
+  }
+}
