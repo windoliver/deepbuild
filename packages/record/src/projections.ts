@@ -153,7 +153,8 @@ export class Projector {
     }
     switch (e.kind) {
       case 'session.start':
-        if (e.session) this.up('sessions', { id: e.session, agent: str(d.agent), worktree: str(d.worktree), branch: str(d.branch), thread_id: str(d.thread), project_id: e.project });
+        // The start's values are the session's first: a worktree the app recorded since, if the start landed late, stands.
+        if (e.session) this.fill('sessions', { id: e.session, agent: str(d.agent), worktree: str(d.worktree), branch: str(d.branch), thread_id: str(d.thread), project_id: e.project });
         break;
       case 'session.attention': {
         // A hook speaks only for its own session; the app and the core may name another.
@@ -344,8 +345,12 @@ export class Projector {
         const r = isObj(d.resource) ? d.resource : {};
         const state = { 'lease.acquired': 'held', 'lease.released': 'released', 'lease.stale': 'stale', 'lease.denied': 'denied' }[e.kind];
         const row = { kind: str(r.kind), key: str(r.key), host: str(r.host), mode: str(d.mode), holder: str(d.holder), expires: int(d.expires), state };
-        if (e.kind !== 'lease.denied') this.up('leases', row);
-        else {
+        if (e.kind === 'lease.acquired') this.up('leases', row);
+        else if (e.kind !== 'lease.denied') {
+          // A release or a stale mark is about its own holder's lease: a late one leaves a newer holder's alone.
+          const now = this.stmt("SELECT holder FROM leases WHERE kind = ? AND key = ? AND state IN ('held', 'stale')").get(row.kind, row.key) as { holder: string | null } | undefined;
+          if (!now || now.holder === row.holder) this.up('leases', row);
+        } else {
           // A denial is not a lease: it takes the key's row only while no one holds it.
           const held = this.stmt("SELECT state FROM leases WHERE kind = ? AND key = ? AND state IN ('held', 'stale')").get(row.kind, row.key);
           if (!held) this.up('leases', row);

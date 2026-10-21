@@ -808,3 +808,32 @@ describe('a run is its first start and its first finish', () => {
     expect(await runOf(r)).toEqual(first);
   });
 });
+
+describe('a late event never replaces newer state', () => {
+  it('a release of A arriving after B acquired the key leaves B holding it, live and after a rebuild', async () => {
+    const { record: r, S } = await record();
+    const A = 'session:01K74G1Z3X5V7T9R1P3N5M7K9H';
+    const B = 'session:01K74H5C7E9G1J3M5P7R9T1V3X';
+    await r.append(app(S), event('lease.acquired', T0 + 10, undefined, { holder: A }));
+    // A's release reached the hub late: B already holds the port.
+    await r.append(app(S), event('lease.acquired', T0 + 20, undefined, { holder: B }));
+    await r.append(app(S), event('lease.released', T0 + 30, undefined, { holder: A }));
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      const row = (await r.table('leases')).rows[0];
+      // A record that applies every release to the key frees B's port.
+      expect([when, row?.holder, row?.state]).toEqual([when, B, 'held']);
+    }
+  });
+  it('a session.start arriving after its worktree.created keeps the worktree', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(app(S), event('worktree.created', T0 + 10, undefined, { path: '~/src/app-14', branch: 'feat/14', owner: `session:${S}#m1` }));
+    // The start was spooled while the hub was down, and lands after the app's worktree.
+    await r.append(hook(S), event('session.start', T0, undefined));
+    const row = (await r.table('sessions')).rows.find((x) => x.id === S);
+    // A record whose start overwrites puts the session back on its first checkout.
+    expect([row?.worktree, row?.branch]).toEqual(['~/src/app-14', 'feat/14']);
+  });
+});
