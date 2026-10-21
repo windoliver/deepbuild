@@ -780,3 +780,31 @@ describe('a session whose start was cut is judged once', () => {
     expect(judged).toEqual([['first', true], ['second', false]]);
   });
 });
+
+describe('a run is its first start and its first finish', () => {
+  const runOf = async (r: RecordStore) => {
+    const row = (await r.table('runs')).rows[0];
+    return [row?.claim_id, row?.commit_sha, row?.check_id, row?.outcome];
+  };
+  it('a finish seen before its start keeps the start\'s claim and commit, live and after a rebuild', async () => {
+    const { record: r, S } = await record();
+    await r.append(core(S), event('run.finished', T0 + 10, undefined, { outcome: 'passed', tests_run: 3, passed: 3 }));
+    await r.append(core(S), event('run.started', T0 + 20, undefined));
+    const live = await runOf(r);
+    // A record whose start only inserts leaves claim and commit empty when the finish came first.
+    expect(live.slice(0, 2)).toEqual(['01K74G1Z3X5V7T9R1P3N5M7K9H', '0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46']);
+    await r.rebuild();
+    expect(await runOf(r)).toEqual(live);
+  });
+  it('a second finish with another check and outcome changes nothing', async () => {
+    const { record: r, S } = await record();
+    await r.append(core(S), event('run.started', T0 + 10, undefined));
+    await r.append(core(S), event('run.finished', T0 + 20, undefined, { outcome: 'passed', tests_run: 3, passed: 3 }));
+    const first = await runOf(r);
+    await r.append(app(S), event('run.finished', T0 + 30, undefined, { check: 'other-check', outcome: 'failed', tests_run: 3, passed: 0 }));
+    // A record whose finish upserts re-points the run to the other check and its outcome.
+    expect(await runOf(r)).toEqual(first);
+    await r.rebuild();
+    expect(await runOf(r)).toEqual(first);
+  });
+});
