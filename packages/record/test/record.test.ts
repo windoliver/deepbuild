@@ -373,3 +373,33 @@ describe('a pre-start stamp sorts after every event of its turn that arrived bef
     expect(view?.turns[0]?.events).toEqual([ask.id, low.id, high.id, early.id]);
   });
 });
+
+describe('a permission request is hook text too', () => {
+  // Built at run time so no fixture holds a secret: a scrub-list value and a gitleaks-shaped AWS key.
+  const VALUE = ['perm', 'Value', '7Q9x', 'Z2kW'].join('');
+  const KEY = ['AKIA', 'Q7ZX', '3KDZ', 'WP2M', 'T4RB'].join('');
+  const request = (S: string, at: number, command: string): EventInput => ({
+    v: 1, id: ulidAt(at), kind: 'permission.request', subject: `session:${S}`, ts: at, seq: seqAt(at), data: { kind: 'tool', tool: 'Bash', command, paths: [] },
+  });
+
+  it('its command keeps neither a scrub-list value nor a secret pattern', async () => {
+    const { record: r, S } = await record();
+    const connection: Connection = { ...hook(S), run: { env: { DEPLOY_SECRET: VALUE }, held: [] } };
+    await r.append(connection, request(S, T0 + 10, `curl -H "x: ${VALUE}" --key ${KEY} https://example.test`));
+    const stored = JSON.stringify((await r.read({ after: 0, limit: 100 })).map((e) => e.data));
+    // A record that scrubs only tool and prompt text keeps both in the request's command.
+    expect(stored).not.toContain(VALUE);
+    expect(stored).not.toContain(KEY);
+    expect(stored).toContain('curl');
+  });
+
+  it('in content-free mode its command is not kept', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), contentFree: true });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), request(S, T0 + 10, 'npm publish --tag next'));
+    const [e] = await r.read({ after: 0, limit: 1 });
+    // A content-free record that blanks only tool and prompt text keeps the command.
+    expect(JSON.stringify(e?.data)).not.toContain('npm publish');
+  });
+});

@@ -113,7 +113,7 @@ const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked',
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The text field each kind keeps of a hook payload: scrubbed, then cut. */
-const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'user.ask': 'text' };
+const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text' };
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS events (
