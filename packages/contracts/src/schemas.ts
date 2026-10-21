@@ -12,12 +12,33 @@ const published: readonly SchemaEntry[] = readdirSync(SCHEMAS).filter((file) => 
   .map((file) => ({ name: file.slice(0, -'.json'.length), schema: readJson(new URL(file, SCHEMAS)) as Schema }));
 const byName = new Map(published.map((entry) => [entry.name, entry.schema]));
 
-export const listSchemas = (): SchemaEntry[] => structuredClone([...published]);
+// Callers get their own copies; parsing the JSON text is cheaper than a structured clone.
+const textByName = new Map(published.map((entry) => [entry.name, JSON.stringify(entry.schema)]));
+
+/** The entries listSchemas() handed out whose schema nobody has read or replaced: each equals the published one. */
+const untouched = new WeakSet<SchemaEntry>();
+const lazyEntry = (name: string, text: string): SchemaEntry => {
+  let schema: Schema | undefined;
+  const entry: SchemaEntry = {
+    get name() { return name; },
+    set name(next: string) { untouched.delete(entry); name = next; },
+    get schema() { untouched.delete(entry); return (schema ??= JSON.parse(text) as Schema); },
+    set schema(next: Schema) { untouched.delete(entry); schema = next; },
+  };
+  untouched.add(entry);
+  return entry;
+};
+/** Every published schema, each copied when first read, so a caller that reads few schemas pays for few. */
+export const listSchemas = (): SchemaEntry[] => published.map((entry) => lazyEntry(entry.name, textByName.get(entry.name)!));
+/** Whether a name is a published contract schema's. */
+export const isPublished = (name: string): boolean => textByName.has(name);
+/** Whether an entry from listSchemas() is untouched: its schema never read or replaced, so it equals the published one. */
+export const isUntouched = (entry: SchemaEntry): boolean => untouched.has(entry);
 
 export function getSchema(name: string): Schema {
-  const schema = byName.get(name);
-  if (!schema) throw new ContractError(issue('unknown_schema', '', name));
-  return structuredClone(schema);
+  const text = textByName.get(name);
+  if (text === undefined) throw new ContractError(issue('unknown_schema', '', name));
+  return JSON.parse(text) as Schema;
 }
 
 /** A schema's valid fixtures, fixtures/<name>/*.json, by file name. */

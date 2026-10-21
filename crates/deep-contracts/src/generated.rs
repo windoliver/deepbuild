@@ -5856,6 +5856,40 @@ impl Contract for AskSuperseded {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckCode {
+    ExitMasked,
+    NoTestsRan,
+    CrashedBeforeFirstAssertion,
+    ReportedAfterDeadline,
+    OutputDropped,
+    TypeErrorAsAssertion,
+}
+
+impl Contract for CheckCode {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "exit_masked" => Ok(Self::ExitMasked),
+            "no_tests_ran" => Ok(Self::NoTestsRan),
+            "crashed_before_first_assertion" => Ok(Self::CrashedBeforeFirstAssertion),
+            "reported_after_deadline" => Ok(Self::ReportedAfterDeadline),
+            "output_dropped" => Ok(Self::OutputDropped),
+            "type_error_as_assertion" => Ok(Self::TypeErrorAsAssertion),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::ExitMasked => "exit_masked",
+            Self::NoTestsRan => "no_tests_ran",
+            Self::CrashedBeforeFirstAssertion => "crashed_before_first_assertion",
+            Self::ReportedAfterDeadline => "reported_after_deadline",
+            Self::OutputDropped => "output_dropped",
+            Self::TypeErrorAsAssertion => "type_error_as_assertion",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckKind {
     Validity,
     Command,
@@ -7822,6 +7856,119 @@ impl Contract for DocPatched {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoctorItemCode {
+    Healthy,
+    BinaryMissing,
+    VersionUncovered,
+    HooksMissing,
+    HooksDisabled,
+    HooksUntrusted,
+    McpUnregistered,
+    StatuslineMissing,
+    SignedOut,
+    NestedSession,
+    TimingRelationBroken,
+    NotChecked,
+    Unknown,
+}
+
+impl Contract for DoctorItemCode {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "healthy" => Ok(Self::Healthy),
+            "binary_missing" => Ok(Self::BinaryMissing),
+            "version_uncovered" => Ok(Self::VersionUncovered),
+            "hooks_missing" => Ok(Self::HooksMissing),
+            "hooks_disabled" => Ok(Self::HooksDisabled),
+            "hooks_untrusted" => Ok(Self::HooksUntrusted),
+            "mcp_unregistered" => Ok(Self::McpUnregistered),
+            "statusline_missing" => Ok(Self::StatuslineMissing),
+            "signed_out" => Ok(Self::SignedOut),
+            "nested_session" => Ok(Self::NestedSession),
+            "timing_relation_broken" => Ok(Self::TimingRelationBroken),
+            "not_checked" => Ok(Self::NotChecked),
+            "unknown" => Ok(Self::Unknown),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Healthy => "healthy",
+            Self::BinaryMissing => "binary_missing",
+            Self::VersionUncovered => "version_uncovered",
+            Self::HooksMissing => "hooks_missing",
+            Self::HooksDisabled => "hooks_disabled",
+            Self::HooksUntrusted => "hooks_untrusted",
+            Self::McpUnregistered => "mcp_unregistered",
+            Self::StatuslineMissing => "statusline_missing",
+            Self::SignedOut => "signed_out",
+            Self::NestedSession => "nested_session",
+            Self::TimingRelationBroken => "timing_relation_broken",
+            Self::NotChecked => "not_checked",
+            Self::Unknown => "unknown",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoctorItemLevel {
+    Ok,
+    Warn,
+    Fail,
+    Skip,
+}
+
+impl Contract for DoctorItemLevel {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "ok" => Ok(Self::Ok),
+            "warn" => Ok(Self::Warn),
+            "fail" => Ok(Self::Fail),
+            "skip" => Ok(Self::Skip),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Ok => "ok",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+            Self::Skip => "skip",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DoctorItem {
+    pub code: DoctorItemCode,
+    pub level: DoctorItemLevel,
+    pub evidence: String,
+    pub fix: String,
+}
+
+impl Contract for DoctorItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["code", "level", "evidence", "fix"])?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_9)?;
+        deep_contracts::check_member(members, at, "fix", &RULE_9)?;
+        Ok(Self {
+            code: deep_contracts::required(members, at, "code")?,
+            level: deep_contracts::required(members, at, "level")?,
+            evidence: deep_contracts::required(members, at, "evidence")?,
+            fix: deep_contracts::required(members, at, "fix")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("code".to_string(), self.code.to_json()));
+        members.push(("level".to_string(), self.level.to_json()));
+        members.push(("evidence".to_string(), self.evidence.to_json()));
+        members.push(("fix".to_string(), self.fix.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
     UnknownSchema,
     NotJson,
@@ -8132,6 +8279,34 @@ impl Contract for EvidencePut {
             members.push(("evidence".to_string(), value.to_json()));
         }
         Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitCode {
+    V0,
+    V1,
+    V2,
+    V3,
+}
+
+impl Contract for ExitCode {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "0" => Ok(Self::V0),
+            "1" => Ok(Self::V1),
+            "2" => Ok(Self::V2),
+            "3" => Ok(Self::V3),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::V0 => "0",
+            Self::V1 => "1",
+            Self::V2 => "2",
+            Self::V3 => "3",
+        }.to_string())
     }
 }
 
@@ -17926,6 +18101,37 @@ impl Contract for VerdictMade {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerdictOutcome {
+    Pass,
+    Fail,
+    Invalid,
+    Blocked,
+    Inconclusive,
+}
+
+impl Contract for VerdictOutcome {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "PASS" => Ok(Self::Pass),
+            "FAIL" => Ok(Self::Fail),
+            "INVALID" => Ok(Self::Invalid),
+            "BLOCKED" => Ok(Self::Blocked),
+            "INCONCLUSIVE" => Ok(Self::Inconclusive),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Pass => "PASS",
+            Self::Fail => "FAIL",
+            Self::Invalid => "INVALID",
+            Self::Blocked => "BLOCKED",
+            Self::Inconclusive => "INCONCLUSIVE",
+        }.to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct VerdictStaleV;
 
@@ -19068,6 +19274,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "ask.later@1" => <AskLater as Contract>::from_json(&value, "")?.to_json(),
         "ask.moot@1" => <AskMoot as Contract>::from_json(&value, "")?.to_json(),
         "ask.superseded@1" => <AskSuperseded as Contract>::from_json(&value, "")?.to_json(),
+        "check.code@1" => <CheckCode as Contract>::from_json(&value, "")?.to_json(),
         "check@1" => <Check as Contract>::from_json(&value, "")?.to_json(),
         "claim.made@1" => <ClaimMade as Contract>::from_json(&value, "")?.to_json(),
         "claim.sent_back@1" => <ClaimSentBack as Contract>::from_json(&value, "")?.to_json(),
@@ -19079,8 +19286,10 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "definition.revised@1" => <DefinitionRevised as Contract>::from_json(&value, "")?.to_json(),
         "delivery.outcome@1" => <DeliveryOutcome as Contract>::from_json(&value, "")?.to_json(),
         "doc.patched@1" => <DocPatched as Contract>::from_json(&value, "")?.to_json(),
+        "doctor.item@1" => <DoctorItem as Contract>::from_json(&value, "")?.to_json(),
         "error@1" => <Error as Contract>::from_json(&value, "")?.to_json(),
         "evidence.put@1" => <EvidencePut as Contract>::from_json(&value, "")?.to_json(),
+        "exit.code@1" => <ExitCode as Contract>::from_json(&value, "")?.to_json(),
         "guard@1" => <Guard as Contract>::from_json(&value, "")?.to_json(),
         "hook.ack@1" => <HookAck as Contract>::from_json(&value, "")?.to_json(),
         "hook.joined@1" => <HookJoined as Contract>::from_json(&value, "")?.to_json(),
@@ -19125,6 +19334,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "turn.usage@1" => <TurnUsage as Contract>::from_json(&value, "")?.to_json(),
         "user.ask@1" => <UserAsk as Contract>::from_json(&value, "")?.to_json(),
         "verdict.made@1" => <VerdictMade as Contract>::from_json(&value, "")?.to_json(),
+        "verdict.outcome@1" => <VerdictOutcome as Contract>::from_json(&value, "")?.to_json(),
         "verdict.stale@1" => <VerdictStale as Contract>::from_json(&value, "")?.to_json(),
         "verdict@1" => <Verdict as Contract>::from_json(&value, "")?.to_json(),
         "worktree.created@1" => <WorktreeCreated as Contract>::from_json(&value, "")?.to_json(),

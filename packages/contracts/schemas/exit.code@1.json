@@ -1,0 +1,16 @@
+{
+  "title": "exit.code@1",
+  "description": "The deep commands' one exit-code table, as strings: 0 for PASS, 1 for FAIL or a failed item, 2 for a usage error, 3 for anything not decided (BLOCKED, INVALID or INCONCLUSIVE, a code no enum lists among them). When 1 and 3 both apply, 1.",
+  "type": "string",
+  "enum": [
+    "0",
+    "1",
+    "2",
+    "3"
+  ],
+  "x-closure": {
+    "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+    "reopens": "never: every deep command exits by this table",
+    "mark": "exhaustive"
+  }
+}

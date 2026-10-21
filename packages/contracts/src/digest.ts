@@ -3,7 +3,9 @@ import { ContractError, issue } from './errors.js';
 import { isObject, resolveRef, type JsonObject, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 import { getSchema } from './schemas.js';
 
-const ANNOTATIONS = new Set(['title', 'description', 'examples', '$comment']);
+// A closure (x-closure) and the adapter rules (x-rules) describe a set's governance, not its shape, so a minor may
+// change them without a new digest.
+const ANNOTATIONS = new Set(['title', 'description', 'examples', '$comment', 'x-closure', 'x-rules']);
 const SCHEMA_MAPS = new Set(['properties']);
 const SCHEMA_SLOTS = new Set(['items', 'additionalProperties', 'propertyNames']);
 

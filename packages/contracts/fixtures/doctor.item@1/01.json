@@ -1,0 +1,6 @@
+{
+  "code": "hooks_missing",
+  "level": "fail",
+  "evidence": "no Stop hook entry in the agent's user settings",
+  "fix": "Run deep setup to install the hook entries."
+}

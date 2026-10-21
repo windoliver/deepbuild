@@ -735,6 +735,9 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** check.code@1 */
+export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
+
 /** check@1 */
 export interface Check {
   kind: "validity" | "command" | "journey" | "review" | "numbers" | "docs" | "draft" | "narrowing" | "document" | "physics_golden" | "media";
@@ -990,6 +993,14 @@ export interface DocPatched {
   evidence?: Array<string>;
 }
 
+/** doctor.item@1 */
+export interface DoctorItem {
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "not_checked" | "unknown";
+  level: "ok" | "warn" | "fail" | "skip";
+  evidence: string;
+  fix: string;
+}
+
 /** error@1 */
 export interface Error {
   code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm";
@@ -1027,6 +1038,9 @@ export interface EvidencePut {
   };
   evidence?: Array<string>;
 }
+
+/** exit.code@1 */
+export type ExitCode = "0" | "1" | "2" | "3";
 
 /** guard@1 */
 export interface Guard {
@@ -2171,6 +2185,9 @@ export interface VerdictMade {
   };
   evidence?: Array<string>;
 }
+
+/** verdict.outcome@1 */
+export type VerdictOutcome = "PASS" | "FAIL" | "INVALID" | "BLOCKED" | "INCONCLUSIVE";
 
 /** verdict.stale@1 */
 export interface VerdictStale {

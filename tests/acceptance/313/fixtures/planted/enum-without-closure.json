@@ -1,0 +1,6 @@
+{
+  "why": "A planted enum added to a published schema with no closure: the lint must name the schema and this pointer. The pointer is a new property of hook.ack@1, which has no enum of its own today.",
+  "schema": "hook.ack@1",
+  "pointer": "/properties/mood",
+  "node": { "type": "string", "enum": ["calm", "hurried", "unknown"], "description": "A planted enum with no closure." }
+}

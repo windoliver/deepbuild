@@ -1,14 +1,15 @@
 import { isNullBranch, isObject, resolveRef, segment, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 import { compilePattern } from './pattern.js';
+import { isPublished, isUntouched } from './schemas.js';
 import { FORMATS } from './validate.js';
 
 export interface LintProblem { schema: string; path: string; reason: string }
 
 const ANNOTATIONS = ['title', 'description', 'examples', '$comment'];
-const ROOT_ONLY = ['$defs', 'x-hash', 'x-feeds'];
+const ROOT_ONLY = ['$defs', 'x-hash', 'x-feeds', 'x-closure', 'x-rules'];
 /** The keywords each closed node type may use besides its annotations. */
 const NODE_KEYWORDS: Record<string, string[]> = {
-  string: ['type', 'pattern', 'minLength', 'maxLength', 'enum', 'format'],
+  string: ['type', 'pattern', 'minLength', 'maxLength', 'enum', 'format', 'x-closure'],
   integer: ['type', 'minimum', 'maximum'],
   number: ['type', 'minimum', 'maximum'],
   boolean: ['type'],
@@ -21,8 +22,13 @@ const COUNT_KEYWORDS = ['minLength', 'maxLength', 'minItems', 'maxItems'];
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 
 /** Why a pattern can't be used, or undefined: it must compile in JavaScript with `u` and for the Rust matcher. */
+const verdicts = new Map<string, string | undefined>();
 const unusable = (pattern: unknown): string | undefined => {
   if (typeof pattern !== 'string') return 'a pattern is a string';
+  if (!verdicts.has(pattern)) verdicts.set(pattern, compiles(pattern));
+  return verdicts.get(pattern);
+};
+const compiles = (pattern: string): string | undefined => {
   try {
     new RegExp(pattern, 'u');
   } catch {
@@ -39,10 +45,20 @@ const unusable = (pattern: unknown): string | undefined => {
 /** The JSON Pointer of every string or key holding half a surrogate pair, which no Rust string can. */
 const halfPairs = (value: JsonValue | undefined, path: string): string[] => {
   const half = (text: string) => /\p{Surrogate}/u.test(text);
-  if (typeof value === 'string') return half(value) ? [path] : [];
-  if (Array.isArray(value)) return value.flatMap((v, i) => halfPairs(v, path + segment(i)));
-  if (!isObject(value)) return [];
-  return Object.entries(value).flatMap(([key, child]) => (half(key) ? [path + segment(key)] : halfPairs(child, path + segment(key))));
+  const found: string[] = [];
+  // The pointer is built only for a hit; almost every schema has none.
+  const walk = (at: JsonValue | undefined, keys: (string | number)[]): void => {
+    const here = (key?: string | number) => path + [...keys, ...(key === undefined ? [] : [key])].map(segment).join('');
+    if (typeof at === 'string') { if (half(at)) found.push(here()); return; }
+    if (Array.isArray(at)) { at.forEach((v, i) => { keys.push(i); walk(v, keys); keys.pop(); }); return; }
+    if (!isObject(at)) return;
+    for (const [key, child] of Object.entries(at)) {
+      if (half(key)) { found.push(here(key)); continue; }
+      keys.push(key); walk(child, keys); keys.pop();
+    }
+  };
+  walk(value, []);
+  return found;
 };
 
 /** Every `$ref` anywhere under a value. */
@@ -88,9 +104,19 @@ function resolves(root: Schema, pointer: string): boolean {
  * The preflight's lint: every contract schema uses only the closed node types both generators map, and a
  * hashed schema (one with `x-hash`) types no integer that can pass 2^53 as a JSON number.
  */
+const linted = new Map<string, LintProblem[]>();
 export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
   const problems: LintProblem[] = [];
-  for (const { name, schema } of entries) {
+  for (const entry of entries) {
+    // A schema's problems depend on it alone, so an unchanged schema's are read back, not found again; an
+    // untouched published entry is keyed by its name, without reading it.
+    const name = entry.name;
+    const key = isUntouched(entry) ? `${name}\npublished` : `${name}\n${JSON.stringify(entry.schema)}`;
+    const known = linted.get(key);
+    if (known) { problems.push(...known.map((p) => ({ ...p }))); continue; }
+    const schema = entry.schema;
+    const hub = isPublished(name);
+    const start = problems.length;
     const flag = (path: string, reason: string): void => { problems.push({ schema: name, path, reason }); };
     const hashed = 'x-hash' in schema;
     const defs = isObject(schema.$defs) ? schema.$defs : {};
@@ -135,6 +161,9 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
         if ('enum' in value && !(Array.isArray(value.enum) && value.enum.length && value.enum.every((v) => typeof v === 'string'))) flag(path + '/enum', 'an enum lists strings');
         else if (Array.isArray(value.enum) && new Set(value.enum).size !== value.enum.length) flag(path + '/enum', 'an enum lists each value once');
         if ('format' in value && !(typeof value.format === 'string' && Object.hasOwn(FORMATS, value.format))) flag(path + '/format', `format ${JSON.stringify(value.format)} is not a listed format`);
+        // Every enum in the hub's schemas says how its set closes (#313); a schema outside them need not.
+        if (hub && 'enum' in value && !('x-closure' in value)) flag(path, 'an enum in the hub\'s schemas carries x-closure: a registry, closed with its reason, what reopens it and its mark, or open');
+        if ('x-closure' in value) closure(value, path);
       }
       if (type === 'array') node(value.items, path + '/items');
       const safe = typeof value.maximum === 'number' && value.maximum <= MAX_SAFE && typeof value.minimum === 'number' && value.minimum >= -MAX_SAFE;
@@ -182,8 +211,29 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       else if (new Set<JsonValue | undefined>(values).size !== values.length) flag(path + '/oneOf', "a union's branches each take their own tag");
     };
 
+    /** The closure beside a listed set: open, a registry, or closed with its reason, what reopens it and its mark. */
+    const closure = (value: Schema, path: string): void => {
+      const c = value['x-closure'];
+      const at = path + '/x-closure';
+      if (c === 'open') return;
+      if (!isObject(c)) return flag(at, "x-closure is 'open', {registry}, or {closed, reopens, mark}");
+      if ('registry' in c) {
+        if (Object.keys(c).length !== 1 || typeof c.registry !== 'string' || !/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/.test(c.registry)) flag(at, 'a registry closure names the registry, <name>@<major>, and nothing else');
+        return;
+      }
+      if (typeof c.closed !== 'string' || !c.closed || typeof c.reopens !== 'string' || !c.reopens) return flag(at, 'a closed closure says why it is closed and what would reopen it');
+      if (c.mark !== 'exhaustive' && c.mark !== 'extensible') return flag(at, 'a closed enum says which it is: mark exhaustive or extensible');
+      if (Object.keys(c).length !== 3) return flag(at, 'a closed closure is {closed, reopens, mark} and nothing else');
+      if (c.mark === 'extensible' && Array.isArray(value.enum) && !value.enum.includes('unknown')) flag(path + '/enum', "an extensible enum lists unknown, which a reader takes for a member it doesn't know");
+    };
     for (const path of halfPairs(schema, '')) flag(path, 'half a surrogate pair: every string in a schema is well-formed Unicode');
     node(schema, '', true);
+    if ('x-closure' in schema && !('enum' in schema)) closure(schema, '');
+    if ('x-rules' in schema) {
+      const rules = schema['x-rules'];
+      if (!Array.isArray(rules) || !rules.every((r) => isObject(r) && typeof r.id === 'string' && /^[a-z][a-z0-9_-]*$/.test(r.id) && typeof r.rule === 'string' && r.rule.length > 0 && Object.keys(r).length === 2)) flag('/x-rules', 'x-rules lists the rules as {id, rule}, each id ^[a-z][a-z0-9_-]*$');
+      else if (new Set(rules.map((r) => (r as Schema).id)).size !== rules.length) flag('/x-rules', 'x-rules gives each rule its own id');
+    }
     for (const [key, def] of Object.entries(defs)) node(def, '/$defs' + segment(key));
     for (const key of cycles(defs)) flag('/$defs' + segment(key), 'a $ref cycle: a definition reaches itself');
     if ('x-feeds' in schema && !(Array.isArray(schema['x-feeds']) && schema['x-feeds'].every((f) => typeof f === 'string'))) flag('/x-feeds', 'x-feeds lists projection names');
@@ -199,6 +249,8 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
         if (!found) flag('/x-hash', `x-hash excludes ${pointer}, which names no field the schema types`);
       }
     }
+    if (linted.size >= 4096) linted.clear();
+    linted.set(key, problems.slice(start).map((p) => ({ ...p })));
   }
   return problems;
 }

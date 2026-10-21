@@ -1,0 +1,17 @@
+{
+  "title": "verdict.outcome@1",
+  "description": "The one source of the five verdict outcomes: the enum every verdict record, verdict.made event and status binding takes its outcome from, and the family deep://codes/<code> documents.",
+  "type": "string",
+  "enum": [
+    "PASS",
+    "FAIL",
+    "INVALID",
+    "BLOCKED",
+    "INCONCLUSIVE"
+  ],
+  "x-closure": {
+    "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+    "reopens": "a new major of the verdict record; the five are what a verdict means",
+    "mark": "exhaustive"
+  }
+}
