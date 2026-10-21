@@ -223,26 +223,48 @@ function runCommand(spec: CheckSpec, ctx: CheckContext, fault: Fault = 'none'): 
   }
 }
 
-const reference = (): CheckRunnerFill => ({ slot: CHECK_KIND, revision: 1, kind: KIND, run: (spec, ctx) => runCommand(spec, ctx) });
+type Run = (spec: CheckSpec, ctx: CheckContext, fault?: Fault) => CheckResult;
+/**
+ * One kit's runs, remembered: the planted runners are the reference's result with one fault applied after the
+ * run, so a case the reference already ran on the same checkout, command and fault is answered from that run
+ * rather than run again (a run that ended within its deadline ends the same under a longer one; a run that
+ * overran its deadline overruns a shorter one). Each caller gets its own copy to bend.
+ */
+function remembered(): Run {
+  const runs = new Map<string, { deadline: number; result: CheckResult }>();
+  return (spec, ctx, fault = 'none') => {
+    const key = `${fault}\n${ctx.checkout}\n${spec.runner}`;
+    const had = runs.get(key);
+    const stands = had !== undefined && (had.result.outcome === 'overran' ? ctx.deadline <= had.deadline : ctx.deadline >= had.deadline);
+    if (had !== undefined && stands) return structuredClone(had.result);
+    const result = runCommand(spec, ctx, fault);
+    runs.set(key, { deadline: ctx.deadline, result: structuredClone(result) });
+    return result;
+  };
+}
+
+const reference = (run: Run): CheckRunnerFill => ({ slot: CHECK_KIND, revision: 1, kind: KIND, run: (spec, ctx) => run(spec, ctx) });
 
 // ---- The planted runners ------------------------------------------------------------------------------
 
-const derived = (run: (spec: CheckSpec, ctx: CheckContext) => CheckResult): CheckRunnerFill => ({ ...reference(), run });
-const plant = (name: string, breaks: keyof typeof RULES, codes: string[], run: (spec: CheckSpec, ctx: CheckContext) => CheckResult): PlantedFill<CheckRunnerFill> =>
-  ({ name, message: RULES[breaks].message, codes, breaks: RULES[breaks].id, fill: derived(run) });
-const plantedFills = (): PlantedFill<CheckRunnerFill>[] => [
-  plant('crashed-suite', 'counts', ['crashed_before_first_assertion'], (spec, ctx) => {
-    const r = runCommand(spec, ctx);
-    // The issue's words: a suite that crashed before its first assertion, reported passed with 12 tests.
-    return r.testsRun === 0 && r.failures.some((f) => !f.assertion) ? { ...r, outcome: 'passed', testsRun: 12, failures: [] } : r;
-  }),
-  plant('past-deadline', 'deadline', ['reported_after_deadline'], (spec, ctx) => runCommand(spec, { ...ctx, deadline: 3_600_000 })),
-  plant('dropped-output', 'output', ['output_dropped'], (spec, ctx) => ({ ...runCommand(spec, ctx), failures: [] })),
-  plant('type-error-as-assertion', 'assertion', ['type_error_as_assertion'], (spec, ctx) => { const r = runCommand(spec, ctx); return { ...r, failures: r.failures.map((f) => ({ ...f, assertion: true })) }; }),
-  plant('ignores-mask', 'mask', ['exit_masked'], (spec, ctx) => runCommand(spec, ctx, 'ignores-mask')),
-  plant('declared-paths-only', 'reads', ['read_set_incomplete'], (spec, ctx) => ({ ...runCommand(spec, ctx), read: [...spec.inputs] })),
-  plant('inherits-host-env', 'hermetic', ['host_env_leaked'], (spec, ctx) => runCommand(spec, ctx, 'host-env')),
-];
+const plant = (name: string, breaks: keyof typeof RULES, codes: string[], fill: CheckRunnerFill): PlantedFill<CheckRunnerFill> =>
+  ({ name, message: RULES[breaks].message, codes, breaks: RULES[breaks].id, fill });
+const plantedFills = (run: Run): PlantedFill<CheckRunnerFill>[] => {
+  const derived = (bent: (spec: CheckSpec, ctx: CheckContext) => CheckResult): CheckRunnerFill => ({ ...reference(run), run: bent });
+  return [
+    plant('crashed-suite', 'counts', ['crashed_before_first_assertion'], derived((spec, ctx) => {
+      const r = run(spec, ctx);
+      // The issue's words: a suite that crashed before its first assertion, reported passed with 12 tests.
+      return r.testsRun === 0 && r.failures.some((f) => !f.assertion) ? { ...r, outcome: 'passed', testsRun: 12, failures: [] } : r;
+    })),
+    plant('past-deadline', 'deadline', ['reported_after_deadline'], derived((spec, ctx) => run(spec, { ...ctx, deadline: 3_600_000 }))),
+    plant('dropped-output', 'output', ['output_dropped'], derived((spec, ctx) => ({ ...run(spec, ctx), failures: [] }))),
+    plant('type-error-as-assertion', 'assertion', ['type_error_as_assertion'], derived((spec, ctx) => { const r = run(spec, ctx); return { ...r, failures: r.failures.map((f) => ({ ...f, assertion: true })) }; })),
+    plant('ignores-mask', 'mask', ['exit_masked'], derived((spec, ctx) => run(spec, ctx, 'ignores-mask'))),
+    plant('declared-paths-only', 'reads', ['read_set_incomplete'], derived((spec, ctx) => ({ ...run(spec, ctx), read: [...spec.inputs] }))),
+    plant('inherits-host-env', 'hermetic', ['host_env_leaked'], derived((spec, ctx) => run(spec, ctx, 'host-env'))),
+  ];
+};
 
 // ---- The fixtures and the seeded suites ---------------------------------------------------------------
 
@@ -354,7 +376,7 @@ function* judge(fill: CheckRunnerFill, c: SlotCase): Generator<() => unknown, vo
   }
 }
 
-export const checkKindKit = (): SlotKitImpl<CheckRunnerFill> => ({
-  slot: CHECK_KIND, fills: 'one', revision: 1, rules, fixtures, planted: plantedFills(),
-  clean: () => [reference()], generate, judge,
-});
+export const checkKindKit = (): SlotKitImpl<CheckRunnerFill> => {
+  const run = remembered();
+  return { slot: CHECK_KIND, fills: 'one', revision: 1, rules, fixtures, planted: plantedFills(run), clean: () => [reference(run)], generate, judge };
+};

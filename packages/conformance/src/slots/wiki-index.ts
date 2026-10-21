@@ -2,7 +2,7 @@
 // with hits that each cite their page, quote and source, answers the same after a rebuild from the pages as after
 // the upserts, and forgets a dropped source's claims. The reference fill is a keyword index in memory; the
 // planted fills keep a dropped source's hits, return a hit without its source, index an upsert only at the next
-// rebuild, and lose a claim in a rebuild.
+// rebuild, and leave the live index as it is on a rebuild.
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { fail } from '../slot-types.js';
@@ -39,13 +39,13 @@ const byClaim = (hits: Hit[]): Hit[] => [...hits].sort((a, b) => (a.claim < b.cl
 export const expectedHits = (claims: Claim[], query: string): Hit[] => byClaim(claims.filter((c) => matches(c, query)).map((c) => ({ claim: c.id, page: c.page, quote: c.text, source: c.source })));
 
 /** The reference index; `plantedWith` plants one fault in it. */
-function reference(fault: 'none' | 'keeps-dropped' | 'sourceless' | 'stale-upsert' | 'lossy-rebuild' = 'none'): IndexFill {
+function reference(fault: 'none' | 'keeps-dropped' | 'sourceless' | 'stale-upsert' | 'noop-rebuild' = 'none'): IndexFill {
   const claims = new Map<string, Claim>();
   const pending: Claim[] = [];
   return {
     slot: INDEX, revision: 1,
-    // The lossy rebuild keeps the first claim of the pages alone, as an index that stops after the first page would.
-    rebuild(next) { claims.clear(); for (const c of [...pending.splice(0), ...(fault === 'lossy-rebuild' ? next.slice(0, 1) : next)]) claims.set(c.id, c); },
+    // The no-op rebuild leaves the live index as it is, as one that only ever grows by upserts would.
+    rebuild(next) { if (fault === 'noop-rebuild') return; claims.clear(); for (const c of [...pending.splice(0), ...next]) claims.set(c.id, c); },
     upsert(next) { if (fault === 'stale-upsert') { pending.push(...next); return; } for (const c of next) claims.set(c.id, c); },
     search(query) { return expectedHits([...claims.values()], query).map((h) => (fault === 'sourceless' ? { ...h, source: '' } : h)); },
     dropSource(source) { if (fault === 'keeps-dropped') return; for (const [id, c] of claims) if (c.source === source) claims.delete(id); },
@@ -57,7 +57,7 @@ const plantedFills = (): PlantedFill<IndexFill>[] => [
   plant('keeps-dropped-source', 'drops', ['dropped_source_hit'], reference('keeps-dropped')),
   plant('sourceless-hit', 'cites', ['hit_uncited'], reference('sourceless')),
   plant('stale-after-upsert', 'finds', ['hits_mismatch'], reference('stale-upsert')),
-  plant('rebuild-loses-claims', 'rebuilds', ['rebuild_mismatch'], reference('lossy-rebuild')),
+  plant('rebuild-is-a-no-op', 'rebuilds', ['rebuild_mismatch'], reference('noop-rebuild')),
 ];
 
 const toCase = (id: string, part: 'fixed' | 'seeded', input: Input): SlotCase => {
@@ -116,10 +116,12 @@ function* judge(fill: IndexFill, c: SlotCase): Generator<() => unknown, void, un
   yield () => fill.upsert(claims);
   const hits = holdHits(yield () => fill.search(query));
   if (!same(byClaim(hits), expected.hits)) throw fail(RULES.finds.message, ['hits_mismatch'], `"${query}" found ${canonical(byClaim(hits))}; the upserted claims give ${canonical(expected.hits)}`);
-  // The same claims rebuilt from the pages answer the same.
+  // The same claims rebuilt from the pages answer the same, and only those: a decoy upserted first, matching the
+  // query but on no page, must be gone, so a rebuild that leaves the live index as it is can't pass.
+  yield () => fill.upsert([{ id: 'decoy', page: 'decoy', source: 'decoy', text: query }]);
   yield () => fill.rebuild(claims);
   const rebuilt = holdHits(yield () => fill.search(query));
-  if (!same(byClaim(rebuilt), expected.hits)) throw fail(RULES.rebuilds.message, ['rebuild_mismatch'], `"${query}" after a rebuild found ${canonical(byClaim(rebuilt))}; after the upserts it found ${canonical(expected.hits)}`);
+  if (!same(byClaim(rebuilt), expected.hits)) throw fail(RULES.rebuilds.message, ['rebuild_mismatch'], `"${query}" after a rebuild from the pages found ${canonical(byClaim(rebuilt))}; the pages' claims give ${canonical(expected.hits)}`);
   yield () => fill.dropSource(drop);
   const after = holdHits(yield () => fill.search(query));
   const kept = after.filter((h) => h.source === drop);

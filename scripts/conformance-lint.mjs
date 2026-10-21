@@ -2,6 +2,7 @@
 // adapter rule has its one broken fake and every code its planted entry, and every fake is killed by the
 // codes it names. One line per check; exit 1 on a finding, 3 when the built package is missing.
 import { existsSync } from 'node:fs';
+import { Worker } from 'node:worker_threads';
 
 if (!existsSync(new URL('../packages/conformance/dist/index.js', import.meta.url))) {
   console.log('BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces');
@@ -17,5 +18,14 @@ const report = (check, findings, pass) => {
 report('enum closures', lintSchemas(listSchemas()).map((p) => `${p.schema}${p.path}: ${p.reason}`), 'every enum carries its closure');
 report('code mappings', unmappedCodes().map((u) => `${u.family} ${u.code} maps to no verdict`), 'every family code maps to a verdict');
 for (const kit of kits()) report(`kit ${kit.name}`, kitProblems(kit).map((p) => `${p.check} ${p.name}: ${p.reason}`), `${kit.fakes.length} fakes killed, ${kit.planted.length} planted codes raised alone`);
-for (const kit of slotKits()) report(`slot kit ${kit.slot}`, kitProblems(kit).map((p) => `${p.check} ${p.name}: ${p.reason}`), `${kit.rules.length} rules, each refusing its one planted fill`);
+// The slot kits run beside each other, each in a worker (conformance-lint-slot.mjs), and report in order.
+const slotProblems = (slot) => new Promise((resolve, reject) => {
+  const worker = new Worker(new URL('./conformance-lint-slot.mjs', import.meta.url), { workerData: slot });
+  worker.once('message', resolve);
+  worker.once('error', reject);
+  worker.once('exit', (code) => { if (code !== 0) reject(Error(`the ${slot} kit check exited ${code}`)); });
+});
+const slots = slotKits();
+const problems = await Promise.all(slots.map((kit) => slotProblems(kit.slot)));
+slots.forEach((kit, i) => report(`slot kit ${kit.slot}`, problems[i].map((p) => `${p.check} ${p.name}: ${p.reason}`), `${kit.rules.length} rules, each refusing its one planted fill`));
 process.exitCode = failed ? 1 : 0;
