@@ -1,0 +1,134 @@
+Acceptance tests for #606 on the base f346706 (origin/main, no implementation), run on 2026-10-20 on a
+Mac15,7 (Apple M3 Pro), Node 23.9.0, Vitest 5.0.5, cargo 1.99.1:
+
+  npx vitest run tests/acceptance/606
+  node --test tests/acceptance/606/corpus.test.mjs
+  node --test tests/acceptance/606/regression.test.mjs
+
+Trimmed to each test's failure reason. No local path appears in what is kept.
+
+== npx vitest run tests/acceptance/606
+
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
+
+FAIL  access.test.ts > #606.1e9b8ac4 the schema that carries access words accepts sound, microphone, camera and device:<class>
+      AssertionError: no published schema has a fixture holding an access word device:<class>, so no schema
+      carries access words: expected 0 to be greater than 0
+FAIL  access.test.ts > #606.1e9b8ac4 the schema that carries access words refuses device: with no class, naming it
+      (the same)
+FAIL  access.test.ts > #606.1e9b8ac4 the schema that carries access words refuses any word outside the list, naming it
+      (the same)
+  (Expected: no shipped schema names an access word, as the issue says.)
+
+FAIL  kinds.test.ts > #606.23148a24 a child session's stop resolves to one catalogued kind with a fixture, which the hook
+      may write: the kind the corpus stores for Claude Code's SubagentStop
+      AssertionError: the corpus (adapters/corpus/claude-code) holds no recorded SubagentStop payload: expected 0 to be
+      greater than 0
+FAIL  kinds.test.ts > #606.23148a24 a task's completion resolves to one catalogued kind with a fixture, which the hook
+      may write: the kind the corpus stores for Claude Code's TaskCompleted
+      AssertionError: the corpus (adapters/corpus/claude-code) holds no recorded TaskCompleted payload: expected 0 to be
+      greater than 0
+  (Expected: the base corpus records neither hook, and the facts list neither.)
+
+FAIL  outcomes.test.ts > #606.9092f0b3 an ask that ends as superseded records that outcome in an event about the ask, of
+      a kind the asks projection reads
+      AssertionError: no event records an ask's outcome superseded: the catalogue has no `ask.superseded` kind, and no
+      fixture of an `ask.*` kind or a kind feeding asks holds an outcome field that takes "superseded": expected 0 to be
+      greater than 0
+FAIL  outcomes.test.ts > #606.9092f0b3 an ask that ends as moot records that outcome in an event about the ask, of a kind
+      the asks projection reads
+      AssertionError: no event records an ask's outcome moot: the catalogue has no `ask.moot` kind, and no fixture of an
+      `ask.*` kind or a kind feeding asks holds an outcome field that takes "moot": expected 0 to be greater than 0
+FAIL  outcomes.test.ts > #606.9092f0b3 an ask outcome outside the design's closed set is refused, naming where it sits
+      and the value
+      AssertionError: no event records superseded or moot, so there is no outcome to refuse an outside value for:
+      expected 0 to be greater than 0
+  (Expected: none of the seven ask kinds carries an outcome, and only suggestion.settled knows superseded.)
+
+== node --test tests/acceptance/606/corpus.test.mjs
+
+# tests 2  # pass 0  # fail 2
+
+not ok 1 - #606.23148a24 the corpus replay maps every recorded Claude Code SubagentStop and TaskCompleted onto the events
+           stored with it, verified
+      AssertionError: the replay printed no claude-code SubagentStop payload: the corpus holds no recorded SubagentStop
+      (exit 0; )
+not ok 2 - #606.23148a24 the adapter's event for a SubagentStop names the child (its agent_id), and for a TaskCompleted
+           names the task (its task_id)
+      AssertionError: the corpus (adapters/corpus/claude-code) holds no recorded SubagentStop payload
+  (Expected: the replay itself passes on the base, exit 0, but has no such payload to map.)
+
+== node --test tests/acceptance/606/regression.test.mjs
+
+# tests 2  # pass 2  # fail 0
+
+ok 1 - #606.f6e09fa4 tests/acceptance/311 is unchanged from the base, committed or not
+ok 2 - #606.f6e09fa4 tests/acceptance/311 passes                    (Test Files 13 passed (13), Tests 313 passed (313))
+  (Expected: criterion 4 is behavior that must not change, so it passes on the base. Its planted programs below fail it.)
+
+
+Planted programs
+----------------
+Criteria 1 to 3: each run once against all ten fast tests, in a scratch copy of the base outside this checkout (not
+committed, not part of this change). The two sample fixes pass all ten; each wrong program is one of them with one part
+changed, so only that criterion's tests can fail.
+
+  sample fix A: ask.cancelled gains data.because, enum [cancelled, superseded, moot], with a superseded fixture;
+    a new schema access.grant@1 {words: [string matching ^(files|programs|hosts|run_as_you|screen|sound|microphone|
+    camera|clipboard|window|agent|edit_as_you|record|device:(ext.<id>.)?<name>@<major>)$]} with a fixture holding
+    sound, microphone, camera and device:midi@1; the facts map SubagentStop onto agent.stop and TaskCompleted onto a
+    new task.completed@1 (writers hook|app|cli|core|ext, feeds tasks, data {task}), with one SubagentStop and one
+    TaskCompleted payload (written from Claude Code's hooks reference, not recorded) in the 2.1.304 subagent set
+                                                                                  all 10 pass
+  sample fix B: as A, with new kinds ask.superseded@1 and ask.moot@1 (feeding asks) instead of the field
+                                                                                  all 10 pass
+
+  criterion 1
+  outcome enum without moot                                    "…ends as moot…" fails: no event records an ask's
+                                                               outcome moot
+  outcome a free string                                        "…closed set is refused…" fails: accepted "accepted" at
+                                                               /data/because
+  outcome enum with obsolete                                   "…closed set is refused…" fails: accepted "obsolete" at
+                                                               /data/because
+  ask.superseded and ask.moot feed decisions, not asks         "…ends as superseded…" and "…ends as moot…" fail:
+                                                               expected [ 'decisions' ] to include 'asks'
+  B plus an ask.obsolete kind                                  "…closed set is refused…" fails: ask.obsolete is an ask
+                                                               ending outside the design's outcomes
+
+  criterion 2
+  pattern takes device:.*                                      "…refuses device: with no class…" fails: accepted
+                                                               "device:" at /words/3
+  access word a free string                                    "…refuses device:…" fails, and "…outside the list…"
+                                                               fails: accepted "notices" at /words/3
+  list without camera                                          "…accepts…" fails: refused "camera" at /words/2 (pattern)
+  list with notices                                            "…outside the list…" fails: accepted "notices"
+  device class a bare name (device:[a-z]+)                     "…accepts…" fails: refused "device:pen@1" at /words/3
+
+  criterion 3
+  TaskCompleted onto task.closed (writer core only)            "a task's completion…" fails: task.closed@1 refuses the
+                                                               writer hook (const at /writer)
+  SubagentStop onto session.child_stopped, no schema           "a child session's stop…" fails: session.child_stopped
+                                                               isn't a catalogued kind
+  TaskCompleted onto tool.after                                "a task's completion…" fails: tool.after feeds
+                                                               ["session_files","returns"], none of ["tasks"]
+  facts map TaskCompleted to agent.stop, corpus stores         "the corpus replay maps…" fails: TaskCompleted replays
+    task.completed                                             as mismatch at /0/kind
+  TaskCompleted's event without the task_id                    "the adapter's event… names…" fails: the adapter's
+                                                               task.completed doesn't carry the payload's task_id "3"
+  a second SubagentStop stored as session.attention            "a child session's stop…" fails: more than one kind
+                                                               ['agent.stop', 'session.attention']; the replay fails
+                                                               too: mismatch at /0/kind
+
+Criterion 4: each run once in this checkout, then reverted (git checkout -- <file>, or the added file removed).
+
+  a comment appended to tests/acceptance/311/helpers.ts        "…is unchanged…" fails: tests/acceptance/311 differs
+                                                               from f346706…: M tests/acceptance/311/helpers.ts
+  a file tests/acceptance/311/planted.json added               "…is unchanged…" fails: tests/acceptance/311 has files
+                                                               the base doesn't
+  sample fix A's ask.cancelled change, without regenerating    "…passes" fails: Test Files 3 failed | 10 passed;
+    digests.json or the generated types                        d1.test.ts AC5 (frozen digests) and rust.test.ts AC18
+                                                               (round-trip) among the failures
+
+The tests' .ts files also type-check under the root tsconfig.json's strict options with allowImportingTsExtensions
+(checked in the scratch copy with a tsconfig that adds tests/acceptance/606/*.ts).
