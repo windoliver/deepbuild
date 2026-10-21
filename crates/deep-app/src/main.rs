@@ -1,12 +1,17 @@
-//! `deep-app [--panel DIR]`: the spike's window, with the count in the menu bar.
+//! `deep-app [--panel DIR]`: the app's shell, with the count in the menu bar. The shell is the
+//! same registry-backed dock the replica draws headless; `--panel DIR` mounts an agent-built
+//! panel into the center beside the shipped home view.
 //!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
 //! has drawn and quits, which is how the spike measures cold start.
 
 use std::{path::PathBuf, time::Instant};
 
-use deep_app::{init, menu_bar_title, mount_panel, sessions, Spike};
+use deep_app::views::{set_state, AppState, Layout, Shell};
+use deep_app::{init, menu_bar_title, mount_panel, sessions};
+use gpui_kit::base::dock::DockPlacement;
 use gpui_kit::*;
+use gpui_shell::dock::ScriptPanel;
 
 fn main() {
     let started = Instant::now();
@@ -15,6 +20,16 @@ fn main() {
         gpui_kit::init(cx);
         init(cx);
         menu_bar::show_title(&menu_bar_title(&sessions()));
+        // No record is wired yet: the shell opens on an empty inbox at this clock.
+        set_state(AppState {
+            inbox: Default::default(),
+            now: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|since| since.as_millis() as u64)
+                .unwrap_or_default(),
+            sessions: Vec::new(),
+            held: None,
+        });
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
         let options = WindowOptions {
@@ -25,7 +40,11 @@ fn main() {
             let panel = panel_dir.as_ref().map(|dir| {
                 let view = mount_panel(&runtime, dir, window, cx)
                     .unwrap_or_else(|error| panic!("panel {}: {error:#}", dir.display()));
-                (dir.display().to_string(), view)
+                let name = dir
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "panel".to_owned());
+                cx.new(|cx| ScriptPanel::new(&name, view, cx))
             });
             window.on_next_frame(move |_, cx| {
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -34,7 +53,15 @@ fn main() {
                     cx.quit();
                 }
             });
-            cx.new(|_| Spike::new(panel))
+            cx.new(|cx| {
+                let shell = Shell::new(&Layout::shipped("home"), window, cx);
+                if let Some(panel) = panel {
+                    shell.dock.update(cx, |dock, cx| {
+                        dock.add_panel(panel, DockPlacement::Center, None, window, cx)
+                    });
+                }
+                shell
+            })
         })
         .expect("open window");
         cx.activate(true);

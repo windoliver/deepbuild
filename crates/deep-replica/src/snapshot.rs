@@ -264,8 +264,11 @@ pub fn from_observed(window: &Window) -> Snapshot {
 /// carry no draw order, so it is rebuilt from the layout: siblings that share an element parent
 /// (the same path but for their own id) form a group the view drew together; groups go in the
 /// order of their top-left corners, top to bottom then left to right, which is how the dock lays
-/// out its regions; within a group, rows go the same way. The live capture is the proof this
-/// matches.
+/// out its regions; within a group, rows go the same way, and two at one corner go by their
+/// element path, so the order is a function of the frame alone. This is a reading of the
+/// layout, not the draw order itself: a view that draws a lower row before a higher one, or
+/// a right column before a left one, would be ordered differently here than the accessibility
+/// tree lists it. The live capture is the proof it matches for the shipped views.
 fn children_of(
     parent: Option<usize>,
     observed: &[(Vec<ElementId>, Node)],
@@ -289,10 +292,16 @@ fn children_of(
     };
     let keys = indices
         .iter()
-        .map(|&index| (group_corner(index), corner(index)))
+        .map(|&index| {
+            (
+                group_corner(index),
+                corner(index),
+                format!("{:?}", observed[index].0),
+            )
+        })
         .collect::<Vec<_>>();
     let mut order: Vec<usize> = (0..indices.len()).collect();
-    order.sort_by_key(|&at| keys[at]);
+    order.sort_by(|&a, &b| keys[a].cmp(&keys[b]));
     order
         .into_iter()
         .map(|at| indices[at])

@@ -90,8 +90,6 @@ pub struct Ask {
     pub handle: String,
     pub session: String,
     pub created: u64,
-    pub kind: String,
-    pub question: String,
     pub deadline: u64,
     /// The kind of the event that closed it, if one did.
     pub closed: Option<String>,
@@ -139,14 +137,6 @@ pub fn inbox(fixture: &Fixture, log_pos: u64) -> Inbox {
             handle: format!("ask:{}", event["id"].as_str().unwrap_or_default()),
             session: row.session_id.clone(),
             created: event["log_pos"].as_u64().unwrap_or_default(),
-            kind: event["data"]["kind"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned(),
-            question: event["data"]["question"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned(),
             deadline: event["data"]["deadline"].as_u64().unwrap_or_default(),
             closed: None,
             later_until: None,

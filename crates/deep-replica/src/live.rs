@@ -150,10 +150,21 @@ mod live {
         }
     }
 
+    /// What AppKit reports for one accessibility element: its frame in device pixels inside the
+    /// content view, and the role, title and value an assistive client would read.
     struct Frame {
         bounds: [i64; 4],
         role: String,
+        title: Option<String>,
+        value: Option<String>,
         children: Vec<Frame>,
+    }
+
+    fn string_of(object: Option<Retained<AnyObject>>) -> Option<String> {
+        object.map(|object| {
+            let text: Retained<NSString> = unsafe { msg_send![&*object, description] };
+            text.to_string()
+        })
     }
 
     fn frames_of(
@@ -165,6 +176,8 @@ mod live {
     ) -> Frame {
         let screen: NSRect = unsafe { msg_send![node, accessibilityFrame] };
         let role: Option<Retained<NSString>> = unsafe { msg_send![node, accessibilityRole] };
+        let title: Option<Retained<NSString>> = unsafe { msg_send![node, accessibilityTitle] };
+        let value: Option<Retained<AnyObject>> = unsafe { msg_send![node, accessibilityValue] };
         let in_window = window.convertRectFromScreen(screen);
         let local = view.convertRect_fromView(in_window, None);
         let top = if flipped {
@@ -183,6 +196,8 @@ mod live {
                 device(local.size.height),
             ],
             role: role.map(|role| role.to_string()).unwrap_or_default(),
+            title: title.map(|title| title.to_string()),
+            value: string_of(value),
             children: children
                 .map(|children| {
                     (0..children.count())
@@ -206,6 +221,60 @@ mod live {
         for child in &frame.children {
             flatten(child, into);
         }
+    }
+
+    /// The AppKit role AccessKit's macOS adapter gives a GPUI role, for the roles the shell draws.
+    fn appkit_role(role: &str) -> Result<&'static str, String> {
+        Ok(match role {
+            "window" => "AXGroup",
+            "label" => "AXStaticText",
+            "button" => "AXButton",
+            other => {
+                return Err(format!(
+                    "GPUI role {other} has no AppKit role in the live oracle; add it before trusting a tree with one"
+                ))
+            }
+        })
+    }
+
+    /// Pairs the GPUI tree with AppKit's elements in pre-order: each node must be the element at
+    /// its position, with the role AccessKit maps it to and its title and value as text, and
+    /// takes that element's frame as its bounds. `at` counts the elements paired so far.
+    fn pair(node: &mut Node, frames: &[&Frame], at: &mut usize) -> Result<(), String> {
+        let index = *at;
+        let frame = frames
+            .get(index)
+            .ok_or_else(|| format!("GPUI has a node {index} but AppKit lists no element there"))?;
+        *at += 1;
+        let who = format!("node {index} ({} {:?})", node.role, node.name);
+        let role = appkit_role(&node.role)?;
+        if frame.role != role {
+            return Err(format!(
+                "{who}: GPUI's role maps to {role} but AppKit reports {}",
+                frame.role
+            ));
+        }
+        // AccessKit withholds the root window's title on purpose, so only the nodes under it
+        // carry one to compare.
+        if node.role != "window" && frame.title != node.name {
+            return Err(format!(
+                "{who}: AppKit's title is {:?}, not GPUI's name",
+                frame.title
+            ));
+        }
+        if let Some(Value::String(value)) = &node.value {
+            if frame.value.as_deref() != Some(value.as_str()) {
+                return Err(format!(
+                    "{who}: AppKit's value is {:?}, not GPUI's {value:?}",
+                    frame.value
+                ));
+            }
+        }
+        node.bounds = frame.bounds;
+        for child in &mut node.children {
+            pair(child, frames, at)?;
+        }
+        Ok(())
     }
 
     /// GPUI's AccessKit tree for the last frame, as nodes without bounds, in tree order.
@@ -271,13 +340,27 @@ mod live {
                 )
             })
             .collect();
+        // The window node itself may or may not be among AppKit's children; when it isn't, the
+        // content view stands in for it, with the group role AccessKit gives a window.
+        let device = |value: Pixels| (f32::from(value) * scale).round() as i64;
+        let content = Frame {
+            bounds: [0, 0, device(viewport.width), device(viewport.height)],
+            role: "AXGroup".into(),
+            title: None,
+            value: None,
+            children: Vec::new(),
+        };
         let mut frames = Vec::new();
         for root in &roots {
             flatten(root, &mut frames);
         }
+        fn count(node: &Node) -> usize {
+            1 + node.children.iter().map(count).sum::<usize>()
+        }
+        if frames.len() + 1 == count(&tree) {
+            frames.insert(0, &content);
+        }
 
-        // Nodes in pre-order, the same walk on both sides; the window node itself may or may
-        // not be among AppKit's children, so its frame is the content view's when it isn't.
         let mut snapshot = Snapshot {
             size: [
                 f32::from(viewport.width).round() as u32,
@@ -287,28 +370,11 @@ mod live {
             tree,
             items: deep_app::canvas::items(),
         };
-        let mut nodes: Vec<&mut Node> = Vec::new();
-        fn collect<'a>(node: &'a mut Node, into: &mut Vec<&'a mut Node>) {
-            let children = &mut node.children as *mut Vec<Node>;
-            into.push(node);
-            // Children are visited through a raw pointer because the parent is already lent out.
-            for child in unsafe { &mut *children } {
-                collect(child, into);
-            }
-        }
-        collect(&mut snapshot.tree, &mut nodes);
-        let device = |value: Pixels| (f32::from(value) * scale).round() as i64;
-        let window_bounds = [0, 0, device(viewport.width), device(viewport.height)];
-        let paired: Vec<[i64; 4]> = if frames.len() == nodes.len() {
-            frames.iter().map(|frame| frame.bounds).collect()
-        } else if frames.len() + 1 == nodes.len() {
-            std::iter::once(window_bounds)
-                .chain(frames.iter().map(|frame| frame.bounds))
-                .collect()
-        } else {
+        let mut paired = 0;
+        pair(&mut snapshot.tree, &frames, &mut paired)?;
+        if paired != frames.len() {
             return Err(format!(
-                "GPUI's tree has {} nodes but AppKit lists {} accessibility elements: {}",
-                nodes.len(),
+                "GPUI's tree has {paired} nodes but AppKit lists {} accessibility elements: {}",
                 frames.len(),
                 frames
                     .iter()
@@ -316,16 +382,12 @@ mod live {
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
-        };
-        for (node, bounds) in nodes.iter_mut().zip(paired) {
-            node.bounds = bounds;
         }
         eprintln!(
-            "deep-live: frame {} at {}x{}, {} nodes",
+            "deep-live: frame {} at {}x{}, {paired} nodes",
             frame["frame_number"],
             frame["viewport_size"]["width"],
             frame["viewport_size"]["height"],
-            nodes.len()
         );
         Ok(snapshot)
     }

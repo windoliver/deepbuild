@@ -1,6 +1,6 @@
 //! `needs-you@1`: a Needs you view's rows equal the inbox projection's list, row for row. A failure
-//! names an ask the view got wrong: one it left out, one it listed that isn't open, or the first
-//! one out of place.
+//! names the ask at the first row that differs: the one the projection lists there, or, past the
+//! projection's end, the one the view listed on its own.
 
 use serde_json::{json, Value};
 
@@ -28,18 +28,10 @@ pub fn needs_you(rows: &[String], expected: &[String]) -> Verdict {
             names: None,
         };
     }
-    let names = expected
-        .iter()
-        .find(|handle| !rows.contains(handle))
-        .or_else(|| rows.iter().find(|handle| !expected.contains(handle)))
-        .or_else(|| {
-            expected
-                .iter()
-                .zip(rows)
-                .find(|(want, got)| want != got)
-                .map(|(want, _)| want)
-        })
-        .cloned();
+    let first = (0..rows.len().max(expected.len()))
+        .find(|&index| rows.get(index) != expected.get(index))
+        .expect("unequal lists differ somewhere");
+    let names = expected.get(first).or_else(|| rows.get(first)).cloned();
     Verdict { pass: false, names }
 }
 
@@ -71,5 +63,13 @@ mod tests {
                 .as_deref(),
             Some("ask:A")
         );
+    }
+
+    #[test]
+    fn a_repeated_row_is_named_too() {
+        let want = handles(&["A", "B", "C"]);
+        let verdict = needs_you(&handles(&["A", "A", "B", "C"]), &want);
+        assert!(!verdict.pass);
+        assert_eq!(verdict.names.as_deref(), Some("ask:B"));
     }
 }
