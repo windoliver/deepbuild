@@ -1,0 +1,2 @@
+{"spike":339,"detail":"held","pid":30965,"shortcut":"option+space","forms":["ns_send","ns_post","cg_post","cg_forged_hid"],"presses_sent":0,"counts":{"presses":0,"hardware_presses":0,"refused_presses":0,"holds":1,"releases":0,"capture_attempts":1,"frames":1,"ticks_without_access":0,"ticks_with_hid_key":11,"ticks_with_hid_option":11},"frame_shown":true,"posted_from_process":null,"events":[]}
+{"spike":339,"mode":"held","presses":1,"frames":1,"held":true,"permission":"granted"}
