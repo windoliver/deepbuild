@@ -8,7 +8,7 @@ if (!existsSync(new URL('../packages/conformance/dist/index.js', import.meta.url
   process.exit(3);
 }
 const { lintSchemas, listSchemas } = await import('../packages/contracts/dist/index.js');
-const { kitProblems, kits, unmappedCodes } = await import('../packages/conformance/dist/index.js');
+const { kitProblems, kits, slotKits, unmappedCodes } = await import('../packages/conformance/dist/index.js');
 
 let failed = false;
 const report = (check, findings, pass) => {
@@ -17,4 +17,5 @@ const report = (check, findings, pass) => {
 report('enum closures', lintSchemas(listSchemas()).map((p) => `${p.schema}${p.path}: ${p.reason}`), 'every enum carries its closure');
 report('code mappings', unmappedCodes().map((u) => `${u.family} ${u.code} maps to no verdict`), 'every family code maps to a verdict');
 for (const kit of kits()) report(`kit ${kit.name}`, kitProblems(kit).map((p) => `${p.check} ${p.name}: ${p.reason}`), `${kit.fakes.length} fakes killed, ${kit.planted.length} planted codes raised alone`);
+for (const kit of slotKits()) report(`slot kit ${kit.slot}`, kitProblems(kit).map((p) => `${p.check} ${p.name}: ${p.reason}`), `${kit.rules.length} rules, each refusing its one planted fill`);
 process.exitCode = failed ? 1 : 0;

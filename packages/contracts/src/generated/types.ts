@@ -1042,6 +1042,39 @@ export interface EvidencePut {
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
 
+/** extension.manifest@1 */
+export interface ExtensionManifest {
+  id: string;
+  version: string;
+  digest: string;
+  publisher_key?: string;
+  access?: {
+    words: Array<string>;
+  };
+  panels?: Array<{
+    name: string;
+    area: "sidebar" | "home" | "tab" | "line";
+    media?: Array<"sound" | "microphone" | "camera">;
+  }>;
+  provides?: Array<{
+    interface: string;
+    kind: "reading" | "action" | "notice" | "view" | "check";
+    minor: number;
+  }>;
+  uses?: Array<{
+    interface: string;
+    minor: number;
+    digest: string;
+  }>;
+  replaces?: Array<string>;
+  events?: Array<string>;
+  stores?: Array<string>;
+  checks?: Array<string>;
+  codes?: Array<string>;
+  notices?: Array<string>;
+  actions?: Array<string>;
+}
+
 /** guard@1 */
 export interface Guard {
   match: string;
@@ -1543,6 +1576,14 @@ export interface OpenItemOpened {
     text: string;
   };
   evidence?: Array<string>;
+}
+
+/** package.envelope@1 */
+export interface PackageEnvelope {
+  id: string;
+  version: string;
+  digest: string;
+  publisher_key?: string;
 }
 
 /** permission.answer@1 */
