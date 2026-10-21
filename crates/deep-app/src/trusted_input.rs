@@ -56,27 +56,30 @@ pub enum Key {
     Up { key_code: u16 },
 }
 
-/// What the gate did with one event.
+/// What the gate made of one event. No verdict changes the held state: the HID table does,
+/// on each tick, in [`Gate::may_capture`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
-    /// A hardware press of the shortcut: held from now until its release.
-    Armed,
+    /// A press of the shortcut whose provenance is hardware.
+    Hardware,
     /// The shortcut's key repeat while held; nothing changes.
     Repeat,
-    /// Space was let go, or the HID table read the chord up on a tick.
-    Released,
-    /// A press of the shortcut whose provenance isn't hardware; never held.
+    /// A press of the shortcut whose provenance isn't hardware.
     Refused,
-    /// Another key, or a release while nothing was held.
+    /// Another key, or any key-up: letting go is read from the table, never from an event,
+    /// since a synthetic key-up must not let go of a chord a person holds.
     Ignored,
 }
 
 /// Counts the record keeps. A frame is counted only when a capture returned pixels.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Counts {
+    /// Presses of the shortcut delivered to this app as key events, by provenance.
     pub presses: u64,
     pub hardware_presses: u64,
     pub synthetic_presses: u64,
+    /// Ticks on which the HID table armed the gate, and on which it released it.
+    pub holds: u64,
     pub releases: u64,
     /// Ticks on which the gate was held and a capture was tried.
     pub capture_attempts: u64,
@@ -89,7 +92,7 @@ pub struct Counts {
     pub ticks_with_hid_option: u64,
 }
 
-/// The shortcut's held state, armed by hardware alone.
+/// The shortcut's held state, held by the HID table alone.
 #[derive(Debug, Default)]
 pub struct Gate {
     held: bool,
@@ -97,6 +100,7 @@ pub struct Gate {
 }
 
 impl Gate {
+    /// Judges one key event for the record. The held state doesn't move.
     pub fn on_key(&mut self, key: Key, provenance: Provenance) -> Verdict {
         match key {
             Key::Down { key_code, repeat } if key_code == SHORTCUT_KEY_CODE => {
@@ -106,26 +110,13 @@ impl Gate {
                 self.counts.presses += 1;
                 if provenance.is_hardware() {
                     self.counts.hardware_presses += 1;
-                    self.held = true;
-                    Verdict::Armed
+                    Verdict::Hardware
                 } else {
                     self.counts.synthetic_presses += 1;
                     Verdict::Refused
                 }
             }
-            // A release is taken from any event: letting go can only close the gate.
-            Key::Up { key_code } if key_code == SHORTCUT_KEY_CODE => self.release(),
             _ => Verdict::Ignored,
-        }
-    }
-
-    fn release(&mut self) -> Verdict {
-        if self.held {
-            self.held = false;
-            self.counts.releases += 1;
-            Verdict::Released
-        } else {
-            Verdict::Ignored
         }
     }
 
@@ -140,11 +131,11 @@ impl Gate {
     /// events said. Events only add their provenance to the record.
     pub fn may_capture(&mut self, hid_chord_down: bool) -> bool {
         if hid_chord_down && !self.held {
-            self.counts.presses += 1;
-            self.counts.hardware_presses += 1;
+            self.counts.holds += 1;
             self.held = true;
         } else if self.held && !hid_chord_down {
-            self.release();
+            self.counts.releases += 1;
+            self.held = false;
         }
         self.held
     }
@@ -424,16 +415,19 @@ mod macos {
         frame: Option<(Frame, Arc<RenderImage>)>,
         access: bool,
         requested: bool,
+        /// What the window asks of the person while nothing is held.
+        hint: &'static str,
     }
 
     impl CursorWindow {
-        pub fn new(gate: Rc<RefCell<Gate>>, size: Size<Pixels>) -> Self {
+        pub fn new(gate: Rc<RefCell<Gate>>, size: Size<Pixels>, hint: &'static str) -> Self {
             Self {
                 gate,
                 size,
                 frame: None,
                 access: capture_access(),
                 requested: false,
+                hint,
             }
         }
 
@@ -511,7 +505,7 @@ mod macos {
             } else if !self.access {
                 "Screen Recording not granted".to_owned()
             } else {
-                "Hold ⌥Space on the keyboard".to_owned()
+                self.hint.to_owned()
             };
             div()
                 .id("cursor-window")
@@ -696,24 +690,44 @@ mod tests {
     }
 
     #[test]
-    fn a_hardware_press_arms_and_its_release_disarms() {
+    fn a_hardware_press_is_counted_and_only_the_table_holds_the_gate() {
         let mut gate = Gate::default();
-        assert_eq!(gate.on_key(down(false), hardware()), Verdict::Armed);
-        assert!(gate.held());
+        assert_eq!(gate.on_key(down(false), hardware()), Verdict::Hardware);
+        assert!(
+            !gate.held(),
+            "an event never holds; the next tick's table does"
+        );
+        assert!(gate.may_capture(true));
         assert_eq!(gate.on_key(down(true), hardware()), Verdict::Repeat);
+        assert_eq!(gate.counts.presses, 1);
+        assert_eq!(gate.counts.hardware_presses, 1);
+        assert_eq!(gate.counts.holds, 1);
+    }
+
+    #[test]
+    fn a_key_up_event_never_lets_go_of_a_chord_the_table_reads_down() {
+        // A synthetic key-up while a person holds the chord would otherwise close the gate,
+        // which the next tick would reopen as a second hold.
+        let mut gate = Gate::default();
+        assert!(gate.may_capture(true));
+        let synthetic = Provenance {
+            source_state: Some(0),
+            source_pid: Some(1),
+            hid_chord_down: true,
+        };
         assert_eq!(
             gate.on_key(
                 Key::Up {
                     key_code: SHORTCUT_KEY_CODE
                 },
-                hardware()
+                synthetic
             ),
-            Verdict::Released
+            Verdict::Ignored
         );
-        assert!(!gate.held());
-        assert_eq!(gate.counts.presses, 1);
-        assert_eq!(gate.counts.hardware_presses, 1);
-        assert_eq!(gate.counts.releases, 1);
+        assert!(gate.held());
+        assert!(gate.may_capture(true));
+        assert_eq!(gate.counts.holds, 1);
+        assert_eq!(gate.counts.releases, 0);
     }
 
     #[test]
@@ -823,10 +837,10 @@ mod tests {
         let mut gate = Gate::default();
         assert!(gate.may_capture(true));
         assert!(gate.held());
-        assert_eq!(gate.counts.presses, 1);
-        assert_eq!(gate.counts.hardware_presses, 1);
+        assert_eq!(gate.counts.holds, 1);
+        assert_eq!(gate.counts.presses, 0, "no event arrived");
         assert!(gate.may_capture(true));
-        assert_eq!(gate.counts.presses, 1, "a held chord is one press");
+        assert_eq!(gate.counts.holds, 1, "a held chord is one hold");
         assert!(!gate.may_capture(false));
         assert_eq!(gate.counts.releases, 1);
     }

@@ -190,9 +190,13 @@ mod trusted {
             is_movable: false,
             ..Default::default()
         };
+        let hint = match mode {
+            Mode::ProbeSynthetic { .. } => "Synthetic run: hands off the keyboard",
+            _ => "Hold ⌥Space on the keyboard",
+        };
         let (handle, view) = open_window(options, cx, {
             let gate = gate.clone();
-            move |_, cx| cx.new(|_| CursorWindow::new(gate, SIZE))
+            move |_, cx| cx.new(|_| CursorWindow::new(gate, SIZE, hint))
         })
         .expect("open the cursor window");
         if matches!(mode, Mode::ProbeSynthetic { .. } | Mode::ProbeHeld { .. }) {
@@ -366,6 +370,7 @@ mod trusted {
                 "presses": counts.presses,
                 "hardware_presses": counts.hardware_presses,
                 "synthetic_presses": counts.synthetic_presses,
+                "holds": counts.holds,
                 "releases": counts.releases,
                 "capture_attempts": counts.capture_attempts,
                 "frames": counts.frames,
@@ -378,18 +383,19 @@ mod trusted {
             "events": by_shape,
         });
         println!("{detail}");
-        // The presses a probe reports are the ones the gate judged, so a press that never
-        // reached the monitor isn't counted as refused.
+        // A synthetic probe reports the presses the gate judged, so a press that never
+        // reached the monitor isn't counted as refused; a held probe reports the holds the
+        // HID table read, since the person's keys go to whichever app is key.
         let presses = match probe {
             "synthetic" => counts.presses,
-            _ => counts.hardware_presses,
+            _ => counts.holds,
         };
         let line = serde_json::json!({
             "spike": 339,
             "mode": probe,
             "presses": presses,
             "frames": counts.frames,
-            "held": ever_held || counts.hardware_presses > 0,
+            "held": ever_held || counts.holds > 0,
             "permission": permission,
         });
         println!("{line}");
