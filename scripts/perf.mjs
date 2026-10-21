@@ -140,14 +140,23 @@ function keptCopy(side) {
   return directory;
 }
 // CARGO_TARGET_DIR names the kept build directory, so Cargo resolves it to the same path every run.
+// DEEP_OPEN_ISSUES names the open issues this checkout's catalogue drift lane fetched, cached beside the
+// kept copy, so each side's lane reads the same issues and none fetches again (#605).
 function checkRun(directory) {
-  const previous = process.env.CARGO_TARGET_DIR;
+  const previous = { CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR, DEEP_OPEN_ISSUES: process.env.DEEP_OPEN_ISSUES };
   process.env.CARGO_TARGET_DIR = join(dirname(directory), 'target');
+  const issues = join(root, 'target', 'open-issues.json');
+  if (existsSync(issues)) {
+    process.env.DEEP_OPEN_ISSUES = join(dirname(directory), 'open-issues.json');
+    copyFileSync(issues, process.env.DEEP_OPEN_ISSUES);
+  }
   try {
     return checkCopy(directory);
   } finally {
-    if (previous === undefined) delete process.env.CARGO_TARGET_DIR;
-    else process.env.CARGO_TARGET_DIR = previous;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }
 // A directory of npm ci, warm builds and the check workload, timed once like the merge base. The checks

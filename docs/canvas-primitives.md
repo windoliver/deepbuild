@@ -586,7 +586,7 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `note.opened`, `note.closed` (new) | `{note, doc, item, rev, t, region, text}`; `{note, by: you \| check, rev, run}` | notes | open notes on an item, in the editor panel and on return cards |
 | `suggestion.filed`, `suggestion.settled` (new) | `{suggestion, doc, item, writer, patch, base, ops}`; `{suggestion, outcome: accepted \| superseded, rev}` | suggestions | suggestions on your items, in the editor panel and on return cards |
 
-The films dry run wrote `verdict.created` and `sendback.delivered`; the scenes dry run wrote `verdict.made`, `claim.sent_back` and `delivery.outcome`. This keeps the scenes forms, matching `claim.made`. `claim.point` folds into `claim.made` as its `scope`.
+The films dry run wrote verdict.created and sendback.delivered; the scenes dry run wrote `verdict.made`, `claim.sent_back` and `delivery.outcome`. This keeps the scenes forms, matching `claim.made`. The films' claim.point folds into `claim.made` as its `scope`.
 
 ### Projections the canvas reads
 
@@ -4389,7 +4389,7 @@ For: fog that fills a hall and takes the light from its windows, a cloud layer u
 
 **Cost:** O(1) per frame; framing O(kept items) per shot change
 
-**It can never:** Move without a shot, navigation or your input; integrate; imitate the app's chrome; frame onto the question card; change its position under your input while `user.pivot` is eye; pan past its bounds
+**It can never:** Move without a shot, navigation or your input; integrate; imitate the app's chrome; frame onto the question card; change its position under your input with `user.pivot: eye`; pan past its bounds
 
 **Lands:** R2, in the canvas core: flat, isometric and orbit; R6 the camera rig
 
@@ -6502,7 +6502,7 @@ For: a piece that plays on live data: a lab that follows a sensor, a ticker game
 - On `net@1`: `readings_from: player | none = none`
 - Issue: `reading.overflow {reading, step, dropped}`
 
-**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with `reading.overflow`, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key. A piece reads one series of a series source, `reading:<source>#<series>`, as a scalar; a whole series never enters a read region, and a piece that binds one is refused at check, naming the source.
+**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with a `reading.overflow {reading, step, dropped}` issue, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key. A piece reads one series of a series source, `reading:<source>#<series>`, as a scalar; a whole series never enters a read region, and a piece that binds one is refused at check, naming the source.
 
 **Cost:** Per reading per step, O(bytes); an `each` reading of 16 values of 8 numbers fills about 1.2 KB of read region (estimate). Budget class: as the logic item.
 

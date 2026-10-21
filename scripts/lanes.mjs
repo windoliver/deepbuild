@@ -28,6 +28,9 @@ export const checks = [
     // tests spend plan usage, and #246's check that change against its own base.
     [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
+  // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
+  // contracts package the typecheck lane builds.
+  { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
@@ -65,10 +68,11 @@ export function runLanes(lanes, { cwd = root } = {}) {
         const lines = output.split('\n').map((line) => line.trim()).filter(Boolean);
         const error = result.error?.message
           ?? lines.find((line) => /\b(?:[a-z]*error(?:\[[^\]]+\])?|fatal):|\berror TS\d+:|panicked at/i.test(line))
-          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b/i.test(line))
+          ?? lines.find((line) => /\berror\b|AssertionError|panicked|\bFAIL\b|\bBLOCKED\b|\bINVALID\b|\bINCONCLUSIVE\b/i.test(line))
           ?? lines[0] ?? `${command} exited ${result.signal ?? result.status}`;
-        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not FAIL.
-        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED)\s+(.+)/) ?? [];
+        // A diagnostic that names its own state keeps it: a check that couldn't run reads BLOCKED, not
+        // FAIL, and one that couldn't read all it checks reads INCONCLUSIVE.
+        const [, state, rest] = error.match(/^(FAIL|INVALID|BLOCKED|INCONCLUSIVE)\s+(.+)/) ?? [];
         failure = { state: result.error ? 'BLOCKED' : state ?? 'FAIL', error: rest ?? error };
       }
     }
