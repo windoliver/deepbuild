@@ -68,10 +68,19 @@ export function readJson(value: unknown): { json: JsonValue } | { path: string; 
 /** One JSON Pointer segment, escaped. */
 export const segment = (key: string | number): string => `/${String(key).replace(/~/g, '~0').replace(/\//g, '~1')}`;
 
-/** The one field every branch of a union fixes and requires: its tag, as the lint requires. */
-export const unionTag = (branches: Schema[]): string => Object.keys(branches[0]!.properties as object).find((key) => branches.every((b) =>
-  isObject(b.properties) && Object.hasOwn(b.properties, key) && isObject(b.properties[key]) && 'const' in b.properties[key]
-  && Array.isArray(b.required) && b.required.includes(key)))!;
+/** A union's null branch, `{"type": "null"}`, which makes the union nullable. */
+export const isNullBranch = (branch: JsonValue): boolean => isObject(branch) && branch.type === 'null';
+
+/** The branches a union's tag tells apart: all but its null branch. */
+export const tagged = (branches: Schema[]): Schema[] => branches.filter((b) => !isNullBranch(b));
+
+/** The one field every tagged branch of a union fixes and requires: its tag, as the lint requires. */
+export const unionTag = (all: Schema[]): string => {
+  const branches = tagged(all);
+  return Object.keys(branches[0]!.properties as object).find((key) => branches.every((b) =>
+    isObject(b.properties) && Object.hasOwn(b.properties, key) && isObject(b.properties[key]) && 'const' in b.properties[key]
+    && Array.isArray(b.required) && b.required.includes(key)))!;
+};
 
 /** The schema a local `#/$defs/<name>` reference points at. */
 export function resolveRef(root: Schema, ref: string): Schema {

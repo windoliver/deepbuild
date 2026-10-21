@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "id": "doc-newer-major",
+  "profile": "figure",
+  "title": "Newer major",
+  "description": "Newer major.",
+  "size": [
+    320,
+    200
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "slab": {
+      "id": "slab",
+      "kind": "test.slab@4",
+      "layer": "main",
+      "name": "Slab",
+      "order": "a0",
+      "params": {
+        "width": 20
+      }
+    }
+  }
+}

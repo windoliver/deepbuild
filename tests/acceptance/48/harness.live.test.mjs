@@ -128,7 +128,7 @@ for (const agent of ['claude', 'codex']) {
 test(`${BUDGETS} ${OCT4} on the reference Mac, the preflight's harness budgets lane passes: every scripted session under 60 s and the whole harness under 10 minutes, compared with the merge base`, { timeout: 2 * HARNESS_MS + 120_000 }, (t) => {
   requireLive('claude', 'codex');
   const machine = referenceMachine();
-  if (!machine.hardware) assert.fail('BLOCKED: budgets count only on the reference Mac, a Mac15,7 with a 12-core M3 Pro and 36 GB');
+  if (!machine.hardware) assert.fail('BLOCKED: budgets count only on one of the two reference Macs, matched in full: a Mac15,7 with a 12-core M3 Pro, 18 GPU cores and 36 GB, or a Mac15,12 with an 8-core M3, 10 GPU cores and 16 GB');
   if (!machine.conditions) assert.fail('BLOCKED: the reference Mac must be on mains power with Low Power Mode off');
   const out = scratch(t);
   const base = mergeBase();

@@ -1,0 +1,188 @@
+Base commit: f346706378d9eaabb1965df1167535fac5a9c285
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/389
+Run against a read-only export of the base commit (git archive) with these test files copied in and the repo's node_modules linked: no crates/deep-canvas and no scripts/canvas-lint.mjs exist there.
+Date: 2026-10-20T21:44:33Z  Node v22.22.3  vitest 5.0.5 darwin-arm64
+Note: package.json asks for Node >=24.22.0; this run used the local Node v22.22.3, left as it is.
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/389
+
+ ❯ lint.test.ts (2 tests | 2 failed) 38ms
+   ❯ AC2 the lint lane refuses the planted forms in a canvas crate and in a crate a check reads, and passes their clean twins (2)
+     × AC2 each of the seven forms, planted once in each crate, fails the lint naming its file and line 4ms
+     × AC2 the clean twins pass the lint 30ms
+ ❯ migration.test.ts (2 tests | 2 failed) 932ms
+   ❯ AC10 a corpus document saved with test.slab@1 opens in a build at major 3, migrating one major a step (1)
+     × AC10 the document loads with one migrated notice per step, and the values the corpus recorded 5ms
+   ❯ AC11 the document check reads only the lowered form (1)
+     × AC11 a width past its maximum, saved as w at @1, raises out_of_range at the @3 path items/<id>/params/width 0ms
+ ❯ canonical.test.ts (6 tests | 6 failed) 1047ms
+   ❯ AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document (6)
+     × AC9 the fixture's SHA-256 is the hash of its own bytes, written before the canonicalizer ran 4ms
+     × AC9 the canonicalizer writes the fixture's bytes: maps by ID, keys by code point, defaults out, shortest floats, NFC, no whitespace 0ms
+     × AC9 the file with its keys permuted gives the same revision hash 0ms
+     × AC9 patch history A reaches the fixture's content and its revision hash 0ms
+     × AC9 patch history B reaches the fixture's content and its revision hash 0ms
+     × AC9 the canonical bytes are a fixed point: canonicalizing the canonical document gives the same bytes 0ms
+ ❯ grammar.test.ts (17 tests | 17 failed) 1168ms
+   ❯ AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference (6)
+     × AC8 time: every valid input parses, prints back to the same text and gives the reference value 5ms
+     × AC8 unit: every valid input parses, prints back to the same text and gives the reference value 0ms
+     × AC8 path: every valid input parses, prints back to the same text and gives the reference value 0ms
+     × AC8 handle: every valid input parses, prints back to the same text and gives the reference value 0ms
+     × AC8 id: every valid input parses, prints back to the same text and gives the reference value 0ms
+     × AC8 "195f" at 30 fps is 4,586,400,000 flicks and "1.25s" is 882,000,000 0ms
+   ❯ AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing (6)
+     × AC4 time: every mutation outside the grammar is refused with its code 0ms
+     × AC4 unit: every mutation outside the grammar is refused with its code 0ms
+     × AC4 path: every mutation outside the grammar is refused with its code 1ms
+     × AC4 handle: every mutation outside the grammar is refused with its code 0ms
+     × AC4 id: every mutation outside the grammar is refused with its code 0ms
+     × AC4 a patch whose path is refused leaves the document and its revision hash unchanged 0ms
+   ❯ AC7 patches, channels and bound values address a field only through the one path grammar (5)
+     × AC7 items/<id>/params/<name>, items/<id>/at/rot/1 and controls/<id>/value parse to their sections, IDs and fields 0ms
+     × AC7 a set through items/<id>/at/rot/1 and items/<id>/params/<name> reaches those fields 0ms
+     × AC7 a set whose path is not in the grammar is refused with bad_path, naming the path 0ms
+     × AC7 a channel or bound value whose target is not a path is refused at its own path 0ms
+     × AC7 an ID containing / is refused wherever it appears 0ms
+ ❯ document.test.ts (7 tests | 7 failed) 1365ms
+   ❯ AC1 a document with a broken reference is refused, and the agent gets the issue by ID (1)
+     × AC1 a parent that names no item is ref_unresolved, with the item's ID, its path and the value 6ms
+   ❯ AC5 unknown fields, unknown kinds and newer majors (4)
+     × AC5 a field the kind's version does not define fails with unknown_field at the field's path 0ms
+     × AC5 the same field is skipped with a notice when the document requires a newer minor of the kind 0ms
+     × AC5 an item of a kind the app does not know is skipped with the notice unknown_kind while the rest draws 0ms
+     × AC5 a newer major of a known kind is refused with kind_too_new 0ms
+   ❯ AC6 a literal whose unit does not convert to the field's unit fails naming the field and the forms it takes (2)
+     × AC6 "45deg" in a length field names the field and lists only length units, printed by the unit printer 0ms
+     × AC6 a literal that converts, "300 mm" for a length in meters, is read as 0.3 and loses nothing 1ms
+ ❯ color.test.ts (5 tests | 5 failed) 1446ms
+   ❯ AC3 OKLab, OKLCh and the sRGB transfer match palette and bevy_color within 1e-6 (5)
+     × AC3 the fixture names its sources and holds near-black and hue-wrap samples 5ms
+     × AC3 sRGB to linear, OKLab and OKLCh match palette on every sample 0ms
+     × AC3 sRGB to linear, OKLab and OKLCh match bevy on every sample 0ms
+     × AC3 the inverse conversions return to palette's sRGB and OKLab values, hue-wrap cases included 0ms
+     × AC3 OKLCh hue is reported in [0, 360) and wraps: a hue just under 360 and one just over 0 are both near the seam 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 39 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  canonical.test.ts > AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document > AC9 the fixture's SHA-256 is the hash of its own bytes, written before the canonicalizer ran
+ FAIL  canonical.test.ts > AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document > AC9 the canonicalizer writes the fixture's bytes: maps by ID, keys by code point, defaults out, shortest floats, NFC, no whitespace
+ FAIL  canonical.test.ts > AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document > AC9 the file with its keys permuted gives the same revision hash
+ FAIL  canonical.test.ts > AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document > AC9 patch history A reaches the fixture's content and its revision hash
+ FAIL  canonical.test.ts > AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document > AC9 patch history B reaches the fixture's content and its revision hash
+ FAIL  canonical.test.ts > AC9 the kernel fixture gives the canonical bytes and SHA-256 of a five-item document > AC9 the canonical bytes are a fixed point: canonicalizing the canonical document gives the same bytes
+ FAIL  color.test.ts > AC3 OKLab, OKLCh and the sRGB transfer match palette and bevy_color within 1e-6 > AC3 the fixture names its sources and holds near-black and hue-wrap samples
+ FAIL  color.test.ts > AC3 OKLab, OKLCh and the sRGB transfer match palette and bevy_color within 1e-6 > AC3 sRGB to linear, OKLab and OKLCh match palette on every sample
+ FAIL  color.test.ts > AC3 OKLab, OKLCh and the sRGB transfer match palette and bevy_color within 1e-6 > AC3 sRGB to linear, OKLab and OKLCh match bevy on every sample
+ FAIL  color.test.ts > AC3 OKLab, OKLCh and the sRGB transfer match palette and bevy_color within 1e-6 > AC3 the inverse conversions return to palette's sRGB and OKLab values, hue-wrap cases included
+ FAIL  color.test.ts > AC3 OKLab, OKLCh and the sRGB transfer match palette and bevy_color within 1e-6 > AC3 OKLCh hue is reported in [0, 360) and wraps: a hue just under 360 and one just over 0 are both near the seam
+ FAIL  document.test.ts > AC1 a document with a broken reference is refused, and the agent gets the issue by ID > AC1 a parent that names no item is ref_unresolved, with the item's ID, its path and the value
+ FAIL  document.test.ts > AC5 unknown fields, unknown kinds and newer majors > AC5 a field the kind's version does not define fails with unknown_field at the field's path
+ FAIL  document.test.ts > AC5 unknown fields, unknown kinds and newer majors > AC5 the same field is skipped with a notice when the document requires a newer minor of the kind
+ FAIL  document.test.ts > AC5 unknown fields, unknown kinds and newer majors > AC5 an item of a kind the app does not know is skipped with the notice unknown_kind while the rest draws
+ FAIL  document.test.ts > AC5 unknown fields, unknown kinds and newer majors > AC5 a newer major of a known kind is refused with kind_too_new
+ FAIL  document.test.ts > AC6 a literal whose unit does not convert to the field's unit fails naming the field and the forms it takes > AC6 "45deg" in a length field names the field and lists only length units, printed by the unit printer
+ FAIL  document.test.ts > AC6 a literal whose unit does not convert to the field's unit fails naming the field and the forms it takes > AC6 a literal that converts, "300 mm" for a length in meters, is read as 0.3 and loses nothing
+ FAIL  grammar.test.ts > AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference > AC8 time: every valid input parses, prints back to the same text and gives the reference value
+ FAIL  grammar.test.ts > AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference > AC8 unit: every valid input parses, prints back to the same text and gives the reference value
+ FAIL  grammar.test.ts > AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference > AC8 path: every valid input parses, prints back to the same text and gives the reference value
+ FAIL  grammar.test.ts > AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference > AC8 handle: every valid input parses, prints back to the same text and gives the reference value
+ FAIL  grammar.test.ts > AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference > AC8 id: every valid input parses, prints back to the same text and gives the reference value
+ FAIL  grammar.test.ts > AC8 10,000 seeded valid inputs per grammar parse, print back and resolve to the rational reference > AC8 "195f" at 30 fps is 4,586,400,000 flicks and "1.25s" is 882,000,000
+ FAIL  grammar.test.ts > AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing > AC4 time: every mutation outside the grammar is refused with its code
+ FAIL  grammar.test.ts > AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing > AC4 unit: every mutation outside the grammar is refused with its code
+ FAIL  grammar.test.ts > AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing > AC4 path: every mutation outside the grammar is refused with its code
+ FAIL  grammar.test.ts > AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing > AC4 handle: every mutation outside the grammar is refused with its code
+ FAIL  grammar.test.ts > AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing > AC4 id: every mutation outside the grammar is refused with its code
+ FAIL  grammar.test.ts > AC4 10,000 seeded mutations per grammar are refused with a code, without a panic, and change nothing > AC4 a patch whose path is refused leaves the document and its revision hash unchanged
+ FAIL  grammar.test.ts > AC7 patches, channels and bound values address a field only through the one path grammar > AC7 items/<id>/params/<name>, items/<id>/at/rot/1 and controls/<id>/value parse to their sections, IDs and fields
+ FAIL  grammar.test.ts > AC7 patches, channels and bound values address a field only through the one path grammar > AC7 a set through items/<id>/at/rot/1 and items/<id>/params/<name> reaches those fields
+ FAIL  grammar.test.ts > AC7 patches, channels and bound values address a field only through the one path grammar > AC7 a set whose path is not in the grammar is refused with bad_path, naming the path
+ FAIL  grammar.test.ts > AC7 patches, channels and bound values address a field only through the one path grammar > AC7 a channel or bound value whose target is not a path is refused at its own path
+ FAIL  grammar.test.ts > AC7 patches, channels and bound values address a field only through the one path grammar > AC7 an ID containing / is refused wherever it appears
+ FAIL  migration.test.ts > AC10 a corpus document saved with test.slab@1 opens in a build at major 3, migrating one major a step > AC10 the document loads with one migrated notice per step, and the values the corpus recorded
+ FAIL  migration.test.ts > AC11 the document check reads only the lowered form > AC11 a width past its maximum, saved as w at @1, raises out_of_range at the @3 path items/<id>/params/width
+AssertionError: the deep-canvas binary builds: expected 'cargo build -p deep-canvas failed:\ne…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build -p deep-canvas failed:
++ error: package ID specification `deep-canvas` did not match any packages
++
+
+ ❯ helpers.ts:41:69
+     39|   let error = '';
+     40|   beforeAll(() => { error = buildBinary(); }, 600_000);
+     41|   beforeEach(() => { expect(error, 'the deep-canvas binary builds').to…
+       |                                                                     ^
+     42| }
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/39]⎯
+
+ FAIL  lint.test.ts > AC2 the lint lane refuses the planted forms in a canvas crate and in a crate a check reads, and passes their clean twins > AC2 each of the seven forms, planted once in each crate, fails the lint naming its file and line
+AssertionError: scripts/canvas-lint.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lint.test.ts:104:64
+    102| describe('AC2 the lint lane refuses the planted forms in a canvas crat…
+    103|   it('AC2 each of the seven forms, planted once in each crate, fails t…
+    104|     expect(existsSync(LINT), 'scripts/canvas-lint.mjs exists').toBe(tr…
+       |                                                                ^
+    105|     const root = workspace(PLANTED);
+    106|     scratch.push(root);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/39]⎯
+
+ FAIL  lint.test.ts > AC2 the lint lane refuses the planted forms in a canvas crate and in a crate a check reads, and passes their clean twins > AC2 the clean twins pass the lint
+AssertionError: the lint failed the clean twins:
+
+node:internal/modules/cjs/loader:1433
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/scripts/canvas-lint.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+    at Function._load (node:internal/modules/cjs/loader:1216:25)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v22.22.3
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ lint.test.ts:125:81
+    123|     scratch.push(root);
+    124|     const result = lint(root);
+    125|     expect(result.status, `the lint failed the clean twins:\n${result.…
+       |                                                                                 ^
+    126|     expect(result.output.split('\n').filter((line) => /^FAIL\b/.test(l…
+    127|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/39]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  39 failed (39)
+   Start at  14:44:04
+   Duration  1.60s (tests 94%, transform 4%, import 1%)
+

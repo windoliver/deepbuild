@@ -513,21 +513,13 @@
     },
     "Stop": {
       "kind": "agent.stop",
-      "data": { "outcome": "=finished", "continued": "stop_hook_active" }
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" },
+      "stop": true
     },
     "StopFailure": {
       "kind": "agent.stop",
       "data": { "outcome": "=failed" },
-      "cause": {
-        "field": "error",
-        "values": {
-          "rate_limit": "rate_limited",
-          "overloaded": "rate_limited",
-          "authentication_failed": "sign_in_required",
-          "oauth_org_not_allowed": "sign_in_required"
-        },
-        "otherwise": "unknown"
-      }
+      "stop": true
     },
     "SessionEnd": {
       "kind": "session.end",
@@ -535,11 +527,52 @@
     },
     "SubagentStop": {
       "kind": "agent.stop",
-      "data": { "outcome": "=finished", "continued": "stop_hook_active" }
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" },
+      "stop": true
     },
     "TaskCompleted": {
       "kind": "task.completed",
       "data": { "agent_task": "task_id", "title": "task_subject" }
+    }
+  },
+  "stop": {
+    "readBy": "each agent.stop names its cause from the stop's closed set and carries its turn's usage (#603); the turn is the transcript's entries from the user entry whose promptId is the payload's prompt_id to the next prompt's; a subagent's stop (its payload carries agent_id) ran in the subagent's own transcript, agent_transcript_path, so no entry of the session's transcript is its turn: its cause comes from the payload alone and its usage is not captured",
+    "turn": { "payload": "prompt_id", "transcript": "promptId", "elsewhere": "agent_id" },
+    "cause": {
+      "readBy": "the first that names a cause: the StopFailure payload's error, then an API error entry of the turn (isApiErrorMessage, its error taking the same values), never the agent's text; Claude Code's hooks reference lists the values; it records rate limits only as those errors, with no reset time in any field, so a Claude Code stop is rate_limited and never plan_window_spent; a value not listed, and a stop nothing names a cause for, is unknown",
+      "payload": {
+        "field": "error",
+        "values": {
+          "rate_limit": "rate_limited",
+          "overloaded": "rate_limited",
+          "authentication_failed": "sign_in_required",
+          "oauth_org_not_allowed": "sign_in_required"
+        }
+      },
+      "errors": {
+        "match": { "type": "assistant", "isApiErrorMessage": true },
+        "field": "error",
+        "values": {
+          "rate_limit": "rate_limited",
+          "overloaded": "rate_limited",
+          "authentication_failed": "sign_in_required",
+          "oauth_org_not_allowed": "sign_in_required"
+        }
+      },
+      "otherwise": "unknown"
+    },
+    "usage": {
+      "readBy": "the turn's assistant entries' message.usage, once per message.id, since each content block repeats it; input is input_tokens plus cache_creation_input_tokens, cached is cache_read_input_tokens, each exact; an API error's synthetic entry (model <synthetic>) carries zeros, not usage, so it is left out; the model is the last entry's message.model; no context window and no cost is recorded, so context_fill is null and the cost unpriced",
+      "covers": "turn",
+      "records": { "match": { "type": "assistant" }, "has": "message.usage", "skip": { "message.model": "<synthetic>" }, "once": "message.id" },
+      "take": "sum",
+      "counts": {
+        "input": ["message.usage.input_tokens", "message.usage.cache_creation_input_tokens"],
+        "cached": ["message.usage.cache_read_input_tokens"],
+        "output": ["message.usage.output_tokens"]
+      },
+      "exact": true,
+      "model": { "record": "message.model" }
     }
   },
   "toolKinds": {

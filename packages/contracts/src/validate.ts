@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { ContractError, issue, type ContractIssue } from './errors.js';
-import { isObject, isPlainObject, readJson, resolveRef, segment, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
+import { isNullBranch, isObject, isPlainObject, readJson, resolveRef, segment, tagged, unionTag, type JsonValue, type Schema, type SchemaEntry } from './json.js';
 
 export type Validation = { ok: true } | { ok: false; issues: ContractIssue[] };
 
@@ -66,9 +66,11 @@ function compile(root: Schema): Check {
 
   const union = (branches: Schema[]): Check => {
     const tag = unionTag(branches);
-    const byTag = new Map(branches.map((b) => [tagOf(b, tag), node(b)]));
+    const byTag = new Map(tagged(branches).map((b) => [tagOf(b, tag), node(b)]));
+    const nullable = branches.some(isNullBranch);
     const at = segment(tag);
     return (value, path, out) => {
+      if (value === null && nullable) return;
       if (!isObject(value)) return void out.push(issue('type', path, value));
       if (!Object.hasOwn(value, tag)) return void out.push(issue('required', path + at, undefined));
       let branch: Check | undefined;
@@ -182,7 +184,7 @@ function seqTransform(root: Schema): Transform | undefined {
     if (Array.isArray(schema.oneOf)) {
       const branches = schema.oneOf as Schema[];
       const tag = unionTag(branches);
-      const byTag = new Map(branches.map((b) => [tagOf(b, tag), node(b)]));
+      const byTag = new Map(tagged(branches).map((b) => [tagOf(b, tag), node(b)]));
       if ([...byTag.values()].every((b) => !b)) return undefined;
       // Only the branch the value's tag names; validation has already refused any other tag.
       return (value, toWire) => {

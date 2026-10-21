@@ -1,0 +1,524 @@
+{
+  "title": "agent.stop@2",
+  "description": "The agent stopped a turn: why, from the stop's closed set of causes, and what the turn used.",
+  "x-feeds": [
+    "claims"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "agent.stop"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^session:[0-9A-Za-z]+$",
+      "description": "The session this event is about."
+    },
+    "writer": {
+      "const": "hook",
+      "description": "Only the hook appends this kind: an adapter maps its agent's events from hook payloads."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "description": "The stop's cause, read from hook payloads, transcript error records and rate-limit records, never from the agent's text; a plan window spent also says when it resets.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "sign_in_required"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "token_refresh_failed"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "plan_window_spent"
+            },
+            "plan_resets": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "When the plan window resets, in milliseconds since the Unix epoch."
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "plan_resets",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "rate_limited"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "refusal"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "max_turns"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "context_overflow"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "tool_schema_rejected"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "agent_crashed"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "timed_out"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "turn": {
+              "$ref": "#/$defs/turn"
+            },
+            "did_work": {
+              "type": "boolean"
+            },
+            "cause": {
+              "const": "unknown"
+            },
+            "usage": {
+              "$ref": "#/$defs/usage"
+            }
+          },
+          "required": [
+            "turn",
+            "did_work",
+            "cause",
+            "usage"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "turn": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "What the turn used, by the agent's counting rules in its facts; null when it was not captured, never zero.",
+      "properties": {
+        "covers": {
+          "type": "string",
+          "enum": [
+            "turn",
+            "session"
+          ],
+          "description": "Whether the counts cover the turn or the session so far."
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "description": "The model that actually answered; null when not captured.",
+          "maxLength": 8192
+        },
+        "input": {
+          "$ref": "#/$defs/count"
+        },
+        "cached": {
+          "$ref": "#/$defs/count"
+        },
+        "output": {
+          "$ref": "#/$defs/count"
+        },
+        "context_fill": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How full the context window is, as a fraction; null when not captured."
+        },
+        "cost": {
+          "$ref": "#/$defs/cost"
+        }
+      },
+      "required": [
+        "covers",
+        "model",
+        "input",
+        "cached",
+        "output",
+        "context_fill",
+        "cost"
+      ],
+      "additionalProperties": false
+    },
+    "count": {
+      "description": "A token count, exact or an estimate; null when not captured. An estimate is never 0.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "exact": {
+              "const": true
+            }
+          },
+          "required": [
+            "value",
+            "exact"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "exact": {
+              "const": false
+            }
+          },
+          "required": [
+            "value",
+            "exact"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "cost": {
+      "description": "What the turn cost: reported by the agent, estimated from a named rate card, or unpriced, never $0 for a cost nobody knows.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "usd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "basis": {
+              "const": "reported"
+            }
+          },
+          "required": [
+            "usd",
+            "basis"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "usd": {
+              "type": "number",
+              "minimum": 0
+            },
+            "basis": {
+              "const": "estimated"
+            },
+            "rate_card": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The rate card the estimate used.",
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "usd",
+            "basis",
+            "rate_card"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "usd": {
+              "const": null
+            },
+            "basis": {
+              "const": "unpriced"
+            }
+          },
+          "required": [
+            "usd",
+            "basis"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

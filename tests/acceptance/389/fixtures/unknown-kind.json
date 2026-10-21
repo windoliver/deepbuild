@@ -1,0 +1,40 @@
+{
+  "format": 1,
+  "id": "doc-unknown-kind",
+  "profile": "figure",
+  "title": "Unknown kind",
+  "description": "Unknown kind.",
+  "size": [
+    320,
+    200
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "slab": {
+      "id": "slab",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Slab",
+      "order": "a0",
+      "params": {
+        "width": 20
+      }
+    },
+    "cube": {
+      "id": "cube",
+      "kind": "test.cube@1",
+      "layer": "main",
+      "name": "Cube",
+      "order": "a1",
+      "params": {
+        "side": 2
+      }
+    }
+  }
+}
