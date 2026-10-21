@@ -1,0 +1,12 @@
+//! The canvas document contract (issue #389): grammars, the document model with kinds and
+//! versions, the check, the canonical form and the f64 math checks read.
+//!
+//! The CPU math here feeds checks, so every transcendental goes through [`ops`] on pinned libm,
+//! and the lint lane (`scripts/canvas-lint.mjs`) refuses anything else.
+
+pub mod canon;
+pub mod color;
+pub mod document;
+pub mod grammar;
+pub mod kinds;
+pub mod ops;

@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "id": "doc-unit-converts",
+  "profile": "figure",
+  "title": "Unit converts",
+  "description": "Unit converts.",
+  "size": [
+    320,
+    200
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "slab": {
+      "id": "slab",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Slab",
+      "order": "a0",
+      "params": {
+        "width": "300 mm",
+        "height": "2.5m"
+      }
+    }
+  }
+}

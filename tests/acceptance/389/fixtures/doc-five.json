@@ -1,0 +1,119 @@
+{
+  "format": 1,
+  "id": "doc-389",
+  "profile": "figure",
+  "title": "Café sign",
+  "description": "Five items for the canonical fixture.",
+  "size": [
+    640,
+    360
+  ],
+  "data": {
+    "ratio": 0.1,
+    "steps": [
+      1,
+      2.5
+    ]
+  },
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "channels": {
+    "grow": {
+      "target": "items/sign/params/width"
+    }
+  },
+  "items": {
+    "sign": {
+      "id": "sign",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Sign",
+      "role": "part",
+      "order": "a0",
+      "parent": null,
+      "visible": true,
+      "pickable": true,
+      "params": {
+        "width": 120.5,
+        "height": 0.1
+      },
+      "at": {
+        "pos": [
+          12,
+          8,
+          0
+        ],
+        "rot": [
+          0,
+          0,
+          45
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    "post": {
+      "id": "post",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Post",
+      "role": "decoration",
+      "parent": "sign",
+      "order": "a1",
+      "params": {
+        "width": 8,
+        "label": "Post",
+        "height": 10
+      }
+    },
+    "base": {
+      "id": "base",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Base",
+      "pickable": false,
+      "order": "a2",
+      "params": {},
+      "at": {
+        "pos": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "cap-1": {
+      "id": "cap-1",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Cap",
+      "visible": false,
+      "order": "a3",
+      "params": {
+        "width": 33.3,
+        "height": 2.25,
+        "corner": 0.75
+      }
+    },
+    "z9": {
+      "id": "z9",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Z",
+      "order": "a4",
+      "params": {
+        "width": 1000,
+        "label": "ünï",
+        "corner": 0
+      }
+    }
+  }
+}

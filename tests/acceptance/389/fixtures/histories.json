@@ -1,0 +1,284 @@
+{
+  "start": {
+    "format": 1,
+    "id": "doc-389",
+    "profile": "figure",
+    "title": "Café sign",
+    "description": "Five items for the canonical fixture.",
+    "size": [
+      640,
+      360
+    ],
+    "data": {
+      "ratio": 0.1,
+      "steps": [
+        1,
+        2.5
+      ]
+    },
+    "layers": {
+      "main": {
+        "writer": "agent-a",
+        "title": "Main",
+        "order": "a0"
+      }
+    },
+    "channels": {
+      "grow": {
+        "target": "items/sign/params/width"
+      }
+    },
+    "items": {}
+  },
+  "writer": "agent-a",
+  "histories": {
+    "A": [
+      {
+        "patch": "01J9Z000000000000000000001",
+        "doc": "doc-389",
+        "base": 0,
+        "reason": "history step 1",
+        "ops": [
+          {
+            "op": "create",
+            "item": {
+              "id": "sign",
+              "kind": "test.slab@3",
+              "name": "Sign",
+              "role": "part",
+              "order": "a0",
+              "parent": null,
+              "visible": true,
+              "pickable": true,
+              "params": {
+                "width": 120.5,
+                "height": 0.1
+              },
+              "at": {
+                "pos": [
+                  12,
+                  8,
+                  0
+                ],
+                "rot": [
+                  0,
+                  0,
+                  45
+                ],
+                "scale": [
+                  1,
+                  1,
+                  1
+                ]
+              }
+            }
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "post",
+              "kind": "test.slab@3",
+              "name": "Post",
+              "role": "decoration",
+              "parent": "sign",
+              "order": "a1",
+              "params": {
+                "width": 8,
+                "label": "Post",
+                "height": 10
+              }
+            }
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "base",
+              "kind": "test.slab@3",
+              "name": "Base",
+              "pickable": false,
+              "order": "a2",
+              "params": {},
+              "at": {
+                "pos": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "cap-1",
+              "kind": "test.slab@3",
+              "name": "Cap",
+              "visible": false,
+              "order": "a3",
+              "params": {
+                "width": 33.3,
+                "height": 2.25,
+                "corner": 0.75
+              }
+            }
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "z9",
+              "kind": "test.slab@3",
+              "name": "Z",
+              "order": "a4",
+              "params": {
+                "width": 1000,
+                "label": "ünï",
+                "corner": 0
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "B": [
+      {
+        "patch": "01J9Z000000000000000000001",
+        "doc": "doc-389",
+        "base": 0,
+        "reason": "history step 1",
+        "ops": [
+          {
+            "op": "create",
+            "item": {
+              "id": "base",
+              "kind": "test.slab@3",
+              "name": "Base",
+              "pickable": false,
+              "order": "a2",
+              "params": {
+                "width": 50
+              }
+            }
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "sign",
+              "kind": "test.slab@3",
+              "name": "Sign",
+              "role": "part",
+              "order": "a0",
+              "params": {
+                "width": 120.5,
+                "height": 0.1
+              },
+              "at": {
+                "pos": [
+                  12,
+                  8,
+                  0
+                ],
+                "rot": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "tmp",
+              "kind": "test.slab@3",
+              "name": "Tmp",
+              "order": "a9",
+              "params": {
+                "label": "gone"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "patch": "01J9Z000000000000000000002",
+        "doc": "doc-389",
+        "base": 0,
+        "reason": "history step 2",
+        "ops": [
+          {
+            "op": "create",
+            "item": {
+              "id": "post",
+              "kind": "test.slab@3",
+              "name": "Post",
+              "parent": "sign",
+              "order": "a1",
+              "params": {
+                "width": 8,
+                "label": "Post",
+                "height": 10
+              }
+            }
+          },
+          {
+            "op": "unset",
+            "id": "base",
+            "path": "items/base/params/width"
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "cap-1",
+              "kind": "test.slab@3",
+              "name": "Cap",
+              "visible": false,
+              "order": "a3",
+              "params": {
+                "width": 33.3,
+                "height": 2.25
+              }
+            }
+          },
+          {
+            "op": "set",
+            "id": "cap-1",
+            "path": "items/cap-1/params/corner",
+            "value": 0.75
+          },
+          {
+            "op": "set",
+            "id": "sign",
+            "path": "items/sign/at/rot/2",
+            "value": 45
+          }
+        ]
+      },
+      {
+        "patch": "01J9Z000000000000000000003",
+        "doc": "doc-389",
+        "base": 0,
+        "reason": "history step 3",
+        "ops": [
+          {
+            "op": "delete",
+            "id": "tmp",
+            "cascade": false
+          },
+          {
+            "op": "create",
+            "item": {
+              "id": "z9",
+              "kind": "test.slab@3",
+              "name": "Z",
+              "order": "a4",
+              "params": {
+                "width": 1000,
+                "label": "ünï"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

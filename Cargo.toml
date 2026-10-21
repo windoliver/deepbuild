@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app"]
+members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas"]
 resolver = "2"
 
 # Issue #337: gpui-kit's own workspace patch, which a dependency's [patch] can't carry.
