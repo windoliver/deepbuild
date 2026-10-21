@@ -4,3 +4,9 @@
 # upstream at a pinned commit, with no fork (#338 checks the manifests for a [patch] table).
 [patch.crates-io]
 rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }
+
+# Issue #390: the GPUI patch (technical design: Conventions, "the GPUI patch ... adds a tinted mask
+# sprite drawn from the core's glyph atlas"). vendor/gpui-pre is gpui-pre 0.3.9 from crates.io with
+# `AtlasKey::Mask`, `Window::paint_mask_sprite` and `Window::remove_mask_page` added, each marked
+# "DeepBuild patch". gpui-kit and gpui-shell still come from upstream, unforked.
+gpui-pre = { path = "vendor/gpui-pre" }

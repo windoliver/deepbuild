@@ -20,7 +20,6 @@ mod suite {
         path::{Path, PathBuf},
         process::Command,
         rc::Rc,
-        sync::Arc,
         time::Instant,
     };
 
@@ -34,8 +33,7 @@ mod suite {
     use gpui_kit::base::dock::DockPlacement;
     use gpui_kit::test::TestWindowExt;
     use gpui_kit::{
-        assets::Assets, AnyWindowHandle, AppContext as _, HeadlessAppContext, TestAppContext,
-        TestDispatcher,
+        AnyWindowHandle, AppContext as _, HeadlessAppContext, TestAppContext, TestDispatcher,
     };
     use gpui_shell::{ScriptView, ShellRuntime};
     use serde_json::{json, Value};
@@ -220,19 +218,6 @@ mod suite {
 
     // Script panels in the shell.
 
-    fn context() -> HeadlessAppContext {
-        let mut cx = HeadlessAppContext::with_platform(
-            gpui_kit::platform::current_platform(true).text_system(),
-            Arc::new(Assets),
-            gpui_kit::platform::current_headless_renderer,
-        );
-        cx.update(|cx| {
-            gpui_kit::init(cx);
-            deep_app::init(cx);
-        });
-        cx
-    }
-
     struct Opened {
         cx: HeadlessAppContext,
         handle: AnyWindowHandle,
@@ -245,7 +230,7 @@ mod suite {
 
     /// Opens the shell on `layout` with the script panels under `panels` registered first.
     fn open_with(panels: &[&str], layout: &Layout) -> Opened {
-        let mut cx = context();
+        let mut cx = deep_replica::headless_context();
         let runtime = deep_app::new_runtime().expect("the panel runtime");
         let dirs: Vec<PathBuf> = panels.iter().map(|panel| panel_dir(panel)).collect();
         let mut mounted = Vec::new();

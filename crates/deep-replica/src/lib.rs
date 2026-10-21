@@ -7,12 +7,16 @@ pub mod kit;
 pub mod shell;
 pub mod snapshot;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use deep_app::{
     events::{inbox, Fixture},
     views::AppState,
 };
+use gpui_kit::{assets::Assets, HeadlessAppContext};
 
 /// The virtual clock's time, in ms since the epoch: every open ask's deadline comes after it.
 pub const NOW: u64 = 1_800_000_000_000;
@@ -24,6 +28,21 @@ pub const SCALE: f32 = 2.;
 /// The line the replica prints once the shell's first frame is drawn; a launch is timed from the
 /// process's spawn to this line, so the screenshot and the files it writes afterwards don't count.
 pub const FIRST_FRAME: &str = "deep-replica: first frame drawn";
+
+/// The headless app: GPUI's own text system for the chrome, the kit's assets and the offscreen
+/// renderer, with the kit and the app initialized.
+pub fn headless_context() -> HeadlessAppContext {
+    let mut cx = HeadlessAppContext::with_platform(
+        gpui_kit::platform::current_platform(true).text_system(),
+        Arc::new(Assets),
+        gpui_kit::platform::current_headless_renderer,
+    );
+    cx.update(|cx| {
+        gpui_kit::init(cx);
+        deep_app::init(cx);
+    });
+    cx
+}
 
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

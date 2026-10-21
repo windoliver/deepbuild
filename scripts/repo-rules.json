@@ -179,11 +179,82 @@
           "why": "Issue #14: the SQLite driver behind the record's storage interface, as the issue names it: exact 64-bit integers, WAL and synchronous per commit."
         }
       }
+    },
+    "crates/deep-text/Cargo.toml": {
+      "dependencies": {
+        "parley": {
+          "spec": "^0.12",
+          "why": "Issue #390: the one text shaper, the stack Vello uses: HarfRust shaping, skrifa outlines, UAX #14, #9 and #29 segmentation; no `system` feature, so no platform font system is reached."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #390: rasterizes each glyph's outline into the atlas's alpha page with its f32 pipeline, the same bytes on every platform."
+        },
+        "fearless_simd": {
+          "spec": "^0.7",
+          "why": "Issue #390: only its force_support_fallback feature, so Vello CPU's scalar level exists on arm64 and x86_64 and the atlas rasterizes at it."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #390: the deep-text CLI's JSON lines; already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-text-gpui/Cargo.toml": {
+      "dependencies": {
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #390: the one shaper and the glyph atlas a label draws from."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #390: the window the mask sprites go into, through the GPUI patch's paint_mask_sprite."
+        }
+      }
+    },
+    "crates/deep-text-render/Cargo.toml": {
+      "dependencies": {
+        "deep-replica": {
+          "spec": "* path=../deep-replica",
+          "why": "Issue #390: the headless app context the render draws in, built once beside the replica."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #390: the font roles a label names."
+        },
+        "deep-text-gpui": {
+          "spec": "* path=../deep-text-gpui",
+          "why": "Issue #390: paints each label through the atlas and reports what it drew."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #390: the headless window, its frames and its offscreen capture."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #390: the render's JSON lines; already in the workspace tree."
+        }
+      }
     }
   },
   "allowedFindings": [
-    { "path": "tests/acceptance/79/checks.test.mjs", "kind": "home path", "sha256": "58e9952854dee73d52cb6faa21ac8323a5cd32e1443749df8bfc69727fab9be2", "why": "Issue #79: a planted macOS home path under the placeholder user someone, proving the acceptance privacy check catches one." },
-    { "path": "tests/acceptance/79/checks.test.mjs", "kind": "home path", "sha256": "69fa3345a8399f93d75d44f0a73ca6c2e0d1f7a4d461cae0f20836843cbb8c3e", "why": "Issue #79: a planted Linux home path under the placeholder user someone, proving the acceptance privacy check catches one." },
-    { "path": "tests/acceptance/79/checks.test.mjs", "kind": "home path", "sha256": "9e63dffb43b4deffde5e7fc73fe70a38ede39f591e7c44dd8bd08d9f742fff36", "why": "Issue #79: a planted Windows home path under the placeholder user someone, proving the acceptance privacy check catches one." }
+    {
+      "path": "tests/acceptance/79/checks.test.mjs",
+      "kind": "home path",
+      "sha256": "58e9952854dee73d52cb6faa21ac8323a5cd32e1443749df8bfc69727fab9be2",
+      "why": "Issue #79: a planted macOS home path under the placeholder user someone, proving the acceptance privacy check catches one."
+    },
+    {
+      "path": "tests/acceptance/79/checks.test.mjs",
+      "kind": "home path",
+      "sha256": "69fa3345a8399f93d75d44f0a73ca6c2e0d1f7a4d461cae0f20836843cbb8c3e",
+      "why": "Issue #79: a planted Linux home path under the placeholder user someone, proving the acceptance privacy check catches one."
+    },
+    {
+      "path": "tests/acceptance/79/checks.test.mjs",
+      "kind": "home path",
+      "sha256": "9e63dffb43b4deffde5e7fc73fe70a38ede39f591e7c44dd8bd08d9f742fff36",
+      "why": "Issue #79: a planted Windows home path under the placeholder user someone, proving the acceptance privacy check catches one."
+    }
   ]
 }
