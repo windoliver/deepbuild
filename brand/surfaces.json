@@ -19,9 +19,9 @@
   ],
   "app": {
     "about": "The stripped release binary's size at the merge base and at HEAD, measured as docs/spikes/337/measure.mjs measures the app, on a reference Mac.",
-    "mergeBase": "30fba4bffdba9fe2a0323eeed658d8294628e76c",
+    "mergeBase": "1dcef1007ce177bacd76b3267939d0316b8f1a71",
     "machine": { "model": "Mac15,12", "macosBuild": "23H723" },
     "measuredOn": "2026-10-20",
-    "strippedBytes": { "base": 49826864, "head": 49976432 }
+    "strippedBytes": { "base": 50817424, "head": 50933680 }
   }
 }
