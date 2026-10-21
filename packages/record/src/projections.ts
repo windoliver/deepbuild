@@ -156,7 +156,8 @@ export class Projector {
   apply(e: Projected): void {
     const d: Obj = isObj(e.data) ? e.data : {};
     if (e.session) {
-      this.up('sessions', { id: e.session, last_seen: e.ts });
+      // The newest stamp seen: a late or spooled event never moves a session back.
+      this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
       // A new prompt resumes a session that had finished: it is active again until its next end.
       if (e.kind === 'user.ask') this.stmt("UPDATE sessions SET status = 'running', ended_log_pos = NULL WHERE id = ? AND status IN ('finished', 'failed')").run(e.session);
       this.turn(e, d);

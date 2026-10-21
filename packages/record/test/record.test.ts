@@ -852,3 +852,18 @@ describe('a run\'s first finish is kept whole', () => {
     expect(await read()).toEqual(first);
   });
 });
+
+describe('a session\'s last_seen only moves forward', () => {
+  it('a spooled start stamped earlier leaves last_seen at the newer event, live and after a rebuild', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('user.ask', T0 + 10, seqAt(T0 + 10)));
+    await r.append(hook(S), event('session.start', T0, undefined));
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      // A record that writes each event's stamp moves the session back to its spooled start.
+      expect([when, Number((await r.table('sessions')).rows.find((x) => x.id === S)?.last_seen)]).toEqual([when, T0 + 10]);
+    }
+  });
+});
