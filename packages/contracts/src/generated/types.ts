@@ -63,6 +63,110 @@ export interface AgentStop {
   evidence?: Array<string>;
 }
 
+export type AgentStopV2Turn = number;
+
+export type AgentStopV2Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV2Count;
+  cached: AgentStopV2Count;
+  output: AgentStopV2Count;
+  context_fill: number | null;
+  cost: AgentStopV2Cost;
+} | null;
+
+export type AgentStopV2Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV2Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+/** agent.stop@2 */
+export interface AgentStopV2 {
+  v: 2;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "refusal";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "max_turns";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "timed_out";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "unknown";
+    usage: AgentStopV2Usage;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.answered@1 */
 export interface AskAnswered {
   v: 1;

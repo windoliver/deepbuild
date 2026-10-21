@@ -346,11 +346,53 @@
     },
     "Stop": {
       "kind": "agent.stop",
-      "data": { "outcome": "=finished", "continued": "stop_hook_active" }
+      "data": { "outcome": "=finished", "continued": "stop_hook_active" },
+      "stop": true
     },
     "SessionEnd": {
       "kind": "session.end",
       "data": { "reason": "reason" }
+    }
+  },
+  "stop": {
+    "readBy": "each agent.stop names its cause from the stop's closed set and carries its usage (#603); the turn is the rollout's entries from the first carrying the payload's turn_id to the first carrying another",
+    "turn": { "payload": "turn_id", "transcript": "payload.turn_id" },
+    "cause": {
+      "readBy": "the first that names a cause, never the agent's text: an error event of the turn by its codex_error_info (codex-rs/protocol CodexErrorInfo), then the turn's last token_count rate_limits: a limit reached (rate_limit_reached_type) is plan_window_spent, resetting when the spent window (used_percent 100) does, resets_at being Unix seconds; one with no reset time is rate_limited; Codex's Stop payload carries no error; anything else is unknown",
+      "errors": {
+        "match": { "type": "event_msg", "payload.type": "error" },
+        "field": "payload.codex_error_info",
+        "values": {
+          "context_window_exceeded": "context_overflow",
+          "server_overloaded": "rate_limited",
+          "unauthorized": "sign_in_required"
+        }
+      },
+      "rateLimits": {
+        "match": { "type": "event_msg", "payload.type": "token_count" },
+        "reached": "payload.rate_limits.rate_limit_reached_type",
+        "windows": ["payload.rate_limits.primary", "payload.rate_limits.secondary"],
+        "used": "used_percent",
+        "resetsAt": "resets_at",
+        "toMs": 1000,
+        "spent": "plan_window_spent",
+        "withoutReset": "rate_limited"
+      },
+      "otherwise": "unknown"
+    },
+    "usage": {
+      "readBy": "the rollout's last token_count info.total_token_usage up to the turn's end, so it covers the session so far; input_tokens includes cached_input_tokens, which is taken back out; each count exact; context_fill is that call's last_token_usage.total_tokens over model_context_window; the model is the Stop payload's; Codex reports no cost on a plan, so it is unpriced",
+      "covers": "session",
+      "records": { "match": { "type": "event_msg", "payload.type": "token_count" }, "has": "payload.info" },
+      "take": "last",
+      "counts": {
+        "input": ["payload.info.total_token_usage.input_tokens", "-payload.info.total_token_usage.cached_input_tokens"],
+        "cached": ["payload.info.total_token_usage.cached_input_tokens"],
+        "output": ["payload.info.total_token_usage.output_tokens"]
+      },
+      "exact": true,
+      "model": { "payload": "model" },
+      "contextFill": { "used": ["payload.info.last_token_usage.total_tokens"], "window": "payload.info.model_context_window" }
     }
   },
   "toolKinds": {

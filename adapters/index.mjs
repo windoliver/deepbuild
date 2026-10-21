@@ -94,6 +94,71 @@ function startedBy(rule, turn, transcript) {
   return source ? { from: rule.values[source], rule: pointer('turnWithoutPrompt', 'values', source) } : { from: rule.otherwise, rule: pointer('turnWithoutPrompt', 'otherwise') };
 }
 
+// Where the turn a payload names lies in the transcript: from the first entry that carries its join value
+// to the next entry that carries another.
+function turnOf(turn, payload, transcript) {
+  const value = payload[turn.payload];
+  const start = value === undefined ? -1 : transcript.findIndex((entry) => get(entry, turn.transcript) === value);
+  if (start < 0) return { start: 0, end: 0 };
+  const after = transcript.slice(start + 1).findIndex((entry) => ![undefined, value].includes(get(entry, turn.transcript)));
+  return { start, end: after < 0 ? transcript.length : start + 1 + after };
+}
+
+const holds = (entry, match) => Object.entries(match ?? {}).every(([path, value]) => get(entry, path) === value);
+
+// A stop's cause from the closed set: the hook payload's error, then the turn's transcript error records,
+// then its last rate-limit record, the first that names one; never the agent's text. Otherwise the facts'
+// fallback, unknown.
+function cause(rule, payload, entries) {
+  const at = (...keys) => pointer('stop', 'cause', ...keys);
+  const named = (values, value) => typeof value === 'string' && Object.hasOwn(values, value);
+  const error = rule.payload && payload[rule.payload.field];
+  if (rule.payload && named(rule.payload.values, error)) return { cause: rule.payload.values[error], rule: at('payload', 'values', error) };
+  for (const entry of rule.errors ? entries.filter((one) => holds(one, rule.errors.match)) : []) {
+    const value = get(entry, rule.errors.field);
+    if (named(rule.errors.values, value)) return { cause: rule.errors.values[value], rule: at('errors', 'values', value) };
+  }
+  const limits = rule.rateLimits && entries.filter((one) => holds(one, rule.rateLimits.match)).at(-1);
+  if (limits && get(limits, rule.rateLimits.reached) != null) {
+    // The window spent resets last; a reached limit with no reset time is a plain rate limit.
+    const { windows, used, resetsAt, toMs } = rule.rateLimits;
+    const resets = windows.map((path) => get(limits, path)).filter((window) => get(window, used) >= 100 && Number.isInteger(get(window, resetsAt))).map((window) => get(window, resetsAt) * toMs);
+    return resets.length ? { cause: 'plan_window_spent', plan_resets: Math.max(...resets), rule: at('rateLimits', 'spent') } : { cause: 'rate_limited', rule: at('rateLimits', 'withoutReset') };
+  }
+  return { cause: rule.otherwise, rule: at('otherwise') };
+}
+
+// A stop's usage by the facts' counting rules: the records of its turn, or of the session up to its turn's
+// end, each counted once. A count its records don't carry is null and no records is null, never 0.
+function usage(rule, payload, entries) {
+  const kept = new Map();
+  for (const entry of entries) {
+    if (!holds(entry, rule.records.match) || get(entry, rule.records.has) === undefined || (rule.records.skip && holds(entry, rule.records.skip))) continue;
+    const key = rule.records.once ? get(entry, rule.records.once) : kept.size;
+    if (!kept.has(key)) kept.set(key, entry);
+  }
+  const records = rule.take === 'last' ? [...kept.values()].slice(-1) : [...kept.values()];
+  if (!records.length) return null;
+  // A path with a leading - is taken away, as Codex's cached tokens are from its input.
+  const sum = (paths) => records.reduce((total, entry) => paths.reduce((inner, path) => {
+    const value = get(entry, path.replace(/^-/, ''));
+    return inner === null || typeof value !== 'number' ? null : inner + (path.startsWith('-') ? -value : value);
+  }, total), 0);
+  const count = (paths) => { const value = sum(paths); return value === null ? null : { value, exact: rule.exact }; };
+  const last = records.at(-1);
+  const model = rule.model.payload ? payload[rule.model.payload] : get(last, rule.model.record);
+  const used = rule.contextFill ? sum(rule.contextFill.used) : null;
+  const window = rule.contextFill && get(last, rule.contextFill.window);
+  return {
+    covers: rule.covers,
+    model: typeof model === 'string' && model ? model : null,
+    ...Object.fromEntries(['input', 'cached', 'output'].map((name) => [name, count(rule.counts[name])])),
+    context_fill: typeof used === 'number' && typeof window === 'number' && window > 0 ? Math.min(1, used / window) : null,
+    // No hook payload or transcript record carries a price, and no rate card is verified.
+    cost: { usd: null, basis: 'unpriced' },
+  };
+}
+
 function map(facts, payload, transcript) {
   const hook = payload.hook_event_name;
   const rule = facts.mapping[hook];
@@ -107,10 +172,12 @@ function map(facts, payload, transcript) {
     const found = call(facts, payload);
     Object.assign(event, { data: { ...event.data, ...(rule.call === 'kind' ? { kind: found.kind } : {}), ...found.detail }, rule: found.rule });
   }
-  if (rule.cause) {
-    const error = payload[rule.cause.field];
-    const known = error in rule.cause.values;
-    Object.assign(event, { data: { ...event.data, cause: known ? rule.cause.values[error] : rule.cause.otherwise }, rule: pointer('mapping', hook, 'cause', known ? 'values' : 'otherwise', ...(known ? [error] : [])) });
+  if (rule.stop) {
+    const { start, end } = turnOf(facts.stop.turn, payload, transcript);
+    const found = cause(facts.stop.cause, payload, transcript.slice(start, end));
+    const counted = transcript.slice(facts.stop.usage.covers === 'session' ? 0 : start, end);
+    const { rule: decided, ...named } = found;
+    Object.assign(event, { data: { ...event.data, ...named, usage: usage(facts.stop.usage, payload, counted) }, rule: decided });
   }
   return [event];
 }
