@@ -1,0 +1,16 @@
+{
+  "version": "0.160.0",
+  "why": "Codex's apply_patch tool updating notes.md, named relative to the session's working folder, in the shape the corpus recorded (adapters/corpus/codex/0.160.0/tools), on a made-up session",
+  "payload": {
+    "session_id": "01a15800-0000-7000-8000-000000000001",
+    "turn_id": "01a15800-0000-7000-8000-000000000002",
+    "transcript_path": "~/.codex/sessions/2026/10/20/rollout-2026-10-20T00-00-00-01a15800-0000-7000-8000-000000000001.jsonl",
+    "cwd": "/work",
+    "hook_event_name": "PreToolUse",
+    "model": "gpt-reserve",
+    "permission_mode": "bypassPermissions",
+    "tool_name": "apply_patch",
+    "tool_input": { "command": "*** Begin Patch\n*** Update File: notes.md\n@@\n-one\n+two\n*** End Patch" },
+    "tool_use_id": "exec-00000000-0000-4000-8000-000000000001"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "title": "permission.answer@1",
+  "description": "Your answer to a permission request: allow or deny comes only from its decision, for this call or this session. It carries no rule for the agent's own settings.",
+  "type": "object",
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny",
+        "cancel"
+      ]
+    },
+    "for": {
+      "type": "string",
+      "enum": [
+        "call",
+        "session"
+      ],
+      "description": "How far the answer reaches: this call, or every like call in this session."
+    },
+    "input": {
+      "x-opaque": "the call's input as you edited it, in the agent's own shape",
+      "description": "The edited input, when the adapter's editInput cap holds."
+    }
+  },
+  "required": [
+    "decision",
+    "for"
+  ],
+  "additionalProperties": false
+}

@@ -15,7 +15,11 @@ fn main() {
         (Some("check"), Some(schema), None) => Box::new(move |line| {
             Ok(match deep_contracts::roundtrip(&schema, line) {
                 Ok(_) => "ok".to_string(),
-                Err(error) => format!("refused {error}"),
+                // One line per input: a refusal that quotes a key holding a newline stays on its line.
+                Err(error) => format!(
+                    "refused {}",
+                    error.replace('\n', "\\n").replace('\r', "\\r")
+                ),
             })
         }),
         (Some("jcs"), None, None) => {

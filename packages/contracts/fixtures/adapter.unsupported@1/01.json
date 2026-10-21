@@ -1,0 +1,11 @@
+{
+  "terminal": [
+    "startTurn",
+    "steer",
+    "followUp",
+    "interrupt",
+    "respond",
+    "history"
+  ],
+  "app-server": []
+}

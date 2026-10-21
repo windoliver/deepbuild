@@ -1,0 +1,7 @@
+{
+  "decision": "deny",
+  "for": "session",
+  "input": {
+    "command": "npm test -- --runInBand"
+  }
+}
