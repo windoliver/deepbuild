@@ -708,3 +708,27 @@ describe('a refused raw statement takes no effect', () => {
     expect(after).toEqual(['full']);
   });
 });
+
+describe('one event ID is appended one at a time', () => {
+  const long = (word: string): string => `cat <<'EOF' > notes.txt\n${`${word}\n`.repeat(2000)}EOF\n`;
+  const twice = async (a: string, b: string) => {
+    const store = await openEvidenceStore({ root: tempRoot(), now: () => T0 });
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), evidence: store });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const id = ulidAt(T0 + 10);
+    const at = (command: string): EventInput => ({ ...event('tool.after', T0 + 10, seqAt(T0 + 10), { kind: 'shell', paths: [], command }), id });
+    const results = await Promise.allSettled([r.append(hook(S), at(long(a))), r.append(hook(S), at(long(b)))]);
+    const stored = (await r.read({ after: 0, limit: 100 })).filter((e) => e.kind === 'evidence.stored');
+    return { results: results.map((x) => x.status), stored: stored.length };
+  };
+  it('the same content at once stores its whole text once', async () => {
+    // A record that checks the log before the put, with no wait on the same ID, stores it twice.
+    expect(await twice('same line', 'same line')).toEqual({ results: ['fulfilled', 'fulfilled'], stored: 1 });
+  });
+  it('other content at once is a conflict, and its text is never stored', async () => {
+    // A record that puts both texts before either event is in the log keeps the refused one's evidence.
+    expect(await twice('first line', 'other line')).toEqual({ results: ['fulfilled', 'rejected'], stored: 1 });
+  });
+});

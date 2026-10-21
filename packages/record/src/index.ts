@@ -198,6 +198,8 @@ class SqliteRecord implements RecordStore {
   private inFlight = 0;
   /** Sessions whose events this run failed to append: their next claims read INVALID, cause events lost. */
   private readonly lost = new Set<string>();
+  /** The append still running for each event ID: the next one for that ID waits for it, so it finds it in the log. */
+  private readonly byId = new Map<string, Promise<unknown>>();
   /** Set after a start with no clean stop: a session this record never kept may have lost its events. */
   private unclean = false;
   private next = 1;
@@ -376,7 +378,15 @@ class SqliteRecord implements RecordStore {
     // Counted from here until it is in the log or refused, so a close waits for it.
     this.inFlight++;
     try {
-      return await this.appendNow(connection, input);
+      const key = String(input.id);
+      const before = this.byId.get(key);
+      const run = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => this.appendNow(connection, input));
+      this.byId.set(key, run);
+      try {
+        return await run;
+      } finally {
+        if (this.byId.get(key) === run) this.byId.delete(key);
+      }
     } finally {
       this.inFlight--;
     }
