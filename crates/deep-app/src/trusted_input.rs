@@ -8,10 +8,11 @@
 //! `NSEvent` carries its `CGEvent`, whose field 45 (`kCGEventSourceStateID`) names the state
 //! table the event's source writes and whose field 41 (`kCGEventSourceUnixProcessID`) names
 //! the process that posted it (CoreGraphics' CGEventTypes.h); hardware carries the HID table
-//! (1) and no posting process (0). What the spike measured: nothing this process builds, and
-//! nothing a process without Accessibility permission posts, writes the table or arrives
-//! (docs/spikes/339/record.json). What it didn't: a poster with Accessibility permission, or
-//! a virtual HID device, both of which Apple's CGEventSource.h routes through that table.
+//! (1) and no posting process (0). What the spike measured: nothing this process builds and
+//! queues, and nothing an untrusted process posted at the HID event tap with `CGEventPost`,
+//! arrived or wrote the table (docs/spikes/339/record.json). What it didn't: a poster with
+//! Accessibility permission, or a virtual HID device, both of which Apple's CGEventSource.h
+//! routes through that table, and the other untrusted posting paths the record lists.
 //!
 //! The pure part, [`Gate`], runs on every platform and is what the unit tests cover. The
 //! macOS part installs the monitor, reads the fields, captures the frame and moves the window.
