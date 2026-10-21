@@ -258,10 +258,17 @@ describe('the design says', () => {
     }
   });
 
-  it('the hub alone records what it made, ran or closed: an action and its report, layer rows, rollups, a dry merge, a closed task, a superseded or moot ask', () => {
-    for (const name of ['action.entered@1', 'action.reported@1', 'layer.rows@1', 'reading.rollup@1', 'merge.dry_run@1', 'task.closed@1', 'ask.superseded@1', 'ask.moot@1']) {
+  it('the hub alone records what it made, ran, read or closed: an action and its report, layer rows, readings and rollups, a dry merge, a closed task, a superseded or moot ask', () => {
+    for (const name of ['action.entered@1', 'action.reported@1', 'layer.rows@1', 'reading.recorded@1', 'reading.batch@1', 'reading.rollup@1', 'merge.dry_run@1', 'task.closed@1', 'ask.superseded@1', 'ask.moot@1']) {
       for (const writer of ['mcp:s1', 'ext:infra', 'hook', 'app', 'cli']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
       expect(ok(name, { ...first(name), writer: 'core' }), name).toBe(true);
+    }
+  });
+
+  it("an agent's tool calls, stops, session starts, prompts and completed tasks come only through the hook", () => {
+    for (const name of ['tool.before@1', 'tool.after@1', 'agent.stop@1', 'session.start@1', 'user.ask@1', 'task.completed@1']) {
+      for (const writer of ['mcp:s1', 'ext:codex', 'core', 'app', 'cli']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(false);
+      expect(ok(name, { ...first(name), writer: 'hook' }), name).toBe(true);
     }
   });
 
@@ -363,12 +370,6 @@ describe('the drift check', () => {
 // Readings the design leaves open, pinned here so a change to one is a decision; each is listed in the PR for
 // the maintainer to confirm.
 describe('readings pending a maintainer', () => {
-  it('a hook kind, a session start or a reading also comes from an adapter without hooks, or the hub', () => {
-    for (const name of ['tool.before@1', 'tool.after@1', 'agent.stop@1', 'session.start@1', 'user.ask@1', 'reading.recorded@1', 'reading.batch@1']) {
-      for (const writer of ['hook', 'core', 'ext:codex']) expect(ok(name, { ...first(name), writer }), `${name} ${writer}`).toBe(true);
-    }
-  });
-
   it("a lease's holder may be any writer, so a document writer can hold its prefix", () => {
     const lease = first('lease.acquired@1');
     for (const holder of ['app', 'cli', 'core']) expect(ok('lease.acquired@1', { ...lease, data: { ...lease.data, holder } }), holder).toBe(true);
