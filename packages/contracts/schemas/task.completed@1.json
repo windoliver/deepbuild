@@ -1,0 +1,102 @@
+{
+  "title": "task.completed@1",
+  "description": "An agent marked a task of its own completed (Claude Code's TaskCompleted). It is the agent's word, held at the child gate until its checks pass; it never closes the task, which only a verdict does (task.closed).",
+  "x-feeds": [
+    "tasks"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "task.completed"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^session:[0-9A-Za-z]+$",
+      "description": "The session that marked the task completed: a lead or a child.",
+      "maxLength": 8192
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection; never an agent through MCP, since no deep_* tool produces this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "agent_task": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The task's ID in the agent's own task list."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The task's subject, as the agent wrote it."
+        }
+      },
+      "required": [
+        "agent_task",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
