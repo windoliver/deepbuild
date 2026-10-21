@@ -45,7 +45,8 @@ async function record(): Promise<{ record: RecordStore; S: string }> {
 describe('an event ID is one event, with what its connection proved', () => {
   it('the same ID from a connection with another actor is a conflict, not the same event', async () => {
     const { record: r, S } = await record();
-    const e = event('tool.after', T0 + 10, seqAt(T0 + 10));
+    // claim.made is a kind the hook and the app may both append, so the duplicate is judged on its connection alone.
+    const e = event('claim.made', T0 + 10, seqAt(T0 + 10));
     await r.append(hook(S), e);
     // A record that hashes only the payload returns existing: true for another actor's identical payload.
     await expect(r.append({ ...hook(S), actor: 'someone-else' }, e)).rejects.toMatchObject({ code: 'conflict', id: e.id });
