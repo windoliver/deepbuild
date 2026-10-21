@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import type { JsonValue } from '@deepbuild/contracts';
-import { openRecord, type Connection, type Event, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, type Connection, type Event, type RecordStore } from '@deepbuild/record';
 import { openAsks, type Asks, type Delivery } from '../src/index.js';
 
 type Obj = { [key: string]: JsonValue };
@@ -162,7 +162,8 @@ describe('no agent closes an ask', () => {
           'ask.superseded': { by: handle },
           'ask.moot': { because: 'attempt_replaced', session: 'session:S1' },
         };
-        await append(writer('S1'), kind, data[kind]!, handle);
+        // The record may refuse the agent's event outright; if it takes it, the ask stays open.
+        await append(writer('S1'), kind, data[kind]!, handle).catch((error: unknown) => expect(error).toBeInstanceOf(RecordError));
         await asks.tick();
         expect(await shown()).toEqual([handle]);
         expect(await outcome(handle)).toBe('unanswered');

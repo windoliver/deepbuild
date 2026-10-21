@@ -94,6 +94,8 @@ const PROVISIONAL_KINDS = new Set(['taste', 'choice']);
 /** Kinds typed text can answer: questions that need no authority. An unblock closes only on its check. */
 const TYPED_KINDS = new Set(['taste', 'choice', 'exception', 'definition']);
 const CORE = { writer: 'core' } as const;
+/** Writers that speak for an agent: none of them closes an ask. */
+const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
 const PAGE = 1000;
 
 type Obj = { [key: string]: JsonValue };
@@ -125,8 +127,10 @@ interface Ask {
   closed?: { outcome: string; at: number };
   approval?: { hash: string | null; token: string | null; decision: string };
   words: string[];
+  /** For a provisional choice: the files its session edited while it went on with the recommended option. */
+  decided: Set<string>;
   /** What the log calls for and the core hasn't appended yet. */
-  pending: { superseded?: string; moot?: string; typed?: string };
+  pending: { superseded?: string; moot?: Obj; typed?: string };
 }
 
 const CLOSING: Readonly<Record<string, string>> = {
@@ -138,6 +142,8 @@ class AsksCore implements Asks {
   private cursor = 0;
   private readonly sessions = new Map<string, { thread: string; worktree: string }>();
   private readonly asks = new Map<string, Ask>();
+  /** Each session's newest attempt at each task, from its claims. */
+  private readonly attempts = new Map<string, Map<string, number>>();
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly options: AsksOptions) {}
@@ -166,7 +172,7 @@ class AsksCore implements Asks {
       const options = data.options as Option[];
       if (data.kind !== row.kind) throw new AskRefused(`${source} raises ${row.kind} asks, not ${String(data.kind)}`, { field: 'kind' });
       // Only DeepBuild writes an allow option; an agent's options declare deny or none.
-      if (!(connection.writer in TRUSTED) && connection.writer !== 'core') {
+      if (isAgent(connection.writer)) {
         const allow = options.find((o) => o.decision === 'allow');
         if (allow) throw new AskRefused(`option ${allow.id} declares allow, which only DeepBuild writes`, { option: allow.id });
       }
@@ -184,6 +190,11 @@ class AsksCore implements Asks {
         const planned = validate('plan.proposed@1', { v: 1, id: ulid(now), kind: 'plan.proposed', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data: proposed });
         if (!planned.ok) throw new AskRefused(`plan.proposed@1 refuses the plan at ${planned.issues[0]!.path}`, { field: `plan${planned.issues[0]!.path.replace(/^\/data/, '')}` });
       }
+      // The same question asked again in its thread, showing the same thing, is one record.
+      const thread = this.threadOf(connection.session);
+      const same = this.open().find((a) => a.thread === thread && a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
+        && sha256Hex(canonicalize(a.data.pinned_to!)) === sha256Hex(canonicalize(data.pinned_to!)) && (a.plan?.hash ?? null) === ((proposed?.hash as string | undefined) ?? null));
+      if (same) return same.handle;
       await this.options.record.append(connection, { v: 1, id, kind: 'ask.created', ts: now, data: data });
       if (proposed) await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
       await this.sync();
@@ -360,10 +371,14 @@ class AsksCore implements Asks {
         const open = this.open().filter((a) => a.thread === thread && !a.fold);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, folded: !fold && open.length >= FOLD_AT, words: [], pending: {},
+          fold, folded: !fold && open.length >= FOLD_AT, words: [], decided: new Set(), pending: {},
         };
-        // A newer ask on the same subject in the same thread supersedes the older one.
-        for (const older of open) if (older.data.key === d.key) older.pending.superseded = ask.handle;
+        // A newer ask on the same subject in the same thread supersedes the older one, and keeps what it decided.
+        for (const older of open) {
+          if (older.data.key !== d.key) continue;
+          older.pending.superseded = ask.handle;
+          for (const path of older.decided) ask.decided.add(path);
+        }
         this.asks.set(e.id, ask);
         return;
       }
@@ -381,8 +396,8 @@ class AsksCore implements Asks {
       case 'ask.superseded':
       case 'ask.moot': {
         const ask = e.kind === 'decision.applied' ? this.asks.get(bare(String(d.ask))) : target;
-        // The first close to append decides.
-        if (!ask || ask.closed) return;
+        // The first close to append decides, and no agent closes an ask.
+        if (!ask || ask.closed || isAgent(e.writer)) return;
         ask.closed = { outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts };
         if (e.kind === 'ask.answered') ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision) };
         return;
@@ -400,7 +415,30 @@ class AsksCore implements Asks {
       case 'verdict.made': {
         if (d.outcome !== 'PASS' || !Array.isArray(d.requirements)) return;
         const passed = new Set(d.requirements.filter((r) => isObj(r) && r.outcome === 'PASS').map((r) => (r as Obj).check));
-        for (const a of this.open()) if (a.data.kind === 'unblock' && passed.has(a.data.proves!)) a.pending.moot ??= String(d.verdict);
+        for (const a of this.open()) if (a.data.kind === 'unblock' && passed.has(a.data.proves!)) a.pending.moot ??= { because: 'check_passed', verdict: String(d.verdict) };
+        return;
+      }
+      case 'claim.made': {
+        // A newer attempt at a task from another thread replaces each older one: their asks are moot.
+        if (!e.session || typeof d.task_ref !== 'string' || typeof d.attempt !== 'number') return;
+        const thread = this.threadOf(e.session);
+        for (const [session, tasks] of this.attempts) {
+          const older = tasks.get(d.task_ref);
+          if (older === undefined || older >= d.attempt || this.threadOf(session) === thread) continue;
+          const by = { because: 'attempt_replaced', session: `session:${e.session}` };
+          for (const a of this.open()) if (a.thread === this.threadOf(session)) a.pending.moot ??= by;
+        }
+        const tasks = this.attempts.get(e.session) ?? this.attempts.set(e.session, new Map()).get(e.session)!;
+        tasks.set(d.task_ref, Math.max(tasks.get(d.task_ref) ?? 0, d.attempt));
+        return;
+      }
+      case 'tool.after': {
+        // What a session edits while a provisional choice goes on is what that choice decided.
+        if ((d.kind !== 'edit' && d.kind !== 'write') || !Array.isArray(d.paths)) return;
+        const worktree = e.session ? this.sessions.get(e.session)?.worktree : undefined;
+        const thread = this.threadOf(e.session ?? undefined);
+        const paths = d.paths.filter((p): p is string => typeof p === 'string').map((p) => (worktree && p.startsWith(`${worktree}/`) ? p.slice(worktree.length + 1) : p));
+        for (const a of this.open()) if (a.thread === thread && a.data.kind === 'choice' && a.data.provisional === true) for (const p of paths) a.decided.add(p);
         return;
       }
     }
@@ -417,13 +455,15 @@ class AsksCore implements Asks {
         if (ask.pending.superseded) {
           await this.options.record.append(as, { ...base, kind: 'ask.superseded', data: { by: ask.pending.superseded } });
         } else if (ask.pending.moot) {
-          await this.options.record.append(as, { ...base, kind: 'ask.moot', data: { because: 'check_passed', verdict: ask.pending.moot } });
+          await this.options.record.append(as, { ...base, kind: 'ask.moot', data: ask.pending.moot });
         } else if (ask.pending.typed !== undefined) {
           // Typed in the session: the answer to that question only, unverified, never a decision.
           await this.options.record.append(as, {
             ...base, v: 2, kind: 'ask.answered',
             data: { answer: ask.pending.typed, plan_hash: null, decision: 'none', via: 'session', verified: false, on: ask.data.pinned_to!, token: null },
           });
+        } else if (await this.reoffer(ask, as, now)) {
+          // Offered again on the new commit: the new ask supersedes this one.
         } else if (now >= (ask.data.deadline as number)) {
           // Past its deadline the default applies; nothing defaults to allow, and an authority ask defaults to no.
           const option = ask.options.find((o) => o.id === ask.data.default);
@@ -439,6 +479,16 @@ class AsksCore implements Asks {
       await this.sync();
       if (await this.fold()) acted = true;
     }
+  }
+
+  /** A provisional choice is offered again, pinned to the new commit, once a change touches what it decided. */
+  private async reoffer(ask: Ask, as: Connection, now: number): Promise<boolean> {
+    if (ask.data.kind !== 'choice' || ask.data.provisional !== true || !ask.decided.size) return false;
+    const changed = await this.changed(ask);
+    if (!changed?.files.some((file) => ask.decided.has(file))) return false;
+    const data: Obj = { ...ask.data, pinned_to: { kind: 'commit', ref: changed.to } };
+    await this.options.record.append(as, { v: 1, id: ulid(now), kind: 'ask.created', ts: now, data });
+    return true;
   }
 
   /** A thread past five open asks gets one exception that holds the rest, while any of them stays open. */
@@ -464,6 +514,9 @@ class AsksCore implements Asks {
     return raised;
   }
 }
+
+/** A question's text as it compares: NFC, case folded, white space collapsed, trailing punctuation dropped. */
+const normalize = (text: string): string => text.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[\s.,;:!?]+$/u, '');
 
 /** The fold's exception is keyed on its thread, never on a session ID that /clear or /compact rotates. */
 const foldKey = (thread: string): string => sha256Hex(new TextEncoder().encode(`${FOLD_SOURCE}:${thread}`));
