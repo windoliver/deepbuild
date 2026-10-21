@@ -35,6 +35,19 @@
      Test Files  1 passed (1)
           Tests  69 passed (69)
 
+## 2a. The redraft on the base f346706 (the suite's files copied in; the base has no tests/acceptance/604): fails, the seven refrozen tests only, each for the expected reason
+
+         × AC3 tool.before@1 is refrozen: differs from the base and equals its schema's digest now 2ms
+         × AC3 tool.after@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 agent.stop@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 session.start@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 user.ask@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 reading.recorded@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+         × AC3 reading.batch@1 is refrozen: differs from the base and equals its schema's digest now 0ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+          Tests  7 failed | 62 passed (69)
+    AssertionError: tool.before@1 still carries its base digest; it was not refrozen: expected 'd1:ac08f143a47abe73532bdef405f29fc5f7…' not to be 'd1:ac08f143a47abe73532bdef405f29fc5f7…' // Object.is equality
+
 ## 3. The redraft on PR #624's branch feat/14-record (e75c776), which adds evidence.stored@1 and evidence.removed@1: passes
 
      Test Files  1 passed (1)

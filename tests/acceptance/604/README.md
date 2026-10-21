@@ -41,7 +41,7 @@ Only what the issue and the existing contract tests name; nothing new is asked o
 - `deep-contracts check <schema>` (the binary in `crates/deep-contracts`), one JSON document per stdin
   line, `ok` or `refused <reason>` per line, as `packages/contracts/test/rust-checks.test.ts` drives it. The
   tests read only `ok` and the `refused` prefix, not the reason's wording.
-- `d1Digest`, `getSchema`, `listSchemas`, `frozenDigests` and `sha256Hex` from the package's public entry,
+- `d1Digest`, `getSchema`, `frozenDigests` and `sha256Hex` from the package's public entry,
   and `packages/contracts/digests.json` read as a file.
 - `fixtures/base-digests.json`: `git show f346706:packages/contracts/digests.json`, byte for byte. The test
   pins its SHA-256 (`81ab2794…0fce`), so the copy can't drift from the base.
@@ -68,9 +68,12 @@ Only what the issue and the existing contract tests name; nothing new is asked o
 ## Files
 
 - `writers.test.ts`: AC1, TypeScript and Rust, one test per kind for each.
-- `digests.test.ts`: AC3.
+- `digests.test.ts`: AC3, the dispute path's one blind redraft (design: Dogfooding) of the first draft, which read
+  "no other digest changes" as "no schema added" and so failed on main once #612 added schemas.
 - `helpers.ts`: the seven kinds and their writers, the writer forms, the first-fixture copy, the cargo and
   `deep-contracts check` drivers.
 - `fixtures/base-digests.json`: the base's `digests.json`.
 - `BASE-FAILURE.txt`: the run on the base, where 21 tests fail, each for the expected reason, and the
   planted wrong programs each test was run against.
+- `AC3-REDRAFT.txt`: the dispute, the first draft's failure on main, and the redraft's runs on main, on the base,
+  on a branch that adds schemas, and against two mutants.
