@@ -318,7 +318,9 @@ fixtures and `digests.json` on main, and never the implementing PR or its branch
 - **On main**, `stop.adapters.test.ts` fails at its import of `packages/adapters/src/index.ts`, as every other
   suite here does at the base (BASE-FAILURE.txt); that is expected until #312's implementation lands. The
   preflight unit lane runs `tests/**/*.test.ts` (`scripts/lanes.mjs`), so this redraft must land together with
-  or after the implementation, never before it on its own.
+  or after the implementation, never before it on its own; its PR is held as a draft that names #623 until
+  then. The root typecheck lane includes only `packages/**`, so the folder's `tsconfig.json`, which also needs
+  `packages/adapters`, is run by hand as above and is not what holds a release.
 - **Surface note.** `StopReading.reset` in the surface above is the adapters' TypeScript reading, left as the
   first draft named it; the published field it maps onto is `agent.stop@2`'s `data.plan_resets`. No test here
   reads `StopReading`, so the redraft doesn't rename it.

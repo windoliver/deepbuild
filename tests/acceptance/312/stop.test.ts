@@ -59,8 +59,7 @@ describe('AC2 a stop event whose cause isn\'t in the closed set fails its schema
   });
 
   it('AC2 a plan window spent carries its reset at /data/plan_resets: a whole number of ms since the epoch', () => {
-    const spent = withCause('plan_window_spent');
-    expectAccepted(validate(STOP(), spent), 'plan_window_spent with its reset');
+    const spent = withCause('plan_window_spent'); // accepted with its reset in the per-cause test above
     expectRefused(validate(STOP(), deleteAt(spent, '/data/plan_resets')), '/data/plan_resets', 'plan_window_spent without its reset');
     expectRefused(validate(STOP(), setAt(spent, '/data/plan_resets', '2026-10-09T14:17:31Z')), '/data/plan_resets', 'reset as text');
     expectRefused(validate(STOP(), setAt(spent, '/data/plan_resets', String(RESETS))), '/data/plan_resets', 'reset as a numeric string');
