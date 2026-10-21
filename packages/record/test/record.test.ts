@@ -25,6 +25,7 @@ const data = (kind: string, index = 0): JsonValue => (fixtures(`${kind}@1`)[inde
 const event = (kind: string, at: number, seq: string | undefined, patch: Record<string, JsonValue> = {}, index = 0): EventInput => ({
   v: 1, id: ulidAt(at), kind, ts: at, ...(seq === undefined ? {} : { seq }), data: { ...(data(kind, index) as Record<string, JsonValue>), ...patch },
 });
+const fx = (kind: string): Record<string, JsonValue> => fixtures(`${kind}@1`)[0] as Record<string, JsonValue>;
 const core = (session: string): Connection => ({ writer: 'core', actor: 'you', scope: 'you', session });
 
 const open: RecordStore[] = [];
@@ -448,5 +449,100 @@ describe('a removed worktree leaves its session', () => {
       // A record that ignores worktree.removed still shows the removed path on the session.
       expect([when, row?.worktree, row?.branch]).toEqual([when, null, null]);
     }
+  });
+});
+
+describe('lost events, decided asks and the record\'s own evidence', () => {
+  it('a session that finished, then took a new prompt, loses events after the last FULL commit: its claim reads INVALID', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const A = ulidAt(T0 - 1000);
+    await r.append(hook(A), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(A), event('user.ask', T0, seqAt(T0)));
+    await r.append(hook(A), { ...event('agent.stop', T0 + 1, seqAt(T0 + 1)), subject: `session:${A}` });
+    await r.append({ ...hook(A), writer: 'app' }, { ...event('session.attention', T0 + 2, undefined, { state: 'finished' }), subject: `session:${A}` });
+    // The person prompts again; the session works and claims done.
+    await r.append(hook(A), event('user.ask', T0 + 10, seqAt(T0 + 10)));
+    const claim = event('claim.made', T0 + 11, undefined);
+    await r.append({ ...hook(A), writer: 'app' }, claim);
+    // Some FULL commit of another session (a verdict on an unrelated claim).
+    const B = ulidAt(T0 + 12);
+    await r.append(hook(B), event('session.start', T0 + 12, undefined));
+    const v = fx('verdict.made');
+    await r.append(core(B), { v: 1, id: ulidAt(T0 + 13), kind: 'verdict.made', ts: T0 + 13, subject: (v.data as Record<string, string>).claim!, data: v.data! });
+    // A writes 50 stream events after the FULL commit, then the power is cut.
+    await Promise.all(Array.from({ length: 50 }, (_, j) => r.append(hook(A), event('tool.after', T0 + 20 + j, seqAt(T0 + 20 + j)))));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
+    expect(rows[0]?.verdict_id, 'A lost 50 events while its claim was open: INVALID').not.toBeNull();
+  });
+
+  it('an ask.escalated from a hook leaves the person\'s answer and decision as they were', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const ac = fx('ask.created');
+    const askId = ulidAt(T0);
+    await r.append(core(S), { v: 1, id: askId, kind: 'ask.created', ts: T0, ...(ac.subject ? { subject: ac.subject as string } : {}), data: ac.data! });
+    const an = fx('ask.answered');
+    await r.append(core(S), { v: 1, id: ulidAt(T0 + 1), kind: 'ask.answered', ts: T0 + 1, subject: `ask:${askId}`, data: { ...(an.data as Record<string, JsonValue>), answer: 'no', decision: 'deny' } });
+    const es = fx('ask.escalated');
+    await r.append(hook(S), { v: 1, id: ulidAt(T0 + 2), kind: 'ask.escalated', ts: T0 + 2, subject: `ask:${askId}`, data: { ...(es.data as Record<string, JsonValue>), answer: 'yes', decision: 'allow' } });
+    const row = (await r.table('asks')).rows.find((x) => x.id === askId);
+    await r.close();
+    expect(row?.decision).toBe('deny');
+  });
+
+  it('an answer\'s plan_hash is the plan\'s answered_hash', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const ac = fx('ask.created');
+    const askId = ulidAt(T0);
+    await r.append(core(S), { v: 1, id: askId, kind: 'ask.created', ts: T0, data: ac.data! });
+    const pp = fx('plan.proposed');
+    const hash = 'a'.repeat(64);
+    await r.append(core(S), { v: 1, id: ulidAt(T0 + 1), kind: 'plan.proposed', ts: T0 + 1, data: { ...(pp.data as Record<string, JsonValue>), ask: `ask:${askId}`, hash } });
+    const an = fx('ask.answered');
+    await r.append(core(S), { v: 1, id: ulidAt(T0 + 2), kind: 'ask.answered', ts: T0 + 2, subject: `ask:${askId}`, data: { ...(an.data as Record<string, JsonValue>), plan_hash: hash, decision: 'allow' } });
+    const plan = (await r.table('plans')).rows.find((x) => x.ask === askId);
+    await r.close();
+    expect(plan?.answered_hash).toBe(hash);
+  });
+
+  it('the whole text the record puts as evidence is a row of the evidence projection', async () => {
+    const root = tempRoot();
+    const store = await openEvidenceStore({ root, now: () => T0 });
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), evidence: store });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const cmd = `cat <<'EOF' > notes.txt\n${'line of notes\n'.repeat(1000)}EOF\n`;
+    await r.append(hook(S), event('tool.after', T0 + 10, seqAt(T0 + 10), { kind: 'shell', paths: [], command: cmd }));
+    const table = (await r.table('evidence')).rows;
+    await r.close();
+    expect(table.length).toBe(1);
+  });
+
+  it('a session with no durable trace before a cut, seen again after it, gets INVALID on its claim', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const B = ulidAt(T0 - 2000);
+    await r.append(hook(B), event('session.start', T0 - 2000, undefined));
+    const v = fx('verdict.made');
+    await r.append(core(B), { v: 1, id: ulidAt(T0 - 1500), kind: 'verdict.made', ts: T0 - 1500, subject: (v.data as Record<string, string>).claim!, data: v.data! });
+    const C = ulidAt(T0 - 1000);
+    await r.append(hook(C), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(C), event('user.ask', T0, seqAt(T0)));
+    await Promise.all(Array.from({ length: 50 }, (_, j) => r.append(hook(C), event('tool.after', T0 + 20 + j, seqAt(T0 + 20 + j)))));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    await r.append(hook(C), event('tool.after', T0 + 6000, seqAt(T0 + 6000)));
+    const claim = event('claim.made', T0 + 6001, undefined);
+    await r.append({ ...hook(C), writer: 'app' }, claim);
+    const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
+    expect(rows[0]?.verdict_id).not.toBeNull();
   });
 });

@@ -140,6 +140,8 @@ export class Projector {
     const d: Obj = isObj(e.data) ? e.data : {};
     if (e.session) {
       this.up('sessions', { id: e.session, last_seen: e.ts });
+      // A new prompt resumes a session that had finished: it is active again until its next end.
+      if (e.kind === 'user.ask') this.stmt("UPDATE sessions SET status = 'running', ended_log_pos = NULL WHERE id = ? AND status IN ('finished', 'failed')").run(e.session);
       this.turn(e, d);
     }
     switch (e.kind) {
@@ -147,7 +149,8 @@ export class Projector {
         if (e.session) this.up('sessions', { id: e.session, agent: str(d.agent), worktree: str(d.worktree), branch: str(d.branch), thread_id: str(d.thread), project_id: e.project });
         break;
       case 'session.attention': {
-        const id = sessionOf(e.subject) ?? e.session;
+        // A hook speaks only for its own session; the app and the core may name another.
+        const id = e.writer === 'hook' ? e.session : sessionOf(e.subject) ?? e.session;
         const state = str(d.state);
         if (id) this.up('sessions', { id, status: state, ended_log_pos: state && ENDED.has(state) ? e.log_pos : null });
         break;
@@ -209,18 +212,22 @@ export class Projector {
         this.up('asks', { id: e.id, kind: str(d.kind), key: str(d.key), question: str(d.question), options: json(d.options), recommended: str(d.recommended), default_option: json(d.default), provisional: int(d.provisional), session_id: e.session, owner: str(d.owner), fallback: json(d.fallback), deadline: int(d.deadline), pinned_to: json(d.pinned_to), created: e.ts });
         break;
       case 'ask.answered':
-      case 'ask.defaulted':
-      case 'ask.escalated':
-      case 'ask.cancelled': {
+      case 'ask.defaulted': {
+        // Only the core appends these: the answer and its decision come from them alone.
         const status = e.kind.slice(4);
-        this.up('asks', { id: bare(e.subject), status, outcome: status, answered: e.ts, answer: json(d.answer), decision: str(d.decision) });
+        const ask = bare(e.subject);
+        this.up('asks', { id: ask, status, outcome: status, answered: e.ts, answer: json(d.answer), decision: str(d.decision) });
+        // The plan digest your yes bound, for the plan this ask showed.
+        if (e.kind === 'ask.answered' && typeof d.plan_hash === 'string') this.up('plans', { ask, answered_hash: d.plan_hash });
         break;
       }
+      case 'ask.escalated':
+      case 'ask.cancelled':
       case 'ask.moot':
       case 'ask.superseded': {
-        // The core closed the ask without an answer: it is never asked again.
+        // An ask closed without an answer is never asked again; one already decided keeps its answer.
         const status = e.kind.slice(4);
-        this.up('asks', { id: bare(e.subject), status, outcome: status, answered: e.ts });
+        this.stmt("UPDATE asks SET status = ?, outcome = ? WHERE id = ? AND status NOT IN ('answered', 'defaulted')").run(status, status, bare(e.subject));
         break;
       }
       case 'ask.later':

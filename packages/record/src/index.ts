@@ -196,6 +196,8 @@ class SqliteRecord implements RecordStore {
   private inFlight = 0;
   /** Sessions whose events this run failed to append: their next claims read INVALID, cause events lost. */
   private readonly lost = new Set<string>();
+  /** Set after a start with no clean stop: a session this record never kept may have lost its events. */
+  private unclean = false;
   private next = 1;
   private blockEnd = 1;
 
@@ -239,7 +241,10 @@ class SqliteRecord implements RecordStore {
     const durable = Number(meta.get('durable') ?? 0);
     // A FULL commit: a cut after this open that loses it would read the earlier clean stop as this run's.
     this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running' });
-    if (wasRunning) this.recover(durable);
+    if (wasRunning) {
+      this.unclean = true;
+      this.recover(durable);
+    }
   }
 
   /** Runs `work` in one synchronous=FULL commit, which also records how far the log is durable. */
@@ -377,6 +382,10 @@ class SqliteRecord implements RecordStore {
   }
   private async appendNow(connection: Connection, input: EventInput): Promise<Appended> {
     const prepared = this.prepare(connection, input);
+    // After an unclean start, a hook event of a session with no row here, and not its start, means its
+    // earlier events were cut with no durable trace: its next claim reads INVALID.
+    if (this.unclean && connection.writer === 'hook' && prepared.session && input.kind !== 'session.start' && !this.lost.has(prepared.session)
+      && !this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(prepared.session)) this.markLost(prepared.session);
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
       // An event the log already holds needs no store: its retry is the same event, or a conflict.
@@ -393,8 +402,17 @@ class SqliteRecord implements RecordStore {
       try {
         if (!this.evidenceWriter) throw Error('the record was opened without an evidence store');
         const put = await this.evidenceWriter.put({ bytes: new Uint8Array(bytes), kind: `${input.kind}.${TEXT_FIELD[input.kind]}`, source: `event:${input.id}`, redaction: 'complete', license: { name: 'record', allows: [] } });
-        if (put.status === 'stored') prepared.evidence.push(put.evidence.sha256);
-        else failure = put.reason;
+        if (put.status === 'stored') {
+          prepared.evidence.push(put.evidence.sha256);
+          // The record runs this put as the core, so the file is an event too, ahead of the event citing it.
+          const ev = put.evidence;
+          const ts = this.options.now();
+          // Straight to appendNow: this append is already counted in flight, so a close waits for both.
+          await this.appendNow({ writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.session ? { session: connection.session } : {}) }, {
+            v: 1, id: ulid(ts), kind: 'evidence.stored', ts,
+            data: { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] },
+          });
+        } else failure = put.reason;
       } catch (error) {
         failure = error instanceof Error ? error.message : String(error);
       }
