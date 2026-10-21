@@ -433,10 +433,6 @@ mod macos {
             }
         }
 
-        pub fn access(&self) -> bool {
-            self.access
-        }
-
         /// Whether the Screen Recording prompt was asked for in this run.
         pub fn requested(&self) -> bool {
             self.requested
