@@ -1,0 +1,120 @@
+Acceptance tests for #318 on the base 4f6dec5 (origin/main, no implementation), run on 2026-10-21 on an Apple
+silicon Mac, Node 24.22.0, Vitest 5.0.5, git 2.52.0:
+
+  npx vitest run tests/acceptance/318
+
+Trimmed to each failure's reason. No local path appears in what is kept (<repo> is the checkout).
+
+== The base
+
+ Test Files  6 failed | 1 passed (7)
+      Tests  4 passed (4)
+
+FAIL  authority.test.ts, flow.test.ts, raise.test.ts, threads.test.ts
+      Error: Cannot find module '../../../packages/asks/src/index.ts' imported from <repo>/tests/acceptance/318/helpers.ts
+FAIL  plants.test.ts, sources.test.ts
+      Error: Cannot find module '../../../packages/asks/src/index.ts' imported from <repo>/tests/acceptance/318/<file>
+  (Expected: the asks core doesn't exist, so the 23 tests that drive it can't load. That covers every criterion.)
+
+PASS  contract.test.ts > #318.b64bd314 an item of no ask kind fails ask.created, and the record refuses to append it
+PASS  contract.test.ts > #318.785af8ee an ask without what it decides, its options, the recommendation or the default
+      fails its schema, naming the field
+PASS  contract.test.ts > #318.fc8e493b an authority ask with an option that has no decision, or any value but allow,
+      deny or none, fails its schema
+PASS  contract.test.ts > #318.e4675a8d an ask.created without its fallback, owner, key or pinned_to fails its schema,
+      naming the field
+  (Expected: the published ask.created@1 already requires these fields, closes its kind tag and its options' decision,
+  and the record already validates against it. These four keep that from regressing; each criterion's behavior half,
+  through the core, is in raise.test.ts or sources.test.ts and fails above.)
+
+
+== A program that does nothing, standing in for the base
+
+So that each test is seen failing at its own assertion rather than at the import: run in a scratch copy of the base
+outside this checkout, with packages/asks/src/index.ts holding the sample fix's askSources() and an openAsks whose
+methods do nothing (raise returns 'ask:0', card an empty card, needsYou, holds [], authorized null).
+
+  contract.test.ts         4 PASS (as on the base)
+  raise.test.ts
+    #318.b64bd314          the authority ask is in the log: expected [] to include 'ask:0'
+    #318.785af8ee          expected a refusal naming {"field":"question"}: expected undefined to be an instance of AskRefused
+    #318.fc8e493b          expected a refusal naming {"field":"decision"}: expected undefined to be an instance of AskRefused
+    #318.e4675a8d          expected a refusal naming {"field":"fallback"}: expected undefined to be an instance of AskRefused
+  flow.test.ts
+    #318.471f0611          ask ask:0: the agent carries on with the recommended option at once: expected [] to deeply equal
+                           [ [ 'blue', true ] ]
+    #318.4c8ff7fb          a push under the provisional taste call runs before your answer: expected [] to include 'ask:0'
+    #318.a4005788          ask ask:0: its card shows the change since the commit it showed: expected null to deeply equal […]
+    #318.4fbf5336          ask ask:0 is superseded by ask:0: expected false to be 'ask:0'
+    #318.4f134efa          ask ask:0 is answered by the typed text, with decision none: expected false to be 'none'
+  authority.test.ts
+    #318.e41be4c3          ask ask:0: its card shows its plan's digest: expected 'undefined' to be 'string'
+    #318.d249acdc          (the same)
+    #318.898ac861          (the same)
+  threads.test.ts
+    #318.b4c25197 /compact thread T1: one card for its subject across /compact: expected [] to deeply equal [ 'ask:0' ]
+    #318.b4c25197 /clear   thread T2: the sixth open ask folds into the exception: expected undefined to be 'exception'
+  sources.test.ts
+    #318.af2a2599          row permission.request: its ask takes its default at the deadline: expected false to be 'deny'
+    #318.e4675a8d          rebuilt ask ask:0 keeps its fallback: expected undefined to deeply equal 'you'
+  plants.test.ts           not meaningful here: each scenario already fails before its plant matters.
+
+
+== The sample fix
+
+A sample fix, kept in a scratch copy of the base outside this checkout (not committed, not part of this change), to show
+the tests can pass: packages/asks/src/index.ts implementing the surface in README.md on the real record (about 220 lines),
+with a 14-row ask.sources@1 table (8 authority rows including budget.raise and generation.paid, one row for each other
+kind, a second exception row for the fold); in contracts, a new ask.sources@1 schema, ask.answered@1 gaining optional
+via, verified, on and words, and a new ask.refused@1 kind (feeds asks; outcome, closed_at, channel, decision).
+
+  npx vitest run tests/acceptance/318        Test Files 7 passed (7), Tests 27 passed (27), about 2 s
+  npx tsc -p tests/acceptance/318            no errors (also checked against a declaration-only copy of the surface)
+
+
+== Planted wrong programs (plants.ts, run by plants.test.ts)
+
+Each is the sample fix with one part wrong, planted around it. On the sample fix, each plant test passes because its
+scenario fails as below; run bare (the scenario on the plant), each fails with:
+
+  #318.d249acdc  infers allow from "yes"          ask ask:…NKY2 answered in words records decision none: expected 'allow' to be 'none'
+  #318.d249acdc  copies decision from the request expected a refusal naming {"field":"decision"}: expected undefined to be an
+                                                  instance of AskRefused
+  #318.e4675a8d  fallback left to the live table  rebuilt ask ask:…NKYA keeps its fallback: expected null to deeply equal 'you'
+  #318.b4c25197  supersede keyed on session ID    thread T1: one card for its subject across /compact: expected [ …(2) ] to deeply
+                                                  equal [ 'ask:…NKYK' ]
+  #318.b4c25197  fold keyed on session ID         thread T2: the sixth open ask has a card of its own: expected [ …(6) ] to not
+                                                  include 'ask:…NKYZ'
+  #318.898ac861  late allow recorded as answered  ask ask:…NKZ1: the late allow reached the agent: expected [ 'deny', 'allow' ] to
+                                                  deeply equal [ 'deny' ]
+  #318.af2a2599  paid generation as a choice      row generation.paid files an authority ask: expected 'choice' to be 'authority'
+                 with an approving default
+
+
+== Mutants of the sample fix (scratch copy; each one change, then the whole suite)
+
+  raise skips the schema check                 raise.test.ts #318.785af8ee, #318.fc8e493b, #318.e4675a8d fail: expected a
+                                               refusal …: expected RecordError … to be an instance of AskRefused
+  raise lets an agent option declare allow     #318.fc8e493b fails: expected a refusal naming {"option":"go"}
+  no provisional delivery at once              #318.471f0611 fails: the agent carries on with the recommended option at once
+  a different answer undoes nothing            #318.471f0611 fails: expected [ [ 'green', null ] ] to deeply equal [ [ 'green', 'blue' ] ]
+  holds nothing that leaves the machine        #318.4c8ff7fb fails: a push under the provisional taste call runs before your answer
+  holds local steps too                        #318.471f0611 and #318.4c8ff7fb fail: a local step waits
+  card shows no change since the pin           #318.a4005788 fails: its card shows the change since the commit it showed
+  answer recorded without the pinned commit    #318.a4005788 fails: is recorded as answered on the commit it showed
+  no supersede                                 #318.4fbf5336 and #318.b4c25197 (/compact) fail
+  no moot                                      #318.4fbf5336 fails: closes as moot when its check passes
+  typed text answers the authority ask too     #318.4f134efa fails: is answered by the typed text, with decision none
+  typed text recorded as verified              #318.4f134efa fails: recorded as unverified
+  deadline defaults answered asks too          #318.4f134efa fails: an ask whose action ran defaulted afterwards
+  answers from any writer                      #318.e41be4c3 fails: expected a refusal (an agent's answer)
+  any plan runs once approved                  #318.e41be4c3 and #318.d249acdc fail: a plan you weren't shown runs
+  an old approval answers the changed plan     #318.e41be4c3 fails: the changed plan runs without a new approval
+  late answer refused but not recorded         #318.898ac861 fails: the refused answer is recorded, naming defaulted and 12:00
+  default not delivered                        #318.898ac861 fails: the agent hears the default no
+  deadline only once it has passed (>, not >=) #318.898ac861 fails: takes its default no at 12:00; #318.af2a2599 fails:
+                                               row permission.request: its ask takes its default at the deadline
+  authority takes its default option           #318.af2a2599 fails: row budget.raise: takes no at its deadline: expected
+                                               'allow' to be 'deny'
+  no source check                              #318.af2a2599 fails: expected a refusal naming {"source":"planted.no_row"}
+  fold counts per session                      #318.b4c25197 (/clear) fails: the sixth open ask has a card of its own

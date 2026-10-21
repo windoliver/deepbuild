@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "01K74FM3A9C1E3G5J7K9M1P3R5",
+  "kind": "ask.answered",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013452123,
+  "data": {
+    "answer": "use the green one",
+    "plan_hash": null,
+    "decision": "none",
+    "via": "session",
+    "verified": false,
+    "on": {
+      "kind": "evidence",
+      "ref": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "token": null
+  }
+}
