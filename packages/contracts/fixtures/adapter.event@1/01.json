@@ -1,0 +1,12 @@
+{
+  "agent": "claude",
+  "kind": "tool.before",
+  "data": {
+    "session": "91f2090e-a2d2-4a41-8794-29ef39f50422",
+    "call": "toolu_01Mcp0000000000000000001",
+    "tool": "deep_ask",
+    "kind": "mcp",
+    "server": "deep"
+  },
+  "rule": "/toolKinds/prefixes/mcp__"
+}

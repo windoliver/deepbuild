@@ -14,11 +14,16 @@ pub mod views;
 
 use std::{path::Path, rc::Rc};
 
+use gpui_kit::component::TitleBar;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 use gpui_shell::{
     anyhow, policy::Policy, FrozenComponentRegistry, HostError, HostModule, HostValue,
     RegistryError, ScriptView, ShellRuntime,
 };
+
+pub mod trusted_input;
+
+pub mod brand;
 
 pub const SESSION_COUNT: usize = 1_000;
 
@@ -239,6 +244,49 @@ pub fn write_report(sessions: &[Session], panel: Option<&str>) -> std::io::Resul
     Ok(format!("file://{}", path.display()))
 }
 
+/// The welcome screen, shown where a panel would be until one is mounted: the kit's stacked
+/// lockup in Ink on Paper, an approved pairing, with the D at `brand::WELCOME_D_PX`.
+fn welcome() -> impl IntoElement {
+    div()
+        .id("welcome")
+        .test_support()
+        .flex_1()
+        .h_full()
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap_6()
+        .bg(rgb(brand::PAPER))
+        .text_color(rgb(brand::INK))
+        .child(
+            svg()
+                .data(brand::WELCOME_LOCKUP)
+                .w(px(brand::WELCOME_LOCKUP_WIDTH_PX))
+                .h(px(brand::WELCOME_LOCKUP_HEIGHT_PX))
+                .text_color(rgb(brand::INK)),
+        )
+        .child(div().text_sm().child("Where your agents show, not tell."))
+}
+
+/// The title bar with the mark: the small cut, drawn 24 px with the D at 18 px, in Ink on the
+/// light bar.
+fn title_bar() -> TitleBar {
+    TitleBar::new().child(
+        div()
+            .id("title-bar-mark")
+            .test_support()
+            .flex()
+            .items_center()
+            .child(
+                svg()
+                    .data(brand::TITLE_BAR_MARK)
+                    .size(px(brand::TITLE_BAR_MARK_PX))
+                    .text_color(rgb(brand::INK)),
+            ),
+    )
+}
+
 pub struct Spike {
     sessions: Rc<Vec<Session>>,
     selected: Option<usize>,
@@ -311,59 +359,78 @@ impl Render for Spike {
         .h_full();
 
         let count = format!("{} waiting on you", self.waiting());
+        let content = match &self.panel {
+            Some(panel) => div()
+                .flex_1()
+                .h_full()
+                .child(panel.clone())
+                .into_any_element(),
+            None => welcome().into_any_element(),
+        };
         div()
             .id("spike")
             .size_full()
             .flex()
+            .flex_col()
             .bg(rgb(0xffffff))
             .text_color(rgb(0x111111))
             .text_sm()
+            .child(title_bar())
             .child(
                 div()
-                    .w(px(260.))
-                    .h_full()
+                    .flex_1()
+                    .w_full()
+                    .min_h_0()
                     .flex()
-                    .flex_col()
-                    .border_r_1()
-                    .border_color(rgb(0xe5e7eb))
                     .child(
                         div()
-                            .p_2()
+                            .w(px(260.))
+                            .h_full()
                             .flex()
-                            .justify_between()
+                            .flex_col()
+                            .border_r_1()
+                            .border_color(rgb(0xe5e7eb))
                             .child(
                                 div()
-                                    .id("count")
-                                    .test_support()
-                                    // The label is the drawn text, so a test can read the count back.
-                                    .aria_label(count.clone())
-                                    .child(count),
+                                    .p_2()
+                                    .flex()
+                                    .justify_between()
+                                    .child(
+                                        div()
+                                            .id("count")
+                                            .test_support()
+                                            // The label is the drawn text, so a test can read the count back.
+                                            .aria_label(count.clone())
+                                            .child(count),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("open-report")
+                                            .test_support()
+                                            .px_2()
+                                            .rounded_md()
+                                            .bg(rgb(0xf3f4f6))
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                match write_report(
+                                                    &this.sessions,
+                                                    this.panel_name.as_deref(),
+                                                ) {
+                                                    Ok(url) => {
+                                                        cx.open_url(&url);
+                                                        this.report = Some(url);
+                                                    }
+                                                    Err(error) => {
+                                                        eprintln!("deep-app: report: {error}")
+                                                    }
+                                                }
+                                                cx.notify();
+                                            }))
+                                            .child("Report"),
+                                    ),
                             )
-                            .child(
-                                div()
-                                    .id("open-report")
-                                    .test_support()
-                                    .px_2()
-                                    .rounded_md()
-                                    .bg(rgb(0xf3f4f6))
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        match write_report(
-                                            &this.sessions,
-                                            this.panel_name.as_deref(),
-                                        ) {
-                                            Ok(url) => {
-                                                cx.open_url(&url);
-                                                this.report = Some(url);
-                                            }
-                                            Err(error) => eprintln!("deep-app: report: {error}"),
-                                        }
-                                        cx.notify();
-                                    }))
-                                    .child("Report"),
-                            ),
+                            .child(list),
                     )
-                    .child(list),
+                    .child(content),
             )
-            .child(div().flex_1().h_full().children(self.panel.clone()))
     }
 }

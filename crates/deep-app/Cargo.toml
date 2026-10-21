@@ -12,13 +12,24 @@ rust-version = "1.95"
 [dependencies]
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }
 gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
+# Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the
+# one-frame capture (objc2-core-graphics), the cursor window's native move (raw-window-handle,
+# NSWindow) and the frame's pixels as a gpui image (image).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder"] }
+# Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
+# menu-bar template from the kit's bytes.
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFCGTypes", "CFData"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "libc"] }
+block2 = "0.6"
+raw-window-handle = "0.6"
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }

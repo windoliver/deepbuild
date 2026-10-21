@@ -6,6 +6,7 @@ so every outline is exact. Fills use nonzero winding: solids clockwise, holes co
 """
 import math
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INK, PAPER, WHITE, SIGNAL, GREY = "#151619", "#F6F6F4", "#FFFFFF", "#F2C440", "#74767D"
@@ -232,6 +233,16 @@ for kind in ("horizontal", "stacked"):
     write(f"lockup-{kind}-ink.svg", lockup(kind, INK, INK, INK, INK))
     write(f"lockup-{kind}-white.svg", lockup(kind, WHITE, WHITE, WHITE, WHITE, D_R, KEY_R))
     write(f"lockup-{kind}-color-dark.svg", lockup(kind, WHITE, SIGNAL, WHITE, SIGNAL, D_R, KEY_R))
+
+# social preview: GitHub's 1280 × 640 card, the colour horizontal lockup on Ink at 60% of the width, centred
+SOCIAL_W, SOCIAL_H = 1280, 640
+_lockup = lockup("horizontal", WHITE, SIGNAL, WHITE, SIGNAL, D_R, KEY_R)
+_vb = [float(v) for v in re.search(r'viewBox="([^"]+)"', _lockup).group(1).split()]
+_s = 0.6 * SOCIAL_W / _vb[2]
+write("social-preview.svg", svg(
+    f'<path fill="{INK}" d="{rect(0, 0, SOCIAL_W, SOCIAL_H)}"/>'
+    f'<g transform="translate({f((SOCIAL_W - _vb[2] * _s) / 2 - _vb[0] * _s)} {f((SOCIAL_H - _vb[3] * _s) / 2 - _vb[1] * _s)}) scale({f(_s)})">'
+    + _lockup.split(">", 1)[1].rsplit("</svg>", 1)[0] + "</g>", f"0 0 {SOCIAL_W} {SOCIAL_H}"))
 
 # README header: ink on light, colour on dark; the keyframe swings and settles once
 write("readme-light.svg", lockup("horizontal", INK, INK, INK, INK, animate=True))

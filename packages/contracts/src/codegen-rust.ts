@@ -310,7 +310,15 @@ export function generateRust(entries: readonly SchemaEntry[]): string {
       output.reserved.add(type);
     }
   }
-  const arms = entries.map(({ name, schema }) => ({ name, type: new Module(schema, typeName(name), name, output).emit() }));
+  // A root that is itself a map, array or bounded scalar has a rule no record checks for it; roundtrip does.
+  const arms = entries.map(({ name, schema }) => {
+    const module = new Module(schema, typeName(name), name, output);
+    return { name, type: module.emit(), rule: module.rule(schema) };
+  });
+  const decode = (a: { type: string; rule: string | undefined }) => {
+    const typed = `<${a.type} as Contract>::from_json(&value, "")?.to_json()`;
+    return a.rule ? `{\n            deep_contracts::check(&value, "", &${a.rule})?;\n            ${typed}\n        }` : typed;
+  };
   return `// Generated from packages/contracts/schemas by generateRust. Do not edit.
 use deep_contracts::{Contract, Value};
 
@@ -319,7 +327,7 @@ ${output.items.join('\n')}
 pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
     let value = deep_contracts::parse(json)?;
     let typed = match schema {
-${arms.map((a) => `        ${literal(a.name)} => <${a.type} as Contract>::from_json(&value, "")?.to_json(),\n`).join('')}        _ => return Err(format!("no generated type for {schema}")),
+${arms.map((a) => `        ${literal(a.name)} => ${decode(a)},\n`).join('')}        _ => return Err(format!("no generated type for {schema}")),
     };
     Ok(deep_contracts::jcs(&typed))
 }

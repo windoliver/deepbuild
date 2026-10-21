@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "turn.usage",
+  "subject": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451124,
+  "data": {
+    "turn": "t-0002",
+    "model": "gpt-reserve-mini",
+    "covers": "session",
+    "tokens": {
+      "input": 7472,
+      "cached": 27392,
+      "output": 166,
+      "exact": true
+    },
+    "cost": {
+      "basis": "estimated",
+      "usd": 0.0105,
+      "rate_card": "openai-2026-10"
+    },
+    "context": {
+      "used": 35030,
+      "window": 258400
+    }
+  }
+}

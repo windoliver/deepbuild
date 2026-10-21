@@ -13,6 +13,13 @@ describe('deep checkout command', () => {
     expect(result.stdout).toContain('Repository skeleton');
   });
 
+  it('opens its help with a one-line banner, plain text with no escape when stdout is not a terminal', () => {
+    const result = spawnSync(process.execPath, [cli, '--help'], { encoding: 'utf8', env: { ...process.env, TERM: 'xterm-kitty', TERM_PROGRAM: 'iTerm.app', LC_TERMINAL: 'iTerm2' } });
+    expect(result.status).toBe(0);
+    expect(result.stdout.split('\n')[0]).toBe('DeepBuild 0.0.0');
+    expect(result.stdout).not.toContain('\x1b');
+  });
+
   it('prints its checkout version', () => {
     const result = run('--version');
     expect(result.status).toBe(0);

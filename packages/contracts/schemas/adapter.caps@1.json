@@ -1,0 +1,65 @@
+{
+  "title": "adapter.caps@1",
+  "description": "What an adapter can do, every flag present: delivery and gates choose a route from these, never from the agent's name.",
+  "type": "object",
+  "properties": {
+    "holdStop": {
+      "type": "boolean",
+      "description": "A stop can be held until checks finish."
+    },
+    "wakeIdle": {
+      "type": "boolean",
+      "description": "An idle session can be woken with an answer."
+    },
+    "steer": {
+      "type": "boolean",
+      "description": "Words can reach a running turn."
+    },
+    "followUp": {
+      "type": "boolean",
+      "description": "A follow-up can be queued for after the turn."
+    },
+    "answerPermission": {
+      "type": "boolean",
+      "description": "A permission request can be answered."
+    },
+    "nativeTools": {
+      "type": "boolean",
+      "description": "The agent's own tool calls are seen by kind."
+    },
+    "mcp": {
+      "type": "boolean",
+      "description": "MCP calls are seen with their server and tool."
+    },
+    "rewrite": {
+      "type": "boolean",
+      "description": "A command can be rewritten before it runs."
+    },
+    "editInput": {
+      "type": "boolean",
+      "description": "A permission reply may carry edited input."
+    },
+    "errorTurnHook": {
+      "type": "boolean",
+      "description": "A turn that ends in an error runs a hook."
+    },
+    "startTurn": {
+      "type": "boolean",
+      "description": "A hook can start a turn."
+    }
+  },
+  "required": [
+    "holdStop",
+    "wakeIdle",
+    "steer",
+    "followUp",
+    "answerPermission",
+    "nativeTools",
+    "mcp",
+    "rewrite",
+    "editInput",
+    "errorTurnHook",
+    "startTurn"
+  ],
+  "additionalProperties": false
+}

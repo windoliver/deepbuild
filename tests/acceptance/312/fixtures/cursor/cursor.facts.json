@@ -1,0 +1,106 @@
+{
+  "schema": "adapter.facts@1",
+  "agent": "cursor",
+  "versions": ["1.7.0"],
+  "hookTimeouts": {
+    "readBy": "a hold waits no longer than the agent lets a hook run",
+    "conformance": "cursor/hookTimeouts/hold-within-timeout",
+    "defaultMs": 60000
+  },
+  "continuation": {
+    "readBy": "a stop hold continues at most this many times in one turn",
+    "conformance": "cursor/continuation/cap",
+    "cap": 5,
+    "field": "loop_limit"
+  },
+  "launch": {
+    "readBy": "how DeepBuild starts the agent headless",
+    "conformance": "cursor/launch/flags",
+    "readOnlyJob": { "args": ["agent", "--print", "--mode", "ask"], "prompt": "stdin" }
+  },
+  "modelFamily": {
+    "readBy": "which rate card and context window a model name belongs to",
+    "conformance": "cursor/modelFamily/known-names",
+    "families": { "auto": "cursor-auto" }
+  },
+  "billing": {
+    "readBy": "whether a session bills a plan or an API account",
+    "conformance": "cursor/billing/detection",
+    "apiKeyVariables": ["CURSOR_API_KEY"]
+  },
+  "usage": {
+    "readBy": "every run prints its cost and is held to its cap",
+    "conformance": "cursor/usage/counting",
+    "cost": "unpriced",
+    "costFrom": "nothing: Cursor's hooks carry no usage",
+    "tokens": "not captured: Cursor's hooks carry no usage"
+  },
+  "questionTools": {
+    "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
+    "conformance": "cursor/questionTools/ask-tool",
+    "tools": []
+  },
+  "transcripts": {
+    "readBy": "a run keeps its session's own transcript",
+    "conformance": "cursor/transcripts/folder",
+    "home": ["CURSOR_HOME", "~/.cursor"],
+    "path": "none: Cursor's hooks do not name a transcript"
+  },
+  "appLinks": {
+    "readBy": "Open on a session's row",
+    "conformance": "cursor/appLinks/open",
+    "open": "cursor://anysphere.cursor-deeplink/chat?id={session}"
+  },
+  "errorTexts": {
+    "readBy": "a stop's cause from the texts the agent writes; a stop that matches none is unknown, never a pass",
+    "conformance": "cursor/errorTexts/unknown-stop",
+    "causes": {}
+  },
+  "events": {
+    "readBy": "each hook's strict payload schema per covered version; a missing or retyped field, or an event not listed, reads unverified and the session's holds go watch-only, naming the field; an unlisted field is only a reading",
+    "conformance": "cursor/events/strict-payloads",
+    "versions": {
+      "1.7.0": {
+        "sessionStart": {
+          "required": { "conversation_id": "string", "hook_event_name": "string", "workspace_roots": "array" },
+          "optional": {}
+        },
+        "preToolUse": {
+          "required": { "conversation_id": "string", "generation_id": "string", "hook_event_name": "string", "tool_name": "string", "tool_input": "object", "cwd": "string" },
+          "optional": {},
+          "tools": { "Shell": { "tool_input.command": "string" } }
+        },
+        "postToolUse": {
+          "required": { "conversation_id": "string", "generation_id": "string", "hook_event_name": "string", "tool_name": "string", "tool_input": "object", "tool_response": "any", "cwd": "string" },
+          "optional": {}
+        },
+        "stop": {
+          "required": { "conversation_id": "string", "hook_event_name": "string", "status": "string" },
+          "optional": {}
+        }
+      }
+    }
+  },
+  "mapping": {
+    "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event; a value names a payload field, or =text a constant",
+    "conformance": "cursor/mapping/explain",
+    "common": { "session": "conversation_id" },
+    "sessionStart": { "kind": "session.start", "data": { "source": "=startup" } },
+    "preToolUse": { "kind": "tool.before", "data": { "call": "generation_id", "tool": "tool_name" }, "call": "kind" },
+    "postToolUse": { "kind": "tool.after", "data": { "call": "generation_id", "tool": "tool_name", "outcome": "=ok" } },
+    "stop": { "kind": "agent.stop", "data": { "outcome": "=finished" }, "cause": { "field": "status", "values": {}, "otherwise": "unknown" } }
+  },
+  "toolKinds": {
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "conformance": "cursor/toolKinds/unknown-otherwise",
+    "tools": { "Shell": "shell", "ReadFile": "read", "EditFile": "edit", "WriteFile": "write" },
+    "prefixes": { "mcp__": "mcp" },
+    "otherwise": "unknown"
+  },
+  "toolDetail": {
+    "readBy": "what a call of each kind carries: a shell call's command, a file call's paths",
+    "conformance": "cursor/toolDetail/paths",
+    "command": { "shell": "tool_input.command" },
+    "paths": { "ReadFile": "tool_input.path", "EditFile": "tool_input.path", "WriteFile": "tool_input.path" }
+  }
+}

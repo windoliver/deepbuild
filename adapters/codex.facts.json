@@ -2,32 +2,85 @@
   "schema": "adapter.facts@1",
   "versions": ["0.144.0", "0.160.0", "0.163.0-alpha.10.2"],
   "agent": "codex",
-  "draft": "Launch fields only, read by scripts/agent-harness.mjs (#48); the full schema and its conformance cases are #312's.",
+  "hookTimeouts": {
+    "readBy": "a hold waits no longer than the agent lets a hook run",
+    "conformance": "codex/hookTimeouts/hold-within-timeout",
+    "defaultMs": null,
+    "perHook": { "Stop": 600000, "Interrupt": 1000 }
+  },
+  "continuation": {
+    "readBy": "a stop hold continues a turn only while the payload says no stop hook already did; the cap is the design's",
+    "conformance": "codex/continuation/stop-hook-active",
+    "field": "stop_hook_active"
+  },
   "signIn": {
     "readBy": "a run is BLOCKED until the agent is signed in",
+    "conformance": "codex/signIn/login-status",
     "args": ["login", "status"],
     "signedIn": "exit code 0; the output is never kept"
   },
   "launch": {
+    "readBy": "how DeepBuild starts the agent headless: a scripted session in a pseudo-terminal, a read-only job on stdin",
+    "conformance": "codex/launch/flags",
     "readOnlyJob": {
       "readBy": "DeepBuild's own jobs: read-only sandbox, none of the user's config or MCP servers, no bypass flag, prompt on stdin",
-      "args": ["exec", "--json", "-s", "read-only", "--skip-git-repo-check", "--ignore-user-config", "-m", "gpt-reserve", "-c", "model_reasoning_effort=\"low\"", "-"],
+      "args": [
+        "exec",
+        "--json",
+        "-s",
+        "read-only",
+        "--skip-git-repo-check",
+        "--ignore-user-config",
+        "-m",
+        "gpt-reserve",
+        "-c",
+        "model_reasoning_effort=\"low\"",
+        "-"
+      ],
       "prompt": "stdin"
     }
   },
+  "modelFamily": {
+    "readBy": "which rate card and context window a model name belongs to",
+    "conformance": "codex/modelFamily/known-names",
+    "families": { "gpt-reserve": "gpt-reserve", "gpt-reserve-mini": "gpt-reserve-mini" }
+  },
+  "billing": {
+    "readBy": "whether a session bills a plan or an API account: set, these variables mean the API",
+    "conformance": "codex/billing/api-key-variables",
+    "apiKeyVariables": ["OPENAI_API_KEY"]
+  },
   "usage": {
     "readBy": "every run prints its cost and is held to its cap",
+    "conformance": "codex/usage/counting",
     "cost": "unpriced",
     "costFrom": "nothing: on a plan Codex reports tokens only, and no rate card is verified, so a token cap stands in for the cost cap",
     "tokens": "the rollout's last token_count info.total_token_usage; input_tokens includes cached_input_tokens, which is taken back out"
   },
+  "questionTools": {
+    "readBy": "which tool calls are questions to the person, so each one is caught as a permission request of kind question",
+    "conformance": "codex/questionTools/question-is-a-request",
+    "tools": []
+  },
   "transcripts": {
     "readBy": "a run keeps its session's own rollout",
+    "conformance": "codex/transcripts/folder",
     "home": ["CODEX_HOME", "~/.codex"],
     "path": "sessions/{YYYY}/{MM}/{DD}/rollout-{time}-{thread}.jsonl"
   },
+  "appLinks": {
+    "readBy": "Open on a session's row",
+    "conformance": "codex/appLinks/open",
+    "open": "none: the Codex app publishes no link that opens a thread"
+  },
+  "errorTexts": {
+    "readBy": "a stop's cause from the error the agent reports, never from its words; a stop that matches none is unknown, never a pass",
+    "conformance": "codex/errorTexts/unknown-otherwise",
+    "causes": {}
+  },
   "events": {
     "readBy": "each hook's strict payload schema per covered version, from Codex's published hook input schemas (codex-rs/hooks/schema/generated at the version's tag), with tool_input an object and a shell or apply_patch call's tool_input.command a string as recorded; a missing or retyped field, or an event not listed, reads unverified and the session's holds go watch-only, naming the field; an unlisted field is only a reading (#47)",
+    "conformance": "codex/events/strict-payloads",
     "versions": {
       "0.144.0": {
         "SessionStart": {
@@ -315,6 +368,7 @@
   },
   "mapping": {
     "readBy": "the adapter maps each hook payload to events by these entries, and deep explain names the entry behind each event (#47); a value names a payload field, or =text a constant",
+    "conformance": "codex/mapping/explain",
     "common": { "session": "session_id", "subagent": "agent_id" },
     "SessionStart": {
       "kind": "session.start",
@@ -356,17 +410,14 @@
   },
   "stop": {
     "readBy": "each agent.stop names its cause from the stop's closed set and carries its usage (#603); the turn is the rollout's entries from the first carrying the payload's turn_id to the first carrying another",
+    "conformance": "codex/stop/cause-and-usage",
     "turn": { "payload": "turn_id", "transcript": "payload.turn_id" },
     "cause": {
       "readBy": "the first that names a cause, never the agent's text: an error event of the turn by its codex_error_info (codex-rs/protocol CodexErrorInfo), then the turn's last token_count rate_limits: a limit reached (rate_limit_reached_type) is plan_window_spent, resetting when the spent window (used_percent 100) does, resets_at being Unix seconds; one with no reset time is rate_limited; Codex's Stop payload carries no error; anything else is unknown",
       "errors": {
         "match": { "type": "event_msg", "payload.type": "error" },
         "field": "payload.codex_error_info",
-        "values": {
-          "context_window_exceeded": "context_overflow",
-          "server_overloaded": "rate_limited",
-          "unauthorized": "sign_in_required"
-        }
+        "values": { "context_window_exceeded": "context_overflow", "server_overloaded": "rate_limited", "unauthorized": "sign_in_required" }
       },
       "rateLimits": {
         "match": { "type": "event_msg", "payload.type": "token_count" },
@@ -383,7 +434,10 @@
     "usage": {
       "readBy": "the rollout's last token_count info.total_token_usage up to the turn's end, so it covers the session so far; input_tokens includes cached_input_tokens, which is taken back out; each count exact; context_fill is that call's last_token_usage.total_tokens over model_context_window; the model is the Stop payload's; Codex reports no cost on a plan, so it is unpriced",
       "covers": "session",
-      "records": { "match": { "type": "event_msg", "payload.type": "token_count" }, "has": "payload.info" },
+      "records": {
+        "match": { "type": "event_msg", "payload.type": "token_count" },
+        "has": "payload.info"
+      },
       "take": "last",
       "counts": {
         "input": ["payload.info.total_token_usage.input_tokens", "-payload.info.total_token_usage.cached_input_tokens"],
@@ -392,27 +446,34 @@
       },
       "exact": true,
       "model": { "payload": "model" },
-      "contextFill": { "used": ["payload.info.last_token_usage.total_tokens"], "window": "payload.info.model_context_window" }
+      "contextFill": {
+        "used": ["payload.info.last_token_usage.total_tokens"],
+        "window": "payload.info.model_context_window"
+      }
     }
   },
   "toolKinds": {
     "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
+    "conformance": "codex/toolKinds/unknown-otherwise",
     "tools": { "Bash": "shell", "apply_patch": "edit" },
     "prefixes": { "mcp__": "mcp" },
     "otherwise": "unknown"
   },
   "toolDetail": {
     "readBy": "what a call of each kind carries: a shell call's command",
+    "conformance": "codex/toolDetail/command",
     "command": { "shell": "tool_input.command" }
   },
   "patch": {
     "readBy": "a patch's paths: every Add, Update or Delete File and Move to line, indented or not, against the payload's cwd or a leading cd; through apply_patch or a shell command that runs it",
+    "conformance": "codex/patch/paths",
     "tools": ["apply_patch"],
     "command": "tool_input.command",
     "shell": "\\bapply_?patch\\b"
   },
   "turnWithoutPrompt": {
     "readBy": "a turn no prompt hook started opens with a user.ask whose origin the rollout's opening user message names; goals and heartbeats are continuations, never your asks",
+    "conformance": "codex/turnWithoutPrompt/goal",
     "payloadField": "turn_id",
     "startedBy": ["UserPromptSubmit", "SessionStart"],
     "turnEntry": "turn_context",
@@ -421,5 +482,9 @@
     "messageText": "payload.content",
     "values": { "<codex_internal_context source=\"goal\">": "continuation" },
     "otherwise": "unknown"
+  },
+  "readUsage": {
+    "readBy": "a turn's usage from the transcript: the model that answered, tokens by the agent's own count, a cost only with its basis",
+    "conformance": "codex/readUsage/token-count"
   }
 }
