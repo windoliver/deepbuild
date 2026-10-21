@@ -292,33 +292,61 @@ export function continuedWith(transcript, token) {
 
 // ------------------------------------------------------------------ the budgets lane
 
-// The reference Mac as the design defines it, read from the machine itself: a 16-inch MacBook Pro
-// (Mac15,7) with a 12-core M3 Pro and 36 GB, on mains power with Low Power Mode off. The thermal
-// state isn't read here; a lane may still call the machine off-reference by it, and must say so.
+// The design's two reference Macs (Numbers version 0 has to hold: The reference Macs). A machine is
+// one of them only when its whole fingerprint matches, never by its model name alone: each model
+// also ships with other chip bins and memory sizes, and an M3 MacBook Air with an 8-core GPU is
+// still a Mac15,12. The built-in display comes with the model, so it isn't read; a closed lid would
+// hide it.
+const REFERENCE_MACS = [
+  { model: 'Mac15,7', chip: 'Apple M3 Pro', cpuCores: 12, gpuCores: 18, memory: 36 * 2 ** 30 },
+  { model: 'Mac15,12', chip: 'Apple M3', cpuCores: 8, gpuCores: 10, memory: 16 * 2 ** 30 },
+];
+
+const sysctl = (name) => {
+  const result = spawnSync('sysctl', ['-n', name], { encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : null;
+};
+
+// This machine as the OS reports it, and whether a budget could count on it now. A value that
+// can't be read counts as not matching, so an unknown machine or power state is never a reference.
+function thisMachine() {
+  let gpuCores = null;
+  const displays = spawnSync('system_profiler', ['SPDisplaysDataType', '-json'], { encoding: 'utf8', timeout: 30_000 });
+  try { gpuCores = Number(JSON.parse(displays.stdout).SPDisplaysDataType.find((gpu) => gpu.sppci_cores).sppci_cores); } catch {}
+  const fingerprint = { model: sysctl('hw.model'), chip: sysctl('machdep.cpu.brand_string'), cpuCores: Number(sysctl('hw.physicalcpu')), gpuCores, memory: Number(sysctl('hw.memsize')) };
+  const hardware = REFERENCE_MACS.some((reference) => Object.keys(reference).every((key) => reference[key] === fingerprint[key]));
+  const battery = spawnSync('pmset', ['-g', 'batt'], { encoding: 'utf8' });
+  const settings = spawnSync('pmset', ['-g'], { encoding: 'utf8' });
+  const mains = battery.status === 0 && /drawing from 'AC Power'/.test(battery.stdout);
+  const lowPowerOff = settings.status === 0 && settings.stdout.match(/^\s*lowpowermode\s+(\d+)/m)?.[1] === '0';
+  return { model: fingerprint.model, hardware, conditions: mains && lowPowerOff };
+}
+
 export function referenceMachine() {
-  if (process.platform !== 'darwin') return { hardware: false, conditions: false };
-  const sysctl = (key) => spawnSync('sysctl', ['-n', key], { encoding: 'utf8' }).stdout?.trim();
-  const hardware = sysctl('hw.model') === 'Mac15,7' && sysctl('hw.memsize') === String(36 * 2 ** 30) && sysctl('hw.ncpu') === '12' && /M3 Pro/.test(sysctl('machdep.cpu.brand_string') ?? '');
-  const power = spawnSync('pmset', ['-g', 'ps'], { encoding: 'utf8' }).stdout ?? '';
-  const settings = spawnSync('pmset', ['-g'], { encoding: 'utf8' }).stdout ?? '';
-  const conditions = /'AC Power'/.test(power) && !/lowpowermode\s+1/.test(settings);
+  const { hardware, conditions } = thisMachine();
   return { hardware, conditions };
 }
 
-// A budget counts only on the reference Mac; anywhere else the lane's result is a reading and
-// its status INCONCLUSIVE. Checks the lane's machine and status against what this machine is.
+// The lane's status for the machine it ran on. Off a reference Mac, or on one off mains power or in
+// Low Power Mode, a budget is only a reading: the lane says reference false and why, and is
+// INCONCLUSIVE whatever its numbers. On one, it is `onReference`. These tests don't read the
+// thermal state, which can change during a run, so on a reference Mac the lane may still call
+// itself off-reference, but only by naming the thermal state, and then it is INCONCLUSIVE too.
 export function assertBudgetStatus(lane, onReference) {
-  const machine = referenceMachine();
   const where = JSON.stringify(lane);
-  assert.equal(typeof lane.machine?.reference, 'boolean', `the lane says whether it ran on the reference Mac: ${where}`);
-  if (!machine.hardware || !machine.conditions) {
-    assert.equal(lane.machine.reference, false, `this machine isn't the reference Mac on mains power with Low Power Mode off: ${where}`);
-    assert.equal(lane.status, 'INCONCLUSIVE', `off the reference Mac a budget is only a reading: ${where}`);
+  const here = thisMachine();
+  assert.ok(lane.machine && typeof lane.machine.reference === 'boolean', `the lane says whether it ran on a reference Mac: ${where}`);
+  assert.equal(lane.machine.model, here.model, `the lane names the model this machine reports: ${where}`);
+  if (lane.machine.reference === false) assert.ok(typeof lane.machine.why === 'string' && lane.machine.why.trim(), `an off-reference lane says why: ${where}`);
+  if (!here.hardware || !here.conditions) {
+    const why = here.hardware ? 'is off mains power or in Low Power Mode' : 'is not one of the reference Macs';
+    assert.equal(lane.machine.reference, false, `this machine ${why}, so its timings are only readings: ${where}`);
+    assert.equal(lane.status, 'INCONCLUSIVE', `off the reference Macs a budget never counts, so the lane is INCONCLUSIVE: ${where}`);
   } else if (lane.machine.reference === false) {
-    assert.match(String(lane.machine.why ?? ''), /thermal/i, `on the reference Mac on mains power, only the thermal state can make it off-reference: ${where}`);
-    assert.equal(lane.status, 'INCONCLUSIVE', where);
+    assert.match(lane.machine.why, /thermal/i, `on a reference Mac on mains power with Low Power Mode off, only the thermal state can make the lane off-reference: ${where}`);
+    assert.equal(lane.status, 'INCONCLUSIVE', `a lane off-reference by its thermal state is INCONCLUSIVE: ${where}`);
   } else {
-    assert.equal(lane.status, onReference, where);
+    assert.equal(lane.status, onReference, `on a reference Mac the lane is ${onReference}: ${where}`);
   }
 }
 

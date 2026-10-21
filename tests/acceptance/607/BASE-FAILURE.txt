@@ -1,0 +1,70 @@
+# tests/acceptance/607 at the base commit f346706 (unchanged scripts/agent-harness.mjs), run once on 2026-10-20T22:51Z
+# Machine running the tests: Mac15,7 (the machine the lane judges is the fake sysctl/pmset each test puts first on PATH).
+# Command: node --test tests/acceptance/607/reference-macs.test.mjs
+#
+# 2 of 7 fail, both criterion #607.845595bb, each on its own assertion:
+#  - the Air (Mac15,12, 8 cores, 16 GB, Apple M3, mains, LPM off, nominal) test fails in assertCounts on
+#    assert.equal(lane.machine.reference, true): the base lane says reference false ("model Mac15,12, not Mac15,7; memory is not 36 GB; ...") and INCONCLUSIVE.
+#  - the neither-Mac (Mac15,13) test fails on assert.match(lane.machine.why, /Mac15,12/): the base why names only Mac15,7.
+# The 5 that pass are guards that hold at the base and fail on a wrong fix (see README.md).
+#
+▶ the budgets lane judges the machine against both reference Macs
+  ✖ #607.845595bb on the 13-inch MacBook Air (Mac15,12, 8 cores, 16 GB, Apple M3) the lane counts: reference true and PASS, INITIAL or FAIL, not INCONCLUSIVE (21816.296834ms)
+  ℹ {"status":"INCONCLUSIVE","machine":{"model":"Mac15,12","reference":false,"why":"model Mac15,12, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro"}}
+  ✖ #607.845595bb on a Mac that is neither reference Mac the lane is a reading, and its why names both Mac15,7 and Mac15,12 (19756.970083ms)
+  ℹ {"status":"INCONCLUSIVE","machine":{"model":"Mac15,13","reference":false,"why":"model Mac15,13, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro"}}
+  ✔ #607.845595bb the 16-inch MacBook Pro (Mac15,7, 12 cores, 36 GB, Apple M3 Pro) still counts (20039.585833ms)
+  ℹ {"status":"INITIAL","machine":{"model":"Mac15,7","reference":true}}
+  ✔ #607.845595bb a Mac15,12 with an M3 Pro chip doesn't count (20325.120958ms)
+  ℹ {"status":"INCONCLUSIVE","machine":{"model":"Mac15,12","reference":false,"why":"model Mac15,12, not Mac15,7; memory is not 36 GB; not 12 cores"}}
+  ✔ #607.845595bb a Mac15,12 with 24 GB of memory doesn't count (20483.267917ms)
+  ℹ {"status":"INCONCLUSIVE","machine":{"model":"Mac15,12","reference":false,"why":"model Mac15,12, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro"}}
+  ✔ #607.845595bb a Mac15,12 with 12 cores doesn't count (20906.953458ms)
+  ℹ {"status":"INCONCLUSIVE","machine":{"model":"Mac15,12","reference":false,"why":"model Mac15,12, not Mac15,7; memory is not 36 GB; not an M3 Pro"}}
+  ✔ #607.845595bb a Mac15,12 with battery power doesn't count (20659.198708ms)
+  ℹ {"status":"INCONCLUSIVE","machine":{"model":"Mac15,12","reference":false,"why":"model Mac15,12, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro; on battery"}}
+✖ the budgets lane judges the machine against both reference Macs (22145.686042ms)
+ℹ tests 7
+ℹ suites 1
+ℹ pass 5
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22211.898917
+
+✖ failing tests:
+
+test at tests/acceptance/607/reference-macs.test.mjs:77:3
+✖ #607.845595bb on the 13-inch MacBook Air (Mac15,12, 8 cores, 16 GB, Apple M3) the lane counts: reference true and PASS, INITIAL or FAIL, not INCONCLUSIVE (21816.296834ms)
+  AssertionError [ERR_ASSERTION]: a reference Mac on mains power, Low Power Mode off and nominal thermal state counts: {"lane":"harness budgets","status":"INCONCLUSIVE","reason":"off the reference Mac (model Mac15,12, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro), a budget is only a reading","baseCommit":"1de288cb4c27b33e83f75ef854d49caaaff41088","touched":["scripts/agent-harness.mjs"],"budgets":"<repo>/benchmarks/budgets.json","limits":{"sessionMs":60000,"wholeMs":600000},"machine":{"model":"Mac15,12","reference":false,"why":"model Mac15,12, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro"},"current":{"wholeMs":16751,"sessions":[{"scenario":"held-stop","agent":"claude","elapsedMs":7569},{"scenario":"idle-wake","agent":"claude","elapsedMs":7547},{"scenario":"read-only-job","agent":"claude","elapsedMs":406},{"scenario":"read-only-job","agent":"codex","elapsedMs":1227}]},"base":null,"initialReason":"Issue #48 first measurement: the merge base has no harness. The lane runs only when a change touches the harness, its hook or its launch facts, since each run spends plan usage. It runs every scripted session once, on real agents, and holds each to 60 s and all of them to 10 minutes on the reference Mac. Model latency moves a single run far more than a code change does, so a later merge base's runs are compared with a 100% margin.","over":[],"regressed":[]}
+  
+  false !== true
+  
+      at assertCounts (file://<repo>/tests/acceptance/607/reference-macs.test.mjs:66:10)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/607/reference-macs.test.mjs:78:5)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1442:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:297:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual'
+  }
+
+test at tests/acceptance/607/reference-macs.test.mjs:81:3
+✖ #607.845595bb on a Mac that is neither reference Mac the lane is a reading, and its why names both Mac15,7 and Mac15,12 (19756.970083ms)
+  AssertionError [ERR_ASSERTION]: the why names the 13-inch MacBook Air: model Mac15,13, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/607/reference-macs.test.mjs:85:12)
+      at async Test.run (node:internal/test_runner/test:1054:7)
+      at async Promise.all (index 1)
+      at async Suite.run (node:internal/test_runner/test:1442:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:297:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'model Mac15,13, not Mac15,7; memory is not 36 GB; not 12 cores; not an M3 Pro',
+    expected: /Mac15,12/,
+    operator: 'match'
+  }
