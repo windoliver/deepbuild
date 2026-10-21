@@ -1,5 +1,10 @@
 // Generated from packages/contracts/schemas by generateTypeScript. Do not edit.
 
+/** access@1 */
+export interface Access {
+  words: Array<string>;
+}
+
 /** action.entered@1 */
 export interface ActionEntered {
   v: 1;
@@ -50,7 +55,7 @@ export interface AgentStop {
   id: string;
   kind: "agent.stop";
   subject: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -289,6 +294,46 @@ export interface AskLater {
   log_pos?: number;
   data: {
     until: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** ask.moot@1 */
+export interface AskMoot {
+  v: 1;
+  id: string;
+  kind: "ask.moot";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    because: "check_passed";
+    verdict: string;
+  } | {
+    because: "attempt_replaced";
+    session: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** ask.superseded@1 */
+export interface AskSuperseded {
+  v: 1;
+  id: string;
+  kind: "ask.superseded";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    by: string;
   };
   evidence?: Array<string>;
 }
@@ -1141,7 +1186,7 @@ export interface ReadingBatch {
   id: string;
   kind: "reading.batch";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1161,7 +1206,7 @@ export interface ReadingRecorded {
   id: string;
   kind: "reading.recorded";
   subject?: string;
-  writer: string;
+  writer: "core";
   actor: string;
   scope: string;
   ts: number;
@@ -1296,7 +1341,7 @@ export interface SessionStart {
   id: string;
   kind: "session.start";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1373,6 +1418,25 @@ export interface TaskClosed {
   evidence?: Array<string>;
 }
 
+/** task.completed@1 */
+export interface TaskCompleted {
+  v: 1;
+  id: string;
+  kind: "task.completed";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    agent_task: string;
+    title: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** task.created@1 */
 export interface TaskCreated {
   v: 1;
@@ -1400,7 +1464,7 @@ export interface ToolAfter {
   id: string;
   kind: "tool.after";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1450,7 +1514,7 @@ export interface ToolBefore {
   id: string;
   kind: "tool.before";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
@@ -1519,7 +1583,7 @@ export interface UserAsk {
   id: string;
   kind: "user.ask";
   subject?: string;
-  writer: string;
+  writer: "hook";
   actor: string;
   scope: string;
   ts: number;
