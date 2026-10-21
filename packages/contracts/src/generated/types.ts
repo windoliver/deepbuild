@@ -357,8 +357,6 @@ export interface AgentStop {
   data: {
     turn: number;
     did_work: boolean;
-    cause?: "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
-    reset?: number;
   };
   evidence?: Array<string>;
 }

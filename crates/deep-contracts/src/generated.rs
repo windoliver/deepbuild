@@ -2765,85 +2765,25 @@ impl Contract for AgentStopWriter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AgentStopDataCause {
-    SignInRequired,
-    TokenRefreshFailed,
-    PlanWindowSpent,
-    RateLimited,
-    Refusal,
-    MaxTurns,
-    ContextOverflow,
-    ToolSchemaRejected,
-    AgentCrashed,
-    TimedOut,
-    Unknown,
-}
-
-impl Contract for AgentStopDataCause {
-    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        match deep_contracts::string(value, at)? {
-            "sign_in_required" => Ok(Self::SignInRequired),
-            "token_refresh_failed" => Ok(Self::TokenRefreshFailed),
-            "plan_window_spent" => Ok(Self::PlanWindowSpent),
-            "rate_limited" => Ok(Self::RateLimited),
-            "refusal" => Ok(Self::Refusal),
-            "max_turns" => Ok(Self::MaxTurns),
-            "context_overflow" => Ok(Self::ContextOverflow),
-            "tool_schema_rejected" => Ok(Self::ToolSchemaRejected),
-            "agent_crashed" => Ok(Self::AgentCrashed),
-            "timed_out" => Ok(Self::TimedOut),
-            "unknown" => Ok(Self::Unknown),
-            other => Err(format!("{at}: {other:?} is not one of the listed values")),
-        }
-    }
-    fn to_json(&self) -> Value {
-        Value::String(match self {
-            Self::SignInRequired => "sign_in_required",
-            Self::TokenRefreshFailed => "token_refresh_failed",
-            Self::PlanWindowSpent => "plan_window_spent",
-            Self::RateLimited => "rate_limited",
-            Self::Refusal => "refusal",
-            Self::MaxTurns => "max_turns",
-            Self::ContextOverflow => "context_overflow",
-            Self::ToolSchemaRejected => "tool_schema_rejected",
-            Self::AgentCrashed => "agent_crashed",
-            Self::TimedOut => "timed_out",
-            Self::Unknown => "unknown",
-        }.to_string())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentStopData {
     pub turn: i64,
     pub did_work: bool,
-    pub cause: Option<AgentStopDataCause>,
-    pub reset: Option<i64>,
 }
 
 impl Contract for AgentStopData {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
-        let members = deep_contracts::members(value, at, &["turn", "did_work", "cause", "reset"])?;
+        let members = deep_contracts::members(value, at, &["turn", "did_work"])?;
         deep_contracts::check_member(members, at, "turn", &RULE_7)?;
-        deep_contracts::check_member(members, at, "reset", &RULE_7)?;
         Ok(Self {
             turn: deep_contracts::required(members, at, "turn")?,
             did_work: deep_contracts::required(members, at, "did_work")?,
-            cause: deep_contracts::optional(members, at, "cause")?,
-            reset: deep_contracts::optional(members, at, "reset")?,
         })
     }
     fn to_json(&self) -> Value {
         let mut members = Vec::new();
         members.push(("turn".to_string(), self.turn.to_json()));
         members.push(("did_work".to_string(), self.did_work.to_json()));
-        if let Some(value) = &self.cause {
-            members.push(("cause".to_string(), value.to_json()));
-        }
-        if let Some(value) = &self.reset {
-            members.push(("reset".to_string(), value.to_json()));
-        }
         Value::Object(members)
     }
 }
