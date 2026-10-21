@@ -338,13 +338,16 @@ test('ambient input through the filesystem, the environment, the network or a pr
   // a socket or a child process is host state a check could read; a grouped import of the
   // module and a bare `fs::` after `use std::*` are the same reads.
   const lib = `${TWIN}\nuse std::{env, io::Write};\nuse std::*;\n\npub fn entropy() -> Vec<u8> {\n    std::fs::read("/dev/urandom").unwrap_or_default() // plant: fs\n}\n\npub fn setting() -> Option<String> {\n    env::var("DEEP_SEED").ok() // plant: env (grouped import above)\n}\n\npub fn bare() -> bool {\n    fs::metadata("/").is_ok() // plant: bare fs\n}\n\npub fn host() -> Option<u32> {\n    std::process::id().checked_add(0) // plant: process\n}\n\npub fn wire() -> bool {\n    std::net::TcpStream::connect("127.0.0.1:1").is_ok() // plant: net\n}\n\npub fn cores() -> usize {\n    std::thread::available_parallelism().map_or(1, usize::from) // plant: thread\n}\n\nuse std::thread as workers; // plant: thread alias\n\npub fn more_cores() -> usize {\n    workers::available_parallelism().map_or(1, usize::from)\n}\n\npub fn own(code: i32) -> usize {\n    if code != 0 {\n        std::process::exit(code); // plant: exit in a library\n    }\n    std::env::args().count() // plant: args in a library\n}\n`;
-  // The command line and the exit code are a binary's own input and output, so they stay in a
-  // binary target's root and nowhere else: a library reading them is a check reading its process.
-  const main = 'fn main() {\n    if std::env::args().count() > 1 { // twin: command line\n        std::process::exit(2); // twin: exit code\n    }\n}\n';
+  // The command line, the exit code and an output file written where the input names are a
+  // binary's own input and output, so they stay in a binary target's root and nowhere else: a
+  // library reading them is a check reading its process. A read of a file is ambient anywhere.
+  const main = 'fn main() {\n    if std::env::args().count() > 1 { // twin: command line\n        std::process::exit(2); // twin: exit code\n    }\n    let _ = std::fs::write("out", b"x"); // twin: own output file\n    let _ = std::fs::read("in"); // plant: a read in the binary\n}\n';
   const at = (mark) => lib.split('\n').findIndex((text) => text.includes(mark)) + 1;
   const { status, output } = lint(t, lib, { extra: { 'src/main.rs': main } });
   assert.equal(status, 1, output);
-  assert.doesNotMatch(output, /^FAIL canvas-lint: deep-canvas-planted\/src\/main\.rs:/m, output);
+  const mainAt = main.split('\n').findIndex((text) => text.includes('// plant: a read in the binary')) + 1;
+  assert.match(output, new RegExp(`^FAIL canvas-lint: deep-canvas-planted/src/main\\.rs:${mainAt}:\\d+ the fs module`, 'm'), output);
+  assert.equal(output.match(/^FAIL canvas-lint: deep-canvas-planted\/src\/main\.rs:/gm).length, 1, output);
   assert.match(output, new RegExp(`^FAIL canvas-lint: deep-canvas-planted/src/lib\\.rs:${at('// plant: exit in a library')}:\\d+ the process module`, 'm'), output);
   assert.match(output, new RegExp(`^FAIL canvas-lint: deep-canvas-planted/src/lib\\.rs:${at('// plant: args in a library')}:\\d+ the env module`, 'm'), output);
   for (const mark of ['// plant: fs', '// plant: bare fs', '// plant: process', '// plant: net', '// plant: thread', '// plant: thread alias']) assert.match(output, new RegExp(`^FAIL canvas-lint: deep-canvas-planted/src/lib\\.rs:${at(mark)}:\\d+ (the|a grouped import of the) (fs|env|net|process|thread) module`, 'm'), output);

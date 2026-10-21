@@ -118,11 +118,11 @@ impl Shape for DocShape<'_> {
             ["safe"] => Some(&d.safe),
             ["locale"] => Some(&d.locale),
             ["aspect"] => {
-                // Letterbox for films and 2D documents, extend for 3D scenes and figures.
                 let profile = member(self.doc, "profile").and_then(Value::as_str);
-                Some(match profile {
-                    Some("figure") | Some("scene") | Some("world") => &d.extend,
-                    _ => &d.letterbox,
+                Some(if extends_by_default(profile) {
+                    &d.extend
+                } else {
+                    &d.letterbox
                 })
             }
             ["requires"] | ["look"] | ["budget"] | ["assets"] | ["requires", "modules"] => {
@@ -135,6 +135,12 @@ impl Shape for DocShape<'_> {
             _ => None,
         }
     }
+}
+
+/// The envelope's `aspect` default: extend for 3D scenes and figures, letterbox for films and
+/// 2D documents.
+pub fn extends_by_default(profile: Option<&str>) -> bool {
+    matches!(profile, Some("figure") | Some("scene") | Some("world"))
 }
 
 /// A document's canonical text and the SHA-256 of its bytes.

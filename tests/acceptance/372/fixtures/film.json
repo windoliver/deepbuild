@@ -1,0 +1,53 @@
+{
+  "format": 1,
+  "id": "doc-372-film",
+  "profile": "film",
+  "title": "Letterbox film",
+  "description": "A still 1920 by 1080 film of flat rectangles: a backdrop, two blocks and a marker in each corner.",
+  "size": [1920, 1080],
+  "camera": "cam",
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [960, 540, 0], "view_width": 1920 }
+    },
+    "backdrop": {
+      "id": "backdrop", "kind": "test.rect@1", "layer": "main", "name": "Backdrop", "order": "a1",
+      "params": { "w": 1920, "h": 1080, "fill": [40, 44, 52] },
+      "at": { "pos": [0, 0, 0] }
+    },
+    "red": {
+      "id": "red", "kind": "test.rect@1", "layer": "main", "name": "Red block", "order": "a2",
+      "params": { "w": 640, "h": 360, "fill": [200, 40, 40] },
+      "at": { "pos": [480, 272, 0] }
+    },
+    "green": {
+      "id": "green", "kind": "test.rect@1", "layer": "main", "name": "Green block", "order": "a3",
+      "params": { "w": 320, "h": 240, "fill": [40, 180, 80] },
+      "at": { "pos": [1280, 640, 0] }
+    },
+    "tl": {
+      "id": "tl", "kind": "test.rect@1", "layer": "main", "name": "Top left marker", "order": "a4",
+      "params": { "w": 64, "h": 64, "fill": [250, 200, 0] },
+      "at": { "pos": [0, 0, 0] }
+    },
+    "tr": {
+      "id": "tr", "kind": "test.rect@1", "layer": "main", "name": "Top right marker", "order": "a5",
+      "params": { "w": 64, "h": 64, "fill": [0, 200, 250] },
+      "at": { "pos": [1856, 0, 0] }
+    },
+    "bl": {
+      "id": "bl", "kind": "test.rect@1", "layer": "main", "name": "Bottom left marker", "order": "a6",
+      "params": { "w": 64, "h": 64, "fill": [250, 0, 200] },
+      "at": { "pos": [0, 1016, 0] }
+    },
+    "br": {
+      "id": "br", "kind": "test.rect@1", "layer": "main", "name": "Bottom right marker", "order": "a7",
+      "params": { "w": 64, "h": 64, "fill": [255, 255, 255] },
+      "at": { "pos": [1856, 1016, 0] }
+    }
+  }
+}
