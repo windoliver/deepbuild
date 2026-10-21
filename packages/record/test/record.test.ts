@@ -732,3 +732,55 @@ describe('one event ID is appended one at a time', () => {
     expect(await twice('first line', 'other line')).toEqual({ results: ['fulfilled', 'rejected'], stored: 1 });
   });
 });
+
+describe('a claim lost in the cut and replayed after the restart', () => {
+  it('reads INVALID though an earlier claim of its session was judged at recovery', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const c1 = event('claim.made', T0, undefined);
+    await r.append(app(S), c1);
+    // A FULL commit makes C1 durable; C2 and the tool events after it are in the NORMAL tail the cut drops.
+    const B = ulidAt(T0 + 5);
+    await r.append(hook(B), event('session.start', T0 + 5, undefined));
+    const v = data('verdict.made') as Record<string, string>;
+    await r.append(core(B), { v: 1, id: ulidAt(T0 + 6), kind: 'verdict.made', ts: T0 + 6, subject: v.claim!, data: v as unknown as JsonValue });
+    await r.append(hook(S), event('tool.after', T0 + 10, seqAt(T0 + 10)));
+    const c2 = event('claim.made', T0 + 11, undefined, { attempt: 2 });
+    await r.append(app(S), c2);
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    // The spool replays C2 with its own ID and stamp.
+    await r.append(app(S), c2);
+    const judged = (await r.table('claims')).rows.filter((x) => x.id === c1.id || x.id === c2.id).map((x) => [x.id === c1.id ? 'c1' : 'c2', x.verdict_id !== null]);
+    // A record that clears the session's loss at C1's verdict leaves the replayed C2 open.
+    expect(judged).toEqual([['c1', true], ['c2', true]]);
+  });
+});
+
+describe('the cut sessions outlast a clean restart', () => {
+  it('a claim lost in the cut, replayed after a clean stop and start, reads INVALID', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    // C1 survives the cut, and its verdict at recovery clears the session's loss mark.
+    await r.append(app(S), event('claim.made', T0, undefined));
+    const B = ulidAt(T0 + 5);
+    await r.append(hook(B), event('session.start', T0 + 5, undefined));
+    const v = data('verdict.made') as Record<string, string>;
+    await r.append(core(B), { v: 1, id: ulidAt(T0 + 6), kind: 'verdict.made', ts: T0 + 6, subject: v.claim!, data: v as unknown as JsonValue });
+    const c2 = event('claim.made', T0 + 11, undefined, { attempt: 2 });
+    await r.append(app(S), c2);
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    await r.close();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 9000, storage });
+    open.push(r);
+    await r.append(app(S), c2);
+    // A record that keeps the cut's sessions only in memory forgets them at the clean restart.
+    expect((await r.table('claims')).rows.find((x) => x.id === c2.id)?.verdict_id ?? null).not.toBeNull();
+  });
+});

@@ -202,6 +202,10 @@ class SqliteRecord implements RecordStore {
   private readonly byId = new Map<string, Promise<unknown>>();
   /** Set after a start with no clean stop: a session this record never kept may have lost its events. */
   private unclean = false;
+  /** Sessions active at the cut, and when this run began: a claim of theirs minted before it, replayed from a
+   *  spool, may stand on lost events, whatever verdict an earlier claim of theirs got. */
+  private readonly cutSessions = new Set<string>();
+  private restartAt = 0;
   private next = 1;
   private blockEnd = 1;
 
@@ -240,6 +244,8 @@ class SqliteRecord implements RecordStore {
     const meta = new Map((this.db.prepare('SELECT key, value FROM meta').all() as { key: string; value: string }[]).map((r) => [r.key, r.value]));
     this.next = Number(meta.get('log_block_end') ?? 1);
     for (const row of this.db.prepare('SELECT session FROM lost_sessions').all() as { session: string }[]) this.lost.add(row.session);
+    for (const id of JSON.parse(meta.get('cut_sessions') ?? '[]') as string[]) this.cutSessions.add(id);
+    this.restartAt = Number(meta.get('restart_at') ?? 0);
     this.blockEnd = this.next;
     const wasRunning = meta.get('state') === 'running';
     const durable = Number(meta.get('durable') ?? 0);
@@ -283,7 +289,13 @@ class SqliteRecord implements RecordStore {
     const active = this.db.prepare("SELECT id FROM sessions WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ?)").all(lastFull) as { id: string }[];
     const mark = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     this.backend.commit(this.db, 'normal', () => { for (const { id } of active) mark.run(id); });
-    for (const { id } of active) this.lost.add(id);
+    for (const { id } of active) {
+      this.lost.add(id);
+      this.cutSessions.add(id);
+    }
+    this.restartAt = this.options.now();
+    // Kept across later starts: a spool may replay a claim from before the cut after a clean restart too.
+    this.commitMeta({ cut_sessions: JSON.stringify([...this.cutSessions]), restart_at: String(this.restartAt) });
     const open = this.db.prepare('SELECT id, session_id FROM claims WHERE verdict_id IS NULL ORDER BY created, id').all() as { id: string; session_id: string | null }[];
     // Chosen before any verdict: a verdict clears its session's mark, and every open claim of a lost session is INVALID.
     const judged = open.filter((claim) => !claim.session_id || this.lost.has(claim.session_id));
@@ -499,7 +511,8 @@ class SqliteRecord implements RecordStore {
       throw error instanceof RecordError ? error : new RecordError('storage', `the storage refused the write: ${message}`);
     }
     for (const outcome of outcomes) {
-      if (outcome.ok && !outcome.appended.existing && outcome.prepared.input.kind === 'claim.made' && outcome.prepared.session && this.lost.has(outcome.prepared.session)) this.invalidate(outcome.prepared.input.id);
+      if (outcome.ok && !outcome.appended.existing && outcome.prepared.input.kind === 'claim.made' && outcome.prepared.session
+        && (this.lost.has(outcome.prepared.session) || (this.cutSessions.has(outcome.prepared.session) && outcome.prepared.input.ts < this.restartAt))) this.invalidate(outcome.prepared.input.id);
     }
     return outcomes;
   }
