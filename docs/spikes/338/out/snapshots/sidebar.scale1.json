@@ -1,0 +1,155 @@
+{
+  "window": {
+    "size": [
+      1512,
+      982
+    ],
+    "scale": 1
+  },
+  "tree": {
+    "role": "window",
+    "name": null,
+    "value": null,
+    "bounds": [
+      0,
+      0,
+      1512,
+      982
+    ],
+    "children": [
+      {
+        "role": "label",
+        "name": "Sessions",
+        "value": null,
+        "bounds": [
+          8,
+          8,
+          244,
+          32
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 1 · 01MCBH57",
+        "value": null,
+        "bounds": [
+          8,
+          40,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 2 · 01MCBH58",
+        "value": null,
+        "bounds": [
+          8,
+          64,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 3 · 01MCBH59",
+        "value": null,
+        "bounds": [
+          8,
+          88,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 4 · 01MCBH5A",
+        "value": null,
+        "bounds": [
+          8,
+          112,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 5 · 01MCBH5B",
+        "value": null,
+        "bounds": [
+          8,
+          136,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 6 · 01MCBH5C",
+        "value": null,
+        "bounds": [
+          8,
+          160,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 7 · 01MCBH5D",
+        "value": null,
+        "bounds": [
+          8,
+          184,
+          244,
+          24
+        ],
+        "children": []
+      },
+      {
+        "role": "label",
+        "name": "Home",
+        "value": null,
+        "bounds": [
+          268,
+          8,
+          1236,
+          32
+        ],
+        "children": []
+      },
+      {
+        "role": "label",
+        "name": "40 asks need you",
+        "value": null,
+        "bounds": [
+          268,
+          40,
+          1236,
+          18
+        ],
+        "children": []
+      },
+      {
+        "role": "label",
+        "name": "40 asks open · virtual clock 1800000000000",
+        "value": null,
+        "bounds": [
+          268,
+          870,
+          1236,
+          18
+        ],
+        "children": []
+      }
+    ]
+  },
+  "items": []
+}

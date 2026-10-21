@@ -1,0 +1,6 @@
+# Issue #337: gpui-kit's own workspace patch, which a dependency's [patch] can't carry.
+# LLRT names `rquickjs`; this routes it to gpui-shell's facade so both share one VM. It lives
+# here, not in Cargo.toml, because it replaces rquickjs alone: gpui-kit and gpui-shell come from
+# upstream at a pinned commit, with no fork (#338 checks the manifests for a [patch] table).
+[patch.crates-io]
+rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }
