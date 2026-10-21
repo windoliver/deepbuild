@@ -732,3 +732,51 @@ describe('one event ID is appended one at a time', () => {
     expect(await twice('first line', 'other line')).toEqual({ results: ['fulfilled', 'rejected'], stored: 1 });
   });
 });
+
+describe('a new session after an unclean start whose prompt arrives before its start', () => {
+  it('its claim is not INVALID, live and after a rebuild', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const B = ulidAt(T0 - 2000);
+    await r.append(hook(B), event('session.start', T0 - 2000, undefined));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    const D = ulidAt(T0 + 6000);
+    // Two hook processes: the prompt's request reaches the hub first.
+    await Promise.all([
+      r.append(hook(D), event('user.ask', T0 + 6001, seqAt(T0 + 6001))),
+      r.append(hook(D), event('session.start', T0 + 6000, undefined)),
+    ]);
+    const claim = event('claim.made', T0 + 6002, undefined);
+    await r.append(app(D), claim);
+    for (const when of ['live', 'rebuilt']) {
+      if (when === 'rebuilt') await r.rebuild();
+      // A record that judges a session lost by which request came first marks D lost at its prompt.
+      expect([when, (await r.table('claims')).rows.find((x) => x.id === claim.id)?.verdict_id ?? null]).toEqual([when, null]);
+    }
+  });
+});
+
+describe('a session whose start was cut is judged once', () => {
+  it('its first claim after the restart is INVALID, its next one stands on its own', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const B = ulidAt(T0 - 2000);
+    await r.append(hook(B), event('session.start', T0 - 2000, undefined));
+    const v = data('verdict.made') as Record<string, string>;
+    await r.append(core(B), { v: 1, id: ulidAt(T0 - 1500), kind: 'verdict.made', ts: T0 - 1500, subject: v.claim!, data: v as unknown as JsonValue });
+    const C = ulidAt(T0 - 1000);
+    await r.append(hook(C), event('session.start', T0 - 1000, undefined));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    const first = event('claim.made', T0 + 6001, undefined);
+    await r.append(app(C), first);
+    const second = event('claim.made', T0 + 7001, undefined, { attempt: 2 });
+    await r.append(app(C), second);
+    const judged = (await r.table('claims')).rows.filter((x) => x.id === first.id || x.id === second.id).map((x) => [x.id === first.id ? 'first' : 'second', x.verdict_id !== null]);
+    // A record that asks only whether the start is in the log judges every later claim INVALID too.
+    expect(judged).toEqual([['first', true], ['second', false]]);
+  });
+});

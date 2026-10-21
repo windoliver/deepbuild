@@ -314,6 +314,16 @@ class SqliteRecord implements RecordStore {
     if (session) this.lost.delete(session);
   }
 
+  /**
+   * After an unclean start, a session whose start isn't in the log lost it in the cut, with no durable
+   * trace: an acknowledged event is never respooled. Asked at its claim, whatever order its hooks arrived in.
+   */
+  private startCut(session: string): boolean {
+    // Judged once: after the record's own loss verdict on one of its claims, the next stands on its own.
+    return this.unclean && !this.db.prepare("SELECT 1 FROM events WHERE session_id = ? AND kind = 'session.start' LIMIT 1").get(session)
+      && !this.db.prepare("SELECT 1 FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE c.session_id = ? AND v.reasons LIKE '%events lost%' LIMIT 1").get(session);
+  }
+
   /** A session's event failed to reach the log: its next claim reads INVALID, across a clean stop too. */
   private markLost(session: string): void {
     this.lost.add(session);
@@ -393,11 +403,6 @@ class SqliteRecord implements RecordStore {
   }
   private async appendNow(connection: Connection, input: EventInput): Promise<Appended> {
     const prepared = this.prepare(connection, input);
-    // After an unclean start, a hook event of a session with no row here, and not its start, means its
-    // earlier events were cut with no durable trace: its next claim reads INVALID.
-    if (this.unclean && connection.writer === 'hook' && prepared.session && input.kind !== 'session.start' && !this.lost.has(prepared.session)
-      && !this.queue.some((q) => q.prepared.session === prepared.session && q.prepared.input.kind === 'session.start')
-      && !this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(prepared.session)) this.markLost(prepared.session);
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
       // An event the log already holds needs no store: its retry is the same event, or a conflict.
@@ -499,7 +504,8 @@ class SqliteRecord implements RecordStore {
       throw error instanceof RecordError ? error : new RecordError('storage', `the storage refused the write: ${message}`);
     }
     for (const outcome of outcomes) {
-      if (outcome.ok && !outcome.appended.existing && outcome.prepared.input.kind === 'claim.made' && outcome.prepared.session && this.lost.has(outcome.prepared.session)) this.invalidate(outcome.prepared.input.id);
+      if (outcome.ok && !outcome.appended.existing && outcome.prepared.input.kind === 'claim.made' && outcome.prepared.session
+        && (this.lost.has(outcome.prepared.session) || this.startCut(outcome.prepared.session))) this.invalidate(outcome.prepared.input.id);
     }
     return outcomes;
   }
