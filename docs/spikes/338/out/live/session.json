@@ -1,0 +1,171 @@
+{
+  "window": {
+    "size": [
+      1512,
+      982
+    ],
+    "scale": 2
+  },
+  "tree": {
+    "role": "window",
+    "name": null,
+    "value": null,
+    "bounds": [
+      0,
+      0,
+      3024,
+      1964
+    ],
+    "children": [
+      {
+        "role": "label",
+        "name": "Sessions",
+        "value": null,
+        "bounds": [
+          16,
+          16,
+          488,
+          64
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 1 · 01MCBH57",
+        "value": null,
+        "bounds": [
+          16,
+          80,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 2 · 01MCBH58",
+        "value": null,
+        "bounds": [
+          16,
+          128,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 3 · 01MCBH59",
+        "value": null,
+        "bounds": [
+          16,
+          176,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 4 · 01MCBH5A",
+        "value": null,
+        "bounds": [
+          16,
+          224,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 5 · 01MCBH5B",
+        "value": null,
+        "bounds": [
+          16,
+          272,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 6 · 01MCBH5C",
+        "value": null,
+        "bounds": [
+          16,
+          320,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "button",
+        "name": "Session 7 · 01MCBH5D",
+        "value": null,
+        "bounds": [
+          16,
+          368,
+          488,
+          48
+        ],
+        "children": []
+      },
+      {
+        "role": "label",
+        "name": "Session 01MCBH57D812FQ88XJ33AV9KCE",
+        "value": null,
+        "bounds": [
+          536,
+          16,
+          2472,
+          64
+        ],
+        "children": []
+      },
+      {
+        "role": "label",
+        "name": "Hours to each deadline: 10 points",
+        "value": null,
+        "bounds": [
+          536,
+          480,
+          2472,
+          36
+        ],
+        "children": []
+      },
+      {
+        "role": "label",
+        "name": "40 asks open · virtual clock 1800000000000",
+        "value": null,
+        "bounds": [
+          536,
+          1740,
+          2472,
+          36
+        ],
+        "children": []
+      }
+    ]
+  },
+  "items": [
+    {
+      "id": "session-line",
+      "value": [
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        4.0
+      ]
+    }
+  ]
+}

@@ -135,13 +135,15 @@ function compile(root: Schema): Check {
   const record = (schema: Schema): Check => {
     const properties = new Map(Object.entries(schema.properties as Schema).map(([key, s]) => [key, { check: node(s as Schema), at: segment(key) }]));
     const required = ((schema.required ?? []) as string[]).map((key) => ({ key, at: segment(key) }));
+    // A record that allows any other field (the lint keeps these out of the published schemas).
+    const open = schema.additionalProperties === true;
     return (value, path, out) => {
       if (!isObject(value)) return void out.push(issue('type', path, value));
       for (const { key, at } of required) if (!Object.hasOwn(value, key)) out.push(issue('required', path + at, undefined));
       for (const key of Object.keys(value)) {
         const property = properties.get(key);
         if (property) property.check(value[key], path + property.at, out);
-        else out.push(issue('unlisted_field', path + segment(key), value[key]));
+        else if (!open) out.push(issue('unlisted_field', path + segment(key), value[key]));
       }
     };
   };

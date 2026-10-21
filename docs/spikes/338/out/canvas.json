@@ -1,0 +1,14 @@
+{
+  "component": "Canvas",
+  "arguments": [
+    {
+      "name": "scene",
+      "type": "entity"
+    },
+    {
+      "name": "color",
+      "type": "optional"
+    }
+  ],
+  "retainedState": true
+}

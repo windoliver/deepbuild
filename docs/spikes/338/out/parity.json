@@ -1,0 +1,34 @@
+{
+  "needs-you": {
+    "result": "pass"
+  },
+  "sidebar": {
+    "result": "pass"
+  },
+  "session": {
+    "result": "pass"
+  },
+  "scale1": {
+    "needs-you": {
+      "result": "fail",
+      "firstNode": {
+        "index": 0
+      },
+      "why": "the window differs: [1512, 982] at 2x vs [1512, 982] at 1x"
+    },
+    "sidebar": {
+      "result": "fail",
+      "firstNode": {
+        "index": 0
+      },
+      "why": "the window differs: [1512, 982] at 2x vs [1512, 982] at 1x"
+    },
+    "session": {
+      "result": "fail",
+      "firstNode": {
+        "index": 0
+      },
+      "why": "the window differs: [1512, 982] at 2x vs [1512, 982] at 1x"
+    }
+  }
+}

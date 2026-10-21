@@ -1,0 +1,112 @@
+Acceptance tests for #338 on the base 2307398 (no implementation), run on 2026-10-20 with node v24.22.0
+in the checkout of the base with only tests/acceptance/338/ added (npm ci run for vitest; no cargo build):
+
+  node --test tests/acceptance/338/spike.test.mjs tests/acceptance/338/spike.live.test.mjs
+  npx vitest run tests/acceptance/338
+
+Trimmed to each test's result and error; the stack frames, which name local paths, are left out.
+Every test fails for the expected reason: the base has no spike record at docs/spikes/338/record.json, so
+there is no replica, no fixture record of asks, no fixture Needs you panel, no registry check and no decision.
+
+✖ #338.6257cd5b the replica launches headless now, under 2 s on every run, and writes each shipped view's snapshot and screenshot (27.263875ms)
+✖ #338.ed0f5115 the fixture panel's rows, written by the run now, equal the rows recomputed from the fixture's events, and each planted view fails naming an ask (0.466209ms)
+✖ #338.78331b15 the snapshots the replica writes now equal the tracked live trees node for node, and the scale-1 replica differs at the node the run names (0.302417ms)
+✖ scope: every slot's panel loads through the registry now, and the canvas component is registered with its argument schemas and retained state (0.671542ms)
+✖ #338.6257cd5b a replica launched headless at the reference window, under 2 s on every run, with a text snapshot of roles, names and canvas item IDs and a screenshot of each shipped view (2.834417ms)
+✖ #338.ed0f5115 the fixture record holds 40 open asks of every kind, one in Later, one held for an unread message, five folded into an exception, one superseded and one moot, as of its log_pos on the virtual clock (0.371958ms)
+✖ #338.ed0f5115 the fixture panel that replaces Needs you lists the inbox projection's rows, recomputed from the fixture's events, row for row, and passes needs-you@1; the planted views that cap at 20, drop the folded asks, list the superseded one or hide the newest each fail, naming the ask (0.297667ms)
+✖ #338.78331b15 for Needs you, the sidebar and a session page, the replica's snapshot with bounds equals the live accessibility tree captured on the reference Mac, node for node, and a replica laid out at scale 1 fails, naming the first node that differs (0.191542ms)
+✖ scope: gpui-shell's panel registry fills every slot of the app (a sidebar item, a home gadget, a tab in any panel, the line) and replaces the shipped Needs you, each from a tracked panel, and the decision says it covers them (0.744875ms)
+✖ scope: the canvas is a component in gpui-shell's registry with argument schemas and a retained-state handle, and gpui-kit and gpui-shell come from upstream at a commit, with no fork (0.656791ms)
+✖ scope: the decision records the finished macOS GPU-layer spike, the IOSurface handoff and its cost, with what the registry and the replica do, in the technical design (0.355667ms)
+✖ scope: the headless command runs in the local preflight, and nothing runs in CI (0.218834ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 0
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+✖ failing tests:
+
+test at tests/acceptance/338/spike.live.test.mjs:20:1
+✖ #338.6257cd5b the replica launches headless now, under 2 s on every run, and writes each shipped view's snapshot and screenshot (27.263875ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.live.test.mjs:25:1
+✖ #338.ed0f5115 the fixture panel's rows, written by the run now, equal the rows recomputed from the fixture's events, and each planted view fails naming an ask (0.466209ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.live.test.mjs:30:1
+✖ #338.78331b15 the snapshots the replica writes now equal the tracked live trees node for node, and the scale-1 replica differs at the node the run names (0.302417ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.live.test.mjs:35:1
+✖ scope: every slot's panel loads through the registry now, and the canvas component is registered with its argument schemas and retained state (0.671542ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:20:1
+✖ #338.6257cd5b a replica launched headless at the reference window, under 2 s on every run, with a text snapshot of roles, names and canvas item IDs and a screenshot of each shipped view (2.834417ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:25:1
+✖ #338.ed0f5115 the fixture record holds 40 open asks of every kind, one in Later, one held for an unread message, five folded into an exception, one superseded and one moot, as of its log_pos on the virtual clock (0.371958ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:29:1
+✖ #338.ed0f5115 the fixture panel that replaces Needs you lists the inbox projection's rows, recomputed from the fixture's events, row for row, and passes needs-you@1; the planted views that cap at 20, drop the folded asks, list the superseded one or hide the newest each fail, naming the ask (0.297667ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:34:1
+✖ #338.78331b15 for Needs you, the sidebar and a session page, the replica's snapshot with bounds equals the live accessibility tree captured on the reference Mac, node for node, and a replica laid out at scale 1 fails, naming the first node that differs (0.191542ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:39:1
+✖ scope: gpui-shell's panel registry fills every slot of the app (a sidebar item, a home gadget, a tab in any panel, the line) and replaces the shipped Needs you, each from a tracked panel, and the decision says it covers them (0.744875ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:43:1
+✖ scope: the canvas is a component in gpui-shell's registry with argument schemas and a retained-state handle, and gpui-kit and gpui-shell come from upstream at a commit, with no fork (0.656791ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:48:1
+✖ scope: the decision records the finished macOS GPU-layer spike, the IOSurface handoff and its cost, with what the registry and the replica do, in the technical design (0.355667ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+test at tests/acceptance/338/spike.test.mjs:52:1
+✖ scope: the headless command runs in the local preflight, and nothing runs in CI (0.218834ms)
+  AssertionError [ERR_ASSERTION]: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+
+RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/338/fixture.test.ts (1 test | 1 failed) 71ms
+   ❯ #338.ed0f5115 the fixture record of asks is made of catalogued events (1)
+     × every event validates against its kind's published schema, log_pos included 67ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  19:30:51
+   Duration  795ms (transform 46%, import 36%, tests 17%, worker 1%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/338/fixture.test.ts > #338.ed0f5115 the fixture record of asks is made of catalogued events > every event validates against its kind's published schema, log_pos included
+Error: no spike record at docs/spikes/338/record.json: the spike hasn't been recorded
+ ❯ fixture tests/acceptance/338/fixture.test.ts:20:38
+ ❯ tests/acceptance/338/fixture.test.ts:29:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+The validator's own tests, which plant wrong spikes in a temporary git repo, pass at the base as they must:
+
+  node --test tests/acceptance/338/validator.test.mjs
+ℹ tests 108
+ℹ pass 108
+ℹ fail 0
+
+The vitest check was also tried once on a planted fixture (a record naming a fixture of three lines: a valid
+ask.created with log_pos, an ask.created missing its options, recommended, fallback, default, provisional,
+owner, key and pinned_to, and an ask.folded, a kind the catalogue lacks); it failed naming lines 2 and 3 and
+their issues, and the planted files were removed again.

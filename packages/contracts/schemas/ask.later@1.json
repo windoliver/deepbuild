@@ -30,7 +30,12 @@
         "cli",
         "core"
       ],
-      "description": "Who wrote it, from the connection; only these writers append this kind."
+      "description": "Who wrote it, from the connection; only these writers append this kind.",
+      "x-closure": {
+        "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+        "reopens": "a new major of this schema",
+        "mark": "exhaustive"
+      }
     },
     "actor": {
       "type": "string",

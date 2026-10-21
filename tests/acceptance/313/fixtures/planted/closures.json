@@ -1,0 +1,7 @@
+{
+  "registry": { "registry": "doctor.code@1" },
+  "closed": { "closed": "record", "reopens": "a release of the record's schema", "mark": "exhaustive" },
+  "extensible": { "closed": "record", "reopens": "a minor that names a new cause", "mark": "extensible" },
+  "open": "open",
+  "unmarked": { "closed": "record", "reopens": "never" }
+}
