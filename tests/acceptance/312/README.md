@@ -316,4 +316,9 @@ fixtures and `digests.json` on main, and never the implementing PR or its branch
   the cause → 1 fails ("a message beside the cause"). At the first draft's base, `agent.stop@2` isn't catalogued,
   so every test fails at `kindSchema('agent.stop', 2)`.
 - **On main**, `stop.adapters.test.ts` fails at its import of `packages/adapters/src/index.ts`, as every other
-  suite here does at the base (BASE-FAILURE.txt); that is expected until #312's implementation lands.
+  suite here does at the base (BASE-FAILURE.txt); that is expected until #312's implementation lands. The
+  preflight unit lane runs `tests/**/*.test.ts` (`scripts/lanes.mjs`), so this redraft must land together with
+  or after the implementation, never before it on its own.
+- **Surface note.** `StopReading.reset` in the surface above is the adapters' TypeScript reading, left as the
+  first draft named it; the published field it maps onto is `agent.stop@2`'s `data.plan_resets`. No test here
+  reads `StopReading`, so the redraft doesn't rename it.

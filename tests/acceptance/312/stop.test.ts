@@ -12,10 +12,13 @@ import { deleteAt, expectAccepted, expectRefused, firstFixture, getAt, kindSchem
 const STOP = () => kindSchema('agent.stop', 2);
 /** A reset time, in ms since the epoch. */
 const RESETS = 1760031451000;
+/** The first published agent.stop@2 without its reset, read once; setAt and deleteAt copy it. */
+let base: JsonValue | undefined;
 /** A published stop with its cause replaced; plan_window_spent brings its reset, every other cause leaves it out. */
 function withCause(cause: JsonValue): JsonValue {
-  let stop = setAt(firstFixture(STOP()), '/data/cause', cause);
-  if (getAt(stop, '/data/plan_resets') !== undefined) stop = deleteAt(stop, '/data/plan_resets');
+  base ??= firstFixture(STOP());
+  if (getAt(base, '/data/plan_resets') !== undefined) base = deleteAt(base, '/data/plan_resets');
+  const stop = setAt(base, '/data/cause', cause);
   return cause === 'plan_window_spent' ? setAt(stop, '/data/plan_resets', RESETS) : stop;
 }
 
@@ -67,7 +70,7 @@ describe('AC2 a stop event whose cause isn\'t in the closed set fails its schema
 
   it('AC2 every reset time in ms is taken with plan_window_spent, and no text or negative is (1,000 cases)', () => {
     const spent = withCause('plan_window_spent');
-    fc.assert(fc.property(fc.oneof(fc.integer({ min: 0 }), fc.integer({ max: -1 }), fc.string()), (resets) => {
+    fc.assert(fc.property(fc.oneof(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), fc.integer({ max: -1 }), fc.string()), (resets) => {
       const result = validate(STOP(), setAt(spent, '/data/plan_resets', resets));
       if (typeof resets === 'number' && resets >= 0) expectAccepted(result, `plan_resets ${resets}`);
       else expectRefused(result, '/data/plan_resets', `plan_resets ${JSON.stringify(resets)}`);
