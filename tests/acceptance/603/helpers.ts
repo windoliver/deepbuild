@@ -33,8 +33,8 @@ export const CAUSES = [
 ] as const;
 export type Cause = (typeof CAUSES)[number];
 
-/** agent.stop@1's frozen d1 digest at the base commit f346706 (packages/contracts/digests.json). */
-export const BASE_V1_DIGEST = 'd1:19afe1534d9ceb89b7c497c93603a0b968201d363e4ffe37bbec99836aa6b236';
+/** agent.stop@1's frozen d1 digest at the base commit 2307398 (packages/contracts/digests.json), after #604 refroze it; see AC4-DIGEST-REDRAFT.md. */
+export const BASE_V1_DIGEST = 'd1:eaddd33caced46ca2441d9da7bb4492c4e22a8f31897edb8c92bd1b25839d6ba';
 
 /** A reset time in ms since the epoch, for plan_window_spent. */
 export const RESETS = 1760020000000;

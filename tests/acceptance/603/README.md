@@ -94,8 +94,10 @@ or the same covering the session, with estimated counts and `"cost": {"usd": 0.0
    same verdict on every one. agent.stop@2 has fixtures, which validate and Rust takes, among them one with
    usage null, one with a usage and one `plan_window_spent`. The catalogue lists `agent.stop` at versions 1
    and 2, with schemas `agent.stop@1` and `agent.stop@2`. agent.stop@1's frozen digest and its schema's d1 are
-   still the base's `d1:19afe153…b236`, it still refuses a `cause` or `usage` in its data, agent.stop@2's frozen
-   digest is its own d1, and `frozenDrift` is empty.
+   still the base's, it still refuses a `cause` or `usage` in its data, agent.stop@2's frozen digest is its own
+   d1, and `frozenDrift` is empty. That test was redrafted blind against base `2307398`, where #604 had refrozen
+   agent.stop@1 (`d1:eaddd33c…d6ba`, was `d1:19afe153…b236` at `f346706`): `ac4-digest-redraft.test.ts`, with
+   `AC4-DIGEST-REDRAFT.md`.
 5. **AC5.** Both versions are catalogued as feeding `claims`, and `checkViewBindings(['agent.stop'])` is ok. A
    stop of either version decodes with the same `turn` and `did_work`, for every cause, with usage null or not.
    agent.stop@2 refuses a stop without `turn` or `did_work`, a non-boolean `did_work` or a negative `turn`

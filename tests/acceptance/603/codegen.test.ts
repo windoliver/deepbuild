@@ -4,11 +4,11 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  catalogue, d1Digest, fixtures, frozenDigests, frozenDrift, generateRust, generateTypeScript, getSchema, listSchemas, validate,
+  catalogue, fixtures, generateRust, generateTypeScript, listSchemas, validate,
 } from '../../../packages/contracts/src/index.ts';
 import type { JsonValue } from '../../../packages/contracts/src/index.ts';
 import {
-  BASE_V1_DIGEST, buildRust, CAUSES, expectPublished, isObject, RESETS, RUST, rustAccepts, rustRoundtrip, stop, stopData, TYPES, typecheck,
+  buildRust, CAUSES, expectPublished, isObject, RESETS, RUST, rustAccepts, rustRoundtrip, stop, stopData, TYPES, typecheck,
   USAGE_ESTIMATED, USAGE_REPORTED, V1, V2,
 } from './helpers.ts';
 import type { JsonObject } from './helpers.ts';
@@ -120,20 +120,5 @@ describe('AC4 the catalogue lists both versions, and agent.stop@1 stays frozen',
   it('AC4 the catalogue lists agent.stop at versions 1 and 2, each with its schema', () => {
     const entries = catalogue().filter((e) => e.kind === 'agent.stop').map((e) => ({ version: e.version, schema: e.schema }));
     expect(entries.sort((a, b) => a.version - b.version)).toEqual([{ version: 1, schema: V1 }, { version: 2, schema: V2 }]);
-  });
-
-  it('AC4 agent.stop@1 keeps its schema and frozen digest from the base; agent.stop@2 has a frozen digest of its own; nothing drifts', () => {
-    expectPublished(V2);
-    const frozen = frozenDigests();
-    expect(frozen[V1], 'agent.stop@1\'s frozen digest is the base\'s').toBe(BASE_V1_DIGEST);
-    expect(d1Digest(getSchema(V1)), 'agent.stop@1\'s schema is the base\'s').toBe(BASE_V1_DIGEST);
-    expect(frozen[V2], 'agent.stop@2 is frozen').toBe(d1Digest(getSchema(V2)));
-    expect(frozenDrift(listSchemas(), frozen)).toEqual([]);
-    // Version 1's shape is unchanged: its fixture still validates, and it takes no cause or usage.
-    for (const f of fixtures(V1)) {
-      expect(validate(V1, f).ok).toBe(true);
-      const withCause = { ...(f as JsonObject), data: { ...((f as JsonObject).data as JsonObject), cause: 'unknown', usage: null } };
-      expect(validate(V1, withCause).ok, 'agent.stop@1 refuses cause and usage').toBe(false);
-    }
   });
 });
