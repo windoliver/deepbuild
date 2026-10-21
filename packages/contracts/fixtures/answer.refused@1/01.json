@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FMXR4T6V8X0Z2B4D6F8H0",
+  "kind": "answer.refused",
+  "subject": "ask:01K74G4B6D8F0H2K4M6P8R0T2V",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123,
+  "data": {
+    "outcome": "defaulted",
+    "closed_at": 1760017051123,
+    "via": "inbox",
+    "option": "merge"
+  }
+}
