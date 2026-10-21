@@ -1,0 +1,41 @@
+{
+  "mark": "DeepBuild",
+  "searchedOn": "2026-10-20",
+  "searchedBy": "the repo's agent (Claude Code), a preliminary screening; not a professional clearance search",
+  "scope": "Word-mark screening for the name. The Keyframe device (a D holding a diamond) was not searched by Vienna class; a professional search should cover it before a launch outside this repo.",
+  "registers": [
+    {
+      "register": "TMview (EUIPN), which federates the USPTO, EUIPO, WIPO, KIPO, CNIPA, JPO, UKIPO, CIPO, IP Australia and the EU member states' offices",
+      "database": "https://www.tmdn.org/tmview/",
+      "queriedOn": "2026-10-20",
+      "terms": ["deepbuild", "deep build", "deepbuilt"],
+      "termsNote": "Basic search, trade mark name contains; the query is not filtered by class, so every class was returned and classes 9 and 42 were read for conflicts.",
+      "classes": [9, 42],
+      "hits": [
+        { "mark": "DeepBuild", "owner": "딥빌드 주식회사 (DeepBuild Co., Ltd.)", "office": "KIPO", "application": "4020220155143", "filed": "2022-08-22", "status": "ended", "classes": [42], "similarity": "identical", "note": "A Korean AI-and-construction company's filing in class 42; ended, so it no longer blocks." },
+        { "mark": "DeepBuild", "owner": "딥빌드 주식회사 (DeepBuild Co., Ltd.)", "office": "KIPO", "application": "4020220155142", "filed": "2022-08-22", "status": "ended", "classes": [37], "similarity": "identical", "note": "Construction services; ended." },
+        { "mark": "DEEPBUILDER", "owner": "北京睿呈时代信息科技有限公司", "office": "CNIPA", "application": "60801941", "filed": "2021-11-23", "status": "registered", "classes": [9], "similarity": "similar", "note": "Live in class 9 (software) in China." },
+        { "mark": "DEEPBUILDER", "owner": "北京睿呈时代信息科技有限公司", "office": "CNIPA", "application": "60832803", "filed": "2021-11-23", "status": "registered", "classes": [42], "similarity": "similar", "note": "Live in class 42 (software services) in China." }
+      ],
+      "noHits": "No live or dead record contains \"deepbuild\" at the USPTO, EUIPO, WIPO or any other federated office; \"deepbuilt\" returns nothing; \"deep build\" returns 33 records, of which only the four above are DeepBuild or DeepBuilder (the rest are DEEP CHI BUILDER, DEEPREBUILD, DEEPAM BUILDERS and the like, unrelated)."
+    },
+    {
+      "register": "Web search for unregistered use of the name in software (common-law or passing-off risk)",
+      "database": "general web search",
+      "queriedOn": "2026-10-20",
+      "terms": ["\"DeepBuild\" trademark", "\"Deep Build\" OR \"DeepBuild\" software"],
+      "classes": [9, 42],
+      "hits": [
+        { "mark": "DeepBuild", "owner": "Creatr (getcreatr.com)", "status": "unregistered; claimed as a trademark in the company's terms of use", "classes": [9, 42], "similarity": "identical", "note": "An AI agent product that builds web apps. No registration was found in TMview. The closest use to DeepBuild's own: identical name, software, AI agents." },
+        { "mark": "DeepBuild", "owner": "DeepBuild (deepbuild.tech)", "status": "unregistered; in use", "classes": [42], "similarity": "identical", "note": "An agentic-AI services company in India." },
+        { "mark": "DeepBuild", "owner": "DeepBuild (deepbuild.co.uk)", "status": "unregistered; in use", "classes": [9, 42], "similarity": "identical", "note": "A UK firm describing a containment layer for autonomous AI agents." },
+        { "mark": "deepbuild", "owner": "martinbowling/deepbuild (GitHub)", "status": "unregistered; an open-source project", "classes": [9], "similarity": "identical", "note": "A DeepSeek-powered coding assistant." }
+      ]
+    }
+  ],
+  "conclusion": {
+    "status": "proceed-with-risk",
+    "reason": "No live registered word mark DeepBuild exists in any federated office; the identical Korean filings have ended. Two live Chinese DEEPBUILDER registrations in classes 9 and 42 and several unregistered software products named DeepBuild, one of which (Creatr) claims the name as a trademark, mean the name is not clear. The mark is already outside the repo on the README; before a launch, a professional clearance search covering the word and the device, and a filing decision, are needed.",
+    "decidedBy": "the repository owner, on 2026-10-20"
+  }
+}

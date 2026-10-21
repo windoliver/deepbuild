@@ -1,0 +1,64 @@
+Acceptance tests for #605 on the base f346706 (no implementation), run on 2026-10-20 on a Mac15,7,
+macOS 26.7.1, Node 23.9.0, after `npm ci` and `npm run build -w packages/contracts`:
+
+  node --test 'tests/acceptance/605/*.test.mjs'
+
+Trimmed to each test's result and failure reason. Local paths are redacted as <checkout>.
+
+ℹ tests 6
+ℹ pass 1
+ℹ fail 5
+
+✖ criterion 1: a planted doc line naming verdict.imagined, an uncatalogued kind in the catalogued verdict family, fails the lane, naming the kind and docs/canvas-primitives.md
+  Error: no catalogue drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /catalogue|drift/i, of ["typecheck","lint","unit","corpus","parity quick"]
+      at laneName (file://<checkout>/tests/acceptance/605/helpers.mjs:162:24)
+
+✖ criterion 1: a planted open issue body that calls claim.imagined an event kind fails the lane, naming the kind and the issue, #9605 (the 36th of 40 open issues)
+  Error: no catalogue drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /catalogue|drift/i, of ["typecheck","lint","unit","corpus","parity quick"]
+
+✖ criterion 1: the real docs, with the five names rewritten, and 40 clean open issues pass the lane, which fetched them with gh issue list --state open --json number,body
+  Error: no catalogue drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /catalogue|drift/i, of ["typecheck","lint","unit","corpus","parity quick"]
+
+✖ criterion 2: offline (gh can't reach GitHub, nothing cached), the lane is INCONCLUSIVE, not PASS, and the checks don't pass
+  Error: no catalogue drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /catalogue|drift/i, of ["typecheck","lint","unit","corpus","parity quick"]
+
+✖ criterion 1 (live): the lane passes on the real docs and the real open issues of windoliver/deepbuild
+  Error: no catalogue drift lane ran:
+  NO LANE: scripts/lanes.mjs checks has 0 lanes matching /catalogue|drift/i, of ["typecheck","lint","unit","corpus","parity quick"]
+
+✔ criterion 3: tests/acceptance/311/catalogue.test.ts, its helpers and fixtures equal the base's, and it passes
+  (Expected: criterion 3 is a regression guard; #311's catalogue test passes on the base, and the
+  criterion is that it still does. Its wrong programs are below.)
+
+(Expected for the five failures: the base has no catalogue drift lane in `checks`, so nothing runs
+catalogueDrift over the docs or the issues, which is what #605 says is missing.)
+
+Planted programs, each run once in a scratch clone of the base (not committed). The planted fix adds a
+lane `catalogue drift` to `checks` running a script that reads both docs, runs
+`gh issue list --state open --json number,body --limit 10000`, prints `<where>: <kind> ...` per drift and
+`INCONCLUSIVE ...` when gh fails; runLanes accepts INCONCLUSIVE as a state; the five doc names are
+rewritten as the issue's Change 2 says.
+
+  the planted fix                                     the 4 hermetic criterion 1 and 2 tests and criterion 3 pass
+  the fix, live (real docs, 573 open issues)          live test fails: 18 drift entries in 10 open issues (below)
+  a lane that ignores issue bodies                    planted-issue test fails; the others pass
+  a lane that keeps gh's default limit of 30          planted-issue test fails (#9605 is the 36th); the others pass
+  a lane that names each kind but not where           planted-doc and planted-issue tests fail
+  a lane that reads a failed gh as no open issues     offline test fails (lane printed PASS)
+  runLanes prints INCONCLUSIVE but returns 0          offline test fails (runLanes returned 0)
+  the fix with the five doc names left as they are    real-docs pass test fails (the lane still names verdict.created)
+  the fix plus a learn.paused@1 schema (option 3a)    criterion 3 fails: #311's AC16 learn.paused body and AC7 learn.paused refusal
+  one line appended to #311's catalogue.test.ts        criterion 3 fails: the file changed from f346706
+
+The live run of the planted fix on 2026-10-20 (open issues as of that day):
+
+  #605: `verdict.created`, `claim.point`, `user.pivot`, `reading.overflow`, `layer.unsupported`,
+        `learn.paused`, `verdict.imagined`
+  #372: `user.pivot`          #361, #261, #259, #72: `layer.unsupported`
+  #266: `user.turn`           #55: `agent.turn_ended`, `agent.permission_requested`, `agent.create`
+  #14:  `evidence.stored`, `evidence.removed`
+  FAIL catalogue drift: 18 uncatalogued event kinds

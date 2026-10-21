@@ -158,6 +158,21 @@ test('the merge-base copy has an origin/main, so checks that compare with main r
   assert.match(readFileSync(join(cwd, 'base-main'), 'utf8'), /^[0-9a-f]{40}\n$/);
 });
 
+test('the copies read the open issues this checkout\'s drift lane fetched, cached beside the kept copy, not fetched again', (t) => {
+  const { cwd, cache, perf } = repository(t, (root) => `
+    import { readFileSync, writeFileSync } from 'node:fs';
+    const file = process.env.DEEP_OPEN_ISSUES;
+    writeFileSync(${JSON.stringify(join(root, 'base-issues'))}, JSON.stringify({ file, issues: file && readFileSync(file, 'utf8') }));
+  `);
+  mkdirSync(join(cwd, 'target'));
+  writeFileSync(join(cwd, 'target', 'open-issues.json'), '[{"number":1,"body":"fetched once"}]');
+  const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const { file, issues } = JSON.parse(readFileSync(join(cwd, 'base-issues'), 'utf8'));
+  assert.equal(issues, '[{"number":1,"body":"fetched once"}]');
+  assert.ok(file.startsWith(join(cache, 'deepbuild-perf')), `the cached issues are under the kept copies: ${file}`);
+});
+
 test('the copy\'s throwaway repository tracks the merge base\'s files, not the link to its kept builds', (t) => {
   const { cwd, perf } = repository(t, (root) => `
     import { execFileSync } from 'node:child_process';

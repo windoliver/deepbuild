@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "id": "doc-unit-mismatch",
+  "profile": "figure",
+  "title": "Unit mismatch",
+  "description": "Unit mismatch.",
+  "size": [
+    320,
+    200
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "slab": {
+      "id": "slab",
+      "kind": "test.slab@3",
+      "layer": "main",
+      "name": "Slab",
+      "order": "a0",
+      "params": {
+        "width": "45deg"
+      }
+    }
+  }
+}

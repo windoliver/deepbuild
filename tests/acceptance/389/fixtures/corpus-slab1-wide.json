@@ -1,0 +1,34 @@
+{
+  "doc": {
+    "format": 1,
+    "id": "doc-corpus-1-wide",
+    "profile": "figure",
+    "title": "Corpus slab 1 wide",
+    "description": "Corpus slab 1 wide.",
+    "size": [
+      320,
+      200
+    ],
+    "layers": {
+      "main": {
+        "writer": "agent-a",
+        "title": "Main",
+        "order": "a0"
+      }
+    },
+    "items": {
+      "slab": {
+        "id": "slab",
+        "kind": "test.slab@1",
+        "layer": "main",
+        "name": "Slab",
+        "order": "a0",
+        "params": {
+          "w": 5000,
+          "h": 7
+        }
+      }
+    }
+  },
+  "saved_at": "test.slab@1"
+}

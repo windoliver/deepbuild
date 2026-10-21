@@ -40,6 +40,8 @@ function tsType(schema: Schema, root: string, indent: string): string {
       return 'number';
     case 'boolean':
       return 'boolean';
+    case 'null':
+      return 'null';
     case 'array':
       return `Array<${tsType(schema.items as Schema, root, indent)}>`;
     case 'object': {

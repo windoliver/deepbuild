@@ -1,0 +1,110 @@
+Base commit: f346706378d9eaabb1965df1167535fac5a9c285
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/312   (node = /Users/<user>/.nvm/versions/node/v24.22.0/bin/node, the repo's .node-version; the same as npx vitest run --root tests/acceptance/312 with that node first on PATH)
+Date: 2026-10-20T21:47:47Z  Node v24.22.0  vitest 5.0.5  darwin-arm64
+Exit code: 1
+Why every suite fails: packages/adapters/src/index.ts, the surface the README defines, does not exist at the base; each suite imports it and fails at its import, before any test runs.
+Checked beside this run (not at the base): the tests type-check under the root tsconfig against a declaration-only copy of the surface (tsc --noEmit --allowImportingTsExtensions -p tests/acceptance/312/tsconfig.json: no errors), and run against a runtime stub of the surface whose every call throws they read 107 failed | 9 passed of 116, the 9 being the attention-state and tool-call-shape checks the README lists as regression protection #311 already meets.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/312
+
+ ❯ edits.test.ts (0 test)
+ ❯ permission.test.ts (0 test)
+ ❯ codex-schemas.test.ts (0 test)
+ ❯ contract.test.ts (0 test)
+ ❯ cursor.test.ts (0 test)
+ ❯ stop.test.ts (0 test)
+ ❯ usage.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  codex-schemas.test.ts [ codex-schemas.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/codex-schemas.test.ts
+ ❯ codex-schemas.test.ts:4:1
+      2| import { join } from 'node:path';
+      3| import { describe, expect, it } from 'vitest';
+      4| import { factsDrift } from '../../../packages/adapters/src/index.ts';
+       | ^
+      5| import type { Schema } from '../../../packages/contracts/src/index.ts';
+      6| import { codexFacts, FIXTURES, fixtureSet, getAt, isObject, readJson }…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  contract.test.ts [ contract.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/contract.test.ts
+ ❯ contract.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { describe, expect, it } from 'vitest';
+      3| import { factsAdapter, registry, shipped } from '../../../packages/ada…
+       | ^
+      4| import type { Adapter, AdapterParts, TurnUsage } from '../../../packag…
+      5| import { lintSchemas, listSchemas, validate } from '../../../packages/…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  cursor.test.ts [ cursor.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/cursor.test.ts
+ ❯ cursor.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { describe, expect, it } from 'vitest';
+      3| import { factsAdapter, registry, shipped } from '../../../packages/ada…
+       | ^
+      4| import type { AdapterEvent } from '../../../packages/adapters/src/inde…
+      5| import { frozenDigests, frozenDrift, getSchema, listSchemas, registry …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  edits.test.ts [ edits.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/edits.test.ts
+ ❯ edits.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { describe, expect, it } from 'vitest';
+      3| import { shipped } from '../../../packages/adapters/src/index.ts';
+       | ^
+      4| import type { JsonValue } from '../../../packages/contracts/src/index.…
+      5| import { validate } from '../../../packages/contracts/src/index.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  permission.test.ts [ permission.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/permission.test.ts
+ ❯ permission.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { describe, expect, it } from 'vitest';
+      3| import { shipped } from '../../../packages/adapters/src/index.ts';
+       | ^
+      4| import { fixtures, validate } from '../../../packages/contracts/src/in…
+      5| import type { JsonValue } from '../../../packages/contracts/src/index.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  stop.test.ts [ stop.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/stop.test.ts
+ ❯ stop.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { describe, expect, it } from 'vitest';
+      3| import { shipped } from '../../../packages/adapters/src/index.ts';
+       | ^
+      4| import { fixtures, validate } from '../../../packages/contracts/src/in…
+      5| import type { JsonValue } from '../../../packages/contracts/src/index.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  usage.test.ts [ usage.test.ts ]
+Error: Cannot find module '../../../packages/adapters/src/index.ts' imported from <checkout>/tests/acceptance/312/usage.test.ts
+ ❯ usage.test.ts:3:1
+      1| import fc from 'fast-check';
+      2| import { describe, expect, it } from 'vitest';
+      3| import { shipped } from '../../../packages/adapters/src/index.ts';
+       | ^
+      4| import type { TurnUsage } from '../../../packages/adapters/src/index.t…
+      5| import { fixtures, validate } from '../../../packages/contracts/src/in…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  no tests
+   Start at  14:47:47
+   Duration  129ms (worker 97%, environment 3%)
+

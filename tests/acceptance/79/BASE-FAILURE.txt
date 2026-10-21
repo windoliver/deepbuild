@@ -1,0 +1,200 @@
+# tests/acceptance/79 at the base commit 30fba4b (origin/main; no manifest, no search record, no docs head, no banner), run once on 2026-10-21T02:50Z
+# Machine: Mac15,12 (13-inch MacBook Air, a reference Mac), macOS build 23H723, node v24.22.0. Home paths redacted as <repo>.
+# Command: node --test tests/acceptance/79/mark.test.mjs tests/acceptance/79/mark.live.test.mjs
+#
+# 11 of 11 fail, each on its own assertion, for the expected reason:
+#  - 9 (both live tests, and the manifest, README, small-cut, Signal, shots and budget tests) on
+#    "BLOCKED: no surfaces manifest at brand/surfaces.json", before any build: the live tests spend nothing at the base.
+#  - the docs test on "no docs head fragment at docs/web/head.html".
+#  - the CLI test on deep --help printing no inline image in a pty identifying as iTerm2 or kitty (its output is the bare usage).
+#  - the trademark test on "BLOCKED: no trademark search record at brand/trademark-search.json".
+# The checks' own tests (checks.test.mjs) pass at the base, 9 of 9; they test the tests, not the change.
+#
+✖ #79.457c8d34 the built app holds every app surface's kit file byte for byte: the .icns, the menu-bar template, the title-bar mark and the welcome screen's artwork (0.402792ms)
+✖ #79.c744da3f on a reference Mac, the stripped release app at HEAD is under 200 KB larger than at the recorded merge base (0.111667ms)
+✖ #79.457c8d34 every surface the issue names has an entry whose file is, byte for byte, a kit file under brand/ (0.3985ms)
+✖ #79.457c8d34 the README header's light image and dark source are the kit's readme files (0.056292ms)
+✖ #79.457c8d34 the docs head fragment and web manifest reference only kit files, each declared with its real sizes (0.905958ms)
+✖ #79.457c8d34 deep --help prints a one-line banner, and where the terminal can show an image the mark in it is a kit file (198.773541ms)
+✖ #79.fd1154c6 every use at 24 px and below takes the small cut: the menu bar, the CLI banner, the tab icon, and the 16 pt entries of the .icns and .ico (0.091667ms)
+✖ #79.fd1154c6 nothing puts Signal on white or paper: the surfaces' files bring an Ink ground or carry no Signal, and the kit's light-ground artwork has none (31.706541ms)
+✖ #79.fd1154c6 proof: a screenshot of each surface, cropped and small, with no Signal next to white or paper in it (0.062458ms)
+✖ #79.816c9037 a trademark search record names the registers, terms, classes and hits behind a conclusion that lets the mark out, and brand/README.md no longer says none was done (0.050458ms)
+✖ #79.c744da3f the mark's assets add under 200 KB to the app: the embedded kit files' sizes, and the stripped app's recorded growth over the merge base on a reference Mac (0.057458ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 0
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 274.132417
+
+✖ failing tests:
+
+test at tests/acceptance/79/mark.live.test.mjs:31:1
+✖ #79.457c8d34 the built app holds every app surface's kit file byte for byte: the .icns, the menu-bar template, the title-bar mark and the welcome screen's artwork (0.402792ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.live.test.mjs:32:20)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+test at tests/acceptance/79/mark.live.test.mjs:41:1
+✖ #79.c744da3f on a reference Mac, the stripped release app at HEAD is under 200 KB larger than at the recorded merge base (0.111667ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.live.test.mjs:42:20)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at tests/acceptance/79/mark.test.mjs:17:1
+✖ #79.457c8d34 every surface the issue names has an entry whose file is, byte for byte, a kit file under brand/ (0.3985ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:18:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+test at tests/acceptance/79/mark.test.mjs:21:1
+✖ #79.457c8d34 the README header's light image and dark source are the kit's readme files (0.056292ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:22:24)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at tests/acceptance/79/mark.test.mjs:25:1
+✖ #79.457c8d34 the docs head fragment and web manifest reference only kit files, each declared with its real sizes (0.905958ms)
+  AssertionError [ERR_ASSERTION]: 
+  no docs head fragment at docs/web/head.html
+  + actual - expected
+  
+  + [
+  +   'no docs head fragment at docs/web/head.html'
+  + ]
+  - []
+  
+      at holds (file://<repo>/tests/acceptance/79/mark.test.mjs:15:36)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:26:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'no docs head fragment at docs/web/head.html' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/79/mark.test.mjs:30:1
+✖ #79.457c8d34 deep --help prints a one-line banner, and where the terminal can show an image the mark in it is a kit file (198.773541ms)
+  AssertionError [ERR_ASSERTION]: deep --help in a pty prints no inline image under iTerm2 (TERM_PROGRAM=iTerm.app) nor kitty (TERM=xterm-kitty); the terminal can show the mark and the banner doesn't
+  iTerm2 output: "Usage: deep [--help | --version]\r\n       deep explain <recorded session folder> [--json]\r\n\r\nRepository skeleton. Hub commands are not implemented yet.\r\n"
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:32:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/79/mark.test.mjs:36:1
+✖ #79.fd1154c6 every use at 24 px and below takes the small cut: the menu bar, the CLI banner, the tab icon, and the 16 pt entries of the .icns and .ico (0.091667ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:37:21)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/acceptance/79/mark.test.mjs:40:1
+✖ #79.fd1154c6 nothing puts Signal on white or paper: the surfaces' files bring an Ink ground or carry no Signal, and the kit's light-ground artwork has none (31.706541ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:42:24)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/acceptance/79/mark.test.mjs:45:1
+✖ #79.fd1154c6 proof: a screenshot of each surface, cropped and small, with no Signal next to white or paper in it (0.062458ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:46:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/acceptance/79/mark.test.mjs:49:1
+✖ #79.816c9037 a trademark search record names the registers, terms, classes and hits behind a conclusion that lets the mark out, and brand/README.md no longer says none was done (0.050458ms)
+  Error: BLOCKED: no trademark search record at brand/trademark-search.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:50:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/acceptance/79/mark.test.mjs:56:1
+✖ #79.c744da3f the mark's assets add under 200 KB to the app: the embedded kit files' sizes, and the stripped app's recorded growth over the merge base on a reference Mac (0.057458ms)
+  Error: BLOCKED: no surfaces manifest at brand/surfaces.json
+      at blocked (file://<repo>/tests/acceptance/79/helpers.mjs:59:37)
+      at loadJson (file://<repo>/tests/acceptance/79/helpers.mjs:77:44)
+      at loadManifest (file://<repo>/tests/acceptance/79/helpers.mjs:84:46)
+      at TestContext.<anonymous> (file://<repo>/tests/acceptance/79/mark.test.mjs:57:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)

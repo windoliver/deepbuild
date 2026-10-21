@@ -294,12 +294,14 @@ describe('the design says', () => {
   it('every kind shares one envelope; only its kind, subject, writer and data differ', () => {
     const envelope = (name: string) => {
       const { properties, required, ...rest } = getSchema(name) as { properties: Record<string, unknown>; required: string[] };
-      const { kind: _kind, subject: _subject, writer: _writer, data: _data, ...shared } = properties;
+      const { kind: _kind, subject: _subject, writer: _writer, data: _data, v, ...shared } = properties;
       const { title: _title, description: _description, $defs: _defs, 'x-feeds': _feeds, ...root } = rest as Record<string, unknown>;
-      return { root, shared, required: required.filter((key) => key !== 'subject') };
+      // Each version fixes its own v.
+      const { const: _version, ...version } = v as Record<string, unknown>;
+      return { root, shared: { ...shared, v: version }, required: required.filter((key) => key !== 'subject') };
     };
     const kinds = catalogue().map((e) => e.schema);
-    expect(kinds).toHaveLength(64);
+    expect(kinds).toHaveLength(67);
     for (const name of kinds) expect(envelope(name), name).toEqual(envelope(kinds[0]!));
   });
 

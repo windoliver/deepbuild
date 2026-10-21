@@ -1,6 +1,6 @@
 import { canonicalText } from './canonical.js';
 import { nameClaims, RESERVED_TYPES, typeName } from './codegen-ts.js';
-import { isObject, resolveRef, segment, unionTag, type Schema, type SchemaEntry } from './json.js';
+import { isNullBranch, isObject, resolveRef, segment, tagged, unionTag, type Schema, type SchemaEntry } from './json.js';
 import { compilePattern } from './pattern.js';
 
 const KEYWORDS = new Set(['as', 'break', 'const', 'continue', 'crate', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
@@ -42,6 +42,13 @@ const float = (n: number): string => {
 };
 const bound = (schema: Schema, key: string, write: (n: number) => string): string =>
   (typeof schema[key] === 'number' ? `Some(${write(schema[key])})` : 'None');
+
+/** What a nullable node holds beside null: a type list's one type, or a union's tagged branches; undefined when it isn't nullable. */
+const nonNull = (schema: Schema): Schema | undefined => {
+  if (Array.isArray(schema.type)) return { ...schema, type: schema.type.find((t) => t !== 'null')! };
+  if (Array.isArray(schema.oneOf) && (schema.oneOf as Schema[]).some(isNullBranch)) return { ...schema, oneOf: tagged(schema.oneOf as Schema[]) };
+  return undefined;
+};
 
 /**
  * What every schema's types share: the items written so far, the type names they, or a schema, hold, and
@@ -142,8 +149,9 @@ class Module {
     if (typeof schema.$ref === 'string') return this.rootName + pascal(schema.$ref.slice('#/$defs/'.length));
     if ('x-opaque' in schema) return 'deep_contracts::Value';
     if ('const' in schema) return this.constant(canonicalText(schema.const!), name);
+    const inner = nonNull(schema);
+    if (inner) return `Option<${this.type(inner, name)}>`;
     if (Array.isArray(schema.oneOf)) return this.union(schema.oneOf as Schema[], name);
-    if (Array.isArray(schema.type)) return `Option<${this.type({ ...schema, type: schema.type.find((t) => t !== 'null')! }, name)}>`;
     switch (schema.type) {
       case 'string':
         if (Array.isArray(schema.enum)) return this.enumeration(schema.enum.map(String), name);
@@ -275,9 +283,8 @@ ${fields.map((f) => (f.required
   private named(schema: Schema, name: string): string {
     this.exact = name;
     // A nullable root is an alias of Option over its own type, which takes the name `…Value`.
-    const type = Array.isArray(schema.type)
-      ? `Option<${this.type({ ...schema, type: schema.type.find((t) => t !== 'null')! }, `${name}Value`)}>`
-      : this.type(schema, name);
+    const inner = nonNull(schema);
+    const type = inner ? `Option<${this.type(inner, `${name}Value`)}>` : this.type(schema, name);
     if (type !== name) {
       if (this.exact !== name) throw Error(`${this.schemaName}: the type ${name} would be written twice`);
       this.claim(name);
@@ -303,7 +310,15 @@ export function generateRust(entries: readonly SchemaEntry[]): string {
       output.reserved.add(type);
     }
   }
-  const arms = entries.map(({ name, schema }) => ({ name, type: new Module(schema, typeName(name), name, output).emit() }));
+  // A root that is itself a map, array or bounded scalar has a rule no record checks for it; roundtrip does.
+  const arms = entries.map(({ name, schema }) => {
+    const module = new Module(schema, typeName(name), name, output);
+    return { name, type: module.emit(), rule: module.rule(schema) };
+  });
+  const decode = (a: { type: string; rule: string | undefined }) => {
+    const typed = `<${a.type} as Contract>::from_json(&value, "")?.to_json()`;
+    return a.rule ? `{\n            deep_contracts::check(&value, "", &${a.rule})?;\n            ${typed}\n        }` : typed;
+  };
   return `// Generated from packages/contracts/schemas by generateRust. Do not edit.
 use deep_contracts::{Contract, Value};
 
@@ -312,7 +327,7 @@ ${output.items.join('\n')}
 pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
     let value = deep_contracts::parse(json)?;
     let typed = match schema {
-${arms.map((a) => `        ${literal(a.name)} => <${a.type} as Contract>::from_json(&value, "")?.to_json(),\n`).join('')}        _ => return Err(format!("no generated type for {schema}")),
+${arms.map((a) => `        ${literal(a.name)} => ${decode(a)},\n`).join('')}        _ => return Err(format!("no generated type for {schema}")),
     };
     Ok(deep_contracts::jcs(&typed))
 }

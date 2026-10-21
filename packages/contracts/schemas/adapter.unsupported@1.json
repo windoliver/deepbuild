@@ -1,0 +1,22 @@
+{
+  "title": "adapter.unsupported@1",
+  "description": "Per surface (terminal, app-server, desktop, …), the driven operations an adapter can't do there; each returns unsupported, never a no-op success.",
+  "type": "object",
+  "propertyNames": {
+    "pattern": "^[a-z][a-z0-9-]*$"
+  },
+  "additionalProperties": {
+    "type": "array",
+    "items": {
+      "type": "string",
+      "enum": [
+        "startTurn",
+        "steer",
+        "followUp",
+        "interrupt",
+        "respond",
+        "history"
+      ]
+    }
+  }
+}

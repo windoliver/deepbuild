@@ -559,7 +559,9 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `task.created`, `task.closed` (closed is new) | `{task_ref, thread, owner, title}`; `{by_verdict}` | tasks | the first and last stations |
 | `definition.drafted`, `definition.locked`, `definition.revised` (new) | `{definition, task_ref, requirements, hash, base_commit, budget}`; revised adds `{dispute_ask}` | definitions | chips per requirement; the defining station |
 | `tool.before`, `tool.after` | `{kind: shell \| read \| edit \| write \| search \| fetch \| mcp \| unknown, paths, command}` | session_files, returns | the files a session touched, on the Map; a turn's parts, on its turn view |
-| `agent.stop` | `{turn, did_work}` | claims | where a stop was judged |
+| `agent.stop` | `{turn, did_work, cause: sign_in_required \| token_refresh_failed \| plan_window_spent \| rate_limited \| refusal \| max_turns \| context_overflow \| tool_schema_rejected \| agent_crashed \| timed_out \| unknown, plan_resets, usage}` | claims | where a stop was judged, and why (`agent.stop@2`); `plan_resets` is when a spent plan window reopens, `usage` the turn's tokens or null |
+| `permission.request` (new) | `{kind: tool \| plan \| question \| mode, tool, command, paths}` | sessions, asks | a session waiting on a person, and what it asks about |
+| `turn.usage` (new) | `{turn, model, covers, tokens: {input, cached, output, exact}, cost: reported \| estimated \| unpriced, context: {used, window}}` | sessions | what a turn cost, where the adapter can read it; a cost basis stays visible, never a bare number |
 | `claim.made` | `{task_ref, attempt, commit, scope: session \| child \| task}` | claims | the says-done station |
 | `claim.sent_back`, `claim.stalled` (new) | `{claim, verdict, round, to}`; `{claim, rule}` | claims | "sent back, round n of 3"; stalled cards |
 | `delivery.outcome` (new) | `{delivery, via: steer \| interrupt \| stop_hold \| next_prompt, outcome}` | deliveries | whether a send-back or an answer arrived |
@@ -586,7 +588,7 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `note.opened`, `note.closed` (new) | `{note, doc, item, rev, t, region, text}`; `{note, by: you \| check, rev, run}` | notes | open notes on an item, in the editor panel and on return cards |
 | `suggestion.filed`, `suggestion.settled` (new) | `{suggestion, doc, item, writer, patch, base, ops}`; `{suggestion, outcome: accepted \| superseded, rev}` | suggestions | suggestions on your items, in the editor panel and on return cards |
 
-The films dry run wrote `verdict.created` and `sendback.delivered`; the scenes dry run wrote `verdict.made`, `claim.sent_back` and `delivery.outcome`. This keeps the scenes forms, matching `claim.made`. `claim.point` folds into `claim.made` as its `scope`.
+The films dry run wrote verdict.created and sendback.delivered; the scenes dry run wrote `verdict.made`, `claim.sent_back` and `delivery.outcome`. This keeps the scenes forms, matching `claim.made`. The films' claim.point folds into `claim.made` as its `scope`.
 
 ### Projections the canvas reads
 
@@ -2127,7 +2129,7 @@ For: hex boards: a tactics map, a strategy board, a hex puzzle, a board game exp
 
 - `target: ID + path`
 - `source: reading: | run: | ask: | verdict: | task: | req: handle`
-- `select: value | p50 | p95 | count | a named query = value`
+- `select: value | p50 | p95 | count | expected | received | a named query = value`
 - `format: {unit, unit_at: after | super = after, precision (no more than the reading's), notation: fixed | compact | percent | duration, sign: auto | always = auto, group: none | locale = locale, ellipsis: bool = false}`
 - `as_of: now | record | time = now` (in a replayed film, the mapped record time)
 - `show: {source: bool, as_of: bool}`
@@ -2135,13 +2137,13 @@ For: hex boards: a tactics map, a strategy board, a hex puzzle, a board game exp
 - `missing: dash | hide = dash`
 - Read-only: the as-of time and the source's name
 
-**Semantics:** Resolved from a record state pinned to the frame, with its as-of time, so a replay shows the same value. Shows the value and unit, with the as-of time on hover. A value goes stale when the frame's pinned host time passes its as-of time plus `stale_after`; the frame clock arms a frame then, so a still view grays it on time and a replay grays it at the same frame. A stale value grays out and shows its age. Updates coalesce to once per frame, and numeric targets go through scales. `super` raises the unit to the number's top, as a degree sign sits. A reading handle may name one series of a series source, `reading:<source>#<series>`. A value resolved through a rollup shows the window's `last`, marked rollup; one whose Read now the quota refused keeps its value, marked `quota` with the time it can run; and one whose file is gone or fails its hash reads missing with that cause.
+**Semantics:** Resolved from a record state pinned to the frame, with its as-of time, so a replay shows the same value. Shows the value and unit, with the as-of time on hover. A value goes stale when the frame's pinned host time passes its as-of time plus `stale_after`; the frame clock arms a frame then, so a still view grays it on time and a replay grays it at the same frame. A stale value grays out and shows its age. Updates coalesce to once per frame, and numeric targets go through scales. `super` raises the unit to the number's top, as a degree sign sits. A reading handle may name one series of a series source, `reading:<source>#<series>`. A run handle may name one assertion its check names, `run:<id>#<assertion>`: `select: expected` and `select: received` read the two values the tool's report recorded for that assertion where it failed, as the raw bytes it printed, parsed as a number in the unit `format` declares, so a figure shows a failing test's expected and received totals with the run as their source. A run whose report holds no such value for that assertion, or one that doesn't parse as a number, reads missing with `not_reported`, naming the run and the assertion. A value resolved through a rollup shows the window's `last`, marked rollup; one whose Read now the quota refused keeps its value, marked `quota` with the time it can run; and one whose file is gone or fails its hash reads missing with that cause.
 
 **Cost:** O(1) per bound value per reading change, never per frame; about 64 B each; 10,000 refreshed in under 1 ms
 
 **It can never:** Show a number nothing measured; show a stale value as live; be typed over; join across a gap without marking it
 
-**Lands:** R1 on the canvas; R2 in panels; R6 unit_at, sign, group and ellipsis
+**Lands:** R1 on the canvas; R2 in panels and a run's assertion values; R6 unit_at, sign, group and ellipsis
 
 #### Held reading
 
@@ -2165,11 +2167,11 @@ For: deciding when a reading can be compared, or acted on without a person
 **Fields**
 
 - `target: ID + paint slot (fill | stroke | badge)`
-- `source: verdict: | run: | ask: handle` (an open ask means needs you; `verdict:<id>#<req>` takes that requirement's outcome, and `pending` draws as running, or as needs you while the requirement's ask is open)
+- `source: verdict: | run: | ask: | session: handle` (an open ask means needs you; `verdict:<id>#<req>` takes that requirement's outcome, and `pending` draws as running, or as needs you while the requirement's ask is open)
 - `as_of: now | record | time = now` (as a bound value's: in a replayed film, the mapped record time)
 - `legend: auto` (can't be turned off)
 
-**Semantics:** Maps the source's state (pass, fail, invalid, blocked, inconclusive, running, needs you, stale, idle) through the look's status map; a verdict on an older commit draws as stale. Draws unlit after tone mapping and effects, so the color is exact. A 3D object has a material, not a paint, so a status binding on one takes its stroke slot, drawn as an outline around the object, or its badge; a fill slot there is refused, since a material never carries a status color. A mark's `status` field holds a status binding whose target is that mark, and it joins `status_bindings` at load, so every rule that asks whether a document has a status binding sees it. A legend entry, with the state's glyph, color and word, appears whenever a status color is on screen, and a click opens the evidence. The bound mark draws the state's glyph or word itself (see the status-color rule).
+**Semantics:** Maps the source's state (pass, fail, invalid, blocked, inconclusive, running, needs you, stale, idle) through the look's status map; a verdict on an older commit draws as stale. A `session:` handle takes the state its session's row shows: working and says done draw as running, sent back as fail, proven as pass, a session with an open ask as needs you whatever else it is doing, and an ended or quiet session as idle, so no binding draws a session as passed before its checks pass. Draws unlit after tone mapping and effects, so the color is exact. A 3D object has a material, not a paint, so a status binding on one takes its stroke slot, drawn as an outline around the object, or its badge; a fill slot there is refused, since a material never carries a status color. A mark's `status` field holds a status binding whose target is that mark, and it joins `status_bindings` at load, so every rule that asks whether a document has a status binding sees it. A legend entry, with the state's glyph, color and word, appears whenever a status color is on screen, and a click opens the evidence. The bound mark draws the state's glyph or word itself (see the status-color rule).
 
 **Cost:** O(1) per state change
 
@@ -4389,7 +4391,7 @@ For: fog that fills a hall and takes the light from its windows, a cloud layer u
 
 **Cost:** O(1) per frame; framing O(kept items) per shot change
 
-**It can never:** Move without a shot, navigation or your input; integrate; imitate the app's chrome; frame onto the question card; change its position under your input while `user.pivot` is eye; pan past its bounds
+**It can never:** Move without a shot, navigation or your input; integrate; imitate the app's chrome; frame onto the question card; change its position under your input with `user.pivot: eye`; pan past its bounds
 
 **Lands:** R2, in the canvas core: flat, isometric and orbit; R6 the camera rig
 
@@ -6502,7 +6504,7 @@ For: a piece that plays on live data: a lab that follows a sensor, a ticker game
 - On `net@1`: `readings_from: player | none = none`
 - Issue: `reading.overflow {reading, step, dropped}`
 
-**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with `reading.overflow`, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key. A piece reads one series of a series source, `reading:<source>#<series>`, as a scalar; a whole series never enters a read region, and a piece that binds one is refused at check, naming the source.
+**Semantics:** Each value a source delivers is a reading with its source and as-of time, recorded on the input track at the first step not yet run, so a replay reads what the run read. With `latest`, a step reads the last value recorded at or before it, as before. With `each`, a step reads every value recorded since the step before, in the order the hub recorded them, so a burst between two steps is never cut to its last value; past `max_per_step` the rest wait for the next step, and past four steps' worth the oldest are dropped and counted with a `reading.overflow {reading, step, dropped}` issue, never silently. A value whose shape doesn't match its source's is refused before it's recorded, naming the source, and so is one whose as-of time is later than its arrival. In a match no copy fetches a source, unless the piece names `readings_from`: that player's copy alone fetches its sources, records each reading as one of its own entries and sends it in its messages like any input, so every copy reads the same values at the same steps, and the Join prompt says "Readings in this piece come from player n's copy.", since that copy could send any value. The web player keeps reading only public sources that need no key. A piece reads one series of a series source, `reading:<source>#<series>`, as a scalar; a whole series never enters a read region, and a piece that binds one is refused at check, naming the source.
 
 **Cost:** Per reading per step, O(bytes); an `each` reading of 16 values of 8 numbers fills about 1.2 KB of read region (estimate). Budget class: as the logic item.
 

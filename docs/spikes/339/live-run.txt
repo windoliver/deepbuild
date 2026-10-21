@@ -1,0 +1,10 @@
+✔ #339.8d46a78e at least 200 synthetic presses of the shortcut capture no frame, run now (17844.619583ms)
+✔ #339.8d46a78e one frame is captured while a person holds the shortcut, run now (5602.054625ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23491.651625

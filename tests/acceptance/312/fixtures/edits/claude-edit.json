@@ -1,0 +1,14 @@
+{
+  "version": "2.1.304",
+  "why": "Claude Code's Edit of /work/notes.md, in the shape the corpus recorded (adapters/corpus/claude-code/2.1.304/tools), on a made-up session",
+  "payload": {
+    "session_id": "0f3c1a2b-4d5e-4f60-8a9b-0c1d2e3f4a5b",
+    "transcript_path": "~/.claude/projects/-work/0f3c1a2b-4d5e-4f60-8a9b-0c1d2e3f4a5b.jsonl",
+    "cwd": "/work",
+    "permission_mode": "default",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "tool_input": { "file_path": "/work/notes.md", "old_string": "one", "new_string": "two", "replace_all": false },
+    "tool_use_id": "toolu_01EditNotesMd00000000001"
+  }
+}
