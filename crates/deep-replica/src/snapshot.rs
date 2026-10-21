@@ -128,10 +128,18 @@ impl Snapshot {
 
 /// The first node, in pre-order, where two snapshots differ, with why; `None` when they are equal
 /// node for node on role, name, value, bounds and children, so a node moved under another parent
-/// is a difference even when the pre-order list of nodes is the same.
+/// is a difference even when the pre-order list of nodes is the same, and their canvas items are
+/// equal too. Equal trees with different items differ at the index one past the last node.
 pub fn first_difference(a: &Snapshot, b: &Snapshot) -> Option<(usize, String)> {
     let mut index = 0;
-    differ(&a.tree, &b.tree, &mut index).err()
+    differ(&a.tree, &b.tree, &mut index).err().or_else(|| {
+        (a.items != b.items).then(|| {
+            (
+                index,
+                format!("the canvas items differ: {:?} vs {:?}", a.items, b.items),
+            )
+        })
+    })
 }
 
 fn differ(x: &Node, y: &Node, index: &mut usize) -> Result<(), (usize, String)> {
@@ -364,6 +372,37 @@ mod tests {
         let (index, why) = first_difference(&a, &shorter).unwrap();
         assert_eq!(index, 0);
         assert!(why.contains("2 children in the first tree and 1"), "{why}");
+    }
+
+    /// Each field the comparison reads, changed alone on one node, is found at that node and named;
+    /// changed canvas items are found after the last node. A comparison that skipped any of them
+    /// would pass the changed snapshot.
+    #[test]
+    fn each_compared_field_changed_alone_is_found() {
+        let a = snapshot(vec![
+            leaf("label", "x", [0, 0, 10, 10]),
+            leaf("button", "y", [0, 20, 10, 10]),
+        ]);
+        type Change = (&'static str, fn(&mut Node));
+        let changes: [Change; 4] = [
+            ("role", |node| node.role = "label".into()),
+            ("name", |node| node.name = Some("z".into())),
+            ("value", |node| node.value = Some(json!("on"))),
+            ("bounds", |node| node.bounds[3] = 11),
+        ];
+        for (field, change) in changes {
+            let mut b = a.clone();
+            change(&mut b.tree.children[1]);
+            let (index, why) =
+                first_difference(&a, &b).unwrap_or_else(|| panic!("a changed {field} went unseen"));
+            assert_eq!(index, 2, "{field}");
+            assert!(why.contains(&format!("differs in {field}")), "{why}");
+        }
+        let mut b = a.clone();
+        b.items.push(("line".into(), json!([1, 2])));
+        let (index, why) = first_difference(&a, &b).expect("changed items went unseen");
+        assert_eq!(index, 3);
+        assert!(why.contains("canvas items"), "{why}");
     }
 
     #[test]

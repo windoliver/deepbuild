@@ -422,4 +422,112 @@ mod live {
         );
         Ok(snapshot)
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use serde_json::json;
+
+        fn node(role: &str, name: Option<&str>, value: Option<Value>, children: Vec<Node>) -> Node {
+            Node {
+                role: role.into(),
+                name: name.map(str::to_owned),
+                value,
+                bounds: [0; 4],
+                children,
+            }
+        }
+
+        fn frame(
+            role: &str,
+            title: Option<&str>,
+            value: Option<&str>,
+            at: i64,
+            children: Vec<Frame>,
+        ) -> Frame {
+            Frame {
+                bounds: [at, at, 10, 10],
+                role: role.into(),
+                title: title.map(str::to_owned),
+                value: value.map(str::to_owned),
+                children,
+            }
+        }
+
+        /// A window over a label "x" and a button "y" valued "on", as GPUI and AppKit both say.
+        fn agreeing() -> (Node, Frame) {
+            (
+                node(
+                    "window",
+                    None,
+                    None,
+                    vec![
+                        node("label", Some("x"), None, Vec::new()),
+                        node("button", Some("y"), Some(json!("on")), Vec::new()),
+                    ],
+                ),
+                frame(
+                    "AXGroup",
+                    None,
+                    None,
+                    0,
+                    vec![
+                        frame("AXStaticText", Some("x"), None, 1, Vec::new()),
+                        frame("AXButton", Some("y"), Some("on"), 2, Vec::new()),
+                    ],
+                ),
+            )
+        }
+
+        #[std::prelude::v1::test]
+        fn agreeing_trees_pair_and_take_appkit_frames() {
+            let (mut tree, root) = agreeing();
+            let mut at = 0;
+            pair(&mut tree, &root, &mut at).unwrap();
+            assert_eq!(at, 3);
+            assert_eq!(tree.children[1].bounds, [2, 2, 10, 10]);
+        }
+
+        /// Each disagreement AppKit can show, planted alone, is refused at the node it is on.
+        #[std::prelude::v1::test]
+        fn each_disagreement_is_refused() {
+            type Change = (&'static str, fn(&mut Frame));
+            let changes: [Change; 6] = [
+                ("maps to AXButton", |root| {
+                    root.children[1].role = "AXStaticText".into()
+                }),
+                ("title", |root| root.children[0].title = Some("z".into())),
+                ("value", |root| root.children[1].value = Some("off".into())),
+                ("value", |root| {
+                    root.children[0].value = Some("extra".into())
+                }),
+                ("value", |root| root.children[1].value = None),
+                ("children", |root| {
+                    let moved = root.children.pop().unwrap();
+                    root.children[0].children.push(moved);
+                }),
+            ];
+            for (why, change) in changes {
+                let (mut tree, mut root) = agreeing();
+                change(&mut root);
+                let error = pair(&mut tree, &root, &mut 0).expect_err(why);
+                assert!(error.contains(why), "{why}: {error}");
+            }
+            let (mut tree, root) = agreeing();
+            tree.children[0].role = "slider".into();
+            let error = pair(&mut tree, &root, &mut 0).unwrap_err();
+            assert!(error.contains("no AppKit role"), "{error}");
+        }
+
+        #[std::prelude::v1::test]
+        fn values_read_as_appkit_prints_them() {
+            assert_eq!(value_text(&None).unwrap(), None);
+            assert_eq!(
+                value_text(&Some(json!(true))).unwrap().as_deref(),
+                Some("1")
+            );
+            assert_eq!(value_text(&Some(json!(3))).unwrap().as_deref(), Some("3"));
+            assert!(value_text(&Some(json!([1]))).is_err());
+        }
+    }
 }
