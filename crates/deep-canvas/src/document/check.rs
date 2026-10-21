@@ -795,7 +795,22 @@ fn check_params(
             }
             continue;
         };
+        if !param.module.is_empty() && !value.is_null() {
+            issues.push(Issue::error(
+                "module_missing",
+                key,
+                path,
+                value.clone(),
+                &format!(
+                    "`{name}` is evaluated by the {} module, which this build lacks",
+                    param.module
+                ),
+            ));
+            continue;
+        }
         match param.ty {
+            // The kind's own reader checks the value's shape when it evaluates the item.
+            ParamType::Json => {}
             ParamType::Str => {
                 if !value.is_string() {
                     // The closed code list has no type code; a value of another type is out of

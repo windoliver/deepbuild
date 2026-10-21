@@ -33,7 +33,8 @@
 // clippy config, io's `last_os_error`, `raw_os_error` and `is_terminal`, the streams outside a
 // binary root and an integration test, the source path through `file!` or a caller `Location`, and the compile-time
 // `env!` and `option_env!` macros), but for a binary root's own
-// command line and exit code and an integration test spawning the binary, an alias of the `std`
+// command line, exit code and output file (`fs::write` of a path its input names; nothing
+// is read) and an integration test spawning the binary, an alias of the `std`
 // or `core` root, a target predicate (`target_*`, `unix`, `windows` in a cfg), since clippy
 // compiles only the host's selection, any other build predicate in a cfg (`debug_assertions`,
 // `feature`, `panic`; `test` alone stays) and `debug_assert!`, since one source would check
@@ -284,7 +285,7 @@ function scanLibm(scope) {
     const binaryHandle = /^\(\s*"CARGO_BIN_EXE_/;
     const ambientModule = /\bstd\s*::\s*(fs|env|net|process|thread|os|backtrace)\b(?:\s*::\s*([A-Za-z_]\w*))?|\b(fs|env|net|process|thread|os|backtrace)\s*::\s*([A-Za-z_]\w*)?/g;
     const ownInput = (module, item, { binary, integrationTest }) =>
-      (binary && module === 'env' && /^args(_os)?$/.test(item ?? '')) || (module === 'process' && ((binary && item === 'exit') || integrationTest));
+      (binary && module === 'env' && /^args(_os)?$/.test(item ?? '')) || (binary && module === 'fs' && item === 'write') || (module === 'process' && ((binary && item === 'exit') || integrationTest));
     const ambientGroup = /\bstd\s*::\s*\{/g;
     const ambientName = /\b(fs|env|net|process|thread|os|backtrace)\b/;
     // An alias of the root itself (`use std as host;`, `extern crate core as machine;`,

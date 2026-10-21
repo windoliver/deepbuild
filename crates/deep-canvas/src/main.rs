@@ -1,6 +1,7 @@
 //! `deep-canvas <subcommand>`: JSON lines in, one JSON line out per input line, in order, exit
 //! 0; a line that can't be read answers `{"ok":false,"code":"bad_input"}`. Subcommands:
-//! `parse <time|unit|path|handle|id>`, `check`, `apply`, `canonical`, `color`.
+//! `parse <time|unit|path|handle|id>`, `check`, `apply`, `canonical`, `color`, `session`,
+//! `render`.
 
 use std::io::{self, BufRead, Write};
 
@@ -12,6 +13,7 @@ use deep_canvas::color::{
 };
 use deep_canvas::document::{apply, canonical, check};
 use deep_canvas::grammar::{Handle, Id, Path, Time, TimeContext, UnitContext, UnitLiteral};
+use deep_canvas::{render, session};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
@@ -174,6 +176,69 @@ fn color_line(input: &Map<String, Value>) -> Value {
     json!({"value": out})
 }
 
+/// Two finite numbers.
+fn pair(value: Option<&Value>) -> Option<[f64; 2]> {
+    let list = value?.as_array()?;
+    match (list.first()?.as_f64(), list.get(1)?.as_f64()) {
+        (Some(a), Some(b)) if list.len() == 2 && a.is_finite() && b.is_finite() => Some([a, b]),
+        _ => None,
+    }
+}
+
+/// `{"doc", "viewport": [w, h], "inputs": [...]}` → the session's states, track and hash.
+fn session_line(input: &Map<String, Value>) -> Value {
+    let (Some(doc), Some(viewport), Some(inputs)) = (
+        input.get("doc"),
+        pair(input.get("viewport")),
+        input.get("inputs").and_then(Value::as_array),
+    ) else {
+        return bad_input();
+    };
+    if viewport[0] <= 0.0 || viewport[1] <= 0.0 {
+        return bad_input();
+    }
+    match session::run(doc, viewport, inputs) {
+        Ok(out) => out,
+        Err(refused) => refused.to_json(),
+    }
+}
+
+/// `{"doc", "panel": [w, h], "ground": [r, g, b], "out": path}` → the frame written to `out`
+/// as raw RGBA8.
+fn render_line(input: &Map<String, Value>) -> Value {
+    let (Some(doc), Some(panel), Some(ground), Some(out)) = (
+        input.get("doc"),
+        pair(input.get("panel")),
+        input.get("ground").and_then(Value::as_array),
+        input.get("out").and_then(Value::as_str),
+    ) else {
+        return bad_input();
+    };
+    let byte = |v: &Value| v.as_u64().filter(|n| *n <= 255).map(|n| n as u8);
+    let (Some(r), Some(g), Some(b)) = (
+        ground.first().and_then(byte),
+        ground.get(1).and_then(byte),
+        ground.get(2).and_then(byte),
+    ) else {
+        return bad_input();
+    };
+    if ground.len() != 3
+        || panel
+            .iter()
+            .any(|n| *n < 1.0 || *n > render::MAX_SIDE as f64 || n.fract() != 0.0)
+    {
+        return bad_input();
+    }
+    let image = match render::render(doc, [panel[0] as u32, panel[1] as u32], [r, g, b]) {
+        Ok(image) => image,
+        Err(refused) => return refused.to_json(),
+    };
+    if std::fs::write(out, &image.rgba).is_err() {
+        return json!({"ok": false, "code": "bad_input", "what": "the frame could not be written to out"});
+    }
+    json!({"ok": true, "width": image.width, "height": image.height})
+}
+
 fn answer(command: &[String], line: &str) -> Value {
     let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
         return bad_input();
@@ -202,6 +267,8 @@ fn answer(command: &[String], line: &str) -> Value {
             None => bad_input(),
         },
         [name] if name == "color" => color_line(&input),
+        [name] if name == "session" => session_line(&input),
+        [name] if name == "render" => render_line(&input),
         _ => bad_input(),
     }
 }
@@ -211,7 +278,9 @@ fn known(command: &[String]) -> bool {
         [parse, grammar] if parse == "parse" => {
             ["time", "unit", "path", "handle", "id"].contains(&grammar.as_str())
         }
-        [name] => ["check", "apply", "canonical", "color"].contains(&name.as_str()),
+        [name] => {
+            ["check", "apply", "canonical", "color", "session", "render"].contains(&name.as_str())
+        }
         _ => false,
     }
 }
@@ -220,7 +289,7 @@ fn main() {
     let command: Vec<String> = std::env::args().skip(1).collect();
     if !known(&command) {
         eprintln!(
-            "deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color"
+            "deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color | session | render"
         );
         std::process::exit(2);
     }
