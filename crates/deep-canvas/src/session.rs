@@ -16,7 +16,7 @@ use crate::camera::{
 };
 use crate::document::member;
 use crate::draw::{bounds_of, scene, Class, Drawn, Goto, Scene, Shape};
-use crate::render::quad_contains;
+use crate::render::{draws_over, Facet};
 
 /// A closed-form eased move on the session's clock, from what was shown when it began.
 #[derive(Clone, Copy, Debug)]
@@ -85,8 +85,10 @@ impl<'a> Session<'a> {
     }
 
     /// Keeps the target inside the content's bounds widened by the margin, each axis by its
-    /// own extent. A target authored or framed outside them starts where it is and may only
-    /// come in, never go further out, so no input snaps the view and none escapes.
+    /// own extent. A target authored or framed outside them, or left outside when a view
+    /// control hides the content it was over, starts where it is and may only come in, never
+    /// go further out: the design lets only navigation reframe the view, never a stray input,
+    /// and it is a pan that can never pass the bounds, not the author's own target.
     fn clamp_pan(&mut self, before: Vec3) {
         let user = &self.scene.spec.user;
         if !user.pan_bounds_content {
@@ -394,11 +396,11 @@ impl<'a> Session<'a> {
     /// nearest disc whose drawn shape covers it.
     fn pick(&self, at: [f64; 2]) -> Option<String> {
         let view = self.projector();
-        // What draws on top wins, as the renderer stacks it (render::raster): the nearer
-        // shape, and at one depth the later in item order.
+        // What draws on top wins, as the renderer stacks it (render::draws_over): the nearer
+        // shape under the pointer, and at one depth the later in item order.
         let mut hit: Option<((f64, usize), &'a str)> = None;
         let mut take = |rank: (f64, usize), id: &'a str| {
-            if hit.is_none_or(|(best, _)| rank > best) {
+            if hit.is_none_or(|(best, _)| draws_over(rank, best)) {
                 hit = Some((rank, id));
             }
         };
@@ -408,21 +410,12 @@ impl<'a> Session<'a> {
             }
             match item.shape {
                 Shape::Rect { x, y, w, h } => {
-                    // The quadrilateral the renderer fills, its depth the corners' mean.
-                    let corners = [
-                        [x, y, 0.0],
-                        [x + w, y, 0.0],
-                        [x + w, y + h, 0.0],
-                        [x, y + h, 0.0],
-                    ]
-                    .map(|c| view.project(c));
-                    let [Some(a), Some(b), Some(c), Some(d)] = corners else {
+                    // The facet the renderer fills, at its depth under the pointer.
+                    let Some(facet) = Facet::of_rect(&view, x, y, w, h) else {
                         continue;
                     };
-                    let quad = [a, b, c, d].map(|p| [p.x, p.y]);
-                    if quad_contains(quad, at[0], at[1]) {
-                        let depth = (a.depth + b.depth + c.depth + d.depth) / 4.0;
-                        take((-depth, index), &item.id);
+                    if facet.contains(at[0], at[1]) {
+                        take((facet.depth_at(&view, at[0], at[1]), index), &item.id);
                     }
                 }
                 Shape::Dot { pos, radius } => {
@@ -431,7 +424,7 @@ impl<'a> Session<'a> {
                     };
                     let (dx, dy) = (at[0] - p.x, at[1] - p.y);
                     if dx * dx + dy * dy <= (radius * p.scale) * (radius * p.scale) {
-                        take((-p.depth, index), &item.id);
+                        take((p.depth, index), &item.id);
                     }
                 }
             }
@@ -870,6 +863,53 @@ mod tests {
         .unwrap();
         assert_eq!(out["trace"][0]["hover"], json!("r"));
         assert_eq!(out["trace"][1]["hover"], Value::Null);
+    }
+
+    #[test]
+    fn of_two_coplanar_rectangles_seen_obliquely_the_later_is_picked_where_they_overlap() {
+        // The eye at the left: the small later rectangle's centre is farther than the big
+        // earlier one's, but they share one plane, so where both cover the pointer the later
+        // is on top, as it is drawn (render).
+        let d = doc(
+            json!({"position": [-5, 5, 10], "target": [5, 5, 0], "fov": 60}),
+            json!({
+                "a": {"id": "a", "kind": "test.rect@1", "layer": "main", "name": "A", "order": "a1", "params": {"w": 10, "h": 10}, "at": {"pos": [0, 0, 0]}},
+                "b": {"id": "b", "kind": "test.rect@1", "layer": "main", "name": "B", "order": "a2", "params": {"w": 4, "h": 10}, "at": {"pos": [6, 0, 0]}}
+            }),
+        );
+        let scene = crate::draw::scene(&d).unwrap();
+        let pose = scene.spec.pose(&scene.rig, &Offsets::default());
+        let view = Projector::new(&pose, [100.0, 100.0], [100.0, 100.0]);
+        let over_b = view.project([8.0, 5.0, 0.0]).unwrap();
+        let over_a = view.project([3.0, 5.0, 0.0]).unwrap();
+        let out = run(
+            &d,
+            [100.0, 100.0],
+            &[
+                json!({"op": "hover", "at": [over_b.x, over_b.y]}),
+                json!({"op": "hover", "at": [over_a.x, over_a.y]}),
+            ],
+            false,
+        )
+        .unwrap();
+        assert_eq!(out["trace"][0]["hover"], json!("b"));
+        assert_eq!(out["trace"][1]["hover"], json!("a"));
+    }
+
+    #[test]
+    fn a_rectangle_with_a_corner_behind_the_eye_is_picked_where_it_lies_in_front() {
+        let d = doc(
+            json!({"position": [0, 5, 3], "target": [10, 5, 0], "fov": 60}),
+            json!({"r": {"id": "r", "kind": "test.rect@1", "layer": "main", "name": "R", "order": "a1", "params": {"w": 20, "h": 10}, "at": {"pos": [-5, 0, 0]}}}),
+        );
+        let out = run(
+            &d,
+            [100.0, 100.0],
+            &[json!({"op": "hover", "at": [50, 50]})],
+            false,
+        )
+        .unwrap();
+        assert_eq!(out["trace"][0]["hover"], json!("r"));
     }
 
     #[test]

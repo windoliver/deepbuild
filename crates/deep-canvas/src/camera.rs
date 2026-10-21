@@ -1100,23 +1100,50 @@ impl Projector {
         sub(scale(self.right, ux), scale(self.up, uy))
     }
 
+    /// Whether points project in perspective, so what lies behind the eye is not shown.
+    pub fn is_perspective(&self) -> bool {
+        self.perspective
+    }
+
+    /// Whether the document is flat, so every point is at one depth.
+    pub fn is_flat(&self) -> bool {
+        self.pose.flat
+    }
+
+    /// A point of the document in the view's frame: screen right, screen up and depth along
+    /// the forward axis, from the eye (a flat document: from its target, in the page).
+    pub fn to_view(&self, p: Vec3) -> Vec3 {
+        let d = if self.pose.flat {
+            sub(p, self.pose.target)
+        } else {
+            sub(p, self.pose.position)
+        };
+        [dot(d, self.right), dot(d, self.up), dot(d, self.forward)]
+    }
+
+    /// A direction of the document in the view's frame.
+    pub fn direction_to_view(&self, d: Vec3) -> Vec3 {
+        [dot(d, self.right), dot(d, self.up), dot(d, self.forward)]
+    }
+
     /// Where a point of the document lands, or `None` behind a perspective eye.
     pub fn project(&self, p: Vec3) -> Option<Projected> {
-        let (x, y, depth, scale) = if self.pose.flat {
-            let d = sub(p, self.pose.target);
-            (d[0] * self.scale, d[1] * self.scale, 1.0, self.scale)
-        } else {
-            let d = sub(p, self.pose.position);
-            let (xc, yc, zc) = (dot(d, self.right), dot(d, self.up), dot(d, self.forward));
-            if self.perspective {
-                if zc <= 0.0 {
-                    return None;
-                }
-                let s = self.scale / zc;
-                (xc * s, -yc * s, zc, s)
-            } else {
-                (xc * self.scale, -yc * self.scale, zc, self.scale)
+        self.project_view(self.to_view(p))
+    }
+
+    /// Where a point of the view's frame lands, or `None` at or behind a perspective eye. A
+    /// flat document's points are all at one depth, 1.
+    pub fn project_view(&self, v: Vec3) -> Option<Projected> {
+        let (xc, yc, zc) = (v[0], v[1], v[2]);
+        let (x, y, depth, scale) = if self.perspective {
+            if zc <= 0.0 {
+                return None;
             }
+            let s = self.scale / zc;
+            (xc * s, -yc * s, zc, s)
+        } else {
+            let depth = if self.pose.flat { 1.0 } else { zc };
+            (xc * self.scale, -yc * self.scale, depth, self.scale)
         };
         // Roll turns the frame about its centre.
         let (rx, ry) = (
@@ -1129,6 +1156,36 @@ impl Projector {
             depth,
             scale,
         })
+    }
+
+    /// The depth at which a pixel's line of sight meets the plane through `point` with
+    /// `normal`, both in the view's frame: the plane's depth under that pixel, what a shape
+    /// on it is drawn and picked by. A flat document's depth is 1 everywhere; a plane seen
+    /// edge-on, which covers no pixel, answers its point's depth.
+    pub fn depth_on_plane(&self, x: f64, y: f64, point: Vec3, normal: Vec3) -> f64 {
+        if self.pose.flat {
+            return 1.0;
+        }
+        let (dx, dy) = (x - self.centre[0], y - self.centre[1]);
+        let (ux, uy) = (
+            dx * self.cos_roll + dy * self.sin_roll,
+            -dx * self.sin_roll + dy * self.cos_roll,
+        );
+        let (sx, sy) = (ux / self.scale, -uy / self.scale);
+        if self.perspective {
+            // The line from the eye through the pixel: t · (sx, sy, 1), at depth t.
+            let along = dot(normal, [sx, sy, 1.0]);
+            if along == 0.0 {
+                return point[2];
+            }
+            dot(normal, point) / along
+        } else {
+            // The line through (sx, sy, 0) along the forward axis.
+            if normal[2] == 0.0 {
+                return point[2];
+            }
+            (dot(normal, point) - normal[0] * sx - normal[1] * sy) / normal[2]
+        }
     }
 
     /// The point of a flat document under a pixel.
