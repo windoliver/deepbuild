@@ -74,6 +74,8 @@ export interface AdapterEvent {
 
 export type AdapterFactsText = string;
 
+export type AdapterFactsMatch = { [key: string]: unknown };
+
 export type AdapterFactsTexts = Array<AdapterFactsText>;
 
 export type AdapterFactsVersion = string;
@@ -114,6 +116,7 @@ export type AdapterFactsHookRule = {
     otherwise: AdapterFactsText;
   };
   call?: "kind" | "detail";
+  stop?: boolean;
   cause?: {
     field: AdapterFactsText;
     values: AdapterFactsCauseMap;
@@ -274,6 +277,63 @@ export interface AdapterFacts {
     args: AdapterFactsTexts;
     signedIn: AdapterFactsText;
   };
+  stop?: {
+    readBy: AdapterFactsText;
+    conformance: AdapterFactsText;
+    turn: {
+      payload: AdapterFactsText;
+      transcript: AdapterFactsText;
+      elsewhere?: AdapterFactsText;
+    };
+    cause: {
+      readBy?: AdapterFactsText;
+      payload?: {
+        field: AdapterFactsText;
+        values: AdapterFactsCauseMap;
+      };
+      errors?: {
+        match: AdapterFactsMatch;
+        field: AdapterFactsText;
+        values: AdapterFactsCauseMap;
+      };
+      rateLimits?: {
+        match: AdapterFactsMatch;
+        reached: AdapterFactsText;
+        windows: AdapterFactsTexts;
+        used: AdapterFactsText;
+        resetsAt: AdapterFactsText;
+        toMs: number;
+        spent: AdapterFactsStopCause;
+        withoutReset: AdapterFactsStopCause;
+      };
+      otherwise: AdapterFactsStopCause;
+    };
+    usage: {
+      readBy?: AdapterFactsText;
+      covers: "turn" | "session";
+      records: {
+        match: AdapterFactsMatch;
+        has: AdapterFactsText;
+        skip?: AdapterFactsMatch;
+        once?: AdapterFactsText;
+      };
+      take: "sum" | "last";
+      counts: {
+        input: AdapterFactsTexts;
+        cached: AdapterFactsTexts;
+        output: AdapterFactsTexts;
+      };
+      exact: boolean;
+      model: {
+        record?: AdapterFactsText;
+        payload?: AdapterFactsText;
+      };
+      contextFill?: {
+        used: AdapterFactsTexts;
+        window: AdapterFactsText;
+      };
+    };
+  };
   readUsage?: AdapterFactsOperation;
   classifyStop?: AdapterFactsOperation;
   skills?: AdapterFactsOperation;
@@ -299,6 +359,110 @@ export interface AgentStop {
     did_work: boolean;
     cause?: "sign_in_required" | "token_refresh_failed" | "plan_window_spent" | "rate_limited" | "refusal" | "max_turns" | "context_overflow" | "tool_schema_rejected" | "agent_crashed" | "timed_out" | "unknown";
     reset?: number;
+  };
+  evidence?: Array<string>;
+}
+
+export type AgentStopV2Turn = number;
+
+export type AgentStopV2Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV2Count;
+  cached: AgentStopV2Count;
+  output: AgentStopV2Count;
+  context_fill: number | null;
+  cost: AgentStopV2Cost;
+} | null;
+
+export type AgentStopV2Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV2Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+/** agent.stop@2 */
+export interface AgentStopV2 {
+  v: 2;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "refusal";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "max_turns";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "timed_out";
+    usage: AgentStopV2Usage;
+  } | {
+    turn: AgentStopV2Turn;
+    did_work: boolean;
+    cause: "unknown";
+    usage: AgentStopV2Usage;
   };
   evidence?: Array<string>;
 }

@@ -10,7 +10,8 @@ describe('AC16 the event catalogue is generated from the kinds\' schemas, and a 
     expect(buildCatalogue(entries)).toEqual(catalogue());
     const names = new Set(entries.map((e) => e.name));
     for (const entry of catalogue()) expect(names.has(entry.schema), `${entry.kind}'s schema ${entry.schema}`).toBe(true);
-    expect(new Set(catalogue().map((e) => e.kind)).size).toBe(catalogue().length);
+    // A kind appears once per version (#603: agent.stop@1 stays catalogued beside agent.stop@2; owner-approved).
+    expect(new Set(catalogue().map((e) => `${e.kind}@${e.version}`)).size).toBe(catalogue().length);
     const userAsk = kindSchema('user.ask');
     const without = buildCatalogue(entries.filter((e) => e.name !== userAsk));
     expect(without.map((e) => e.kind)).not.toContain('user.ask');

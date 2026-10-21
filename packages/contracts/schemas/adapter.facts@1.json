@@ -616,6 +616,251 @@
       ],
       "additionalProperties": false
     },
+    "stop": {
+      "type": "object",
+      "properties": {
+        "readBy": {
+          "$ref": "#/$defs/text"
+        },
+        "conformance": {
+          "$ref": "#/$defs/text"
+        },
+        "turn": {
+          "type": "object",
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/text",
+              "description": "The payload field that names the turn."
+            },
+            "transcript": {
+              "$ref": "#/$defs/text",
+              "description": "The transcript entry path that carries the same value."
+            },
+            "elsewhere": {
+              "$ref": "#/$defs/text",
+              "description": "A payload field whose presence says the turn ran in another transcript."
+            }
+          },
+          "required": [
+            "payload",
+            "transcript"
+          ],
+          "additionalProperties": false
+        },
+        "cause": {
+          "type": "object",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "$ref": "#/$defs/text"
+                },
+                "values": {
+                  "$ref": "#/$defs/causeMap"
+                }
+              },
+              "required": [
+                "field",
+                "values"
+              ],
+              "additionalProperties": false,
+              "description": "The hook payload's error field and the causes its values name."
+            },
+            "errors": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "$ref": "#/$defs/match"
+                },
+                "field": {
+                  "$ref": "#/$defs/text"
+                },
+                "values": {
+                  "$ref": "#/$defs/causeMap"
+                }
+              },
+              "required": [
+                "match",
+                "field",
+                "values"
+              ],
+              "additionalProperties": false,
+              "description": "The turn's error records, matched by their fields, and the causes their error field names."
+            },
+            "rateLimits": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "$ref": "#/$defs/match"
+                },
+                "reached": {
+                  "$ref": "#/$defs/text"
+                },
+                "windows": {
+                  "$ref": "#/$defs/texts"
+                },
+                "used": {
+                  "$ref": "#/$defs/text"
+                },
+                "resetsAt": {
+                  "$ref": "#/$defs/text"
+                },
+                "toMs": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "spent": {
+                  "$ref": "#/$defs/stopCause"
+                },
+                "withoutReset": {
+                  "$ref": "#/$defs/stopCause"
+                }
+              },
+              "required": [
+                "match",
+                "reached",
+                "windows",
+                "used",
+                "resetsAt",
+                "toMs",
+                "spent",
+                "withoutReset"
+              ],
+              "additionalProperties": false,
+              "description": "The turn's last rate-limit record: a reached limit whose spent window names a reset is plan_window_spent, otherwise rate_limited."
+            },
+            "otherwise": {
+              "$ref": "#/$defs/stopCause"
+            }
+          },
+          "required": [
+            "otherwise"
+          ],
+          "additionalProperties": false
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "readBy": {
+              "$ref": "#/$defs/text"
+            },
+            "covers": {
+              "type": "string",
+              "enum": [
+                "turn",
+                "session"
+              ]
+            },
+            "records": {
+              "type": "object",
+              "properties": {
+                "match": {
+                  "$ref": "#/$defs/match"
+                },
+                "has": {
+                  "$ref": "#/$defs/text"
+                },
+                "skip": {
+                  "$ref": "#/$defs/match"
+                },
+                "once": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "required": [
+                "match",
+                "has"
+              ],
+              "additionalProperties": false,
+              "description": "Which transcript entries count: those matching, that carry the `has` path, not matching `skip`, once per `once` value."
+            },
+            "take": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "last"
+              ]
+            },
+            "counts": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/texts"
+                },
+                "cached": {
+                  "$ref": "#/$defs/texts"
+                },
+                "output": {
+                  "$ref": "#/$defs/texts"
+                }
+              },
+              "required": [
+                "input",
+                "cached",
+                "output"
+              ],
+              "additionalProperties": false,
+              "description": "The record paths each count sums; a path with a leading - is taken away."
+            },
+            "exact": {
+              "type": "boolean"
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "record": {
+                  "$ref": "#/$defs/text"
+                },
+                "payload": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "additionalProperties": false,
+              "description": "Where the model that answered is read: the last record's path, or a payload field."
+            },
+            "contextFill": {
+              "type": "object",
+              "properties": {
+                "used": {
+                  "$ref": "#/$defs/texts"
+                },
+                "window": {
+                  "$ref": "#/$defs/text"
+                }
+              },
+              "required": [
+                "used",
+                "window"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "covers",
+            "records",
+            "take",
+            "counts",
+            "exact",
+            "model"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "readBy",
+        "conformance",
+        "turn",
+        "cause",
+        "usage"
+      ],
+      "additionalProperties": false,
+      "description": "How each agent.stop names its cause and carries its usage (#603): the turn's span in the transcript, the cause tables in order, and the counting rules."
+    },
     "readUsage": {
       "$ref": "#/$defs/operation"
     },
@@ -649,6 +894,16 @@
     "text": {
       "type": "string",
       "minLength": 1
+    },
+    "match": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"
+      },
+      "additionalProperties": {
+        "x-opaque": "the value a transcript entry carries at that path"
+      },
+      "description": "Entry paths and the values each must carry."
     },
     "texts": {
       "type": "array",
@@ -832,6 +1087,10 @@
             "detail"
           ],
           "description": "The event carries the tool call's kind and detail, or its detail alone."
+        },
+        "stop": {
+          "type": "boolean",
+          "description": "The event is a stop: it names its cause and carries its usage by the facts' stop section."
         },
         "cause": {
           "type": "object",
