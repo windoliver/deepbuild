@@ -209,6 +209,13 @@ export class Projector {
         this.up('asks', { id: bare(e.subject), status, outcome: status, answered: e.ts, answer: json(d.answer), decision: str(d.decision) });
         break;
       }
+      case 'ask.moot':
+      case 'ask.superseded': {
+        // The core closed the ask without an answer: it is never asked again.
+        const status = e.kind.slice(4);
+        this.up('asks', { id: bare(e.subject), status, outcome: status, answered: e.ts });
+        break;
+      }
       case 'ask.later':
         this.set('asks', { status: 'later', later_until: int(d.until) }, { id: bare(e.subject) });
         break;

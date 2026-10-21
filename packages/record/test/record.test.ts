@@ -403,3 +403,31 @@ describe('a permission request is hook text too', () => {
     expect(JSON.stringify(e?.data)).not.toContain('npm publish');
   });
 });
+
+describe('asks the core closes without an answer', () => {
+  for (const kind of ['ask.moot', 'ask.superseded']) {
+    it(`${kind} closes its ask, live and after a rebuild`, async () => {
+      const { record: r, S } = await record();
+      const ask = event('ask.created', T0 + 10, undefined);
+      await r.append(core(S), ask);
+      await r.append(core(S), { ...event(kind, T0 + 20, undefined), subject: `ask:${ask.id}` });
+      for (const when of ['live', 'rebuilt']) {
+        if (when === 'rebuilt') await r.rebuild();
+        const row = (await r.table('asks')).rows.find((x) => x.id === ask.id);
+        // A record that ignores the kind leaves the ask open, so a person is asked it again.
+        expect([when, row?.status, row?.outcome]).toEqual([when, kind.slice(4), kind.slice(4)]);
+      }
+    });
+  }
+});
+
+describe('table() reads rows in SQLite primary-key order', () => {
+  it('attempt 2 comes before attempt 10', async () => {
+    const { record: r, S } = await record();
+    const task = 'task:01K74FX2B4D6F8H0K2M4P6R8T0';
+    await r.append({ ...core(S), writer: 'app' }, event('claim.made', T0 + 10, undefined, { task_ref: task, attempt: 10 }));
+    await r.append({ ...core(S), writer: 'app' }, event('claim.made', T0 + 20, undefined, { task_ref: task, attempt: 2 }));
+    // A table() that orders keys as text puts 10 before 2.
+    expect((await r.table('attempts')).rows.map((x) => Number(x.attempt))).toEqual([2, 10]);
+  });
+});

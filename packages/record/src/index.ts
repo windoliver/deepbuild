@@ -500,9 +500,9 @@ class SqliteRecord implements RecordStore {
   async table(name: string): Promise<Table> {
     const def = tableDef(name);
     if (!def) throw new RecordError('schema', `no projection ${name}`, { path: '/name' });
-    const rows = this.db.prepare(`SELECT * FROM ${name}`).safeIntegers(true).all() as Row[];
-    const keyOf = (row: Row) => def.pk.map((k) => canon(row[k])).join('|');
-    rows.sort((a, b) => (keyOf(a) < keyOf(b) ? -1 : keyOf(a) > keyOf(b) ? 1 : 0));
+    // SQLite's own order for stored values: numbers as numbers, text by its bytes.
+    const order = def.pk.map((k) => `"${k}"`).join(', ');
+    const rows = this.db.prepare(`SELECT * FROM ${name} ORDER BY ${order}`).safeIntegers(true).all() as Row[];
     return { name, primaryKey: [...def.pk], rows };
   }
 
@@ -592,14 +592,6 @@ function toEvent(row: StoredRow): Event {
   if (row.agent !== null) event.agent = row.agent;
   return event;
 }
-/** A key's text for ordering rows: the same text for the same stored value, whatever its type. */
-function canon(value: unknown): string {
-  if (typeof value === 'bigint') return `${value}n`;
-  if (value === undefined) return 'undefined';
-  if (value instanceof Uint8Array) return `bytes:${Buffer.from(value).toString('hex')}`;
-  return JSON.stringify(value);
-}
-
 export async function openRecord(options: RecordOptions): Promise<RecordStore> {
   const storage = options.storage ?? fileStorage();
   if (!isBackend(storage)) throw new RecordError('storage', `storage ${storage.name} is not one the record can write through`);
