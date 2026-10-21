@@ -66,3 +66,30 @@
     ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
     AssertionError: check@1's digest changed from the base's value: expected 'd1:a03991e1499e75f1ab18c4b366cbaa80d6…' to be 'd1:a03991e1499e75f1ab18c4b366cbaa80d6…' // Object.is equality
           Tests  1 failed | 68 passed (69)
+
+## 6. Mutant: check@1 (a base name outside the seven) dropped from packages/contracts/digests.json while its schema stays: fails
+
+         × AC3 check@1 is unchanged: same digest as the base, and its schema still matches 3ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    AssertionError: check@1 was in digests.json at the base and is missing now: expected undefined to be type of 'string'
+          Tests  1 failed | 68 passed (69)
+
+## 7. Mutant: frozenDigests() returns a hard-coded table instead of reading digests.json (the table is today's file without access@1): fails
+
+         × AC3 frozenDigests() reads packages/contracts/digests.json 3ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    AssertionError: frozenDigests()[access@1] differs from digests.json: expected undefined to be 'd1:d870bc18ea2241218c18e46815d9e28466…' // Object.is equality
+          Tests  1 failed | 68 passed (69)
+
+    Note: a hard-coded table that equals the file byte for byte is not told apart by behavior; the test
+    catches it the moment the table and the file diverge, as here, which is the only observable wrong program.
+
+## 8. Known shape of a failure: a base schema's file deleted (schemas/check@1.json) while its digests.json row stays
+
+    The test fails, but through getSchema's throw before the named assertion runs, not the "schema was reshaped"
+    message. Recorded as is; the test is the blind job's and is not edited.
+
+         × AC3 check@1 is unchanged: same digest as the base, and its schema still matches 67ms
+    ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+    ContractError: unknown_schema at /: check@1
+         19|   if (!schema) throw new ContractError(issue('unknown_schema', '', nam…

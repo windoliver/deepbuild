@@ -76,4 +76,4 @@ Only what the issue and the existing contract tests name; nothing new is asked o
 - `BASE-FAILURE.txt`: the run on the base, where 21 tests fail, each for the expected reason, and the
   planted wrong programs each test was run against.
 - `AC3-REDRAFT.txt`: the dispute, the first draft's failure on main, and the redraft's runs on main, on the base,
-  on a branch that adds schemas, and against two mutants.
+  on a branch that adds schemas, and against four mutants, plus the shape a deleted base schema fails in.
