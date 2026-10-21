@@ -967,3 +967,66 @@ describe('round 15: run results, resumed sessions, answered plans and agent puts
     expect(rows.length, 'a removed file stays removed').toBe(0);
   });
 });
+
+describe('round 16: cut starts across restarts, late finishes, archived transcripts', () => {
+  async function fullCommitElsewhere(r: RecordStore, at: number): Promise<void> {
+    const B = ulidAt(at);
+    await r.append(hook(B), event('session.start', at, undefined));
+    const cb = event('claim.made', at + 1, undefined);
+    await r.append(hook(B), cb);
+    const vid = ulidAt(at + 2);
+    await r.append(core(B), { ...event('verdict.made', at + 2, undefined, { claim: `claim:${cb.id}`, verdict: `verdict:${vid}` }, 1), id: vid });
+  }
+  it('a session whose start a cut lost reads INVALID at its claim after a later clean restart', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    await fullCommitElsewhere(r, T0 - 5000);
+    const X = ulidAt(T0 - 1000);
+    await r.append(hook(X), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(X), event('user.ask', T0 - 900, seqAt(T0 - 900)));
+    for (let i = 1; i <= 5; i++) await r.append(hook(X), event('tool.after', T0 - 900 + i, seqAt(T0 - 900 + i)));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 1000, storage });
+    // X keeps working after the restart
+    await r.append(hook(X), event('tool.after', T0 + 1100, seqAt(T0 + 1100)));
+    await r.close();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 2000, storage });
+    open.push(r);
+    const claim = event('claim.made', T0 + 2100, undefined);
+    await r.append(hook(X), claim);
+    const verdicts = (await r.table('verdicts')).rows.filter((v) => v.claim_id === claim.id);
+    expect(verdicts[0]?.outcome, 'X lost its start and 6 events in the cut').toBe('INVALID');
+  });
+
+  it('a finish that lands after a newer prompt, before the FULL boundary, exempts nothing', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(S), event('user.ask', T0 - 900, seqAt(T0 - 900)));
+    await r.append(hook(S), { ...event('agent.stop', T0 - 800, seqAt(T0 - 800), { turn: 1 }), subject: `session:${S}` });
+    // The person types the next prompt; its hook reaches the hub before the app's finish of turn 1.
+    await r.append(hook(S), event('user.ask', T0 + 20, seqAt(T0 + 20)));
+    await r.append(app(S), { ...event('session.attention', T0 + 10, undefined, { state: 'finished' }), subject: `session:${S}` });
+    await fullCommitElsewhere(r, T0 + 30);
+    for (let i = 1; i <= 5; i++) await r.append(hook(S), event('tool.after', T0 + 40 + i, seqAt(T0 + 40 + i)));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    open.push(r);
+    await r.append(hook(S), event('tool.after', T0 + 6000, seqAt(T0 + 6000)));
+    await r.append(hook(S), { ...event('agent.stop', T0 + 6001, seqAt(T0 + 6001), { turn: 2 }), subject: `session:${S}` });
+    const claim = event('claim.made', T0 + 6002, undefined);
+    await r.append(hook(S), claim);
+    const verdicts = (await r.table('verdicts')).rows.filter((v) => v.claim_id === claim.id);
+    expect(verdicts[0]?.outcome, 'S lost 5 tool calls in the cut').toBe('INVALID');
+  });
+  it('transcript.archived never brings back a file retention removed', async () => {
+    const { record: r, S } = await record();
+    const stored = event('evidence.stored', T0 + 1, undefined);
+    await r.append(core(S), stored);
+    await r.append(core(S), event('evidence.removed', T0 + 2, undefined, { sha256: (stored.data as Record<string, JsonValue>).sha256! }));
+    await r.append(app(S), event('transcript.archived', T0 + 3, undefined, { session: `session:${S}`, evidence: (stored.data as Record<string, JsonValue>).sha256! }));
+    // A record that lets the archive write the evidence row lists a file the store no longer holds.
+    expect((await r.table('evidence')).rows).toEqual([]);
+  });
+});

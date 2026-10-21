@@ -243,12 +243,11 @@ class SqliteRecord implements RecordStore {
     this.blockEnd = this.next;
     const wasRunning = meta.get('state') === 'running';
     const durable = Number(meta.get('durable') ?? 0);
+    // A cut's fact outlives clean restarts: a session whose start it lost is judged at its claim, whenever that comes.
+    this.unclean = wasRunning || meta.get('cut') === '1';
     // A FULL commit: a cut after this open that loses it would read the earlier clean stop as this run's.
-    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running' });
-    if (wasRunning) {
-      this.unclean = true;
-      this.recover(durable);
-    }
+    this.commitMeta({ schema: String(SCHEMA_VERSION), state: 'running', ...(this.unclean ? { cut: '1' } : {}) });
+    if (wasRunning) this.recover(durable);
   }
 
   /** Runs `work` in one synchronous=FULL commit, which also records how far the log is durable. */
@@ -280,9 +279,9 @@ class SqliteRecord implements RecordStore {
   private recover(lastFull: number): void {
     // Every session still active at that commit may have lost its tail, a claim of its own included: its
     // next claim, surviving here or replayed from a spool, reads INVALID.
-    // Ended means nothing of the session reached the log after its end: a finish that landed late, after it
-    // resumed, exempts nothing.
-    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos))").all(lastFull) as { id: string }[];
+    // Ended means nothing of the session reached the log after its end and no turn of it is open: a finish
+    // that landed late, after it resumed, exempts nothing.
+    const active = this.db.prepare("SELECT id FROM sessions s WHERE NOT (status IN ('finished', 'failed') AND ended_log_pos IS NOT NULL AND ended_log_pos <= ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.session_id = s.id AND e.log_pos > s.ended_log_pos) AND NOT EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.stopped = 0))").all(lastFull) as { id: string }[];
     const mark = this.db.prepare('INSERT OR IGNORE INTO lost_sessions (session) VALUES (?)');
     this.backend.commit(this.db, 'normal', () => { for (const { id } of active) mark.run(id); });
     for (const { id } of active) this.lost.add(id);

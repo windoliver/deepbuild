@@ -193,7 +193,6 @@ export class Projector {
       case 'transcript.archived': {
         const session = bare(d.session);
         if (session) this.up('sessions', { id: session, transcript: str(d.evidence) });
-        this.up('evidence', { hash: str(d.evidence), kind: 'transcript' });
         break;
       }
       case 'agent.stop':
