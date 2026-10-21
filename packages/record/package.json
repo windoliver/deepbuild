@@ -1,0 +1,15 @@
+{
+  "name": "@deepbuild/record",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=24.22.0" },
+  "exports": "./dist/index.js",
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@deepbuild/contracts": "0.0.0",
+    "@deepbuild/evidence": "0.0.0",
+    "better-sqlite3": "13.0.3"
+  }
+}

@@ -103,6 +103,15 @@ export class EvidenceError extends Error {
   }
 }
 
+/**
+ * Text scrubbed as the store's text sink scrubs it: by the run's held and secret-looking env values, in
+ * every printed form, and then by pattern. The record scrubs a hook payload's text fields with it before
+ * it cuts them (#14, Privacy).
+ */
+export function scrubText(text: string, run?: Run): string {
+  return scrub(Buffer.from(text, 'utf8'), scrubList(run)).toString('utf8');
+}
+
 const DAY = 86_400_000;
 const RETENTION_MS = 30 * DAY;
 // Uncited files of these kinds go sooner: a series' batches after a day, its minute rollups after a week (#262).

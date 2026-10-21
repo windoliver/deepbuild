@@ -17,6 +17,10 @@
         "vitest": {
           "spec": "5.0.5",
           "why": "Issue #12: the unit lane's TypeScript tests."
+        },
+        "@types/better-sqlite3": {
+          "spec": "7.6.13",
+          "why": "Issue #14: the types of better-sqlite3 for the record package."
         }
       }
     },
@@ -140,12 +144,40 @@
     },
     "spikes/hub-core/package.json": {
       "dependencies": {
-        "effect": { "spec": "4.0.5", "why": "Issue #56: the Effect 4 build of the hub-core spike, and the import(\"effect/Effect\") timing." }
+        "effect": {
+          "spec": "4.0.5",
+          "why": "Issue #56: the Effect 4 build of the hub-core spike, and the import(\"effect/Effect\") timing."
+        }
       },
       "devDependencies": {
-        "@effect/language-service": { "spec": "0.87.5", "why": "Issue #56: the Effect diagnostics the Effect build must pass." },
-        "@types/node": { "spec": "22.20.5", "why": "Issue #56: Node's types the spike's builds were written and typechecked against, on Node 22 as the issue times it." },
-        "typescript": { "spec": "5.9.3", "why": "Issue #56: tsc over both builds, and the compiler the Effect diagnostics run on." }
+        "@effect/language-service": {
+          "spec": "0.87.5",
+          "why": "Issue #56: the Effect diagnostics the Effect build must pass."
+        },
+        "@types/node": {
+          "spec": "22.20.5",
+          "why": "Issue #56: Node's types the spike's builds were written and typechecked against, on Node 22 as the issue times it."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #56: tsc over both builds, and the compiler the Effect diagnostics run on."
+        }
+      }
+    },
+    "packages/record/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #14: the catalogue the record validates every event against, canonical JSON and the hash of an event's content."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #14: the scrub of a hook payload's text before the record cuts it, and the evidence copy of the whole text (#15's store)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #14: the SQLite driver behind the record's storage interface, as the issue names it: exact 64-bit integers, WAL and synchronous per commit."
+        }
       }
     }
   },
