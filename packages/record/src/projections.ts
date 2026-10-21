@@ -227,11 +227,12 @@ export class Projector {
       case 'ask.superseded': {
         // An ask closed without an answer is never asked again; one already decided keeps its answer.
         const status = e.kind.slice(4);
-        this.stmt("UPDATE asks SET status = ?, outcome = ? WHERE id = ? AND status NOT IN ('answered', 'defaulted')").run(status, status, bare(e.subject));
+        this.stmt("UPDATE asks SET status = ?, outcome = ? WHERE id = ? AND status NOT IN ('answered', 'defaulted', 'decided')").run(status, status, bare(e.subject));
         break;
       }
       case 'ask.later':
-        this.set('asks', { status: 'later', later_until: int(d.until) }, { id: bare(e.subject) });
+        // Only an ask still waiting can wait longer.
+        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.until), bare(e.subject));
         break;
       case 'ask.batched':
         if (Array.isArray(d.asks)) for (const a of d.asks) if (isObj(a)) this.set('asks', { batch_id: str(d.batch) }, { id: bare(a.ask) });
@@ -256,7 +257,8 @@ export class Projector {
         this.up('definitions', { ...this.definition(d, 'revised', e.ts), dispute_ask: str(d.dispute_ask) });
         break;
       case 'run.started':
-        this.up('runs', { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts });
+        // A run's claim, check and commit are fixed by its first start: a later start of the same run changes nothing.
+        this.add('runs', { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts });
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'run.finished':
@@ -303,7 +305,8 @@ export class Projector {
         this.up('dry_merges', { a: str(d.a), b: str(d.b), conflicts: json(d.conflicts), as_of: e.ts });
         break;
       case 'evidence.put':
-        this.up('evidence', { hash: str(d.sha256), kind: str(d.kind), source: str(d.source), origin: str(d.origin), redaction: str(d.redaction), license: str(d.license), step_times: json(d.step_times) });
+        // A put never relabels a file already recorded: the core's evidence.stored is the store's own record.
+        this.add('evidence', { hash: str(d.sha256), kind: str(d.kind), source: str(d.source), origin: str(d.origin), redaction: str(d.redaction), license: str(d.license), step_times: json(d.step_times) });
         break;
       case 'evidence.stored':
         this.up('evidence', { hash: str(d.sha256), kind: str(d.kind), type: str(d.type), size: int(d.size), origin: str(d.origin), redaction: str(d.redaction), license: str(d.license), step_times: json(d.step_times), derived_from: json(d.derived_from) });

@@ -113,7 +113,9 @@ const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked',
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
 /** The text field each kind keeps of a hook payload: scrubbed, then cut. */
-const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text' };
+const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
+/** What content-free mode keeps of each text field: nothing its schema allows. */
+const BLANK: Readonly<Record<string, string | null>> = { command: null, text: '', title: '-' };
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS events (
@@ -281,10 +283,9 @@ class SqliteRecord implements RecordStore {
     this.backend.commit(this.db, 'normal', () => { for (const { id } of active) mark.run(id); });
     for (const { id } of active) this.lost.add(id);
     const open = this.db.prepare('SELECT id, session_id FROM claims WHERE verdict_id IS NULL ORDER BY created, id').all() as { id: string; session_id: string | null }[];
-    for (const claim of open) {
-      if (claim.session_id && !this.lost.has(claim.session_id)) continue;
-      this.invalidate(claim.id);
-    }
+    // Chosen before any verdict: a verdict clears its session's mark, and every open claim of a lost session is INVALID.
+    const judged = open.filter((claim) => !claim.session_id || this.lost.has(claim.session_id));
+    for (const claim of judged) this.invalidate(claim.id);
   }
   /** The record, as the core, appends the verdict that a claim's stream events were lost. */
   private invalidate(claimId: string): void {
@@ -338,7 +339,7 @@ class SqliteRecord implements RecordStore {
     let whole: string | undefined;
     const field = TEXT_FIELD[kind];
     if (field && isObj(data)) {
-      if (this.options.contentFree) data[field] = field === 'command' ? null : '';
+      if (this.options.contentFree) data[field] = BLANK[field] ?? null;
       else if (typeof data[field] === 'string') {
         const scrubbed = scrubText(data[field], connection.run);
         data[field] = cut(scrubbed, CUT);
@@ -385,6 +386,7 @@ class SqliteRecord implements RecordStore {
     // After an unclean start, a hook event of a session with no row here, and not its start, means its
     // earlier events were cut with no durable trace: its next claim reads INVALID.
     if (this.unclean && connection.writer === 'hook' && prepared.session && input.kind !== 'session.start' && !this.lost.has(prepared.session)
+      && !this.queue.some((q) => q.prepared.session === prepared.session && q.prepared.input.kind === 'session.start')
       && !this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(prepared.session)) this.markLost(prepared.session);
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
@@ -566,6 +568,8 @@ class SqliteRecord implements RecordStore {
 
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
   async raw(sql: string): Promise<unknown[]> {
+    // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
+    if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
     const statement = this.db.prepare(sql);
     if (!statement.readonly || !statement.reader) throw new RecordError('storage', 'raw SQL reads the record; it never writes it');
     return statement.all();

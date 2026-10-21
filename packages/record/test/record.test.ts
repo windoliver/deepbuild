@@ -26,6 +26,8 @@ const event = (kind: string, at: number, seq: string | undefined, patch: Record<
   v: 1, id: ulidAt(at), kind, ts: at, ...(seq === undefined ? {} : { seq }), data: { ...(data(kind, index) as Record<string, JsonValue>), ...patch },
 });
 const fx = (kind: string): Record<string, JsonValue> => fixtures(`${kind}@1`)[0] as Record<string, JsonValue>;
+const app = (session: string): Connection => ({ writer: 'app', actor: 'you', scope: 'you', session });
+const mcp = (session: string): Connection => ({ writer: 'mcp:claude', actor: 'agent', scope: 'you', session });
 const core = (session: string): Connection => ({ writer: 'core', actor: 'you', scope: 'you', session });
 
 const open: RecordStore[] = [];
@@ -544,5 +546,165 @@ describe('lost events, decided asks and the record\'s own evidence', () => {
     await r.append({ ...hook(C), writer: 'app' }, claim);
     const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
     expect(rows[0]?.verdict_id).not.toBeNull();
+  });
+});
+
+describe('recovery invalidates every open claim of a lost session', () => {
+  it('two open claims in one session, cut: both INVALID', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const c1 = event('claim.made', T0, undefined);
+    const c2 = event('claim.made', T0 + 1, undefined, { attempt: 2 });
+    await r.append(app(S), c1);
+    await r.append(app(S), c2);
+    // a FULL commit so both claims are durable
+    const B = ulidAt(T0 + 5);
+    await r.append(hook(B), event('session.start', T0 + 5, undefined));
+    const v = data('verdict.made') as Record<string, string>;
+    await r.append(core(B), { v: 1, id: ulidAt(T0 + 6), kind: 'verdict.made', ts: T0 + 6, subject: v.claim!, data: v as unknown as JsonValue });
+    await r.append(hook(S), event('tool.after', T0 + 10, seqAt(T0 + 10)));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 100, storage });
+    const claims = (await r.table('claims')).rows.filter((x) => x.id === c1.id || x.id === c2.id).map((x) => [x.id === c1.id ? 'c1' : 'c2', x.verdict_id !== null]);
+    await r.close();
+    expect(claims).toEqual([['c1', true], ['c2', true]]);
+  });
+});
+
+describe('a new session after an unclean start whose start and prompt arrive together', () => {
+  it('its claim is not INVALID', async () => {
+    const storage = testStorage();
+    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const B = ulidAt(T0 - 2000);
+    await r.append(hook(B), event('session.start', T0 - 2000, undefined));
+    storage.cutPower();
+    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
+    const D = ulidAt(T0 + 6000);
+    await Promise.all([
+      r.append(hook(D), event('session.start', T0 + 6000, undefined)),
+      r.append(hook(D), event('user.ask', T0 + 6001, seqAt(T0 + 6001))),
+    ]);
+    const claim = event('claim.made', T0 + 6002, undefined);
+    await r.append(app(D), claim);
+    const row = (await r.table('claims')).rows.find((x) => x.id === claim.id);
+    await r.close();
+    expect(row?.verdict_id ?? null).toBeNull();
+  });
+});
+
+describe('an agent evidence.put leaves a stored file\'s origin and redaction', () => {
+  it('origin stays agent, redaction stays incomplete', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(core(S), event('evidence.stored', T0, undefined, { origin: 'agent', redaction: 'incomplete' }));
+    await r.append(mcp(S), event('evidence.put', T0 + 1, undefined, { origin: 'deepbuild', redaction: 'complete' }));
+    const row = (await r.table('evidence')).rows[0];
+    await r.close();
+    expect([row?.origin, row?.redaction]).toEqual(['agent', 'incomplete']);
+  });
+});
+
+describe('an agent run.started does not re-point a run', () => {
+  it('the finished run keeps its claim and commit', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(core(S), event('run.started', T0, undefined));
+    await r.append(core(S), event('run.finished', T0 + 1, undefined, { outcome: 'passed', tests_run: 3, passed: 3 }));
+    const other = `claim:${ulidAt(T0 + 2)}`;
+    await r.append(mcp(S), event('run.started', T0 + 3, undefined, { claim: other, commit: 'f'.repeat(40) }));
+    const row = (await r.table('runs')).rows[0];
+    await r.close();
+    expect([row?.claim_id, row?.commit_sha, row?.outcome]).toEqual(['01K74G1Z3X5V7T9R1P3N5M7K9H', '0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46', 'passed']);
+  });
+});
+
+describe('raw refuses statements that change the database', () => {
+  for (const sql of ['PRAGMA journal_mode = DELETE', 'PRAGMA synchronous = OFF', 'PRAGMA fullfsync = OFF', 'PRAGMA query_only = 1', "ATTACH ':memory:' AS x", 'PRAGMA recursive_triggers = 1']) {
+    it(sql, async () => {
+      const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+      let refused = false;
+      try { await r.raw(sql); } catch { refused = true; }
+      await r.close();
+      expect(refused).toBe(true);
+    });
+  }
+});
+
+describe('a decided ask stays decided', () => {
+  it('a hook ask.cancelled after decision.applied keeps decided_for_you', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const askId = ulidAt(T0);
+    await r.append(core(S), { v: 1, id: askId, kind: 'ask.created', ts: T0, data: data('ask.created') });
+    await r.append(core(S), event('decision.applied', T0 + 1, undefined, { ask: `ask:${askId}` }));
+    await r.append(hook(S), { ...event('ask.cancelled', T0 + 2, undefined), subject: `ask:${askId}` });
+    const row = (await r.table('asks')).rows.find((x) => x.id === askId);
+    await r.close();
+    expect([row?.status, row?.outcome]).toEqual(['decided', 'decided_for_you']);
+  });
+  it('an app ask.later after ask.answered keeps it answered', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const askId = ulidAt(T0);
+    await r.append(core(S), { v: 1, id: askId, kind: 'ask.created', ts: T0, data: data('ask.created') });
+    await r.append(core(S), { ...event('ask.answered', T0 + 1, undefined), subject: `ask:${askId}` });
+    await r.append(app(S), { ...event('ask.later', T0 + 2, undefined), subject: `ask:${askId}` });
+    const row = (await r.table('asks')).rows.find((x) => x.id === askId);
+    await r.close();
+    expect([row?.status, row?.outcome]).toEqual(['answered', 'answered']);
+  });
+});
+
+describe('task.completed title is agent text', () => {
+  it('content-free mode keeps no agent-written title', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), contentFree: true });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(S), { ...event('task.completed', T0, seqAt(T0), { title: 'Rotate the prod password hunter2 for ACME' }), subject: `session:${S}` });
+    const rows = await r.raw("SELECT data FROM events WHERE kind = 'task.completed'") as { data: string }[];
+    await r.close();
+    expect(rows[0]!.data).not.toContain('hunter2');
+  });
+  it('a secret-pattern token in a title is scrubbed', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    const tok = 'ghp_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8';
+    await r.append(hook(S), { ...event('task.completed', T0, seqAt(T0), { title: `use ${tok}` }), subject: `session:${S}` });
+    const rows = await r.raw("SELECT data FROM events WHERE kind = 'task.completed'") as { data: string }[];
+    await r.close();
+    expect(rows[0]!.data).not.toContain(tok);
+  });
+});
+
+describe('a refused raw statement takes no effect', () => {
+  it('after a refused raw PRAGMA query_only = 1 an append still lands', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
+    const S = ulidAt(T0 - 1000);
+    await expect(r.raw('PRAGMA query_only = 1')).rejects.toThrow();
+    let err: unknown;
+    try { await r.append(hook(S), event('session.start', T0 - 1000, undefined)); } catch (e) { err = e; }
+    let closeErr: unknown;
+    try { await r.close(); } catch (e) { closeErr = e; }
+    expect([String(err ?? 'ok'), String(closeErr ?? 'ok')]).toEqual(['ok', 'ok']);
+  });
+  it('after a refused raw PRAGMA fullfsync = OFF a verdict still syncs full', async () => {
+    const storage = testStorage();
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage });
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await expect(r.raw('PRAGMA fullfsync = OFF')).rejects.toThrow();
+    const before = storage.syncs().length;
+    const v = data('verdict.made') as Record<string, string>;
+    await r.append(core(S), { v: 1, id: ulidAt(T0 + 6), kind: 'verdict.made', ts: T0 + 6, subject: v.claim!, data: v as unknown as JsonValue });
+    const after = storage.syncs().slice(before).map((c) => c.mode);
+    await r.close();
+    expect(after).toEqual(['full']);
   });
 });
