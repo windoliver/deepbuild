@@ -239,6 +239,76 @@
           "why": "Issue #390: the render's JSON lines; already in the workspace tree."
         }
       }
+    },
+    "crates/deep-canvas-motion/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #391: the time grammar a key or a placement writes its time in, and the ops module on pinned libm the motion math goes through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #391: reads the document and the deep-motion CLI JSON lines; float_roundtrip, so a key value reads back to its exact f64. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-canvas-marks/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #391: the ops module on pinned libm that path flattening and stroking go through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #391: reads the evaluated items and their params. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #391: content keys, 128 bits of SHA-256 over length-prefixed fields, and the SHA-256 of each cached result. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-marks-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #391: the frame draw list, path tessellations and content keys the render draws and caches."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #391: evaluates the document at each frame time and gives the frame clock its valid_until."
+        },
+        "deep-replica": {
+          "spec": "* path=../deep-replica",
+          "why": "Issue #391: the headless app context the view draws in, as deep-text-render uses it."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #391: the font roles a text mark names, and the shaped run a text cache entry holds."
+        },
+        "deep-text-gpui": {
+          "spec": "* path=../deep-text-gpui",
+          "why": "Issue #391: shapes and paints each text mark through the canvas's atlas, never GPUI's text system."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #391: the headless windows, their frames through the GPUI patch's present_frame, and the offscreen capture."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #391: the RgbaImage a writer-layer cache holds and hands GPUI as a RenderImage; already in the workspace tree through gpui."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #391: the render's JSON lines. Already in the workspace tree."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "gpui-pre-apple": {
+          "spec": "=0.3.9",
+          "why": "Issue #391: the GPU ledger the GPUI patch adds to the Metal renderer (frame command buffers committed and their GPU time), which shows a still view uses none. Already in the tree under gpui-kit, as the vendored copy."
+        }
+      }
     }
   },
   "allowedFindings": [
