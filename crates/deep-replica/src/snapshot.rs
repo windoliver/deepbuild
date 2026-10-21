@@ -46,10 +46,13 @@ impl Node {
                 other => Some(other.clone()),
             },
             bounds: [bounds[0], bounds[1], bounds[2], bounds[3]],
+            // A leaf says so with `[]`; a missing list is missing evidence, not a leaf.
             children: value["children"]
                 .as_array()
-                .map(|children| children.iter().map(Node::from_json).collect())
-                .unwrap_or(Ok(Vec::new()))?,
+                .ok_or("a node without a children list")?
+                .iter()
+                .map(Node::from_json)
+                .collect::<Result<_, _>>()?,
         })
     }
 
@@ -93,20 +96,21 @@ impl Snapshot {
                 .as_u64()
                 .ok_or("a snapshot without window.scale")? as u32,
             tree: Node::from_json(&value["tree"])?,
+            // No items drawn is `[]`; a missing list, an item without an id or one without a
+            // value is missing evidence.
             items: value["items"]
                 .as_array()
-                .map(|items| {
-                    items
-                        .iter()
-                        .map(|item| {
-                            (
-                                item["id"].as_str().unwrap_or_default().to_owned(),
-                                item["value"].clone(),
-                            )
-                        })
-                        .collect()
+                .ok_or("a snapshot without an items list")?
+                .iter()
+                .map(|item| {
+                    let id = item["id"].as_str().ok_or("a canvas item without an id")?;
+                    let value = item
+                        .get("value")
+                        .filter(|value| !value.is_null())
+                        .ok_or("a canvas item without a value")?;
+                    Ok((id.to_owned(), value.clone()))
                 })
-                .unwrap_or_default(),
+                .collect::<Result<_, &str>>()?,
         })
     }
 
@@ -430,6 +434,43 @@ mod tests {
         let (index, why) = first_difference(&flat, &nested).unwrap();
         assert_eq!(index, 0);
         assert!(why.contains("children"), "{why}");
+    }
+
+    /// A snapshot missing a node's children, its items, or an item's id or value does not read as
+    /// an empty one.
+    #[test]
+    fn missing_lists_and_item_fields_are_refused() {
+        let mut with_item = snapshot(vec![leaf("label", "x", [0, 0, 10, 10])]);
+        with_item.items.push(("line".into(), json!([1, 2])));
+        let whole = with_item.to_json();
+        assert_eq!(Snapshot::from_json(&whole).unwrap(), with_item);
+        type Removal = (&'static str, fn(&mut Value));
+        let removals: [Removal; 5] = [
+            ("children list", |json| {
+                json["tree"]["children"][0]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("children");
+            }),
+            ("children list", |json| {
+                json["tree"]["children"] = json!(null)
+            }),
+            ("items list", |json| {
+                json.as_object_mut().unwrap().remove("items");
+            }),
+            ("without an id", |json| {
+                json["items"][0].as_object_mut().unwrap().remove("id");
+            }),
+            ("without a value", |json| {
+                json["items"][0].as_object_mut().unwrap().remove("value");
+            }),
+        ];
+        for (why, remove) in removals {
+            let mut json = whole.clone();
+            remove(&mut json);
+            let error = Snapshot::from_json(&json).expect_err(why);
+            assert!(error.contains(why), "{why}: {error}");
+        }
     }
 
     #[test]

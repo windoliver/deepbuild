@@ -552,6 +552,23 @@ mod suite {
                 .any(|(id, value)| id == "script-line" && *value == json!([3., 1., 4., 1., 5.])),
             "the script's canvas drew its line: {items:?}"
         );
+        // The item says what was asked to be drawn; the pixels say it was. The line is the
+        // canvas's default blue, #2563eb, which nothing else in the shell is drawn in.
+        let image = opened
+            .cx
+            .capture_screenshot(opened.handle)
+            .expect("offscreen rendering is available");
+        let blue = image
+            .pixels()
+            .filter(|pixel| {
+                let [r, g, b, _] = pixel.0;
+                r.abs_diff(0x25) < 40 && g.abs_diff(0x63) < 40 && b.abs_diff(0xeb) < 40
+            })
+            .count();
+        assert!(
+            blue > 200,
+            "the script's canvas painted its line: {blue} line-blue pixels"
+        );
     }
 
     pub fn run() -> i32 {
