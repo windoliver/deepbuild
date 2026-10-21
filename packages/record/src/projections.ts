@@ -132,6 +132,16 @@ export class Projector {
     const rest = cols.filter((c) => !def.pk.includes(c));
     this.stmt(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ON CONFLICT (${def.pk.join(", ")}) DO UPDATE SET ${rest.map((c) => `${c} = COALESCE(${c}, excluded.${c})`).join(", ")}`).run(...cols.map((c) => row[c] ?? null));
   }
+  /**
+   * Inserts the row, or writes its columns only while `mark` is still empty: the first event of its kind owns
+   * them all, empty ones included. A column in `keep` is filled only when empty, whichever event wrote it first.
+   */
+  private once(table: string, row: Row, mark: string, keep: readonly string[] = []): void {
+    const def = byName.get(table)!;
+    const cols = Object.keys(row);
+    const set = cols.filter((c) => !def.pk.includes(c)).map((c) => (keep.includes(c) ? `${c} = COALESCE(${table}.${c}, excluded.${c})` : `${c} = excluded.${c}`));
+    this.stmt(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ON CONFLICT (${def.pk.join(", ")}) DO UPDATE SET ${set.join(", ")} WHERE ${table}.${mark} IS NULL`).run(...cols.map((c) => row[c] ?? null));
+  }
   private add(table: string, row: Row): void {
     const cols = Object.keys(row);
     this.stmt(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT DO NOTHING`).run(...cols.map((c) => row[c] ?? null));
@@ -266,12 +276,12 @@ export class Projector {
         break;
       case 'run.started':
         // A run's claim, check and commit are its first start's, whichever of its start and finish came first.
-        this.fill('runs', { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts });
+        this.once('runs', { id: bare(d.run), check_id: str(d.check), claim_id: bare(d.claim), commit_sha: str(d.commit), started: e.ts }, 'started');
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'run.finished':
         // A run finishes once: a later finish of the same run changes nothing.
-        this.fill('runs', { id: bare(d.run), check_id: str(d.check), ended: e.ts, outcome: str(d.outcome), tests_run: int(d.tests_run), passed: int(d.passed), evidence: json(d.evidence), assertion: str(d.assertion), expected: str(d.expected), actual: str(d.actual), step: str(d.step), points_to: str(d.points_to) });
+        this.once('runs', { id: bare(d.run), check_id: str(d.check), ended: e.ts, outcome: str(d.outcome), tests_run: int(d.tests_run), passed: int(d.passed), evidence: json(d.evidence), assertion: str(d.assertion), expected: str(d.expected), actual: str(d.actual), step: str(d.step), points_to: str(d.points_to) }, 'ended', ['check_id']);
         this.up('checks', { id: str(d.check), name: str(d.check) });
         break;
       case 'task.created':

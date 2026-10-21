@@ -837,3 +837,18 @@ describe('a late event never replaces newer state', () => {
     expect([row?.worktree, row?.branch]).toEqual(['~/src/app-14', 'feat/14']);
   });
 });
+
+describe('a run\'s first finish is kept whole', () => {
+  it('a second finish fills none of the fields the first left empty, live and after a rebuild', async () => {
+    const { record: r, S } = await record();
+    await r.append(core(S), event('run.started', T0 + 10, undefined));
+    await r.append(core(S), event('run.finished', T0 + 20, undefined, { outcome: 'failed', tests_run: 3, passed: 2, actual: null }));
+    const read = async () => { const x = (await r.table('runs')).rows[0]; return [x?.outcome, x?.actual, x?.ended]; };
+    const first = await read();
+    await r.append(app(S), event('run.finished', T0 + 30, undefined, { outcome: 'failed', tests_run: 3, passed: 2, actual: 'passing' }));
+    // A record that fills empty columns from a later finish mixes two finishes into one run.
+    expect(await read()).toEqual(first);
+    await r.rebuild();
+    expect(await read()).toEqual(first);
+  });
+});
