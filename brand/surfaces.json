@@ -1,0 +1,27 @@
+{
+  "issue": 79,
+  "about": "Every use of the mark, with the kit file it is byte for byte (checked by SHA-256 in tests/acceptance/79), the point size the D is shown at, and the screenshot that proves it. px is the D's height in points; a PNG's height is px times scale.",
+  "surfaces": [
+    { "surface": "app-icon", "kit": "brand/DeepBuild.icns", "use": "brand/DeepBuild.icns", "shots": ["docs/evidence/79/dock.png"], "note": "Embedded by crates/deep-app/src/brand.rs and set on the running app as its dock icon; there is no .app bundle yet." },
+    { "surface": "menu-bar", "kit": "brand/png/trayTemplate.png", "use": "brand/png/trayTemplate.png", "px": 16, "shots": ["docs/evidence/79/menu-bar.png"], "note": "The status item's template image at 1x, tinted by macOS." },
+    { "surface": "menu-bar", "kit": "brand/png/trayTemplate@2x.png", "use": "brand/png/trayTemplate@2x.png", "px": 16, "scale": 2, "shots": ["docs/evidence/79/menu-bar.png"], "note": "The same image's 2x representation." },
+    { "surface": "title-bar", "kit": "brand/symbol-small-ink.svg", "use": "brand/symbol-small-ink.svg", "px": 18, "shots": ["docs/evidence/79/title-bar-light.png"], "note": "The small cut in Ink, drawn by the window's own title bar." },
+    { "surface": "welcome", "kit": "brand/lockup-stacked-ink.svg", "use": "brand/lockup-stacked-ink.svg", "px": 96, "shots": ["docs/evidence/79/welcome-light.png"], "note": "The stacked lockup in Ink on Paper where no panel is mounted." },
+    { "surface": "cli-banner", "kit": "brand/png/favicon-32.png", "use": "brand/png/favicon-32.png", "px": 16, "scale": 2, "shots": ["docs/evidence/79/cli.png"], "note": "deep --help reads the file and sends it inline where the terminal identifies as iTerm2 or kitty; the shot is Terminal.app, which shows the text banner alone." },
+    { "surface": "readme-light", "kit": "brand/readme-light.svg", "use": "brand/readme-light.svg", "px": 60, "shots": ["docs/evidence/79/readme-light.png"], "note": "README.md's <img>, 300 px wide, so the D is 60 px tall." },
+    { "surface": "readme-dark", "kit": "brand/readme-dark.svg", "use": "brand/readme-dark.svg", "px": 60, "shots": ["docs/evidence/79/readme-dark.png"], "note": "README.md's dark <source>." },
+    { "surface": "docs-favicon", "kit": "brand/png/favicon.ico", "use": "docs/web/favicon.ico", "shots": ["docs/evidence/79/favicon.png"], "note": "Linked from docs/web/head.html. The shot is a page Chrome rendered with the icon files at tab size on light and dark, not a capture of a browser's own tab strip, which needs Screen Recording." },
+    { "surface": "docs-favicon", "kit": "brand/favicon.svg", "use": "docs/web/favicon.svg", "px": 16, "shots": ["docs/evidence/79/favicon.png"], "note": "The same page." },
+    { "surface": "docs-web-icon", "kit": "brand/png/apple-touch-icon.png", "use": "docs/web/apple-touch-icon.png", "px": 180, "shots": ["docs/evidence/79/web-icon.png"], "note": "Linked from docs/web/head.html. The shot is a page Chrome rendered with the icon files at their sizes, not a home screen." },
+    { "surface": "docs-web-icon", "kit": "brand/png/icon-192.png", "use": "docs/web/icon-192.png", "px": 192, "shots": ["docs/evidence/79/web-icon.png"], "note": "Named by docs/web/site.webmanifest; the same page." },
+    { "surface": "docs-web-icon", "kit": "brand/png/icon-512.png", "use": "docs/web/icon-512.png", "px": 512, "shots": ["docs/evidence/79/web-icon.png"], "note": "Named by docs/web/site.webmanifest; the same page." },
+    { "surface": "social-preview", "kit": "brand/png/social-preview.png", "use": "brand/png/social-preview.png", "shots": ["docs/evidence/79/social-preview.png"], "note": "To be uploaded by hand in the repository's settings, which GitHub keeps outside the repo; not uploaded yet. The shot is the file in a card frame Chrome rendered, not GitHub's card." }
+  ],
+  "app": {
+    "about": "The stripped release binary's size at the merge base and at HEAD, measured as docs/spikes/337/measure.mjs measures the app, on a reference Mac.",
+    "mergeBase": "30fba4bffdba9fe2a0323eeed658d8294628e76c",
+    "machine": { "model": "Mac15,12", "macosBuild": "23H723" },
+    "measuredOn": "2026-10-20",
+    "strippedBytes": { "base": 49826864, "head": 49976432 }
+  }
+}

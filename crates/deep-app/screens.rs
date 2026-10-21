@@ -114,6 +114,52 @@ mod screens {
         assert!(before != after, "selecting a session changed no pixels");
     }
 
+    /// Issue #79: with no panel, the right pane is the welcome screen, Paper with the lockup in
+    /// Ink, and the title bar holds the mark in Ink. Read from the pixels, within 8 per channel.
+    fn welcome_screen() {
+        let mut cx = context();
+        let handle = open(&mut cx, None);
+        let raw = shot(&mut cx, handle, "welcome");
+        let (width, height) = cx.capture_screenshot(handle).unwrap().dimensions();
+        let scale = width as f32 / 960.;
+        let near = |pixel: &[u8], rgb: u32| {
+            let [r, g, b] = [rgb >> 16 & 255, rgb >> 8 & 255, rgb & 255];
+            pixel[0].abs_diff(r as u8) <= 8
+                && pixel[1].abs_diff(g as u8) <= 8
+                && pixel[2].abs_diff(b as u8) <= 8
+        };
+        let pixel = |x: u32, y: u32| &raw[((y * width + x) * 4) as usize..][..4];
+        let right_pane =
+            (0..height).flat_map(|y| (((260. * scale) as u32)..width).map(move |x| (x, y)));
+        let (mut paper, mut ink) = (0usize, 0usize);
+        for (x, y) in right_pane {
+            if y < (34. * scale) as u32 {
+                continue;
+            }
+            let pixel = pixel(x, y);
+            paper += usize::from(near(pixel, deep_app::brand::PAPER));
+            ink += usize::from(near(pixel, deep_app::brand::INK));
+        }
+        assert!(
+            paper > 1_000,
+            "the welcome screen is not on Paper: {paper} Paper pixels"
+        );
+        // The lockup alone is about 351 by 199 px at 1x and mostly Ink; the tagline is under 2,000.
+        let lockup_ink = (6_000. * scale * scale) as usize;
+        assert!(
+            ink > lockup_ink,
+            "the welcome screen shows no Ink lockup: {ink} Ink pixels, under {lockup_ink}"
+        );
+        let bar_ink = (0..(34. * scale) as u32)
+            .flat_map(|y| (0..((260. * scale) as u32)).map(move |x| (x, y)))
+            .filter(|&(x, y)| near(pixel(x, y), deep_app::brand::INK))
+            .count();
+        assert!(
+            bar_ink > 10,
+            "the title bar shows no Ink mark: {bar_ink} Ink pixels"
+        );
+    }
+
     fn panel_screen(agent: &str) {
         let mut cx = context();
         let handle = open(&mut cx, Some(agent));
@@ -128,8 +174,9 @@ mod screens {
     }
 
     pub fn run() -> i32 {
-        let cases: [(&str, fn()); 3] = [
+        let cases: [(&str, fn()); 4] = [
             ("window_screen", window_screen),
+            ("welcome_screen", welcome_screen),
             ("claude_code_panel_screen", || panel_screen("claude-code")),
             ("codex_panel_screen", || panel_screen("codex")),
         ];

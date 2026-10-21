@@ -81,6 +81,30 @@ fn assert_has(tree: &str, text: &str) {
     );
 }
 
+/// Issue #79: the title bar carries the mark, and where no panel is mounted the welcome screen
+/// shows the lockup; a mounted panel takes the welcome screen's place.
+#[gpui_kit::test]
+fn mark_in_the_title_bar_and_the_welcome_screen(cx: &mut TestAppContext) {
+    let (window, _, _) = open(cx, None);
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("title-bar-mark").visible());
+        assert!(window.find("welcome").visible());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn a_panel_replaces_the_welcome_screen(cx: &mut TestAppContext) {
+    let (window, _, _) = open(cx, Some("codex"));
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("title-bar-mark").visible());
+        assert!(window.try_find("welcome").is_none());
+    })
+    .unwrap();
+}
+
 #[gpui_kit::test]
 fn session_list_count_and_report(cx: &mut TestAppContext) {
     let (window, spike, _) = open(cx, None);
