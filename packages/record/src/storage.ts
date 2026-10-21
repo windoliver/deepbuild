@@ -2,6 +2,8 @@
 // its storage by injection (design: Fault injection). The record's own storage is the OS file system in
 // WAL mode; the test storage is the design's test VFS, which keeps every write in memory until a sync
 // and drops the rest at a power cut.
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 
 export type Db = Database.Database;
@@ -53,6 +55,8 @@ export function fileStorage(): Backend {
   return {
     name: 'file',
     open(path) {
+      // The record's folder may not exist yet on a first start.
+      mkdirSync(dirname(path), { recursive: true });
       const db = new Database(path);
       settle(db);
       return db;
