@@ -23,13 +23,10 @@ const SEVEN: readonly string[] = NARROWED.map((n) => n.name);
 
 const D1 = /^d1:[0-9a-f]{64}$/;
 
-const readDigests = (path: string): Record<string, string> =>
-  JSON.parse(readFileSync(path, 'utf8')) as Record<string, string>;
-
 describe(`AC3: the seven digests are refrozen and no other digest changes (base ${BASE})`, () => {
   const baseBytes = readFileSync(BASE_FIXTURE);
   const base = JSON.parse(baseBytes.toString('utf8')) as Record<string, string>;
-  const current = readDigests(DIGESTS_FILE);
+  const current = JSON.parse(readFileSync(DIGESTS_FILE, 'utf8')) as Record<string, string>;
   const baseNames = Object.keys(base);
   const others = baseNames.filter((name) => !SEVEN.includes(name));
 
@@ -41,6 +38,7 @@ describe(`AC3: the seven digests are refrozen and no other digest changes (base 
   it('the seven are all base entries, and the base has sixty others', () => {
     expect(SEVEN).toHaveLength(7);
     expect(SEVEN.filter((name) => !(name in base))).toEqual([]);
+    for (const name of SEVEN) expect(base[name], `${name}: base digest`).toMatch(D1);
     expect(others).toHaveLength(60);
   });
 
@@ -80,9 +78,7 @@ describe(`AC3: the seven digests are refrozen and no other digest changes (base 
     });
   });
 
-  it('frozenDigests() agrees with the file for every base entry', () => {
-    const frozen = frozenDigests();
-    const disagree = baseNames.filter((name) => frozen[name] !== current[name]);
-    expect(disagree, 'frozenDigests() differs from digests.json').toEqual([]);
+  it('frozenDigests() is the file', () => {
+    expect(frozenDigests(), 'frozenDigests() differs from digests.json').toEqual(current);
   });
 });

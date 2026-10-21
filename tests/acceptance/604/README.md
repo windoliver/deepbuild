@@ -60,8 +60,6 @@ Only what the issue and the existing contract tests name; nothing new is asked o
   so no other schema was reshaped either. A base entry that is gone fails, naming it, and `frozenDigests()`
   must agree with the file for every base entry. A schema that did not exist at the base is out of scope: an
   entry added since is neither a refreeze nor a change, so the file may name more schemas than the base's 67.
-  (The first draft also required the file's names to be exactly the base's; that failed on every later schema
-  addition and went to a blind redraft of this job, PR #625.)
 - **The package fixtures.** The base's first fixtures of `session.start@1`, `user.ask@1`, `reading.recorded@1`
   and `reading.batch@1` carry writer `app`, which the narrowed schemas refuse. These tests set the writer
   themselves, so they don't care; `tests/acceptance/311` (AC2) and the package's contract tests validate
@@ -76,4 +74,5 @@ Only what the issue and the existing contract tests name; nothing new is asked o
   `deep-contracts check` drivers.
 - `fixtures/base-digests.json`: the base's `digests.json`.
 - `BASE-FAILURE.txt`: the run on the base, where 21 tests fail, each for the expected reason, and the
-  planted wrong programs each test was run against.
+  planted wrong programs each test was run against. Recorded with the first draft of `digests.test.ts`, whose
+  test names it shows; the redraft (PR #625) records its own proof there.
