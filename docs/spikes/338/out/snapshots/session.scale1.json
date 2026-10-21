@@ -153,6 +153,30 @@
   },
   "items": [
     {
+      "id": "session-caption",
+      "value": {
+        "text": "Hours to each deadline",
+        "role": "body",
+        "bound": false,
+        "widest": null,
+        "at": [
+          277.0,
+          45.0
+        ],
+        "box": [
+          143.0,
+          17.0
+        ],
+        "width": 142.390625,
+        "lines": 1,
+        "ellipsized": false,
+        "sprites": 19,
+        "pages": [
+          0
+        ]
+      }
+    },
+    {
       "id": "session-line",
       "value": [
         5.0,
@@ -166,6 +190,30 @@
         8.0,
         4.0
       ]
+    },
+    {
+      "id": "session-readout",
+      "value": {
+        "text": "10",
+        "role": "body",
+        "bound": true,
+        "widest": "9999",
+        "at": [
+          825.0,
+          45.0
+        ],
+        "box": [
+          34.0,
+          17.0
+        ],
+        "width": 16.859375,
+        "lines": 1,
+        "ellipsized": false,
+        "sprites": 2,
+        "pages": [
+          0
+        ]
+      }
     }
   ]
 }

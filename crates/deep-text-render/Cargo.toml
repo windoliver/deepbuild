@@ -1,0 +1,19 @@
+[package]
+name = "deep-text-render"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #390: `deep-text-render render`, the proof surface for canvas text: a card and its labels
+# drawn headless with GPUI's offscreen Metal renderer, each label from the canvas's atlas through
+# the GPUI patch's tinted mask sprite, captured at scale 1 as a PNG with a report of what was
+# drawn. Named deep-text* so scripts/text-lint.mjs reads it; the headless context comes from the
+# replica, where GPUI's own text system serves the chrome.
+[dependencies]
+deep-replica = { path = "../deep-replica" }
+deep-text = { path = "../deep-text" }
+deep-text-gpui = { path = "../deep-text-gpui" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+serde_json = "1"

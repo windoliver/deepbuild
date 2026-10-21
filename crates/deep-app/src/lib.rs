@@ -10,6 +10,7 @@
 
 pub mod canvas;
 pub mod events;
+pub mod text;
 pub mod views;
 
 use std::{path::Path, rc::Rc};

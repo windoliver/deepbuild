@@ -15,12 +15,11 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod replica {
-    use std::{path::PathBuf, sync::Arc};
+    use std::path::PathBuf;
 
     use deep_app::views::{Layout, SHIPPED_VIEWS};
     use deep_replica::{shell::open_shell, snapshot::from_observed};
     use gpui_kit::test::TestWindowExt;
-    use gpui_kit::{assets::Assets, HeadlessAppContext};
 
     pub fn run() -> i32 {
         let mut view = None;
@@ -51,17 +50,8 @@ mod replica {
         let mut phases = Vec::new();
         let mut phase =
             |name: &str| phases.push(format!("{name} {}ms", started.elapsed().as_millis()));
-        let mut cx = HeadlessAppContext::with_platform(
-            gpui_kit::platform::current_platform(true).text_system(),
-            Arc::new(Assets),
-            gpui_kit::platform::current_headless_renderer,
-        );
-        phase("context");
-        cx.update(|cx| {
-            gpui_kit::init(cx);
-            deep_app::init(cx);
-        });
-        phase("init");
+        let mut cx = deep_replica::headless_context();
+        phase("context and init");
         deep_app::views::set_state(deep_replica::load_state());
         let layout = Layout::shipped(&view);
         let (handle, _) = cx.update(|cx| open_shell(&layout, cx, |_, _| {}));

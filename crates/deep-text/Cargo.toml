@@ -1,0 +1,18 @@
+[package]
+name = "deep-text"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #390: the canvas's one text shaper with bundled fonts, its glyph atlas and its fit check
+# (technical design: The canvas core, "text"; Decided: Which text shaper). The stack Vello uses:
+# parley shapes with HarfRust and reads outlines through skrifa; Vello CPU rasterizes them. No
+# `system` feature, so CoreText, fontconfig and DirectWrite are never reached; swash isn't linked.
+[dependencies]
+parley = { version = "0.12", default-features = false, features = ["std"] }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# Only for its feature: Vello CPU's scalar level exists on arm64 and x86_64 with it alone, and the
+# atlas rasterizes at that level so every platform computes the same alpha (design: Decided, Goldens).
+fearless_simd = { version = "0.7", features = ["force_support_fallback"] }
+serde_json = "1"

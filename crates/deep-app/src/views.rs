@@ -19,7 +19,7 @@ use gpui_kit::base::dock::{
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
-use crate::{canvas, events::Inbox};
+use crate::{canvas, events::Inbox, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -212,6 +212,13 @@ impl Render for Shipped {
                     .map(|ask| (ask.deadline as f64 - state.now as f64) / 3_600_000.0)
                     .collect();
                 let points = hours.len();
+                // The line's caption and its readout are the canvas's text (#390): the readout
+                // is a bound number, tabular and never cut, holding its widest value's room.
+                let caption = text::Label::new("Hours to each deadline");
+                let readout = text::Label {
+                    bound: true,
+                    ..text::Label::new(points.to_string())
+                };
                 page.child(title("session-title", format!("Session {session}")))
                     .child(
                         div()
@@ -219,9 +226,31 @@ impl Render for Shipped {
                             .h(px(200.))
                             .border_1()
                             .border_color(rgb(0xe5e7eb))
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_between()
+                                    .px(px(8.))
+                                    .py(px(4.))
+                                    .child(text::label(
+                                        "session-caption",
+                                        caption,
+                                        rgb(0x374151).into(),
+                                        None,
+                                    ))
+                                    .child(text::label(
+                                        "session-readout",
+                                        readout,
+                                        rgb(0xb45309).into(),
+                                        Some("9999"),
+                                    )),
+                            )
                             .child(
                                 canvas::line("session-line", hours, rgb(0x2563eb).into())
-                                    .size_full(),
+                                    .flex_1()
+                                    .w_full(),
                             ),
                     )
                     .child(label(
