@@ -248,12 +248,17 @@ pub struct Layout {
 }
 
 impl Layout {
-    /// The shipped shell showing one of the shipped views: `needs-you`, `session` or home.
+    /// The shipped shell with `needs-you`, `session` or `home` in the center; `sidebar`, the
+    /// replica's view of the sidebar, shows home beside it. Any other name is a mistake, not a
+    /// view.
     pub fn shipped(view: &str) -> Self {
         let center = match view {
             "needs-you" => NEEDS_YOU,
             "session" => SESSION,
-            _ => HOME,
+            "home" | "sidebar" => HOME,
+            other => {
+                panic!("{other} is not a shipped view; the shipped views are {SHIPPED_VIEWS:?} and home")
+            }
         };
         Self {
             sidebar: SIDEBAR.into(),
@@ -311,5 +316,24 @@ impl Render for Shell {
             .text_color(rgb(0x111827))
             .text_sm()
             .child(self.dock.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[std::prelude::v1::test]
+    fn a_shipped_view_fills_the_center_and_the_sidebar_view_shows_home() {
+        assert_eq!(Layout::shipped("needs-you").center, [NEEDS_YOU]);
+        assert_eq!(Layout::shipped("session").center, [SESSION]);
+        assert_eq!(Layout::shipped("sidebar").center, [HOME]);
+        assert_eq!(Layout::shipped("home").center, [HOME]);
+    }
+
+    #[std::prelude::v1::test]
+    #[should_panic(expected = "is not a shipped view")]
+    fn a_name_that_is_not_a_shipped_view_is_refused() {
+        Layout::shipped("needs_you");
     }
 }

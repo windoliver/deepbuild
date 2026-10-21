@@ -17,7 +17,7 @@ fn main() {
 mod replica {
     use std::{path::PathBuf, sync::Arc};
 
-    use deep_app::views::Layout;
+    use deep_app::views::{Layout, SHIPPED_VIEWS};
     use deep_replica::{shell::open_shell, snapshot::from_observed};
     use gpui_kit::test::TestWindowExt;
     use gpui_kit::{assets::Assets, HeadlessAppContext};
@@ -40,6 +40,12 @@ mod replica {
             eprintln!("usage: deep-replica --view <id> --out <dir>");
             return 2;
         };
+        if !SHIPPED_VIEWS.contains(&view.as_str()) {
+            eprintln!(
+                "deep-replica: {view} is not a shipped view; the views are {SHIPPED_VIEWS:?}"
+            );
+            return 2;
+        }
 
         let started = std::time::Instant::now();
         let mut phases = Vec::new();

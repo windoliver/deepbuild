@@ -617,6 +617,14 @@ mod suite {
             .filter(|(name, _)| filter.as_deref().is_none_or(|filter| name.contains(filter)))
             .collect();
         let total = cases.len();
+        if total == 0 {
+            // A filter that names nothing ran nothing, and nothing unrun passes.
+            println!(
+                "\ntest result: INCONCLUSIVE. the filter {:?} names no test; nothing ran",
+                filter.unwrap_or_default()
+            );
+            return 1;
+        }
         println!("\nrunning {total} tests");
         let mut failed = 0;
         for (name, case) in cases {
