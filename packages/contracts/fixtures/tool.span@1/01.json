@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "kind": "tool.span",
+  "writer": "ext:otlp",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "tool": "Bash",
+    "tool_use_id": "toolu_01Tool00000000000000001",
+    "duration_ms": 1700,
+    "blocked_ms": 1500,
+    "decision": "accept",
+    "reading": "reading:otlpBlockedBash"
+  }
+}
