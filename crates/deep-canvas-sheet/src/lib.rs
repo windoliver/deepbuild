@@ -50,8 +50,8 @@ pub fn p90_delta_e(a: &Still, b: &Still) -> Option<f64> {
     }
     let mut d: Vec<f64> = a
         .rgba
-        .chunks_exact(4)
-        .zip(b.rgba.chunks_exact(4))
+        .as_chunks::<4>().0.iter()
+        .zip(b.rgba.as_chunks::<4>().0.iter())
         .map(|(p, q)| {
             let (p, q) = (oklab(p), oklab(q));
             let (dl, da, db) = (p.l - q.l, p.a - q.a, p.b - q.b);
@@ -78,7 +78,7 @@ pub fn base64(text: &str) -> Option<Vec<u8>> {
         return None;
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for (k, quad) in bytes.chunks_exact(4).enumerate() {
+    for (k, quad) in bytes.as_chunks::<4>().0.iter().enumerate() {
         let last = k + 1 == bytes.len() / 4;
         let pad = quad.iter().rev().take_while(|&&c| c == b'=').count();
         if pad > 2 || (pad > 0 && !last) {
@@ -403,7 +403,7 @@ pub fn render(still: &Still, treatment: Treatment) -> Vec<u8> {
         Treatment::None => still.rgba.clone(),
         Treatment::Mono => still
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>().0.iter()
             .flat_map(|px| {
                 let grey = oklab_to_srgb(Oklab {
                     l: oklab(px).l,
@@ -416,14 +416,14 @@ pub fn render(still: &Still, treatment: Treatment) -> Vec<u8> {
             .collect(),
         Treatment::Reversed => still
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>().0.iter()
             .flat_map(|px| [255 - px[0], 255 - px[1], 255 - px[2], px[3]])
             .collect(),
         _ if w == 0 || h == 0 => still.rgba.clone(),
         Treatment::Mirror => still
             .rgba
             .chunks_exact(w * 4)
-            .flat_map(|row| row.chunks_exact(4).rev().flatten().copied())
+            .flat_map(|row| row.as_chunks::<4>().0.iter().rev().flatten().copied())
             .collect(),
         Treatment::Blur => {
             let radius = (w.min(h) / 32).max(1);
