@@ -173,3 +173,16 @@ describe('no agent closes an ask', () => {
     }
   }
 });
+
+describe('a taste call that dropped near copies (#394)', () => {
+  it('names each dropped copy only beside an option it still offers', async () => {
+    await start('S1', 'T1');
+    const copy = { option: 'teal', same_as: 'blue' };
+    const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header', { dropped: [copy] }));
+    expect((await events('ask.created')).find((e) => e.id === handle.slice(4))?.data).toMatchObject({ dropped: [copy] });
+    for (const wrong of [{ option: 'green', same_as: 'blue' }, { option: 'teal', same_as: 'red' }]) {
+      await expect(asks.raise(agent('S1'), 'deep_ask.taste', taste('footer', { dropped: [wrong] }))).rejects.toMatchObject({ option: wrong.option });
+    }
+    expect((await events('ask.created')).length).toBe(1);
+  });
+});
