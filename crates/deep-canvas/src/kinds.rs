@@ -39,6 +39,10 @@ pub struct Param {
     /// kind's own; a document that sets a field of a module this build lacks is refused with
     /// `module_missing` (technical design: Canvas modules).
     pub module: &'static str,
+    /// The operator of that module that evaluates it, or empty: when the seal left the operator
+    /// out, for an optional dependency the build lacks, setting the field is `module_missing`
+    /// naming that dependency (Registry and seal).
+    pub operator: &'static str,
 }
 
 /// One major of a kind: its minor and its params.
@@ -158,6 +162,11 @@ impl Registry {
         }
         Some(out)
     }
+
+    /// Adds the kinds the sealed canvas modules register (Registry and seal).
+    pub(crate) fn extend(&mut self, entries: impl IntoIterator<Item = Entry>) {
+        self.entries.extend(entries);
+    }
 }
 
 fn f32_param(
@@ -177,6 +186,7 @@ fn f32_param(
         max: Some(max),
         minor,
         module: "",
+        operator: "",
     }
 }
 
@@ -190,6 +200,7 @@ fn str_param(name: &'static str, default: &str) -> Param {
         max: None,
         minor: 0,
         module: "",
+        operator: "",
     }
 }
 
@@ -203,6 +214,7 @@ fn json_param(name: &'static str, default: Value) -> Param {
         max: None,
         minor: 0,
         module: "",
+        operator: "",
     }
 }
 

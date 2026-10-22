@@ -245,6 +245,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #96 first measurement: the merge base has no merge by ID. One process merges two writers' 10,000-item revisions of one base through `deep-canvas merge`, reading and writing its JSON line, so p50 includes Node's and the binary's start; the issue's 200 ms a merge stays in tests/acceptance/96/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-seal",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "seal"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #305 first measurement: the merge base has no canvas-module registry or seal. One process starts `deep-show run` in the shipped build, which registers and seals its canvas modules once, asks for the registry, draws one board at six times and asks again, failing unless the seal ran once with an unchanged time; p50 includes Node's and the binary's start. The issue's 50 ms for registration and the seal stays in tests/acceptance/305/budgets.test.ts, read from the binary's own clock. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

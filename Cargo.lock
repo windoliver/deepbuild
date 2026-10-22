@@ -1786,6 +1786,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-test-modules"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-contracts"
 version = "0.0.0"
 
@@ -1843,6 +1851,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-canvas-test-modules",
  "deep-marks-vello",
  "deep-replica",
  "deep-text",
