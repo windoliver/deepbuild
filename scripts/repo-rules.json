@@ -334,6 +334,10 @@
           "spec": "* path=../deep-canvas",
           "why": "Issue #391: the ops module on pinned libm that path flattening and stroking go through."
         },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #375: auto layout measures text leaves with the canvas's one shaper."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: reads the evaluated items and their params. Already in the workspace tree."
@@ -341,6 +345,10 @@
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #391: content keys, 128 bits of SHA-256 over length-prefixed fields, and the SHA-256 of each cached result. Already in the workspace tree."
+        },
+        "taffy": {
+          "spec": "^0.14",
+          "why": "Issue #375: auto layout's flexbox and grid, the engine GPUI already uses; already in the workspace tree at this version through GPUI."
         }
       }
     },
