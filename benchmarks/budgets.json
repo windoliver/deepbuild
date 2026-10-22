@@ -170,6 +170,39 @@
       "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-cold-start",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "cold-start"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process spawns `deep hub run` on a temp home and waits for its socket's hello, then stops it, so p50 includes Node's start twice; the issue's 500 ms cold start stays in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-round-trip",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "round-trip"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and sends 1,000 PreToolUse requests, one connection each as deep-hook makes them, then stops it; the issue's 2 ms p95 round trip stays in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-idle",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "idle"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "otlp-receive-20k-spans",
       "command": [
         "node",

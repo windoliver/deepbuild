@@ -1,0 +1,8 @@
+{
+  "code": "role",
+  "retryable": false,
+  "remediation": "Call this method on a connection whose credential allows it.",
+  "path": "/method",
+  "actual": "hub.health",
+  "evidence": []
+}

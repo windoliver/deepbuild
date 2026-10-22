@@ -9,7 +9,7 @@ const MULTILINE_WINDOW = 65_536;
 const FOLD = Uint8Array.from({ length: 256 }, (_, c) => (c >= 65 && c <= 90 ? c | 32 : c));
 
 /** One string to find: `match` returns where a match starting at `at` ends, or -1. A keyword names its rules. */
-interface Needle { match(text: Buffer, at: number): number; rules?: Rule[] }
+interface Needle { match(text: Buffer, at: number, latin: string): number; rules?: Rule[] }
 
 /** Files a needle under its first three bytes with A-Z folded, and marks the bitmap so most positions cost one lookup. */
 function add(bits: Uint8Array, byKey: Map<number, Needle[]>, head: Uint8Array, needle: Needle): void {
@@ -42,20 +42,36 @@ export function scrubList(run: Run | undefined): string[] {
   return values.filter(Boolean);
 }
 
+interface Tables { bits: Uint8Array; byValue: Map<number, Needle[]>; short: Buffer[] }
+const NO_VALUES: Tables = { bits: keywordBits, byValue: new Map(), short: [] };
+// The tables for the last few value lists: the hub scrubs every hook by the same values, and building them copies a 1 MB bitmap.
+const cached = new Map<string, Tables>();
+const CACHED = 4;
+
+/** The search tables for a list of values: the keyword bitmap with each value's forms added. */
+function tablesFor(values: readonly string[]): Tables {
+  if (!values.length) return NO_VALUES;
+  const key = JSON.stringify(values);
+  const found = cached.get(key);
+  if (found) return found;
+  const tables: Tables = { bits: keywordBits.slice(), byValue: new Map(), short: [] };
+  for (const value of values) {
+    for (const form of forms(Buffer.from(value, 'utf8'))) {
+      if (form.length >= 3) add(tables.bits, tables.byValue, form, { match: (t, at) => (t.subarray(at, at + form.length).equals(form) ? at + form.length : -1) });
+      else tables.short.push(form);
+    }
+    const url = urlForm(Buffer.from(value, 'utf8'));
+    if (url) add(tables.bits, tables.byValue, Buffer.from(url.head, 'latin1'), { match: (_, at, latin) => { url.regex.lastIndex = at; return url.regex.test(latin) ? url.regex.lastIndex : -1; } });
+  }
+  if (cached.size >= CACHED) cached.delete(cached.keys().next().value!);
+  cached.set(key, tables);
+  return tables;
+}
+
 /** Scrubs bytes by value, in every printed form, and then by pattern. */
 export function scrub(text: Buffer, values: readonly string[]): Buffer {
   const latin = text.toString('latin1');
-  const bits = values.length ? keywordBits.slice() : keywordBits;
-  const byValue = new Map<number, Needle[]>();
-  const short: Buffer[] = [];
-  for (const value of values) {
-    for (const form of forms(Buffer.from(value, 'utf8'))) {
-      if (form.length >= 3) add(bits, byValue, form, { match: (t, at) => (t.subarray(at, at + form.length).equals(form) ? at + form.length : -1) });
-      else short.push(form);
-    }
-    const url = urlForm(Buffer.from(value, 'utf8'));
-    if (url) add(bits, byValue, Buffer.from(url.head, 'latin1'), { match: (_, at) => { url.regex.lastIndex = at; return url.regex.test(latin) ? url.regex.lastIndex : -1; } });
-  }
+  const { bits, byValue, short } = tablesFor(values);
   const masks: [number, number][] = [];
   const hits: [number, Rule[]][] = [];
   let key = FOLD[text[0] ?? 0]! << 8 | FOLD[text[1] ?? 0]!;
@@ -63,8 +79,8 @@ export function scrub(text: Buffer, values: readonly string[]): Buffer {
   for (let i = 2; i < text.length; i++) {
     key = (key << 8 | FOLD[text[i]!]!) & 0xffffff;
     if (!bits[slot(key)]) continue;
-    for (const needle of keywords.get(key) ?? []) if (needle.match(text, i - 2) > 0) hits.push([i - 2, needle.rules!]);
-    for (const needle of byValue.get(key) ?? []) { const end = needle.match(text, i - 2); if (end > 0) masks.push([i - 2, end]); }
+    for (const needle of keywords.get(key) ?? []) if (needle.match(text, i - 2, latin) > 0) hits.push([i - 2, needle.rules!]);
+    for (const needle of byValue.get(key) ?? []) { const end = needle.match(text, i - 2, latin); if (end > 0) masks.push([i - 2, end]); }
   }
   for (const form of short) for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) masks.push([at, at + form.length]);
 
