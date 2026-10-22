@@ -426,12 +426,15 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // what this kit can see: the fill runs in the kit's own process, which other kits and concurrent cases share, so
     // every child of that process is no boundary. Holding a run to a boundary is the hub's (a process group per run,
     // the design's words), where the fill's processes are its alone.
-    // Closed to a fixed point: a sibling that joins by its token has its own tree walked in the next pass.
-    const grow = (rows: Row[]): void => {
+    // Closed to a fixed point: a sibling that joins by its token has its own tree walked in the next pass. Trees are
+    // walked only from `live` members, those the table shows with their recorded start time: a pid a member left and
+    // the OS gave to another process has children that are not the environment's.
+    const grow = (rows: Row[], live: number[] = [...members.keys()]): void => {
+      const parents = new Set(live);
       for (let size = -1; size !== members.size;) {
         size = members.size;
-        for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); }
-        for (const row of rows) if (carries(row, lease.token) && !members.has(row.pid)) join(row.pid);
+        for (const parent of [...parents]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); parents.add(row.pid); }
+        for (const row of rows) if (carries(row, lease.token) && !members.has(row.pid)) { join(row.pid); parents.add(row.pid); }
       }
     };
     join(pid);
@@ -461,8 +464,10 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const read = (): Row[] => { const rows = table(); if (rows === null) throw PS_DOWN(); return rows; };
     const clear = (): boolean => {
       const rows = read();
-      grow(rows);
-      const there = stillThere(rows);
+      const live = stillThere(rows);
+      const known = members.size;
+      grow(rows, live.map((m) => m.pid));
+      const there = members.size === known ? live : stillThere(rows);
       if (there.length > 0) {
         const late = inventory(there.map((m) => m.pid)).filter((l) => !leased(l));
         if (late.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listened on ${late.map(shown).join(', ')} besides the lease ${LOOPBACK}:${lease.port} while going down`);
