@@ -371,6 +371,24 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('reads BLOCKED, with the environment still taken down, when a fill\'s down never settles', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const handles: Handle[] = [];
+    // A down whose promise never settles; the test takes the environments down itself afterwards.
+    const stuck: EnvironmentFill = {
+      ...clean!,
+      down: ((handle: Handle) => { handles.push(handle); return new Promise<void>(() => undefined); }) as unknown as EnvironmentFill['down'],
+    };
+    try {
+      const report = await runKit(k, stuck, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'step_timeout'], ['BLOCKED', 'step_timeout']]);
+      expect(report.cases[0]!.message).toMatch(/down did not settle within 5000 ms/);
+    } finally {
+      for (const h of handles) clean!.down(h);
+    }
+  }, 30_000);
+
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
     const reports = await Promise.all([0, 1].map(() => runKit(k, cleanFills(k)[0]!, { parts: ['fixed'] })));

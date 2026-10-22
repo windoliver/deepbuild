@@ -307,23 +307,37 @@ const fixtures: Fixture[] = [
 const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(40, 80) }));
 
 /**
+ * A fill's step with a deadline: one whose promise never settles would hold the whole run with no verdict and
+ * nothing cleaned, so past the limit the step is BLOCKED (step_timeout) and the case goes on to its end. A step
+ * that returns without a promise is done when it returns.
+ */
+const UP_LIMIT_MS = 10_000;
+const DOWN_LIMIT_MS = 5000;
+function bounded(step: () => unknown, ms: number, what: string): unknown {
+  const out = step();
+  if (!(out instanceof Promise)) return out;
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Finding('BLOCKED', `the fill's ${what} did not settle within ${ms} ms, so the case can't go on and nothing of it is known`, ['step_timeout'])), ms); });
+  return Promise.race([out, deadline]).finally(() => clearTimeout(timer));
+}
+/**
  * The down step: asked once more, inside the step the driver runs and awaits, when the first asking threw or
  * rejected, so an environment whose down fails once is still taken down before the case ends; the first failure is
- * what the case reports.
+ * what the case reports, a first asking past its deadline included.
  */
 const downStep = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
   const again = (error: unknown): Promise<never> => {
     let second: unknown;
-    try { second = fill.down(handle); } catch { return Promise.reject(error); }
+    try { second = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); } catch { return Promise.reject(error); }
     return second instanceof Promise ? second.then(() => { throw error; }, () => { throw error; }) : Promise.reject(error);
   };
   let first: unknown;
-  try { first = fill.down(handle); } catch (error) { return again(error); }
+  try { first = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); } catch (error) { return again(error); }
   return first instanceof Promise ? first.catch(again) : first;
 };
 /** Down for a case refused before its down step, awaited by the driver all the same; what it does or throws is not the finding. */
 const quietDown = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
-  try { const r: unknown = fill.down(handle); return r instanceof Promise ? r.catch(() => undefined) : undefined; } catch { return undefined; }
+  try { const r: unknown = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); return r instanceof Promise ? r.catch(() => undefined) : undefined; } catch { return undefined; }
 };
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
@@ -337,7 +351,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   let up: Handle | null = null;
   let downed = false;
   try {
-    const handle = object('the handle', yield () => fill.up(spec, lease));
+    const handle = object('the handle', yield () => bounded(() => fill.up(spec, lease), UP_LIMIT_MS, 'up'));
     up = handle as unknown as Handle;
     text('handle/id', handle.id);
     if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
