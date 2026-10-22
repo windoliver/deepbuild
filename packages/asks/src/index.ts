@@ -646,6 +646,11 @@ class AsksCore implements Asks {
     return ask.shown && ask.later === undefined;
   }
 
+  /** In sight on its own card, or inside an exception that is: what typed text can answer, and what can take its default. */
+  private inSight(ask: Ask): boolean {
+    return this.visible(ask) && (!this.inFold(ask) || this.visible(this.asks.get(bare(ask.folded!))!));
+  }
+
   /** Shows these asks now, outside any batch. */
   private async showNow(asks: Ask[]): Promise<boolean> {
     if (!asks.length) return false;
@@ -851,8 +856,7 @@ class AsksCore implements Asks {
         // Typed text never answers an authority ask: it shows beside it, for one tap on the card.
         for (const a of open) if (a.data.kind === 'authority') a.words.push(d.text);
         // It answers only a question in sight: not one queued for a batch, put off with Later, or in a hidden exception.
-        const inSight = (a: Ask) => this.visible(a) && (!this.inFold(a) || this.visible(this.asks.get(bare(a.folded!))!));
-        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && inSight(a)).at(-1);
+        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && this.inSight(a)).at(-1);
         if (question && d.text && question.pending.typed === undefined) question.pending.typed = d.text;
         return;
       }
@@ -891,8 +895,8 @@ class AsksCore implements Asks {
   /** Appends what the state calls for until it calls for nothing more. */
   private async settle(): Promise<void> {
     // The asks that had shown before this call: only they can take a default in it, whatever the clock reads.
-    // One under Later wasn't in sight.
-    const seen = new Set(this.open().filter((a) => this.visible(a)).map((a) => a.handle));
+    // One under Later, or held by an exception under Later, wasn't in sight.
+    const seen = new Set(this.open().filter((a) => this.inSight(a)).map((a) => a.handle));
     for (let acted = true; acted;) {
       // What shows comes first, so no ask takes its default before it has shown.
       acted = await this.show();

@@ -317,6 +317,20 @@ describe('an ask past its deadline', () => {
     expect(await about(joined, 'ask.defaulted')).toHaveLength(1);
   });
 
+  it('shown through an exception, then hidden with it by Later while the hub was down, defaults only on a later call', async () => {
+    settings({});
+    await start('S1');
+    const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
+    expect((await asks.card(exception)).folded).toContain(folded);
+    await asks.later(card, exception, T0 + DAY);
+    now = T0 + 4 * DAY;
+    await asks.tick();
+    expect(await about(folded, 'ask.defaulted')).toEqual([]);
+    expect(await shown()).toContain(exception);
+    await asks.tick();
+    expect(await about(folded, 'ask.defaulted')).toHaveLength(1);
+  });
+
   it('first shown by one call defaults on the next, even on a clock that has not moved', async () => {
     await start('S1');
     const raised = id(now);
