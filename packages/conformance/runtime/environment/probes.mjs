@@ -31,6 +31,9 @@ const listening = ({ port }) => new Promise((resolve) => {
   socket.once('error', (e) => resolve({ open: false, code: e.code ?? String(e) }));
 });
 const OPS = { lease, probe, listening };
+// The first fetch of a thread loads the HTTP client; done here, against a port nothing serves on, so the first health
+// answer the kit measures is the environment's time and not the client's loading.
+fetch('http://127.0.0.1:9/', { signal: AbortSignal.timeout(500) }).catch(() => undefined);
 
 parentPort.on('message', async (request) => {
   let answer;

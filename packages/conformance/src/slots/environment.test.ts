@@ -117,7 +117,8 @@ describe('the environment kit and the process table', () => {
   const scripted = (script: string, children: ChildProcess[]): EnvironmentFill => ({
     slot: 'environment@1', revision: 1,
     up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
-      const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, lease.token], { stdio: 'ignore' });
+      // The run token rides inside an option, as a real server's command line might carry it.
+      const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, `--run-token=${lease.token}`], { stdio: 'ignore' });
       children.push(child);
       const until = Date.now() + 5000;
       const poll = (): void => {
@@ -183,6 +184,46 @@ describe('the environment kit and the process table', () => {
       const report = await runKit(k, scripted(script, children), { parts: ['fixed'] });
       expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'unleased_port'], ['FAIL', 'unleased_port']]);
       expect(report.cases[0]!.message).toMatch(/besides the lease/);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+    }
+  });
+
+  it('refuses an environment whose tagged sibling process, beside the handle\'s, listens on a port of its own', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const siblings: ChildProcess[] = [];
+    // The reference environment plus a process carrying the run token that the fill starts beside it, listening elsewhere.
+    const withSibling: EnvironmentFill = {
+      ...clean!,
+      up: (spec, lease) => {
+        const sibling = spawn(process.execPath, ['-e', 'require("node:http").createServer().listen(0, "127.0.0.1"); process.on("SIGTERM", () => process.exit(0));', lease.token], { stdio: 'ignore' });
+        siblings.push(sibling);
+        return clean!.up(spec, lease);
+      },
+      down: (handle) => { clean!.down(handle); for (const s of siblings) s.kill('SIGTERM'); },
+    };
+    try {
+      const report = await runKit(k, withSibling, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'unleased_port'], ['FAIL', 'unleased_port']]);
+      expect(report.cases[0]!.message).toMatch(/besides the lease/);
+    } finally {
+      for (const s of siblings) s.kill('SIGKILL');
+    }
+  });
+
+  it('refuses an environment that binds the leased port on every interface rather than 127.0.0.1', async () => {
+    const k = kit();
+    const script = `
+      const [port, token] = process.argv.slice(1);
+      require('node:http').createServer((q, s) => { if (q.url === '/ping') { s.writeHead(204); s.end(); return; } s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ ok: true, token })); })
+        .listen(Number(port), '0.0.0.0');
+      process.on('SIGTERM', () => process.exit(0));`;
+    const children: ChildProcess[] = [];
+    try {
+      const report = await runKit(k, scripted(script, children), { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'unleased_port'], ['FAIL', 'unleased_port']]);
+      expect(report.cases[0]!.message).toMatch(/\*:\d+/);
     } finally {
       for (const c of children) c.kill('SIGKILL');
     }

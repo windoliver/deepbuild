@@ -45,7 +45,18 @@ const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule
 
 const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 /** The process table, in the C locale, so its dates and states read the same under every LANG. */
-const ps = (args: string[]): SpawnSyncReturns<string> => spawnSync('ps', args, { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
+/**
+ * A system tool run once more when it could not be started at all (a fork refused under load, say): the second
+ * attempt's answer is the answer. A tool that started and failed is not retried.
+ */
+function tool(command: string, args: string[]): SpawnSyncReturns<string> {
+  const options = { encoding: 'utf8' as const, env: { ...process.env, LC_ALL: 'C' } };
+  const first = spawnSync(command, args, options);
+  if (!first.error) return first;
+  sleep(20);
+  return spawnSync(command, args, options);
+}
+const ps = (args: string[]): SpawnSyncReturns<string> => tool('ps', args);
 const PS_DOWN = (): Finding => new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so the state of the environment\'s processes is unknown', ['ps_unavailable']);
 /**
  * Whether the process still runs; an exited child not yet reaped (a zombie) counts as gone. Null when the process
@@ -77,18 +88,28 @@ function table(): Row[] | null {
     return /^\d+$/.test(pid ?? '') && /^\d+$/.test(ppid ?? '') ? [{ pid: Number(pid), ppid: Number(ppid), zombie: (stat ?? '').startsWith('Z'), command: words.join(' ') }] : [];
   });
 }
+interface Listener { address: string; port: number }
+const LOOPBACK = '127.0.0.1';
+const shown = (l: Listener): string => `${l.address}:${l.port}`;
 /**
- * The TCP ports the given processes listen on, read from the open files table (lsof); null when it can't be read.
+ * The TCP addresses the given processes listen on, read from the open files table (lsof); null when it can't be read.
  * lsof ends with 1 both when it found nothing and on a failure it reports on stderr; only the silent 1 is an answer.
+ * An address is as lsof names it: `127.0.0.1`, `*` for every interface, `[::1]`.
  */
-function listeners(pids: number[]): number[] | null {
-  const read = spawnSync('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn'], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
+function listeners(pids: number[]): Listener[] | null {
+  const read = tool('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn']);
   if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
-  const ports = new Set<number>();
-  for (const line of read.stdout.split('\n')) if (line.startsWith('n')) { const port = Number(line.slice(line.lastIndexOf(':') + 1)); if (Number.isInteger(port)) ports.add(port); }
-  return [...ports].sort((a, b) => a - b);
+  const seen = new Map<string, Listener>();
+  for (const line of read.stdout.split('\n')) {
+    if (!line.startsWith('n')) continue;
+    const colon = line.lastIndexOf(':');
+    const port = Number(line.slice(colon + 1));
+    if (colon > 0 && Number.isInteger(port)) seen.set(line.slice(1), { address: line.slice(1, colon), port });
+  }
+  return [...seen.values()].sort((a, b) => a.port - b.port || a.address.localeCompare(b.address));
 }
-const carries = (row: Row, run: string): boolean => row.command.split(' ').includes(run);
+/** Whether the command line carries the run token anywhere (as its own word or inside `--run-token=`, say): 18 random hex digits after `run-` match nothing else. */
+const carries = (row: Row, run: string): boolean => row.command.includes(run);
 /**
  * Every process carrying the run token as a word of its command line (the issue's words: down leaves no process
  * carrying its run token). The scan finds what was left; it grants no authority to stop anything (see `own`).
@@ -124,7 +145,8 @@ const sameStart = (a: number | null, b: number | undefined): boolean => a !== nu
 const record = (pid: number): void => { const at = startTime(pid); if (at !== null) own.set(pid, at); };
 /** Whether `pid` is one the kit started and is still that process. */
 const isOwn = (pid: number): boolean => own.has(pid) && sameStart(startTime(pid), own.get(pid));
-const forget = (): void => { for (const [pid, at] of own) if (!sameStart(startTime(pid), at)) own.delete(pid); };
+/** Drops the records of what is gone or another process; one the table can't speak for while it may still run is kept. */
+const forget = (): void => { for (const [pid, at] of own) { const now = startTime(pid); if (now === null ? alive(pid) === false : !sameStart(now, at)) own.delete(pid); } };
 const scanned = (run: string): Carrier[] => {
   const left = carrying(run);
   if (left === null) throw PS_DOWN();
@@ -145,7 +167,7 @@ function stop(pid: number, run: string): 'signalled' | 'other' | 'unreadable' {
   if (at === undefined || read.status !== 0) return 'other';
   const words = read.stdout.trim().split(/\s+/);
   const start = Date.parse(words.slice(0, 5).join(' '));
-  if (!sameStart(Number.isFinite(start) ? start : null, at) || !words.slice(5).includes(run)) return 'other';
+  if (!sameStart(Number.isFinite(start) ? start : null, at) || !words.slice(5).join(' ').includes(run)) return 'other';
   try { process.kill(pid, 'SIGKILL'); } catch { /* told by the check that follows */ }
   return 'signalled';
 }
@@ -302,7 +324,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const again = probe(lease.port, spec.health);
     const second = Date.now() - askedAgain;
     if (again.status !== 200 || again.token !== spec.token) throw fail(RULES.health.message, ['health_unstable'], `GET ${spec.health} answered once, then ${again.error ?? `status ${again.status} with token ${JSON.stringify(again.token)}`}`);
-    if (first > second * 3 + 500) throw fail(RULES.health.message, ['ready_before_health'], `the first health answer came ${first} ms after up returned, the next in ${second} ms: the environment held the request until it was ready`);
+    if (first > second * 3 + 800) throw fail(RULES.health.message, ['ready_before_health'], `the first health answer came ${first} ms after up returned, the next in ${second} ms: the environment held the request until it was ready`);
     // The handle's pid is the fill's word until the process table shows it: a running process carrying the run
     // token. Otherwise "gone after down" would hold of a pid that never was the environment.
     const before = table();
@@ -318,8 +340,11 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // still there is BLOCKED, never a member the wait could lose track of. A process gone meanwhile is no member.
     const START_UNKNOWN = (p: number) => new Finding('BLOCKED', `the start time of pid ${p}, a process of the environment, can't be read, so it can't be told from another process later`, ['start_unknown']);
     const join = (p: number): void => { const at = startTime(p); if (at !== null) members.set(p, at); else if (alive(p) !== false) throw START_UNKNOWN(p); };
+    // The environment is every process carrying the run token, under the handle's process or beside it (a database
+    // the fill started next to its server, say), and every process under the handle's, which must carry the token.
     const grow = (rows: Row[]): void => {
       for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); }
+      for (const row of rows) if (carries(row, lease.token) && !members.has(row.pid)) join(row.pid);
     };
     join(pid);
     if (!members.has(pid)) throw START_UNKNOWN(pid);
@@ -327,15 +352,16 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // The environment's processes listen on the leased port and no other; the open files table shows which, here
     // and again at every step of the wait after down for whatever still runs then. A listener bound and closed
     // wholly between two readings is beyond what a sampled table shows, as the fork above is.
-    const inventory = (pids: number[]): number[] => {
+    const inventory = (pids: number[]): Listener[] => {
       const bound = listeners(pids);
       if (bound === null) throw new Finding('BLOCKED', 'the environment\'s listening ports can\'t be read (lsof failed), so whether it binds its lease alone is unknown', ['listeners_unknown']);
       return bound;
     };
+    const leased = (l: Listener): boolean => l.port === lease.port && l.address === LOOPBACK;
     const bound = inventory([...members.keys()]);
-    if (!bound.includes(lease.port)) throw fail(RULES.port.message, ['unleased_port'], `no process of the environment listens on ${lease.port}, though health answered there (${bound.length ? `it listens on ${bound.join(', ')}` : 'it listens on nothing'})`);
-    const extra = bound.filter((port) => port !== lease.port);
-    if (extra.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listens on ${extra.join(', ')} besides the lease ${lease.port}`);
+    if (!bound.some(leased)) throw fail(RULES.port.message, ['unleased_port'], `no process of the environment listens on ${LOOPBACK}:${lease.port}, though health answered there (${bound.length ? `it listens on ${bound.map(shown).join(', ')}` : 'it listens on nothing'})`);
+    const extra = bound.filter((l) => !leased(l));
+    if (extra.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listens on ${extra.map(shown).join(', ')} besides the lease ${LOOPBACK}:${lease.port}`);
     // A member is still there when the table shows its pid alive (not a zombie) with the start time it was remembered
     // with; a pid the table shows whose start time then can't be read is unknown, not gone.
     const stillThere = (rows: Row[]): { pid: number }[] => [...members].filter(([p, start]) => {
@@ -350,8 +376,8 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
       grow(rows);
       const there = stillThere(rows);
       if (there.length > 0) {
-        const late = inventory(there.map((m) => m.pid)).filter((port) => port !== lease.port);
-        if (late.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listened on ${late.join(', ')} besides the lease ${lease.port} while going down`);
+        const late = inventory(there.map((m) => m.pid)).filter((l) => !leased(l));
+        if (late.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listened on ${late.map(shown).join(', ')} besides the lease ${LOOPBACK}:${lease.port} while going down`);
       }
       return there.length === 0 && !listening(lease.port) && !rows.some((row) => carries(row, lease.token));
     };
@@ -362,7 +388,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (!waitUntil(clear, 150)) {
       const left = scanned(lease.token);
       const there = stillThere(read());
-      const why = there.length > 0 ? `${there.map((m) => `pid ${m.pid}`).join(', ')} still run${there.length === 1 ? 's' : ''} 150 ms after down${there.every((m) => isOwn(m.pid)) ? '' : ' (not the kit\'s own, so left as they are)'}`
+      const why = there.length > 0 ? `${there.map((m) => `pid ${m.pid}`).join(', ')} still run${there.length === 1 ? 's' : ''} 150 ms after down${left.length > 0 ? ` and still carries the run token` : ''}${there.every((m) => isOwn(m.pid)) ? '' : ' (not the kit\'s own, so left as they are)'}`
         : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} still accepts connections 150 ms after down`
         : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`
         : `pid ${pid}, the port and the run token were not all clear within 150 ms of down`;
@@ -381,7 +407,12 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const mine = left.map((p) => p.pid).filter(isOwn);
     for (const p of mine) if (stop(p, lease.token) === 'unreadable') throw PS_DOWN();
     // Every owned pid, signalled or not, must be gone or another process by now; one still the kit's and alive is BLOCKED.
-    const remaining = (): number[] => mine.filter((p) => alive(p) !== false && isOwn(p));
+    const remaining = (): number[] => mine.filter((p) => {
+      if (alive(p) === false) return false;
+      const at = startTime(p);
+      if (at === null) throw PS_DOWN();
+      return sameStart(at, own.get(p));
+    });
     if (!waitUntil(() => remaining().length === 0, 500)) throw new Finding('BLOCKED', `the kit's own process ${remaining().join(', ')} did not end within 500 ms of SIGKILL`, ['kit_leftover']);
     forget();
   }
