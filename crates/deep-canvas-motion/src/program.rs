@@ -20,6 +20,8 @@ pub struct Field {
     pub path: Vec<String>,
     pub slot: usize,
     pub width: usize,
+    /// A bool channel's field, written as `true` or `false`.
+    pub boolean: bool,
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
@@ -81,6 +83,7 @@ fn authored(item: &Value, path: &[String], width: usize, out: &mut [f64]) {
                 *o = number(Some(v)).unwrap_or(0.0);
             }
         }
+        Some(Value::Bool(b)) => out[0] = if *b { 1.0 } else { 0.0 },
         v => {
             if let Some(n) = number(v) {
                 out[0] = n;
@@ -125,6 +128,7 @@ impl Program {
         for channel in &motion.channels {
             let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
             let slot = program.slot(items_json, &channel.target.owner, &channel.target, width);
+            program.mark_bool(slot, channel.ty);
             program.channels.push((slot, width));
             program.values.push(values);
             values += width;
@@ -140,6 +144,7 @@ impl Program {
                         }
                         let width = channel.curve.keys.first().map_or(1, |k| k.value.len());
                         let slot = program.slot(items_json, &binding.item, &channel.target, width);
+                        program.mark_bool(slot, channel.ty);
                         writes.push(Write {
                             channel: c,
                             delay: binding.delay,
@@ -158,6 +163,15 @@ impl Program {
             .filter_map(|(child, parent)| Some((index(child)?, index(parent)?)))
             .collect();
         Ok(program)
+    }
+
+    /// Marks the field at `slot` as a bool channel's, so it is written as a bool.
+    fn mark_bool(&mut self, slot: usize, ty: doc::ValueType) {
+        if ty == doc::ValueType::Bool {
+            if let Some(f) = self.fields.iter_mut().find(|f| f.slot == slot) {
+                f.boolean = true;
+            }
+        }
     }
 
     /// The slots a target names in `owner`: its transform's, or a field's of its own, made once.
@@ -200,6 +214,7 @@ impl Program {
             path: target.field.clone(),
             slot,
             width,
+            boolean: false,
         });
         slot
     }
