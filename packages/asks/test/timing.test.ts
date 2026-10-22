@@ -481,6 +481,21 @@ describe('the asks table and the exception', () => {
     await record.rebuild();
     expect(await row()).toBe('open');
   });
+
+  it('counts as held only the asks raised after the exception, not an earlier one from the same instant, before and after a rebuild', async () => {
+    settings({});
+    await start('S1');
+    // Raised before the exception, in the same millisecond on this clock: never held by it, whatever its deadline.
+    const earlier = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'S1 banner', { deadline: T0 + DAY }));
+    const { exception } = await fold('S1', ask('taste', 'S1 footer'));
+    expect((await asks.card(exception)).folded).not.toContain(earlier);
+    await asks.later(card, exception, T0 + DAY + 12 * HOUR);
+    const row = async () => (await record.table('asks')).rows.find((r) => `ask:${String(r.id)}` === exception)?.status;
+    expect((await asks.inbox()).find((r) => r.ask === exception)?.status).toBe('later');
+    expect(await row()).toBe('later');
+    await record.rebuild();
+    expect(await row()).toBe('later');
+  });
 });
 
 describe('showings', () => {

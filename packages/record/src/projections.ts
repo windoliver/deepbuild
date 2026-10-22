@@ -282,12 +282,12 @@ export class Projector {
         // own event changes nothing.
         if (e.writer !== 'core') break;
         // For the exception, never past the earliest deadline among the open asks it holds: those raised after it in
-        // its thread under its identity, as the core counts them.
+        // the log, in its thread under its identity, as the core counts them; not one from the same instant before it.
         this.stmt(`UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ?
           AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)
           AND NOT EXISTS (SELECT 1 FROM asks held JOIN events he ON he.id = held.id JOIN events ee ON ee.id = asks.id
             WHERE asks.kind = 'exception' AND held.kind != 'exception' AND held.status IN ('open', 'later')
-              AND held.created >= asks.created AND he.actor = ee.actor AND he.scope = ee.scope
+              AND he.log_pos > ee.log_pos AND he.actor = ee.actor AND he.scope = ee.scope
               AND COALESCE((SELECT thread_id FROM sessions WHERE id = held.session_id), held.session_id)
                 = COALESCE((SELECT thread_id FROM sessions WHERE id = asks.session_id), asks.session_id)
               AND held.deadline <= ?)`).run(int(d.until), bare(e.subject), int(d.until), e.actor, e.scope, int(d.until));
