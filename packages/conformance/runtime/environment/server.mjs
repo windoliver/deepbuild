@@ -12,7 +12,8 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const [port, health, token, warmup, ready, run, helper] = process.argv.slice(2);
-if (helper === 'helper') spawn(process.execPath, [fileURLToPath(new URL('./helper.mjs', import.meta.url)), run], { detached: true, stdio: 'ignore' }).unref();
+const grandchild = helper === 'helper' ? spawn(process.execPath, [fileURLToPath(new URL('./helper.mjs', import.meta.url)), run], { detached: true, stdio: 'ignore' }) : null;
+grandchild?.unref();
 const server = createServer((request, response) => {
   if (request.method === 'GET' && request.url === health) {
     response.writeHead(200, { 'content-type': 'application/json' });
@@ -24,7 +25,8 @@ const server = createServer((request, response) => {
 });
 setTimeout(() => {
   server.listen(Number(port), '127.0.0.1', () => {
-    writeFileSync(ready, JSON.stringify({ port: Number(port), pid: process.pid }));
+    // The ready marker names the processes this environment is made of, so the kit knows what it started.
+    writeFileSync(ready, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild?.pid ?? null }));
   });
 }, Number(warmup));
 // A fixture server never outlives its run by much.

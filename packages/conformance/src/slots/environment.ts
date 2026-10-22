@@ -5,7 +5,7 @@
 // and leave their process running.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +18,6 @@ import { object, text, word } from './shared.js';
 
 export const ENVIRONMENT = 'environment@1';
 const SERVER = fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url));
-const HELPER = fileURLToPath(new URL('../../runtime/environment/helper.mjs', import.meta.url));
 
 export interface EnvSpec { health: string; token: string; warmup: number }
 /**
@@ -68,12 +67,11 @@ function isThisServer(pid: number, port: number, run: string): boolean {
   const words = (ps.stdout ?? '').trim().split(/\s+/);
   return ps.status === 0 && words.includes(SERVER) && words.includes(String(port)) && words.includes(run);
 }
-interface Carrier { pid: number; command: string; own: boolean }
+interface Carrier { pid: number; command: string }
 /**
  * Every process carrying the run token as a word of its command line (the issue's words: down leaves no process
- * carrying its run token), with whether it is this case's fixture server or helper, which the kit may stop: the
- * token is the kit's own draw for the case, so nothing else carries it. A process table the kit can't read is
- * null, never an empty list.
+ * carrying its run token). A process table the kit can't read is null, never an empty list. The scan finds what
+ * was left; it grants no authority to stop anything (see `started`).
  */
 function carrying(run: string): Carrier[] | null {
   const ps = spawnSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' });
@@ -81,9 +79,15 @@ function carrying(run: string): Carrier[] | null {
   return ps.stdout.split('\n').flatMap((line) => {
     const [pid, ...words] = line.trim().split(/\s+/);
     if (!words.includes(run) || !/^\d+$/.test(pid ?? '')) return [];
-    return [{ pid: Number(pid), command: words.join(' '), own: words.includes(SERVER) || words.includes(HELPER) }];
+    return [{ pid: Number(pid), command: words.join(' ') }];
   });
 }
+/**
+ * The pids of the fixture processes the kit's own reference fills started, as their ready markers reported them.
+ * The kit signals only these, and only while they still carry the run token: a command line a fill could dress up
+ * with the kit's words is no proof the kit started it.
+ */
+const started = new Set<number>();
 const scanned = (run: string): Carrier[] => {
   const left = carrying(run);
   if (left === null) throw new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so whether down left a process is unknown', ['ps_unavailable']);
@@ -128,8 +132,13 @@ function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper =
   const child = spawn(process.execPath, [SERVER, String(port), spec.health, spec.token, String(spec.warmup), ready, run, ...(helper ? ['helper'] : [])], { stdio: 'ignore' });
   child.unref();
   const pid = child.pid ?? -1;
+  started.add(pid);
   if (wait && !waitUntil(() => existsSync(ready), 5000)) { child.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); throw Error(`the environment on ${port} did not come up in 5 s`); }
-  if (wait) rmSync(dir, { recursive: true, force: true });
+  if (wait) {
+    // The marker names the server's grandchild, if any: a process the kit started through the fill and may stop.
+    try { const marker = JSON.parse(readFileSync(ready, 'utf8')) as { helper?: number | null }; if (typeof marker.helper === 'number') started.add(marker.helper); } catch { /* an unreadable marker names nothing */ }
+    rmSync(dir, { recursive: true, force: true });
+  }
   return { handle: { id: `env-${pid}`, port, pid }, child };
 }
 /**
@@ -175,17 +184,19 @@ const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seede
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
   const spec = c.input as unknown as EnvSpec;
-  // The lease: a port reserved by binding it once and released for the environment to bind (the moment between is
-  // the hub's too), and a run token drawn for this case alone, so a concurrent case or another kit run on the same
-  // fixture shares nothing with it.
+  // The lease: a port reserved by binding it once and released for the environment to bind, and a run token drawn
+  // for this case alone, so a concurrent case or another kit run on the same fixture shares nothing with it. The
+  // moment between the release and the environment's bind is open, as it is for the hub's own leases: the slot's
+  // interface hands the environment a port number, not a bound socket, and a port taken in that moment fails the
+  // reference fill's start loudly (no ready marker), never a rule.
   const lease: Lease = { port: leasePort(), token: `run-${randomBytes(9).toString('hex')}` };
   const handle = object('the handle', yield () => fill.up(spec, lease));
   text('handle/id', handle.id);
   if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
   if (!Number.isInteger(handle.pid)) throw new Finding('FAIL', `handle/pid ${JSON.stringify(handle.pid)} is not a pid`, ['type']);
   const pid = handle.pid as number;
-  // Only a process the kit can identify as this case's server is ever signalled; another pid is the fill's claim alone.
-  const owned = isThisServer(pid, handle.port as number, lease.token);
+  // Only a process the kit started itself and can identify as this case's server is ever signalled; another pid is the fill's claim alone.
+  const owned = started.has(pid) && isThisServer(pid, handle.port as number, lease.token);
   try {
     if (handle.port !== lease.port) throw fail(RULES.port.message, ['unleased_port'], `bound ${handle.port}; the lease is ${lease.port}`);
     const answer = probe(lease.port, spec.health);
@@ -205,10 +216,10 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
       throw fail(RULES.down.message, ['process_left'], why);
     }
   } finally {
-    // The kit stops only processes it started through the reference fill and can still identify (its fixture server
-    // and helper, by their scripts and this case's run token); any other pid is left as it is.
+    // The kit stops only processes it started through the reference fill (its fixture server and helper, by the pids
+    // their ready marker reported) that still carry this case's run token; any other pid is left as it is.
     if (owned && alive(pid) && isThisServer(pid, handle.port as number, lease.token)) stop(pid);
-    for (const p of carrying(lease.token) ?? []) if (p.own) stop(p.pid);
+    for (const p of carrying(lease.token) ?? []) if (started.has(p.pid)) stop(p.pid);
   }
 }
 
