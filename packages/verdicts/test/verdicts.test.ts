@@ -515,6 +515,36 @@ describe('a waiver\'s error', () => {
   });
 });
 
+describe('wording a person reads', () => {
+  const fixReq = { req: REQ, depth: 'unit' as const, oracle: 'code' as const, on_base: 'fails' as const };
+  it('a fix check with no base result names what closes it, not its reason', () => {
+    const c = check('fix');
+    const v = verdict(claim({ requirements: [fixReq], checks: [c], runs: [run(c, 'passed')] }));
+    const item = v.open_items.find((i) => i.check === 'fix');
+    expect(item?.closes_with.evidence).toBe('a run of it on the merge base that fails on an assertion it names');
+  });
+  it('a requirement no check covers at its depth reads as a sentence', () => {
+    const c = check('unit');
+    const deep = verdict(claim({ requirements: [{ req: REQ, depth: 'journey', oracle: 'code', on_base: 'passes' }], checks: [c], runs: [run(c, 'passed')] }));
+    expect(deep.reasons).toContain(`${REQ} is covered by no check at depth journey: it needs a check at depth journey`);
+    const numbers = verdict(claim({ requirements: [{ req: REQ, depth: 'unit', oracle: 'code', on_base: 'passes', numbers: true }], checks: [c], runs: [run(c, 'passed')] }));
+    expect(numbers.reasons).toContain(`${REQ} is covered by no check with a numeric contract at depth unit: it needs a check with a numeric contract at depth unit`);
+    expect(numbers.open_items[0]?.closes_with.evidence).toBe('a check with a numeric contract at depth unit');
+  });
+  it('a check whose every failure is waived is unwatched, and its item does not ask for clean runs', () => {
+    const c = check('unit');
+    const v = verdict(claim({
+      checks: [c], runs: [run(c, 'failed', { failures: [failure('t1')] })],
+      waivers: [{ check: 'unit', error: 't1 broke', owner: 'you', approved_by: 'you', ends: { date: 10 } }],
+    }));
+    expect(v.checks[0]?.outcome).toBe('INCONCLUSIVE');
+    const item = v.open_items.find((i) => i.check === 'unit');
+    expect(item?.text).not.toContain('clean runs');
+    expect(item?.text).toContain('waived');
+    expect(item?.closes_with.evidence).toContain('waiver');
+  });
+});
+
 describe('the perf lane\'s verdict task', () => {
   // AC22's merge-base comparison runs in the perf lane, which measures the task benchmarks/budgets.json
   // declares; this keeps the manifest's command and the benchmark it names from drifting apart. The benchmark

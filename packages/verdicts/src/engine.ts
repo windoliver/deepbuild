@@ -229,9 +229,10 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
     if (!need.ok) row('BLOCKED', need.reason);
     if (c.cant_fail) row('INVALID', `can't fail: ${c.cant_fail}`);
     if (isFix(claim, c)) {
-      if (!c.base) row('INVALID', 'has no run on the merge base, so nothing proves the fix');
-      else if (c.base.outcome === 'passed') row('INVALID', 'passes on the merge base, so it can\'t prove the fix');
-      else if (!c.base.on_assertion) row('INVALID', 'failed on the merge base only off its named assertions, so it proves nothing');
+      const proves = 'a run of it on the merge base that fails on an assertion it names';
+      if (!c.base) row('INVALID', 'has no run on the merge base, so nothing proves the fix', undefined, proves);
+      else if (c.base.outcome === 'passed') row('INVALID', 'passes on the merge base, so it can\'t prove the fix', undefined, proves);
+      else if (!c.base.on_assertion) row('INVALID', 'failed on the merge base only off its named assertions, so it proves nothing', undefined, proves);
     }
     const causes = new Set<string>();
     for (const r of runs) {
@@ -269,7 +270,15 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       }
       const stopped = runs.some((r) => r.outcome === 'stopped');
       if (stopped) row('INCONCLUSIVE', 'a run was stopped before it ended', undefined, 'a run that ends');
-      if (need.ok && !flaky && !stopped && passes.length < needed) {
+      // Every real run failed only on waived errors: the check is unwatched while the waivers last, and no
+      // number of clean runs is owed, since each would fail the same way.
+      const waivedRuns = runs.filter((r) => waived(claim, r));
+      const unwatched = waivedRuns.length > 0 && !passes.length && !fails.length;
+      if (unwatched) {
+        const errors = unique(waivedRuns.flatMap((r) => r.failures.map((f) => f.message))).join(', ');
+        row('INCONCLUSIVE', `every failure of its runs is waived: ${errors}`, 'every failure of its runs is waived', 'the waived error gone from its runs, or the waiver\'s end');
+      }
+      if (need.ok && !flaky && !stopped && !unwatched && passes.length < needed) {
         short = needed - passes.length;
         row('INCONCLUSIVE', `${passes.length} of ${needed} clean runs`, `fewer clean runs than the ${needed} it needs`, `${needed - passes.length} more clean runs`);
       }
@@ -473,9 +482,9 @@ function requirementOutcome(
     closes = `your answer to ${q.ask ?? 'its ask'}`;
   } else if (atDepth.length === 0) {
     own = 'INVALID';
-    const needs = `a check at depth ${q.depth}${q.numbers ? ' with a numeric contract' : ''}`;
-    why = `${q.req} has no ${needs}: it needs depth ${q.depth}`;
-    closes = needs;
+    const kind = q.numbers ? `check with a numeric contract at depth ${q.depth}` : `check at depth ${q.depth}`;
+    why = `${q.req} is covered by no ${kind}: it needs a ${kind}`;
+    closes = `a ${kind}`;
   } else if (atDepth.every((j) => j.check.source === 'own')) {
     own = 'INCONCLUSIVE';
     // You're asked to approve only an own check that passed, and only while that approval is what's left.
