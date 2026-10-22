@@ -200,7 +200,7 @@ impl Render for View {
 
 /// A straight RGBA raster as the BGRA picture GPUI paints.
 fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
     }
     let frame = image::RgbaImage::from_raw(u32::from(size[0]), u32::from(size[1]), rgba)?;

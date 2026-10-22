@@ -1,0 +1,104 @@
+{
+  "format": 1,
+  "id": "parity-star",
+  "profile": "figure",
+  "title": "Stars",
+  "description": "A five-point star, a regular hexagon, a star of 5.5 points that closes on a half spike, and a burst of 100 points, the most a star may have.",
+  "size": [
+    880,
+    220
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "star5": {
+      "id": "star5",
+      "kind": "star@1",
+      "layer": "main",
+      "name": "Five-point star",
+      "order": "a00",
+      "params": {
+        "center": [
+          110,
+          110
+        ],
+        "points": 5,
+        "outer_r": 100,
+        "inner_r": 40,
+        "paint": {
+          "fill": {
+            "role": "star.a"
+          }
+        }
+      }
+    },
+    "hexagon": {
+      "id": "hexagon",
+      "kind": "star@1",
+      "layer": "main",
+      "name": "Hexagon",
+      "order": "a01",
+      "params": {
+        "center": [
+          330,
+          110
+        ],
+        "points": 6,
+        "polygon": true,
+        "outer_r": 100,
+        "paint": {
+          "fill": {
+            "role": "star.b"
+          }
+        }
+      }
+    },
+    "star55": {
+      "id": "star55",
+      "kind": "star@1",
+      "layer": "main",
+      "name": "Star of 5.5 points",
+      "order": "a02",
+      "params": {
+        "center": [
+          550,
+          110
+        ],
+        "points": 5.5,
+        "outer_r": 100,
+        "inner_r": 40,
+        "paint": {
+          "fill": {
+            "role": "star.a"
+          }
+        }
+      }
+    },
+    "burst": {
+      "id": "burst",
+      "kind": "star@1",
+      "layer": "main",
+      "name": "Burst",
+      "order": "a03",
+      "params": {
+        "center": [
+          770,
+          110
+        ],
+        "points": 100,
+        "outer_r": 100,
+        "inner_r": 80,
+        "paint": {
+          "fill": {
+            "role": "star.b"
+          }
+        }
+      }
+    }
+  }
+}

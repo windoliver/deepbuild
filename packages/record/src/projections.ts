@@ -4,6 +4,7 @@
 // replaying the log rebuilds them all (design: One event log, with tables built from it).
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Statement } from 'better-sqlite3';
+import { CHECKED, judge, ROLLERS, YOURS, type LearnedChange } from './learned.js';
 import type { Db } from './storage.js';
 
 /** One event as the projections read it: the stored row, with its data parsed and migrated. */
@@ -25,11 +26,11 @@ export interface Projected {
   evidence: string[];
 }
 
-interface TableDef { name: string; pk: string[]; columns: string }
+interface TableDef { name: string; pk: string[]; columns: string; indexes?: string[] }
 type Row = Record<string, unknown>;
 type Obj = { [key: string]: JsonValue };
 
-const T = (name: string, pk: string[], columns: string): TableDef => ({ name, pk, columns });
+const T = (name: string, pk: string[], columns: string, indexes?: string[]): TableDef => ({ name, pk, columns, ...(indexes ? { indexes } : {}) });
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
 export const TABLES: readonly TableDef[] = [
   T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT'),
@@ -60,7 +61,9 @@ export const TABLES: readonly TableDef[] = [
   T('notes', ['note'], 'note TEXT, doc TEXT, item TEXT, rev INTEGER, region TEXT, text TEXT, state TEXT, opened INTEGER, closed INTEGER, by TEXT'),
   T('suggestions', ['suggestion'], 'suggestion TEXT, doc TEXT, item TEXT, writer TEXT, base INTEGER, filed INTEGER, outcome TEXT, rev INTEGER'),
   T('returns', ['id'], 'id TEXT, session TEXT, turn INTEGER, did_work INTEGER, at INTEGER'),
-  T('learned_layer', ['id'], 'id TEXT, kind TEXT, layer TEXT, target TEXT, scope TEXT, created INTEGER'),
+  T('learned_layer', ['id'], 'id TEXT, kind TEXT, layer TEXT, target TEXT, scope TEXT, created INTEGER, state TEXT, reason TEXT, flagged TEXT, handle TEXT, diff TEXT, evidence TEXT, supersedes TEXT, applied_by TEXT, log_pos INTEGER', ['handle', 'supersedes', 'layer, target', 'log_pos']),
+  // Which learned change cites which change's handle, so a rollback finds what it flags without reading every row.
+  T('learned_cites', ['handle', 'id'], 'handle TEXT, id TEXT'),
   // The record's reading of each session's turns: which turn each event belongs to and its place in it.
   T('turns', ['session_id', 'idx'], 'session_id TEXT, idx INTEGER, number INTEGER, start_seq INTEGER, start_id TEXT, stop_seq INTEGER, stopped INTEGER NOT NULL DEFAULT 0, last_seq INTEGER, last_id TEXT'),
   T('turn_events', ['event_id'], 'event_id TEXT, session_id TEXT, turn_idx INTEGER, eff_seq INTEGER, eff_id TEXT, log_pos INTEGER'),
@@ -94,9 +97,23 @@ export class Projector {
 
   constructor(private readonly db: Db) {}
 
-  /** Creates each table that is missing. */
-  ensure(): void {
-    for (const t of TABLES) this.db.exec(`CREATE TABLE IF NOT EXISTS ${t.name} (${t.columns}, PRIMARY KEY (${t.pk.join(', ')})) STRICT`);
+  /**
+   * Creates each table that is missing. A table an older version made with other columns is left as it is, and
+   * it returns true: the record then rebuilds, which drops and remakes every table and replays the log in one
+   * commit, so a stop before that commit finds the old table again.
+   */
+  ensure(): boolean {
+    let stale = false;
+    for (const t of TABLES) {
+      const have = (this.db.prepare('SELECT name FROM pragma_table_info(?)').all(t.name) as { name: string }[]).map((c) => c.name).join(',');
+      if (have && have !== t.columns.split(',').map((c) => c.trim().split(' ')[0]).join(',')) {
+        stale = true;
+        continue;
+      }
+      this.db.exec(`CREATE TABLE IF NOT EXISTS ${t.name} (${t.columns}, PRIMARY KEY (${t.pk.join(', ')})) STRICT`);
+      for (const [i, columns] of (t.indexes ?? []).entries()) this.db.exec(`CREATE INDEX IF NOT EXISTS ${t.name}_${i} ON ${t.name} (${columns})`);
+    }
+    return stale;
   }
   /** Drops every projection, so a replay starts from nothing. */
   drop(): void {
@@ -407,8 +424,40 @@ export class Projector {
       case 'learn.proposed':
       case 'learn.applied':
       case 'learn.widened':
-      case 'learn.rolled_back':
-        this.up('learned_layer', { id: e.id, kind: e.kind, layer: str(d.layer), target: json(d.target), scope: json(d.scope), created: e.ts });
+      case 'learn.rolled_back': {
+        // A change is judged at its place in the log, from the record alone; what the core read in the evidence
+        // store at append comes as learn_check.made, in the same commit.
+        const judged = CHECKED.has(e.kind) ? judge(this.db, d as unknown as LearnedChange, e.writer) : undefined;
+        const state = e.kind === 'learn.proposed' ? 'proposed' : e.kind === 'learn.rolled_back' ? null : judged?.outcome ?? 'applied';
+        const handle = `doc:${e.id}`;
+        this.up('learned_layer', { id: e.id, kind: e.kind, layer: str(d.layer), target: str(d.target), scope: str(d.scope), created: e.ts, state, reason: judged?.reason ?? null, handle, diff: str(d.diff), evidence: json(d.evidence), supersedes: str(d.supersedes), applied_by: str(d.applied_by), log_pos: e.log_pos });
+        if (e.kind !== 'learn.rolled_back' && Array.isArray(d.evidence)) {
+          for (const q of d.evidence) if (isObj(q) && typeof q.at === 'string' && q.at.startsWith('doc:')) this.up('learned_cites', { handle: q.at, id: e.id });
+        }
+        // A rollback is a compensating event: it takes the change it names out of force and flags every later
+        // change that supersedes or cites it. Only you, through the app or the CLI, or the core roll back, and
+        // the base only you: the core's attempt on a rule you typed is refused and recorded, as its base changes are.
+        const undone = str(d.supersedes);
+        if (e.kind !== 'learn.rolled_back' || !undone) break;
+        if (!ROLLERS.has(e.writer)) {
+          this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE id = ?").run(`a rollback takes a change out of force only from the app, the CLI or the core, not ${e.writer}`, e.id);
+          break;
+        }
+        if (!YOURS.has(e.writer)) {
+          const named = this.stmt("SELECT layer, target FROM learned_layer WHERE handle = ? AND kind IN ('learn.applied', 'learn.widened')").get(undone) as { layer: string | null; target: string | null } | undefined;
+          if (named?.layer === 'base') {
+            this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE id = ?").run(`${named.target ?? undone} is in the base, which only you change: the app or the CLI speaks for you, not ${e.writer}`, e.id);
+            break;
+          }
+        }
+        this.stmt("UPDATE learned_layer SET state = 'rolled_back' WHERE handle = ? AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened')").run(undone);
+        this.stmt("UPDATE learned_layer SET flagged = COALESCE(flagged || ' ', '') || ? WHERE kind <> 'learn.rolled_back' AND log_pos > (SELECT log_pos FROM learned_layer WHERE handle = ?)"
+          + ' AND id IN (SELECT id FROM learned_layer WHERE supersedes = ? UNION SELECT id FROM learned_cites WHERE handle = ?)').run(undone, undone, undone, undone);
+        break;
+      }
+      case 'learn_check.made':
+        // What the core read refuses a change the record alone would apply or hold, in the change's own commit.
+        this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE handle = ? AND state IN ('applied', 'held')").run(str(d.reason), str(d.change));
         break;
       default:
         break;

@@ -5,6 +5,11 @@
 //! R1's slice: rect, circle (dots and rings), path (lines and arrows, and simple fills) and text;
 //! solid fills and two-stop linear gradients; an item's `at.pos` moves it, while rotation and scale
 //! wait for the GPU layer, since GPUI's quads and sprites don't turn.
+//!
+//! Issue #373 adds R2's 2D marks, drawn by Vello CPU: star@1, arcs, frames and groups, gradients of
+//! up to 8 stops (linear, radial with a focal point, sweep) on fills and strokes, alpha and
+//! luminance rect masks, and each item's adjust. A mark carries the scopes it draws inside, from
+//! its outermost ancestor in: a rect mask's scissor, a soft mask, or a group's opacity.
 
 use std::collections::BTreeMap;
 
@@ -12,7 +17,9 @@ use serde_json::{Map, Value};
 
 use crate::data;
 use crate::key::{ContentKey, KeyBuilder};
-use crate::path::{self, Mesh};
+use crate::outline::{self, Star};
+use crate::paint::{self, Adjust, Ramp};
+use crate::path::{self, Mesh, Verb};
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
@@ -39,8 +46,9 @@ fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> 
     })
 }
 
-/// A fill: one role's color, or a two-stop linear gradient from the box's west edge to its east.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A fill: one role's color, a two-stop linear gradient from the box's west edge to its east (R1,
+/// which GPUI draws), or any other gradient as its ramp (R2).
+#[derive(Clone, Debug, PartialEq)]
 pub enum Fill {
     Solid(Rgb),
     Linear {
@@ -49,6 +57,110 @@ pub enum Fill {
         /// Each stop's `at`, 0..1 along the box.
         at: [f64; 2],
     },
+    Ramp(Ramp),
+}
+
+impl Fill {
+    fn adjust(&mut self, a: &Adjust) {
+        match self {
+            Fill::Solid(c) => *c = a.rgb(*c),
+            Fill::Linear { from, to, .. } => {
+                *from = a.rgb(*from);
+                *to = a.rgb(*to);
+            }
+            Fill::Ramp(r) => r.stops.iter_mut().for_each(|(_, c)| *c = a.color(*c)),
+        }
+    }
+
+    fn feed(&self, k: &mut KeyBuilder) {
+        match self {
+            Fill::Solid(c) => {
+                k.text("solid").bytes(c);
+            }
+            Fill::Linear { from, to, at } => {
+                k.text("linear").bytes(from).bytes(to);
+                k.number(at[0]).number(at[1]);
+            }
+            Fill::Ramp(r) => {
+                k.text("ramp").int(r.extend as i64);
+                let points: &[f64] = match &r.geometry {
+                    paint::Geometry::Linear { from, to } => &[from[0], from[1], to[0], to[1]],
+                    paint::Geometry::Radial {
+                        center,
+                        radius,
+                        focal,
+                    } => &[center[0], center[1], *radius, focal[0], focal[1]],
+                    paint::Geometry::Sweep { center, start, end } => {
+                        &[center[0], center[1], *start, *end]
+                    }
+                };
+                points.iter().for_each(|v| {
+                    k.number(*v);
+                });
+                for (t, c) in &r.stops {
+                    k.number(*t).number(c[0]).number(c[1]).number(c[2]);
+                }
+            }
+        }
+    }
+}
+
+/// What a mark draws inside (Mask `mask@1`; Frame and group): a rect mask's or a frame's
+/// scissor, an alpha or luminance mask's coverage from its own paint over its rect, or a group's
+/// (or an item's adjust) opacity through one offscreen pass.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Scope {
+    Clip {
+        item: String,
+        rect: [f64; 4],
+    },
+    Mask {
+        item: String,
+        rect: [f64; 4],
+        luminance: bool,
+        fill: Fill,
+    },
+    Opacity {
+        item: String,
+        alpha: f64,
+    },
+}
+
+impl Scope {
+    pub fn item(&self) -> &str {
+        match self {
+            Scope::Clip { item, .. } | Scope::Mask { item, .. } | Scope::Opacity { item, .. } => {
+                item
+            }
+        }
+    }
+
+    fn feed(&self, k: &mut KeyBuilder) {
+        k.text(self.item());
+        match self {
+            Scope::Clip { rect, .. } => {
+                k.text("clip");
+                rect.iter().for_each(|v| {
+                    k.number(*v);
+                });
+            }
+            Scope::Mask {
+                rect,
+                luminance,
+                fill,
+                ..
+            } => {
+                k.text(if *luminance { "luminance" } else { "alpha" });
+                rect.iter().for_each(|v| {
+                    k.number(*v);
+                });
+                fill.feed(k);
+            }
+            Scope::Opacity { alpha, .. } => {
+                k.text("opacity").number(*alpha);
+            }
+        }
+    }
 }
 
 /// A path's geometry: what its tessellation reads.
@@ -161,6 +273,14 @@ pub enum Mark {
         offset: [f64; 2],
         color: Rgb,
     },
+    /// R2's outlines: a star, an arc, or a path whose fill or stroke is a gradient, in u with the
+    /// item's offset applied; a stroke is `(width, paint)`.
+    Shape {
+        item: String,
+        verbs: Vec<Verb>,
+        fill: Option<Fill>,
+        stroke: Option<(f64, Fill)>,
+    },
     Text {
         item: String,
         spec: TextSpec,
@@ -175,14 +295,18 @@ pub enum Mark {
         fit: ImageFit,
         crop: Option<[f64; 4]>,
         opacity: f64,
+        /// The item's adjust, applied to every pixel of the image.
+        adjust: Adjust,
     },
 }
 
-/// A mark with the rect its masks clip it to, if any (Mask `mask@1`: a rect mask is a scissor).
+/// A mark with the rect its rect masks clip it to, if any (Mask `mask@1`: a rect mask is a
+/// scissor), and every scope it draws inside, outermost first.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Drawn {
     pub mark: Mark,
     pub clip: Option<[f64; 4]>,
+    pub scopes: Vec<Scope>,
 }
 
 impl Mark {
@@ -191,8 +315,24 @@ impl Mark {
             Mark::Rect { item, .. }
             | Mark::Circle { item, .. }
             | Mark::Path { item, .. }
+            | Mark::Shape { item, .. }
             | Mark::Text { item, .. }
             | Mark::Image { item, .. } => item,
+        }
+    }
+
+    /// Every color the mark draws, through the item's adjust; an image's pixels take it as drawn.
+    fn adjust(&mut self, a: &Adjust) {
+        match self {
+            Mark::Rect { fill, .. } => fill.adjust(a),
+            Mark::Circle { color, .. } | Mark::Path { color, .. } | Mark::Text { color, .. } => {
+                *color = a.rgb(*color)
+            }
+            Mark::Shape { fill, stroke, .. } => {
+                fill.iter_mut().for_each(|f| f.adjust(a));
+                stroke.iter_mut().for_each(|(_, f)| f.adjust(a));
+            }
+            Mark::Image { adjust, .. } => *adjust = a.clone(),
         }
     }
 
@@ -215,16 +355,41 @@ impl Mark {
                     k.number(*v);
                 });
                 k.number(*radius);
+                fill.feed(k);
+            }
+            Mark::Shape {
+                verbs,
+                fill,
+                stroke,
+                ..
+            } => {
+                k.text("shape");
+                for v in verbs {
+                    let (tag, points): (&str, &[[f64; 2]]) = match v {
+                        Verb::Move(p) => ("M", std::slice::from_ref(p)),
+                        Verb::Line(p) => ("L", std::slice::from_ref(p)),
+                        Verb::Quad(a, b) => ("Q", &[*a, *b]),
+                        Verb::Cubic(a, b, c) => ("C", &[*a, *b, *c]),
+                        Verb::Close => ("Z", &[]),
+                    };
+                    k.text(tag);
+                    points.iter().for_each(|p| {
+                        k.number(p[0]).number(p[1]);
+                    });
+                }
                 match fill {
-                    Fill::Solid(c) => {
-                        k.text("solid");
-                        color(k, c);
+                    Some(f) => f.feed(k),
+                    None => {
+                        k.text("no fill");
                     }
-                    Fill::Linear { from, to, at } => {
-                        k.text("linear");
-                        color(k, from);
-                        color(k, to);
-                        k.number(at[0]).number(at[1]);
+                }
+                match stroke {
+                    Some((w, f)) => {
+                        k.text("stroke").number(*w);
+                        f.feed(k);
+                    }
+                    None => {
+                        k.text("no stroke");
                     }
                 }
             }
@@ -269,6 +434,7 @@ impl Mark {
                 fit,
                 crop,
                 opacity,
+                adjust,
                 ..
             } => {
                 // An asset enters by its sha256, as every asset does.
@@ -282,6 +448,15 @@ impl Mark {
                     });
                 }
                 k.number(*opacity);
+                if !adjust.is_identity() {
+                    let a = adjust;
+                    k.text("adjusted").number(a.hue).number(a.saturation);
+                    k.number(a.brightness).number(a.contrast).number(a.exposure);
+                    k.number(a.gamma).int(i64::from(a.invert));
+                    if let Some(t) = a.tint {
+                        k.bytes(&t);
+                    }
+                }
             }
         }
     }
@@ -324,40 +499,18 @@ fn role(palette: &Palette, name: Option<&Value>, path: &str) -> Result<Rgb, Refu
     })
 }
 
-fn fill_of(palette: &Palette, fill: &Map<String, Value>, path: &str) -> Result<Fill, Refused> {
+/// A fill over `bounds`: a role, R1's two-stop linear gradient, or any other gradient's ramp.
+pub(crate) fn fill_of(
+    palette: &Palette,
+    fill: &Map<String, Value>,
+    path: &str,
+    bounds: [f64; 4],
+) -> Result<Fill, Refused> {
     if let Some(Value::Object(g)) = fill.get("gradient") {
-        if g.get("kind").and_then(Value::as_str).unwrap_or("linear") != "linear" {
-            return refuse("gradient_kind", format!("{path}/gradient/kind"));
-        }
-        let Some(Value::Array(stops)) = g.get("stops") else {
-            return refuse("bad_paint", format!("{path}/gradient/stops"));
-        };
-        // R1 draws two-stop gradients only; more stops land in R2.
-        let [a, b] = stops.as_slice() else {
-            return refuse("gradient_stops", format!("{path}/gradient/stops"));
-        };
-        let stop = |s: &Value, i: usize| -> Result<(f64, Rgb), Refused> {
-            let at = num(s.get("at")).filter(|a| (0.0..=1.0).contains(a));
-            let Some(at) = at else {
-                return refuse("out_of_range", format!("{path}/gradient/stops/{i}/at"));
-            };
-            Ok((
-                at,
-                role(
-                    palette,
-                    s.get("role"),
-                    &format!("{path}/gradient/stops/{i}/role"),
-                )?,
-            ))
-        };
-        let ((a_at, from), (b_at, to)) = (stop(a, 0)?, stop(b, 1)?);
-        if b_at <= a_at {
-            return refuse("out_of_range", format!("{path}/gradient/stops"));
-        }
-        return Ok(Fill::Linear {
-            from,
-            to,
-            at: [a_at, b_at],
+        let g = paint::gradient(palette, g, &format!("{path}/gradient"))?;
+        return Ok(match g.two_stop() {
+            Some((at, [from, to])) => Fill::Linear { from, to, at },
+            None => Fill::Ramp(g.ramp(bounds)),
         });
     }
     Ok(Fill::Solid(role(
@@ -365,6 +518,80 @@ fn fill_of(palette: &Palette, fill: &Map<String, Value>, path: &str) -> Result<F
         fill.get("role"),
         &format!("{path}/role"),
     )?))
+}
+
+/// The box of `verbs`' points, `[x, y, w, h]`, a gradient's box on a path.
+fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
+    let mut b = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for v in verbs {
+        let points: &[[f64; 2]] = match v {
+            Verb::Move(p) | Verb::Line(p) => std::slice::from_ref(p),
+            Verb::Quad(a, c) => &[*a, *c],
+            Verb::Cubic(a, c, d) => &[*a, *c, *d],
+            Verb::Close => &[],
+        };
+        for p in points {
+            b = [
+                b[0].min(p[0]),
+                b[1].min(p[1]),
+                b[2].max(p[0]),
+                b[3].max(p[1]),
+            ];
+        }
+    }
+    if b[0] > b[2] {
+        return [0.0; 4];
+    }
+    [b[0], b[1], b[2] - b[0], b[3] - b[1]]
+}
+
+/// A path-like item's paint as a [`Mark::Shape`]: its fill and its stroke, either a role or a
+/// gradient over the outline's box.
+fn shape_of(
+    palette: &Palette,
+    id: &str,
+    verbs: Vec<Verb>,
+    paint: &Map<String, Value>,
+    path: &str,
+) -> Result<Mark, Refused> {
+    let bounds = bounds_of(&verbs);
+    let fill = match paint.get("fill").and_then(Value::as_object) {
+        Some(f) => Some(fill_of(palette, f, &format!("{path}/fill"), bounds)?),
+        None => None,
+    };
+    let stroke = match paint.get("stroke").and_then(Value::as_object) {
+        Some(s) => Some((
+            num(s.get("width")).unwrap_or(1.0),
+            fill_of(palette, s, &format!("{path}/stroke"), bounds)?,
+        )),
+        None => None,
+    };
+    Ok(Mark::Shape {
+        item: id.to_string(),
+        verbs,
+        fill,
+        stroke,
+    })
+}
+
+/// Moves verbs by `offset`.
+fn offset(verbs: Vec<Verb>, by: [f64; 2]) -> Vec<Verb> {
+    let m = |p: [f64; 2]| [p[0] + by[0], p[1] + by[1]];
+    verbs
+        .into_iter()
+        .map(|v| match v {
+            Verb::Move(p) => Verb::Move(m(p)),
+            Verb::Line(p) => Verb::Line(m(p)),
+            Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
+            Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
+            Verb::Close => Verb::Close,
+        })
+        .collect()
 }
 
 /// A format's notation (Bound value: `fixed | compact | percent | duration`).
@@ -874,60 +1101,117 @@ type Ordered = (String, String, Drawn);
 /// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
 const MASK_DEPTH: usize = 4;
 
-/// Each item's clip from the rect masks that apply to it: a mask's children (items whose
-/// `parent` it is, at any depth) and a collection's members, intersected. A mask never clips
-/// another writer's items, and an item under more than four masks is refused.
-fn clips_of(
+/// A mask's scope over the items it applies to: a scissor for a shape mask, coverage from its own
+/// paint for an alpha or luminance one. Other shapes, feathers, inverted and combined masks wait
+/// for Vello GPU (#385).
+fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refused> {
+    let path = format!("items/{id}/params");
+    let empty = Map::new();
+    let p = item
+        .get("params")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    if p.get("shape").and_then(Value::as_str).unwrap_or("rect") != "rect" {
+        return refuse("mask_r2", format!("{path}/shape"));
+    }
+    let soft = num(p.get("feather")).unwrap_or(0.0) != 0.0
+        || p.get("invert") == Some(&Value::Bool(true))
+        || p.get("combine")
+            .and_then(Value::as_str)
+            .is_some_and(|c| c != "add");
+    if soft {
+        return refuse("mask_r2", path);
+    }
+    let b: Option<Vec<f64>> = p
+        .get("box")
+        .and_then(Value::as_array)
+        .map(|b| b.iter().map(|v| num(Some(v))).collect())
+        .unwrap_or(None);
+    let Some([x, y, w, h]) = b.as_deref().and_then(|b| <[f64; 4]>::try_from(b).ok()) else {
+        return refuse("bad_doc", format!("{path}/box"));
+    };
+    let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
+    let e = num(p.get("expand")).unwrap_or(0.0);
+    let rect = [x + pos[0] - e, y + pos[1] - e, w + 2.0 * e, h + 2.0 * e];
+    let luminance = match p.get("mode").and_then(Value::as_str) {
+        None | Some("shape") => {
+            return Ok(Scope::Clip {
+                item: id.to_string(),
+                rect,
+            })
+        }
+        Some("alpha") => false,
+        Some("luminance") => true,
+        Some(_) => return refuse("bad_doc", format!("{path}/mode")),
+    };
+    // Alpha and luminance take coverage from the mask's own paint.
+    let Some(fill) = p
+        .get("paint")
+        .and_then(|pt| pt.get("fill"))
+        .and_then(Value::as_object)
+    else {
+        return refuse("bad_paint", format!("{path}/paint/fill"));
+    };
+    Ok(Scope::Mask {
+        item: id.to_string(),
+        fill: fill_of(palette, fill, &format!("{path}/paint/fill"), rect)?,
+        rect,
+        luminance,
+    })
+}
+
+/// The scope an ancestor puts its children in: a mask's, a frame's overflow scissor, or a group's
+/// opacity (one offscreen pass, which GPUI's per-primitive opacity can't do).
+fn ancestor_scope(id: &str, item: &Value, palette: &Palette) -> Result<Option<Scope>, Refused> {
+    let p = item.get("params");
+    let get = |k: &str| p.and_then(|p| p.get(k));
+    Ok(match item.get("kind").and_then(Value::as_str) {
+        Some("mask@1") => match get("applies_to").and_then(Value::as_str) {
+            None | Some("children") => Some(mask_scope(id, item, palette)?),
+            Some(_) => None,
+        },
+        Some("frame@1") if get("overflow").and_then(Value::as_str) != Some("show") => {
+            let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
+            let rect = frame_box(id, item)?;
+            Some(Scope::Clip {
+                item: id.to_string(),
+                rect: [rect[0] + pos[0], rect[1] + pos[1], rect[2], rect[3]],
+            })
+        }
+        Some("group@1") => {
+            let alpha = num(get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0);
+            (alpha < 1.0 || get("isolate") == Some(&Value::Bool(true))).then(|| Scope::Opacity {
+                item: id.to_string(),
+                alpha,
+            })
+        }
+        _ => None,
+    })
+}
+
+fn frame_box(id: &str, item: &Value) -> Result<[f64; 4], Refused> {
+    let b: Option<Vec<f64>> = item
+        .get("params")
+        .and_then(|p| p.get("box"))
+        .and_then(Value::as_array)
+        .map(|b| b.iter().map(|v| num(Some(v))).collect())
+        .unwrap_or(None);
+    b.as_deref()
+        .and_then(|b| <[f64; 4]>::try_from(b).ok())
+        .ok_or(Refused {
+            code: "bad_doc",
+            path: format!("items/{id}/params/box"),
+        })
+}
+
+/// Each item's scopes, outermost first: its ancestors' (a mask's children are the items whose
+/// `parent` it is, at any depth), then the masks whose collection holds it. A mask never reaches
+/// another writer's items, and a fifth mask over one item is refused, naming that mask.
+fn scopes_of(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-) -> Result<BTreeMap<String, [f64; 4]>, Refused> {
-    let mut masks: Vec<(String, [f64; 4], Value)> = Vec::new();
-    for (id, item) in items {
-        if item.get("kind").and_then(Value::as_str) != Some("mask@1")
-            || item.get("visible") == Some(&Value::Bool(false))
-        {
-            continue;
-        }
-        let path = format!("items/{id}/params");
-        let empty = Map::new();
-        let p = item
-            .get("params")
-            .and_then(Value::as_object)
-            .unwrap_or(&empty);
-        if p.get("shape").and_then(Value::as_str).unwrap_or("rect") != "rect" {
-            return refuse("mask_r2", format!("{path}/shape"));
-        }
-        // Shape, soft, inverted and combined masks land in R2.
-        let soft = num(p.get("feather")).unwrap_or(0.0) != 0.0
-            || p.get("invert") == Some(&Value::Bool(true))
-            || p.get("mode")
-                .and_then(Value::as_str)
-                .is_some_and(|m| m != "shape")
-            || p.get("combine")
-                .and_then(Value::as_str)
-                .is_some_and(|c| c != "add");
-        if soft {
-            return refuse("mask_r2", path);
-        }
-        let b: Option<Vec<f64>> = p
-            .get("box")
-            .and_then(Value::as_array)
-            .map(|b| b.iter().map(|v| num(Some(v))).collect())
-            .unwrap_or(None);
-        let Some([x, y, w, h]) = b.as_deref().and_then(|b| <[f64; 4]>::try_from(b).ok()) else {
-            return refuse("bad_doc", format!("{path}/box"));
-        };
-        let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
-        let e = num(p.get("expand")).unwrap_or(0.0);
-        let rect = [x + pos[0] - e, y + pos[1] - e, w + 2.0 * e, h + 2.0 * e];
-        masks.push((
-            id.clone(),
-            rect,
-            p.get("applies_to")
-                .cloned()
-                .unwrap_or(Value::String("children".into())),
-        ));
-    }
+    palette: &Palette,
+) -> Result<BTreeMap<String, Vec<Scope>>, Refused> {
     let parent = |id: &str| {
         items
             .get(id)
@@ -935,65 +1219,107 @@ fn clips_of(
             .and_then(Value::as_str)
             .map(str::to_string)
     };
-    let mut out: BTreeMap<String, ([f64; 4], usize)> = BTreeMap::new();
-    for (mask, rect, applies) in &masks {
-        let layer = items[mask].get("layer").cloned();
-        let members: Vec<String> = match applies.as_str() {
-            Some("children") => items
-                .keys()
-                .filter(|id| {
-                    let mut at = parent(id);
-                    let mut hops = 0;
-                    while let Some(p) = at {
-                        if &p == mask {
-                            return true;
-                        }
-                        hops += 1;
-                        if hops > items.len() {
-                            break;
-                        }
-                        at = parent(&p);
-                    }
-                    false
-                })
-                .cloned()
-                .collect(),
-            Some(collection) => match doc
-                .get("collections")
-                .and_then(|c| c.get(collection))
-                .and_then(|c| c.get("members"))
-            {
-                Some(Value::Array(m)) => m
-                    .iter()
-                    .filter_map(|v| v.as_str().map(str::to_string))
-                    .collect(),
-                _ => return refuse("ref_unresolved", format!("items/{mask}/params/applies_to")),
-            },
-            None => return refuse("bad_doc", format!("items/{mask}/params/applies_to")),
-        };
-        for member in members {
-            let Some(item) = items.get(&member) else {
-                return refuse(
-                    "ref_unresolved",
-                    format!("items/{mask}/params/applies_to: {member}"),
-                );
-            };
-            if item.get("layer").cloned() != layer {
-                return refuse("mask_writer", format!("items/{mask}: {member}"));
-            }
-            let entry = out.entry(member.clone()).or_insert((*rect, 0));
-            let [ax, ay, aw, ah] = entry.0;
-            let [bx, by, bw, bh] = *rect;
-            let (x0, y0) = (ax.max(bx), ay.max(by));
-            let (x1, y1) = ((ax + aw).min(bx + bw), (ay + ah).min(by + bh));
-            entry.0 = [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)];
-            entry.1 += 1;
-            if entry.1 > MASK_DEPTH {
-                return refuse("mask_depth", format!("items/{member}"));
-            }
+    let shown =
+        |id: &str| items.get(id).and_then(|i| i.get("visible")) != Some(&Value::Bool(false));
+    let mut collection_masks: Vec<(String, Vec<String>)> = Vec::new();
+    for (id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("mask@1") || !shown(id) {
+            continue;
         }
+        // Every mask is held to what this build draws, whether or not anything is under it.
+        mask_scope(id, item, palette)?;
+        let applies = item.get("params").and_then(|p| p.get("applies_to"));
+        let collection = match applies {
+            None => continue,
+            Some(Value::String(c)) if c == "children" => continue,
+            Some(Value::String(c)) => c,
+            Some(_) => return refuse("bad_doc", format!("items/{id}/params/applies_to")),
+        };
+        let Some(Value::Array(m)) = doc
+            .get("collections")
+            .and_then(|c| c.get(collection))
+            .and_then(|c| c.get("members"))
+        else {
+            return refuse("ref_unresolved", format!("items/{id}/params/applies_to"));
+        };
+        let members = m
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        collection_masks.push((id.clone(), members));
     }
-    Ok(out.into_iter().map(|(k, (r, _))| (k, r)).collect())
+    let mut out = BTreeMap::new();
+    for (id, item) in items {
+        // The ancestors, innermost first, bounded so a cycle the check refuses can't spin.
+        let mut chain = Vec::new();
+        let mut at = parent(id);
+        while let Some(p) = at {
+            if chain.len() > items.len() || &p == id {
+                break;
+            }
+            at = parent(&p);
+            chain.push(p);
+        }
+        let mut scopes = Vec::new();
+        let mut masks: Vec<&str> = Vec::new();
+        // (ancestor, true) for a parent's scope; (mask, false) for a collection's mask.
+        let ancestors = chain.iter().rev().map(|a| (a.as_str(), true));
+        let collected = collection_masks
+            .iter()
+            .filter(|(_, members)| members.contains(id))
+            .map(|(m, _)| (m.as_str(), false));
+        for (a, by_parent) in ancestors.chain(collected) {
+            let Some(ancestor) = items.get(a) else {
+                return refuse("ref_unresolved", format!("items/{id}/parent"));
+            };
+            if !shown(a) && ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
+                continue;
+            }
+            let scope = if by_parent {
+                ancestor_scope(a, ancestor, palette)?
+            } else {
+                Some(mask_scope(a, ancestor, palette)?)
+            };
+            let Some(scope) = scope else { continue };
+            if ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
+                if ancestor.get("layer") != item.get("layer") {
+                    return refuse("mask_writer", format!("items/{a}: {id}"));
+                }
+                masks.push(a);
+                if masks.len() > MASK_DEPTH {
+                    return refuse("mask_depth", format!("items/{a}"));
+                }
+            }
+            scopes.push(scope);
+        }
+        out.insert(id.clone(), scopes);
+    }
+    Ok(out)
+}
+
+/// The rect a mark's scissors leave it, for a renderer that clips only by rect.
+fn clip_of(scopes: &[Scope]) -> Option<[f64; 4]> {
+    scopes.iter().fold(None, |acc, s| {
+        let Scope::Clip { rect, .. } = s else {
+            return acc;
+        };
+        let Some([ax, ay, aw, ah]) = acc else {
+            return Some(*rect);
+        };
+        let [bx, by, bw, bh] = *rect;
+        let (x0, y0) = (ax.max(bx), ay.max(by));
+        let (x1, y1) = ((ax + aw).min(bx + bw), (ay + ah).min(by + bh));
+        Some([x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)])
+    })
+}
+
+/// A wrong program a proof plants, reachable only through a proof surface's `planted` field.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Planted {
+    #[default]
+    None,
+    /// #373 AC5's twin: a filled arc closes along its chord.
+    ArcClosedAlongChord,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -1005,6 +1331,18 @@ pub fn frame(
     record: &Record,
     zoom: f64,
 ) -> Result<Frame, Refused> {
+    frame_planted(doc, items, palette, record, zoom, Planted::None)
+}
+
+/// [`frame`], with a planted wrong program.
+pub fn frame_planted(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    record: &Record,
+    zoom: f64,
+    planted: Planted,
+) -> Result<Frame, Refused> {
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
@@ -1015,7 +1353,22 @@ pub fn frame(
     })?;
     let bucket = path::bucket(zoom);
     let bound = bound_texts(doc, items, record)?;
-    let clips = clips_of(doc, items)?;
+    // Mark sets' rows across the document, before any is built (Mark set: "exceed … 16M per
+    // document" it can never); the set that crosses the limit is named.
+    let mut rows: u64 = 0;
+    for (id, item) in items {
+        if item.get("kind").and_then(Value::as_str) == Some("marks@1") {
+            rows += item
+                .get("params")
+                .and_then(|p| p.get("n"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if rows > data::MAX_DOCUMENT_ROWS {
+                return refuse("out_of_range", format!("items/{id}/params/n"));
+            }
+        }
+    }
+    let scopes = scopes_of(doc, items, palette)?;
     // Each layer as (order, ID, its marks as (order, ID, mark)), sorted below.
     let mut layers: Vec<(String, String, Vec<Ordered>)> = Vec::new();
     if let Some(Value::Object(ls)) = doc.get("layers") {
@@ -1048,9 +1401,99 @@ pub fn frame(
             .unwrap_or(&empty);
         let fill = paint.get("fill").and_then(Value::as_object);
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-        let marks: Vec<Mark> = match kind {
-            // A scale and a mask draw nothing themselves.
-            "scale@1" | "mask@1" => continue,
+        let adjust = Adjust::read(item, palette, id)?;
+        let mut marks: Vec<Mark> = match kind {
+            // A scale, a mask and a group draw nothing themselves.
+            "scale@1" | "mask@1" | "group@1" => continue,
+            "star@1" => {
+                let p = |k: &str| num(params.get(k));
+                let star = Star {
+                    center: pair(params.get("center")).ok_or(Refused {
+                        code: "bad_doc",
+                        path: format!("{path}/params/center"),
+                    })?,
+                    points: p("points").unwrap_or(5.0),
+                    outer_r: p("outer_r").unwrap_or(0.0),
+                    inner_r: p("inner_r").unwrap_or(0.0),
+                    outer_round: p("outer_round").unwrap_or(0.0),
+                    inner_round: p("inner_round").unwrap_or(0.0),
+                    polygon: params.get("polygon") == Some(&Value::Bool(true)),
+                };
+                let verbs = offset(star.verbs(&format!("{path}/params"))?, pos);
+                vec![shape_of(
+                    palette,
+                    id,
+                    verbs,
+                    paint,
+                    &format!("{path}/params/paint"),
+                )?]
+            }
+            "frame@1" => {
+                // A frame draws its background; its overflow mask scopes its children.
+                let Some(fill) = fill else { continue };
+                let [x, y, w, h] = frame_box(id, item)?;
+                let bounds = [x + pos[0], y + pos[1], w, h];
+                vec![Mark::Rect {
+                    item: id.clone(),
+                    bounds,
+                    radius: num(params.get("radius")).unwrap_or(0.0),
+                    fill: fill_of(palette, fill, &format!("{path}/params/paint/fill"), bounds)?,
+                }]
+            }
+            "circle@1" if params.get("arc").is_some() => {
+                let center = pair(params.get("center")).ok_or(Refused {
+                    code: "bad_doc",
+                    path: format!("{path}/params/center"),
+                })?;
+                let arc = params.get("arc");
+                let (Some(from), Some(to)) = (
+                    num(arc.and_then(|a| a.get("from"))),
+                    num(arc.and_then(|a| a.get("to"))),
+                ) else {
+                    return refuse("bad_doc", format!("{path}/params/arc"));
+                };
+                let close = match (fill.is_some(), planted) {
+                    (false, _) => outline::Close::Open,
+                    (true, Planted::ArcClosedAlongChord) => outline::Close::Chord,
+                    (true, Planted::None) => outline::Close::Filled,
+                };
+                let verbs = outline::arc(
+                    [center[0] + pos[0], center[1] + pos[1]],
+                    num(params.get("r")).unwrap_or(0.0),
+                    num(params.get("inner_r")).unwrap_or(0.0),
+                    from,
+                    to,
+                    close,
+                );
+                vec![shape_of(
+                    palette,
+                    id,
+                    verbs,
+                    paint,
+                    &format!("{path}/params/paint"),
+                )?]
+            }
+            "path@1"
+                if ["fill", "stroke"]
+                    .iter()
+                    .any(|k| paint.get(*k).and_then(|p| p.get("gradient")).is_some()) =>
+            {
+                let Some(Value::String(d)) = params.get("d") else {
+                    return refuse("bad_doc", format!("{path}/params/d"));
+                };
+                let verbs = path::parse(d).ok_or(Refused {
+                    code: "bad_path_data",
+                    path: format!("{path}/params/d"),
+                })?;
+                let verbs = offset(verbs, pos);
+                vec![shape_of(
+                    palette,
+                    id,
+                    verbs,
+                    paint,
+                    &format!("{path}/params/paint"),
+                )?]
+            }
             "marks@1" => data::mark_set(id, item, items, palette, pos)?,
             "axis@1" => data::axis(id, item, items, palette, pos)?,
             "image@1" => {
@@ -1088,6 +1531,7 @@ pub fn frame(
                     fit,
                     crop: four(params.get("crop")),
                     opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
+                    adjust: Adjust::default(),
                 }]
             }
             _ => vec![match kind {
@@ -1102,11 +1546,12 @@ pub fn frame(
                         return refuse("bad_doc", format!("{path}/params/box"));
                     };
                     let Some(fill) = fill else { continue };
+                    let bounds = [x + pos[0], y + pos[1], w, h];
                     Mark::Rect {
                         item: id.clone(),
-                        bounds: [x + pos[0], y + pos[1], w, h],
+                        bounds,
                         radius: num(params.get("radius")).unwrap_or(0.0),
-                        fill: fill_of(palette, fill, &format!("{path}/params/paint/fill"))?,
+                        fill: fill_of(palette, fill, &format!("{path}/params/paint/fill"), bounds)?,
                     }
                 }
                 "circle@1" => {
@@ -1219,13 +1664,27 @@ pub fn frame(
         let Some(slot) = layers.iter_mut().find(|l| l.1 == layer) else {
             return refuse("ref_unresolved", format!("{path}/layer"));
         };
-        let clip = clips.get(id).copied();
+        let mut scopes = scopes.get(id).cloned().unwrap_or_default();
+        if adjust.opacity < 1.0 {
+            scopes.push(Scope::Opacity {
+                item: format!("{id}#adjust"),
+                alpha: adjust.opacity,
+            });
+        }
+        let clip = clip_of(&scopes);
+        if !adjust.is_identity() {
+            marks.iter_mut().for_each(|m| m.adjust(&adjust));
+        }
         for (k, mark) in marks.into_iter().enumerate() {
             // A generated row keeps its set's place, in row order.
             slot.2.push((
                 format!("{order}\u{0}{k:08}"),
                 id.clone(),
-                Drawn { mark, clip },
+                Drawn {
+                    mark,
+                    clip,
+                    scopes: scopes.clone(),
+                },
             ));
         }
     }
@@ -1239,6 +1698,7 @@ pub fn frame(
             k.text(&id).number(size[0]).number(size[1]).number(zoom);
             for m in &marks {
                 m.mark.feed(&mut k, bucket);
+                m.scopes.iter().for_each(|s| s.feed(&mut k));
                 match m.clip {
                     Some(c) => c.iter().for_each(|v| {
                         k.number(*v);
@@ -1437,6 +1897,22 @@ mod tests {
             serde_json::json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "feather": 2}}}),
         );
         assert_eq!(draw(&soft).unwrap_err().code, "mask_r2");
+    }
+
+    #[test]
+    fn a_document_s_mark_sets_hold_at_most_16m_rows_together() {
+        let set = |k: usize| {
+            (
+                format!("s{k:02}"),
+                serde_json::json!({"kind": "marks@1", "layer": "main", "params": {"mark": "point", "n": 1_000_000}}),
+            )
+        };
+        let items: serde_json::Map<_, _> = (0..17).map(set).collect();
+        let r = draw(&board(serde_json::Value::Object(items))).unwrap_err();
+        assert_eq!(
+            (r.code, r.path.as_str()),
+            ("out_of_range", "items/s16/params/n")
+        );
     }
 
     #[test]

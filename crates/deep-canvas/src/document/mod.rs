@@ -111,7 +111,8 @@ pub const ID_MAPS: &[&str] = &[
 ];
 
 pub const ITEM_KEYS: &[&str] = &[
-    "id", "kind", "layer", "parent", "name", "role", "params", "at", "visible", "pickable", "order",
+    "id", "kind", "layer", "parent", "name", "role", "params", "at", "adjust", "visible",
+    "pickable", "order",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
@@ -120,7 +121,21 @@ pub const ITEM_OWN_FIELDS: &[&str] = &[
 ];
 
 /// The item fields `unset` may remove (every one with a default).
-pub const ITEM_OPTIONAL_FIELDS: &[&str] = &["parent", "role", "visible", "pickable", "at"];
+pub const ITEM_OPTIONAL_FIELDS: &[&str] =
+    &["parent", "role", "visible", "pickable", "at", "adjust"];
+
+/// An item's color adjustments (Item and kind: adjust), each a channel; `invert` a bool one.
+pub const ADJUST_FIELDS: &[&str] = &[
+    "opacity",
+    "tint",
+    "hue",
+    "saturation",
+    "brightness",
+    "contrast",
+    "exposure",
+    "gamma",
+    "invert",
+];
 
 /// The `at` members that are vectors of three.
 pub const AT_VECTORS: &[&str] = &["pos", "rot", "scale", "pivot"];
