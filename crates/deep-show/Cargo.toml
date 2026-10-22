@@ -42,6 +42,7 @@ deep-canvas = { path = "../deep-canvas" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-marks-vello = { path = "../deep-marks-vello" }
 deep-text = { path = "../deep-text" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
