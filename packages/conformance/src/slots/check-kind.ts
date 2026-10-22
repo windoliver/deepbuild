@@ -241,6 +241,7 @@ function snapshot(checkout: string): string {
     try { hash.update(readFileSync(path)); } catch { hash.update('unreadable'); }
   };
   const walk = (dir: string, seen: Set<string>): void => {
+    hash.update(`dir ${(lstatSync(dir).mode & 0o777).toString(8)}`);
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(dir, entry.name);
       hash.update(`\0${relative(checkout, path)}\0`);
@@ -253,7 +254,7 @@ function snapshot(checkout: string): string {
           if (target.isFile()) file(real);
           else if (target.isDirectory()) walk(real, new Set([...seen, real]));
         }
-      } else if (entry.isDirectory()) { hash.update(`dir ${(lstatSync(path).mode & 0o777).toString(8)}`); walk(path, seen); }
+      } else if (entry.isDirectory()) walk(path, seen);
       else if (entry.isFile()) file(path);
       else hash.update('other');
     }
@@ -272,9 +273,11 @@ function snapshot(checkout: string): string {
 function remembered(): Run {
   const runs = new Map<string, { deadline: number; result: CheckResult }>();
   return (spec, ctx, fault = 'none') => {
-    // A checkout that isn't there is the runner's `missing`, not a remembered run.
+    // A checkout that isn't there is the runner's `missing`, and one whose tree can't be read is run, not remembered.
     if (!existsSync(ctx.checkout)) return runCommand(spec, ctx, fault);
-    const key = `${fault}\n${ctx.checkout}\n${snapshot(ctx.checkout)}\n${JSON.stringify(spec)}`;
+    let tree: string;
+    try { tree = snapshot(ctx.checkout); } catch { return runCommand(spec, ctx, fault); }
+    const key = `${fault}\n${ctx.checkout}\n${tree}\n${JSON.stringify(spec)}`;
     const had = runs.get(key);
     const stands = had !== undefined && (had.result.outcome === 'overran' ? ctx.deadline <= had.deadline : ctx.deadline >= had.deadline);
     if (had !== undefined && stands) return structuredClone(had.result);

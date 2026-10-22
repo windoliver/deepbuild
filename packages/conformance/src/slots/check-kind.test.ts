@@ -47,6 +47,16 @@ describe('the reference runner on a checkout that changes between runs', () => {
     expect(second.testsRun).toBe(0);
   });
 
+  it('runs the suite again when only the checkout folder\'s own mode changed', async () => {
+    const { checkout, run } = knownPass();
+    expect(await run(checkout)).toMatchObject(PASSED);
+    // The same tree, its root no longer searchable: the suite can't be found, let alone pass.
+    chmodSync(checkout, 0o000);
+    const second = await run(checkout);
+    chmodSync(checkout, 0o755);
+    expect(second.outcome).not.toBe('passed');
+  });
+
   it('runs the suite again when the bytes behind a link out of the checkout changed', async () => {
     const { checkout, run } = knownPass();
     const outside = mkdtempSync(join(tmpdir(), 'check-kind-outside-'));
