@@ -60,7 +60,7 @@ impl Drawn {
                     spec.width.unwrap_or(spec.size),
                     1.3 * spec.size,
                 ],
-                Mark::Path { .. } => continue,
+                Mark::Path { .. } | Mark::Shape { .. } => continue,
             };
             let id = drawn
                 .mark
@@ -172,6 +172,25 @@ impl Renderer {
                 }
             }
         }
+        // R2's marks (#373) draw through `deep-canvas-render raster`; render-back's snapshot draws
+        // R1's, and refuses the rest naming the item, never drawing them wrong.
+        for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
+            let r2 = matches!(
+                &drawn.mark,
+                Mark::Shape { .. }
+                    | Mark::Rect {
+                        fill: Fill::Ramp(_),
+                        ..
+                    }
+            ) || matches!(&drawn.mark, Mark::Image { adjust, .. } if !adjust.is_identity())
+                || drawn
+                    .scopes
+                    .iter()
+                    .any(|s| !matches!(s, scene::Scope::Clip { .. }));
+            if r2 {
+                return unfit("module_missing", format!("items/{}", drawn.mark.item()));
+            }
+        }
         // Each text mark's font names a role the shaper bundles.
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -244,6 +263,8 @@ impl Renderer {
                         ]);
                         ctx.set_paint(gradient);
                     }
+                    // `prepare` refuses R2's ramps.
+                    Fill::Ramp(_) => return,
                 }
                 ctx.fill_path(&rect_path(*bounds, *radius));
             }
@@ -289,6 +310,8 @@ impl Renderer {
                 ctx.set_paint(color(*c));
                 ctx.fill_path(&p);
             }
+            // `prepare` refuses R2's outlines.
+            Mark::Shape { .. } => {}
             Mark::Text {
                 spec,
                 origin,
