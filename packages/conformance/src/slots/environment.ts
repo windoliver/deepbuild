@@ -4,6 +4,7 @@
 // memorized answer can pass it. The planted fills report ready before health answers, bind a port of their own
 // and leave their process running.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,11 +21,15 @@ const SERVER = fileURLToPath(new URL('../../runtime/environment/server.mjs', imp
 const HELPER = fileURLToPath(new URL('../../runtime/environment/helper.mjs', import.meta.url));
 
 export interface EnvSpec { health: string; token: string; warmup: number }
-export interface Lease { port: number }
+/**
+ * What the hub leases a run: a loopback port, and the run token every process of the environment carries on its
+ * command line, so that after down the hub can tell nothing of the run is left. The kit issues one per case.
+ */
+export interface Lease { port: number; token: string }
 export interface Handle { id: string; port: number; pid: number }
 export interface EnvironmentFill extends SlotFill {
   slot: 'environment@1';
-  /** Brings the environment up on the leased port; returns once it is ready. */
+  /** Brings the environment up on the leased port, its processes carrying the lease's run token; returns once it is ready. */
   up(spec: EnvSpec, lease: Lease): Handle;
   down(handle: Handle): void;
 }
@@ -32,7 +37,7 @@ export interface EnvironmentFill extends SlotFill {
 const RULES = {
   health: { id: 'ready-means-healthy', rule: 'up returns only once the environment\'s health route answers on the leased port with the spec\'s token.', message: 'reported ready before its health check answered' },
   port: { id: 'binds-leased-port', rule: 'The environment binds the port the hub leased it and no other.', message: 'bound a port outside its lease' },
-  down: { id: 'down-stops-process', rule: 'After down, the environment\'s process is gone and nothing listens on the leased port.', message: 'left its process running after down' },
+  down: { id: 'down-stops-process', rule: 'After down, the environment\'s process is gone, nothing listens on the leased port, and no process carries the run token.', message: 'left its process running after down' },
 };
 const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule }));
 
@@ -58,23 +63,32 @@ function waitUntil(done: () => boolean, ms: number): boolean {
  * fill's handle is never kill authority, and a pid that isn't provably the kit's own is never signalled. A fill
  * serving the slot with a server of its own is judged on the lease, the health answer and the process state alone.
  */
-function isThisServer(pid: number, port: number, token: string): boolean {
+function isThisServer(pid: number, port: number, run: string): boolean {
   const ps = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
   const words = (ps.stdout ?? '').trim().split(/\s+/);
-  return ps.status === 0 && words.includes(SERVER) && words.includes(String(port)) && words.includes(token);
+  return ps.status === 0 && words.includes(SERVER) && words.includes(String(port)) && words.includes(run);
 }
+interface Carrier { pid: number; command: string; own: boolean }
 /**
- * Every process carrying the run's token as a word of its command line (the issue's words: down leaves no process
- * carrying its run token), with whether it is the kit's own fixture server or helper, which the kit may stop.
+ * Every process carrying the run token as a word of its command line (the issue's words: down leaves no process
+ * carrying its run token), with whether it is this case's fixture server or helper, which the kit may stop: the
+ * token is the kit's own draw for the case, so nothing else carries it. A process table the kit can't read is
+ * null, never an empty list.
  */
-function carrying(token: string): { pid: number; command: string; own: boolean }[] {
+function carrying(run: string): Carrier[] | null {
   const ps = spawnSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' });
-  return (ps.stdout ?? '').split('\n').flatMap((line) => {
+  if (ps.status !== 0 || ps.error) return null;
+  return ps.stdout.split('\n').flatMap((line) => {
     const [pid, ...words] = line.trim().split(/\s+/);
-    if (!words.includes(token)) return [];
+    if (!words.includes(run) || !/^\d+$/.test(pid ?? '')) return [];
     return [{ pid: Number(pid), command: words.join(' '), own: words.includes(SERVER) || words.includes(HELPER) }];
   });
 }
+const scanned = (run: string): Carrier[] => {
+  const left = carrying(run);
+  if (left === null) throw new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so whether down left a process is unknown', ['ps_unavailable']);
+  return left;
+};
 const stop = (pid: number): void => { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } };
 
 /**
@@ -107,11 +121,11 @@ const probe = (port: number, path: string): Probe => ask<Probe>({ op: 'probe', p
 /** Whether something accepts connections on the loopback port. */
 const listening = (port: number): boolean => ask<{ open: boolean }>({ op: 'listening', port }).open;
 
-/** Starts the fixture server on `port`, waiting for its ready marker unless `wait` is false; with `helper`, its grandchild too. */
-function start(spec: EnvSpec, port: number, wait: boolean, helper = false): { handle: Handle; child: ChildProcess } {
+/** Starts the fixture server on `port` carrying `run`, waiting for its ready marker unless `wait` is false; with `helper`, its grandchild too. */
+function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper = false): { handle: Handle; child: ChildProcess } {
   const dir = mkdtempSync(join(tmpdir(), 'deep-env-'));
   const ready = join(dir, 'ready');
-  const child = spawn(process.execPath, [SERVER, String(port), spec.health, spec.token, String(spec.warmup), ready, ...(helper ? ['helper'] : [])], { stdio: 'ignore' });
+  const child = spawn(process.execPath, [SERVER, String(port), spec.health, spec.token, String(spec.warmup), ready, run, ...(helper ? ['helper'] : [])], { stdio: 'ignore' });
   child.unref();
   const pid = child.pid ?? -1;
   if (wait && !waitUntil(() => existsSync(ready), 5000)) { child.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); throw Error(`the environment on ${port} did not come up in 5 s`); }
@@ -129,7 +143,7 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
   return {
     slot: ENVIRONMENT, revision: 1,
     up(spec, lease) {
-      const { handle, child } = start(spec, fault === 'own-port' ? leasePort() : lease.port, fault !== 'early', fault === 'leaves');
+      const { handle, child } = start(spec, fault === 'own-port' ? leasePort() : lease.port, lease.token, fault !== 'early', fault === 'leaves');
       started.set(handle.id, child);
       return handle;
     },
@@ -152,23 +166,26 @@ const plantedFills = (): PlantedFill<EnvironmentFill>[] => [
 
 const toCase = (id: string, part: 'fixed' | 'seeded', spec: EnvSpec): SlotCase => ({ id, part, input: spec as unknown as JsonValue, expected: { status: 200, token: spec.token } });
 const fixtures: Fixture[] = [
-  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 100 }),
-  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 70 }),
+  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 40 }),
+  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 30 }),
 ].map(({ id, input, expected }) => ({ id, input, expected }));
 
-/** Two environments from the draw, each with its own health route, token and warm-up. */
-const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(100, 200) }));
+/** Two environments from the draw, each with its own health route, token and warm-up (long enough that ready before it is caught). */
+const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(40, 80) }));
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
   const spec = c.input as unknown as EnvSpec;
-  const lease: Lease = { port: leasePort() };
+  // The lease: a port reserved by binding it once and released for the environment to bind (the moment between is
+  // the hub's too), and a run token drawn for this case alone, so a concurrent case or another kit run on the same
+  // fixture shares nothing with it.
+  const lease: Lease = { port: leasePort(), token: `run-${randomBytes(9).toString('hex')}` };
   const handle = object('the handle', yield () => fill.up(spec, lease));
   text('handle/id', handle.id);
   if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
   if (!Number.isInteger(handle.pid)) throw new Finding('FAIL', `handle/pid ${JSON.stringify(handle.pid)} is not a pid`, ['type']);
   const pid = handle.pid as number;
   // Only a process the kit can identify as this case's server is ever signalled; another pid is the fill's claim alone.
-  const owned = isThisServer(pid, handle.port as number, spec.token);
+  const owned = isThisServer(pid, handle.port as number, lease.token);
   try {
     if (handle.port !== lease.port) throw fail(RULES.port.message, ['unleased_port'], `bound ${handle.port}; the lease is ${lease.port}`);
     const answer = probe(lease.port, spec.health);
@@ -179,18 +196,19 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     yield () => fill.down(handle as unknown as Handle);
     // Gone means all of: the pid the handle names is no process, nothing answers on the leased port any more, and
     // no process carries the run token (a grandchild the handle never named is caught there).
-    if (!waitUntil(() => !alive(pid) && !listening(lease.port) && carrying(spec.token).length === 0, 150)) {
-      const left = carrying(spec.token);
+    if (!waitUntil(() => !alive(pid) && !listening(lease.port) && scanned(lease.token).length === 0, 150)) {
+      const left = scanned(lease.token);
       const why = alive(pid) ? `pid ${pid} still runs 150 ms after down${owned ? '' : ' (not the kit\'s server, so left as it is)'}`
         : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} still accepts connections 150 ms after down`
-        : `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`;
+        : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`
+        : `pid ${pid}, the port and the run token were not all clear within 150 ms of down`;
       throw fail(RULES.down.message, ['process_left'], why);
     }
   } finally {
     // The kit stops only processes it started through the reference fill and can still identify (its fixture server
-    // and helper, by their scripts and the token); any other pid is left as it is.
-    if (owned && alive(pid) && isThisServer(pid, handle.port as number, spec.token)) stop(pid);
-    for (const p of carrying(spec.token)) if (p.own) stop(p.pid);
+    // and helper, by their scripts and this case's run token); any other pid is left as it is.
+    if (owned && alive(pid) && isThisServer(pid, handle.port as number, lease.token)) stop(pid);
+    for (const p of carrying(lease.token) ?? []) if (p.own) stop(p.pid);
   }
 }
 
