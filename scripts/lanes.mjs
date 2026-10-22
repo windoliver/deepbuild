@@ -21,8 +21,8 @@ export const checks = [
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
     // while a sibling file builds finds it gone or half-written: those files run one at a time, after
     // every other file has run in parallel.
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**', '--exclude', 'tests/acceptance/390/**', '--exclude', 'tests/acceptance/391/**', '--exclude', 'tests/acceptance/394/**'],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/394/'],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**', '--exclude', 'tests/acceptance/390/**', '--exclude', 'tests/acceptance/391/**', '--exclude', 'tests/acceptance/392/**', '--exclude', 'tests/acceptance/394/**'],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/394/'],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.

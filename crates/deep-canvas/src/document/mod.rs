@@ -12,16 +12,20 @@
 //! - [`apply`]: patches as a writer, each all or nothing, checked after each → [`ApplyResult`].
 //! - [`canonical`]: the canonical bytes and SHA-256 of a document; [`DocShape`] is the
 //!   [`crate::canon::Shape`] the document declares.
+//! - [`duration`]: a duration field's flicks, as the check reads `stale_after`.
+//! - [`STATUS_ROLE`]: the prefix of the status roles only a status binding reaches.
 //! - [`Issue`] and [`Notice`], as the check writes them.
 
 mod apply;
 mod check;
+mod rules;
 mod shape;
 
 use serde_json::{json, Map, Value};
 
 pub use apply::{apply, ApplyResult};
-pub use check::{check, CheckResult};
+pub use check::{check, duration, CheckResult};
+pub use rules::STATUS_ROLE;
 pub use shape::{canonical, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
@@ -213,6 +217,14 @@ fn fix_for(code: &str) -> String {
         "bad_path" => "Write the path as <section>/<id>[#<sub>]/<field>[/<field>...].",
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
         "bad_id" => "Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.",
+        "bad_time" => "Write the time as a span such as 2s or 120f.",
+        "bound_typed_over" => "Leave a bound value's text empty; its reading shows there.",
+        "number_unsourced" => {
+            "Bind the number to a reading with a bound value, or compute it in the document."
+        }
+        "status_color_unbound" => {
+            "Bind the paint slot to a verdict, run, ask or session with a status binding."
+        }
         _ => "See the issue.",
     }
     .to_string()
