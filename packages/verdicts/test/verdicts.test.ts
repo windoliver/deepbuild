@@ -1,6 +1,7 @@
 // Regressions the acceptance suite (tests/acceptance/28) doesn't reach: exact run counts at the edges of a
 // decimal rate, claims with no requirements, waived runs, open item IDs, where a FAIL points, and `**/` globs.
-import { mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -514,10 +515,33 @@ describe('a waiver\'s error', () => {
   });
 });
 
+describe('the perf lane\'s verdict task', () => {
+  // AC22's merge-base comparison runs in the perf lane, which measures the task benchmarks/budgets.json
+  // declares; this keeps the manifest's command and the benchmark it names from drifting apart. The benchmark
+  // runs the built dist, as the lane does, so after editing src rebuild before reading a failure here.
+  it('verdict-1000-runs, as budgets.json declares it, runs and exits 0', () => {
+    const root = join(import.meta.dirname, '..', '..', '..');
+    const budgets = JSON.parse(readFileSync(join(root, 'benchmarks', 'budgets.json'), 'utf8')) as { tasks: { id: string; command: string[] }[] };
+    const task = budgets.tasks.find(({ id }) => id === 'verdict-1000-runs');
+    expect(task, 'budgets.json declares verdict-1000-runs').toBeDefined();
+    const [command, ...args] = task!.command;
+    const result = spawnSync(command === 'node' ? process.execPath : command!, args, { cwd: root, encoding: 'utf8' });
+    expect(result.status, `${task!.command.join(' ')} wrote: ${result.stdout}${result.stderr}`).toBe(0);
+  });
+});
+
 describe('`**/` matches zero folders', () => {
   it('a change to src/a.ts is an input of src/**/*.ts, so that check runs again', () => {
     const a = check('A', { inputs: ['src/**/*.ts'] }), b = check('B', { inputs: ['src/*.ts'] });
     const sel = selectReruns(claim({ checks: [a, b], runs: [run(a, 'passed', { commit: C }), run(b, 'passed', { commit: C })], changes: [{ from: C, paths: ['src/a.ts'] }] }));
     expect(sel.rerun.sort()).toEqual(['A', 'B']);
+  });
+  // `**` is special only as a whole segment, and skips whole segments, as the acceptance reference reads it.
+  it('`**` glued to text, or a `**/` over an empty segment, is no input of a path', () => {
+    for (const [glob, path] of [['a**b', 'a/b'], ['a**', 'a/b'], ['**a', 'x/a'], ['a/***/b', 'a/x/y/b'], ['**/x', '/x'], ['a/**/b', 'a//b']]) {
+      const a = check('A', { inputs: [glob!] }), b = check('B', { inputs: ['**'] });
+      const sel = selectReruns(claim({ checks: [a, b], runs: [run(a, 'passed', { commit: C }), run(b, 'passed', { commit: C })], changes: [{ from: C, paths: [path!] }] }));
+      expect(sel.rerun, `${glob} against ${path}`).toEqual(['B']);
+    }
   });
 });

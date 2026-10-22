@@ -40,36 +40,54 @@ const globs = new Map<string, string[] | null>();
 /** Glob syntax beyond `**` and `*`: braces, classes, `?`, `!`, escapes and a leading `./`. */
 const UNKNOWN = /[{}[\]?!\\]|^\.\//;
 /**
- * `**` matches any number of folders, none included; `*` anything within one. Matched by a table over the glob's
- * parts and the path's characters, so its cost is their product and no glob can make it backtrack. A glob in
- * syntax beyond that matches every path, so a check whose inputs can't be read always runs again.
+ * A glob is read by segments, as the acceptance reference reads it: `**` as a whole segment matches any number of
+ * non-empty folders, none included, and as the last segment everything under the folder before it; `*` matches
+ * anything within one segment, and a run of stars glued to text is one `*`. Matched by tables over the segments
+ * and their characters, so the cost is their product and no glob can make it backtrack. A glob in syntax beyond
+ * that matches every path, so a check whose inputs can't be read always runs again.
  */
 function globMatch(glob: string, path: string): boolean {
-  let parts = globs.get(glob);
-  if (parts === undefined) {
-    parts = UNKNOWN.test(glob) ? null : glob.split(/(\*\*\/|\/\*\*$|\*\*|\*)/).flatMap((part) => (part === '**/' || part === '/**' || part === '**' || part === '*' ? [part] : part.split('')));
+  let segments = globs.get(glob);
+  if (segments === undefined) {
+    segments = UNKNOWN.test(glob) ? null : glob.split('/');
     if (globs.size >= 1024) globs.clear();
-    globs.set(glob, parts);
+    globs.set(glob, segments);
   }
-  if (parts === null) return true;
-  const n = path.length;
-  // next[j]: the rest of the glob, after the part in hand, matches path from j.
+  if (segments === null) return true;
+  if (glob === '**') return true;
+  const parts = path.split('/');
+  const G = segments.length, P = parts.length;
+  // next[p]: the segments after the one in hand match the path's segments from p.
+  let next = new Uint8Array(P + 1);
+  let here = new Uint8Array(P + 1);
+  next[P] = 1;
+  for (let g = G - 1; g >= 0; g--) {
+    const segment = segments[g]!;
+    for (let p = P; p >= 0; p--) {
+      if (segment === '**') here[p] = g === G - 1 ? (p < P ? 1 : 0) : next[p] || (p < P && parts[p] !== '' && here[p + 1]) ? 1 : 0;
+      else here[p] = p < P && segmentMatch(segment, parts[p]!) && next[p + 1] ? 1 : 0;
+    }
+    [next, here] = [here, next];
+  }
+  return next[0] === 1;
+}
+/** One glob segment against one path segment: `*` (or any run of stars) matches any characters. */
+function segmentMatch(segment: string, part: string): boolean {
+  if (!segment.includes('*')) return segment === part;
+  const n = part.length;
   let next = new Uint8Array(n + 1);
   let here = new Uint8Array(n + 1);
   next[n] = 1;
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i]!;
-    let slash = 0;
-    for (let j = n; j >= 0; j--) {
-      const c = path[j];
-      if (part === '/**') here[j] = c === '/' ? 1 : 0;
-      else if (part === '**') here[j] = next[j] || (j < n && here[j + 1]) ? 1 : 0;
-      else if (part === '*') here[j] = next[j] || (j < n && c !== '/' && here[j + 1]) ? 1 : 0;
-      else if (part === '**/') {
-        // Some k > j just past a '/' from which the rest matches.
-        if (j < n && c === '/' && next[j + 1]) slash = 1;
-        here[j] = next[j] || slash ? 1 : 0;
-      } else here[j] = j < n && c === part && next[j + 1] ? 1 : 0;
+  let star = false;
+  for (let i = segment.length - 1; i >= 0; i--) {
+    const c = segment[i];
+    if (c === '*') {
+      if (star) continue;
+      star = true;
+      for (let j = n; j >= 0; j--) here[j] = next[j] || (j < n && here[j + 1]) ? 1 : 0;
+    } else {
+      star = false;
+      for (let j = n; j >= 0; j--) here[j] = j < n && part[j] === c && next[j + 1] ? 1 : 0;
     }
     [next, here] = [here, next];
   }
