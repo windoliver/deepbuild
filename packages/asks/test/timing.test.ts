@@ -446,6 +446,23 @@ describe('the inbox and the asks table', () => {
   });
 });
 
+describe('the asks table and the exception', () => {
+  it('takes a Later on the exception only before the earliest deadline it holds, as the core does, before and after a rebuild', async () => {
+    settings({});
+    await start('S1');
+    const { exception } = await fold('S1', ask('taste', 'S1 footer', { deadline: T0 + 3 * DAY }));
+    // A 1-day approval joins: the exception must show by then, whatever its own deadline says.
+    const approval = await asks.raise(core('S1'), sourceOf('authority'), ask('authority', 'main'));
+    expect((await asks.card(exception)).folded).toContain(approval);
+    await record.append(core('S1'), { v: 1, id: id(now), kind: 'ask.later', ts: now, subject: exception, data: { until: T0 + 2 * DAY } });
+    const row = async () => (await record.table('asks')).rows.find((r) => `ask:${String(r.id)}` === exception)?.status;
+    expect((await asks.inbox()).find((r) => r.ask === exception)?.status).toBe('shown');
+    expect(await row()).toBe('open');
+    await record.rebuild();
+    expect(await row()).toBe('open');
+  });
+});
+
 describe('showings', () => {
   it('a fold is one person\'s: another scope\'s ask on the same thread neither folds into it nor is answered by it', async () => {
     settings({});
