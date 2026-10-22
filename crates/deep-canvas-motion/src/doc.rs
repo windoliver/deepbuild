@@ -356,7 +356,7 @@ pub fn read(doc: &Value) -> Result<Motion, Refused> {
                 Some("wrap") => true,
                 Some(_) => return refuse("bad_doc", "transport/loop"),
             };
-            if wrap && !span.is_some_and(|s| s > 0) {
+            if wrap && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
             Transport { start, span, wrap }
