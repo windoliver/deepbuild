@@ -1744,6 +1744,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-graph"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-marks"
 version = "0.0.0"
 dependencies = [
@@ -1757,6 +1764,22 @@ name = "deep-canvas-motion"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "serde_json",
+]
+
+[[package]]
+name = "deep-canvas-record"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "deep-canvas-sheet"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
  "serde_json",
 ]
 

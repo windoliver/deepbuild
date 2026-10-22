@@ -1,0 +1,47 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "ask.created",
+  "writer": "mcp:s1",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "taste",
+    "question": "Which look for the launch figure?",
+    "options": [
+      {
+        "id": "fig-warm",
+        "label": "Warm",
+        "decision": "none"
+      },
+      {
+        "id": "fig-cool",
+        "label": "Cool",
+        "decision": "none"
+      },
+      {
+        "id": "none_of_these",
+        "label": "None of these",
+        "decision": "none"
+      }
+    ],
+    "recommended": "fig-warm",
+    "deadline": 1760272651123,
+    "fallback": "you",
+    "default": "fig-warm",
+    "provisional": false,
+    "owner": "you",
+    "key": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pinned_to": {
+      "kind": "evidence",
+      "ref": "894368daa195264b0ee144b62f90e92318d394d925f9e2a6691cb8b48d5efb42"
+    },
+    "dropped": [
+      {
+        "option": "fig-warm-exposed",
+        "same_as": "fig-warm"
+      }
+    ]
+  }
+}
