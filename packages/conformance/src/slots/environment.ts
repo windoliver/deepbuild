@@ -198,7 +198,8 @@ function ask<T>(request: { op: 'lease' | 'probe' | 'listening'; port?: number; p
   if (probes === null) {
     const shared = new SharedArrayBuffer(8 + 65_536);
     let worker: Worker;
-    try { worker = new Worker(PROBES, { workerData: shared }); } catch (error) { throw unavailable(error); }
+    // The thread takes none of the host's own flags: one meant for an eval'd host (--input-type) ends a thread at its start.
+    try { worker = new Worker(PROBES, { workerData: shared, execArgv: [] }); } catch (error) { throw unavailable(error); }
     worker.unref();
     const mine = { worker, flags: new Int32Array(shared, 0, 2), out: new Uint8Array(shared, 8) };
     // A thread that died is replaced at the next probe rather than waited on.
