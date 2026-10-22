@@ -133,16 +133,20 @@ const scanned = (run: string): Carrier[] => {
  * Stops one of the kit's own processes, if it is still that process at the moment of the signal: one reading of the
  * table gives its start time and command line together, and the SIGKILL follows only when the start is the recorded
  * one and the command still carries the run token. What remains is the instant between that reading and the signal;
- * a pid the OS reuses within it would have to carry this case's random token too. True when the signal was sent.
+ * a pid the OS reuses within it would have to carry this case's random token too. 'unreadable' when the table gave
+ * no answer; 'other' when the pid is gone or another process by now; else 'signalled' (a refused signal is told by the
+ * process still being there afterwards, which the caller checks for every owned pid, signalled or not).
  */
-function stop(pid: number, run: string): boolean {
+function stop(pid: number, run: string): 'signalled' | 'other' | 'unreadable' {
   const at = own.get(pid);
   const read = ps(['-o', 'lstart=,command=', '-p', String(pid)]);
-  if (at === undefined || read.status !== 0 || read.error) return false;
+  if (read.error || read.status === null) return 'unreadable';
+  if (at === undefined || read.status !== 0) return 'other';
   const words = read.stdout.trim().split(/\s+/);
   const start = Date.parse(words.slice(0, 5).join(' '));
-  if (!sameStart(Number.isFinite(start) ? start : null, at) || !words.slice(5).includes(run)) return false;
-  try { process.kill(pid, 'SIGKILL'); return true; } catch { return false; }
+  if (!sameStart(Number.isFinite(start) ? start : null, at) || !words.slice(5).includes(run)) return 'other';
+  try { process.kill(pid, 'SIGKILL'); } catch { /* told by the check that follows */ }
+  return 'signalled';
 }
 
 /**
@@ -353,8 +357,11 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // case found before; so is a process of the kit's own that a SIGKILL did not end.
     const left = carrying(lease.token);
     if (left === null) throw PS_DOWN();
-    const mine = left.map((p) => p.pid).filter(isOwn).filter((p) => stop(p, lease.token));
-    if (!waitUntil(() => mine.every((p) => alive(p) === false), 500)) throw new Finding('BLOCKED', `the kit's own process ${mine.filter((p) => alive(p) !== false).join(', ')} did not end within 500 ms of SIGKILL`, ['kit_leftover']);
+    const mine = left.map((p) => p.pid).filter(isOwn);
+    for (const p of mine) if (stop(p, lease.token) === 'unreadable') throw PS_DOWN();
+    // Every owned pid, signalled or not, must be gone or another process by now; one still the kit's and alive is BLOCKED.
+    const remaining = (): number[] => mine.filter((p) => alive(p) !== false && isOwn(p));
+    if (!waitUntil(() => remaining().length === 0, 500)) throw new Finding('BLOCKED', `the kit's own process ${remaining().join(', ')} did not end within 500 ms of SIGKILL`, ['kit_leftover']);
     forget();
   }
 }
