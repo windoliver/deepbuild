@@ -1,0 +1,50 @@
+{
+  "format": 1,
+  "id": "subdivision-stable",
+  "profile": "film",
+  "title": "Subdivision stable",
+  "description": "Four channels, each with a linear segment a key is inserted on at the curve's own value: a linear channel, one after a hold segment, one after a Bezier segment, and an OKLab color channel.",
+  "size": [320, 180],
+  "transport": { "span": "4s" },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "box": {
+      "id": "box", "kind": "rect@1", "layer": "main", "name": "Box", "order": "a0",
+      "params": { "box": [0, 0, 100, 60], "paint": { "fill": { "role": "accent" } } }
+    }
+  },
+  "channels": {
+    "lin": {
+      "target": "items/box/at/pos/0", "type": "f32",
+      "keys": {
+        "a": { "t": "0s", "value": 1.0000000000009095, "interp": "linear" },
+        "b": { "t": "4s", "value": 5.0000000000009095, "interp": "linear" }
+      }
+    },
+    "held": {
+      "target": "items/box/at/pos/1", "type": "f32",
+      "keys": {
+        "a": { "t": "0s", "value": 3.0000000000009095, "interp": "hold" },
+        "b": { "t": "2s", "value": 1.0000000000009095, "interp": "linear" },
+        "c": { "t": "4s", "value": 2.0000000000009095, "interp": "linear" }
+      }
+    },
+    "curve": {
+      "target": "items/box/at/rot/2", "type": "f32",
+      "keys": {
+        "a": { "t": "0s", "value": 10.000000000003638, "interp": { "bezier": { "x1": 0.42, "y1": 0, "x2": 0.58, "y2": 1 } } },
+        "b": { "t": "2s", "value": 20.000000000003638, "interp": "linear" },
+        "c": { "t": "4s", "value": 30.000000000003638, "interp": "linear" }
+      }
+    },
+    "tint": {
+      "target": "items/box/adjust/tint", "type": "color", "space": "oklab",
+      "keys": {
+        "a": { "t": "0s", "value": [0.5000000000009095, 0.06250000000005684, -0.12499999999994316], "interp": "linear" },
+        "b": { "t": "4s", "value": [0.7500000000009095, 0.12500000000005684, -0.06249999999994316], "interp": "linear" }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "format": 1,
+  "id": "patch-equals-rebuild",
+  "profile": "board",
+  "title": "Patch equals rebuild",
+  "description": "A board that touches every cache the 2D slice ships: path tessellation, shaped text and writer-layer caches, beside a layer that moves.",
+  "size": [480, 270],
+  "layers": {
+    "board": { "writer": "agent-a", "title": "Board", "order": "a0" },
+    "live": { "writer": "agent-b", "title": "Live", "order": "a1" }
+  },
+  "items": {
+    "card": {
+      "id": "card", "kind": "rect@1", "layer": "board", "name": "Card", "order": "a0",
+      "params": {
+        "box": [16, 16, 448, 238], "radius": 8,
+        "paint": { "fill": { "gradient": { "kind": "linear", "stops": [{ "at": 0, "role": "grad.from" }, { "at": 1, "role": "grad.to" }] } } }
+      }
+    },
+    "badge": {
+      "id": "badge", "kind": "rect@1", "layer": "board", "name": "Badge", "order": "a1",
+      "params": { "box": [32, 32, 96, 24], "paint": { "fill": { "role": "ink" } } }
+    },
+    "title": {
+      "id": "title", "kind": "text@1", "layer": "board", "name": "Title", "order": "a2",
+      "params": { "text": "Ready", "font": "body", "size": 13, "box": { "w": 240, "h": 24 } },
+      "at": { "pos": [144, 34, 0] }
+    },
+    "count": {
+      "id": "count", "kind": "text@1", "layer": "board", "name": "Count", "order": "a3",
+      "params": { "text": "", "font": "body", "size": 13, "numerals": "tabular", "widest": "999,999", "box": { "w": 120, "h": 20 } },
+      "at": { "pos": [32, 72, 0] }
+    },
+    "note": {
+      "id": "note", "kind": "text@1", "layer": "board", "name": "Note", "order": "a4",
+      "params": { "text": "All checks passed", "font": "body", "size": 13, "box": { "w": 240, "h": 20 } },
+      "at": { "pos": [32, 100, 0] }
+    },
+    "ring": {
+      "id": "ring", "kind": "circle@1", "layer": "board", "name": "Ring", "order": "a5",
+      "params": { "center": [400, 60], "r": 20, "inner_r": 14, "paint": { "fill": { "role": "muted" } } }
+    },
+    "route": {
+      "id": "route", "kind": "path@1", "layer": "board", "name": "Route", "order": "a6",
+      "params": { "d": "M 32 160 C 120 120 200 220 300 170 L 440 200", "paint": { "stroke": { "role": "ink", "width": 2 } } }
+    },
+    "arrow": {
+      "id": "arrow", "kind": "path@1", "layer": "board", "name": "Arrow", "order": "a7",
+      "params": { "d": "M 300 230 L 440 230 M 430 222 L 440 230 L 430 238", "paint": { "stroke": { "role": "ink", "width": 1.5 } } }
+    },
+    "dot": {
+      "id": "dot", "kind": "circle@1", "layer": "live", "name": "Dot", "order": "a0",
+      "params": { "center": [0, 250], "r": 6, "paint": { "fill": { "role": "live" } } }
+    }
+  },
+  "channels": {
+    "dot-x": {
+      "target": "items/dot/at/pos/0", "type": "f32",
+      "keys": {
+        "k0": { "t": "0s", "value": 24, "interp": "linear" },
+        "k1": { "t": "10s", "value": 456, "interp": "linear" }
+      }
+    }
+  },
+  "bound_values": {
+    "count-value": { "target": "items/count/params/text", "source": "reading:01JB0000000000000000000000" }
+  }
+}
