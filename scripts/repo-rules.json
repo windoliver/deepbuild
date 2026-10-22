@@ -228,6 +228,22 @@
         }
       }
     },
+    "packages/budget/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #86: the asks core the ledger raises a budget raise, a re-run's yes and an uncovered run's request through."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #86: the canonical hash of an ask's key."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #86: the record the ledger reads its budgets and reservations from and appends them to."
+        }
+      }
+    },
     "crates/deep-text/Cargo.toml": {
       "dependencies": {
         "parley": {
