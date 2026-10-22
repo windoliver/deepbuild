@@ -94,7 +94,11 @@ const startTime = (pid: number): number | null => {
   const at = Date.parse((table.stdout ?? '').trim());
   return table.status === 0 && Number.isFinite(at) ? at : null;
 };
-/** The same start, within the second a table derives it to (Linux recomputes it from the boot time, which can move). */
+/**
+ * The same start, within the second a table derives it to (Linux recomputes it from the boot time, which can move).
+ * The tolerance is safe because ownership is never start time alone: the kit signals a recorded pid only while it
+ * carries this case's run token, a random draw only the kit's own fixture processes ever receive.
+ */
 const sameStart = (a: number | null, b: number | undefined): boolean => a !== null && b !== undefined && Math.abs(a - b) <= 1500;
 const record = (pid: number): void => { const at = startTime(pid); if (at !== null) own.set(pid, at); };
 /** Whether `pid` is one the kit started and is still that process. */
@@ -184,9 +188,10 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
       // The own-port fault binds a port of its own: one the lease didn't name (a lease draw can repeat it).
       let port = lease.port;
       if (fault === 'own-port') do port = leasePort(); while (port === lease.port);
-      // The early fault reports ready at once while its server still warms up, for long enough that no delay between
-      // the fill's return and the kit's probe can hide it: the fill is wrong by construction, not by a close race.
-      const { handle, child } = start(fault === 'early' ? { ...spec, warmup: 2000 } : spec, port, lease.token, fault !== 'early', fault === 'leaves');
+      // The early fault reports ready at once while its server never comes to listen within its life (it exits on its
+      // own after 60 s; down ends it sooner): wrong by construction, so no stall between the fill's return and the
+      // kit's probe can make it healthy first.
+      const { handle, child } = start(fault === 'early' ? { ...spec, warmup: 60_000 } : spec, port, lease.token, fault !== 'early', fault === 'leaves');
       started.set(handle.id, child);
       return handle;
     },
