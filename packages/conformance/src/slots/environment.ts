@@ -342,6 +342,10 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const join = (p: number): void => { const at = startTime(p); if (at !== null) members.set(p, at); else if (alive(p) !== false) throw START_UNKNOWN(p); };
     // The environment is every process carrying the run token, under the handle's process or beside it (a database
     // the fill started next to its server, say), and every process under the handle's, which must carry the token.
+    // A process the fill starts beside the handle's without the token is outside the lease's contract and outside
+    // what this kit can see: the fill runs in the kit's own process, which other kits and concurrent cases share, so
+    // every child of that process is no boundary. Holding a run to a boundary is the hub's (a process group per run,
+    // the design's words), where the fill's processes are its alone.
     const grow = (rows: Row[]): void => {
       for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); }
       for (const row of rows) if (carries(row, lease.token) && !members.has(row.pid)) join(row.pid);
