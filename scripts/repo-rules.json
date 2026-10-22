@@ -184,6 +184,30 @@
         }
       }
     },
+    "packages/hub/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
+        }
+      }
+    },
     "packages/otlp/package.json": {
       "dependencies": {
         "@deepbuild/record": {
@@ -233,6 +257,14 @@
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #390: the window the mask sprites go into, through the GPUI patch's paint_mask_sprite."
+        }
+      }
+    },
+    "crates/deep-hook/Cargo.toml": {
+      "dependencies": {
+        "deep-contracts": {
+          "spec": "* path=../deep-contracts",
+          "why": "Issue #16: the hook's JSON read and written by the contracts' own parser and RFC 8785 printer, the Rust side of the wire it shares with the hub."
         }
       }
     },
