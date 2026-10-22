@@ -554,6 +554,8 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `session.start` | `{agent, worktree, branch, thread}` | sessions | the Map's session tokens |
 | `session.child_started` | `{parent, child, task_ref}` | sessions | child sessions on a lead's line |
 | `session.attention` (new) | `{state: finished \| failed \| waiting_permission \| unknown}` | sessions | the Map's attention state; silence never counts as finished |
+| `session.end` (new) | `{reason}` | sessions | a session's end, as its agent's SessionEnd hook gave it; only an end checked against the session ends it |
+| `hub.stopped` (new) | `{reason: signal:<name> \| requested \| crashed}` | nothing | why the hub stopped, once per stop; a crash is recorded at the next start |
 | `worktree.created`, `worktree.removed` | `{path, branch, owner}` | sessions | the Map's worktrees |
 | `user.ask` | `{msg, text (redacted), tasks: [task_ref], from: person \| scheduled \| subagent \| session \| continuation}` | tasks, returns | a row per ask on the line; which stops are answers |
 | `task.created`, `task.closed` (closed is new) | `{task_ref, thread, owner, title}`; `{by_verdict}` | tasks | the first and last stations |

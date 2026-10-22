@@ -184,6 +184,30 @@
         }
       }
     },
+    "packages/hub/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
+        }
+      }
+    },
     "crates/deep-text/Cargo.toml": {
       "dependencies": {
         "parley": {

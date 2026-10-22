@@ -1,0 +1,29 @@
+{
+  "title": "hook.reply@2",
+  "description": "The reply deep-hook prints, already mapped to the agent's own output. Every socket line carries its version.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The line's protocol version: every socket line carries it."
+    },
+    "exit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "stdout": {
+      "type": "string"
+    },
+    "stderr": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "v",
+    "exit",
+    "stdout",
+    "stderr"
+  ],
+  "additionalProperties": false
+}

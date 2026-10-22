@@ -1750,6 +1750,9 @@ version = "0.0.0"
 [[package]]
 name = "deep-hook"
 version = "0.0.0"
+dependencies = [
+ "deep-contracts",
+]
 
 [[package]]
 name = "deep-replica"
