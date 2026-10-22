@@ -70,7 +70,9 @@ export function alive(pid: number): boolean | null {
   const table = ps(['-o', 'stat=', '-p', String(pid)]);
   if (table.error || table.status === null) return null;
   const state = (table.stdout ?? '').trim();
-  return table.status === 0 && state.length > 0 && !state.startsWith('Z');
+  // ps ends with 1 and says nothing for a pid no process has: gone. Anything else it says, or any other status, is unknown.
+  if (table.status !== 0) return table.status === 1 && state === '' && table.stderr.trim() === '' ? false : null;
+  return state.length > 0 ? !state.startsWith('Z') : null;
 }
 /** `alive`, for a judge: unknown is BLOCKED. */
 const running = (pid: number): boolean => { const a = alive(pid); if (a === null) throw PS_DOWN(); return a; };
@@ -165,7 +167,7 @@ const scanned = (run: string): Carrier[] => {
 function stop(pid: number, run: string): 'signalled' | 'other' | 'unreadable' {
   const at = own.get(pid);
   const read = ps(['-o', 'lstart=,command=', '-p', String(pid)]);
-  if (read.error || read.status === null) return 'unreadable';
+  if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return 'unreadable';
   if (at === undefined || read.status !== 0) return 'other';
   const words = read.stdout.trim().split(/\s+/);
   const start = Date.parse(words.slice(0, 5).join(' '));
