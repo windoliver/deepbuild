@@ -13,12 +13,14 @@ mod snapshot;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::time::Instant;
 
+use deep_canvas::registry::{BuildSet, Fault, Module, Registry, SealError};
 use serde_json::{json, Map, Value};
 
 use hub::{
-    flicks, Call, Card, Claim, Fault, Hold, Include, Panel, Planted, Process, RecordObject,
-    Scenario, Session, Show, Via,
+    flicks, Call, Card, Claim, Fault as HoldFault, Hold, Include, Panel, Planted, Process,
+    RecordObject, Scenario, Session, Show, Startup, Via,
 };
 
 fn bad_input() -> Value {
@@ -67,6 +69,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     let via = match name {
         "revisions" => return Some(Call::Revisions(c.get("doc")?.as_str()?.to_string())),
         "screen" => return Some(Call::Screen),
+        "registry" => return Some(Call::Registry),
         "deep_show" => match c.get("session")? {
             Value::Null => Via::Mcp(None),
             Value::String(s) => Via::Mcp(Some(s.clone())),
@@ -212,7 +215,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let fault = match input.get("fault") {
         None => None,
-        Some(f) => Some(Fault {
+        Some(f) => Some(HoldFault {
             holds: match f.get("holds")?.as_str()? {
                 "fallback_pipeline" => Hold::FallbackPipeline,
                 "rebuild_queue" => Hold::RebuildQueue,
@@ -230,6 +233,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "inlines_every_issue" => Planted::InlinesEveryIssue,
             "cuts_without_truncated" => Planted::CutsWithoutTruncated,
             "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
+            "reply_without_digest" => Planted::ReplyWithoutDigest,
+            "reads_wasm_bytes" => Planted::ReadsWasmBytes,
             _ => return None,
         }),
     };
@@ -260,7 +265,7 @@ fn run(hub: &mut hub::Hub<'_>) -> Vec<Value> {
     hub.scenario.calls.iter().map(|c| hub.call(c)).collect()
 }
 
-fn answer(command: &str, line: &str) -> Value {
+fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
         return bad_input();
     };
@@ -269,7 +274,7 @@ fn answer(command: &str, line: &str) -> Value {
     };
     match command {
         "run" => {
-            let mut hub = hub::Hub::new(&scenario);
+            let mut hub = hub::Hub::new(&scenario, startup);
             let replies = run(&mut hub);
             json!({"ok": true, "replies": replies})
         }
@@ -278,32 +283,158 @@ fn answer(command: &str, line: &str) -> Value {
             else {
                 return bad_input();
             };
-            screen(&scenario, out)
+            screen(&scenario, startup, out)
         }
         _ => bad_input(),
     }
 }
 
 #[cfg(target_os = "macos")]
-fn screen(scenario: &Scenario, out: &str) -> Value {
-    let mut hub = hub::Hub::new(scenario);
+fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
+    let mut hub = hub::Hub::new(scenario, startup);
     let replies = run(&mut hub);
     window::draw(&mut hub, replies, out)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn screen(_: &Scenario, _: &str) -> Value {
+fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
+// The build set this binary holds, one of its Cargo features (#305: Registry and seal:
+// `build_set`); `full` is the default, so a plain build is the full set.
+#[cfg(not(any(feature = "core", feature = "r1", feature = "r2", feature = "full")))]
+compile_error!("deep-show needs one build-set feature: core, r1, r2 or full");
+#[cfg(any(
+    all(feature = "core", feature = "r1"),
+    all(feature = "core", feature = "r2"),
+    all(feature = "core", feature = "full"),
+    all(feature = "r1", feature = "r2"),
+    all(feature = "r1", feature = "full"),
+    all(feature = "r2", feature = "full"),
+))]
+compile_error!("deep-show takes one build-set feature, not two: core, r1, r2 or full");
+
+fn build_set() -> BuildSet {
+    if cfg!(feature = "full") {
+        BuildSet::Full
+    } else if cfg!(feature = "r2") {
+        BuildSet::R2
+    } else if cfg!(feature = "r1") {
+        BuildSet::R1
+    } else {
+        BuildSet::Core
+    }
+}
+
+/// The canvas modules this build compiles in: the shipped set's (none yet: R1's canvas code
+/// stays the core's own until #137) and, under its `test-*` features, the #305 acceptance
+/// README's test canvas modules.
+fn modules() -> Vec<Module> {
+    #[allow(unused_mut)]
+    let mut out: Vec<Module> = Vec::new();
+    #[cfg(feature = "test-a")]
+    out.push(deep_canvas_test_modules::a());
+    #[cfg(feature = "test-b")]
+    out.push(deep_canvas_test_modules::b());
+    #[cfg(feature = "test-b-requires-a")]
+    out.push(deep_canvas_test_modules::b_requires_a());
+    #[cfg(feature = "test-two-writers")]
+    out.extend(deep_canvas_test_modules::two_writers());
+    #[cfg(feature = "test-later-phase")]
+    out.push(deep_canvas_test_modules::later_phase());
+    #[cfg(feature = "test-cycle")]
+    out.extend(deep_canvas_test_modules::cycle());
+    #[cfg(feature = "test-missing-dep")]
+    out.push(deep_canvas_test_modules::missing_dep());
+    out
+}
+
+/// Registers the build's canvas modules in sorted name order and seals, timing both; the
+/// planted seal (`--planted treats_every_dependency_required`) is the criterion's wrong program.
+fn seal(fault: Option<Fault>) -> Result<Startup, SealError> {
+    let started = Instant::now();
+    hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut registry = Registry::new(build_set());
+    for module in modules() {
+        registry = registry.with(module);
+    }
+    if let Some(fault) = fault {
+        registry = registry.plant(fault);
+    }
+    let sealed = registry.seal()?;
+    Ok(Startup {
+        sealed,
+        seal_ms: started.elapsed().as_secs_f64() * 1000.0,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_seal_in_the_process_counts() {
+        use std::sync::atomic::Ordering;
+        let before = hub::SEAL_RUNS.load(Ordering::Relaxed);
+        seal(None).expect("the shipped set seals");
+        seal(None).expect("the shipped set seals");
+        assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
+    }
+
+    #[test]
+    fn core_version_is_the_canvas_crates_version() {
+        let manifest = include_str!("../../deep-canvas/Cargo.toml");
+        let line = format!("version = \"{}\"", deep_canvas::registry::CORE_VERSION);
+        assert!(manifest.lines().any(|l| l.trim() == line), "{line}");
+        // The seal parses it at startup; a pre-release tag would need `Semver` to carry one.
+        assert!(
+            deep_canvas::registry::Semver::parse(deep_canvas::registry::CORE_VERSION).is_some()
+        );
+    }
+}
+
 fn main() {
-    let command = std::env::args().nth(1).unwrap_or_default();
-    let stdin = io::stdin();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let command = args.first().cloned().unwrap_or_default();
     let stdout = io::stdout();
     let mut out = stdout.lock();
+    // `--planted <name>` plants the seal's wrong program; an unknown name is bad input.
+    let fault = match args.get(1).map(String::as_str) {
+        None => None,
+        Some("--planted") => match args.get(2).map(String::as_str) {
+            Some("treats_every_dependency_required") => Some(Fault::EveryDependencyRequired),
+            _ => {
+                let _ = writeln!(out, "{}", bad_input());
+                std::process::exit(2);
+            }
+        },
+        Some(_) => {
+            let _ = writeln!(out, "{}", bad_input());
+            std::process::exit(2);
+        }
+    };
+    // The seal runs before the first line is read: a refused set answers no scenario.
+    let startup = match seal(fault) {
+        Ok(startup) => startup,
+        Err(err) => {
+            let line = json!({
+                "ok": false,
+                "code": "seal_refused",
+                "reason": err.code,
+                "modules": err.modules,
+                "arrays": err.arrays,
+                "what": err.what,
+            });
+            let _ = writeln!(out, "{line}");
+            let _ = out.flush();
+            std::process::exit(2);
+        }
+    };
+    let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
-        let reply = answer(&command, &line);
+        let reply = answer(&command, &startup, &line);
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
     }

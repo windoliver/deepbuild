@@ -19,8 +19,27 @@ canvas_text = true
 name = "deep-show"
 path = "src/main.rs"
 
+# Issue #305: the build set is a Cargo feature (one of core, r1, r2, full; full by default), and
+# each test canvas module of the #305 acceptance README joins a test build under its own feature.
+# R1's canvas code stays the core's own until #137, so the four sets hold the same shipped
+# modules today; a shipped optional module gets a feature of its own when it lands.
+[features]
+default = ["full"]
+core = []
+r1 = []
+r2 = []
+full = []
+test-a = ["dep:deep-canvas-test-modules"]
+test-b = ["dep:deep-canvas-test-modules"]
+test-b-requires-a = ["dep:deep-canvas-test-modules"]
+test-two-writers = ["dep:deep-canvas-test-modules"]
+test-later-phase = ["dep:deep-canvas-test-modules"]
+test-cycle = ["dep:deep-canvas-test-modules"]
+test-missing-dep = ["dep:deep-canvas-test-modules"]
+
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-text = { path = "../deep-text" }

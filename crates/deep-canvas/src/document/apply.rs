@@ -43,7 +43,9 @@ type Refused = Box<Issue>;
 /// The revision hash of `doc`, or the issue of a document with no canonical form (a float
 /// outside its width, two keys that are one key after NFC).
 fn hash_of(doc: &Value) -> Result<String, Refused> {
-    revision_hash(doc, &DocShape::new(doc)).map_err(|e| {
+    // `apply` checks in the core's own build (`check`), so it hashes by the core's own kinds.
+    let kinds = crate::kinds::registry();
+    revision_hash(doc, &DocShape::new(doc, &kinds)).map_err(|e| {
         Box::new(Issue::envelope(
             "out_of_range",
             e.path,
@@ -115,9 +117,11 @@ fn store_migrations(doc: &mut Value, layer: &str) {
         return;
     };
     let mut notices = Vec::new();
+    // `apply` checks in the core's own build (`check`), so it migrates by the core's own kinds.
+    let kinds = crate::kinds::registry();
     for (key, item) in items.iter_mut() {
         if member(item, "layer").and_then(Value::as_str) == Some(layer) {
-            migrate_item(key, item, &mut notices);
+            migrate_item(key, item, &kinds, &mut notices);
         }
     }
 }
