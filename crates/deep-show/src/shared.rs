@@ -36,6 +36,7 @@ use sha2::{Digest, Sha256};
 use crate::evidence;
 use crate::hub::{Body, Call, Hub, PatchCall, Planted, Show, Via};
 use crate::snapshot::Unfit;
+use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
 
 /// Flicks per second (Time and the flick).
@@ -1727,7 +1728,8 @@ fn referenced(doc: &Value) -> BTreeSet<String> {
 }
 
 /// The marks module's frame over `items` in `doc`'s envelope: the vertices it draws (four for
-/// each quad, a rect, circle, text or image, and a path's tessellation), or why it can't draw.
+/// each quad, a rect, circle, text or image; a path's tessellation; an outline's points), or why
+/// it can't draw.
 fn marks(doc: &Value, items: &Map<String, Value>, palette: &Palette) -> Result<i64, Refused> {
     let empty = Map::new();
     let envelope = doc.as_object().unwrap_or(&empty);
@@ -1739,6 +1741,16 @@ fn marks(doc: &Value, items: &Map<String, Value>, palette: &Palette) -> Result<i
         .flat_map(|l| &l.marks)
         .map(|drawn| match &drawn.mark {
             Mark::Path { geometry, .. } => geometry.tessellate(bucket).vertices.len() as i64,
+            // An outline drawn from its verbs: its points.
+            Mark::Shape { verbs, .. } => verbs
+                .iter()
+                .map(|v| match v {
+                    Verb::Move(_) | Verb::Line(_) => 1,
+                    Verb::Quad(..) => 2,
+                    Verb::Cubic(..) => 3,
+                    Verb::Close => 0,
+                })
+                .sum(),
             _ => 4,
         })
         .sum())
@@ -1746,8 +1758,9 @@ fn marks(doc: &Value, items: &Map<String, Value>, palette: &Palette) -> Result<i
 
 /// The marks module's check of the items a patch wrote, and what it changed in the cost model
 /// (Patch: result). The items it wrote are drawn as they are now and as they were, beside what
-/// they read (the items their params name, and those other maps target), so a patch the module
-/// can't draw is refused as a whole revision is, unless the item couldn't be drawn before either.
+/// they read (their ancestors, the items their params name, and those other maps target), so a
+/// patch the module can't draw is refused as a whole revision is, unless the item couldn't be
+/// drawn before either.
 /// A 2D mark lights nothing, so `lights` is 0; this build has no time or memory model for 2D
 /// marks yet, so `cpu_ms`, `gpu_ms` and `gpu_mb` read 0 until the meter's cost model (#379) lands.
 fn marks_check(
@@ -1782,6 +1795,13 @@ fn marks_check(
         .collect();
     for item in now_items.values().chain(was_items.values()) {
         named(item, &mut context);
+        // Its ancestors, which a frame reads for what scopes it.
+        let mut at = item["parent"].as_str();
+        while let Some(p) =
+            at.filter(|p| doc["items"].get(*p).is_some() && context.insert(p.to_string()))
+        {
+            at = doc["items"][p]["parent"].as_str();
+        }
     }
     context.retain(|id| !before.contains_key(id));
     let with_context = |subset: &Map<String, Value>| {
