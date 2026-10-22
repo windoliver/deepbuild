@@ -1,0 +1,42 @@
+{
+  "format": 1,
+  "id": "auto-layout-row",
+  "profile": "figure",
+  "title": "Six tiles on one bottom line",
+  "description": "A row frame with gap 24 and align_cross end holding six fixed tiles from 40 to 120 u wide and of different heights; their bottoms share one line.",
+  "size": [640, 200],
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "strip": {
+      "id": "strip", "kind": "frame@1", "layer": "main", "name": "Strip", "order": "a0",
+      "at": { "pos": [24, 40, 0] },
+      "params": { "layout": "row", "gap": 24, "align_cross": "end" }
+    },
+    "plum": {
+      "id": "plum", "kind": "frame@1", "layer": "main", "name": "Plum", "parent": "strip", "order": "a3",
+      "params": { "box": [0, 0, 96, 72], "width": "fixed", "height": "fixed" }
+    },
+    "kiwi": {
+      "id": "kiwi", "kind": "frame@1", "layer": "main", "name": "Kiwi", "parent": "strip", "order": "a0",
+      "params": { "box": [0, 0, 40, 30], "width": "fixed", "height": "fixed" }
+    },
+    "lime": {
+      "id": "lime", "kind": "frame@1", "layer": "main", "name": "Lime", "parent": "strip", "order": "a5",
+      "params": { "box": [0, 0, 80, 60], "width": "fixed", "height": "fixed" }
+    },
+    "apple": {
+      "id": "apple", "kind": "frame@1", "layer": "main", "name": "Apple", "parent": "strip", "order": "a1",
+      "params": { "box": [0, 0, 120, 56], "width": "fixed", "height": "fixed" }
+    },
+    "date": {
+      "id": "date", "kind": "frame@1", "layer": "main", "name": "Date", "parent": "strip", "order": "a4",
+      "params": { "box": [0, 0, 52, 24], "width": "fixed", "height": "fixed" }
+    },
+    "fig": {
+      "id": "fig", "kind": "frame@1", "layer": "main", "name": "Fig", "parent": "strip", "order": "a2",
+      "params": { "box": [0, 0, 64, 44], "width": "fixed", "height": "fixed" }
+    }
+  }
+}
