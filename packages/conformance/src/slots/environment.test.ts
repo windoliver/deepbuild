@@ -1,7 +1,10 @@
 // The environment kit's down rule reads the process table for the run token. (The second invariant: what the kit
 // can't see is BLOCKED, never a pass.) Two kit runs on the same fixture at once share no run token, so neither
 // sees the other's processes.
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanFills, runKit, slotKits } from '../index.js';
@@ -91,6 +94,36 @@ describe('the environment kit and the process table', () => {
       expect(report.cases.map((c) => `${c.outcome}${c.message ? `: ${c.message}` : ''}`)).toEqual(['PASS', 'PASS']);
     } finally {
       for (const c of children) c.kill('SIGKILL');
+    }
+  });
+
+  it('refuses an environment with a process under it that carries no run token, before down could lose it', async () => {
+    const k = kit();
+    const server = fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url));
+    const children: ChildProcess[] = [];
+    // The fixture server with a quiet grandchild: one the lease's contract doesn't cover.
+    const quiet: EnvironmentFill = {
+      slot: 'environment@1', revision: 1,
+      up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
+        const dir = mkdtempSync(join(tmpdir(), 'deep-env-test-'));
+        const ready = join(dir, 'ready');
+        const child = spawn(process.execPath, [server, String(lease.port), spec.health, spec.token, String(spec.warmup), ready, lease.token, 'quiet'], { stdio: 'ignore' });
+        children.push(child);
+        const until = Date.now() + 5000;
+        const poll = (): void => { if (existsSync(ready)) { rmSync(dir, { recursive: true, force: true }); resolve({ id: `quiet-${child.pid}`, port: lease.port, pid: child.pid! }); } else if (Date.now() < until) setTimeout(poll, 20); else reject(Error('the quiet server did not come up')); };
+        poll();
+      }) as unknown as Handle,
+      down: (handle) => { for (const c of children) if (c.pid === handle.pid) c.kill('SIGTERM'); },
+    };
+    const grandchildren = (): string[] => execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/helper.mjs') && !l.trim().split(/\s+/).some((w) => w.startsWith('run-')));
+    try {
+      const report = await runKit(k, quiet, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'untagged_process'], ['FAIL', 'untagged_process']]);
+      // The quiet grandchildren are not the kit's to stop: still there, and this test's to end.
+      expect(grandchildren().length).toBeGreaterThanOrEqual(2);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+      for (const line of grandchildren()) { const pid = Number(line.trim().split(/\s+/)[0]); if (pid > 1) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
     }
   });
 

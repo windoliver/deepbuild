@@ -65,20 +65,29 @@ function waitUntil(done: () => boolean, ms: number): boolean {
   while (Date.now() < end) { if (done()) return true; sleep(10); }
   return done();
 }
+interface Row { pid: number; ppid: number; command: string }
 interface Carrier { pid: number; command: string }
+/** The whole process table, one row per process; null when it can't be read, never an empty list. */
+function table(): Row[] | null {
+  const read = ps(['-Awwo', 'pid=,ppid=,command=']);
+  if (read.status !== 0 || read.error) return null;
+  return read.stdout.split('\n').flatMap((line) => {
+    const [pid, ppid, ...words] = line.trim().split(/\s+/);
+    return /^\d+$/.test(pid ?? '') && /^\d+$/.test(ppid ?? '') ? [{ pid: Number(pid), ppid: Number(ppid), command: words.join(' ') }] : [];
+  });
+}
+const carries = (row: Row, run: string): boolean => row.command.split(' ').includes(run);
 /**
  * Every process carrying the run token as a word of its command line (the issue's words: down leaves no process
- * carrying its run token). A process table the kit can't read is null, never an empty list. The scan finds what
- * was left; it grants no authority to stop anything (see `own`).
+ * carrying its run token). The scan finds what was left; it grants no authority to stop anything (see `own`).
  */
-function carrying(run: string): Carrier[] | null {
-  const table = ps(['-Awwo', 'pid=,command=']);
-  if (table.status !== 0 || table.error) return null;
-  return table.stdout.split('\n').flatMap((line) => {
-    const [pid, ...words] = line.trim().split(/\s+/);
-    if (!words.includes(run) || !/^\d+$/.test(pid ?? '')) return [];
-    return [{ pid: Number(pid), command: words.join(' ') }];
-  });
+const carrying = (run: string): Carrier[] | null => table()?.map((row) => (carries(row, run) ? { pid: row.pid, command: row.command } : null)).filter((c): c is Carrier => c !== null) ?? null;
+/** The processes under `pid` in the table at this moment: its children, theirs, and so on (one that has left the tree is not seen). */
+function descendants(rows: Row[], pid: number): Row[] {
+  const found: Row[] = [];
+  const queue = [pid];
+  while (queue.length) { const parent = queue.shift()!; for (const row of rows) if (row.ppid === parent && !found.includes(row)) { found.push(row); queue.push(row.pid); } }
+  return found;
 }
 /**
  * The fixture processes the kit's own reference fills started, as their ready markers reported them: each pid with
@@ -247,14 +256,24 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (answer.token !== spec.token) throw fail(RULES.health.message, ['health_mismatch'], `health answered with token ${JSON.stringify(answer.token)}, not the spec's`);
     // The handle's pid is the fill's word until the process table shows it: a running process carrying the run
     // token. Otherwise "gone after down" would hold of a pid that never was the environment.
-    if (!running(pid) || !scanned(lease.token).some((p) => p.pid === pid)) throw new Finding('FAIL', `handle/pid ${pid} is no running process carrying the run token`, ['pid_not_environment']);
+    const before = table();
+    if (before === null) throw PS_DOWN();
+    if (!running(pid) || !before.some((row) => row.pid === pid && carries(row, lease.token))) throw new Finding('FAIL', `handle/pid ${pid} is no running process carrying the run token`, ['pid_not_environment']);
+    // Every process of the environment carries the run token (the lease's contract), so a descendant of the handle's
+    // process without it is refused here; the tree is remembered, by pid and start time, to be gone after down.
+    const tree = descendants(before, pid);
+    const untagged = tree.find((row) => !carries(row, lease.token));
+    if (untagged) throw fail(RULES.down.message, ['untagged_process'], `pid ${untagged.pid} (${untagged.command}), a process of the environment, carries no run token, so down could leave it unseen`);
+    const members = [pid, ...tree.map((row) => row.pid)].map((p) => ({ pid: p, start: startTime(p) }));
+    const stillThere = (): { pid: number }[] => members.filter((m) => running(m.pid) && sameStart(startTime(m.pid), m.start ?? undefined));
     downed = true;
     yield () => fill.down(handle as unknown as Handle);
-    // Gone means all of: the pid the handle names is no process, nothing answers on the leased port any more, and
-    // no process carries the run token (a grandchild the handle never named is caught there).
-    if (!waitUntil(() => !running(pid) && !listening(lease.port) && scanned(lease.token).length === 0, 150)) {
+    // Gone means all of: the pid the handle names and every process that was under it are no process, nothing answers
+    // on the leased port any more, and no process carries the run token (a grandchild that left the tree is caught there).
+    if (!waitUntil(() => stillThere().length === 0 && !listening(lease.port) && scanned(lease.token).length === 0, 150)) {
       const left = scanned(lease.token);
-      const why = running(pid) ? `pid ${pid} still runs 150 ms after down${isOwn(pid) ? '' : ' (not the kit\'s own process, so left as it is)'}`
+      const there = stillThere();
+      const why = there.length > 0 ? `${there.map((m) => `pid ${m.pid}`).join(', ')} still run${there.length === 1 ? 's' : ''} 150 ms after down${there.every((m) => isOwn(m.pid)) ? '' : ' (not the kit\'s own, so left as they are)'}`
         : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} still accepts connections 150 ms after down`
         : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`
         : `pid ${pid}, the port and the run token were not all clear within 150 ms of down`;

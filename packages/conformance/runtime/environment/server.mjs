@@ -2,17 +2,21 @@
 // up. It takes a moment to come up (the warm-up), then listens on the leased port, answers its health route
 // with its token and writes its ready marker; so an environment that reports ready before the health check
 // answers is caught, and one that binds another port is seen at the lease.
-//   node server.mjs <port> <healthPath> <token> <warmupMs> <readyFile> <runToken> [helper]
+//   node server.mjs <port> <healthPath> <token> <warmupMs> <readyFile> <runToken> [helper|quiet]
 // It carries the lease's run token on its command line, as every process of an environment does. With `helper`,
 // it also starts helper.mjs carrying that token, a grandchild that outlives the server: the planted environment
-// that leaves a process after down.
+// that leaves a process after down. With `quiet`, the grandchild carries no token: an environment with a process
+// the lease's contract doesn't cover, which the kit refuses before down (the kit's own tests use it).
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { renameSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const [port, health, token, warmup, ready, run, helper] = process.argv.slice(2);
-const grandchild = helper === 'helper' ? spawn(process.execPath, [fileURLToPath(new URL('./helper.mjs', import.meta.url)), run], { detached: true, stdio: 'ignore' }) : null;
+const HELPER = fileURLToPath(new URL('./helper.mjs', import.meta.url));
+const grandchild = helper === 'helper' ? spawn(process.execPath, [HELPER, run], { detached: true, stdio: 'ignore' })
+  : helper === 'quiet' ? spawn(process.execPath, [HELPER], { detached: true, stdio: 'ignore' })
+  : null;
 grandchild?.unref();
 const server = createServer((request, response) => {
   if (request.method === 'GET' && request.url === health) {
