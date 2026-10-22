@@ -1,0 +1,623 @@
+[
+  {
+    "source": "effect.push",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Push feature/login to origin?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Push it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Hold the push",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "d2d8657f71c5081497de05489d87e82d95083fa201453bd9297aa4a1959715e5",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "effect.merge",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Merge PR 42 into main?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Merge it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Hold the merge",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "3422314410c7336bcce4f5e07eff6ad39cb9eb58032c239b352d000a270d1053",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "effect.dispatch",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Dispatch the release workflow?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Dispatch it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't dispatch",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "24a5530f2e7c02ceb9de75035d9d8b3f0b1a979eca94cda6b5772c94b735b66b",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "effect.send",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Send the release notes to the team list?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Send them",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't send",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "1d3892a04ef7d19f35bae7f957435dd9168c67b76e0d8c8c44cdf86f62d63484",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "effect.delete",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Delete the branch old/spike?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Delete it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "13cdd0ba1ae079b27955376f8648d1df09dbaa62882b522adb177a577e31e7b8",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "permission.request",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Allow the agent to run the migration script?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Allow it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Deny it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "332f3be614de23c2724ba91e5bfbd95c7332a5cd7d9cffda84205e5f787d1e5d",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "mcp.tool_changed",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Load the changed MCP tool db.write?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Load it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep it unloaded",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "65a142aaa4e24c0478a6e2cf910faa017013ecdfca74fee69be8e5b62528820a",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "budget.raise",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Raise the project's budget from 20 to 40 USD?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Raise it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep it at 20 USD",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "f8ad5087ea3a366e96a3d539344c951dda23482a4690f74ef26a930510dbe3c5",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "command.unstageable",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Run a cleanup script whose reach can't be worked out?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Run it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't run it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "fdd88538170d75d751940bf854fbef7b6cf11c354ea6e24b0287f56a5d81ab6c",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "production.write",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Write the schema change to production?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Write it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't write it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "ee877b0bf5020cc57e3c583b99efe9a9bbcca451c35118cd618995d03933bcd3",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "service.beyond_localhost",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Open the preview server beyond localhost?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Open it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep it on localhost",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "f7d7615e902d14ac9142bad5d42aee53fa610fb680bac222a81be848cf34c121",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "generation.paid",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Generate the hero video for 3.20 USD?",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Generate it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't generate it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "d981025840da28168185acc04ad20b2fd8885317f0601a8e7b3f170514012c23",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "deep_ask.unblock",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "Sign in to GitHub in your own terminal?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "done",
+        "provisional": false,
+        "owner": "you",
+        "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+        },
+        "steps": [
+          "Run gh auth login in your own terminal"
+        ],
+        "where": "your terminal",
+        "why": "the push needs a GitHub token",
+        "unblocks": [
+          "task:01K74FX2B4D6F8H0K2M4P6R8T0"
+        ],
+        "proves": "auth.unit"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "deep_ask.taste",
+    "kind": "taste",
+    "fixture": {
+      "ask": {
+        "kind": "taste",
+        "question": "Which header colour?",
+        "options": [
+          {
+            "id": "blue",
+            "label": "Blue header",
+            "decision": "none"
+          },
+          {
+            "id": "green",
+            "label": "Green header",
+            "decision": "none"
+          }
+        ],
+        "recommended": "blue",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "blue",
+        "provisional": false,
+        "owner": "you",
+        "key": "e3ec83bf9a447263636dfa7746083bdc44fedc91cb656f21f18d9060159b7bcd",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "894368daa195264b0ee144b62f90e92318d394d925f9e2a6691cb8b48d5efb42"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "deep_ask.choice",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Keep the store on SQLite or plain files?",
+        "options": [
+          {
+            "id": "sqlite",
+            "label": "SQLite",
+            "decision": "none"
+          },
+          {
+            "id": "files",
+            "label": "Plain files",
+            "decision": "none"
+          }
+        ],
+        "recommended": "sqlite",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "sqlite",
+        "provisional": false,
+        "owner": "you",
+        "key": "0b68e2ff8a1045d156e9951dd26f8eea9f25a65e1a0ec365cf0a65364ad31b03",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "f99b1a47a7b50a87a18927c5d036025fb3dd80eb3de61100ac280b79467654ac"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "definition.draft",
+    "kind": "definition",
+    "fixture": {
+      "ask": {
+        "kind": "definition",
+        "question": "Should done include the offline mode?",
+        "options": [
+          {
+            "id": "keep",
+            "label": "Keep the requirement",
+            "decision": "none"
+          },
+          {
+            "id": "drop",
+            "label": "Leave it out",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "drop",
+        "provisional": false,
+        "owner": "you",
+        "key": "ba2afb8dddcd62467404ccb3428e6edcd88e5950be3d7aefb5e5658400161aee",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "86e5d79a26e38e1667cd899c6113f84bd20412f8a2dd601299d20725952b1386"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "asks.fold",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "This session keeps asking: answer its asks together, pause it, or leave them to their defaults?",
+        "options": [
+          {
+            "id": "together",
+            "label": "Answer them together",
+            "decision": "none"
+          },
+          {
+            "id": "pause",
+            "label": "Pause the session",
+            "decision": "none"
+          },
+          {
+            "id": "defaults",
+            "label": "Leave them to their defaults",
+            "decision": "none"
+          }
+        ],
+        "recommended": "defaults",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "defaults",
+        "provisional": false,
+        "owner": "you",
+        "key": "85805858a6fa78bb25d6a1188b9f4fa0bc4c8e212716402f702a89d1766c481e",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "aa81be425bcb3e51ffd2e109a8597b229be4efdecf9c3687cafa308ae926c994"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  }
+]

@@ -1,0 +1,166 @@
+Base commit: 554bebb6cc8e5693a887bdeac45771e046fcac5e
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/372
+Run in the worktree at the base commit, with no implementation of #372: crates/deep-canvas is #389's (parse, check, apply, canonical, color), so the session and render subcommands don't exist and the binary exits 2 with its usage line. The repo's node_modules was linked from the main checkout.
+Date: 2026-10-21T08:54:06Z  Node v24.22.0  vitest 5.0.5 darwin-arm64
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/372
+
+ ❯ frame.test.ts (2 tests | 2 failed) 789ms
+   ❯ AC3 a document's fixed frame in a panel of another shape: films letterbox, 3D documents with extend widen the view (2)
+     × AC3 a 1920x1080 film in a 1200x1200 panel draws a 1200x675 picture centred between bars in the look's ground, equal by pixel hash to a 1200x675 snapshot 173ms
+     × AC3 a 3D document with extend in a 1200x1200 panel keeps its kept items where they are at 16:9 within 0.5 px, shows more above and below, and crops nothing 3ms
+ ❯ session.test.ts (6 tests | 6 failed) 805ms
+   ❯ AC1 hover, a camera moved on a view and a view's cutaway never change the saved document's hash (2)
+     × AC1 a hover, camera drags, a pinch and the cutaway change session state only; a document-class input alone reaches the track 167ms
+     × AC1 1,000 seeded hovers, drags, pinches and cutaway toggles over 100 sessions never change the document's hash or its track 9ms
+   ❯ AC2 the camera you move: pivot eye, yaw limits, pan bounds and zoom at the pointer (4)
+     × AC2 with pivot: eye, 1,000 seeded drags and pinches leave the position unchanged bit for bit and the field of view inside its zoom range 3ms
+     × AC2 with yaw [-60, 60], 1,000 seeded drags and pinches never take the azimuth past 60° either side of the shot's 3ms
+     × AC2 a 2D pan with content bounds keeps the view's centre inside the content's bounds widened by the margin after each of 1,000 seeded drags 2ms
+     × AC2 a pinch at the pointer keeps the content point under it within 0.5 px, over 1,000 seeded pinches and drags 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  frame.test.ts > AC3 a document's fixed frame in a panel of another shape: films letterbox, 3D documents with extend widen the view > AC3 a 1920x1080 film in a 1200x1200 panel draws a 1200x675 picture centred between bars in the look's ground, equal by pixel hash to a 1200x675 snapshot
+Error: deep-canvas render exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ one helpers.ts:60:10
+ ❯ render helpers.ts:108:18
+ ❯ frame.test.ts:20:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  frame.test.ts > AC3 a document's fixed frame in a panel of another shape: films letterbox, 3D documents with extend widen the view > AC3 a 3D document with extend in a 1200x1200 panel keeps its kept items where they are at 16:9 within 0.5 px, shows more above and below, and crops nothing
+Error: deep-canvas render exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ one helpers.ts:60:10
+ ❯ render helpers.ts:108:18
+ ❯ frame.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  session.test.ts > AC1 hover, a camera moved on a view and a view's cutaway never change the saved document's hash > AC1 a hover, camera drags, a pinch and the cutaway change session state only; a document-class input alone reaches the track
+Error: deep-canvas session exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ sessions helpers.ts:85:16
+ ❯ session helpers.ts:95:10
+ ❯ session.test.ts:43:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  session.test.ts > AC1 hover, a camera moved on a view and a view's cutaway never change the saved document's hash > AC1 1,000 seeded hovers, drags, pinches and cutaway toggles over 100 sessions never change the document's hash or its track
+Error: deep-canvas session exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ sessions helpers.ts:85:16
+ ❯ session.test.ts:81:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  session.test.ts > AC2 the camera you move: pivot eye, yaw limits, pan bounds and zoom at the pointer > AC2 with pivot: eye, 1,000 seeded drags and pinches leave the position unchanged bit for bit and the field of view inside its zoom range
+Error: deep-canvas session exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ sessions helpers.ts:85:16
+ ❯ session helpers.ts:95:10
+ ❯ session.test.ts:96:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  session.test.ts > AC2 the camera you move: pivot eye, yaw limits, pan bounds and zoom at the pointer > AC2 with yaw [-60, 60], 1,000 seeded drags and pinches never take the azimuth past 60° either side of the shot's
+Error: deep-canvas session exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ sessions helpers.ts:85:16
+ ❯ session helpers.ts:95:10
+ ❯ session.test.ts:132:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  session.test.ts > AC2 the camera you move: pivot eye, yaw limits, pan bounds and zoom at the pointer > AC2 a 2D pan with content bounds keeps the view's centre inside the content's bounds widened by the margin after each of 1,000 seeded drags
+Error: deep-canvas session exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ sessions helpers.ts:85:16
+ ❯ session helpers.ts:95:10
+ ❯ session.test.ts:154:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  session.test.ts > AC2 the camera you move: pivot eye, yaw limits, pan bounds and zoom at the pointer > AC2 a pinch at the pointer keeps the content point under it within 0.5 px, over 1,000 seeded pinches and drags
+Error: deep-canvas session exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color
+
+ ❯ batch helpers.ts:47:54
+     45|   // A run that exits early (an unknown subcommand, a panic) can close…
+     46|   // its exit and stderr first, rather than the broken pipe that follo…
+     47|   if (run.status !== null && run.status !== 0) throw Error(`deep-canva…
+       |                                                      ^
+     48|   if (run.error) throw Error(`deep-canvas ${args.join(' ')}: ${run.err…
+     49|   if (run.status !== 0) throw Error(`deep-canvas ${args.join(' ')} exi…
+ ❯ sessions helpers.ts:85:16
+ ❯ session helpers.ts:95:10
+ ❯ session.test.ts:178:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  8 failed (8)
+   Start at  01:53:58
+   Duration  914ms (tests 95%, transform 3%, import 1%)
+

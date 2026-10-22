@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "id": "doc-372-view",
+  "profile": "scene",
+  "title": "House with a cutaway",
+  "description": "A 3D scene with a core dot at the camera's target, a roof dot a view-class cutaway hides, and a document-class throttle.",
+  "size": [1920, 1080],
+  "camera": "cam",
+  "data": { "throttle": 0 },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "controls": {
+    "cutaway": {
+      "kind": "toggle", "class": "view", "label": "Show the roof", "role": "switch",
+      "binds": ["items/roof/visible"], "default": true
+    },
+    "throttle": {
+      "kind": "slider", "class": "document", "label": "Throttle", "role": "slider",
+      "binds": ["data/throttle"], "range": [0, 1], "default": 0
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
+      "params": {
+        "projection": "perspective", "target": [0, 0, 0],
+        "orbit": { "azimuth": 45, "elevation": 30, "distance": 10 }, "fov": 40,
+        "user": { "turn": 0.25, "tilt": 0.25, "pitch": [-80, 80], "zoom": [0.5, 4], "zoom_rate": 0.005 }
+      }
+    },
+    "core": { "id": "core", "kind": "test.dot@1", "layer": "main", "name": "Core", "order": "a1",
+      "params": { "radius": 0.5, "fill": [220, 60, 60] }, "at": { "pos": [0, 0, 0] } },
+    "roof": { "id": "roof", "kind": "test.dot@1", "layer": "main", "name": "Roof", "order": "a2",
+      "params": { "radius": 0.4, "fill": [60, 200, 90] }, "at": { "pos": [0, 2.5, 0] } }
+  }
+}

@@ -465,6 +465,27 @@ export interface AgentStopV2 {
   evidence?: Array<string>;
 }
 
+/** answer.refused@1 */
+export interface AnswerRefused {
+  v: 1;
+  id: string;
+  kind: "answer.refused";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    outcome: "answered" | "decided_for_you" | "escalated" | "defaulted" | "unanswerable" | "cancelled" | "superseded" | "moot" | "unanswered";
+    closed_at: number;
+    via: "card" | "inbox";
+    option: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.answered@1 */
 export interface AskAnswered {
   v: 1;
@@ -481,6 +502,41 @@ export interface AskAnswered {
     answer: string;
     plan_hash: string | null;
     decision: "allow" | "deny" | "none";
+  };
+  evidence?: Array<string>;
+}
+
+export type AskAnsweredV2PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+/** ask.answered@2 */
+export interface AskAnsweredV2 {
+  v: 2;
+  id: string;
+  kind: "ask.answered";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    answer: string;
+    plan_hash: string | null;
+    decision: "allow" | "deny" | "none";
+    via: "card" | "inbox" | "session";
+    verified: boolean;
+    on: AskAnsweredV2PinnedTo;
+    token: string | null;
   };
   evidence?: Array<string>;
 }
@@ -637,6 +693,120 @@ export interface AskCreated {
   evidence?: Array<string>;
 }
 
+export type AskCreatedV2PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedV2Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+/** ask.created@2 */
+export interface AskCreatedV2 {
+  v: 2;
+  id: string;
+  kind: "ask.created";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "authority";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  } | {
+    kind: "unblock";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+  } | {
+    kind: "taste";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+    dropped?: Array<{
+      option: string;
+      same_as: string;
+    }>;
+  } | {
+    kind: "exception";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  } | {
+    kind: "choice";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  } | {
+    kind: "definition";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.defaulted@1 */
 export interface AskDefaulted {
   v: 1;
@@ -716,6 +886,114 @@ export interface AskMoot {
   };
   evidence?: Array<string>;
 }
+
+export type AskSourcesPinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskSourcesOptions = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskSourcesAsk = {
+  kind: "authority";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "unblock";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+  steps: Array<string>;
+  where: string;
+  why: string;
+  unblocks: Array<string>;
+  proves: string;
+} | {
+  kind: "taste";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "exception";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "choice";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+} | {
+  kind: "definition";
+  question: string;
+  options: AskSourcesOptions;
+  recommended: string | null;
+  deadline: number;
+  fallback: string;
+  default: string;
+  provisional: boolean;
+  owner: string;
+  key: string;
+  pinned_to: AskSourcesPinnedTo;
+};
+
+/** ask.sources@1 */
+export type AskSources = Array<{
+  source: string;
+  kind: "authority" | "unblock" | "taste" | "exception" | "choice" | "definition";
+  fixture: {
+    ask: AskSourcesAsk;
+    at_deadline: {
+      decision: "allow" | "deny" | "none";
+    };
+  };
+}>;
 
 /** ask.superseded@1 */
 export interface AskSuperseded {
@@ -995,7 +1273,7 @@ export interface DocPatched {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "not_checked" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -1775,6 +2053,35 @@ export interface ReadingRollup {
   evidence?: Array<string>;
 }
 
+/** request.cost@1 */
+export interface RequestCost {
+  v: 1;
+  id: string;
+  kind: "request.cost";
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    model: string;
+    request_id: string | null;
+    cost: {
+      basis: "reported";
+      usd: number;
+    };
+    tokens: {
+      input: number;
+      cached: number;
+      output: number;
+      exact: boolean;
+    };
+    reading: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.finished@1 */
 export interface RunFinished {
   v: 1;
@@ -2102,6 +2409,28 @@ export interface ToolBefore {
     kind: "unknown";
     paths: Array<string>;
     command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** tool.span@1 */
+export interface ToolSpan {
+  v: 1;
+  id: string;
+  kind: "tool.span";
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    tool: string;
+    tool_use_id: string | null;
+    duration_ms: number;
+    blocked_ms: number | null;
+    decision: string | null;
+    reading: string;
   };
   evidence?: Array<string>;
 }

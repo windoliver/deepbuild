@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "doc-372-eye",
+  "profile": "scene",
+  "title": "Room seen from its own eye",
+  "description": "A 3D scene whose camera turns about its own position and zooms by narrowing its field of view.",
+  "size": [1920, 1080],
+  "camera": "cam",
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "layer": "main", "name": "Camera", "order": "a0",
+      "params": {
+        "projection": "perspective", "position": [2.5, 1.5, 4], "target": [0, 1.5, 0], "fov": 40,
+        "user": { "turn": 0.2, "tilt": 0.2, "pitch": [-80, 80], "zoom": [0.5, 4], "zoom_rate": 0.005, "pivot": "eye" }
+      }
+    },
+    "wall": { "id": "wall", "kind": "test.dot@1", "layer": "main", "name": "Wall mark", "order": "a1",
+      "params": { "radius": 0.3, "fill": [220, 60, 60] }, "at": { "pos": [0, 1.5, 0] } }
+  }
+}

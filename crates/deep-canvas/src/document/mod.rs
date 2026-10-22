@@ -12,17 +12,21 @@
 //! - [`apply`]: patches as a writer, each all or nothing, checked after each → [`ApplyResult`].
 //! - [`canonical`]: the canonical bytes and SHA-256 of a document; [`DocShape`] is the
 //!   [`crate::canon::Shape`] the document declares.
+//! - [`duration`]: a duration field's flicks, as the check reads `stale_after`.
+//! - [`STATUS_ROLE`]: the prefix of the status roles only a status binding reaches.
 //! - [`Issue`] and [`Notice`], as the check writes them.
 
 mod apply;
 mod check;
+mod rules;
 mod shape;
 
 use serde_json::{json, Map, Value};
 
 pub use apply::{apply, ApplyResult};
-pub use check::{check, CheckResult};
-pub use shape::{canonical, Canonical, DocShape};
+pub use check::{check, duration, CheckResult};
+pub use rules::STATUS_ROLE;
+pub use shape::{canonical, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
 pub const CHECK: &str = "document.validate";
@@ -204,6 +208,7 @@ fn fix_for(code: &str) -> String {
         "unknown_field" => "Remove the field, or require the kind's minor that defines it.",
         "unknown_kind" => "Register the kind, or remove the item.",
         "kind_too_new" => "Save the item at a major this build knows.",
+        "module_missing" => "Open the document in a build with the module, or remove the field.",
         "out_of_range" => "Give the field a value of its type inside its range.",
         "ref_unresolved" => "Name an ID the document holds, or remove the reference.",
         "cycle" => "Give the item a parent that does not descend from it.",
@@ -212,6 +217,14 @@ fn fix_for(code: &str) -> String {
         "bad_path" => "Write the path as <section>/<id>[#<sub>]/<field>[/<field>...].",
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
         "bad_id" => "Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.",
+        "bad_time" => "Write the time as a span such as 2s or 120f.",
+        "bound_typed_over" => "Leave a bound value's text empty; its reading shows there.",
+        "number_unsourced" => {
+            "Bind the number to a reading with a bound value, or compute it in the document."
+        }
+        "status_color_unbound" => {
+            "Bind the paint slot to a verdict, run, ask or session with a status binding."
+        }
         _ => "See the issue.",
     }
     .to_string()
@@ -247,7 +260,7 @@ pub(crate) fn as_object(value: &Value) -> Option<&Map<String, Value>> {
 }
 
 /// The object member `key` of `value`, if `value` is an object holding it.
-pub(crate) fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+pub fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     value.as_object().and_then(|o| o.get(key))
 }
 
@@ -323,6 +336,24 @@ mod tests {
         let mut doc = base();
         doc["layers"] = json!({});
         doc["items"] = json!({});
+        assert!(check(&doc).ok);
+    }
+
+    #[test]
+    fn a_camera_field_of_a_module_this_build_lacks_is_module_missing_and_a_core_one_is_kept() {
+        let mut doc = base();
+        doc["items"]["cam"] = json!({
+            "id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+            "params": {"fit": {"keep": ["cam"]}, "dof": {"f_stop": 2.8}}
+        });
+        let result = check(&doc);
+        let codes: Vec<(&str, &str)> = result
+            .issues
+            .iter()
+            .map(|i| (i.code, i.path.as_str()))
+            .collect();
+        assert_eq!(codes, [("module_missing", "items/cam/params/dof")]);
+        doc["items"]["cam"]["params"] = json!({"fit": {"keep": ["cam"]}, "dof": null});
         assert!(check(&doc).ok);
     }
 

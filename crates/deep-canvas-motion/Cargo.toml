@@ -1,0 +1,19 @@
+[package]
+name = "deep-canvas-motion"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #391: the line's slice of the motion module (channels and keys with linear, hold, Bézier
+# and the follow spring; placements with start, repeat and extend; the transport's loop) and the
+# frame clock's `valid_until`. Named deep-canvas* so the canvas lint reads it: a check reads what it
+# evaluates, so its math is f64 through deep-canvas's ops module on pinned libm.
+[[bin]]
+name = "deep-motion"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+# float_roundtrip: a key's value reads back to the exact f64 its text names (#391 AC4 is 1 ulp).
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
