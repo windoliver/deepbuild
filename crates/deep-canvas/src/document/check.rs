@@ -9,7 +9,9 @@ use super::{
     as_f64, as_object, kind_text, member, sort_issues, sort_notices, Issue, Notice, AT_VECTORS,
     ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
-use crate::grammar::{forms_for, Handle, Id, Path, Refusal, Section, UnitContext, UnitLiteral};
+use crate::grammar::{
+    forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
+};
 use crate::kinds::{lookup, parse_required, registry, Entry, Lookup, ParamType, Version};
 
 /// The closed list of item roles.
@@ -106,6 +108,7 @@ pub fn check(doc: &Value) -> CheckResult {
     check_id_maps(&lowered, &mut issues);
     check_targets(&lowered, "channels", false, &mut issues);
     check_targets(&lowered, "bound_values", true, &mut issues);
+    super::rules::check(&lowered, &mut issues);
 
     sort_issues(&mut issues);
     sort_notices(&mut notices);
@@ -945,9 +948,10 @@ fn check_targets(doc: &Value, section: &str, with_source: bool, issues: &mut Vec
     let Some(entries) = member(doc, section).and_then(as_object) else {
         return;
     };
-    // A channel is `{target}` and a bound value `{target, source}`, nothing else.
+    // A channel is `{target}`; a bound value is `{target, source}` with the fields of Bound
+    // value, nothing else.
     let allowed: &[&str] = if with_source {
-        &["target", "source"]
+        BOUND_VALUE_FIELDS
     } else {
         &["target"]
     };
@@ -1004,6 +1008,17 @@ fn check_targets(doc: &Value, section: &str, with_source: bool, issues: &mut Vec
                 "not a path",
             )),
         }
+        if let Some(stale_after) = member(entry, "stale_after") {
+            if let Err(what) = duration(doc, stale_after) {
+                issues.push(Issue::error(
+                    "bad_time",
+                    key,
+                    format!("{section}/{key}/stale_after"),
+                    stale_after.clone(),
+                    &what,
+                ));
+            }
+        }
         if with_source {
             let source_path = format!("{section}/{key}/source");
             match member(entry, "source") {
@@ -1027,6 +1042,47 @@ fn check_targets(doc: &Value, section: &str, with_source: bool, issues: &mut Vec
                 )),
             }
         }
+    }
+}
+
+/// A bound value's fields (Bound value).
+const BOUND_VALUE_FIELDS: &[&str] = &[
+    "target",
+    "source",
+    "select",
+    "format",
+    "as_of",
+    "show",
+    "stale_after",
+    "missing",
+];
+
+/// A duration field's flicks: a time span (`"2s"`, `"120f"` at the transport's rate), above 0.
+pub fn duration(doc: &Value, value: &Value) -> Result<i64, String> {
+    let Value::String(text) = value else {
+        return Err("not a time literal".into());
+    };
+    let rate = member(doc, "transport")
+        .and_then(|t| member(t, "frame_rate"))
+        .and_then(Value::as_array)
+        .and_then(|pq| {
+            let p = u32::try_from(pq.first()?.as_u64()?).ok()?;
+            let q = u32::try_from(pq.get(1)?.as_u64()?).ok()?;
+            Some((p, q))
+        })
+        .unwrap_or((60, 1));
+    let ctx = TimeContext {
+        frame_rate: rate,
+        ..TimeContext::default()
+    };
+    match Time::parse(text) {
+        Ok(Time::Span(span)) => match span.resolve(&ctx) {
+            Ok(flicks) if flicks > 0 => Ok(flicks),
+            Ok(_) => Err("a duration is above 0".into()),
+            Err(r) => Err(r.what),
+        },
+        Ok(_) => Err("a duration is a span, such as 2s or 120f".into()),
+        Err(r) => Err(r.what),
     }
 }
 

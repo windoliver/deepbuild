@@ -1,0 +1,138 @@
+Base commit: 5f498a6be1d15b55b4e6a8c10232cb4350ebbb46
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/394 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked), the repo's node_modules from npm ci and the workspaces built (npm run build --workspaces): no deep-graph, deep-salience or deep-sheet bin target exists there.
+Date: 2026-10-22T02:29:35Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/394
+
+ ❯ taste.test.ts (5 tests | 5 failed) 15240ms
+   ❯ AC5 a taste call with three figure candidates, one a copy of another with a 2% exposure change, shows two side by side beside none of these and names the dropped copy in its record; answering none of these sends the work back with your note (2)
+     × AC5 the copy is dropped before the ask: two candidates side by side on the sheet, none of these on the card, the dropped copy named in the ask's record 4ms
+     × AC5 answering none of these on the card sends the work back to the agent with your note 0ms
+   ❯ AC6 two candidates whose stills differ by ΔE 0.09 at the 90th percentile count as one, and by 0.11 as two (3)
+     × AC6 the fixtures' ΔE is palette's OKLab: its own test values hold, and the stills differ by 0.09 and 0.11 at the 90th percentile 0ms
+     × AC6 ΔE 0.09 at the 90th percentile counts as one: the later is dropped 0ms
+     × AC6 ΔE 0.11 at the 90th percentile counts as two: both are kept 0ms
+ ❯ salience.test.ts (6 tests | 6 failed) 12918ms
+   ❯ AC3 a canvas level with 40 items shows exactly nine when nine fit at the minimum readable size, ranked by what needs you, and folds the rest into one counted line (5)
+     × AC3 with nine fitting, the level shows exactly the top nine in rank order and folds the other 31 into one counted line 4ms
+     × AC3 room for all 40 still shows nine: show is 9 unless fewer fit 0ms
+     × AC3 with five fitting at the minimum readable size, show is lowered to five 0ms
+     × AC3 a level that lists asks still shows every open ask: seven that need you all show when only five fit 0ms
+     × AC3 deep-salience level answers bad_input to a line it can't read 0ms
+   ❯ AC4 a level with 12 open asks from four sessions, three from each, and 30 other items shows all 12 asks and folds the 30 others into one counted line (1)
+     × AC4 the 12 open asks all show, ranked by ID among themselves, and the 30 others fold into one counted line 0ms
+ ❯ graph.test.ts (4 tests | 4 failed) 10972ms
+   ❯ AC2 re-rendering the basic layered layout with no change moves no node, and each node's rank, order and position is stored by stable ID (4)
+     × AC2 the layout memory holds every node by its stable ID as [rank, order, x, y], and it is a layered layout 4ms
+     × AC2 re-rendering with the memory and no change moves no node, and the same graph, memory and seed give the same bytes 1ms
+     × AC2 the memory is keyed by node ID: the same graph with its rows in another order keeps every node's entry 0ms
+     × AC2 deep-graph layout answers bad_input to a line it can't read 0ms
+ ❯ sheet.test.ts (4 tests | 4 failed) 6454ms
+   ❯ AC1 a taste call shows its sheet beside the card, and a cell click only preselects (4)
+     × AC1 the taste call's sheet draws beside the card's slot, one cell per candidate at its still's exact size 4ms
+     × AC1 a cell click preselects its option and nothing else: the ask stays open and unanswered until the card's own click 0ms
+     × AC1 a planted sheet whose cell click answers fails this check, naming the ask 0ms
+     × AC1 deep-sheet view and deep-sheet taste answer bad_input to a line they can't read 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  graph.test.ts > AC2 re-rendering the basic layered layout with no change moves no node, and each node's rank, order and position is stored by stable ID > AC2 the layout memory holds every node by its stable ID as [rank, order, x, y], and it is a layered layout
+ FAIL  graph.test.ts > AC2 re-rendering the basic layered layout with no change moves no node, and each node's rank, order and position is stored by stable ID > AC2 re-rendering with the memory and no change moves no node, and the same graph, memory and seed give the same bytes
+ FAIL  graph.test.ts > AC2 re-rendering the basic layered layout with no change moves no node, and each node's rank, order and position is stored by stable ID > AC2 the memory is keyed by node ID: the same graph with its rows in another order keeps every node's entry
+ FAIL  graph.test.ts > AC2 re-rendering the basic layered layout with no change moves no node, and each node's rank, order and position is stored by stable ID > AC2 deep-graph layout answers bad_input to a line it can't read
+AssertionError: the binaries build: deep-graph: expected 'cargo build --bin deep-graph failed:\…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-graph failed:
++ error: no bin target named `deep-graph` in default-run packages
++
++ help: a target with a similar name exists: `deep-app`
++
+
+ ❯ helpers.ts:99:79
+     97|   let error = '';
+     98|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     99|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+    100| }
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  salience.test.ts > AC3 a canvas level with 40 items shows exactly nine when nine fit at the minimum readable size, ranked by what needs you, and folds the rest into one counted line > AC3 with nine fitting, the level shows exactly the top nine in rank order and folds the other 31 into one counted line
+ FAIL  salience.test.ts > AC3 a canvas level with 40 items shows exactly nine when nine fit at the minimum readable size, ranked by what needs you, and folds the rest into one counted line > AC3 room for all 40 still shows nine: show is 9 unless fewer fit
+ FAIL  salience.test.ts > AC3 a canvas level with 40 items shows exactly nine when nine fit at the minimum readable size, ranked by what needs you, and folds the rest into one counted line > AC3 with five fitting at the minimum readable size, show is lowered to five
+ FAIL  salience.test.ts > AC3 a canvas level with 40 items shows exactly nine when nine fit at the minimum readable size, ranked by what needs you, and folds the rest into one counted line > AC3 a level that lists asks still shows every open ask: seven that need you all show when only five fit
+ FAIL  salience.test.ts > AC3 a canvas level with 40 items shows exactly nine when nine fit at the minimum readable size, ranked by what needs you, and folds the rest into one counted line > AC3 deep-salience level answers bad_input to a line it can't read
+ FAIL  salience.test.ts > AC4 a level with 12 open asks from four sessions, three from each, and 30 other items shows all 12 asks and folds the 30 others into one counted line > AC4 the 12 open asks all show, ranked by ID among themselves, and the 30 others fold into one counted line
+AssertionError: the binaries build: deep-salience: expected 'cargo build --bin deep-salience faile…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-salience failed:
++ error: no bin target named `deep-salience` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-hook
++     deep-live
++     deep-motion
++     deep-replica
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:99:79
+     97|   let error = '';
+     98|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     99|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+    100| }
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+ FAIL  sheet.test.ts > AC1 a taste call shows its sheet beside the card, and a cell click only preselects > AC1 the taste call's sheet draws beside the card's slot, one cell per candidate at its still's exact size
+ FAIL  sheet.test.ts > AC1 a taste call shows its sheet beside the card, and a cell click only preselects > AC1 a cell click preselects its option and nothing else: the ask stays open and unanswered until the card's own click
+ FAIL  sheet.test.ts > AC1 a taste call shows its sheet beside the card, and a cell click only preselects > AC1 a planted sheet whose cell click answers fails this check, naming the ask
+ FAIL  sheet.test.ts > AC1 a taste call shows its sheet beside the card, and a cell click only preselects > AC1 deep-sheet view and deep-sheet taste answer bad_input to a line they can't read
+ FAIL  taste.test.ts > AC5 a taste call with three figure candidates, one a copy of another with a 2% exposure change, shows two side by side beside none of these and names the dropped copy in its record; answering none of these sends the work back with your note > AC5 the copy is dropped before the ask: two candidates side by side on the sheet, none of these on the card, the dropped copy named in the ask's record
+ FAIL  taste.test.ts > AC5 a taste call with three figure candidates, one a copy of another with a 2% exposure change, shows two side by side beside none of these and names the dropped copy in its record; answering none of these sends the work back with your note > AC5 answering none of these on the card sends the work back to the agent with your note
+ FAIL  taste.test.ts > AC6 two candidates whose stills differ by ΔE 0.09 at the 90th percentile count as one, and by 0.11 as two > AC6 the fixtures' ΔE is palette's OKLab: its own test values hold, and the stills differ by 0.09 and 0.11 at the 90th percentile
+ FAIL  taste.test.ts > AC6 two candidates whose stills differ by ΔE 0.09 at the 90th percentile count as one, and by 0.11 as two > AC6 ΔE 0.09 at the 90th percentile counts as one: the later is dropped
+ FAIL  taste.test.ts > AC6 two candidates whose stills differ by ΔE 0.09 at the 90th percentile count as one, and by 0.11 as two > AC6 ΔE 0.11 at the 90th percentile counts as two: both are kept
+AssertionError: the binaries build: deep-sheet: expected 'cargo build --bin deep-sheet failed:\…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-sheet failed:
++ error: no bin target named `deep-sheet` in default-run packages
++
++ help: a target with a similar name exists: `deep-text`
++
+
+ ❯ helpers.ts:99:79
+     97|   let error = '';
+     98|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     99|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+    100| }
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  19 failed (19)
+   Start at  19:29:39
+   Duration  47.35s (tests 97%, import 2%)
+

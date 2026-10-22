@@ -1,0 +1,19 @@
+[package]
+name = "deep-canvas-sheet"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #394: the sheet module (canvas primitives: Sheet `sheet@1`): a taste call's candidates on
+# a variant sheet, near copies dropped by their stills' OKLab ΔE, and the view that draws the
+# sheet beside the question card's slot, where a cell click only preselects. Named deep-canvas*
+# so the canvas lint reads it: the ΔE a check reads is f64 through deep-canvas's color and ops.
+[[bin]]
+name = "deep-sheet"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

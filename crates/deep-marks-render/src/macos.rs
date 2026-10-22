@@ -13,6 +13,10 @@
 //! classes, and a layer counts as unchanged only while none of its items, nor any under it, is
 //! dirty. A rect mask clips its items as a scissor, and an image is read from the request's
 //! content-addressed store by its sha256, checked, and decoded once per session.
+//!
+//! Status marks draw after every writer layer, unlit and exact, each with its state's glyph and
+//! word inside it, and a legend of every state on screen (its swatch, glyph and word) at the
+//! frame's top right; nothing covers them (canvas primitives: The status-color rule).
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -23,8 +27,11 @@ use std::time::{Duration, Instant};
 
 use deep_canvas_marks::dirty::{Class, Dirty};
 use deep_canvas_marks::key::{sha256_hex, ContentKey, KeyBuilder};
+use deep_canvas_marks::look::{self, Look};
 use deep_canvas_marks::path::{self, Mesh};
-use deep_canvas_marks::scene::{self, Align, Drawn, Fill, ImageFit, Mark, Rgb};
+use deep_canvas_marks::scene::{
+    self, Align, Drawn, Fill, ImageFit, Mark, Record, Rgb, Slot, StatusMark,
+};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
 use deep_text::Role;
@@ -34,12 +41,21 @@ use gpui_kit::test::TestWindowExt;
 use gpui_kit::*;
 use serde_json::{json, Map, Value};
 
-use crate::{refused, Look, Request, Step, Theme, View};
+use crate::{palette_of, refused, Request, Step, Theme, View};
 
 /// Frames a writer layer stays the same before it is cached (Invalidation and damage).
 const STABLE_FRAMES: u32 = 3;
 /// One vsync of a session's steps: 60 Hz in flicks.
 const STEP_VSYNC: i64 = 705_600_000 / 60;
+/// A status mark's label: the glyph and word, in the body face at this size and weight.
+const STATUS_LABEL: (f32, u16) = (12., 600);
+/// A stroke's or a badge's chip: its glyph's size and weight, and the chip's height in u.
+const STATUS_CHIP: (f32, u16) = (11., 600);
+const CHIP_HEIGHT: f64 = 16.;
+/// The legend's rows, its swatch and its margin from the frame's top right, in u.
+const LEGEND_ROW: f64 = 20.;
+const LEGEND_SWATCH: f64 = 12.;
+const LEGEND_MARGIN: f64 = 16.;
 
 fn hsla(c: Rgb) -> Hsla {
     Rgba {
@@ -237,6 +253,12 @@ struct Session {
     stable: Vec<(ContentKey, u32)>,
     /// The presented frame's `valid_until`, or `None` once nothing changes again.
     valid_until: Option<i64>,
+    /// The pinned time a bound value on the presented frame next changes: it goes stale, or the
+    /// age it shows ticks.
+    stale_at: Option<i64>,
+    /// Each bound value as the presented frame shows it, and the frame's status marks and legend.
+    bound: Value,
+    snapshot: Value,
     read: Read,
     dirty: Dirty,
     /// Each item's layer on the last presented frame, for one that was deleted since.
@@ -442,11 +464,29 @@ impl Renderer {
                 doc,
                 look,
                 view,
-                readings,
+                record,
                 hz,
                 vsyncs,
                 store,
-            } => self.frames(&doc, &look, view, &readings, hz, vsyncs, store),
+                start,
+                replay,
+                captures,
+                arms_only_on_readings,
+            } => self.frames(
+                &doc,
+                &look,
+                view,
+                record,
+                Clock {
+                    hz,
+                    vsyncs,
+                    start,
+                    replay,
+                    arms_only_on_readings,
+                },
+                &captures,
+                store,
+            ),
             Request::Session { look, steps, store } => self.session(&look, steps, store),
             Request::Render {
                 out,
@@ -454,9 +494,10 @@ impl Renderer {
                 look,
                 view,
                 t,
+                record,
                 gpui_oklab,
                 store,
-            } => self.render(&out, &doc, &look, view, t, gpui_oklab, store),
+            } => self.render(&out, &doc, &look, view, t, record, gpui_oklab, store),
         }
     }
 
@@ -657,7 +698,7 @@ impl Renderer {
         doc: &Map<String, Value>,
         look: &Look,
         view: View,
-        readings: &BTreeMap<String, f64>,
+        record: &Record,
         t: i64,
         gpui_oklab: bool,
         by_clock: bool,
@@ -672,12 +713,35 @@ impl Renderer {
             program.evaluate(t, eval::Validity::Full, state);
             (eval::items(doc, program, state), state.valid_until)
         };
-        let palette = look.palette(view.theme);
-        let frame = scene::frame(doc, &items, palette, readings, view.zoom)
+        let palette = palette_of(look, view.theme);
+        let frame = scene::frame(doc, &items, palette, record, view.zoom)
             .map_err(|r| refused(r.code, &r.path))?;
         let shown =
-            scene::bound_texts(doc, &items, readings).map_err(|r| refused(r.code, &r.path))?;
-        let changes = session.dirty.advance(&items, &shown, by_clock);
+            scene::bound_texts(doc, &items, record).map_err(|r| refused(r.code, &r.path))?;
+        let status = scene::status_marks(doc, &items, record, look.status.as_ref(), palette)
+            .map_err(|r| refused(r.code, &r.path))?;
+        let texts: BTreeMap<String, String> = shown
+            .iter()
+            .map(|(id, s)| (id.clone(), s.text.clone()))
+            .collect();
+        // A number is never cut short or wrapped: a bound text that doesn't fit its box on one
+        // line fails rather than draws (Honest numbers).
+        for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+            if let Mark::Text { item, spec, .. } = &drawn.mark {
+                if spec.bound && spec.width.is_some() {
+                    let label = label_of(spec)
+                        .ok_or_else(|| refused("bad_font", &format!("items/{item}/params/font")))?;
+                    let one_line = Label {
+                        max_lines: Some(1),
+                        ..label
+                    };
+                    if !deep_text_gpui::fit(&one_line, None).fits {
+                        return Err(refused("number_unfit", &format!("items/{item}/params/box")));
+                    }
+                }
+            }
+        }
+        let changes = session.dirty.advance(&items, &texts, by_clock);
         // The layers an item changed in, this frame: a mark's item is its own ID before any `#`.
         let changed_layers: BTreeSet<String> = changes
             .iter()
@@ -793,6 +857,15 @@ impl Renderer {
             .flat_map(|l| l.marks.iter())
             .collect();
         list.extend(Self::draws(session, &live, bucket, gpui_oklab, &mut used)?);
+        // Status colors last, over every writer layer, with their legend.
+        let snapshot = status_draws(
+            &status,
+            &occupied(&frame),
+            palette,
+            frame.size,
+            view.zoom,
+            &mut list,
+        );
 
         // What the frame reads: every visible path's tessellation and text's shaped run, those a
         // cached picture was drawn from included, since they are its read set.
@@ -829,6 +902,19 @@ impl Renderer {
         }
         session.stable = stable;
         session.valid_until = valid_until;
+        session.stale_at = shown.values().filter_map(|s| s.changes_at).min();
+        session.bound = Value::Object(
+            shown
+                .values()
+                .map(|s| {
+                    (
+                        s.bound.clone(),
+                        json!({"text": s.text, "stale": s.stale, "age": s.age}),
+                    )
+                })
+                .collect(),
+        );
+        session.snapshot = snapshot;
         session.read = read;
 
         let main = session
@@ -849,6 +935,9 @@ impl Renderer {
             layers: HashMap::new(),
             stable: Vec::new(),
             valid_until: None,
+            stale_at: None,
+            bound: json!({}),
+            snapshot: json!({"marks": [], "legend": []}),
             read: Read::default(),
             dirty: Dirty::default(),
             stamped: BTreeSet::new(),
@@ -865,25 +954,32 @@ impl Renderer {
         doc: &Map<String, Value>,
         look: &Look,
         view: View,
-        readings: &BTreeMap<String, f64>,
-        hz: i64,
-        vsyncs: u32,
+        mut record: Record,
+        clock: Clock,
+        captures: &[(u32, String)],
         store: Option<PathBuf>,
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
-        let period = 705_600_000 / hz;
-        let mut out = Vec::with_capacity(vsyncs as usize);
+        let period = 705_600_000 / clock.hz;
+        // Each frame is pinned to the host time live, or to the mapped record time in a replay.
+        let pinned_at_0 = clock.replay.unwrap_or(clock.start);
+        let mut out = Vec::with_capacity(clock.vsyncs as usize);
         // The windows open before vsync 0, so their setup isn't counted.
         let result = (|| -> Result<(), Value> {
             compile(&mut session, doc)?;
-            for k in 0..i64::from(vsyncs) {
+            for k in 0..i64::from(clock.vsyncs) {
                 let t = k * period;
-                let armed = k == 0 || session.valid_until.is_some_and(|v| v <= t);
+                record.pinned = pinned_at_0 + t;
+                // The planted clock arms only on readings, which never change here: it misses the
+                // time a bound value goes stale.
+                let stale = !clock.arms_only_on_readings
+                    && session.stale_at.is_some_and(|s| s <= record.pinned);
+                let armed = k == 0 || session.valid_until.is_some_and(|v| v <= t) || stale;
                 // Everything the vsync cost on the GPU, a layer picture it made included.
                 let before = settled();
                 if armed {
-                    self.present(&mut session, doc, look, view, readings, t, false, k > 0)?;
+                    self.present(&mut session, doc, look, view, &record, t, false, k > 0)?;
                 }
                 let after = settled();
                 out.push(json!({
@@ -891,7 +987,11 @@ impl Renderer {
                     "presented": armed,
                     "command_buffers": after.committed - before.committed,
                     "gpu_ns": after.gpu_ns - before.gpu_ns,
+                    "bound": session.bound,
                 }));
+                for (_, path) in captures.iter().filter(|(v, _)| i64::from(*v) == k) {
+                    self.capture(&session, path)?;
+                }
             }
             Ok(())
         })();
@@ -902,6 +1002,19 @@ impl Renderer {
         }
     }
 
+    /// Writes the frame on screen as a PNG.
+    fn capture(&mut self, session: &Session, out: &str) -> Result<(), Value> {
+        let main = session
+            .main
+            .as_ref()
+            .ok_or_else(|| refused("no_window", ""))?;
+        let image = self
+            .cx
+            .capture_screenshot(main.handle)
+            .map_err(|_| refused("no_capture", ""))?;
+        image.save(out).map_err(|_| refused("not_written", out))
+    }
+
     fn session(&mut self, look: &Look, steps: Vec<Step>, store: Option<PathBuf>) -> Value {
         let mut session = Self::new_session();
         session.store = store;
@@ -910,7 +1023,7 @@ impl Renderer {
             zoom: 1.0,
             theme: Theme::Light,
         };
-        let mut readings = BTreeMap::new();
+        let mut record = Record::default();
         let mut out = Vec::with_capacity(steps.len());
         let result = (|| -> Result<(), Value> {
             for step in steps {
@@ -921,16 +1034,19 @@ impl Renderer {
                 if let Some(v) = step.view {
                     view = v;
                 }
-                if let Some(r) = step.readings {
-                    readings = r;
+                if let Some(r) = step.record {
+                    record = r;
                 }
                 for f in 0..i64::from(step.frames) {
                     let t = step.t + f * STEP_VSYNC;
                     // A new revision, view or reading arms the step's first frame; after it the
                     // frame clock does.
-                    let armed = f == 0 || session.valid_until.is_some_and(|v| v <= t);
+                    record.pinned = t;
+                    let armed = f == 0
+                        || session.valid_until.is_some_and(|v| v <= t)
+                        || session.stale_at.is_some_and(|s| s <= t);
                     if armed {
-                        self.present(&mut session, &doc, look, view, &readings, t, false, f > 0)?;
+                        self.present(&mut session, &doc, look, view, &record, t, false, f > 0)?;
                     }
                 }
                 let dirty: Vec<Value> = std::mem::take(&mut session.stamped)
@@ -956,22 +1072,15 @@ impl Renderer {
         look: &Look,
         view: View,
         t: i64,
+        mut record: Record,
         gpui_oklab: bool,
         store: Option<PathBuf>,
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
+        record.pinned = t;
         let result = compile(&mut session, doc).and_then(|()| {
-            self.present(
-                &mut session,
-                doc,
-                look,
-                view,
-                &BTreeMap::new(),
-                t,
-                gpui_oklab,
-                false,
-            )
+            self.present(&mut session, doc, look, view, &record, t, gpui_oklab, false)
         });
         let answer = match result {
             Err(refusal) => refusal,
@@ -979,9 +1088,10 @@ impl Renderer {
                 let main = session.main.as_ref().map(|m| m.handle);
                 match main.map(|h| self.cx.capture_screenshot(h)) {
                     Some(Ok(image)) => match image.save(out) {
-                        Ok(()) => {
-                            json!({"ok": true, "width": image.width(), "height": image.height()})
-                        }
+                        Ok(()) => json!({
+                            "ok": true, "width": image.width(), "height": image.height(),
+                            "marks": session.snapshot["marks"], "legend": session.snapshot["legend"],
+                        }),
                         Err(_) => refused("not_written", out),
                     },
                     _ => refused("no_capture", ""),
@@ -996,4 +1106,236 @@ impl Renderer {
 /// A filled quad: GPUI's `fill`, named apart from the paint's fill.
 fn fill_quad(bounds: Bounds<Pixels>, background: impl Into<Background>) -> PaintQuad {
     gpui_kit::fill(bounds, background)
+}
+
+/// How a `frames` run's clock runs: its rate, its length, the host time of vsync 0, the record
+/// time vsync 0 maps to in a replay, and #392 AC3's planted clock.
+pub struct Clock {
+    hz: i64,
+    vsyncs: u32,
+    start: i64,
+    replay: Option<i64>,
+    arms_only_on_readings: bool,
+}
+
+/// A label in the body face that sizes to its text.
+fn status_label(text: String, (size, weight): (f32, u16)) -> Label {
+    Label {
+        size,
+        weight,
+        ..Label::new(text)
+    }
+}
+
+/// A box in u as pixels of the frame at `zoom`.
+fn px_box(b: [f64; 4], zoom: f64) -> Value {
+    json!(b.map(|v| v * zoom))
+}
+
+/// Appends the status marks, their labels and the legend to `list`, over everything drawn, and
+/// returns the text snapshot of what they show: each mark's state, color, glyph or word and their
+/// boxes, and each legend entry, in pixels of the frame.
+fn status_draws(
+    status: &[StatusMark],
+    occupied: &[[f64; 4]],
+    palette: &scene::Palette,
+    size: [f64; 2],
+    zoom: f64,
+    list: &mut Vec<Placed>,
+) -> Value {
+    let mut marks = Vec::with_capacity(status.len());
+    // The marks draw after the legend, so nothing covers them; their boxes keep the legend clear.
+    let mut taken: Vec<[f64; 4]> = occupied.to_vec();
+    let mut mark_draws: Vec<Placed> = Vec::new();
+    for m in status {
+        let [x, y, w, h] = m.bounds;
+        // The colored core: the item's own box for a fill, a ring of `core` px around it for a
+        // stroke, and for a stroke or a badge a chip at the top right corner carrying the glyph.
+        let mut word = None;
+        let (core, label, chip) = match m.slot {
+            Slot::Fill => {
+                // The glyph and the word inside the mark; the glyph alone where both don't fit.
+                word = Some(m.word);
+                let mut label = status_label(format!("{} {}", m.glyph, m.word), STATUS_LABEL);
+                if f64::from(deep_text_gpui::measure(&label).width) > w - 8.0 {
+                    word = None;
+                    label = status_label(m.glyph.clone(), STATUS_LABEL);
+                }
+                (m.bounds, label, None)
+            }
+            Slot::Stroke | Slot::Badge => {
+                let ring = match m.slot {
+                    Slot::Stroke => [x - m.core, y - m.core, w + 2.0 * m.core, h + 2.0 * m.core],
+                    _ => m.bounds,
+                };
+                let label = status_label(m.glyph.clone(), STATUS_CHIP);
+                let gw = f64::from(deep_text_gpui::measure(&label).width);
+                let ch = CHIP_HEIGHT.max(m.core);
+                let cw = ch.max(gw + 8.0);
+                let chip = [ring[0] + ring[2] - cw / 2.0, ring[1] - ch / 2.0, cw, ch];
+                (ring, label, Some(chip))
+            }
+        };
+        let outline = |list: &mut Vec<Placed>, b: [f64; 4], r: f64| {
+            if let Some((px_w, color)) = m.outline {
+                let o = [
+                    b[0] - px_w,
+                    b[1] - px_w,
+                    b[2] + 2.0 * px_w,
+                    b[3] + 2.0 * px_w,
+                ];
+                list.push((Draw::Quad(ring_quad(o, r + px_w, px_w, color)), None));
+            }
+        };
+        if m.slot == Slot::Stroke {
+            outline(&mut mark_draws, core, m.radius + m.core);
+            mark_draws.push((
+                Draw::Quad(ring_quad(core, m.radius + m.core, m.core, m.color)),
+                None,
+            ));
+        } else if m.slot == Slot::Fill {
+            outline(&mut mark_draws, core, m.radius);
+            mark_draws.push((
+                Draw::Quad(fill_quad(rect(core), hsla(m.color)).corner_radii(px(m.radius as f32))),
+                None,
+            ));
+        }
+        let host = match chip {
+            Some(c) => {
+                outline(&mut mark_draws, c, c[3] / 2.0);
+                mark_draws.push((
+                    Draw::Quad(
+                        fill_quad(rect(c), hsla(m.color)).corner_radii(px((c[3] / 2.0) as f32)),
+                    ),
+                    None,
+                ));
+                c
+            }
+            None => core,
+        };
+        let fits = deep_text_gpui::measure(&label);
+        let (tw, th) = (f64::from(fits.width), f64::from(fits.height));
+        let origin = [
+            (host[0] + (host[2] - tw) / 2.0).round(),
+            (host[1] + (host[3] - th) / 2.0).round(),
+        ];
+        mark_draws.push((
+            Draw::Text {
+                label,
+                origin: point(px(origin[0] as f32), px(origin[1] as f32)),
+                color: hsla(m.ink),
+            },
+            None,
+        ));
+        taken.push(core);
+        taken.extend(chip);
+        marks.push(json!({
+            "item": m.item, "binding": m.binding, "slot": m.slot.name(), "state": m.state,
+            "color": m.color, "bounds": px_box(core, zoom), "chip": chip.map(|c| px_box(c, zoom)),
+            "glyph": m.glyph, "word": word, "label": px_box([origin[0], origin[1], tw, th], zoom),
+        }));
+    }
+    // The legend: every state on screen, in the status map's order.
+    let mut legend = Vec::new();
+    let on_screen: Vec<&StatusMark> = look::STATES
+        .iter()
+        .filter_map(|s| status.iter().find(|m| m.state == *s))
+        .collect();
+    let ink = palette.get("ink").copied().unwrap_or([0, 0, 0]);
+    let labels: Vec<Label> = on_screen
+        .iter()
+        .map(|m| status_label(format!("{} {}", m.glyph, m.word), (12., 400)))
+        .collect();
+    let widest = labels
+        .iter()
+        .map(|l| f64::from(deep_text_gpui::measure(l).width))
+        .fold(0.0, f64::max);
+    // The first corner, top right first, whose box clears every item and status mark; else the
+    // first that clears every status mark; else the top right.
+    let (lw, lh) = (
+        widest + LEGEND_SWATCH + 6.0,
+        LEGEND_ROW * on_screen.len() as f64,
+    );
+    let (right, bottom) = (size[0] - LEGEND_MARGIN - lw, size[1] - LEGEND_MARGIN - lh);
+    let corners = [
+        [right, LEGEND_MARGIN],
+        [right, bottom],
+        [LEGEND_MARGIN, bottom],
+        [LEGEND_MARGIN, LEGEND_MARGIN],
+    ];
+    let clear = |c: &[f64; 2], boxes: &[[f64; 4]]| {
+        !boxes.iter().any(|b| {
+            c[0] < b[0] + b[2] && b[0] < c[0] + lw && c[1] < b[1] + b[3] && b[1] < c[1] + lh
+        })
+    };
+    let marks_only = &taken[occupied.len()..];
+    let [x0, y0] = corners
+        .iter()
+        .find(|c| clear(c, &taken))
+        .or_else(|| corners.iter().find(|c| clear(c, marks_only)))
+        .copied()
+        .unwrap_or(corners[0]);
+    for (k, (m, label)) in on_screen.iter().zip(labels).enumerate() {
+        let top = y0 + LEGEND_ROW * k as f64;
+        let swatch = [
+            x0,
+            top + (LEGEND_ROW - LEGEND_SWATCH) / 2.0,
+            LEGEND_SWATCH,
+            LEGEND_SWATCH,
+        ];
+        list.push((Draw::Quad(fill_quad(rect(swatch), hsla(m.color))), None));
+        let th = f64::from(deep_text_gpui::measure(&label).height);
+        let origin = point(
+            px((x0 + LEGEND_SWATCH + 6.0) as f32),
+            px((top + (LEGEND_ROW - th) / 2.0).round() as f32),
+        );
+        list.push((
+            Draw::Text {
+                label,
+                origin,
+                color: hsla(ink),
+            },
+            None,
+        ));
+        legend.push(json!({
+            "state": m.state, "glyph": m.glyph, "word": m.word, "color": m.color,
+            "swatch": px_box(swatch, zoom),
+        }));
+    }
+    list.extend(mark_draws);
+    json!({"marks": marks, "legend": legend})
+}
+
+/// The box of every mark a frame draws that a legend would cover: rects, circles, images and
+/// texts (their box's width, or their run's, and their run's height), in u.
+fn occupied(frame: &scene::Frame) -> Vec<[f64; 4]> {
+    frame
+        .layers
+        .iter()
+        .flat_map(|l| l.marks.iter())
+        .filter_map(|d| match &d.mark {
+            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => Some(*bounds),
+            Mark::Circle { center, r, .. } => {
+                Some([center[0] - r, center[1] - r, 2.0 * r, 2.0 * r])
+            }
+            Mark::Text { spec, origin, .. } => {
+                let size = deep_text_gpui::measure(&label_of(spec)?);
+                let w = spec.width.unwrap_or(f64::from(size.width));
+                Some([origin[0], origin[1], w, f64::from(size.height)])
+            }
+            Mark::Path { .. } => None,
+        })
+        .collect()
+}
+
+/// A ring `width` px wide inside `b`, in `color`, with outer corner radius `r`.
+fn ring_quad(b: [f64; 4], r: f64, width: f64, color: Rgb) -> PaintQuad {
+    quad(
+        rect(b),
+        px(r as f32),
+        transparent_black(),
+        px(width as f32),
+        hsla(color),
+        BorderStyle::Solid,
+    )
 }

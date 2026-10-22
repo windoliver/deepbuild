@@ -1,0 +1,16 @@
+[package]
+name = "deep-canvas-record"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #394: the record module's salience (canvas primitives: Salience `salience@1`): which items
+# a level shows, ranked by record facts with no model, and the one counted line the rest fold
+# into. Named deep-canvas* so the canvas lint reads it. It draws nothing.
+[[bin]]
+name = "deep-salience"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
