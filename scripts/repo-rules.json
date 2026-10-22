@@ -184,6 +184,14 @@
         }
       }
     },
+    "packages/verdicts/package.json": {
+      "dependencies": {
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #28: the record a verdict is appended to as verdict.made and verdict.stale, as the core; only its types are imported."
+        }
+      }
+    },
     "packages/hub/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
