@@ -295,6 +295,26 @@ const fixtures: Fixture[] = [
 /** Two environments from the draw, each with its own health route, token and warm-up. */
 const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(40, 80) }));
 
+/**
+ * The down step: asked once more, inside the step the driver runs and awaits, when the first asking threw or
+ * rejected, so an environment whose down fails once is still taken down before the case ends; the first failure is
+ * what the case reports.
+ */
+const downStep = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
+  const again = (error: unknown): Promise<never> => {
+    let second: unknown;
+    try { second = fill.down(handle); } catch { return Promise.reject(error); }
+    return second instanceof Promise ? second.then(() => { throw error; }, () => { throw error; }) : Promise.reject(error);
+  };
+  let first: unknown;
+  try { first = fill.down(handle); } catch (error) { return again(error); }
+  return first instanceof Promise ? first.catch(again) : first;
+};
+/** Down for a case refused before its down step, awaited by the driver all the same; what it does or throws is not the finding. */
+const quietDown = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
+  try { const r: unknown = fill.down(handle); return r instanceof Promise ? r.catch(() => undefined) : undefined; } catch { return undefined; }
+};
+
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
   const spec = c.input as unknown as EnvSpec;
   // The lease: a port reserved by binding it once and released for the environment to bind, and a run token drawn
@@ -387,9 +407,8 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
       }
       return there.length === 0 && !listening(lease.port) && !rows.some((row) => carries(row, lease.token));
     };
-    // Down counts as asked only once it returned: a down that threw gets the case's end to ask once more.
-    yield () => fill.down(handle as unknown as Handle);
     downed = true;
+    yield downStep(fill, handle as unknown as Handle);
     // Gone means all of: the pid the handle names and every process that was under it are no process, nothing answers
     // on the leased port any more, and no process carries the run token (a grandchild that left the tree is caught there).
     if (!waitUntil(clear, 150)) {
@@ -401,10 +420,12 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
         : `pid ${pid}, the port and the run token were not all clear within 150 ms of down`;
       throw fail(RULES.down.message, ['process_left'], why);
     }
+  } catch (error) {
+    // A case refused before its down step still has the fill take its environment down, as a step the driver awaits,
+    // so a refusal or a block leaves nothing running that the fill knows how to stop; then the refusal stands.
+    if (up !== null && !downed) { downed = true; yield quietDown(fill, up); }
+    throw error;
   } finally {
-    // A case that ended before its down step still asks the fill to take its environment down, as best it can, so a
-    // refusal or a block leaves nothing running that the fill knows how to stop.
-    if (up !== null && !downed) { try { void Promise.resolve(fill.down(up)).catch(() => undefined); } catch { /* the fill's own failure */ } }
     // The kit stops only processes it started through the reference fill (its fixture server and helper, by pid and
     // start time as their ready marker reported them) that still carry this case's run token; any other pid is left.
     // A process table that can't be read here leaves what remains unknown, and unknown is BLOCKED, whatever the

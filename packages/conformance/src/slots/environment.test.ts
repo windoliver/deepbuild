@@ -282,14 +282,19 @@ describe('the environment kit and the process table', () => {
     const k = kit();
     const [clean] = cleanFills(k) as EnvironmentFill[];
     const asked: Handle[] = [];
-    // A fill whose down throws the first time it is asked and works the second.
+    // A fill whose asynchronous down rejects the first time it is asked and, the second time, stops the server after a pause.
     const flaky: EnvironmentFill = {
       ...clean!,
-      down: (handle) => { asked.push(handle); if (asked.filter((h) => h.id === handle.id).length === 1) throw new Error('down refused'); clean!.down(handle); },
+      down: (async (handle: Handle) => {
+        asked.push(handle);
+        if (asked.filter((h) => h.id === handle.id).length === 1) throw new Error('down refused');
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        clean!.down(handle);
+      }) as unknown as EnvironmentFill['down'],
     };
     const report = await runKit(k, flaky, { parts: ['fixed'] });
     expect(report.cases.map((c) => `${c.outcome}: ${c.message}`)).toEqual(['FAIL: the fill threw: Error: down refused', 'FAIL: the fill threw: Error: down refused']);
-    // Each environment was asked twice, and the second time it went down: nothing of them is left.
+    // Each environment was asked twice, and the second asking was waited for: by now nothing of them is left.
     expect(asked.map((h) => h.id)).toEqual([asked[0]!.id, asked[0]!.id, asked[2]!.id, asked[2]!.id]);
     const left = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/server.mjs') && asked.some((h) => l.includes(` ${h.port} `)));
     expect(left).toEqual([]);
