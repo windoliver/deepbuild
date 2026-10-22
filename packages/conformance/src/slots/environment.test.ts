@@ -212,6 +212,31 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('refuses an environment whose tagged sibling has a child without the run token', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const siblings: ChildProcess[] = [];
+    // A tagged sibling, listening on nothing, whose own child carries no token.
+    const withQuietGrandchild: EnvironmentFill = {
+      ...clean!,
+      up: (spec, lease) => {
+        const sibling = spawn(process.execPath, ['-e', 'const c = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 20_000)"], { stdio: "ignore" }); process.on("SIGTERM", () => { c.kill("SIGKILL"); process.exit(0); }); setTimeout(() => {}, 20_000);', lease.token], { stdio: 'ignore' });
+        siblings.push(sibling);
+        const until = Date.now() + 3000;
+        // Wait for the child to appear in the table, so the kit's first reading sees it.
+        while (Date.now() < until && !execFileSync('ps', ['-Awwo', 'ppid=,command='], { encoding: 'utf8' }).split('\n').some((l) => l.trim().startsWith(`${sibling.pid} `))) { /* spin */ }
+        return clean!.up(spec, lease);
+      },
+      down: (handle) => { clean!.down(handle); for (const s of siblings) s.kill('SIGTERM'); },
+    };
+    try {
+      const report = await runKit(k, withQuietGrandchild, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'untagged_process'], ['FAIL', 'untagged_process']]);
+    } finally {
+      for (const s of siblings) s.kill('SIGTERM');
+    }
+  });
+
   it('refuses an environment that binds the leased port on every interface rather than 127.0.0.1', async () => {
     const k = kit();
     const script = `

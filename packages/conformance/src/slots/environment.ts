@@ -382,9 +382,13 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // what this kit can see: the fill runs in the kit's own process, which other kits and concurrent cases share, so
     // every child of that process is no boundary. Holding a run to a boundary is the hub's (a process group per run,
     // the design's words), where the fill's processes are its alone.
+    // Closed to a fixed point: a sibling that joins by its token has its own tree walked in the next pass.
     const grow = (rows: Row[]): void => {
-      for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); }
-      for (const row of rows) if (carries(row, lease.token) && !members.has(row.pid)) join(row.pid);
+      for (let size = -1; size !== members.size;) {
+        size = members.size;
+        for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); }
+        for (const row of rows) if (carries(row, lease.token) && !members.has(row.pid)) join(row.pid);
+      }
     };
     join(pid);
     if (!members.has(pid)) throw START_UNKNOWN(pid);
