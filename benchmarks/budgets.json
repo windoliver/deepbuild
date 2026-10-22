@@ -148,6 +148,17 @@
       "initialReason": "Issue #14 first measurement: the merge base has no record package. One process appends a 100,000-event log, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the replay's own limits (60 s per million events, 100 MB of working memory) stay in tests/acceptance/14/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "verdict-1000-runs",
+      "command": [
+        "node",
+        "benchmarks/verdicts.mjs",
+        "verdict-1000-runs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #28 first measurement: the merge base has no verdict engine. One process builds the claim that AC22 times, 20 checks with 1,000 runs among them (carried runs and two flaky checks), and computes its verdict 200 times and checks each is INCONCLUSIVE, so p50 includes Node's start and the 10 ms per-verdict limit stays in tests/acceptance/28/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "record-learn-apply-rollback-1k",
       "command": [
         "node",
@@ -212,6 +223,28 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #42 first measurement: the merge base has no OTLP receiver. One process starts the receiver on a temp record and sends it 20,000 Claude Code spans as 100 protobuf trace exports of 200, the AC6 load without its pacing, so p50 includes Node's start and the sustained limits (2,000 spans a second under 5% of a core and 50 MB) stay in tests/acceptance/42/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-patch-apply",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "patch-apply"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #96 first measurement: the merge base has no shared documents. One process plays 200 of an agent's patches on a 1,000-item board through `deep-show run` and reads the result, so p50 includes Node's and the binary's start; the issue's 2 ms a patch stays in tests/acceptance/96/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-merge-10k",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "merge-10k"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #96 first measurement: the merge base has no merge by ID. One process merges two writers' 10,000-item revisions of one base through `deep-canvas merge`, reading and writing its JSON line, so p50 includes Node's and the binary's start; the issue's 200 ms a merge stays in tests/acceptance/96/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

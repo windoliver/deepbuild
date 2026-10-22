@@ -1,0 +1,133 @@
+{
+  "format": 1,
+  "id": "parity-adjust",
+  "profile": "board",
+  "title": "Adjust",
+  "description": "A status mark beside four swatches in the clean look, each with one of the new adjust channels: contrast, gamma, invert and exposure.",
+  "size": [
+    480,
+    160
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "gate": {
+      "id": "gate",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Status of the release",
+      "order": "a00",
+      "params": {
+        "box": [
+          16,
+          16,
+          96,
+          24
+        ]
+      }
+    },
+    "ink-contrast": {
+      "id": "ink-contrast",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Ink with contrast",
+      "order": "a01",
+      "params": {
+        "box": [
+          16,
+          64,
+          96,
+          64
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "adjust": {
+        "contrast": 1.5
+      }
+    },
+    "muted-gamma": {
+      "id": "muted-gamma",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Muted with gamma",
+      "order": "a02",
+      "params": {
+        "box": [
+          128,
+          64,
+          96,
+          64
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "adjust": {
+        "gamma": 2
+      }
+    },
+    "ink-invert": {
+      "id": "ink-invert",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Ink inverted",
+      "order": "a03",
+      "params": {
+        "box": [
+          240,
+          64,
+          96,
+          64
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "adjust": {
+        "invert": true
+      }
+    },
+    "muted-exposed": {
+      "id": "muted-exposed",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Muted exposed",
+      "order": "a04",
+      "params": {
+        "box": [
+          352,
+          64,
+          96,
+          64
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "adjust": {
+        "exposure": 1
+      }
+    }
+  },
+  "status_bindings": {
+    "gate-state": {
+      "target": "items/gate/params/paint/fill",
+      "source": "verdict:01JB3730000000000000000001"
+    }
+  }
+}

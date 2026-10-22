@@ -1,0 +1,12 @@
+{
+  "title": "Write, then read back",
+  "description": "An agent writes a box, then moves it; the move's layer file can't be written at its commit, so the move is lost. The agent reads the document back.",
+  "write": [
+    { "op": "create", "item": { "id": "alpha.box", "kind": "rect@1", "name": "Box", "order": "a0", "params": { "box": [0, 0, 80, 40], "paint": { "fill": { "role": "ink" } } }, "at": { "pos": [400, 40, 0] } } }
+  ],
+  "lost": [
+    { "op": "set", "id": "alpha.box", "path": "items/alpha.box/at/pos", "value": [400, 260, 0] }
+  ],
+  "kept_pos": [400, 40, 0],
+  "lost_pos": [400, 260, 0]
+}

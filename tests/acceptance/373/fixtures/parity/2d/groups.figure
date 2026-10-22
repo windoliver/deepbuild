@@ -1,0 +1,114 @@
+{
+  "format": 1,
+  "id": "parity-groups",
+  "profile": "figure",
+  "title": "Frame and group",
+  "description": "A frame whose rect mask clips a child that overflows it, and a group at half opacity over two overlapping rects, drawn through one offscreen pass.",
+  "size": [
+    400,
+    200
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "card": {
+      "id": "card",
+      "kind": "frame@1",
+      "layer": "main",
+      "name": "Card",
+      "order": "a00",
+      "params": {
+        "box": [
+          20,
+          20,
+          160,
+          120
+        ],
+        "overflow": "mask",
+        "paint": {
+          "fill": {
+            "role": "frame.bg"
+          }
+        }
+      }
+    },
+    "card-bar": {
+      "id": "card-bar",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Overflowing bar",
+      "order": "a01",
+      "params": {
+        "box": [
+          100,
+          60,
+          160,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "parent": "card"
+    },
+    "veil": {
+      "id": "veil",
+      "kind": "group@1",
+      "layer": "main",
+      "name": "Half-opacity group",
+      "order": "a02",
+      "params": {
+        "opacity": 0.5
+      }
+    },
+    "veil-a": {
+      "id": "veil-a",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Upper rect",
+      "order": "a03",
+      "params": {
+        "box": [
+          220,
+          40,
+          100,
+          60
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "parent": "veil"
+    },
+    "veil-b": {
+      "id": "veil-b",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Lower rect",
+      "order": "a04",
+      "params": {
+        "box": [
+          260,
+          80,
+          100,
+          60
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "parent": "veil"
+    }
+  }
+}

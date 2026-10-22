@@ -18,13 +18,24 @@
 
 mod apply;
 mod check;
+mod merge;
+mod order;
+mod requires;
+mod rows;
 mod rules;
 mod shape;
+mod transform;
 
 use serde_json::{json, Map, Value};
 
-pub use apply::{apply, ApplyResult};
-pub use check::{check, duration, CheckResult};
+pub use apply::{
+    apply, apply_ops, rollback, store_migrations, touched, writer_layer, ApplyResult, Patched,
+    Refused, Writing,
+};
+pub use check::{check, check_with, duration, recheck, CheckResult};
+pub use merge::{merge, Merged};
+pub use order::key_between;
+pub use requires::{derived_kinds, write_required_kinds};
 pub use rules::STATUS_ROLE;
 pub use shape::{canonical, extends_by_default, Canonical, DocShape};
 
@@ -100,7 +111,8 @@ pub const ID_MAPS: &[&str] = &[
 ];
 
 pub const ITEM_KEYS: &[&str] = &[
-    "id", "kind", "layer", "parent", "name", "role", "params", "at", "visible", "pickable", "order",
+    "id", "kind", "layer", "parent", "name", "role", "params", "at", "adjust", "visible",
+    "pickable", "order",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
@@ -109,7 +121,21 @@ pub const ITEM_OWN_FIELDS: &[&str] = &[
 ];
 
 /// The item fields `unset` may remove (every one with a default).
-pub const ITEM_OPTIONAL_FIELDS: &[&str] = &["parent", "role", "visible", "pickable", "at"];
+pub const ITEM_OPTIONAL_FIELDS: &[&str] =
+    &["parent", "role", "visible", "pickable", "at", "adjust"];
+
+/// An item's color adjustments (Item and kind: adjust), each a channel; `invert` a bool one.
+pub const ADJUST_FIELDS: &[&str] = &[
+    "opacity",
+    "tint",
+    "hue",
+    "saturation",
+    "brightness",
+    "contrast",
+    "exposure",
+    "gamma",
+    "invert",
+];
 
 /// The `at` members that are vectors of three.
 pub const AT_VECTORS: &[&str] = &["pos", "rot", "scale", "pivot"];
@@ -213,6 +239,9 @@ fn fix_for(code: &str) -> String {
         "ref_unresolved" => "Name an ID the document holds, or remove the reference.",
         "cycle" => "Give the item a parent that does not descend from it.",
         "not_your_layer" => "Patch only items in your own layer.",
+        "stale_base" => "Read the current revision and send the patch again on it.",
+        "undo_conflict" => "Leave it: another writer changed what the undo would put back.",
+        "over_quota" => "Send fewer patches a second, or coalesce them.",
         "bad_unit" => "Write the value as a number in the field's unit or as one of its forms.",
         "bad_path" => "Write the path as <section>/<id>[#<sub>]/<field>[/<field>...].",
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
@@ -277,6 +306,193 @@ pub(crate) fn kind_text(item: &Value) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The patch fuzzer's fifth law: after each seeded patch (a create, a set of a param in and out
+    /// of range, a move under another item or under itself, a delete that leaves children
+    /// behind), the incremental re-check gives the full check's issues, by code, IDs and path.
+    #[test]
+    fn the_incremental_recheck_gives_the_full_checks_issues() {
+        let mut doc = base();
+        for i in 0..12 {
+            let parent = if i % 3 == 0 {
+                Value::Null
+            } else {
+                json!(format!("s{}", i / 3 * 3))
+            };
+            doc["items"][format!("s{i}")] = json!({"id": format!("s{i}"), "kind": "test.slab@3",
+                "layer": "main", "name": format!("S{i}"), "order": "a0", "parent": parent,
+                "params": {"width": 2}});
+        }
+        let key = |is: &[Issue]| -> Vec<(String, Vec<String>, String)> {
+            is.iter()
+                .map(|i| (i.code.to_string(), i.ids.clone(), i.path.clone()))
+                .collect()
+        };
+        let mut issues = check(&doc).issues;
+        let mut seed: u64 = 96;
+        let knows = |_: &str| true;
+        for n in 0..300 {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let pick = |k: u64| format!("s{}", (seed >> (17 + k)) % 14);
+            let op = match (seed >> 33) % 5 {
+                0 => {
+                    json!({"op": "set", "id": pick(1), "path": format!("items/{}/params/width", pick(1)), "value": if seed.is_multiple_of(7) { json!(-5) } else { json!(3) }})
+                }
+                1 => json!({"op": "move", "id": pick(1), "parent": pick(5)}),
+                2 => json!({"op": "delete", "id": pick(1)}),
+                3 => json!({"op": "move", "id": pick(1), "parent": null}),
+                _ => {
+                    json!({"op": "create", "item": {"id": pick(1), "kind": "test.slab@3", "name": "New", "order": "a1", "parent": pick(4), "params": {}}})
+                }
+            };
+            let patch = json!({"patch": "01J9Z00000000000000000AC05", "doc": "doc-1", "base": 0, "reason": "law 5", "ops": [op]});
+            let writing = Writing {
+                layer: "main",
+                writer: "agent-a",
+                you: false,
+                base: None,
+                knows: &knows,
+            };
+            let was = doc.clone();
+            let Ok(patched) = apply_ops(&mut doc, &patch, "patch", "doc-1", &writing) else {
+                assert_eq!(
+                    doc.to_string(),
+                    was.to_string(),
+                    "patch {n}: a refused op left a change"
+                );
+                continue;
+            };
+            let changed = patched.changed(&doc);
+            let incremental = recheck(&doc, &issues, &changed).expect("items only");
+            let full = check(&doc).issues;
+            assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
+            // Taken back out, the document is what it was, byte for byte.
+            let mut back = doc.clone();
+            rollback(&mut back, &patched);
+            assert_eq!(
+                back.to_string(),
+                was.to_string(),
+                "patch {n}: the rollback of {op}"
+            );
+            issues = full;
+        }
+        assert!(!issues.is_empty(), "the walk left some issue to compare");
+    }
+
+    /// One op as `agent-a`, applied through `apply_ops`, on `doc`.
+    fn op_on(doc: &Value, op: Value) -> Result<Value, Refused> {
+        let mut out = doc.clone();
+        let patch = json!({"patch": "01J9Z00000000000000000AC96", "doc": "doc-1", "base": 0,
+                           "reason": "ops", "ops": [op]});
+        let knows = |_: &str| true;
+        let writing = Writing {
+            layer: "main",
+            writer: "agent-a",
+            you: false,
+            base: None,
+            knows: &knows,
+        };
+        apply_ops(&mut out, &patch, "patch", "doc-1", &writing).map(|_| out)
+    }
+
+    #[test]
+    fn a_move_keeps_the_item_in_place_in_the_world_unless_told_local() {
+        let mut doc = base();
+        doc["items"] = json!({
+            "a": {"id": "a", "kind": "test.slab@3", "layer": "main", "name": "A", "order": "a0", "params": {}, "at": {"pos": [40, 40, 0]}},
+            "b": {"id": "b", "kind": "test.slab@3", "layer": "main", "name": "B", "order": "a1", "params": {}, "at": {"pos": [40, 200, 0]}},
+            "c": {"id": "c", "kind": "test.slab@3", "layer": "main", "name": "C", "order": "a2", "params": {}, "parent": "a", "at": {"pos": [10, 0, 0]}},
+        });
+        let world = op_on(&doc, json!({"op": "move", "id": "c", "parent": "b"})).unwrap();
+        // c sat at (50, 40) in the world; under b, at (40, 200), that is (10, -160).
+        assert_eq!(world["items"]["c"]["at"]["pos"], json!([10.0, -160.0, 0.0]));
+        assert_eq!(world["items"]["c"]["parent"], json!("b"));
+        let local = op_on(
+            &doc,
+            json!({"op": "move", "id": "c", "parent": "b", "keep": "local"}),
+        )
+        .unwrap();
+        assert_eq!(local["items"]["c"]["at"]["pos"], json!([10, 0, 0]));
+        let root = op_on(&doc, json!({"op": "move", "id": "c", "parent": null})).unwrap();
+        assert_eq!(root["items"]["c"]["at"]["pos"], json!([50.0, 40.0, 0.0]));
+    }
+
+    #[test]
+    fn rows_ops_edit_a_mark_set_by_key_and_a_view_of_the_record_is_never_patched() {
+        let mut doc = base();
+        doc["items"]["set"] = json!({"id": "set", "kind": "marks@1", "layer": "main", "name": "S", "order": "a0",
+            "params": {"mark": "point", "n": 1, "key": "k", "columns": {
+                "k": {"dtype": "str", "len": 1, "data": ["a"]},
+                "v": {"dtype": "u8", "len": 1, "data": "Bw=="}}}});
+        let out = op_on(
+            &doc,
+            json!({"op": "rows", "id": "set", "append": [{"k": "b", "v": 9}]}),
+        )
+        .unwrap();
+        assert_eq!(out["items"]["set"]["params"]["n"], json!(2));
+        assert_eq!(
+            out["items"]["set"]["params"]["columns"]["v"]["data"],
+            json!("Bwk=")
+        );
+        let refused = op_on(&doc, json!({"op": "rows", "id": "set", "remove": ["z"]})).unwrap_err();
+        assert_eq!(refused.code, "ref_unresolved");
+        let mut view = doc.clone();
+        view["source"] = json!({"projections": ["tasks"]});
+        let refused =
+            op_on(&view, json!({"op": "rows", "id": "set", "remove": ["a"]})).unwrap_err();
+        assert_eq!(
+            (refused.code, refused.path.as_str()),
+            ("record_view", "source")
+        );
+    }
+
+    #[test]
+    fn a_coalesce_key_is_a_string_and_no_other_patch_field_is_read() {
+        let mut out = base();
+        let knows = |_: &str| true;
+        let writing = Writing {
+            layer: "main",
+            writer: "agent-a",
+            you: false,
+            base: None,
+            knows: &knows,
+        };
+        let patch = |extra: Value| {
+            let mut p = json!({"patch": "01J9Z00000000000000000AC96", "doc": "doc-1", "base": 0, "reason": "r", "ops": []});
+            for (k, v) in extra.as_object().unwrap() {
+                p[k] = v.clone();
+            }
+            p
+        };
+        assert!(apply_ops(
+            &mut out,
+            &patch(json!({"coalesce_key": "drag"})),
+            "patch",
+            "doc-1",
+            &writing
+        )
+        .is_ok());
+        let bad = apply_ops(
+            &mut out,
+            &patch(json!({"coalesce_key": 3})),
+            "patch",
+            "doc-1",
+            &writing,
+        )
+        .unwrap_err();
+        assert_eq!(bad.code, "out_of_range");
+        let unknown = apply_ops(
+            &mut out,
+            &patch(json!({"dry_run": true})),
+            "patch",
+            "doc-1",
+            &writing,
+        )
+        .unwrap_err();
+        assert_eq!(unknown.code, "unknown_field");
+    }
 
     /// The smallest document the check passes: every required envelope field, one layer, no item.
     fn base() -> Value {
@@ -448,8 +664,16 @@ mod tests {
             ("out_of_range", "ops/0/cascade".to_string())
         );
         assert_eq!(
-            refused_at(json!({"op": "move", "id": "a"})),
+            refused_at(json!({"op": "break_out", "id": "a"})),
             ("unknown_field", "ops/0/op".to_string())
+        );
+        assert_eq!(
+            refused_at(json!({"op": "move", "id": "a"})),
+            ("out_of_range", "ops/0/parent".to_string())
+        );
+        assert_eq!(
+            refused_at(json!({"op": "reorder", "id": "a"})),
+            ("out_of_range", "ops/0/after".to_string())
         );
         assert_eq!(refused_at(json!(7)), ("out_of_range", "ops/0".to_string()));
         let out = apply(

@@ -1,0 +1,486 @@
+Base commit: 5592207bced5eac35ec51f1bfcaacd02bef42d1b
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/373 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: deep-canvas-render builds there, but has no raster or geometry subcommand (it exits 2 with its usage line); the two tests that reach the check first fail on the base check's unknown_field for an item's adjust.
+Date: 2026-10-22T05:24:16Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/373
+
+ ❯ parity.test.ts (11 tests | 11 failed) 19107ms
+   ❯ AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code (11)
+     × AC4 stroke-gradient.figure: bit-identical rasters in two processes and twice in one; its twin fails with status_color_unbound, naming stroke-ramp 4390ms
+     × AC4 star.figure: bit-identical rasters in two processes and twice in one; its twin fails with out_of_range, naming burst 145ms
+     × AC4 arcs.figure: bit-identical rasters in two processes and twice in one; its twin fails with status_color_unbound, naming sector 130ms
+     × AC4 adjust.board: bit-identical rasters in two processes and twice in one; its twin fails with status_distance, naming muted-exposed 126ms
+     × AC4 masks.board: bit-identical rasters in two processes and twice in one; its twin fails with mask_depth, naming m5 123ms
+     × AC4 marks.figure: bit-identical rasters in two processes and twice in one; its twin fails with key_not_unique, naming set-rect 127ms
+     × AC4 groups.figure: bit-identical rasters in two processes and twice in one; its twin fails with cycle, naming veil 140ms
+     × AC4 marks.figure: every mark type a mark set holds draws its rows where they are, in its role 11ms
+     × AC4 marks.figure: a rect mark set's rows draw the same pixels as the same rects as rect@1 items (a reftest) 15ms
+     × AC4 groups.figure: a frame masks its overflow, and a group at half opacity draws its overlapping children as one 16ms
+     × a raster or geometry line that is not JSON, lacks its document or item, or names an unknown planted value is bad_input with no panic 11ms
+ ❯ mask.test.ts (5 tests | 5 failed) 7023ms
+   ❯ AC6 masks: luminance in linear light, rect masks as scissors, four deep at most, and never over status (5)
+     × AC6 a luminance mask of sRGB 0.5 gray covers 0.214 within 1/255 1188ms
+     × AC6 a planted mask that reads encoded luma covers 0.5 and fails 12ms
+     × AC6 a rect mask is a scissor with no offscreen pass 14ms
+     × AC6 a fifth nested mask is refused naming the item; four nested masks clip to their intersection 166ms
+     × AC6 a mask over a status mark leaves its pixels exact 12ms
+ ❯ adjust.test.ts (3 tests | 3 failed) 6737ms
+   ❯ AC3 the adjust channels: identity changes nothing, exposure is linear light, and the status distance holds (3)
+     × AC3 adjust with contrast 1, exposure 0, gamma 1 and invert false changes no pixel 1176ms
+     × AC3 exposure 1 doubles linear light within one code value 13ms
+     × AC3 wherever status can show, an adjust that brings a role the item uses within the status distance is refused naming the role 257ms
+ ❯ stroke.test.ts (3 tests | 3 failed) 6432ms
+   ❯ AC1 a gradient stroke matches its OKLab ramp, a focal radial gradient matches SVG's two-point form, and a stroke naming a status role is refused (3)
+     × AC1 a gradient stroke's color at 32 sampled arc lengths matches its OKLab ramp within one code value 1193ms
+     × AC1 a focal radial gradient matches the two-point form SVG defines 16ms
+     × AC1 a stroke naming a status role is refused, naming the item; the same stroke over data roles passes 271ms
+ ❯ star.test.ts (4 tests | 4 failed) 5941ms
+   ❯ AC2 star@1: stars and regular polygons as closed paths, a fractional count, and the 200-vertex limit (4)
+     × AC2 star@1 with 5 points is a closed path of 10 vertices matching its closed form within 0.01 u 1129ms
+     × AC2 a polygon with 6 points is a regular hexagon 11ms
+     × AC2 a star of 5.5 points closes on a half spike 10ms
+     × AC2 a star past 200 vertices is refused, naming the item; one of exactly 200 is drawn 151ms
+ ❯ arc.test.ts (4 tests | 4 failed) 6193ms
+   ❯ AC5 a filled arc closes through the centre (a sector) or along inner_r (a ring sector), and an unfilled arc's stroke stays open (4)
+     × AC5 a filled circle@1 with r 100 u and arc {from: 0, to: 90} covers the sample 50 u out along 45°, and its area is 7,854 u² within 0.5% 1203ms
+     × AC5 a twin closed along the chord covers 2,854 u², misses that sample, and fails 13ms
+     × AC5 with inner_r: 50 the sample 25 u out is empty 10ms
+     × AC5 with no fill, no stroked pixel lies within 40 u of the centre 12ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 30 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  adjust.test.ts > AC3 the adjust channels: identity changes nothing, exposure is linear light, and the status distance holds > AC3 adjust with contrast 1, exposure 0, gamma 1 and invert false changes no pixel
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ adjust.test.ts:72:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/30]⎯
+
+ FAIL  adjust.test.ts > AC3 the adjust channels: identity changes nothing, exposure is linear light, and the status distance holds > AC3 exposure 1 doubles linear light within one code value
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ adjust.test.ts:83:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/30]⎯
+
+ FAIL  adjust.test.ts > AC3 the adjust channels: identity changes nothing, exposure is linear light, and the status distance holds > AC3 wherever status can show, an adjust that brings a role the item uses within the status distance is refused naming the role
+AssertionError: the fixture, whose adjusts keep their roles apart from status, passes: expected [ 'unknown_field ink-contrast', …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "unknown_field ink-contrast",
++   "unknown_field ink-invert",
++   "unknown_field muted-exposed",
++   "unknown_field muted-gamma",
++ ]
+
+ ❯ adjust.test.ts:107:144
+    105|     const doc = fixture('adjust.board');
+    106|     const fine = check(doc, 'clean');
+    107|     expect(errorsOf(fine).map((e) => `${e.code} ${e.ids.join(',')}`), …
+       |                                                                                                                                                ^
+    108|     raster(dir, doc, 'clean', 'adjust.board');
+    109|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/30]⎯
+
+ FAIL  arc.test.ts > AC5 a filled arc closes through the centre (a sector) or along inner_r (a ring sector), and an unfilled arc's stroke stays open > AC5 a filled circle@1 with r 100 u and arc {from: 0, to: 90} covers the sample 50 u out along 45°, and its area is 7,854 u² within 0.5%
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ arc.test.ts:50:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/30]⎯
+
+ FAIL  arc.test.ts > AC5 a filled arc closes through the centre (a sector) or along inner_r (a ring sector), and an unfilled arc's stroke stays open > AC5 a twin closed along the chord covers 2,854 u², misses that sample, and fails
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ arc.test.ts:56:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/30]⎯
+
+ FAIL  arc.test.ts > AC5 a filled arc closes through the centre (a sector) or along inner_r (a ring sector), and an unfilled arc's stroke stays open > AC5 with inner_r: 50 the sample 25 u out is empty
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ arc.test.ts:67:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/30]⎯
+
+ FAIL  arc.test.ts > AC5 a filled arc closes through the centre (a sector) or along inner_r (a ring sector), and an unfilled arc's stroke stays open > AC5 with no fill, no stroked pixel lies within 40 u of the centre
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ arc.test.ts:76:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/30]⎯
+
+ FAIL  mask.test.ts > AC6 masks: luminance in linear light, rect masks as scissors, four deep at most, and never over status > AC6 a luminance mask of sRGB 0.5 gray covers 0.214 within 1/255
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ mask.test.ts:52:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/30]⎯
+
+ FAIL  mask.test.ts > AC6 masks: luminance in linear light, rect masks as scissors, four deep at most, and never over status > AC6 a planted mask that reads encoded luma covers 0.5 and fails
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ mask.test.ts:59:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/30]⎯
+
+ FAIL  mask.test.ts > AC6 masks: luminance in linear light, rect masks as scissors, four deep at most, and never over status > AC6 a rect mask is a scissor with no offscreen pass
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ mask.test.ts:66:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/30]⎯
+
+ FAIL  mask.test.ts > AC6 masks: luminance in linear light, rect masks as scissors, four deep at most, and never over status > AC6 a fifth nested mask is refused naming the item; four nested masks clip to their intersection
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ mask.test.ts:82:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/30]⎯
+
+ FAIL  mask.test.ts > AC6 masks: luminance in linear light, rect masks as scissors, four deep at most, and never over status > AC6 a mask over a status mark leaves its pixels exact
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ mask.test.ts:101:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/30]⎯
+
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 stroke-gradient.figure: bit-identical rasters in two processes and twice in one; its twin fails with status_color_unbound, naming stroke-ramp
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 star.figure: bit-identical rasters in two processes and twice in one; its twin fails with out_of_range, naming burst
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 arcs.figure: bit-identical rasters in two processes and twice in one; its twin fails with status_color_unbound, naming sector
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 masks.board: bit-identical rasters in two processes and twice in one; its twin fails with mask_depth, naming m5
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 marks.figure: bit-identical rasters in two processes and twice in one; its twin fails with key_not_unique, naming set-rect
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 groups.figure: bit-identical rasters in two processes and twice in one; its twin fails with cycle, naming veil
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ parity.test.ts:58:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/30]⎯
+
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 adjust.board: bit-identical rasters in two processes and twice in one; its twin fails with status_distance, naming muted-exposed
+AssertionError: adjust.board: the check raises no error: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "unknown_field ink-contrast items/ink-contrast/adjust",
++   "unknown_field ink-invert items/ink-invert/adjust",
++   "unknown_field muted-exposed items/muted-exposed/adjust",
++   "unknown_field muted-gamma items/muted-gamma/adjust",
++ ]
+
+ ❯ expectClean helpers.ts:206:109
+    204|   const result = check(doc, look);
+    205|   const errors = errorsOf(result);
+    206|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    207|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    208| }
+ ❯ parity.test.ts:57:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/30]⎯
+
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 marks.figure: every mark type a mark set holds draws its rows where they are, in its role
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ parity.test.ts:76:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/30]⎯
+
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 marks.figure: a rect mark set's rows draw the same pixels as the same rects as rect@1 items (a reftest)
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ parity.test.ts:120:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/30]⎯
+
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > AC4 groups.figure: a frame masks its overflow, and a group at half opacity draws its overlapping children as one
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ parity.test.ts:127:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/30]⎯
+
+ FAIL  parity.test.ts > AC4 the 2D marks this task ships render bit-identical Vello CPU rasters, and each parity fixture has a planted-fault twin that fails with its exact issue code > a raster or geometry line that is not JSON, lacks its document or item, or names an unknown planted value is bad_input with no panic
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ parity.test.ts:140:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/30]⎯
+
+ FAIL  star.test.ts > AC2 star@1: stars and regular polygons as closed paths, a fractional count, and the 200-vertex limit > AC2 star@1 with 5 points is a closed path of 10 vertices matching its closed form within 0.01 u
+Error: deep-canvas-render geometry exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ one helpers.ts:105:14
+ ❯ geometry helpers.ts:263:15
+ ❯ star.test.ts:53:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/30]⎯
+
+ FAIL  star.test.ts > AC2 star@1: stars and regular polygons as closed paths, a fractional count, and the 200-vertex limit > AC2 a polygon with 6 points is a regular hexagon
+Error: deep-canvas-render geometry exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ one helpers.ts:105:14
+ ❯ geometry helpers.ts:263:15
+ ❯ star.test.ts:59:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/30]⎯
+
+ FAIL  star.test.ts > AC2 star@1: stars and regular polygons as closed paths, a fractional count, and the 200-vertex limit > AC2 a star of 5.5 points closes on a half spike
+Error: deep-canvas-render geometry exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ one helpers.ts:105:14
+ ❯ geometry helpers.ts:263:15
+ ❯ star.test.ts:73:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/30]⎯
+
+ FAIL  star.test.ts > AC2 star@1: stars and regular polygons as closed paths, a fractional count, and the 200-vertex limit > AC2 a star past 200 vertices is refused, naming the item; one of exactly 200 is drawn
+Error: deep-canvas-render geometry exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ one helpers.ts:105:14
+ ❯ geometry helpers.ts:263:15
+ ❯ star.test.ts:84:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/30]⎯
+
+ FAIL  stroke.test.ts > AC1 a gradient stroke matches its OKLab ramp, a focal radial gradient matches SVG's two-point form, and a stroke naming a status role is refused > AC1 a gradient stroke's color at 32 sampled arc lengths matches its OKLab ramp within one code value
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ stroke.test.ts:74:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/30]⎯
+
+ FAIL  stroke.test.ts > AC1 a gradient stroke matches its OKLab ramp, a focal radial gradient matches SVG's two-point form, and a stroke naming a status role is refused > AC1 a focal radial gradient matches the two-point form SVG defines
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ raster helpers.ts:248:28
+ ❯ stroke.test.ts:92:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/30]⎯
+
+ FAIL  stroke.test.ts > AC1 a gradient stroke matches its OKLab ramp, a focal radial gradient matches SVG's two-point form, and a stroke naming a status role is refused > AC1 a stroke naming a status role is refused, naming the item; the same stroke over data roles passes
+Error: deep-canvas-render raster exited 2:
+deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look
+
+ ❯ batch helpers.ts:98:31
+     96|   const name = `${RENDER_BIN_NAME} ${subcommand}`;
+     97|   if (run.error) throw Error(`${name}: ${run.error.message}`);
+     98|   if (run.status !== 0) throw Error(`${name} exited ${run.status}:\n${…
+       |                               ^
+     99|   const lines = run.stdout.split('\n').filter((line) => line !== '');
+    100|   expect(lines.length, `${name}: one output line per input line`).toBe…
+ ❯ one helpers.ts:105:14
+ ❯ expectRefused helpers.ts:110:15
+ ❯ stroke.test.ts:107:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/30]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  30 failed (30)
+   Start at  22:24:18
+   Duration  52.13s (tests 100%)
+
