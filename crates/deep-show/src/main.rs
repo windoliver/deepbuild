@@ -8,6 +8,7 @@
 
 mod evidence;
 mod hub;
+mod shared;
 mod snapshot;
 
 use std::collections::BTreeMap;
@@ -19,9 +20,10 @@ use deep_canvas::registry::{BuildSet, Fault, Module, Registry, SealError};
 use serde_json::{json, Map, Value};
 
 use hub::{
-    flicks, Call, Card, Claim, Fault as HoldFault, Hold, Include, Panel, Planted, Process,
-    RecordObject, Scenario, Session, Show, Startup, Via,
+    flicks, Body, Call, Card, Claim, Fault as HoldFault, Hold, Include, Panel, PatchCall, Planted,
+    Process, RecordObject, Scenario, Session, Show, Startup, Via,
 };
+use shared::{Clock, CommitFault, Quota};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
@@ -64,23 +66,70 @@ fn strings(value: Option<&Value>) -> Option<Vec<String>> {
     }
 }
 
-fn call(c: &Map<String, Value>) -> Option<Call> {
-    let name = c.get("call")?.as_str()?;
-    let via = match name {
-        "revisions" => return Some(Call::Revisions(c.get("doc")?.as_str()?.to_string())),
-        "screen" => return Some(Call::Screen),
-        "registry" => return Some(Call::Registry),
+/// Who a call names: a `deep_show` call's session, or a `deep show` call's peer process.
+fn via(name: &str, c: &Map<String, Value>) -> Option<Via> {
+    match name {
         "deep_show" => match c.get("session")? {
-            Value::Null => Via::Mcp(None),
-            Value::String(s) => Via::Mcp(Some(s.clone())),
-            _ => return None,
+            Value::Null => Some(Via::Mcp(None)),
+            Value::String(s) => Some(Via::Mcp(Some(s.clone()))),
+            _ => None,
         },
         "deep show" => {
             let peer = c.get("peer")?.as_object()?;
-            Via::Cli(peer.get("pid")?.as_u64()?, peer.get("start")?.as_i64()?)
+            Some(Via::Cli(
+                peer.get("pid")?.as_u64()?,
+                peer.get("start")?.as_i64()?,
+            ))
         }
+        _ => None,
+    }
+}
+
+fn call(c: &Map<String, Value>) -> Option<Call> {
+    let name = c.get("call")?.as_str()?;
+    let doc = || Some(c.get("doc")?.as_str()?.to_string());
+    match name {
+        "revisions" => return Some(Call::Revisions(doc()?)),
+        "screen" => return Some(Call::Screen),
+        "registry" => return Some(Call::Registry),
+        "by_writer" => return Some(Call::ByWriter(doc()?)),
+        "history" => {
+            return Some(Call::History {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
+        "read" => {
+            let as_writer = match (c.get("session"), c.get("peer")) {
+                (None, None) => None,
+                (Some(_), None) => Some(via("deep_show", c)?),
+                (None, Some(_)) => Some(via("deep show", c)?),
+                _ => return None,
+            };
+            return Some(Call::Read {
+                doc: doc()?,
+                via: as_writer,
+            });
+        }
+        _ => {}
+    }
+    let via = via(name, c)?;
+    let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
+        (Some(_), None, None) => None,
+        (None, Some(p), None) => Some(Body::Patch(p.clone())),
+        (None, None, Some(u)) => Some(Body::Undo {
+            patch: u.get("patch")?.as_str()?.to_string(),
+            of: u.get("of")?.as_str()?.to_string(),
+        }),
         _ => return None,
     };
+    if let Some(body) = body {
+        return Some(Call::Patch(Box::new(PatchCall {
+            via,
+            doc: doc()?,
+            body,
+        })));
+    }
     let include = match c.get("include") {
         None => vec![Include::Issues],
         Some(v) => v
@@ -167,6 +216,38 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let docs = entries(input, "docs", |d| {
         Some(d.get("panel")?.as_str()?.to_string())
     })?;
+    let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
+        .into_iter()
+        .filter_map(|(id, seed)| Some((id, seed?)))
+        .collect();
+    let quotas = entries(input, "quotas", |q| {
+        let cap = |k: &str| match q.get(k) {
+            None => Some(None),
+            Some(v) => v.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some),
+        };
+        let known = ["patches_per_s", "items", "msg_bytes", "docs"];
+        if q.keys().any(|k| !known.contains(&k.as_str())) {
+            return None;
+        }
+        Some(Quota {
+            patches_per_s: cap("patches_per_s")?,
+            items: cap("items")?,
+            msg_bytes: cap("msg_bytes")?,
+            docs: cap("docs")?,
+        })
+    })?;
+    let clock = match input.get("clock") {
+        None => None,
+        Some(c) => {
+            let n = |k: &str| c.get(k)?.as_i64().filter(|n| *n >= 0);
+            let refresh_hz = n("refresh_hz").filter(|n| *n > 0)?;
+            Some(Clock {
+                refresh_hz,
+                lead: n("lead")?,
+                check: n("check")?,
+            })
+        }
+    };
     let record = entries(input, "record", |o| {
         Some(RecordObject {
             session: match o.get("session")? {
@@ -213,8 +294,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             rect: rect(c.get("rect"))?,
         }),
     };
+    let commit_fault = match input.get("fault") {
+        Some(f) if f.get("kill_after_layer_file").is_some() => Some(
+            CommitFault::KillAfterLayerFile(f.get("kill_after_layer_file")?.as_str()?.to_string()),
+        ),
+        Some(f) if f.get("layer_file_fails").is_some() => Some(CommitFault::LayerFileFails(
+            f.get("layer_file_fails")?.as_str()?.to_string(),
+        )),
+        _ => None,
+    };
     let fault = match input.get("fault") {
         None => None,
+        Some(_) if commit_fault.is_some() => None,
         Some(f) => Some(HoldFault {
             holds: match f.get("holds")?.as_str()? {
                 "fallback_pipeline" => Hold::FallbackPipeline,
@@ -235,14 +326,26 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
             "reply_without_digest" => Planted::ReplyWithoutDigest,
             "reads_wasm_bytes" => Planted::ReadsWasmBytes,
+            "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
+            "diffs_whole_document" => Planted::DiffsWholeDocument,
+            "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
+            "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
             _ => return None,
         }),
     };
-    let calls = input
-        .get("calls")?
-        .as_array()?
+    let list = input.get("calls")?.as_array()?;
+    let calls = list
         .iter()
         .map(|c| call(c.as_object()?))
+        .collect::<Option<_>>()?;
+    // On the clock every call says when it arrives.
+    let at = list
+        .iter()
+        .map(|c| match (c.get("at"), &clock) {
+            (Some(t), Some(_)) => t.as_i64().filter(|t| *t >= 0),
+            (None, None) => Some(0),
+            _ => None,
+        })
         .collect::<Option<_>>()?;
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
@@ -257,12 +360,21 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         fault,
         planted,
         calls,
+        at,
+        seeds,
+        state: match input.get("state") {
+            None => None,
+            Some(s) => Some(PathBuf::from(s.as_str()?)),
+        },
+        quotas,
+        clock,
+        commit_fault,
     })
 }
 
-/// Runs a scenario's calls in order, one reply each.
+/// Runs a scenario's calls, one reply each, in call order.
 fn run(hub: &mut hub::Hub<'_>) -> Vec<Value> {
-    hub.scenario.calls.iter().map(|c| hub.call(c)).collect()
+    hub.run_calls()
 }
 
 fn answer(command: &str, startup: &Startup, line: &str) -> Value {
@@ -380,6 +492,80 @@ mod tests {
         seal(None).expect("the shipped set seals");
         seal(None).expect("the shipped set seals");
         assert_eq!(hub::SEAL_RUNS.load(Ordering::Relaxed) - before, 2);
+    }
+
+    #[test]
+    fn every_shared_document_reply_is_stamped_on_the_clock_too() {
+        // The clocked check queue builds a patch's reply itself, not through `Hub::call`.
+        // `seal()` is not called here: the seal-count test counts its runs.
+        let startup = Startup {
+            sealed: deep_canvas::registry::core(),
+            seal_ms: 0.0,
+        };
+        let evidence = std::env::temp_dir().join(format!("deep-305-stamp-{}", std::process::id()));
+        let doc = "01JB7D00000000000000000001";
+        let seed = json!({
+            "format": 1, "profile": "board", "title": "Stamps", "size": [640, 360],
+            "description": "A shared board whose every reply must carry the core and the set digest.",
+            "layers": {"alpha-main": {"writer": "agent:t", "title": "Alpha", "order": "a1"}},
+            "items": {},
+        });
+        let patch = |id: &str| {
+            json!({"call": "deep_show", "session": "s", "doc": doc, "patch": {
+                "patch": id, "doc": doc, "base": 0, "reason": "a stamp test",
+                "ops": [{"op": "create", "item": {"id": "~1", "kind": "rect@1", "name": "N",
+                    "order": "a5", "params": {"box": [0, 0, 10, 10]}}}],
+            }})
+        };
+        let scenario = |clock: bool, planted: Option<&str>| {
+            let mut calls = vec![
+                patch("01JB7D0000000000000000P001"),
+                patch("01JB7D0000000000000000P002"),
+                json!({"call": "read", "doc": doc}),
+            ];
+            let mut s = json!({
+                "evidence": evidence.to_string_lossy(),
+                "sessions": {"s": {"thread": "t", "name": "Claude Code: t",
+                    "process": {"pid": 4100, "start": 1000}}},
+                "processes": [{"pid": 1, "ppid": 0, "start": 0}],
+                "panels": {"main": {"rect": [0, 0, 800, 600]}},
+                "docs": {doc: {"panel": "main", "document": seed}},
+            });
+            if clock {
+                for (i, c) in calls.iter_mut().enumerate() {
+                    c["at"] = json!(i * 10);
+                }
+                s["clock"] = json!({"refresh_hz": 60, "lead": 0, "check": 5});
+            }
+            if let Some(twin) = planted {
+                s["planted"] = json!(twin);
+            }
+            s["calls"] = json!(calls);
+            s.to_string()
+        };
+        for (clock, planted) in [
+            (false, None),
+            (true, None),
+            (true, Some("reply_without_digest")),
+        ] {
+            let out = answer("run", &startup, &scenario(clock, planted));
+            let replies = out["replies"].as_array().expect("a run's replies");
+            assert_eq!(replies.len(), 3, "{out}");
+            assert_eq!(replies[0]["outcome"], "applied", "{out}");
+            for r in replies {
+                assert_eq!(
+                    r["core"],
+                    json!(deep_canvas::registry::core_name()),
+                    "clock {clock}: {r}"
+                );
+                let digest = r.get("set_digest");
+                match planted {
+                    None => assert_eq!(digest, Some(&json!(startup.sealed.set_digest)), "{r}"),
+                    Some(_) => assert!(digest.is_none(), "{r}"),
+                }
+            }
+        }
+        let _ = std::fs::remove_dir_all(&evidence);
     }
 
     #[test]

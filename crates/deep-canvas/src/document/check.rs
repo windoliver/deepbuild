@@ -12,7 +12,9 @@ use super::{
 use crate::grammar::{
     forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
 };
-use crate::kinds::{lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Version};
+use crate::kinds::{
+    lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
+};
 use crate::registry::{self, core_name, Range, Sealed};
 
 /// The closed list of item roles.
@@ -66,11 +68,21 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
+    check_by(doc, sealed, &sealed.kinds())
+}
+
+/// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
+/// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
+pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
+    check_by(doc, &registry::core(), kinds)
+}
+
+/// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`.
+fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
     let mut lowered = doc.clone();
-    let kinds = sealed.kinds();
 
     check_envelope(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
@@ -104,7 +116,7 @@ pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
         None => {}
         Some(Value::Object(items)) => {
             for (key, item) in items.iter_mut() {
-                migrate_item(key, item, &kinds, &mut notices);
+                migrate_item(key, item, &mut notices, kinds);
             }
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
@@ -113,7 +125,7 @@ pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
                 required: &required,
                 declared: &declared,
                 sealed,
-                kinds: &kinds,
+                kinds,
             };
             for (key, item) in items.iter_mut() {
                 if check_item(key, item, &ctx, &mut issues, &mut notices) {
@@ -130,8 +142,8 @@ pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
     }
 
     check_id_maps(&lowered, &mut issues);
-    check_targets(&lowered, "channels", false, &kinds, sealed, &mut issues);
-    check_targets(&lowered, "bound_values", true, &kinds, sealed, &mut issues);
+    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
+    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
     super::rules::check(&lowered, &mut issues);
 
     sort_issues(&mut issues);
@@ -146,6 +158,112 @@ pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
         lowered,
         core: core_name(),
         set_digest: sealed.set_digest.clone(),
+    }
+}
+
+/// The issues of `doc`, a patch's result that changed only the items `changed`, re-checked
+/// incrementally from `prev_issues`, the issues of the revision it was applied to (Patch: "re-checked incrementally"; the patch fuzzer's fifth
+/// law: the same issues, by code, IDs and path, as a full check). The items the patch changed are
+/// checked again, with those hanging from them and those whose params name one of them, in a
+/// document of only them and what they read (their ancestors, the items their params name and the
+/// camera); every other item keeps its issues. `None` when a full check is needed: the document
+/// holds entries of other maps keyed by ID, which read items by path. A patch that reached
+/// beyond items (a layer added) takes a full check, which the caller runs.
+pub fn recheck(
+    doc: &Value,
+    prev_issues: &[Issue],
+    changed: &BTreeSet<String>,
+) -> Option<Vec<Issue>> {
+    let after = doc.as_object()?;
+    let maps_empty = ID_MAPS
+        .iter()
+        .all(|m| member(doc, m).and_then(as_object).is_none_or(Map::is_empty));
+    if !maps_empty {
+        return None;
+    }
+    let items = member(doc, "items")?.as_object()?;
+    // The items to check again: those changed, those whose params name one, and below them, in
+    // passes over the items until a pass adds none.
+    let mut affected: BTreeSet<String> = changed.clone();
+    loop {
+        let more: Vec<&String> = items
+            .iter()
+            .filter(|(id, item)| {
+                !affected.contains(*id)
+                    && (member(item, "parent")
+                        .and_then(Value::as_str)
+                        .is_some_and(|p| affected.contains(p))
+                        || member(item, "params").is_some_and(|p| names_any(p, changed)))
+            })
+            .map(|(id, _)| id)
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        affected.extend(more.into_iter().cloned());
+    }
+    // What they read: their ancestors, the items their params name, and the camera.
+    let mut context: BTreeSet<String> = affected.clone();
+    if let Some(camera) = member(doc, "camera").and_then(Value::as_str) {
+        context.insert(camera.to_string());
+    }
+    for id in &affected {
+        let Some(item) = items.get(id) else { continue };
+        if let Some(params) = member(item, "params") {
+            strings_in(params, &mut |s| {
+                if items.contains_key(s) {
+                    context.insert(s.to_string());
+                }
+            });
+        }
+        let mut at = member(item, "parent").and_then(Value::as_str);
+        while let Some(p) = at.filter(|p| context.insert(p.to_string())) {
+            at = items
+                .get(p)
+                .and_then(|i| member(i, "parent"))
+                .and_then(Value::as_str);
+        }
+    }
+    let mut reduced = Map::new();
+    for (k, v) in after {
+        if k != "items" {
+            reduced.insert(k.clone(), v.clone());
+        }
+    }
+    let subset: Map<String, Value> = context
+        .iter()
+        .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
+        .collect();
+    reduced.insert("items".into(), Value::Object(subset));
+    let fresh = check(&Value::Object(reduced)).issues;
+    let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
+    let mut out: Vec<Issue> = prev_issues
+        .iter()
+        .filter(|i| !touches(i))
+        .cloned()
+        .chain(fresh.into_iter().filter(|i| touches(i)))
+        .collect();
+    sort_issues(&mut out);
+    Some(out)
+}
+
+/// Calls `f` with each string `value` holds, at any depth.
+fn strings_in(value: &Value, f: &mut dyn FnMut(&str)) {
+    match value {
+        Value::String(s) => f(s),
+        Value::Array(list) => list.iter().for_each(|v| strings_in(v, f)),
+        Value::Object(map) => map.values().for_each(|v| strings_in(v, f)),
+        _ => {}
+    }
+}
+
+/// Whether `value` holds, at any depth, a string in `ids`.
+fn names_any(value: &Value, ids: &BTreeSet<String>) -> bool {
+    match value {
+        Value::String(s) => ids.contains(s),
+        Value::Array(list) => list.iter().any(|v| names_any(v, ids)),
+        Value::Object(map) => map.values().any(|v| names_any(v, ids)),
+        _ => false,
     }
 }
 
@@ -496,13 +614,13 @@ fn check_layers(doc: &Value, issues: &mut Vec<Issue>) -> BTreeSet<String> {
 pub(super) fn migrate_item(
     key: &str,
     item: &mut Value,
-    kinds: &crate::kinds::Registry,
     notices: &mut Vec<Notice>,
+    registry: &Registry,
 ) {
     let Some(text) = kind_text(item).map(str::to_string) else {
         return;
     };
-    let Lookup::Known { entry, saved } = lookup(kinds, &text) else {
+    let Lookup::Known { entry, saved } = lookup(registry, &text) else {
         return;
     };
     let Some(steps) = entry.steps_from(saved) else {

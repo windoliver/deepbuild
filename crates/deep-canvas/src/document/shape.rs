@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use crate::canon::{canonical_bytes, revision_hash, CanonError, Shape, Width};
 use crate::kinds::{parse_kind, registry, Param, Registry};
 
+use super::requires::derived_kinds;
 use super::{kind_text, member, AT_VECTORS, ID_MAPS};
 
 /// The default values, built with the shape so [`Shape::default_at`] can hand out references.
@@ -65,14 +66,18 @@ pub struct DocShape<'a> {
     doc: &'a Value,
     registry: &'a Registry,
     defaults: Defaults,
+    /// `requires.kinds` as the document's fields need it: written so, it is a default.
+    kinds: Value,
 }
 
 impl<'a> DocShape<'a> {
     pub fn new(doc: &'a Value, registry: &'a Registry) -> Self {
+        let kinds = json!(derived_kinds(doc, registry));
         DocShape {
             doc,
             registry,
             defaults: defaults(),
+            kinds,
         }
     }
 
@@ -130,7 +135,8 @@ impl Shape for DocShape<'_> {
             ["requires"] | ["look"] | ["budget"] | ["assets"] | ["requires", "modules"] => {
                 Some(&d.empty_object)
             }
-            ["requires", "kinds"] | ["requires", "preview"] | ["packs"] => Some(&d.empty_list),
+            ["requires", "kinds"] => Some(&self.kinds),
+            ["requires", "preview"] | ["packs"] => Some(&d.empty_list),
             ["look", "theme"] => Some(&d.auto),
             ["camera"] => Some(&d.null),
             [map] if ID_MAPS.contains(map) => Some(&d.empty_object),

@@ -1,17 +1,33 @@
 //! Patches applied as a writer (canvas primitives: Patch): each patch all or nothing, the full
 //! check after each, and the revision hash of what comes out.
+//!
+//! [`apply_ops`] is one patch's ops on one document as one writer, with what the hub needs to
+//! commit it: the real IDs of its temporary ones, each item it changed as it was before (for its
+//! achieved counts and its undo), and the IDs it touches (for a rebase).
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 use super::check::{check, migrate_item};
+use super::order::key_between;
+use super::requires::write_required_kinds;
 use super::shape::DocShape;
-use super::{as_object, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS};
+use super::{
+    as_object, kind_text, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS,
+};
+use super::{rows, transform};
 use crate::canon::revision_hash;
 use crate::grammar::{HandleId, Id, Path, Section};
+use crate::kinds::{lookup, registry, Lookup};
 
 /// A patch's fields (canvas primitives: Patch). `base` is carried, not checked against a
 /// revision here.
 const PATCH_KEYS: &[&str] = &["patch", "doc", "base", "reason", "ops"];
+/// A patch's optional field the core reads at admission: `coalesce_key`, a string (Admission and
+/// latch: a coalesce key keeps only the latest value).
+const COALESCE_KEY: &str = "coalesce_key";
 
 /// What an apply returns.
 #[derive(Clone, Debug)]
@@ -38,7 +54,105 @@ impl ApplyResult {
 }
 
 /// The issue an op is refused with, boxed so the ok path stays small.
-type Refused = Box<Issue>;
+pub type Refused = Box<Issue>;
+
+/// Who a patch writes as, and what it reads besides the document it changes.
+pub struct Writing<'a> {
+    /// The writer's layer.
+    pub layer: &'a str,
+    /// The writer's text, `kind:id`: it seeds the patch's order keys and minted IDs.
+    pub writer: &'a str,
+    /// A patch from you takes another writer's item into your layer (Writer layer).
+    pub you: bool,
+    /// The revision the patch was made on, when it isn't the document patched: a new order key
+    /// falls between its neighbors there.
+    pub base: Option<&'a Value>,
+    /// Whether this build knows a kind: an item of a kind it doesn't is never targeted.
+    pub knows: &'a dyn Fn(&str) -> bool,
+}
+
+/// One patch applied in place, before any check: what [`rollback`] needs to take it back.
+#[derive(Clone, Debug, Default)]
+pub struct Patched {
+    /// Each temporary ID (`~n`) and the ID it got.
+    pub ids: Map<String, Value>,
+    /// Each item the patch wrote, as it was before (`None`: it created it).
+    pub before: BTreeMap<String, Option<Value>>,
+    /// Each item it removed and where it sat then, in order, so a rollback puts it back there
+    /// and leaves the bytes as they were.
+    pub removed: Vec<(String, usize)>,
+}
+
+impl Patched {
+    /// The IDs whose items changed in `doc`: created, changed, moved, taken or deleted.
+    pub fn changed(&self, doc: &Value) -> BTreeSet<String> {
+        let after = member(doc, "items");
+        self.before
+            .iter()
+            .filter(|(id, was)| was.as_ref() != after.and_then(|i| member(i, id)))
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// `{created: {kind: n}, updated: n, deleted: {kind: n}, unchanged}` (Patch: result).
+    pub fn achieved(&self, doc: &Value) -> Value {
+        let after = member(doc, "items");
+        let mut created: BTreeMap<String, u64> = BTreeMap::new();
+        let mut deleted: BTreeMap<String, u64> = BTreeMap::new();
+        let mut updated = 0u64;
+        for (id, was) in &self.before {
+            let now = after.and_then(|i| member(i, id));
+            match (was, now) {
+                (None, Some(item)) => *created.entry(kind_of(item)).or_default() += 1,
+                (Some(item), None) => *deleted.entry(kind_of(item)).or_default() += 1,
+                (Some(a), Some(b)) if a != b => updated += 1,
+                _ => {}
+            }
+        }
+        let unchanged = created.is_empty() && deleted.is_empty() && updated == 0;
+        json!({"created": created, "updated": updated, "deleted": deleted, "unchanged": unchanged})
+    }
+
+    /// The inverse ops, for the same writer: deletes for what it created, creates for what it
+    /// deleted and the fields it changed set back. A take has no op: undoing the patch that took
+    /// an item hands it back through the hub's undo, which restores items as they were.
+    pub fn undo(&self, doc: &Value) -> Vec<Value> {
+        let after = member(doc, "items");
+        let mut ops = Vec::new();
+        for (id, was) in &self.before {
+            let now = after.and_then(|i| member(i, id));
+            match (was, now) {
+                (None, Some(_)) => ops.push(json!({"op": "delete", "id": id, "cascade": false})),
+                (Some(item), None) => {
+                    let mut item = item.clone();
+                    if let Some(fields) = item.as_object_mut() {
+                        fields.shift_remove("layer");
+                    }
+                    ops.push(json!({"op": "create", "item": item}));
+                }
+                (Some(Value::Object(a)), Some(Value::Object(b))) => {
+                    let fields: BTreeSet<&String> = a.keys().chain(b.keys()).collect();
+                    for f in fields {
+                        if ["id", "kind", "layer"].contains(&f.as_str()) || a.get(f) == b.get(f) {
+                            continue;
+                        }
+                        let path = format!("items/{id}/{f}");
+                        ops.push(match a.get(f) {
+                            Some(v) => json!({"op": "set", "id": id, "path": path, "value": v}),
+                            None => json!({"op": "unset", "id": id, "path": path}),
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        ops
+    }
+}
+
+fn kind_of(item: &Value) -> String {
+    kind_text(item).unwrap_or_default().to_string()
+}
 
 /// The revision hash of `doc`, or the issue of a document with no canonical form (a float
 /// outside its width, two keys that are one key after NFC).
@@ -57,7 +171,8 @@ fn hash_of(doc: &Value) -> Result<String, Refused> {
 
 /// Applies `patches` to `doc` in order as `writer`. A patch with any refused op, or whose
 /// result fails the check, refuses the run with those issues and the input unchanged; so does a
-/// result with no canonical form. `applied` always carries the revision hash of what comes out.
+/// result with no canonical form. `applied` always carries the revision hash of what comes out,
+/// and `requires.kinds` as its fields need it.
 /// The input itself is not checked before the first patch: a history may start from an
 /// envelope whose references its patches go on to create.
 ///
@@ -77,20 +192,23 @@ pub fn apply(doc: &Value, writer: &str, patches: &[Value]) -> ApplyResult {
         Ok(layer) => layer,
         Err(issue) => return refused(vec![*issue]),
     };
+    let reg = registry();
+    let knows = |kind: &str| !matches!(lookup(&reg, kind), Lookup::UnknownKind);
     let doc_id = member(doc, "id")
         .and_then(Value::as_str)
         .unwrap_or_default();
     let mut working = doc.clone();
     for (i, patch) in patches.iter().enumerate() {
-        let ops = match patch_ops(i, patch, doc_id) {
-            Ok(ops) => ops,
-            Err(issue) => return refused(vec![*issue]),
+        let writing = Writing {
+            layer: &layer,
+            writer,
+            you: writer.starts_with("you:"),
+            base: None,
+            knows: &knows,
         };
         let mut next = working.clone();
-        for (j, op) in ops.iter().enumerate() {
-            if let Err(issue) = apply_op(&mut next, &layer, j, op) {
-                return refused(vec![*issue]);
-            }
+        if let Err(issue) = apply_ops(&mut next, patch, &format!("patches/{i}"), doc_id, &writing) {
+            return refused(vec![*issue]);
         }
         let result = check(&next);
         if !result.ok {
@@ -99,6 +217,7 @@ pub fn apply(doc: &Value, writer: &str, patches: &[Value]) -> ApplyResult {
         store_migrations(&mut next, &layer);
         working = next;
     }
+    write_required_kinds(&mut working, &reg);
     match hash_of(&working) {
         Ok(hash) => ApplyResult {
             outcome: "applied",
@@ -110,31 +229,203 @@ pub fn apply(doc: &Value, writer: &str, patches: &[Value]) -> ApplyResult {
     }
 }
 
-/// Stores the migrations of the items in `layer`, the writer's, in place. The check just passed
-/// on the migrated form, so each step is one the build carries; the notices are the check's.
-fn store_migrations(doc: &mut Value, layer: &str) {
+/// Stores the migrations of the items in `layer`, the writer's, in place, and returns each item
+/// it migrated as it was before. The check just passed on the migrated form, so each step is one
+/// the build carries; the notices are the check's.
+pub fn store_migrations(doc: &mut Value, layer: &str) -> Vec<(String, Value)> {
+    let mut out = Vec::new();
+    let Some(Value::Object(items)) = doc.get_mut("items") else {
+        return out;
+    };
+    let mut notices = Vec::new();
+    let registry = registry();
+    for (key, item) in items.iter_mut() {
+        if member(item, "layer").and_then(Value::as_str) != Some(layer) {
+            continue;
+        }
+        let older = kind_text(item).is_some_and(|k| match lookup(&registry, k) {
+            Lookup::Known { entry, saved } => saved < entry.current().major,
+            _ => false,
+        });
+        if older {
+            out.push((key.clone(), item.clone()));
+            migrate_item(key, item, &mut notices, &registry);
+        }
+    }
+    out
+}
+
+/// One patch's ops on `doc`, in place, as `writing` says: all or nothing, before any check, so a
+/// refused op leaves `doc` as it was, byte for byte. `at` prefixes the envelope's paths in an
+/// issue (`patches/0`). Its cost is its ops', never the document's (Admission and latch).
+pub fn apply_ops(
+    doc: &mut Value,
+    patch: &Value,
+    at: &str,
+    doc_id: &str,
+    writing: &Writing<'_>,
+) -> Result<Patched, Refused> {
+    let ops = patch_ops(at, patch, doc_id)?;
+    // A view of the record is rebuilt from projections, never patched (Patch: it can never edit
+    // a view of the record).
+    if let Some(source) = member(doc, "source") {
+        return Err(Box::new(Issue::envelope(
+            "record_view",
+            "source".into(),
+            source.clone(),
+            "a view of the record is rebuilt from the record, never patched",
+        )));
+    }
+    let patch_id = member(patch, "patch")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let ids = mint_ids(doc, ops, writing, patch_id);
+    let mut done = Patched {
+        ids: ids.clone(),
+        ..Patched::default()
+    };
+    for (j, op) in ops.iter().enumerate() {
+        let op = with_ids(op, &ids);
+        let seed = format!("{}|{patch_id}|{j}", writing.writer);
+        if let Err(issue) = apply_op(doc, writing, j, &op, &seed, &mut done) {
+            rollback(doc, &done);
+            return Err(issue);
+        }
+    }
+    Ok(done)
+}
+
+/// Takes a patch applied in place back out of `doc`, leaving it as it was, its items in their
+/// places.
+pub fn rollback(doc: &mut Value, patched: &Patched) {
     let Some(Value::Object(items)) = doc.get_mut("items") else {
         return;
     };
-    let mut notices = Vec::new();
-    // `apply` checks in the core's own build (`check`), so it migrates by the core's own kinds.
-    let kinds = crate::kinds::registry();
-    for (key, item) in items.iter_mut() {
-        if member(item, "layer").and_then(Value::as_str) == Some(layer) {
-            migrate_item(key, item, &kinds, &mut notices);
+    // What it created goes; what it removed comes back where it sat, the last removed first;
+    // what it changed takes its old value in its place.
+    for (id, was) in &patched.before {
+        if was.is_none() {
+            items.shift_remove(id);
+        }
+    }
+    for (id, at) in patched.removed.iter().rev() {
+        if let Some(Some(item)) = patched.before.get(id) {
+            items.shift_remove(id);
+            items.shift_insert((*at).min(items.len()), id.clone(), item.clone());
+        }
+    }
+    for (id, was) in &patched.before {
+        if let Some(item) = was {
+            items.insert(id.clone(), item.clone());
         }
     }
 }
 
-/// The ops of patch `i`, once its envelope holds exactly the patch's fields: `patch` a ULID,
+/// The IDs a patch touches (Patch): those its ops target, plus the parent a create or move
+/// names and the neighbor a reorder names; `targets_only` leaves out the parents and neighbors.
+pub fn touched(patch: &Value, targets_only: bool) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let ops = member(patch, "ops").and_then(Value::as_array);
+    for op in ops.into_iter().flatten() {
+        let item = member(op, "item");
+        let mut take = |v: Option<&Value>| {
+            if let Some(id) = v.and_then(Value::as_str) {
+                out.insert(id.to_string());
+            }
+        };
+        take(member(op, "id"));
+        take(item.and_then(|i| member(i, "id")));
+        if !targets_only {
+            take(item.and_then(|i| member(i, "parent")));
+            if member(op, "op").and_then(Value::as_str) == Some("move") {
+                take(member(op, "parent"));
+            }
+            take(member(op, "after"));
+            take(member(op, "before"));
+        }
+    }
+    out.retain(|id| !id.starts_with('~'));
+    out
+}
+
+/// A real ID for each temporary one a create names (`~n`), from the writer's layer, the writer,
+/// the patch and `n`, so a replay mints the same ID; never one the document holds.
+fn mint_ids(doc: &Value, ops: &[Value], writing: &Writing<'_>, patch: &str) -> Map<String, Value> {
+    let mut out = Map::new();
+    let items = member(doc, "items").and_then(as_object);
+    for op in ops {
+        let Some(temp) = member(op, "item")
+            .and_then(|i| member(i, "id"))
+            .and_then(Value::as_str)
+            .filter(|id| is_temporary(id))
+        else {
+            continue;
+        };
+        let digest = Sha256::digest(format!("{}|{patch}|{temp}", writing.writer).as_bytes());
+        let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+        let mut len = 8;
+        let mut id = format!("{}.t{}", writing.layer, &hex[..len]);
+        while items.is_some_and(|i| i.contains_key(&id)) && len < hex.len() {
+            len += 4;
+            id = format!("{}.t{}", writing.layer, &hex[..len]);
+        }
+        out.insert(temp.to_string(), json!(id));
+    }
+    out
+}
+
+fn is_temporary(id: &str) -> bool {
+    id.strip_prefix('~')
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// `op` with each temporary ID it names replaced by its real one.
+fn with_ids(op: &Value, ids: &Map<String, Value>) -> Value {
+    if ids.is_empty() {
+        return op.clone();
+    }
+    let real = |v: &mut Value| {
+        if let Some(id) = v.as_str().and_then(|t| ids.get(t)) {
+            *v = id.clone();
+        }
+    };
+    let mut op = op.clone();
+    if let Some(fields) = op.as_object_mut() {
+        for key in ["id", "parent", "after", "before"] {
+            if let Some(v) = fields.get_mut(key) {
+                real(v);
+            }
+        }
+        if let Some(Value::String(path)) = fields.get_mut("path") {
+            for (temp, id) in ids {
+                if let (Some(rest), Some(id)) =
+                    (path.strip_prefix(&format!("items/{temp}/")), id.as_str())
+                {
+                    *path = format!("items/{id}/{rest}");
+                    break;
+                }
+            }
+        }
+        if let Some(Value::Object(item)) = fields.get_mut("item") {
+            for key in ["id", "parent"] {
+                if let Some(v) = item.get_mut(key) {
+                    real(v);
+                }
+            }
+        }
+    }
+    op
+}
+
+/// The ops of a patch, once its envelope holds exactly the patch's fields: `patch` a ULID,
 /// `doc` this document's ID, `base` a u64, `reason` a string and `ops` a list. A patch that
 /// can't say which patch it is, or which document it is for, is refused before any op runs.
-fn patch_ops<'a>(i: usize, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Value>, Refused> {
-    let at = |field: &str| format!("patches/{i}/{field}");
+fn patch_ops<'a>(at: &str, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Value>, Refused> {
+    let path = |field: &str| format!("{at}/{field}");
     let refuse = |code: &'static str, field: &str, what: &str| -> Refused {
         Box::new(Issue::envelope(
             code,
-            at(field),
+            path(field),
             member(patch, field).cloned().unwrap_or(Value::Null),
             what,
         ))
@@ -142,16 +433,17 @@ fn patch_ops<'a>(i: usize, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
     let Some(envelope) = as_object(patch) else {
         return Err(Box::new(Issue::envelope(
             "out_of_range",
-            format!("patches/{i}"),
+            at.to_string(),
             patch.clone(),
             "a patch is an object",
         )));
     };
-    if let Some(key) = envelope.keys().find(|k| !PATCH_KEYS.contains(&k.as_str())) {
+    let known = |k: &String| PATCH_KEYS.contains(&k.as_str()) || k == COALESCE_KEY;
+    if let Some(key) = envelope.keys().find(|k| !known(k)) {
         return Err(refuse(
             "unknown_field",
             key,
-            "not a field of a patch (patch, doc, base, reason, ops)",
+            "not a field of a patch (patch, doc, base, reason, ops, coalesce_key)",
         ));
     }
     for field in PATCH_KEYS {
@@ -176,6 +468,9 @@ fn patch_ops<'a>(i: usize, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
     if !envelope["reason"].is_string() {
         return Err(refuse("out_of_range", "reason", "not a string"));
     }
+    if envelope.get(COALESCE_KEY).is_some_and(|k| !k.is_string()) {
+        return Err(refuse("out_of_range", COALESCE_KEY, "not a string"));
+    }
     envelope["ops"]
         .as_array()
         .ok_or_else(|| refuse("out_of_range", "ops", "not a list of ops"))
@@ -184,7 +479,7 @@ fn patch_ops<'a>(i: usize, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
 /// The one layer whose `writer` is `writer`. None is `ref_unresolved`; two would make the
 /// outcome depend on the layers' order, so that is refused too (the check refuses it as well,
 /// but the input is not checked before the first patch).
-fn writer_layer(doc: &Value, writer: &str) -> Result<String, Refused> {
+pub fn writer_layer(doc: &Value, writer: &str) -> Result<String, Refused> {
     let mut found: Vec<&String> = Vec::new();
     if let Some(layers) = member(doc, "layers").and_then(as_object) {
         for (id, layer) in layers {
@@ -211,26 +506,45 @@ fn writer_layer(doc: &Value, writer: &str) -> Result<String, Refused> {
     }
 }
 
-/// The fields each op has, `op` included; `cascade` is the one optional field.
+/// The fields each op has, `op` included; the optional ones are listed in [`OPTIONAL`].
 fn op_fields(name: &str) -> Option<&'static [&'static str]> {
     match name {
         "create" => Some(&["op", "item"]),
         "set" => Some(&["op", "id", "path", "value"]),
         "unset" => Some(&["op", "id", "path"]),
         "delete" => Some(&["op", "id", "cascade"]),
+        "move" => Some(&["op", "id", "parent", "keep"]),
+        "reorder" => Some(&["op", "id", "after", "before"]),
+        "rows" => Some(&["op", "id", "append", "set", "remove"]),
         _ => None,
     }
 }
 
+/// The op fields that may be left out: a delete's `cascade`, a move's `keep`, a reorder's `after`
+/// and `before`, of which it names exactly one, and a rows op's `append`, `set` and `remove`,
+/// likewise one.
+const OPTIONAL: &[&str] = &[
+    "cascade", "keep", "after", "before", "append", "set", "remove",
+];
+
 /// Refuses an op whose fields are not exactly its op's: an unknown field is `unknown_field`,
-/// an absent one `out_of_range`, and `cascade` must be a bool when present.
+/// an absent one `out_of_range`; `cascade` must be a bool, `keep` world or local, and a reorder
+/// names one neighbor.
 fn check_op_fields(j: usize, op: &Map<String, Value>, name: &str) -> Result<(), Refused> {
+    let bad = |field: &str, what: &str| -> Refused {
+        Box::new(Issue::envelope(
+            "out_of_range",
+            format!("ops/{j}/{field}"),
+            op.get(field).cloned().unwrap_or(Value::Null),
+            what,
+        ))
+    };
     let Some(fields) = op_fields(name) else {
         return Err(Box::new(Issue::envelope(
             "unknown_field",
             format!("ops/{j}/op"),
             json!(name),
-            "not an op of this slice (create, set, unset, delete)",
+            "not an op of this slice (create, set, unset, delete, move, reorder, rows)",
         )));
     };
     if let Some(key) = op.keys().find(|k| !fields.contains(&k.as_str())) {
@@ -242,35 +556,42 @@ fn check_op_fields(j: usize, op: &Map<String, Value>, name: &str) -> Result<(), 
         )));
     }
     for field in fields {
-        if *field != "cascade" && !op.contains_key(*field) {
-            return Err(Box::new(Issue::envelope(
-                "out_of_range",
-                format!("ops/{j}/{field}"),
-                Value::Null,
-                "required, and absent",
-            )));
+        if !OPTIONAL.contains(field) && !op.contains_key(*field) {
+            return Err(bad(field, "required, and absent"));
         }
     }
-    if let Some(cascade) = op.get("cascade") {
-        if !cascade.is_boolean() {
-            return Err(Box::new(Issue::envelope(
-                "out_of_range",
-                format!("ops/{j}/cascade"),
-                cascade.clone(),
-                "not a bool",
-            )));
-        }
+    if op.get("cascade").is_some_and(|c| !c.is_boolean()) {
+        return Err(bad("cascade", "not a bool"));
+    }
+    if op
+        .get("keep")
+        .is_some_and(|k| !matches!(k.as_str(), Some("world" | "local")))
+    {
+        return Err(bad("keep", "not world or local"));
+    }
+    if name == "reorder" && op.contains_key("after") == op.contains_key("before") {
+        return Err(bad("after", "a reorder names one of after and before"));
+    }
+    let edits = ["append", "set", "remove"]
+        .iter()
+        .filter(|k| op.contains_key(**k))
+        .count();
+    if name == "rows" && edits != 1 {
+        return Err(bad(
+            "append",
+            "a rows op names one of append, set and remove",
+        ));
     }
     Ok(())
 }
 
-/// The op's `id` field as text.
-fn op_id(j: usize, op: &Value) -> Result<String, Refused> {
-    match member(op, "id") {
+/// The op's ID field `key` as text.
+fn op_text(j: usize, op: &Value, key: &str) -> Result<String, Refused> {
+    match member(op, key) {
         Some(Value::String(id)) => Ok(id.clone()),
         other => Err(Box::new(Issue::envelope(
             "bad_id",
-            format!("ops/{j}/id"),
+            format!("ops/{j}/{key}"),
             other.cloned().unwrap_or(Value::Null),
             "not an ID",
         ))),
@@ -300,11 +621,13 @@ fn items_mut(doc: &mut Value) -> Result<&mut Map<String, Value>, Refused> {
     })
 }
 
-/// The item `id` in the writer's layer, for a set, unset or delete.
-fn own_item<'a>(
+/// The item `id` for a writer to change: one of a kind this build knows, in the writer's layer,
+/// or taken into yours by your patch. Its value before the patch goes into `before`.
+fn writable<'a>(
     items: &'a mut Map<String, Value>,
     id: &str,
-    layer: &str,
+    writing: &Writing<'_>,
+    done: &mut Patched,
 ) -> Result<&'a mut Map<String, Value>, Refused> {
     let Some(item) = items.get_mut(id) else {
         return Err(Box::new(Issue::error(
@@ -315,6 +638,18 @@ fn own_item<'a>(
             "no such item",
         )));
     };
+    if let Some(kind) = kind_text(item).filter(|k| !(writing.knows)(k)) {
+        return Err(Box::new(Issue::error(
+            "unknown_kind",
+            id,
+            format!("items/{id}/kind"),
+            json!(kind),
+            "this build doesn't know the item's kind: it is kept as written, and never patched",
+        )));
+    }
+    done.before
+        .entry(id.to_string())
+        .or_insert_with(|| Some(item.clone()));
     let Some(fields) = item.as_object_mut() else {
         return Err(Box::new(Issue::error(
             "out_of_range",
@@ -324,14 +659,18 @@ fn own_item<'a>(
             "not an object",
         )));
     };
-    if fields.get("layer").and_then(Value::as_str) != Some(layer) {
-        return Err(Box::new(Issue::error(
-            "not_your_layer",
-            id,
-            format!("items/{id}/layer"),
-            fields.get("layer").cloned().unwrap_or(Value::Null),
-            "the item is in another writer's layer",
-        )));
+    if fields.get("layer").and_then(Value::as_str) != Some(writing.layer) {
+        if !writing.you {
+            return Err(Box::new(Issue::error(
+                "not_your_layer",
+                id,
+                format!("items/{id}/layer"),
+                fields.get("layer").cloned().unwrap_or(Value::Null),
+                "the item is in another writer's layer",
+            )));
+        }
+        // Your patch takes the item into your layer with its ID and values.
+        fields.insert("layer".into(), json!(writing.layer));
     }
     Ok(fields)
 }
@@ -398,7 +737,14 @@ fn unresolved(id: &str, op: &Value) -> Refused {
     ))
 }
 
-fn apply_op(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused> {
+fn apply_op(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    seed: &str,
+    done: &mut Patched,
+) -> Result<(), Refused> {
     let Some(fields) = as_object(op) else {
         return Err(Box::new(Issue::envelope(
             "out_of_range",
@@ -417,14 +763,23 @@ fn apply_op(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Re
     };
     check_op_fields(j, fields, name)?;
     match name {
-        "create" => create(doc, layer, j, op),
-        "set" => set(doc, layer, j, op),
-        "unset" => unset(doc, layer, j, op),
-        _ => delete(doc, layer, j, op),
+        "create" => create(doc, writing.layer, j, op, done),
+        "set" => set(doc, writing, j, op, done),
+        "unset" => unset(doc, writing, j, op, done),
+        "move" => move_to(doc, writing, j, op, done),
+        "reorder" => reorder(doc, writing, j, op, seed, done),
+        "rows" => rows_op(doc, writing, j, op, done),
+        _ => delete(doc, writing, j, op, done),
     }
 }
 
-fn create(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused> {
+fn create(
+    doc: &mut Value,
+    layer: &str,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
     let Some(item) = member(op, "item").and_then(as_object) else {
         return Err(Box::new(Issue::envelope(
             "out_of_range",
@@ -461,21 +816,39 @@ fn create(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refu
             "ID already exists",
         )));
     }
+    done.before.entry(id.clone()).or_insert(None);
     let mut stamped = item.clone();
     stamped.insert("layer".into(), json!(layer));
     items.insert(id.clone(), Value::Object(stamped));
     Ok(())
 }
 
-fn set(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused> {
-    let id = op_id(j, op)?;
+fn set(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let id = op_text(j, op, "id")?;
     let fields = op_path(&id, op)?;
     let value = member(op, "value").cloned().unwrap_or(Value::Null);
-    let item = own_item(items_mut(doc)?, &id, layer)?;
+    let item = writable(items_mut(doc)?, &id, writing, done)?;
     let steps: Vec<&str> = fields.iter().map(String::as_str).collect();
     match steps.as_slice() {
-        ["params", name] => {
-            object_at(item, "params").insert((*name).to_string(), value);
+        ["params" | "at"] if value.is_object() => {
+            item.insert(steps[0].to_string(), value);
+        }
+        ["params", path @ ..] if !path.is_empty() => {
+            let (last, parents) = path.split_last().expect("not empty");
+            let mut at = object_at(item, "params");
+            for step in parents {
+                let slot = at
+                    .entry((*step).to_string())
+                    .or_insert_with(|| Value::Object(Map::new()));
+                at = slot.as_object_mut().ok_or_else(|| unresolved(&id, op))?;
+            }
+            at.insert((*last).to_string(), value);
         }
         ["at", name] if AT_VECTORS.contains(name) || *name == "shear" => {
             object_at(item, "at").insert((*name).to_string(), value);
@@ -506,15 +879,26 @@ fn set(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused
     Ok(())
 }
 
-fn unset(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused> {
-    let id = op_id(j, op)?;
+fn unset(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let id = op_text(j, op, "id")?;
     let fields = op_path(&id, op)?;
-    let item = own_item(items_mut(doc)?, &id, layer)?;
+    let item = writable(items_mut(doc)?, &id, writing, done)?;
     let steps: Vec<&str> = fields.iter().map(String::as_str).collect();
     match steps.as_slice() {
-        ["params", name] => {
-            if let Some(Value::Object(params)) = item.get_mut("params") {
-                params.shift_remove(*name);
+        ["params", path @ ..] if !path.is_empty() => {
+            let (last, parents) = path.split_last().expect("not empty");
+            let mut at = item.get_mut("params");
+            for step in parents {
+                at = at.and_then(|v| v.get_mut(*step));
+            }
+            if let Some(Value::Object(map)) = at {
+                map.shift_remove(*last);
             }
         }
         ["at", name] if AT_VECTORS.contains(name) || *name == "shear" => {
@@ -530,13 +914,211 @@ fn unset(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refus
     Ok(())
 }
 
-fn delete(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused> {
-    let id = op_id(j, op)?;
+/// `move {id, parent, keep}`: the item under a new parent (an ID any writer holds, or null for
+/// none), never under itself. No drawing in this build composes a parent's transform, so the
+/// item's `at` is its place in the world either way and `keep` changes nothing yet.
+fn move_to(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let id = op_text(j, op, "id")?;
+    let parent = match member(op, "parent") {
+        Some(Value::Null) => None,
+        _ => Some(op_text(j, op, "parent")?),
+    };
+    let items = items_mut(doc)?;
+    if let Some(p) = &parent {
+        if !items.contains_key(p) {
+            return Err(Box::new(Issue::error(
+                "ref_unresolved",
+                &id,
+                format!("items/{id}/parent"),
+                json!(p),
+                "no such item",
+            )));
+        }
+        // Walk up from the new parent: reaching the item is a cycle.
+        let mut at = Some(p.clone());
+        for _ in 0..=items.len() {
+            let Some(here) = at else { break };
+            if here == id {
+                return Err(Box::new(Issue::error(
+                    "cycle",
+                    &id,
+                    format!("items/{id}/parent"),
+                    json!(p),
+                    "the new parent descends from the item",
+                )));
+            }
+            at = items
+                .get(&here)
+                .and_then(|i| member(i, "parent"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+        }
+    }
+    // `keep: world` (the default) rewrites `at` so the item stays where it is in the world.
+    let world = member(op, "keep").and_then(Value::as_str) != Some("local");
+    let kept = if world {
+        let old_parent = items
+            .get(&id)
+            .and_then(|i| member(i, "parent"))
+            .and_then(Value::as_str);
+        let at = items.get(&id).and_then(|i| member(i, "at"));
+        let place = transform::world(items, old_parent)
+            .and_then(|old| Ok((old, transform::world(items, parent.as_deref())?)))
+            .and_then(|(old, new)| transform::keep_world(at, old, new));
+        match place {
+            Ok(kept) => kept,
+            Err(why) => {
+                return Err(Box::new(Issue::error(
+                    "out_of_range",
+                    &id,
+                    format!("items/{id}/at"),
+                    at.cloned().unwrap_or(Value::Null),
+                    &format!(
+                        "keep: world can't be written in `at` here: {why}; move with keep: local"
+                    ),
+                )))
+            }
+        }
+    } else {
+        None
+    };
+    let item = writable(items, &id, writing, done)?;
+    match parent {
+        Some(p) => item.insert("parent".into(), json!(p)),
+        None => item.shift_remove("parent"),
+    };
+    if let Some(at) = kept {
+        item.insert("at".into(), at);
+    }
+    Ok(())
+}
+
+/// `rows {id, append | set | remove}`: a mark set's rows edited in place, by key.
+fn rows_op(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let id = op_text(j, op, "id")?;
+    let item = writable(items_mut(doc)?, &id, writing, done)?;
+    let empty = Map::new();
+    let params = item
+        .get("params")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
+    let edit = as_object(op).expect("an op is an object");
+    match rows::rows(params, edit) {
+        Ok(params) => {
+            item.insert("params".into(), Value::Object(params));
+            Ok(())
+        }
+        Err((code, path, what)) => {
+            let at = if path.starts_with("params") {
+                format!("items/{id}/{path}")
+            } else {
+                format!("ops/{j}/{path}")
+            };
+            Err(Box::new(Issue::error(code, &id, at, Value::Null, &what)))
+        }
+    }
+}
+
+/// `reorder {id, after | before}`: a key between the named sibling and its neighbor on that side
+/// in the patch's base, with jitter seeded from the writer, the patch and the op.
+fn reorder(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    seed: &str,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let id = op_text(j, op, "id")?;
+    let after = member(op, "after").is_some();
+    let neighbor = op_text(j, op, if after { "after" } else { "before" })?;
+    let parent_of = |items: &Map<String, Value>, k: &str| {
+        items
+            .get(k)
+            .and_then(|i| member(i, "parent"))
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    let items = items_mut(doc)?;
+    let refuse = |code: &'static str, what: &str| -> Refused {
+        Box::new(Issue::error(
+            code,
+            &id,
+            format!("items/{id}/order"),
+            json!(neighbor),
+            what,
+        ))
+    };
+    if !items.contains_key(&neighbor) || neighbor == id {
+        return Err(refuse("ref_unresolved", "no other item has this ID"));
+    }
+    let parent = parent_of(items, &id);
+    // The siblings in the base, where the neighbor is there; else as the patch has them.
+    let base = writing
+        .base
+        .and_then(|b| member(b, "items"))
+        .and_then(as_object)
+        .filter(|b| b.contains_key(&neighbor))
+        .unwrap_or(&*items);
+    if parent_of(base, &neighbor) != parent {
+        return Err(refuse("out_of_range", "the neighbor has another parent"));
+    }
+    let key = |v: &Value| {
+        member(v, "order")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let mut siblings: Vec<(String, &String)> = base
+        .iter()
+        .filter(|(k, v)| **k != id && member(v, "parent").cloned().unwrap_or(Value::Null) == parent)
+        .map(|(k, v)| (key(v), k))
+        .collect();
+    siblings.sort();
+    let at = key(&base[&neighbor]);
+    let (lo, hi) = if after {
+        let hi = siblings.iter().map(|s| &s.0).find(|k| **k > at);
+        (Some(at.as_str()), hi.map(String::as_str))
+    } else {
+        let lo = siblings.iter().map(|s| &s.0).rev().find(|k| **k < at);
+        (lo.map(String::as_str), Some(at.as_str()))
+    };
+    let lo = lo.filter(|k| !k.is_empty());
+    let Some(order) = key_between(lo, hi, seed.as_bytes()) else {
+        return Err(refuse(
+            "out_of_range",
+            "no order key fits between the neighbors",
+        ));
+    };
+    writable(items, &id, writing, done)?.insert("order".into(), json!(order));
+    Ok(())
+}
+
+fn delete(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let id = op_text(j, op, "id")?;
     let cascade = member(op, "cascade")
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let items = items_mut(doc)?;
-    own_item(items, &id, layer)?;
+    writable(items, &id, writing, done)?;
     let mut gone = vec![id.clone()];
     if cascade {
         // Every descendant: repeat until no item's parent is among the gone. A descendant in
@@ -557,7 +1139,7 @@ fn delete(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refu
             }
             for child in &more {
                 let child_layer = items.get(child).and_then(|v| member(v, "layer"));
-                if child_layer.and_then(Value::as_str) != Some(layer) {
+                if child_layer.and_then(Value::as_str) != Some(writing.layer) && !writing.you {
                     return Err(Box::new(Issue::error(
                         "not_your_layer",
                         child,
@@ -568,12 +1150,16 @@ fn delete(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refu
                         ),
                     )));
                 }
+                writable(items, child, writing, done)?;
             }
             gone.extend(more);
         }
     }
     for id in gone {
-        items.shift_remove(&id);
+        if let Some(at) = items.keys().position(|k| *k == id) {
+            items.shift_remove(&id);
+            done.removed.push((id, at));
+        }
     }
     Ok(())
 }

@@ -124,7 +124,7 @@ impl Entry {
 }
 
 /// Every kind this build registers.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Registry {
     entries: Vec<Entry>,
 }
@@ -132,7 +132,35 @@ pub struct Registry {
 impl Registry {
     /// The entry named `family.name`, if any.
     pub fn entry(&self, full_name: &str) -> Option<&Entry> {
-        self.entries.iter().find(|e| e.full_name() == full_name)
+        // `family.name` compared in place: lookups run per item, so nothing is allocated.
+        let named = |e: &&Entry| {
+            if e.family.is_empty() {
+                return e.name == full_name;
+            }
+            full_name
+                .strip_prefix(e.family)
+                .and_then(|rest| rest.strip_prefix('.'))
+                == Some(e.name)
+        };
+        self.entries.iter().find(named)
+    }
+
+    /// This registry as an earlier build had it: each `family.name@major.minor` in `pins` at
+    /// that minor, with only the params its minor has. `None` when a pin names a kind or a major
+    /// this build lacks, or a minor above the build's.
+    pub fn pinned(&self, pins: &[String]) -> Option<Registry> {
+        let mut out = self.clone();
+        for pin in pins {
+            let (name, major, minor) = parse_required(pin)?;
+            let entry = out.entries.iter_mut().find(|e| e.full_name() == name)?;
+            let version = entry.versions.iter_mut().find(|v| v.major == major)?;
+            if minor > version.minor {
+                return None;
+            }
+            version.minor = minor;
+            version.params.retain(|p| p.minor <= minor);
+        }
+        Some(out)
     }
 
     /// Adds the kinds the sealed canvas modules register (Registry and seal).
