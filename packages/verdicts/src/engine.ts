@@ -3,9 +3,14 @@
 import { createHash } from 'node:crypto';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
-  CheckResult, ClaimCheck, ClaimInput, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo, Requirement,
-  RequirementOutcome, Result, Run, SendBack, Verdict, VerdictAsk, VerdictKey,
+  CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo,
+  Prediction, Requirement, RequirementOutcome, Result, Run, SendBack, Verdict, VerdictAsk, VerdictKey,
 } from './types.js';
+
+/** A sha256 as evidence records it: only captured evidence with one supports a PASS. */
+const HEX64 = /^[0-9a-f]{64}$/;
+/** The evidence states, the closed set. */
+const SLOT_STATES: ReadonlySet<string> = new Set(['captured', 'not_requested', 'missing', 'truncated']);
 
 const RANK: Readonly<Record<Result, number>> = { PASS: 0, pending: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 4, FAIL: 5 };
 const DEPTH: Readonly<Record<Depth, number>> = { unit: 0, integration: 1, journey: 2, live: 3 };
@@ -163,6 +168,8 @@ interface Judged {
   short: number;
   /** Every failure is one the merge base shares, whatever rule decides the check. */
   inherits: boolean;
+  /** The tests the merge base fails, when this check can inherit them. */
+  base: Set<string> | null;
   /** What its deciding rows need you to provide: each missing thing you own, when that decides it. */
   unblocks: string[];
 }
@@ -176,23 +183,18 @@ const waived = (claim: ClaimInput, r: Run): boolean =>
   r.outcome === 'failed' && r.failures.length > 0 && r.failures.every((f) => waivedFailure(claim, r.check, f));
 const isFix = (claim: ClaimInput, c: ClaimCheck): boolean =>
   c.covers.some((req) => claim.requirements.find((q) => q.req === req)?.on_base === 'fails');
-/** A failure the merge base also shows: for a check that isn't a fix check, a test that failed there too. */
-const onBase = (claim: ClaimInput, c: ClaimCheck, f: Failure): boolean => baseFailed(claim, c)?.has(f.test) ?? false;
-const bases = new WeakMap<ClaimCheck, { claim: ClaimInput; tests: Set<string> | null }>();
-function baseFailed(claim: ClaimInput, c: ClaimCheck): Set<string> | null {
-  let base = bases.get(c);
-  if (base?.claim !== claim) {
-    base = { claim, tests: !isFix(claim, c) && c.base?.outcome === 'failed' ? new Set(c.base.failed_tests) : null };
-    bases.set(c, base);
-  }
-  return base.tests;
-}
+/** The tests the merge base fails, for a check that isn't a fix check; null when none can be inherited. */
+const baseFailed = (claim: ClaimInput, c: ClaimCheck): Set<string> | null =>
+  !isFix(claim, c) && c.base?.outcome === 'failed' ? new Set(c.base.failed_tests) : null;
+/** A failure the merge base also shows. */
+const onBase = (base: Set<string> | null, f: Failure): boolean => base?.has(f.test) ?? false;
 
 function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
   const id = c.check;
   const runs = sel.counted(c);
   const need = runsNeeded(c);
   const needed = need.ok ? need.needed : 0;
+  const base = baseFailed(claim, c);
   const passes = runs.filter((r) => r.outcome === 'passed' && r.tests_run > 0);
   const rows: Row[] = [];
   const row = (result: Result, reason: string, item = reason, closes = item, unblock?: string): void => {
@@ -237,8 +239,8 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       const overran = fails.some((r) => r.outcome === 'overran') ? [`overran its deadline ${c.deadline ?? '(none stated)'}`] : [];
       if (fails.length && !passes.length) {
         inherited = c.base?.outcome === 'failed' && !isFix(claim, c)
-          && fails.every((r) => r.failures.length > 0 && r.failures.every((f) => onBase(claim, c, f)));
-        const tests = sorted(fails.flatMap((r) => r.failures).filter((f) => inherited || !onBase(claim, c, f)).map((f) => f.test));
+          && fails.every((r) => r.failures.length > 0 && r.failures.every((f) => onBase(base, f)));
+        const tests = sorted(fails.flatMap((r) => r.failures).filter((f) => inherited || !onBase(base, f)).map((f) => f.test));
         const what = [...tests, ...overran].join(', ') || 'failed';
         if (inherited) row('BLOCKED', `inherited: also fails on the merge base: ${what}`, undefined, 'a fix on the default branch for each cause');
         else row('FAIL', `failed on every real run: ${what}`, undefined, 'a commit whose runs pass');
@@ -256,10 +258,13 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       const slots = new Set<string>();
       for (const r of runs) for (const s of r.evidence) {
         const key = `${s.state} ${s.outside_code === true} ${s.slot}`;
-        if (slots.has(key) || (s.state !== 'missing' && s.state !== 'truncated')) continue;
+        const uncaptured = (s.state === 'captured' && !(s.sha256 && HEX64.test(s.sha256))) || !SLOT_STATES.has(s.state);
+        if (slots.has(key) || (s.state !== 'missing' && s.state !== 'truncated' && !uncaptured)) continue;
         slots.add(key);
         // The open item's words leave out what one run said, so the item is the same whichever run came first.
         if (s.state === 'missing' && s.outside_code) row('BLOCKED', `evidence ${s.slot} missing for a cause outside the code: ${s.reason ?? 'unknown'}`, `evidence ${s.slot} missing for a cause outside the code`, `evidence ${s.slot} captured`);
+        else if (!SLOT_STATES.has(s.state)) row('INCONCLUSIVE', `evidence ${s.slot} in an unknown state ${s.state}`, `evidence ${s.slot} in an unknown state`, `evidence ${s.slot} captured`);
+        else if (uncaptured) row('INCONCLUSIVE', `evidence ${s.slot} captured with no digest of what it holds`, `evidence ${s.slot} with no digest`, `evidence ${s.slot} captured`);
         else if (s.state === 'missing') row('INCONCLUSIVE', `evidence ${s.slot} missing: ${s.reason ?? 'unknown'}`, `evidence ${s.slot} missing`, `evidence ${s.slot} captured`);
         else row('INCONCLUSIVE', `evidence ${s.slot} truncated${s.counts ? `: ${s.counts.kept} of ${s.counts.expected}` : ''}`, `evidence ${s.slot} truncated`, `evidence ${s.slot} captured complete`);
       }
@@ -270,7 +275,7 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
     ? [`${id}: PASS on ${passes.length} clean run${passes.length === 1 ? '' : 's'}`]
     : rows.filter((r) => r.result === outcome).map((r) => r.reason);
   return {
-    check: c, rows, runs, fails, short, inherits: inherited, unblocks: rows.flatMap((r) => (r.result === outcome && r.unblock !== undefined ? [r.unblock] : [])),
+    check: c, rows, runs, fails, short, inherits: inherited, base, unblocks: rows.flatMap((r) => (r.result === outcome && r.unblock !== undefined ? [r.unblock] : [])),
     result: {
       check: id, outcome, reasons, counted: runs.map((r) => r.run), clean: passes.length, needed,
       inherited: inherited && outcome === 'BLOCKED', never_started: c.state === 'never_started',
@@ -282,12 +287,12 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
 
 interface Pointer { smallest: string; points_to: PointsTo }
 /** A FAIL check's smallest failing case and where it points, from its first failure the merge base doesn't share. */
-function pointer(claim: ClaimInput, sel: Selection, j: Judged): Pointer | null {
+function pointer(sel: Selection, j: Judged): Pointer | null {
   if (j.result.outcome !== 'FAIL') return null;
   // A failure the base doesn't share, from any failing run, then an overrun, before one the base shares.
-  const own = j.fails.find((r) => r.failures.some((x) => !onBase(claim, j.check, x))) ?? j.fails.find((r) => !r.failures.length);
+  const own = j.fails.find((r) => r.failures.some((x) => !onBase(j.base, x))) ?? j.fails.find((r) => !r.failures.length);
   for (const r of own ? [own] : j.fails) {
-    const f = r.failures.find((x) => !onBase(claim, j.check, x)) ?? r.failures[0];
+    const f = r.failures.find((x) => !onBase(j.base, x)) ?? r.failures[0];
     let step: string | null = null;
     const passed = r.steps ? sel.lastPass(j.check.check)?.steps : undefined;
     if (passed && r.steps) {
@@ -325,7 +330,7 @@ export function verdict(claim: ClaimInput): Verdict {
   const approvals = new Map<string, string[]>();
   const items: OpenItem[] = [];
   const reasons: string[] = [];
-  const pointers = new Map(judged.map((j) => [j.check.check, pointer(claim, sel, j)]));
+  const pointers = new Map(judged.map((j) => [j.check.check, pointer(sel, j)]));
 
   const requirements = claim.requirements.map((q) => requirementOutcome(claim, q, judged.filter((j) => j.check.covers.includes(q.req)), pointers, approvals, items, reasons));
   // One approve ask per own check, naming every requirement its approval closes.
@@ -333,6 +338,15 @@ export function verdict(claim: ClaimInput): Verdict {
     asks.push({ kind: 'authority', question: `Approve ${approve} as the check for ${reqs.join(', ')}?`, req: reqs.length === 1 ? reqs[0]! : null, check: approve });
   }
   const outcomes: Result[] = [...judged.map((j) => j.result.outcome), ...requirements.map((r) => r.outcome)];
+  const badState = (claim.state ?? []).filter((d) => !HEX64.test(d));
+  if (badState.length) {
+    outcomes.push('INVALID');
+    const why = `state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`;
+    reasons.unshift(why);
+    const scope = { repo: claim.repo, task: claim.task, req: null };
+    const text = `INVALID: ${why}`;
+    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'state digests as sha256 hex from the workspace\'s state sources', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+  }
   if (!claim.checks.length) {
     outcomes.push('INVALID');
     const reqs = claim.requirements.map((q) => q.req);
@@ -380,7 +394,7 @@ export function verdict(claim: ClaimInput): Verdict {
     for (const r of j.fails) {
       const failures = r.failures.length ? r.failures : [null];
       for (const f of failures) {
-        if (f && (inherited || onBase(claim, j.check, f))) {
+        if (f && (inherited || onBase(j.base, f))) {
           const task = fixTasks.get(f.cause) ?? { cause: f.cause, checks: new Set<string>(), tests: new Set<string>() };
           task.checks.add(j.check.check);
           task.tests.add(f.test);
@@ -399,6 +413,12 @@ export function verdict(claim: ClaimInput): Verdict {
   }
 
   const first = judged.map((j) => pointers.get(j.check.check)).find((p) => p);
+  const contra = contradictions(claim, judged);
+  for (const x of contra) {
+    reasons.push(x.late
+      ? `${x.check}: the agent's prediction (${x.predicted}) was recorded after ${x.run} started, so it predicts nothing`
+      : `${x.check}: the agent predicted ${x.predicted}, and ${x.run} ${x.outcome}`);
+  }
   return {
     claim: claim.claim, commit: claim.commit, outcome,
     stale: claim.checks.some((c) => c.state === 'never_started' && c.never_started === 'newer_claim'),
@@ -412,6 +432,7 @@ export function verdict(claim: ClaimInput): Verdict {
     fix_tasks: [...fixTasks.values()].map((t): FixTask => ({ cause: t.cause, checks: [...t.checks], tests: [...t.tests] })),
     asks: unique(asks.map((a) => canonical(a))).map((a) => JSON.parse(a) as VerdictAsk),
     key: key(claim),
+    contradictions: contra,
   };
 }
 
@@ -474,7 +495,7 @@ function requirementOutcome(
     runs: { clean: decider?.result.clean ?? 0, needed: decider?.result.needed ?? 0, counted: sorted(counted.map((r) => r.run)) },
     smallest: failing?.smallest ?? null,
     points_to: failing ? pointsText(failing.points_to) : null,
-    evidence: sorted(counted.flatMap((r) => r.evidence).filter((s) => s.state === 'captured' && s.sha256 && /^[0-9a-f]{64}$/.test(s.sha256)).map((s) => s.sha256!)),
+    evidence: sorted(counted.flatMap((r) => r.evidence).filter((s) => s.state === 'captured' && s.sha256 && HEX64.test(s.sha256)).map((s) => s.sha256!)),
     proof: q.oracle === 'person' ? 'decision' : decider?.check.proof ?? 'statement',
   };
   if (q.oracle === 'person' && q.ask) outcomeRow.ask = q.ask;
@@ -486,22 +507,59 @@ function key(claim: ClaimInput): VerdictKey {
     commit: claim.commit,
     doc_revisions: [],
     check_digests: sorted(claim.checks.map((c) => c.digest)),
-    state_digests: [],
+    state_digests: sorted((claim.state ?? []).filter((d) => HEX64.test(d))),
     environment: sorted(claim.checks.map((c) => canonical(c.environment))).join(' | ') || 'none',
     tools: sorted(claim.checks.flatMap((c) => Object.entries(c.tools).map(([k, v]) => `${k}@${v}`))),
   };
 }
 
-/** Why the verdict is stale on `commit`, or null while it still covers it. */
-export function staleReason(v: Verdict, commit: string): string | null {
-  return commit === v.commit ? null : `the verdict covers commit ${v.commit}, and the claim is now at ${commit}`;
+/**
+ * Why the verdict is stale on `commit`, or null while it still covers it. On a workspace, `state` is what its state
+ * sources read now: a digest that differs from the ones the verdict pinned makes it stale too.
+ */
+export function staleReason(v: Verdict, commit: string, state?: readonly string[]): string | null {
+  if (commit !== v.commit) return `the verdict covers commit ${v.commit}, and the claim is now at ${commit}`;
+  if (state === undefined) return null;
+  const now = new Set(state), was = new Set(v.key.state_digests);
+  const drifted = sorted([...[...now].filter((d) => !was.has(d)), ...[...was].filter((d) => !now.has(d))]);
+  return drifted.length ? `the state the verdict read changed: ${drifted.join(', ')}` : null;
 }
 
-/** The verdict record's hash, leaving out display fields: reasons, open item words and ask questions. */
+/**
+ * Each counted run a prediction disagrees with, and each a prediction was recorded only after it started. One pass
+ * per check over its distinct predictions and the runs already counted, so the agent's count of predictions can't
+ * slow the verdict; a run with no start, or a start past its end, can't be shown to follow any prediction.
+ */
+function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradiction[] {
+  const byCheck = new Map<string, Map<string, Prediction>>();
+  for (const p of claim.predictions ?? []) {
+    const of = byCheck.get(p.check) ?? new Map<string, Prediction>();
+    of.set(`${p.expects}\0${p.at}`, p);
+    byCheck.set(p.check, of);
+  }
+  const out = new Map<string, Contradiction>();
+  for (const j of judged) {
+    const predictions = byCheck.get(j.check.check);
+    if (!predictions) continue;
+    for (const r of j.runs) {
+      if (r.outcome !== 'passed' && r.outcome !== 'failed' && r.outcome !== 'overran') continue;
+      for (const p of predictions.values()) {
+        const late = r.started === undefined || p.at >= Math.min(r.started, r.ended);
+        if (!late && (r.outcome === 'passed') === (p.expects === 'passed')) continue;
+        const key = `${r.run}\0${p.expects}\0${late}`;
+        if (!out.has(key)) out.set(key, { check: j.check.check, run: r.run, predicted: p.expects, outcome: r.outcome, late });
+      }
+    }
+  }
+  return [...out.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, x]) => x);
+}
+
+/** The verdict record's hash, leaving out display fields: reasons, open item words, ask questions and contradictions. */
 export function verdictHash(v: Verdict): string {
   return sha256(canonical({
     ...v,
     reasons: undefined,
+    contradictions: undefined,
     checks: v.checks.map((c) => ({ ...c, reasons: undefined })),
     open_items: v.open_items.map((i) => ({ ...i, text: undefined })),
     asks: v.asks.map((a) => ({ ...a, question: undefined })),

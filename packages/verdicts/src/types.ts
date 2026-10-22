@@ -94,6 +94,8 @@ export interface Run {
   environment: Record<string, string>;
   tools: Record<string, string>;
   outcome: RunOutcome;
+  /** When the run started, where its runner records it; a prediction counts only from before it. */
+  started?: number;
   ended: number;
   tests_run: number;
   /** The files the run read, as the check runner recorded them. */
@@ -117,6 +119,11 @@ export interface Waiver {
   ends: { date: number } | { condition: string; met: boolean };
 }
 
+/** What the agent expects a check to show, recorded by deep_claim before the check runs. */
+export interface Prediction { check: string; expects: 'passed' | 'failed'; at: number }
+/** A counted run that disagrees with a prediction, or one a prediction was recorded only after it started. */
+export interface Contradiction { check: string; run: string; predicted: 'passed' | 'failed'; outcome: RunOutcome; late: boolean }
+
 export interface ClaimInput {
   claim: string;
   /** The claimant, session:<id>. */
@@ -132,6 +139,9 @@ export interface ClaimInput {
   changes: Change[];
   waivers: Waiver[];
   now: number;
+  predictions?: Prediction[];
+  /** On a workspace, the digests of what its state sources read: sha256 hex, as verdict.made's key holds them. */
+  state?: string[];
 }
 
 export interface CheckResult {
@@ -198,6 +208,8 @@ export interface Verdict {
   fix_tasks: FixTask[];
   asks: VerdictAsk[];
   key: VerdictKey;
+  /** Reported, never evidence: no prediction moves a verdict. */
+  contradictions: Contradiction[];
 }
 
 export type Outputs = Record<string, readonly number[]>;

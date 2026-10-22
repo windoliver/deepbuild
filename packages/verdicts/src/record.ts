@@ -43,9 +43,9 @@ export async function recordVerdict(record: RecordStore, verdict: Verdict, at: n
   return { id, handle, log_pos };
 }
 
-/** Appends verdict.stale for a recorded verdict when `commit` isn't its commit; returns whether it did. */
-export async function markStale(record: RecordStore, recorded: RecordedVerdict, verdict: Verdict, commit: string, at: number): Promise<boolean> {
-  const because = staleReason(verdict, commit);
+/** Appends verdict.stale for a recorded verdict when `commit` isn't its commit, or a workspace's `state` drifted from what it pinned; returns whether it did. */
+export async function markStale(record: RecordStore, recorded: RecordedVerdict, verdict: Verdict, commit: string, at: number, state?: readonly string[]): Promise<boolean> {
+  const because = staleReason(verdict, commit, state);
   if (because === null) return false;
   await record.append(CORE, { v: 1, id: ulid(at), kind: 'verdict.stale', ts: at, subject: recorded.handle, data: { verdict: recorded.handle, because: cut(because) } });
   return true;

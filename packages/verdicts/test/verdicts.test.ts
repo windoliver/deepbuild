@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { openRecord } from '@deepbuild/record';
-import { conductRun, markStale, recordVerdict, runContract, runsNeeded, selectReruns, verdict } from '../src/index.js';
+import { conductRun, markStale, recordVerdict, runContract, runsNeeded, selectReruns, staleReason, verdict, verdictHash } from '../src/index.js';
 import type { ClaimCheck, ClaimInput, Failure, Run } from '../src/index.js';
 
 const D = 'd'.repeat(40), C = 'c'.repeat(40);
@@ -90,6 +90,107 @@ describe('runContract', () => {
     const r = runContract(contract, { reference: () => ({ y: [1, 2] }), underTest: () => ({ y: [1, 2, 999, Number.NaN] }) });
     expect(r.run.outcome).toBe('failed');
     expect(r.run.failed_at).toBe('assert_close');
+  });
+});
+
+describe('predictions first', () => {
+  const c = check('unit', { runs: 2 });
+  it('a run that disagrees with a prediction recorded before it is a contradiction, and the verdict is the runs\' alone', () => {
+    const runs = [run(c, 'passed', { started: 10, ended: 11 }), run(c, 'failed', { started: 12, ended: 13, failures: [failure('t')] })];
+    const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'passed', at: 5 }] }));
+    expect(v.outcome).toBe('INCONCLUSIVE');
+    expect(v.contradictions).toEqual([{ check: 'unit', run: runs[1]!.run, predicted: 'passed', outcome: 'failed', late: false }]);
+    expect(v.reasons.join(' ')).toContain('predicted');
+  });
+  it('a prediction recorded after a run started predicts nothing, and is shown as late', () => {
+    const runs = [run(c, 'failed', { started: 10, ended: 20, failures: [failure('t')] }), run(c, 'failed', { started: 21, ended: 22, failures: [failure('t')] })];
+    const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'failed', at: 15 }] }));
+    expect(v.contradictions).toEqual([{ check: 'unit', run: runs[0]!.run, predicted: 'failed', outcome: 'failed', late: true }]);
+  });
+  it('a prediction never moves a verdict or its hash: a passing claim predicted to fail still passes', () => {
+    const runs = [run(c, 'passed', { started: 10, ended: 11 }), run(c, 'passed', { started: 12, ended: 13 })];
+    const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'failed', at: 1 }, { check: 'unit', expects: 'failed', at: 1 }] }));
+    expect(v.outcome).toBe('PASS');
+    expect(v.contradictions.map((x) => x.run)).toEqual(runs.map((r) => r.run));
+    expect(verdictHash(v)).toBe(verdictHash(verdict(claim({ checks: [c], runs }))));
+  });
+  it('a run whose start is recorded after its end can\'t be shown to follow its prediction either', () => {
+    const runs = [run(c, 'failed', { started: 100, ended: 50, failures: [failure('t')] }), run(c, 'failed', { started: 100, ended: 51, failures: [failure('t')] })];
+    const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'failed', at: 75 }] }));
+    expect(v.contradictions.map((x) => x.late)).toEqual([true, true]);
+  });
+  it('a thousand predictions on a thousand runs are judged in well under a verdict budget', () => {
+    const wide = check('unit', { runs: 1000 });
+    const runs = Array.from({ length: 1000 }, (_, i) => run(wide, 'passed', { started: 10, ended: i + 11 }));
+    const predictions = Array.from({ length: 1000 }, (_, i) => ({ check: 'unit', expects: 'failed' as const, at: i % 7 }));
+    const started = performance.now();
+    const v = verdict(claim({ checks: [wide], runs, predictions }));
+    expect(performance.now() - started).toBeLessThan(100);
+    expect(v.outcome).toBe('PASS');
+    expect(v.contradictions).toHaveLength(1000);
+  });
+  it('a run with no start time can\'t be shown to follow its prediction, so the prediction reads late', () => {
+    const runs = [run(c, 'failed', { ended: 20, failures: [failure('t')] }), run(c, 'failed', { ended: 22, failures: [failure('t')] })];
+    const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'failed', at: 1 }] }));
+    expect(v.contradictions.map((x) => x.late)).toEqual([true, true]);
+  });
+});
+
+describe('a verdict on a workspace', () => {
+  const c = check('unit');
+  const state = ['1'.repeat(64), '2'.repeat(64)];
+  it('pins to the digests of what its state sources read, and reads stale when one drifts', () => {
+    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed')], state }));
+    expect(v.key.state_digests).toEqual(state);
+    expect(staleReason(v, D, [...state].reverse())).toBeNull();
+    expect(staleReason(v, D, [state[0]!, '3'.repeat(64)])).toContain('3'.repeat(64));
+  });
+  it('a state digest that isn\'t a sha256 makes the claim INVALID naming it, never a verdict that can\'t be recorded', () => {
+    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed')], state: ['host:gpu-box sha256:' + '1'.repeat(64)] }));
+    expect(v.outcome).toBe('INVALID');
+    expect(v.reasons.join(' ')).toContain('host:gpu-box');
+    expect(v.open_items).toHaveLength(1);
+    expect(v.open_items[0]!.closes_with.evidence).toContain('sha256');
+  });
+  it('is recorded, and marked stale on drift, through the record', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'deep-verdicts-'));
+    try {
+      const record = await openRecord({ path: join(dir, 'record.db'), now: () => 1 });
+      const v = verdict(claim({ claim: 'claim:01K74G1Z3X5V7T9R1P3N5M7K9K', checks: [c], runs: [run(c, 'passed')], state }));
+      const recorded = await recordVerdict(record, v, 2);
+      await expect(markStale(record, recorded, v, D, 3, state)).resolves.toBe(false);
+      await expect(markStale(record, recorded, v, D, 4, [state[0]!, '3'.repeat(64)])).resolves.toBe(true);
+      await record.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('evidence that isn\'t captured and complete', () => {
+  it.each<[string, Run['evidence'][number], string]>([
+    ['captured with no digest', { slot: 'screenshot', state: 'captured' }, 'no digest'],
+    ['captured with a digest that isn\'t one', { slot: 'screenshot', state: 'captured', sha256: 'nope' }, 'no digest'],
+    ['in a state outside the closed set', { slot: 'screenshot', state: 'weird' as 'captured' }, 'unknown state weird'],
+  ])('%s never supports a PASS', (_, slot, words) => {
+    const c = check('unit');
+    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed', { evidence: [slot] })] }));
+    expect(v.outcome).toBe('INCONCLUSIVE');
+    expect(v.open_items[0]!.closes_with.evidence).toContain('screenshot');
+    expect(v.reasons.join(' ')).toContain(words);
+  });
+});
+
+describe('the engine is pure', () => {
+  it('judges a claim object changed between calls from what it holds now, not from what it held', () => {
+    const c = check('unit', { runs: 1, base: { outcome: 'failed', on_assertion: true, failed_tests: ['tax'] } });
+    const input = claim({ checks: [c], runs: [run(c, 'failed', { failures: [failure('tax', { cause: 'red-main' })] })] });
+    expect(verdict(input).outcome).toBe('BLOCKED');
+    input.requirements[0]!.on_base = 'fails';
+    const again = verdict(input);
+    expect(again.outcome).toBe('FAIL');
+    expect(again.send_backs.map((b) => b.cause)).toEqual(['red-main']);
+    expect(again.fix_tasks).toEqual([]);
   });
 });
 
