@@ -1755,8 +1755,10 @@ name = "deep-canvas-marks"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-text",
  "serde_json",
  "sha2 0.10.9",
+ "taffy 0.14.0",
 ]
 
 [[package]]
