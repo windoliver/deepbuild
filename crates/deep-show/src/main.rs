@@ -383,6 +383,30 @@ mod tests {
     }
 
     #[test]
+    fn run_takes_planted_and_nothing_else() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(matches!(planted_arg(&args(&["run"])), Ok(None)));
+        assert!(matches!(
+            planted_arg(&args(&[
+                "run",
+                "--planted",
+                "treats_every_dependency_required"
+            ])),
+            Ok(Some(Fault::EveryDependencyRequired))
+        ));
+        let twin = "treats_every_dependency_required";
+        for stray in [
+            &["run", "extra"][..],
+            &["run", "--planted"],
+            &["run", "--planted", "nonsense"],
+            &["run", "--planted", twin, "extra"],
+            &["run", "--planted", twin, "--planted", twin],
+        ] {
+            assert!(planted_arg(&args(stray)).is_err(), "{stray:?}");
+        }
+    }
+
+    #[test]
     fn core_version_is_the_canvas_crates_version() {
         let manifest = include_str!("../../deep-canvas/Cargo.toml");
         let line = format!("version = \"{}\"", deep_canvas::registry::CORE_VERSION);
@@ -394,25 +418,26 @@ mod tests {
     }
 }
 
+/// The seal's planted twin from the arguments after the command: none, or
+/// `--planted <name>` and nothing else; an unknown name or a stray argument is bad input.
+fn planted_arg(args: &[String]) -> Result<Option<Fault>, ()> {
+    match args.get(1..).unwrap_or_default() {
+        [] => Ok(None),
+        [flag, twin] if flag == "--planted" && twin == "treats_every_dependency_required" => {
+            Ok(Some(Fault::EveryDependencyRequired))
+        }
+        _ => Err(()),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().cloned().unwrap_or_default();
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    // `--planted <name>` plants the seal's wrong program; an unknown name is bad input.
-    let fault = match args.get(1).map(String::as_str) {
-        None => None,
-        Some("--planted") => match args.get(2).map(String::as_str) {
-            Some("treats_every_dependency_required") => Some(Fault::EveryDependencyRequired),
-            _ => {
-                let _ = writeln!(out, "{}", bad_input());
-                std::process::exit(2);
-            }
-        },
-        Some(_) => {
-            let _ = writeln!(out, "{}", bad_input());
-            std::process::exit(2);
-        }
+    let Ok(fault) = planted_arg(&args) else {
+        let _ = writeln!(out, "{}", bad_input());
+        std::process::exit(2);
     };
     // The seal runs before the first line is read: a refused set answers no scenario.
     let startup = match seal(fault) {
