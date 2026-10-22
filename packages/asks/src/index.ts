@@ -452,6 +452,10 @@ class AsksCore implements Asks {
       // The fold's "answer them together" answers, with its recommended option, each open ask of its thread that
       // you've seen: the ones it holds and the ones already on their own cards. An ask still queued for a batch
       // isn't answered unseen, and one whose recommended option approves, or an unblock, waits for its own card.
+      // Answering for several asks at once is for the person they were raised for alone.
+      if (ask.fold && chosen?.id === TOGETHER && (ask.who.actor !== connection.actor || ask.who.scope !== connection.scope)) {
+        throw new AskRefused(`${ask.handle} was raised for ${ask.who.actor} in ${ask.who.scope}`, { field: 'ask', ask: ask.handle });
+      }
       const together = ask.fold && chosen?.id === TOGETHER
         ? this.open().flatMap((a) => {
           const recommended = a.options.find((o) => o.id === a.data.recommended);

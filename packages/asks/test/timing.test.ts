@@ -457,6 +457,15 @@ describe('showings', () => {
     expect(await shown()).toEqual([mine, theirs]);
   });
 
+  it('the fold\'s answer together from another scope is refused and closes nothing', async () => {
+    settings({});
+    await start('S1');
+    const { exception } = await fold('S1', ask('taste', 'S1 footer'));
+    const refusal = await asks.answer({ writer: 'app', actor: 'ana', scope: 'team:web' }, exception, { option: 'together' }).catch((e: unknown) => e);
+    expect((refusal as AskRefused).field).toBe('ask');
+    expect(await events('ask.answered')).toEqual([]);
+  });
+
   it('Later from another scope neither is taken nor, recorded, hides the ask in the inbox or the asks table', async () => {
     settings({});
     const team = { actor: 'ana', scope: 'team:web' };
