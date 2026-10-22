@@ -13,6 +13,10 @@ export const testGlobs = (extension) => testPaths
   .map((path) => (path.endsWith('/**') ? `${path}/*.test.${extension}` : path))
   .filter((glob) => glob.endsWith(`.test.${extension}`) && !glob.startsWith('crates/'));
 
+/** Vitest files the unit lane runs one at a time, after the parallel block (see the lane). */
+const alone = ['tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/',
+  'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts'];
+
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
   { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/conformance-lint.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names.' },
@@ -21,9 +25,11 @@ export const checks = [
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
     // while a sibling file builds finds it gone or half-written: those files run one at a time, after
     // every other file has run in parallel. The hub's files (#16) start real hubs and time their
-    // sockets to 2 ms, so they too run one at a time, with nothing beside them.
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**', '--exclude', 'tests/acceptance/390/**', '--exclude', 'tests/acceptance/391/**', '--exclude', 'tests/acceptance/392/**', '--exclude', 'tests/acceptance/393/**', '--exclude', 'tests/acceptance/394/**', '--exclude', 'tests/acceptance/305/**', '--exclude', 'tests/acceptance/16/**', '--exclude', 'tests/acceptance/373/**', '--exclude', 'tests/acceptance/96/**'],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/'],
+    // sockets to 2 ms, so they too run one at a time, with nothing beside them. So does each file
+    // that times an issue's frozen budget on the reference Mac (gated by environmentProblem()): #14's
+    // 5,000 appends a second fell to 3,300-4,000/s beside the parallel block and passed alone.
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...alone.flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.
