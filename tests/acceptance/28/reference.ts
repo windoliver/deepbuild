@@ -59,8 +59,18 @@ export function refMoreRuns(declared: { runs?: number; accept?: string }, outcom
 }
 
 // ---- Globs and carry.
-const globRe = (glob: string): RegExp =>
-  new RegExp(`^${glob.split('**').map((part) => part.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*')).join('.*')}$`);
+// `**` as a whole segment matches any number of segments, none included: `src/**/*.ts` matches `src/a.ts`.
+// A trailing `/**` matches everything under the directory, not the bare directory name (`src/**` ≠ `src`).
+// Changed from a one-or-more reading by the approved proposal of 2026-10-21, after the blind redraft read it so.
+const globRe = (glob: string): RegExp => {
+  const segments = glob.split('/');
+  const re = segments.map((segment, i) => {
+    const last = i === segments.length - 1;
+    if (segment === '**') return last ? '.*' : '(?:[^/]+/)*';
+    return segment.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*') + (last ? '' : '/');
+  });
+  return new RegExp(`^${re.join('')}$`);
+};
 export const globMatch = (glob: string, path: string): boolean => globRe(glob).test(path);
 const declares = (c: ClaimCheck): boolean => (c.inputs?.length ?? 0) > 0;
 
