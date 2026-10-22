@@ -282,6 +282,10 @@
     },
     "crates/deep-marks-render/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #392: the `check` subcommand runs the document check, with the honest-numbers and status-color rules."
+        },
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #391: the frame draw list, path tessellations and content keys the render draws and caches."
