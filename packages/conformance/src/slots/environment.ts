@@ -65,16 +65,27 @@ function waitUntil(done: () => boolean, ms: number): boolean {
   while (Date.now() < end) { if (done()) return true; sleep(10); }
   return done();
 }
-interface Row { pid: number; ppid: number; command: string }
+interface Row { pid: number; ppid: number; zombie: boolean; command: string }
 interface Carrier { pid: number; command: string }
 /** The whole process table, one row per process; null when it can't be read, never an empty list. */
 function table(): Row[] | null {
-  const read = ps(['-Awwo', 'pid=,ppid=,command=']);
+  const read = ps(['-Awwo', 'pid=,ppid=,stat=,command=']);
   if (read.status !== 0 || read.error) return null;
   return read.stdout.split('\n').flatMap((line) => {
-    const [pid, ppid, ...words] = line.trim().split(/\s+/);
-    return /^\d+$/.test(pid ?? '') && /^\d+$/.test(ppid ?? '') ? [{ pid: Number(pid), ppid: Number(ppid), command: words.join(' ') }] : [];
+    const [pid, ppid, stat, ...words] = line.trim().split(/\s+/);
+    return /^\d+$/.test(pid ?? '') && /^\d+$/.test(ppid ?? '') ? [{ pid: Number(pid), ppid: Number(ppid), zombie: (stat ?? '').startsWith('Z'), command: words.join(' ') }] : [];
   });
+}
+/**
+ * The TCP ports the given processes listen on, read from the open files table (lsof); null when it can't be read.
+ * lsof ends with 1 when it found nothing, which is an answer, and otherwise on failure.
+ */
+function listeners(pids: number[]): number[] | null {
+  const read = spawnSync('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn'], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
+  if (read.error || (read.status !== 0 && read.status !== 1)) return null;
+  const ports = new Set<number>();
+  for (const line of read.stdout.split('\n')) if (line.startsWith('n')) { const port = Number(line.slice(line.lastIndexOf(':') + 1)); if (Number.isInteger(port)) ports.add(port); }
+  return [...ports].sort((a, b) => a - b);
 }
 const carries = (row: Row, run: string): boolean => row.command.split(' ').includes(run);
 /**
@@ -251,9 +262,19 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const pid = handle.pid as number;
     if (handle.port !== lease.port) throw fail(RULES.port.message, ['unleased_port'], `bound ${handle.port}; the lease is ${lease.port}`);
     // The probe follows up at once, nothing between: an environment ready before its health answers is caught here.
+    const asked = Date.now();
     const answer = probe(lease.port, spec.health);
+    const first = Date.now() - asked;
     if (answer.status !== 200) throw fail(RULES.health.message, ['ready_before_health'], `GET ${spec.health} on ${lease.port} right after up: ${answer.error ?? `status ${answer.status}`}`);
     if (answer.token !== spec.token) throw fail(RULES.health.message, ['health_mismatch'], `health answered with token ${JSON.stringify(answer.token)}, not the spec's`);
+    // An environment can take the request at once and hold its answer until it is ready: then ready was reported
+    // before health answered all the same. Its next answer, from a server now surely ready, is the measure of what
+    // an answer costs on this machine at this moment, so a slow machine slows both and only a held first answer stands out.
+    const askedAgain = Date.now();
+    const again = probe(lease.port, spec.health);
+    const second = Date.now() - askedAgain;
+    if (again.status !== 200 || again.token !== spec.token) throw fail(RULES.health.message, ['health_unstable'], `GET ${spec.health} answered once, then ${again.error ?? `status ${again.status} with token ${JSON.stringify(again.token)}`}`);
+    if (first > second * 3 + 500) throw fail(RULES.health.message, ['ready_before_health'], `the first health answer came ${first} ms after up returned, the next in ${second} ms: the environment held the request until it was ready`);
     // The handle's pid is the fill's word until the process table shows it: a running process carrying the run
     // token. Otherwise "gone after down" would hold of a pid that never was the environment.
     const before = table();
@@ -261,18 +282,36 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (!running(pid) || !before.some((row) => row.pid === pid && carries(row, lease.token))) throw new Finding('FAIL', `handle/pid ${pid} is no running process carrying the run token`, ['pid_not_environment']);
     // Every process of the environment carries the run token (the lease's contract), so a descendant of the handle's
     // process without it is refused here; the tree is remembered, by pid and start time, to be gone after down.
-    const tree = descendants(before, pid);
-    const untagged = tree.find((row) => !carries(row, lease.token));
-    if (untagged) throw fail(RULES.down.message, ['untagged_process'], `pid ${untagged.pid} (${untagged.command}), a process of the environment, carries no run token, so down could leave it unseen`);
-    const members = [pid, ...tree.map((row) => row.pid)].map((p) => ({ pid: p, start: startTime(p) }));
-    const stillThere = (): { pid: number }[] => members.filter((m) => running(m.pid) && sameStart(startTime(m.pid), m.start ?? undefined));
+    // One that forks between two reads of the table and is reparented before the next is beyond what a process
+    // table shows; the table is read again at every step of the wait after down to leave that gap as small as it gets.
+    const members = new Map<number, number | null>();
+    const refused = (row: Row): never => { throw fail(RULES.down.message, ['untagged_process'], `pid ${row.pid} (${row.command}), a process of the environment, carries no run token, so down could leave it unseen`); };
+    const grow = (rows: Row[]): void => {
+      for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); members.set(row.pid, startTime(row.pid)); }
+    };
+    members.set(pid, startTime(pid));
+    grow(before);
+    // The environment's processes listen on the leased port and no other; the open files table shows which.
+    const bound = listeners([...members.keys()]);
+    if (bound === null) throw new Finding('BLOCKED', 'the environment\'s listening ports can\'t be read (lsof failed), so whether it binds its lease alone is unknown', ['listeners_unknown']);
+    if (!bound.includes(lease.port)) throw fail(RULES.port.message, ['unleased_port'], `no process of the environment listens on ${lease.port}, though health answered there (${bound.length ? `it listens on ${bound.join(', ')}` : 'it listens on nothing'})`);
+    const extra = bound.filter((port) => port !== lease.port);
+    if (extra.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listens on ${extra.join(', ')} besides the lease ${lease.port}`);
+    // A member is still there when the table shows its pid alive (not a zombie) with the start time it was remembered with.
+    const stillThere = (rows: Row[]): { pid: number }[] => [...members].filter(([p, start]) => rows.some((row) => row.pid === p && !row.zombie) && sameStart(startTime(p), start ?? undefined)).map(([p]) => ({ pid: p }));
+    const read = (): Row[] => { const rows = table(); if (rows === null) throw PS_DOWN(); return rows; };
+    const clear = (): boolean => {
+      const rows = read();
+      grow(rows);
+      return stillThere(rows).length === 0 && !listening(lease.port) && !rows.some((row) => carries(row, lease.token));
+    };
     downed = true;
     yield () => fill.down(handle as unknown as Handle);
     // Gone means all of: the pid the handle names and every process that was under it are no process, nothing answers
     // on the leased port any more, and no process carries the run token (a grandchild that left the tree is caught there).
-    if (!waitUntil(() => stillThere().length === 0 && !listening(lease.port) && scanned(lease.token).length === 0, 150)) {
+    if (!waitUntil(clear, 150)) {
       const left = scanned(lease.token);
-      const there = stillThere();
+      const there = stillThere(read());
       const why = there.length > 0 ? `${there.map((m) => `pid ${m.pid}`).join(', ')} still run${there.length === 1 ? 's' : ''} 150 ms after down${there.every((m) => isOwn(m.pid)) ? '' : ' (not the kit\'s own, so left as they are)'}`
         : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} still accepts connections 150 ms after down`
         : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`
@@ -285,7 +324,13 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (up !== null && !downed) { try { void Promise.resolve(fill.down(up)).catch(() => undefined); } catch { /* the fill's own failure */ } }
     // The kit stops only processes it started through the reference fill (its fixture server and helper, by pid and
     // start time as their ready marker reported them) that still carry this case's run token; any other pid is left.
-    for (const p of carrying(lease.token) ?? []) if (isOwn(p.pid)) stop(p.pid);
+    // A process table that can't be read here leaves what remains unknown, and unknown is BLOCKED, whatever the
+    // case found before; so is a process of the kit's own that a SIGKILL did not end.
+    const left = carrying(lease.token);
+    if (left === null) throw PS_DOWN();
+    const mine = left.map((p) => p.pid).filter(isOwn);
+    for (const p of mine) stop(p);
+    if (!waitUntil(() => mine.every((p) => alive(p) === false), 500)) throw new Finding('BLOCKED', `the kit's own process ${mine.filter((p) => alive(p) !== false).join(', ')} did not end within 500 ms of SIGKILL`, ['kit_leftover']);
     forget();
   }
 }

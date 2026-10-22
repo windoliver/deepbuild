@@ -97,6 +97,62 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  // A fill around a server given as a `node -e` script taking `[port, token, runToken]`; up resolves once `/ping` answers.
+  const scripted = (script: string, children: ChildProcess[]): EnvironmentFill => ({
+    slot: 'environment@1', revision: 1,
+    up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
+      const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, lease.token], { stdio: 'ignore' });
+      children.push(child);
+      const until = Date.now() + 5000;
+      const poll = (): void => {
+        fetch(`http://127.0.0.1:${lease.port}/ping`).then(() => resolve({ id: `scripted-${child.pid}`, port: lease.port, pid: child.pid! }), () => (Date.now() < until ? setTimeout(poll, 20) : reject(Error('the scripted server did not come up'))));
+      };
+      poll();
+    }) as unknown as Handle,
+    down: (handle) => { for (const c of children) if (c.pid === handle.pid) c.kill('SIGTERM'); },
+  });
+
+  it('refuses an environment that takes the health request at once and holds its answer until it is ready', async () => {
+    const k = kit();
+    // Ready is reported (the server listens and pings) while the first health answer waits 1.5 s; later ones are instant.
+    const script = `
+      const [port, token] = process.argv.slice(1);
+      let held = false;
+      require('node:http').createServer((q, s) => {
+        if (q.url === '/ping') { s.writeHead(204); s.end(); return; }
+        const answer = () => { s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ ok: true, token })); };
+        if (held) answer(); else { held = true; setTimeout(answer, 1500); }
+      }).listen(Number(port), '127.0.0.1');
+      process.on('SIGTERM', () => process.exit(0));`;
+    const children: ChildProcess[] = [];
+    try {
+      const report = await runKit(k, scripted(script, children), { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'ready_before_health'], ['FAIL', 'ready_before_health']]);
+      expect(report.cases[0]!.message).toMatch(/held the request/);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+    }
+  });
+
+  it('refuses an environment that listens on a second port besides its lease', async () => {
+    const k = kit();
+    const script = `
+      const [port, token] = process.argv.slice(1);
+      const http = require('node:http');
+      const handler = (q, s) => { if (q.url === '/ping') { s.writeHead(204); s.end(); return; } s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ ok: true, token })); };
+      http.createServer(handler).listen(Number(port), '127.0.0.1');
+      http.createServer(handler).listen(0, '127.0.0.1');
+      process.on('SIGTERM', () => process.exit(0));`;
+    const children: ChildProcess[] = [];
+    try {
+      const report = await runKit(k, scripted(script, children), { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'unleased_port'], ['FAIL', 'unleased_port']]);
+      expect(report.cases[0]!.message).toMatch(/besides the lease/);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+    }
+  });
+
   it('refuses an environment with a process under it that carries no run token, before down could lose it', async () => {
     const k = kit();
     const server = fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url));
