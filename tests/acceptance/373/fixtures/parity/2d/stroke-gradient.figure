@@ -1,0 +1,96 @@
+{
+  "format": 1,
+  "id": "parity-stroke-gradient",
+  "profile": "figure",
+  "title": "Stroke gradient",
+  "description": "A straight stroke colored by a three-stop OKLab gradient along its length, and a square filled by a radial gradient whose focal point sits 0.4 of the radius east of its centre.",
+  "size": [
+    560,
+    480
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "stroke-ramp": {
+      "id": "stroke-ramp",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Ramp stroke",
+      "order": "a00",
+      "params": {
+        "d": "M 20 40 L 532 40",
+        "paint": {
+          "stroke": {
+            "width": 24,
+            "gradient": {
+              "kind": "linear",
+              "stops": [
+                {
+                  "at": 0,
+                  "role": "grad.a"
+                },
+                {
+                  "at": 0.5,
+                  "role": "grad.b"
+                },
+                {
+                  "at": 1,
+                  "role": "grad.c"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "focal-disc": {
+      "id": "focal-disc",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Focal disc",
+      "order": "a01",
+      "params": {
+        "box": [
+          20,
+          80,
+          384,
+          384
+        ],
+        "paint": {
+          "fill": {
+            "gradient": {
+              "kind": "radial",
+              "stops": [
+                {
+                  "at": 0,
+                  "role": "rad.from"
+                },
+                {
+                  "at": 1,
+                  "role": "rad.to"
+                }
+              ],
+              "from": [
+                0.5,
+                0.5
+              ],
+              "to": [
+                1,
+                0.5
+              ],
+              "focal": {
+                "length": 0.4,
+                "angle": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
