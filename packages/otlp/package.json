@@ -1,0 +1,17 @@
+{
+  "name": "@deepbuild/otlp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=24.22.0" },
+  "exports": {
+    "types": "./src/index.ts",
+    "development": "./src/index.ts",
+    "default": "./dist/index.js"
+  },
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@deepbuild/record": "0.0.0"
+  }
+}

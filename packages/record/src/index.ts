@@ -8,11 +8,12 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
+import { CHECKED, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type LearnedChange, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
 export { PROJECTIONS, testStorage };
-export type { Storage, SyncCall, TestStorage };
+export type { Backend, SliceEntry, Storage, SyncCall, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -23,6 +24,8 @@ export interface Connection {
   project?: string;
   agent?: string;
   run?: { env?: Readonly<Record<string, string>>; held?: readonly string[] };
+  /** False when the event claims a session the hub couldn't check it against; the event keeps that mark. */
+  verified?: boolean;
 }
 /** The payload: an event without what the connection supplies. */
 export interface EventInput {
@@ -52,6 +55,8 @@ export interface Event {
   session?: string;
   project?: string;
   agent?: string;
+  /** Set when the hub recorded the event as unverified: it claims a session it couldn't be checked against. */
+  unverified?: true;
 }
 export interface Appended { log_pos: number; existing: boolean }
 export type RecordErrorCode = 'schema' | 'forged' | 'writer' | 'conflict' | 'storage' | 'closed';
@@ -80,6 +85,8 @@ export interface RecordOptions {
   storage?: Storage;
   evidence?: EvidenceStore;
   contentFree?: boolean;
+  /** Commit each stream event in its own commit, in its append call, so the durable write points depend only on the events (the hub, #16). */
+  commitEach?: boolean;
   schemas?: readonly SchemaEntry[];
   migrations?: readonly Migration[];
 }
@@ -94,7 +101,17 @@ export interface RecordStore {
   table(name: string): Promise<Table>;
   session(id: string): Promise<SessionView | undefined>;
   rebuild(): Promise<void>;
+  /** Waits for every queued append, then commits synchronous=FULL: everything appended so far is durable. */
+  sync(): Promise<void>;
   raw(sql: string): Promise<unknown[]>;
+  /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
+  startSlice(session: string): Promise<SliceEntry[]>;
+  /**
+   * Rolls back one learned change, by its event's ID, or every learned change in force since a time: one
+   * learn.rolled_back each, newest first, through the connection; nothing is deleted. Resolves with the
+   * compensated changes' IDs, in that order.
+   */
+  rollBack(connection: Connection, what: { change: string } | { since: number }): Promise<string[]>;
   close(): Promise<void>;
 }
 
@@ -113,6 +130,10 @@ const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
+/** The core's check of a learned change: only the core appends it, in the change's own batch. */
+const LEARN_CHECK = 'learn_check.made';
+/** Parsed transcripts kept for the next learned change's reading, newest last. */
+const TRANSCRIPTS_KEPT = 4;
 /** The text field each kind keeps of a hook payload: scrubbed, then cut. */
 const TEXT_FIELD: Readonly<Record<string, string>> = { 'tool.before': 'command', 'tool.after': 'command', 'permission.request': 'command', 'user.ask': 'text', 'task.completed': 'title' };
 /** What content-free mode keeps of each text field: nothing its schema allows. */
@@ -135,7 +156,8 @@ CREATE TABLE IF NOT EXISTS events (
   subject     TEXT,
   data        TEXT NOT NULL,
   evidence    TEXT,
-  hash        TEXT NOT NULL
+  hash        TEXT NOT NULL,
+  unverified  INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
@@ -177,6 +199,7 @@ interface Prepared {
   seq: bigint | null;
   data: JsonValue;
   evidence: string[];
+  unverified: boolean;
   hash: string;
   /** The whole scrubbed text when the event keeps only its first part. */
   whole?: string;
@@ -205,6 +228,11 @@ class SqliteRecord implements RecordStore {
   private unclean = false;
   private next = 1;
   private blockEnd = 1;
+  private readonly transcripts: Transcripts = new Map();
+  /** The rollback running now, which the next one waits for. */
+  private rolling: Promise<unknown> = Promise.resolve();
+  /** Set when a projection an older version made had other columns: the open replays the log before any read. */
+  readonly stale: boolean;
 
   constructor(private readonly options: RecordOptions, backend: Backend) {
     this.backend = backend;
@@ -216,9 +244,12 @@ class SqliteRecord implements RecordStore {
       backend.close(this.db);
       throw new RecordError('storage', `the record is at schema ${schema}, newer than this version's ${SCHEMA_VERSION}; migrations only move forward`);
     }
+    // A record made before events kept the unverified mark gains the column, every event in it unmarked.
+    const columns = this.db.prepare("SELECT name FROM pragma_table_info('events')").all() as { name: string }[];
+    if (columns.length && !columns.some((c) => c.name === 'unverified')) this.db.exec('ALTER TABLE events ADD COLUMN unverified INTEGER NOT NULL DEFAULT 0');
     this.db.exec(DDL);
     this.projector = new Projector(this.db);
-    this.projector.ensure();
+    this.stale = this.projector.ensure();
     const entries = [...listSchemas(), ...(options.schemas ?? [])];
     this.registry = registry(entries);
     for (const { schema } of entries) {
@@ -344,7 +375,7 @@ class SqliteRecord implements RecordStore {
       if (Object.hasOwn(input, field)) throw new RecordError('forged', `the payload carries ${field}, which only the connection or the hub supplies`, { path: `/${field}` });
     }
     const kind = typeof input.kind === 'string' ? input.kind : '';
-    if ((CORE_ONLY.has(kind) || STORE_ONLY.has(kind)) && connection.writer !== 'core') throw new RecordError('writer', `${kind} is appended only by the core, not by ${connection.writer}`, { kind });
+    if ((CORE_ONLY.has(kind) || STORE_ONLY.has(kind) || kind === LEARN_CHECK) && connection.writer !== 'core') throw new RecordError('writer', `${kind} is appended only by the core, not by ${connection.writer}`, { kind });
     const versions = this.versions.get(kind);
     if (!versions) throw new RecordError('schema', `no event kind ${kind} is catalogued`, { path: '/kind' });
     if (!versions.includes(input.v)) throw new RecordError('schema', `${kind} has no schema at version ${String(input.v)}`, { path: '/v' });
@@ -370,7 +401,7 @@ class SqliteRecord implements RecordStore {
     const prepared: Prepared = {
       input, writer: connection.writer, actor: connection.actor, scope: connection.scope,
       session: connection.session ?? null, project: connection.project ?? null, agent: connection.agent ?? null,
-      seq: input.seq === undefined ? null : BigInt(input.seq), data, evidence: [...(input.evidence ?? [])], hash: '',
+      seq: input.seq === undefined ? null : BigInt(input.seq), data, evidence: [...(input.evidence ?? [])], unverified: connection.verified === false, hash: '',
     };
     if (whole !== undefined) prepared.whole = whole;
     return prepared;
@@ -381,6 +412,7 @@ class SqliteRecord implements RecordStore {
     p.hash = sha256Hex(canonicalize({
       v: p.input.v, kind: p.input.kind, subject: p.input.subject ?? null, ts: p.input.ts, seq: p.input.seq ?? null, data: p.data, evidence: p.evidence,
       writer: p.writer, actor: p.actor, scope: p.scope, session: p.session, project: p.project, agent: p.agent,
+      ...(p.unverified ? { unverified: true } : {}),
     }));
     return p;
   }
@@ -441,13 +473,38 @@ class SqliteRecord implements RecordStore {
       }
     }
     this.sealed(prepared);
-    if (CORE_ONLY.has(input.kind)) {
-      const [outcome] = this.commit([prepared], 'full');
+    if (CORE_ONLY.has(input.kind) || this.options.commitEach) {
+      const [outcome] = this.commit([prepared], CORE_ONLY.has(input.kind) || this.resumes([prepared]) ? 'full' : 'normal');
       if (!outcome!.ok) throw outcome!.error;
       return outcome!.appended;
     }
+    // The core reads what a learned change cites in the evidence store before it is in force; a refusal is its
+    // event, queued right behind the change so both land in one commit, and the projection never reads bytes.
+    // A retry of a change already in the log isn't read again.
+    let checked: Prepared | undefined;
+    if (CHECKED.has(input.kind) && !this.db.prepare('SELECT 1 FROM events WHERE id = ?').get(input.id)) {
+      const change = prepared.data as unknown as LearnedChange;
+      // The reading must be of what the change's handles name at its place in the log: while anything is queued
+      // (a transcript link, a change it cites), or a link moved or a change took effect during the read, it waits
+      // for the queue and reads again.
+      let found;
+      for (;;) {
+        if (this.queue.length) { await this.settle(); continue; }
+        const before = dependsOn(this.db, change);
+        found = await readEvidence(this.db, this.options.evidence, change, this.transcripts).catch((error: unknown) => {
+          throw new RecordError('storage', `the evidence ${input.id} cites could not be read, so it isn't appended: ${error instanceof Error ? error.message : String(error)}`, { id: input.id });
+        });
+        if (!this.queue.length && dependsOn(this.db, change) === before) break;
+      }
+      while (this.transcripts.size > TRANSCRIPTS_KEPT) this.transcripts.delete(this.transcripts.keys().next().value!);
+      if (found) {
+        const ts = this.options.now();
+        checked = this.sealed(this.prepare({ writer: 'core', actor: connection.actor, scope: connection.scope }, { v: 1, id: ulid(ts), kind: LEARN_CHECK, ts, data: { change: `doc:${input.id}`, reason: found.reason } }));
+      }
+    }
     return new Promise<Appended>((resolve, reject) => {
       this.queue.push({ prepared, resolve, reject });
+      if (checked) this.queue.push({ prepared: checked, resolve: () => undefined, reject: () => undefined });
       if (!this.scheduled) {
         this.scheduled = true;
         setImmediate(() => this.flush());
@@ -462,11 +519,8 @@ class SqliteRecord implements RecordStore {
     if (!batch.length) return;
     let outcomes: Outcome[];
     try {
-      // A prompt that resumes an ended session commits FULL: recovery then sees the session active again,
-      // though every event after it is lost in a cut.
-      const ended = this.db.prepare("SELECT 1 FROM sessions WHERE id = ? AND status IN ('finished', 'failed')");
-      const resumes = batch.some(({ prepared: p }) => p.input.kind === 'user.ask' && p.session !== null && p.session !== undefined && ended.get(p.session));
-      outcomes = this.commit(batch.map((p) => p.prepared), resumes ? 'full' : 'normal');
+      const items = batch.map((p) => p.prepared);
+      outcomes = this.commit(items, this.resumes(items) ? 'full' : 'normal');
     } catch (error) {
       for (const p of batch) p.reject(error as Error);
       return;
@@ -478,13 +532,22 @@ class SqliteRecord implements RecordStore {
     }
   }
 
+  /**
+   * Whether a batch holds a prompt that resumes an ended session: it commits FULL, so recovery sees the
+   * session active again, though every event after it is lost in a cut.
+   */
+  private resumes(items: readonly Prepared[]): boolean {
+    const ended = this.db.prepare("SELECT 1 FROM sessions WHERE id = ? AND status IN ('finished', 'failed')");
+    return items.some((p) => p.input.kind === 'user.ask' && p.session !== null && p.session !== undefined && ended.get(p.session) !== undefined);
+  }
+
   /** Writes the events in one commit of the durability asked for; a claim from a session that lost events gets its verdict at once. */
   private commit(items: Prepared[], mode: Durability, also?: () => void): Outcome[] {
     const outcomes: Outcome[] = [];
     try {
       this.reserve(items.length);
       const existing = this.db.prepare('SELECT log_pos, hash FROM events WHERE id = ?');
-      const insert = this.db.prepare('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      const insert = this.db.prepare('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
       write(() => {
         for (const p of items) {
@@ -495,7 +558,7 @@ class SqliteRecord implements RecordStore {
             continue;
           }
           const log_pos = this.next++;
-          insert.run(p.input.id, log_pos, p.input.v, p.input.ts, p.project, p.session, p.seq, p.agent, p.writer, p.actor, p.scope, p.input.kind, p.input.subject ?? null, JSON.stringify(p.data), p.evidence.length ? JSON.stringify(p.evidence) : null, p.hash);
+          insert.run(p.input.id, log_pos, p.input.v, p.input.ts, p.project, p.session, p.seq, p.agent, p.writer, p.actor, p.scope, p.input.kind, p.input.subject ?? null, JSON.stringify(p.data), p.evidence.length ? JSON.stringify(p.evidence) : null, p.hash, p.unverified ? 1 : 0);
           this.projector.apply(this.projected(p, log_pos));
           outcomes.push({ ok: true, appended: { log_pos, existing: false }, prepared: p, log_pos });
         }
@@ -588,6 +651,16 @@ class SqliteRecord implements RecordStore {
     }
   }
 
+  async sync(): Promise<void> {
+    if (this.closing) throw new RecordError('closed', 'the record is closed');
+    await this.settle();
+    try {
+      this.full(() => undefined);
+    } catch (error) {
+      throw new RecordError('storage', `the storage refused the write: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
   async raw(sql: string): Promise<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
@@ -595,6 +668,35 @@ class SqliteRecord implements RecordStore {
     const statement = this.db.prepare(sql);
     if (!statement.readonly || !statement.reader) throw new RecordError('storage', 'raw SQL reads the record; it never writes it');
     return statement.all();
+  }
+
+  async startSlice(session: string): Promise<SliceEntry[]> {
+    await this.settle();
+    return startSlice(this.db, session);
+  }
+
+  rollBack(connection: Connection, what: { change: string } | { since: number }): Promise<string[]> {
+    // Only you, through the app or the CLI, and the core roll back: the projection honors no one else's.
+    if (!ROLLERS.has(connection.writer)) return Promise.reject(new RecordError('writer', `learn.rolled_back takes a change out of force only from the app, the CLI or the core, not ${connection.writer}`, { kind: 'learn.rolled_back' }));
+    // One rollback at a time: each picks what is in force after the one before it committed, so none is compensated twice.
+    const run = this.rolling.catch(() => undefined).then(() => this.rollBackNow(connection, what));
+    this.rolling = run;
+    return run;
+  }
+  private async rollBackNow(connection: Connection, what: { change: string } | { since: number }): Promise<string[]> {
+    await this.settle();
+    const rolled: string[] = [];
+    for (const change of toRollBack(this.db, what)) {
+      const ts = this.options.now();
+      // The compensating change: the same target and scope, its diff inverted, naming the change it undoes.
+      const diff = change.diff.split('\n').map((l) => (l.startsWith('+') ? `-${l.slice(1)}` : l.startsWith('-') ? `+${l.slice(1)}` : l)).join('\n');
+      await this.append(connection, {
+        v: 1, id: ulid(ts), kind: 'learn.rolled_back', ts,
+        data: { layer: change.layer, target: change.target, diff, evidence: [], scope: change.scope, replay: null, applied_by: 'you', supersedes: change.handle },
+      });
+      rolled.push(change.id);
+    }
+    return rolled;
   }
 
   /** Waits for every queued stream event to commit or be refused. */
@@ -622,7 +724,7 @@ class SqliteRecord implements RecordStore {
 
 interface StoredRow {
   id: string; log_pos: bigint; v: bigint; ts: bigint; project_id: string | null; session_id: string | null; seq: bigint | null; agent: string | null;
-  writer: string; actor: string; scope: string; kind: string; subject: string | null; data: string; evidence: string | null; hash: string;
+  writer: string; actor: string; scope: string; kind: string; subject: string | null; data: string; evidence: string | null; hash: string; unverified: bigint;
 }
 function toEvent(row: StoredRow): Event {
   const event: Event = {
@@ -634,12 +736,15 @@ function toEvent(row: StoredRow): Event {
   if (row.session_id !== null) event.session = row.session_id;
   if (row.project_id !== null) event.project = row.project_id;
   if (row.agent !== null) event.agent = row.agent;
+  if (row.unverified) event.unverified = true;
   return event;
 }
 export async function openRecord(options: RecordOptions): Promise<RecordStore> {
   const storage = options.storage ?? fileStorage();
   if (!isBackend(storage)) throw new RecordError('storage', `storage ${storage.name} is not one the record can write through`);
   const record = new SqliteRecord(options, storage);
+  // A projection remade with new columns is filled again from the log, before recovery reads the tables.
+  if (record.stale) await record.rebuild();
   record.start();
   return record;
 }

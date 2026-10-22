@@ -1,0 +1,113 @@
+Base commit: 4c6bba5b2cabcfd2a174aff430e520aa6c030ec8
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/393 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: no deep-show bin target exists there, so every file's cargo build fails and each of its tests fails on it.
+Date: 2026-10-22T05:13:44Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/393
+
+ ❯ writer.test.ts (7 tests | 7 failed) 47082ms
+   ❯ AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused (5)
+     × AC4 `deep show` run inside alpha's process tree lands in the same writer layer as alpha's own deep_show, stamped as alpha 9ms
+     × AC4 the peer check picks the agent whose tree the command runs in, and you outside every agent's tree 1ms
+     × AC4 a process that reuses an ended agent's PID is not inside that agent's tree: `deep show` under it is you, not the agent 1ms
+     × AC4 a deep_show call bound to no session is refused: it draws nothing, makes no revision and attaches no evidence 0ms
+     × deep-show run answers bad_input to a line it can't read, and to a scenario with no calls 0ms
+   ❯ AC6 an agent's deep_show document draws in its own writer layer, stamped from its connection and outlined with its name, in the agent band below the question card, and a payload that names its own layer or writer is refused (2)
+     × AC6 two agents' documents each draw in their own writer layer, stamped from the connection, outlined with the agent's name, in the agent band below the card 0ms
+     × AC6 a payload that names its own layer, an item's layer or a writer is refused, naming the field, and nothing draws 0ms
+ ❯ revisions.test.ts (5 tests | 5 failed) 24064ms
+   ❯ AC7 a whole revision keeps its items: one that drops IDs it doesn't name in removes is refused with unintended_removal, and the reply lists the IDs changed, unchanged, created and removed (5)
+     × AC7 the 14-item document re-sent as after /compact with 9 of them and no removes is refused with unintended_removal naming exactly the five missing IDs, and the 14-item revision stays current, by hash 10ms
+     × AC7 the same 9 with those five in removes is presented, its reply listing the five as removed and the nine as unchanged 1ms
+     × AC7 from the 14-item revision, all 14 re-sent with one label's text changed reply with that ID as changed and the other 13 as unchanged 1ms
+     × AC7 a planted deep_show that presents the 9-item revision fails this check, naming the five IDs it dropped 1ms
+     × AC7 a re-send that keeps all 14 items but leaves out one of the two markers is refused naming the marker; a planted deep_show that diffs only the items map fails, naming the marker 1ms
+ ❯ settle.test.ts (4 tests | 4 failed) 21183ms
+   ❯ AC1 a deep_show snapshot at a declared time is taken only once the frame is settled; a frame that can't settle within 2 s returns not presented with the reason, and a check that needed it is BLOCKED (3)
+     × AC1 a frame that settles 1.5 s late is waited for: the reply comes after it settles, with the same snapshot as a frame settled at once 6ms
+     × AC1 a frame that can't settle within 2 s returns not presented with the reason timeout, within 2 s, and no snapshot 0ms
+     × AC1 `deep show --check --snap` whose snapshot can't settle within 2 s is BLOCKED; the same check on a frame that settles passes 0ms
+   ❯ AC2 deep_show on a hidden panel returns "not presented" within 2 s (1)
+     × AC2 deep_show on a hidden panel returns not presented with the reason hidden within 2 s; on a shown panel it is presented 0ms
+ ❯ issues.test.ts (4 tests | 4 failed) 24958ms
+   ❯ AC9 5,000 unnamed marks sent with deep_show are refused with 5,000 issues, inlined up to 8,192 characters, errors first then by code and ID, with truncated, and the full list reads back from its evidence hash (4)
+     × AC9 deep_show's reply inlines issues up to the read cap, in order, adds truncated {shown, total: 5000, by_code}, and the full list reads back issue for issue 5ms
+     × AC9 `deep show --check` replies the same way, and its check fails 0ms
+     × AC9 a reply that inlines every issue fails this test, naming the reply's size 0ms
+     × AC9 a reply that cuts with no truncated fails this test, naming the missing field 0ms
+ ❯ refs.test.ts (4 tests | 4 failed) 11092ms
+   ❯ AC5 a deep_show document that binds a value or a status to a handle its session's credential can't read is refused with ref_unresolved naming the handle, and render-back returns no snapshot of it (4)
+     × AC5 bound to its own session's open ask and reading, the document is presented with a snapshot 6ms
+     × AC5 a status bound to another session's open ask is refused with ref_unresolved naming the ask, with no snapshot 1ms
+     × AC5 a value bound to another session's reading is refused with ref_unresolved naming the reading, with no snapshot 0ms
+     × AC5 after a good revision, one that binds another session's ask is refused with no snapshot, and the good one stays current 0ms
+ ❯ card.test.ts (3 tests | 3 failed) 12830ms
+   ❯ AC8 an agent document with the highest order key and bounds 100 times the window leaves the card's interior pixels equal to its isolated render (3)
+     × AC8 the agent's flood draws in its panel but never over the card: the card's interior equals its isolated render 7ms
+     × AC8 a compositor that sorts by order key alone draws above the card and fails, naming the item 1ms
+     × deep-show screen answers bad_input to a line it can't read, and to one with no out 1ms
+ ❯ proof.test.ts (2 tests | 2 failed) 27139ms
+   ❯ AC3 a render-back snapshot never counts as proof for any claim (2)
+     × AC3 a settled snapshot of a document that passes its checks proves nothing for a claim whose deliverable it isn't: the check never passes the claim 8ms
+     × AC3 the same check passes a claim whose deliverable is the document itself, on its checks, not its picture 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 29 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  card.test.ts > AC8 an agent document with the highest order key and bounds 100 times the window leaves the card's interior pixels equal to its isolated render > AC8 the agent's flood draws in its panel but never over the card: the card's interior equals its isolated render
+ FAIL  card.test.ts > AC8 an agent document with the highest order key and bounds 100 times the window leaves the card's interior pixels equal to its isolated render > AC8 a compositor that sorts by order key alone draws above the card and fails, naming the item
+ FAIL  card.test.ts > AC8 an agent document with the highest order key and bounds 100 times the window leaves the card's interior pixels equal to its isolated render > deep-show screen answers bad_input to a line it can't read, and to one with no out
+ FAIL  issues.test.ts > AC9 5,000 unnamed marks sent with deep_show are refused with 5,000 issues, inlined up to 8,192 characters, errors first then by code and ID, with truncated, and the full list reads back from its evidence hash > AC9 deep_show's reply inlines issues up to the read cap, in order, adds truncated {shown, total: 5000, by_code}, and the full list reads back issue for issue
+ FAIL  issues.test.ts > AC9 5,000 unnamed marks sent with deep_show are refused with 5,000 issues, inlined up to 8,192 characters, errors first then by code and ID, with truncated, and the full list reads back from its evidence hash > AC9 `deep show --check` replies the same way, and its check fails
+ FAIL  issues.test.ts > AC9 5,000 unnamed marks sent with deep_show are refused with 5,000 issues, inlined up to 8,192 characters, errors first then by code and ID, with truncated, and the full list reads back from its evidence hash > AC9 a reply that inlines every issue fails this test, naming the reply's size
+ FAIL  issues.test.ts > AC9 5,000 unnamed marks sent with deep_show are refused with 5,000 issues, inlined up to 8,192 characters, errors first then by code and ID, with truncated, and the full list reads back from its evidence hash > AC9 a reply that cuts with no truncated fails this test, naming the missing field
+ FAIL  proof.test.ts > AC3 a render-back snapshot never counts as proof for any claim > AC3 a settled snapshot of a document that passes its checks proves nothing for a claim whose deliverable it isn't: the check never passes the claim
+ FAIL  proof.test.ts > AC3 a render-back snapshot never counts as proof for any claim > AC3 the same check passes a claim whose deliverable is the document itself, on its checks, not its picture
+ FAIL  refs.test.ts > AC5 a deep_show document that binds a value or a status to a handle its session's credential can't read is refused with ref_unresolved naming the handle, and render-back returns no snapshot of it > AC5 bound to its own session's open ask and reading, the document is presented with a snapshot
+ FAIL  refs.test.ts > AC5 a deep_show document that binds a value or a status to a handle its session's credential can't read is refused with ref_unresolved naming the handle, and render-back returns no snapshot of it > AC5 a status bound to another session's open ask is refused with ref_unresolved naming the ask, with no snapshot
+ FAIL  refs.test.ts > AC5 a deep_show document that binds a value or a status to a handle its session's credential can't read is refused with ref_unresolved naming the handle, and render-back returns no snapshot of it > AC5 a value bound to another session's reading is refused with ref_unresolved naming the reading, with no snapshot
+ FAIL  refs.test.ts > AC5 a deep_show document that binds a value or a status to a handle its session's credential can't read is refused with ref_unresolved naming the handle, and render-back returns no snapshot of it > AC5 after a good revision, one that binds another session's ask is refused with no snapshot, and the good one stays current
+ FAIL  revisions.test.ts > AC7 a whole revision keeps its items: one that drops IDs it doesn't name in removes is refused with unintended_removal, and the reply lists the IDs changed, unchanged, created and removed > AC7 the 14-item document re-sent as after /compact with 9 of them and no removes is refused with unintended_removal naming exactly the five missing IDs, and the 14-item revision stays current, by hash
+ FAIL  revisions.test.ts > AC7 a whole revision keeps its items: one that drops IDs it doesn't name in removes is refused with unintended_removal, and the reply lists the IDs changed, unchanged, created and removed > AC7 the same 9 with those five in removes is presented, its reply listing the five as removed and the nine as unchanged
+ FAIL  revisions.test.ts > AC7 a whole revision keeps its items: one that drops IDs it doesn't name in removes is refused with unintended_removal, and the reply lists the IDs changed, unchanged, created and removed > AC7 from the 14-item revision, all 14 re-sent with one label's text changed reply with that ID as changed and the other 13 as unchanged
+ FAIL  revisions.test.ts > AC7 a whole revision keeps its items: one that drops IDs it doesn't name in removes is refused with unintended_removal, and the reply lists the IDs changed, unchanged, created and removed > AC7 a planted deep_show that presents the 9-item revision fails this check, naming the five IDs it dropped
+ FAIL  revisions.test.ts > AC7 a whole revision keeps its items: one that drops IDs it doesn't name in removes is refused with unintended_removal, and the reply lists the IDs changed, unchanged, created and removed > AC7 a re-send that keeps all 14 items but leaves out one of the two markers is refused naming the marker; a planted deep_show that diffs only the items map fails, naming the marker
+ FAIL  settle.test.ts > AC1 a deep_show snapshot at a declared time is taken only once the frame is settled; a frame that can't settle within 2 s returns not presented with the reason, and a check that needed it is BLOCKED > AC1 a frame that settles 1.5 s late is waited for: the reply comes after it settles, with the same snapshot as a frame settled at once
+ FAIL  settle.test.ts > AC1 a deep_show snapshot at a declared time is taken only once the frame is settled; a frame that can't settle within 2 s returns not presented with the reason, and a check that needed it is BLOCKED > AC1 a frame that can't settle within 2 s returns not presented with the reason timeout, within 2 s, and no snapshot
+ FAIL  settle.test.ts > AC1 a deep_show snapshot at a declared time is taken only once the frame is settled; a frame that can't settle within 2 s returns not presented with the reason, and a check that needed it is BLOCKED > AC1 `deep show --check --snap` whose snapshot can't settle within 2 s is BLOCKED; the same check on a frame that settles passes
+ FAIL  settle.test.ts > AC2 deep_show on a hidden panel returns "not presented" within 2 s > AC2 deep_show on a hidden panel returns not presented with the reason hidden within 2 s; on a shown panel it is presented
+ FAIL  writer.test.ts > AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused > AC4 `deep show` run inside alpha's process tree lands in the same writer layer as alpha's own deep_show, stamped as alpha
+ FAIL  writer.test.ts > AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused > AC4 the peer check picks the agent whose tree the command runs in, and you outside every agent's tree
+ FAIL  writer.test.ts > AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused > AC4 a process that reuses an ended agent's PID is not inside that agent's tree: `deep show` under it is you, not the agent
+ FAIL  writer.test.ts > AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused > AC4 a deep_show call bound to no session is refused: it draws nothing, makes no revision and attaches no evidence
+ FAIL  writer.test.ts > AC4 a `deep show` run from inside an agent's process tree draws in that agent's writer layer, stamped as that agent and never as you, and a deep_show call bound to no session is refused > deep-show run answers bad_input to a line it can't read, and to a scenario with no calls
+ FAIL  writer.test.ts > AC6 an agent's deep_show document draws in its own writer layer, stamped from its connection and outlined with its name, in the agent band below the question card, and a payload that names its own layer or writer is refused > AC6 two agents' documents each draw in their own writer layer, stamped from the connection, outlined with the agent's name, in the agent band below the card
+ FAIL  writer.test.ts > AC6 an agent's deep_show document draws in its own writer layer, stamped from its connection and outlined with its name, in the agent band below the question card, and a payload that names its own layer or writer is refused > AC6 a payload that names its own layer, an item's layer or a writer is refused, naming the field, and nothing draws
+AssertionError: the binary builds: deep-show: expected 'cargo build --bin deep-show failed:\n…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show failed:
++ error: no bin target named `deep-show` in default-run packages
++
++ help: a target with a similar name exists: `deep-hook`
++
+
+ ❯ helpers.ts:96:71
+     94|   let error = '';
+     95|   beforeAll(() => { error = buildBinary(SHOW_NAME); }, 900_000);
+     96|   beforeEach(() => { expect(error, `the binary builds: ${SHOW_NAME}`).…
+       |                                                                       ^
+     97| }
+     98|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/29]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  29 failed (29)
+   Start at  22:13:47
+   Duration  170.09s (tests 100%)
+

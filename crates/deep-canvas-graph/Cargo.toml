@@ -1,0 +1,16 @@
+[package]
+name = "deep-canvas-graph"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #394: the graph module's R1 slice, the basic layered layout with its memory format
+# (canvas primitives: Graph and layout memory). Named deep-canvas* so the canvas lint reads it:
+# a check reads the positions it writes. It draws nothing.
+[[bin]]
+name = "deep-graph"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

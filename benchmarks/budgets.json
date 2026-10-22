@@ -146,6 +146,72 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #14 first measurement: the merge base has no record package. One process appends a 100,000-event log, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the replay's own limits (60 s per million events, 100 MB of working memory) stay in tests/acceptance/14/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "record-learn-apply-rollback-1k",
+      "command": [
+        "node",
+        "benchmarks/record.mjs",
+        "learn-apply-rollback-1k"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process archives 10 transcripts of about 2,000 messages each in a temp evidence store, applies 1,000 learned changes one at a time, each read against its transcript (a different one each time, so no parse is reused), then rolls each back, so p50 includes Node's start and the per-change limit (100 ms to apply or roll back) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "record-learn-rebuild-10k",
+      "command": [
+        "node",
+        "benchmarks/record.mjs",
+        "learn-rebuild-10k"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process builds a 10,000-change learned layer over 200 archived transcripts, rolls back the newer 5,000 to a date, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the rebuild's own limit (5 s) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-cold-start",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "cold-start"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process spawns `deep hub run` on a temp home and waits for its socket's hello, then stops it, so p50 includes Node's start twice; the issue's 500 ms cold start stays in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-round-trip",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "round-trip"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and sends 1,000 PreToolUse requests, one connection each as deep-hook makes them, then stops it; the issue's 2 ms p95 round trip stays in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-idle",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "idle"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "otlp-receive-20k-spans",
+      "command": [
+        "node",
+        "benchmarks/otlp.mjs",
+        "receive-20k-spans"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #42 first measurement: the merge base has no OTLP receiver. One process starts the receiver on a temp record and sends it 20,000 Claude Code spans as 100 protobuf trace exports of 200, the AC6 load without its pacing, so p50 includes Node's start and the sustained limits (2,000 spans a second under 5% of a core and 50 MB) stay in tests/acceptance/42/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

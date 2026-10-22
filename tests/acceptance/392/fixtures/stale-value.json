@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "id": "stale-value",
+  "profile": "board",
+  "title": "One bound value",
+  "description": "A still core view with one bound value whose reading goes stale two seconds after its as-of time.",
+  "size": [
+    320,
+    96
+  ],
+  "budget": {
+    "class": "core view"
+  },
+  "layers": {
+    "line": {
+      "writer": "deep",
+      "title": "Line",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "label": {
+      "id": "label",
+      "kind": "text@1",
+      "layer": "line",
+      "name": "Label",
+      "order": "a0",
+      "params": {
+        "text": "Open asks",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 200,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          16,
+          16,
+          0
+        ]
+      }
+    },
+    "count": {
+      "id": "count",
+      "kind": "text@1",
+      "layer": "line",
+      "name": "Open asks count",
+      "order": "a1",
+      "params": {
+        "text": "",
+        "font": "body",
+        "size": 13,
+        "numerals": "tabular",
+        "widest": "999,999",
+        "box": {
+          "w": 280,
+          "h": 24
+        }
+      },
+      "at": {
+        "pos": [
+          16,
+          48,
+          0
+        ]
+      }
+    }
+  },
+  "bound_values": {
+    "open-asks": {
+      "target": "items/count/params/text",
+      "source": "reading:01JB3000000000000000000001",
+      "stale_after": "2s"
+    }
+  }
+}
