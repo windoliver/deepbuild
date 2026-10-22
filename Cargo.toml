@@ -10,3 +10,17 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.fearless_simd]
 opt-level = 3
+
+# Issue #96: the shared-document budgets (a patch applies in under 2 ms; merging two 10,000-item
+# documents takes under 200 ms) are read off the dev binaries the acceptance tests run, so the
+# kernel and the JSON, map and hash crates it spends its time in build at release speed there.
+[profile.dev.package.deep-canvas]
+opt-level = 3
+[profile.dev.package.serde_json]
+opt-level = 3
+[profile.dev.package.indexmap]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.unicode-normalization]
+opt-level = 3

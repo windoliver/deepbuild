@@ -14,6 +14,11 @@ use crate::data;
 use crate::key::{ContentKey, KeyBuilder};
 use crate::path::{self, Mesh};
 
+/// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
+pub const KINDS: &[&str] = &[
+    "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
+];
+
 /// An sRGB-encoded color, 0–255 per channel, as the look's roles resolve for a 2D writer layer.
 pub type Rgb = [u8; 3];
 
