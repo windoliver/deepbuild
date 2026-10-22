@@ -4,8 +4,8 @@
 //! through scales, and an axis is generated from its scale, never drawn by hand.
 //!
 //! Columns hold `data` as base64 of little-endian values of their `dtype` (`f64`, `f32`, `i64`,
-//! `i32`, `u32`, `u16`, `u8`, and `bool` and `role` a byte each), or a JSON list for `str`, or a
-//! `const`. A time scale's domain is milliseconds since the Unix epoch, UTC, as the record's times
+//! `i32`, `u32`, `u16`, `u8`, and `bool` and `role` a byte each), or `{sidecar: sha256}` for those
+//! bytes in a file the renderer reads from its store, or a JSON list for `str`, or a `const`. A time scale's domain is milliseconds since the Unix epoch, UTC, as the record's times
 //! are, and its ticks fall on calendar units.
 //!
 //! Issue #373 adds R2's mark types: rects from (x, y) to (x2, y2), bars from their y scale's zero
@@ -112,6 +112,11 @@ fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
             }
             _ => refuse("bad_column", format!("{path}/data")),
         };
+    }
+    // Sidecar data reaches the module inlined by whoever holds the store; one that didn't is
+    // missing, never zeros.
+    if c.get("data").and_then(|d| d.get("sidecar")).is_some() {
+        return refuse("asset_missing", format!("{path}/data"));
     }
     let Some(bytes) = c.get("data").and_then(Value::as_str).and_then(base64) else {
         return refuse("bad_column", format!("{path}/data"));

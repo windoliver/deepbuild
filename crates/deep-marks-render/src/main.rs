@@ -231,6 +231,27 @@ fn refused_by_check(checked: &Value) -> Option<Value> {
     Some(json!({"ok": false, "code": first["code"], "issues": issues}))
 }
 
+/// Every document a line carries (`doc`, and each step's in a session) with its mark sets'
+/// sidecar columns read from the line's `store` and inlined.
+fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
+    let store = input
+        .get("store")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    let store = store.as_deref();
+    if let Some(Value::Object(doc)) = input.get_mut("doc") {
+        asset::sidecars(doc, store)?;
+    }
+    if let Some(Value::Array(steps)) = input.get_mut("steps") {
+        for step in steps {
+            if let Some(Value::Object(doc)) = step.get_mut("doc") {
+                asset::sidecars(doc, store)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // `check` reads the document and the look, `look` the look alone; both answer on every
     // platform. A look the status guard refuses is the answer, and nothing is drawn.
@@ -421,7 +442,10 @@ fn main() {
         }
         let line = std::str::from_utf8(&buf).map(|l| l.trim_end_matches(['\n', '\r']));
         let request = match line.map(serde_json::from_str::<Value>) {
-            Ok(Ok(Value::Object(input))) => parse(&command, &input),
+            Ok(Ok(Value::Object(mut input))) => match inline_sidecars(&mut input) {
+                Ok(()) => parse(&command, &input),
+                Err(refusal) => Some(Answer::Now(refusal)),
+            },
             _ => None,
         };
         let answer = match request {
