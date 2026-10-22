@@ -157,7 +157,9 @@ fn kind_of(item: &Value) -> String {
 /// The revision hash of `doc`, or the issue of a document with no canonical form (a float
 /// outside its width, two keys that are one key after NFC).
 fn hash_of(doc: &Value) -> Result<String, Refused> {
-    revision_hash(doc, &DocShape::new(doc)).map_err(|e| {
+    // `apply` checks in the core's own build (`check`), so it hashes by the core's own kinds.
+    let kinds = crate::kinds::registry();
+    revision_hash(doc, &DocShape::new(doc, &kinds)).map_err(|e| {
         Box::new(Issue::envelope(
             "out_of_range",
             e.path,

@@ -15,6 +15,7 @@ pub mod check;
 pub mod data;
 pub mod dirty;
 pub mod key;
+pub mod layout;
 pub mod look;
 pub mod outline;
 pub mod paint;
