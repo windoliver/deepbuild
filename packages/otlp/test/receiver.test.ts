@@ -60,9 +60,26 @@ describe('the receiver keeps only what the export says', () => {
     ['logs', { resourceLogs: {} }],
     ['traces', { resourceSpans: [{ scopeSpans: {} }] }],
     ['traces', { resourceSpans: [{ scopeSpans: [{ spans: ['not a span'] }] }] }],
+    // Failed on: attributes that aren't a list reading as none, so an api_request lost its cost and was dropped with a 200.
+    ['logs', logs([{ timeUnixNano: nanos(Date.now()), attributes: { 'event.name': 'api_request', cost_usd: '0.01' } }])],
+    ['logs', logs([{ timeUnixNano: nanos(Date.now()), attributes: [{ key: 'event.name', value: 'api_request' }] }])],
+    ['logs', logs([{ timeUnixNano: nanos(Date.now()), attributes: [{ key: 7, value: { stringValue: 'api_request' } }] }])],
+    // Failed on: a resource that isn't an object reading as one with no attributes, so a session-scoped export lost its session.
+    ['logs', { resourceLogs: [{ resource: [], scopeLogs: [] }] }],
+    ['traces', { resourceSpans: [{ resource: 'claude-code', scopeSpans: [] }] }],
+    ['traces', { resourceSpans: [{ scopeSpans: [{ spans: [{ ...toolSpan({ start: 1, end: 2 }).resourceSpans[0]!.scopeSpans[0]!.spans[0]!, attributes: ['tool_name=Bash'] }] }] }] }],
   ] as const)('a malformed OTLP/JSON %s envelope is refused with 400', async (signal, body) => {
     const { url } = await setUp();
     expect((await post(url, signal, body)).status).toBe(400);
+  });
+
+  // Failed on: a null body or attribute value, the protobuf JSON mapping's default, refused with its whole export.
+  it('a null body and a null attribute value are skipped, and the export is recorded', async () => {
+    const { record, url } = await setUp();
+    const request = apiRequest(Date.now(), { cost_usd: '0.01', request_id: 'req_null', input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 });
+    const body = logs([{ ...request, body: null, attributes: [...request.attributes, { key: 'ignored', value: null }] }]);
+    expect((await post(url, 'logs', body)).status).toBe(200);
+    expect(await kinds(record, 'request.cost')).toHaveLength(1);
   });
 
   // Failed on: the resource's attributes copied into every record, so a 200 KB export held the event loop for seconds.

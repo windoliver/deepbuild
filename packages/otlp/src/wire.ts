@@ -132,10 +132,15 @@ function protoRequest<T>(buf: Buffer, read: (start: number, end: number, base: A
 
 // ---- OTLP/JSON ---------------------------------------------------------------------------------------------
 type Json = { [key: string]: unknown };
-const obj = (v: unknown): Json => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Json) : {});
-const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-// The envelope is read strictly: a collection that is there but not a list, or an entry that isn't an object, is a
-// malformed export, refused, never read as an empty one the exporter would take for delivered.
+/** A present resource must be an object: anything else would read as one with no attributes, and its records would lose their session. */
+const resourceOf = (v: unknown): Json => {
+  if (v === undefined || v === null) return {};
+  if (typeof v !== 'object' || Array.isArray(v)) throw new WireError('resource is not an object');
+  return v as Json;
+};
+// The envelope and the attributes are read strictly: a collection that is there but not a list, an entry that isn't
+// an object, or a value that isn't an AnyValue is a malformed export, refused, never read as an empty one (or a
+// record with no cost) the exporter would take for delivered.
 const entries = (v: unknown, what: string): Json[] => {
   if (v === undefined || v === null) return [];
   if (!Array.isArray(v)) throw new WireError(`${what} is not a list`);
@@ -149,7 +154,10 @@ const jsonMs = (v: unknown): number => {
   return Number.isFinite(n) ? Math.floor(n / 1e6) : 0;
 };
 function jsonValue(v: unknown): Scalar | undefined {
-  const o = obj(v);
+  // null is the JSON mapping's default for any field: an absent value, as an absent field is.
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'object' || Array.isArray(v)) throw new WireError('a value is not an AnyValue object');
+  const o = v as Json;
   if (typeof o.stringValue === 'string') return o.stringValue;
   if (typeof o.boolValue === 'boolean') return o.boolValue;
   if (typeof o.intValue === 'string' || typeof o.intValue === 'number') { const n = Number(o.intValue); return Number.isFinite(n) ? n : undefined; }
@@ -157,17 +165,18 @@ function jsonValue(v: unknown): Scalar | undefined {
   return undefined;
 }
 function jsonAttrs(v: unknown, into: Attrs): Attrs {
-  for (const kv of list(v)) {
-    const { key, value } = obj(kv);
+  for (const kv of entries(v, 'attributes')) {
+    const { key, value } = kv;
+    if (typeof key !== 'string') throw new WireError('an attribute has no string key');
     const scalar = jsonValue(value);
-    if (typeof key === 'string' && scalar !== undefined) into[key] = scalar;
+    if (scalar !== undefined) into[key] = scalar;
   }
   return into;
 }
 const idOf = (v: unknown): string => (typeof v === 'string' ? v.toLowerCase() : '');
 function jsonRequest<T>(body: Json, top: string, scopes: string, records: string, read: (record: Json, base: Attrs) => T | null): T[] {
   return entries(body[top], top).flatMap((r) => {
-    const base = jsonAttrs(obj(r.resource).attributes, {});
+    const base = jsonAttrs(resourceOf(r.resource).attributes, {});
     return entries(r[scopes], scopes).flatMap((s) => entries(s[records], records).flatMap((record) => read(record, base) ?? []));
   });
 }
