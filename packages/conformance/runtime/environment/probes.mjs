@@ -19,11 +19,12 @@ const lease = () => new Promise((resolve, reject) => {
 const probe = ({ port, path }) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(2500), headers: { connection: 'close' }, redirect: 'error' })
   .then((r) => r.text().then((body) => ({ status: r.status, body, error: null })))
   .catch((e) => ({ status: null, body: '', error: String(e) }));
+// Open, or the error code the connect gave: only a refusal proves nothing listens; the kit reads anything else as unknown.
 const listening = ({ port }) => new Promise((resolve) => {
   const socket = connect(port, '127.0.0.1');
-  socket.setTimeout(1000, () => { socket.destroy(); resolve({ open: false }); });
-  socket.once('connect', () => { socket.destroy(); resolve({ open: true }); });
-  socket.once('error', () => resolve({ open: false }));
+  socket.setTimeout(1000, () => { socket.destroy(); resolve({ open: false, code: 'ETIMEDOUT' }); });
+  socket.once('connect', () => { socket.destroy(); resolve({ open: true, code: null }); });
+  socket.once('error', (e) => resolve({ open: false, code: e.code ?? String(e) }));
 });
 const OPS = { lease, probe, listening };
 

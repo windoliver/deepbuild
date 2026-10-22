@@ -140,8 +140,13 @@ export const leasePort = (): number => {
 };
 interface Probe { status: number | null; body: string; error: string | null }
 const probe = (port: number, path: string): Probe => ask<Probe>({ op: 'probe', port, path });
-/** Whether something accepts connections on the loopback port. */
-const listening = (port: number): boolean => ask<{ open: boolean }>({ op: 'listening', port }).open;
+/** Whether something accepts connections on the loopback port: open, or refused; any other answer is unknown, BLOCKED. */
+const listening = (port: number): boolean => {
+  const answer = ask<{ open?: unknown; code?: unknown }>({ op: 'listening', port });
+  if (answer.open === true) return true;
+  if (answer.open === false && answer.code === 'ECONNREFUSED') return false;
+  throw new Finding('BLOCKED', `whether ${port} still listens is unknown: the connect ended with ${JSON.stringify(answer.code ?? answer)}`, ['port_state_unknown']);
+};
 
 /** Starts the fixture server on `port` carrying `run`, waiting for its ready marker unless `wait` is false; with `helper`, its grandchild too. */
 function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper = false): { handle: Handle; child: ChildProcess } {
@@ -178,7 +183,9 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
       // The own-port fault binds a port of its own: one the lease didn't name (a lease draw can repeat it).
       let port = lease.port;
       if (fault === 'own-port') do port = leasePort(); while (port === lease.port);
-      const { handle, child } = start(spec, port, lease.token, fault !== 'early', fault === 'leaves');
+      // The early fault reports ready at once while its server still warms up, for long enough that no delay between
+      // the fill's return and the kit's probe can hide it: the fill is wrong by construction, not by a close race.
+      const { handle, child } = start(fault === 'early' ? { ...spec, warmup: 2000 } : spec, port, lease.token, fault !== 'early', fault === 'leaves');
       started.set(handle.id, child);
       return handle;
     },
@@ -187,8 +194,9 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
       if (!child) return;
       started.delete(handle.id);
       child.kill('SIGTERM');
-      // Unknown (no process table) is not gone: the wait runs out and the child is killed outright.
-      if (!waitUntil(() => child.exitCode !== null || child.signalCode !== null || alive(child.pid ?? -1) === false, 2000)) child.kill('SIGKILL');
+      // Unknown (no process table) is not gone: a short wait, then the child is killed outright.
+      const grace = alive(child.pid ?? -1) === null ? 300 : 2000;
+      if (!waitUntil(() => child.exitCode !== null || child.signalCode !== null || alive(child.pid ?? -1) === false, grace)) child.kill('SIGKILL');
     },
   };
 }
@@ -202,14 +210,12 @@ const plantedFills = (): PlantedFill<EnvironmentFill>[] => [
 
 const toCase = (id: string, part: 'fixed' | 'seeded', spec: EnvSpec): SlotCase => ({ id, part, input: spec as unknown as JsonValue, expected: { status: 200, token: spec.token } });
 const fixtures: Fixture[] = [
-  // Warm-ups well past the kit's own latency between up and its probe (one worker round-trip, a few ms), on top of
-  // the server's own start, so an environment ready before its health answers is caught on a loaded machine too.
-  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 80 }),
-  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 60 }),
+  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 40 }),
+  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 30 }),
 ].map(({ id, input, expected }) => ({ id, input, expected }));
 
-/** Two environments from the draw, each with its own health route, token and warm-up (long enough that ready before it is caught). */
-const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(80, 120) }));
+/** Two environments from the draw, each with its own health route, token and warm-up. */
+const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(40, 80) }));
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
   const spec = c.input as unknown as EnvSpec;
@@ -219,8 +225,11 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   // interface hands the environment a port number, not a bound socket, and a port taken in that moment fails the
   // reference fill's start loudly (no ready marker), never a rule.
   const lease: Lease = { port: leasePort(), token: `run-${randomBytes(9).toString('hex')}` };
+  let up: Handle | null = null;
+  let downed = false;
   try {
     const handle = object('the handle', yield () => fill.up(spec, lease));
+    up = handle as unknown as Handle;
     text('handle/id', handle.id);
     if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
     if (!Number.isInteger(handle.pid)) throw new Finding('FAIL', `handle/pid ${JSON.stringify(handle.pid)} is not a pid`, ['type']);
@@ -235,6 +244,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // The handle's pid is the fill's word until the process table shows it: a running process carrying the run
     // token. Otherwise "gone after down" would hold of a pid that never was the environment.
     if (!running(pid) || !scanned(lease.token).some((p) => p.pid === pid)) throw new Finding('FAIL', `handle/pid ${pid} is no running process carrying the run token`, ['pid_not_environment']);
+    downed = true;
     yield () => fill.down(handle as unknown as Handle);
     // Gone means all of: the pid the handle names is no process, nothing answers on the leased port any more, and
     // no process carries the run token (a grandchild the handle never named is caught there).
@@ -247,6 +257,9 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
       throw fail(RULES.down.message, ['process_left'], why);
     }
   } finally {
+    // A case that ended before its down step still asks the fill to take its environment down, as best it can, so a
+    // refusal or a block leaves nothing running that the fill knows how to stop.
+    if (up !== null && !downed) { try { void Promise.resolve(fill.down(up)).catch(() => undefined); } catch { /* the fill's own failure */ } }
     // The kit stops only processes it started through the reference fill (its fixture server and helper, by pid and
     // start time as their ready marker reported them) that still carry this case's run token; any other pid is left.
     for (const p of carrying(lease.token) ?? []) if (isOwn(p.pid)) stop(p.pid);
