@@ -317,7 +317,7 @@ fn image_of(
     }
     let (w, h) = rgba.dimensions();
     let mut bgra = rgba.into_raw();
-    for px in bgra.chunks_exact_mut(4) {
+    for px in bgra.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
         px[3] = (f64::from(px[3]) * opacity).round() as u8;
     }
@@ -816,7 +816,7 @@ impl Renderer {
                 let entry = Entry::of(key, pixels.as_raw());
                 let (w, h) = pixels.dimensions();
                 let mut bgra = pixels.into_raw();
-                for px in bgra.chunks_exact_mut(4) {
+                for px in bgra.as_chunks_mut::<4>().0 {
                     px.swap(0, 2);
                 }
                 let image = image::RgbaImage::from_raw(w, h, bgra)

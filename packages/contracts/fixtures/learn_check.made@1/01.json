@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6X",
+  "kind": "learn_check.made",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451124,
+  "data": {
+    "change": "doc:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "reason": "the quote is not at its handle session:01K74G1Z3X5V7T9R1P3N5M7K9H#msg4"
+  }
+}

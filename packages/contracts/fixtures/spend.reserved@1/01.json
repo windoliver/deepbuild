@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "id": "01K74G2B6D8F0H2K4M6P8R0T2V",
+  "kind": "spend.reserved",
+  "subject": "run:01K74G2A4C6E8G0J2M4N6Q8S0V",
+  "data": {
+    "run": "run:01K74G2A4C6E8G0J2M4N6Q8S0V",
+    "check": "gpu.render-golden",
+    "inputs": "5f1c2a8e9d3b7c6a4f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a",
+    "issue": "windoliver/deepbuild#41",
+    "resource": "local/gpu/a100-0",
+    "budgets": [
+      {
+        "budget": "01K74FMXR4T6V8X0Z2B4D6F8H0",
+        "usd": 3
+      },
+      {
+        "budget": "01K74FMYA2C4E6G8J0M2N4Q6S8",
+        "usd": 3
+      }
+    ],
+    "ask": null,
+    "decision": null
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760017111123
+}
