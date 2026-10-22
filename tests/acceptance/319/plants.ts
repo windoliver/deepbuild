@@ -17,6 +17,8 @@ export const waitsForNextBatch: Planting = {
 };
 
 /** A hub that, for one person, records an authority ask past its deadline as escalated, though nobody is there to take it. */
+// The real record is a class instance, so a spread would lose its methods: every method of the interface is
+// forwarded by name, and a method the record gains later fails the type-check here rather than at run time.
 export const escalatesWithNobody: Planting = {
   record: (record): RecordStore => ({
     append: (connection, event) => record.append(connection, event.kind === 'ask.defaulted' ? { ...event, kind: 'ask.escalated' } : event),
@@ -24,6 +26,7 @@ export const escalatesWithNobody: Planting = {
     table: (name) => record.table(name),
     session: (id) => record.session(id),
     rebuild: () => record.rebuild(),
+    sync: () => record.sync(),
     raw: (sql) => record.raw(sql),
     close: () => record.close(),
   }),
