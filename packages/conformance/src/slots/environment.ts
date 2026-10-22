@@ -291,9 +291,15 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     };
     members.set(pid, startTime(pid));
     grow(before);
-    // The environment's processes listen on the leased port and no other; the open files table shows which.
-    const bound = listeners([...members.keys()]);
-    if (bound === null) throw new Finding('BLOCKED', 'the environment\'s listening ports can\'t be read (lsof failed), so whether it binds its lease alone is unknown', ['listeners_unknown']);
+    // The environment's processes listen on the leased port and no other; the open files table shows which, here
+    // and again at every step of the wait after down for whatever still runs then. A listener bound and closed
+    // wholly between two readings is beyond what a sampled table shows, as the fork above is.
+    const inventory = (pids: number[]): number[] => {
+      const bound = listeners(pids);
+      if (bound === null) throw new Finding('BLOCKED', 'the environment\'s listening ports can\'t be read (lsof failed), so whether it binds its lease alone is unknown', ['listeners_unknown']);
+      return bound;
+    };
+    const bound = inventory([...members.keys()]);
     if (!bound.includes(lease.port)) throw fail(RULES.port.message, ['unleased_port'], `no process of the environment listens on ${lease.port}, though health answered there (${bound.length ? `it listens on ${bound.join(', ')}` : 'it listens on nothing'})`);
     const extra = bound.filter((port) => port !== lease.port);
     if (extra.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listens on ${extra.join(', ')} besides the lease ${lease.port}`);
@@ -303,7 +309,12 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const clear = (): boolean => {
       const rows = read();
       grow(rows);
-      return stillThere(rows).length === 0 && !listening(lease.port) && !rows.some((row) => carries(row, lease.token));
+      const there = stillThere(rows);
+      if (there.length > 0) {
+        const late = inventory(there.map((m) => m.pid)).filter((port) => port !== lease.port);
+        if (late.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listened on ${late.join(', ')} besides the lease ${lease.port} while going down`);
+      }
+      return there.length === 0 && !listening(lease.port) && !rows.some((row) => carries(row, lease.token));
     };
     downed = true;
     yield () => fill.down(handle as unknown as Handle);

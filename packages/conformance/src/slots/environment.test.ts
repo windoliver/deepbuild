@@ -153,6 +153,25 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('refuses an environment that opens a second listener only while going down', async () => {
+    const k = kit();
+    // On SIGTERM the server closes its leased listener, opens another port, and exits 400 ms later.
+    const script = `
+      const [port, token] = process.argv.slice(1);
+      const http = require('node:http');
+      const handler = (q, s) => { if (q.url === '/ping') { s.writeHead(204); s.end(); return; } s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ ok: true, token })); };
+      const main = http.createServer(handler).listen(Number(port), '127.0.0.1');
+      process.on('SIGTERM', () => { main.close(); http.createServer(handler).listen(0, '127.0.0.1'); setTimeout(() => process.exit(0), 400); });`;
+    const children: ChildProcess[] = [];
+    try {
+      const report = await runKit(k, scripted(script, children), { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'unleased_port'], ['FAIL', 'unleased_port']]);
+      expect(report.cases[0]!.message).toMatch(/while going down/);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+    }
+  });
+
   it('refuses an environment with a process under it that carries no run token, before down could lose it', async () => {
     const k = kit();
     const server = fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url));
