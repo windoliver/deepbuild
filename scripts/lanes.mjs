@@ -21,9 +21,10 @@ export const checks = [
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
     // while a sibling file builds finds it gone or half-written: those files run one at a time, after
     // every other file has run in parallel. The hub's files (#16) start real hubs and time their
-    // sockets to 2 ms, so they too run one at a time, with nothing beside them.
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**', '--exclude', 'tests/acceptance/390/**', '--exclude', 'tests/acceptance/391/**', '--exclude', 'tests/acceptance/392/**', '--exclude', 'tests/acceptance/393/**', '--exclude', 'tests/acceptance/394/**', '--exclude', 'tests/acceptance/16/**'],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/16/'],
+    // sockets to 2 ms, so they too run one at a time, with nothing beside them. So do the supervisor's
+    // (#236): they read the system's one sandbox log stream and time a sandboxed start against a bare one.
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**', '--exclude', 'tests/acceptance/390/**', '--exclude', 'tests/acceptance/391/**', '--exclude', 'tests/acceptance/392/**', '--exclude', 'tests/acceptance/393/**', '--exclude', 'tests/acceptance/394/**', '--exclude', 'tests/acceptance/16/**', '--exclude', 'tests/acceptance/236/**'],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/16/', 'tests/acceptance/236/'],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.

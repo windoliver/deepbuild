@@ -212,6 +212,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #42 first measurement: the merge base has no OTLP receiver. One process starts the receiver on a temp record and sends it 20,000 Claude Code spans as 100 protobuf trace exports of 200, the AC6 load without its pacing, so p50 includes Node's start and the sustained limits (2,000 spans a second under 5% of a core and 50 MB) stay in tests/acceptance/42/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "sandbox-setup",
+      "command": [
+        "node",
+        "benchmarks/sandbox.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #236 first measurement: the merge base has no supervisor. One process opens a record, the asks core and the supervisor in a temp folder, then starts, waits for and cleans up 20 runs of /usr/bin/true in the platform sandbox, interleaved with 20 bare spawns, so p50 includes Node's start, the denial stream's warm-up and the record's appends; the issue's 300 ms per check over a bare start stays in tests/acceptance/236/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

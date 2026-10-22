@@ -4,13 +4,16 @@
 // output or a backfill never holds up the event loop that acknowledges hooks.
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir, networkInterfaces } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { openAsks } from '@deepbuild/asks';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { openSupervisor, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { disk, testVfs, type Durable } from './vfs.js';
@@ -34,7 +37,10 @@ interface Session { id: string; agent: string; pid: number; start: string; cwd: 
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string; spent: boolean }
 /** A run the supervisor started, as the journal keeps it until its finish is durable. */
-interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; pid?: number; start?: string }
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant }
+/** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
+const RUN_AS_YOU: Grant = { run_as_you: true };
+const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 
 /** A ULID at `ms` whose random part is a hash of `key`, so the same source line always gets the same ID. */
 function derivedId(ms: number, key: string): string {
@@ -54,6 +60,9 @@ export class Core {
   private readonly durable: Durable;
   private record!: RecordStore;
   private store!: EvidenceStore;
+  private supervisor!: Supervisor;
+  /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
+  private host!: Host;
   private readonly ready: Promise<void>;
   private readonly sessions = new Map<string, Session>();
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
@@ -96,6 +105,23 @@ export class Core {
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
+    // Opening the supervisor reaps what the record says a run left before this start.
+    const asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
+    this.supervisor = await openSupervisor({
+      record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
+      // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;
+      // the sandbox profile itself keeps every project's agent hook and MCP files.
+      guarded: [
+        this.root.dir, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
+        join(homedir(), 'Library', 'LaunchAgents'),
+        process.execPath, resolve(process.execPath, '../../lib/node_modules'),
+        ...[process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME].filter((p): p is string => !!p && isAbsolute(p)),
+      ],
+    });
+    this.host = this.options.host
+      ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
+      : this.supervisor;
+    this.timers.push(setInterval(() => void this.supervisor.tick().catch(() => undefined), 1000));
     await this.replaySpool();
     await this.recoverRuns();
     await this.retain();
@@ -435,17 +461,28 @@ export class Core {
   }
 
   private async runStart(params: Obj): Promise<Obj> {
-    const { check, claim, commit, argv, env = {} } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU } = params;
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
     if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
     if (!Array.isArray(argv) || !argv.length || argv.some((a) => typeof a !== 'string')) throw new Refused(refusal('type', '/params/argv', 'Give the run its program and arguments as strings.', argv));
     if (!isObj(env) || Object.values(env).some((v) => typeof v !== 'string')) throw new Refused(refusal('type', '/params/env', 'Give env as names to string values.', env));
-    const run = await this.launch({ run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string> });
+    if (typeof cwd !== 'string' || !isAbsolute(cwd)) throw new Refused(refusal('type', '/params/cwd', 'Give the run its folder as an absolute path.', cwd));
+    if (!isObj(grant) || Object.keys(grant).some((k) => k !== 'run_as_you' && !(GRANT_LISTS as readonly string[]).includes(k))) {
+      throw new Refused(refusal('type', '/params/grant', 'Give the grant as read, write, hosts and sockets lists, or run_as_you.', grant));
+    }
+    for (const k of GRANT_LISTS) {
+      const list = grant[k];
+      if (list !== undefined && (!Array.isArray(list) || list.some((v) => typeof v !== 'string' || (k !== 'hosts' && !isAbsolute(v))))) {
+        throw new Refused(refusal('type', `/params/grant/${k}`, k === 'hosts' ? 'List hosts as host:port strings.' : 'List absolute paths.', list));
+      }
+    }
+    if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
+    const run = await this.launch({ run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant });
     return { run };
   }
 
-  /** Starts a run in a process group of its own, with the hub's run token injected; its output becomes scrubbed evidence. */
+  /** Starts a run through the host, sandboxed, with the hub's run token injected; its output becomes scrubbed evidence. */
   private async launch(run: Run): Promise<string> {
     this.writeJournal((runs) => { runs[run.run] = run; });
     await this.appendCore('run.started', { run: run.run, check: run.check, claim: run.claim, commit: run.commit }, { subject: run.run });
@@ -455,19 +492,39 @@ export class Core {
     const writer = this.store.connect({ role: 'deepbuild', via: 'job' });
     const label = { source: run.run, redaction: 'complete' as const, license: { name: 'local', allows: [] }, ...(values ? { run: values } : {}) };
     const sinks = [writer.text({ kind: 'run.stdout', ...label }), writer.text({ kind: 'run.stderr', ...label })];
-    const child = spawn(run.argv[0]!, run.argv.slice(1), { env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let writes = Promise.resolve();
-    child.stdout!.on('data', (chunk: Buffer) => { writes = writes.then(() => sinks[0]!.write(chunk)); });
-    child.stderr!.on('data', (chunk: Buffer) => { writes = writes.then(() => sinks[1]!.write(chunk)); });
-    const ended = new Promise<{ code: number | null; failed?: string }>((done) => {
-      child.on('error', (error) => done({ code: null, failed: error.message }));
-      child.on('close', (code) => done({ code }));
-    });
-    if (child.pid) {
-      const start = await this.startOf(child.pid, true);
-      this.writeJournal((runs) => { if (runs[run.run]) Object.assign(runs[run.run]!, { pid: child.pid, ...(start ? { start } : {}) }); });
+    const output = {
+      stdout: (chunk: Buffer) => { writes = writes.then(() => sinks[0]!.write(chunk)); },
+      stderr: (chunk: Buffer) => { writes = writes.then(() => sinks[1]!.write(chunk)); },
+    };
+    let stop: () => void;
+    let ended: Promise<{ code: number | null; failed?: string }>;
+    if (this.options.plant === 'run-spawns-itself') {
+      // The planted wrong program: the hub spawns the run itself, past the host and its sandbox.
+      const child = spawn(run.argv[0]!, run.argv.slice(1), { cwd: run.cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout!.on('data', output.stdout);
+      child.stderr!.on('data', output.stderr);
+      ended = new Promise((done) => {
+        child.on('error', (error) => done({ code: null, failed: error.message }));
+        child.on('close', (code) => done({ code }));
+      });
+      stop = () => { try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* gone */ } };
+    } else {
+      const started = this.host.start({ run: run.run, argv: run.argv, cwd: run.cwd, env, grant: run.grant, output });
+      ended = started.then(async (s) => {
+        if (s.status === 'BLOCKED') return { code: null, failed: `BLOCKED: no ${s.kind} free` };
+        const exit = await this.host.wait(run.run);
+        return { code: exit.code };
+      }, (error: Error) => ({ code: null, failed: error.message }));
+      stop = () => {
+        void started.then(() => this.host.signal(run.run, 'SIGTERM')).catch(() => undefined);
+        // A run still held on a resource never starts: given up on, its start resolves BLOCKED.
+        void this.supervisor.status(run.run).then((s) => (s.state === 'held' ? this.supervisor.cleanup(run.run) : undefined)).catch(() => undefined);
+      };
     }
     const done = ended.then(async ({ code, failed }) => {
+      // What the run left behind is stopped and its leases released before its finish is recorded.
+      if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
       await writes;
       const evidence: string[] = [];
       for (const sink of sinks) {
@@ -478,7 +535,7 @@ export class Core {
       const findings = this.stopping ? ['hub stopped'] : failed ? [failed] : [];
       await this.finish(run, outcome, findings, evidence);
     });
-    this.runs.set(run.run, { run, done, stop: () => { try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* gone */ } } });
+    this.runs.set(run.run, { run, done, stop });
     void done.finally(() => this.runs.delete(run.run));
     return run.run;
   }
@@ -499,14 +556,11 @@ export class Core {
         this.writeJournal((runs) => { delete runs[run.run]; });
         continue;
       }
-      // Stopped only when it is provably the process this hub started: its PID and its start time.
-      if (run.pid && run.start && (await this.startOf(run.pid, true)) === run.start) {
-        try { process.kill(-run.pid, 'SIGTERM'); } catch { /* gone */ }
-      }
+      // Its processes were reaped when the supervisor opened.
       if (await recorded('run.started', run.run)) await this.finish(run, 'stopped', ['hub restarted'], []);
       else this.writeJournal((runs) => { delete runs[run.run]; });
       // Its claim's check runs again.
-      await this.launch({ run: `run:${ulid(this.now())}`, check: run.check, claim: run.claim, commit: run.commit, argv: run.argv, env: run.env });
+      await this.launch({ ...run, run: `run:${ulid(this.now())}`, cwd: run.cwd ?? process.cwd(), grant: run.grant ?? RUN_AS_YOU });
     }
   }
 
@@ -627,6 +681,7 @@ export class Core {
     for (const { stop } of this.runs.values()) stop();
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
+    await this.supervisor.close();
     await this.record.close();
     this.writeState('stopped');
   }

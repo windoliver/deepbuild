@@ -190,6 +190,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
         },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
@@ -201,6 +205,10 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -225,6 +233,18 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."
+        }
+      }
+    },
+    "packages/supervisor/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
         }
       }
     },
