@@ -184,6 +184,14 @@
         }
       }
     },
+    "packages/otlp/package.json": {
+      "dependencies": {
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #42: the record the receiver appends tool.span and request.cost events to, and reads a session's and a task's cost from."
+        }
+      }
+    },
     "packages/asks/package.json": {
       "dependencies": {
         "@deepbuild/contracts": {

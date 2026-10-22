@@ -1273,7 +1273,7 @@ export interface DocPatched {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "not_checked" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -2010,6 +2010,35 @@ export interface ReadingRollup {
   evidence?: Array<string>;
 }
 
+/** request.cost@1 */
+export interface RequestCost {
+  v: 1;
+  id: string;
+  kind: "request.cost";
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    model: string;
+    request_id: string | null;
+    cost: {
+      basis: "reported";
+      usd: number;
+    };
+    tokens: {
+      input: number;
+      cached: number;
+      output: number;
+      exact: boolean;
+    };
+    reading: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.finished@1 */
 export interface RunFinished {
   v: 1;
@@ -2319,6 +2348,28 @@ export interface ToolBefore {
     kind: "unknown";
     paths: Array<string>;
     command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** tool.span@1 */
+export interface ToolSpan {
+  v: 1;
+  id: string;
+  kind: "tool.span";
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    tool: string;
+    tool_use_id: string | null;
+    duration_ms: number;
+    blocked_ms: number | null;
+    decision: string | null;
+    reading: string;
   };
   evidence?: Array<string>;
 }
