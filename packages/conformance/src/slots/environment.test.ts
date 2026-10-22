@@ -300,6 +300,33 @@ describe('the environment kit and the process table', () => {
     expect(left).toEqual([]);
   });
 
+  it('leaves no helper of its own when its fixture server cannot bind the leased port', async () => {
+    const k = kit();
+    const planted = k.planted.find((p) => p.name === 'leaves-grandchild')!.fill as EnvironmentFill;
+    const squatters: ChildProcess[] = [];
+    const tokens: string[] = [];
+    // The planted fill that starts a helper, with the leased port taken before its server can bind it.
+    const squatted: EnvironmentFill = {
+      ...planted,
+      up: (spec, lease) => {
+        tokens.push(lease.token);
+        const squatter = spawn(process.execPath, ['-e', `require('node:net').createServer().listen(${lease.port}, '127.0.0.1'); setTimeout(() => {}, 20_000);`], { stdio: 'ignore' });
+        squatters.push(squatter);
+        const until = Date.now() + 3000;
+        while (Date.now() < until) { try { execFileSync('lsof', ['-nP', '-iTCP:' + lease.port, '-sTCP:LISTEN'], { stdio: 'ignore' }); break; } catch { /* not yet */ } }
+        return planted.up(spec, lease);
+      },
+    };
+    try {
+      const report = await runKit(k, squatted, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'fixture_down'], ['BLOCKED', 'fixture_down']]);
+      const helpers = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/helper.mjs') && tokens.some((t) => l.includes(t)));
+      expect(helpers).toEqual([]);
+    } finally {
+      for (const s of squatters) s.kill('SIGKILL');
+    }
+  });
+
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
     const reports = await Promise.all([0, 1].map(() => runKit(k, cleanFills(k)[0]!, { parts: ['fixed'] })));

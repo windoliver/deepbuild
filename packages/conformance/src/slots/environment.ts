@@ -236,7 +236,8 @@ function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper =
   try {
     if (wait) {
       // The fixture itself not coming up (its port taken in the lease's open moment, say) is the kit's, not the fill's.
-      if (!waitUntil(() => existsSync(ready), 5000)) { child.kill('SIGKILL'); throw new Finding('BLOCKED', `the kit's fixture environment on ${port} did not come up in 5 s`, ['fixture_down']); }
+      // The wait ends early when the server is gone (it exits on a port it can't bind), so the kit's wait is on a server, not a 5 s clock.
+      if (!waitUntil(() => existsSync(ready) || alive(pid) === false, 5000) || !existsSync(ready)) { child.kill('SIGKILL'); throw new Finding('BLOCKED', `the kit's fixture environment on ${port} did not come up${alive(pid) === false ? ' (its server ended before it was ready)' : ' in 5 s'}`, ['fixture_down']); }
       // The marker names the server's grandchild, if any: a process the kit started through the fill and may stop. A
       // marker the kit can't read, or one that names no helper where one was asked for, leaves the kit's ownership
       // of what it started unknown; that is the kit's own failure, BLOCKED, and the server is stopped before it is told.
