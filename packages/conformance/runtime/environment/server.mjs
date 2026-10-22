@@ -26,9 +26,12 @@ const server = createServer((request, response) => {
 setTimeout(() => {
   server.listen(Number(port), '127.0.0.1', () => {
     // The ready marker names the processes this environment is made of, so the kit knows what it started; written
-    // whole, then moved into place, so a reader never sees half of it.
-    writeFileSync(`${ready}.tmp`, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild?.pid ?? null }));
-    renameSync(`${ready}.tmp`, ready);
+    // whole, then moved into place, so a reader never sees half of it. A fill that never waits for the marker has
+    // removed its folder already; the server serves on regardless, so that fill is judged on its health answer.
+    try {
+      writeFileSync(`${ready}.tmp`, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild?.pid ?? null }));
+      renameSync(`${ready}.tmp`, ready);
+    } catch { /* nobody is waiting for the marker */ }
   });
 }, Number(warmup));
 // A fixture server never outlives its run by much.

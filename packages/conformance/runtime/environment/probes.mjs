@@ -14,10 +14,10 @@ const lease = () => new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(0, '127.0.0.1', () => { const { port } = server.address(); server.close(() => resolve({ port })); });
 });
-// One connection, closed after the answer (a kept-alive socket would hold an environment's graceful close open),
-// and a body cut to what the shared buffer holds.
-const probe = ({ port, path }) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(2500), headers: { connection: 'close' } })
-  .then((r) => r.text().then((body) => ({ status: r.status, body: body.slice(0, 16_384), error: null })))
+// One connection, closed after the answer (a kept-alive socket would hold an environment's graceful close open);
+// a redirect is an error, since the answer must come from the leased port itself.
+const probe = ({ port, path }) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(2500), headers: { connection: 'close' }, redirect: 'error' })
+  .then((r) => r.text().then((body) => ({ status: r.status, body, error: null })))
   .catch((e) => ({ status: null, body: '', error: String(e) }));
 const listening = ({ port }) => new Promise((resolve) => {
   const socket = connect(port, '127.0.0.1');
@@ -30,7 +30,9 @@ const OPS = { lease, probe, listening };
 parentPort.on('message', async (request) => {
   let answer;
   try { answer = await OPS[request.op](request); } catch (error) { answer = { error: String(error) }; }
-  const bytes = Buffer.from(JSON.stringify(answer));
+  let bytes = Buffer.from(JSON.stringify(answer));
+  // An answer past the shared buffer keeps its status and loses its body, marked so, rather than arriving cut.
+  if (bytes.length > out.length) bytes = Buffer.from(JSON.stringify({ ...answer, body: '', truncated: true }));
   const length = bytes.copy(out, 0, 0, out.length);
   Atomics.store(flags, 1, length);
   Atomics.store(flags, 0, 1);

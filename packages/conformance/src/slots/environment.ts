@@ -3,7 +3,7 @@
 // the kit's fixture server; the kit itself leases the port, probes health and watches the process, so no
 // memorized answer can pass it. The planted fills report ready before health answers, bind a port of their own
 // and leave their process running.
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -43,6 +43,8 @@ const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule
 // ---- Processes and ports, synchronously -------------------------------------------------------------
 
 const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+/** The process table, in the C locale, so its dates and states read the same under every LANG. */
+const ps = (args: string[]): SpawnSyncReturns<string> => spawnSync('ps', args, { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
 const PS_DOWN = (): Finding => new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so the state of the environment\'s processes is unknown', ['ps_unavailable']);
 /**
  * Whether the process still runs; an exited child not yet reaped (a zombie) counts as gone. Null when the process
@@ -51,10 +53,10 @@ const PS_DOWN = (): Finding => new Finding('BLOCKED', 'the process table can\'t 
 export function alive(pid: number): boolean | null {
   // A signal of 0 asks without sending; a pid no process has fails it, and then `ps` has nothing to add.
   try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false; }
-  const ps = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' });
-  if (ps.error || ps.status === null) return null;
-  const state = (ps.stdout ?? '').trim();
-  return ps.status === 0 && state.length > 0 && !state.startsWith('Z');
+  const table = ps(['-o', 'stat=', '-p', String(pid)]);
+  if (table.error || table.status === null) return null;
+  const state = (table.stdout ?? '').trim();
+  return table.status === 0 && state.length > 0 && !state.startsWith('Z');
 }
 /** `alive`, for a judge: unknown is BLOCKED. */
 const running = (pid: number): boolean => { const a = alive(pid); if (a === null) throw PS_DOWN(); return a; };
@@ -67,12 +69,12 @@ interface Carrier { pid: number; command: string }
 /**
  * Every process carrying the run token as a word of its command line (the issue's words: down leaves no process
  * carrying its run token). A process table the kit can't read is null, never an empty list. The scan finds what
- * was left; it grants no authority to stop anything (see `started`).
+ * was left; it grants no authority to stop anything (see `own`).
  */
 function carrying(run: string): Carrier[] | null {
-  const ps = spawnSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' });
-  if (ps.status !== 0 || ps.error) return null;
-  return ps.stdout.split('\n').flatMap((line) => {
+  const table = ps(['-Awwo', 'pid=,command=']);
+  if (table.status !== 0 || table.error) return null;
+  return table.stdout.split('\n').flatMap((line) => {
     const [pid, ...words] = line.trim().split(/\s+/);
     if (!words.includes(run) || !/^\d+$/.test(pid ?? '')) return [];
     return [{ pid: Number(pid), command: words.join(' ') }];
@@ -88,9 +90,9 @@ function carrying(run: string): Carrier[] | null {
 const own = new Map<number, number>();
 /** The process's start time in ms since the epoch, as the process table gives it; null for no process or no table. */
 const startTime = (pid: number): number | null => {
-  const ps = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' });
-  const at = Date.parse((ps.stdout ?? '').trim());
-  return ps.status === 0 && Number.isFinite(at) ? at : null;
+  const table = ps(['-o', 'lstart=', '-p', String(pid)]);
+  const at = Date.parse((table.stdout ?? '').trim());
+  return table.status === 0 && Number.isFinite(at) ? at : null;
 };
 /** The same start, within the second a table derives it to (Linux recomputes it from the boot time, which can move). */
 const sameStart = (a: number | null, b: number | undefined): boolean => a !== null && b !== undefined && Math.abs(a - b) <= 1500;
@@ -200,14 +202,14 @@ const plantedFills = (): PlantedFill<EnvironmentFill>[] => [
 
 const toCase = (id: string, part: 'fixed' | 'seeded', spec: EnvSpec): SlotCase => ({ id, part, input: spec as unknown as JsonValue, expected: { status: 200, token: spec.token } });
 const fixtures: Fixture[] = [
-  // Warm-ups well past the kit's own latency between up and its probe (one worker round-trip), so an environment
-  // ready before its health answers is caught on a loaded machine too.
-  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 120 }),
-  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 100 }),
+  // Warm-ups well past the kit's own latency between up and its probe (one worker round-trip, a few ms), on top of
+  // the server's own start, so an environment ready before its health answers is caught on a loaded machine too.
+  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 80 }),
+  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 60 }),
 ].map(({ id, input, expected }) => ({ id, input, expected }));
 
 /** Two environments from the draw, each with its own health route, token and warm-up (long enough that ready before it is caught). */
-const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(120, 180) }));
+const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(80, 120) }));
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
   const spec = c.input as unknown as EnvSpec;
@@ -217,12 +219,12 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   // interface hands the environment a port number, not a bound socket, and a port taken in that moment fails the
   // reference fill's start loudly (no ready marker), never a rule.
   const lease: Lease = { port: leasePort(), token: `run-${randomBytes(9).toString('hex')}` };
-  const handle = object('the handle', yield () => fill.up(spec, lease));
-  text('handle/id', handle.id);
-  if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
-  if (!Number.isInteger(handle.pid)) throw new Finding('FAIL', `handle/pid ${JSON.stringify(handle.pid)} is not a pid`, ['type']);
-  const pid = handle.pid as number;
   try {
+    const handle = object('the handle', yield () => fill.up(spec, lease));
+    text('handle/id', handle.id);
+    if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
+    if (!Number.isInteger(handle.pid)) throw new Finding('FAIL', `handle/pid ${JSON.stringify(handle.pid)} is not a pid`, ['type']);
+    const pid = handle.pid as number;
     if (handle.port !== lease.port) throw fail(RULES.port.message, ['unleased_port'], `bound ${handle.port}; the lease is ${lease.port}`);
     // The probe follows up at once, nothing between: an environment ready before its health answers is caught here.
     const answer = probe(lease.port, spec.health);
