@@ -4,7 +4,7 @@
 // replaying the log rebuilds them all (design: One event log, with tables built from it).
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Statement } from 'better-sqlite3';
-import { CHECKED, judge, ROLLERS, type LearnedChange } from './learned.js';
+import { CHECKED, judge, ROLLERS, YOURS, type LearnedChange } from './learned.js';
 import type { Db } from './storage.js';
 
 /** One event as the projections read it: the stored row, with its data parsed and migrated. */
@@ -413,9 +413,17 @@ export class Projector {
           for (const q of d.evidence) if (isObj(q) && typeof q.at === 'string' && q.at.startsWith('doc:')) this.up('learned_cites', { handle: q.at, id: e.id });
         }
         // A rollback is a compensating event: it takes the change it names out of force and flags every later
-        // change that supersedes or cites it. Only you, through the app or the CLI, or the core roll back.
+        // change that supersedes or cites it. Only you, through the app or the CLI, or the core roll back, and
+        // the base only you: the core's attempt on a rule you typed is refused and recorded, as its base changes are.
         const undone = str(d.supersedes);
         if (e.kind !== 'learn.rolled_back' || !undone || !ROLLERS.has(e.writer)) break;
+        if (!YOURS.has(e.writer)) {
+          const named = this.stmt("SELECT layer, target FROM learned_layer WHERE handle = ? AND kind IN ('learn.applied', 'learn.widened')").get(undone) as { layer: string | null; target: string | null } | undefined;
+          if (named?.layer === 'base') {
+            this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE id = ?").run(`${named.target ?? undone} is in the base, which only you change: the app or the CLI speaks for you, not ${e.writer}`, e.id);
+            break;
+          }
+        }
         this.stmt("UPDATE learned_layer SET state = 'rolled_back' WHERE handle = ? AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened')").run(undone);
         this.stmt("UPDATE learned_layer SET flagged = COALESCE(flagged || ' ', '') || ? WHERE kind <> 'learn.rolled_back' AND log_pos > (SELECT log_pos FROM learned_layer WHERE handle = ?)"
           + ' AND id IN (SELECT id FROM learned_layer WHERE supersedes = ? UNION SELECT id FROM learned_cites WHERE handle = ?)').run(undone, undone, undone, undone);

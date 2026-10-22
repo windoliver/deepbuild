@@ -86,6 +86,12 @@ describe('the learned layer', () => {
     const rule = await apply(record, you, { layer: 'base', target: 'rule:nopush', diff: '+ never push without asking', evidence: [{ at: `session:${S}#m1`, quote: 'never push' }], scope: 'all', applied_by: 'you' });
     expect(await record.rollBack(you, { change: rule })).toEqual([]);
     expect(await stateOf(record, rule)).toBe('applied');
+    // Nor does the core, by appending the compensating event itself: refused and recorded, as its base changes are.
+    // Failed on a projection that honoured any roller's learn.rolled_back whatever the layer it named.
+    const undo = ulidAt(T0 + 2000);
+    await record.append(core, { v: 1, id: undo, kind: 'learn.rolled_back', ts: T0 + 2000, data: { replay: null, supersedes: `doc:${rule}`, layer: 'base', target: 'rule:nopush', diff: '- never push without asking', evidence: [], scope: 'all', applied_by: 'you' } as never });
+    expect(await stateOf(record, rule)).toBe('applied');
+    expect(await stateOf(record, undo)).toBe('refused');
     expect(JSON.stringify(await record.startSlice(S))).toContain('never push without asking');
     await record.close();
   });
