@@ -325,12 +325,15 @@ const DOWN_LIMIT_MS = 5000;
 const thenable = (value: unknown): Promise<unknown> | null => (value !== null && (typeof value === 'object' || typeof value === 'function') && typeof (value as { then?: unknown }).then === 'function' ? Promise.resolve(value) : null);
 // A step that blocks the thread itself, never returning, is beyond a deadline set on that thread: the fill is an
 // object in the kit's own process, as every in-process fill is, and nothing in that process runs while it blocks.
-function bounded(step: () => unknown, ms: number, what: string): unknown {
+function bounded(step: () => unknown, ms: number, what: string, late?: (value: unknown) => void): unknown {
   const out = step();
   const pending = thenable(out);
   if (pending === null) return out;
   let timer: NodeJS.Timeout | undefined;
-  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Finding('BLOCKED', `the fill's ${what} did not settle within ${ms} ms, so the case can't go on and nothing of it is known`, ['step_timeout'])), ms); });
+  let expired = false;
+  const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => { expired = true; reject(new Finding('BLOCKED', `the fill's ${what} did not settle within ${ms} ms, so the case can't go on and nothing of it is known`, ['step_timeout'])); }, ms); });
+  // A value that arrives after the deadline is still the fill's: `late` gets it, so an environment that came up late is taken down.
+  if (late) pending.then((value) => { if (expired) late(value); }, () => undefined);
   return Promise.race([pending, deadline]).finally(() => clearTimeout(timer));
 }
 /**
@@ -373,7 +376,9 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   let up: Handle | null = null;
   let downed = false;
   try {
-    const handle = object('the handle', yield () => bounded(() => fill.up(spec, lease), UP_LIMIT_MS, 'up'));
+    // An up that settles after its deadline has still brought something up: that handle goes to a quiet down of its own.
+    const lateUp = (value: unknown): void => { if (value !== null && typeof value === 'object') { try { void thenable(quietDown(fill, value as Handle)())?.catch(() => undefined); } catch { /* the fill's own failure */ } } };
+    const handle = object('the handle', yield () => bounded(() => fill.up(spec, lease), UP_LIMIT_MS, 'up', lateUp));
     up = handle as unknown as Handle;
     text('handle/id', handle.id);
     if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);

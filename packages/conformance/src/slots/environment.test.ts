@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanFills, runKit, slotKits } from '../index.js';
-import type { EnvironmentFill, Handle } from './environment.js';
+import type { EnvironmentFill, EnvSpec, Handle, Lease } from './environment.js';
 
 const kit = () => slotKits().find((k) => k.slot === 'environment@1')!;
 const path = process.env.PATH;
@@ -465,6 +465,25 @@ describe('the environment kit and the process table', () => {
       for (const h of real) clean!.down(h);
     }
   }, 30_000);
+
+  it('takes down an environment whose up settles only after its deadline, with the case BLOCKED', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const downs: Handle[] = [];
+    // Up brings the server up at once and hands its handle over 10.3 s later, past the kit's 10 s deadline.
+    const lateUp: EnvironmentFill = {
+      ...clean!,
+      up: ((spec: EnvSpec, lease: Lease) => { const h = clean!.up(spec, lease); return new Promise<Handle>((resolve) => setTimeout(() => resolve(h), 10_300)); }) as unknown as EnvironmentFill['up'],
+      down: (handle) => { downs.push(handle); clean!.down(handle); },
+    };
+    const report = await runKit(k, lateUp, { parts: ['fixed'] });
+    expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'step_timeout'], ['BLOCKED', 'step_timeout']]);
+    // The late handles were taken down by the kit's late hand, so the servers are gone.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(downs.length).toBe(2);
+    const left = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/server.mjs') && downs.some((h) => l.includes(` ${h.port} `)));
+    expect(left).toEqual([]);
+  }, 40_000);
 
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
