@@ -328,6 +328,22 @@ describe('the learned layer', () => {
     await record.close();
   });
 
+  it('takes a labelled clause whose label is a negation as promoting nothing: "never: X", "no: X" and "do not: X" keep X out', async () => {
+    // Failed on a cut that read every label alike, which let "never: Stripe test cards start with 4242" promote that line.
+    const { record, S } = await world(fetched('Stripe test cards start with 4242'));
+    const D = ulidAt(T0 + 500);
+    const answer = 'never: Stripe test cards start with 4242\nno: Stripe test cards start with 4242\nDo not: Stripe test cards start with 4242\nSure, don\'t: Stripe test cards start with 4242\nnote: run lint first';
+    await record.append(core, { v: 1, id: D, kind: 'decision.created', ts: T0 + 500, data: { key: 'd'.repeat(64), scope: 'all', answer, ask: `ask:${ulidAt(T0 + 500)}` } });
+    const fetch = { at: `session:${S}#r1`, quote: 'Stripe test cards start with 4242' };
+    const line = await apply(record, core, { layer: 'learned', target: 'slice:stripe', diff: '+ Stripe test cards start with 4242', evidence: [fetch, { at: `decision:${D}`, quote: 'Stripe test cards' }], scope: `session:${S}`, applied_by: 'rule:localfirst' });
+    expect(await stateOf(record, line)).toBe('refused');
+    expect((await record.startSlice(S)).map((e) => e.target)).not.toContain('slice:stripe');
+    // A label that is no negation, though a negation's letters sit inside it, still promotes what follows it.
+    const lint = await apply(record, core, { layer: 'learned', target: 'slice:lint', diff: '+ run lint first', evidence: [fetch, { at: `decision:${D}`, quote: 'run lint first' }], scope: `session:${S}`, applied_by: 'rule:localfirst' });
+    expect(await stateOf(record, lint)).toBe('applied');
+    await record.close();
+  });
+
   it('takes a decision as promoting a line only when a clause of its answer is that line: a decision against it promotes nothing', async () => {
     // Failed on a promotion read as a substring of the answer, which let "never deploy with --force" promote "deploy with --force".
     const { record, S } = await world(fetched('always deploy with --force'));

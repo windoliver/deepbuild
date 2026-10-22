@@ -241,11 +241,18 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
   // false to a citation back to it, though a change cites only changes already in force, so none can.
   /**
    * The clauses (normalized) of the decisions of yours among the quotes: each line of an answer, cut at '; ', and
-   * of a labelled line ("promote: X") what follows its last label, never the label ("X: no" promotes only "no").
+   * of a labelled line ("promote: X") what follows its last label, never the label ("X: no" promotes only "no"),
+   * and nothing when the label is a negation ("never: X", "no: X", "do not: X" promote nothing).
    */
+  const NEGATION = /(^|[^a-z])(never|no|not|don'?t)([^a-z]|$)/;
+  const clauseOf = (piece: string): string => {
+    const cut = piece.lastIndexOf(': ');
+    if (cut < 0) return piece.trim();
+    return NEGATION.test(piece.slice(0, cut).toLowerCase()) ? '' : piece.slice(cut + 2).trim();
+  };
   const decisionsAmong = (quotes: Quote[]): string[] => quotes.filter((q) => q.at.startsWith('decision:')).flatMap((q) => {
     const where = locate(db, q.at);
-    return where?.in === 'record' ? where.entry.text.split('\n').flatMap((l) => norm(l).split('; ')).map((c) => c.slice(c.lastIndexOf(': ') + 1).trim()).filter((c) => c !== '') : [];
+    return where?.in === 'record' ? where.entry.text.split('\n').flatMap((l) => norm(l).split('; ')).map(clauseOf).filter((c) => c !== '') : [];
   });
   /** What a cited change rests on: whether only outside content, and the decisions it and its citations cite. */
   interface Rests { outside: boolean; decisions: string[] }
