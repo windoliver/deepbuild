@@ -514,8 +514,8 @@ class AsksCore implements Asks {
       const thread = this.threadOf(session);
       const held = this.open().filter((a) => a.thread === thread && a.data.provisional === true);
       // A session held on an ask: it shows at once, cap or not.
-      // A folded ask shows through its thread's exception.
-      const cards = new Set(held.flatMap((a) => (this.inFold(a) ? this.open().filter((f) => f.handle === a.folded) : [a])));
+      // A folded ask shows through its thread's exception, itself included there.
+      const cards = new Set(held.flatMap((a) => (this.inFold(a) ? [...this.open().filter((f) => f.handle === a.folded), a] : [a])));
       await this.showNow([...cards].filter((a) => !a.shown || a.later !== undefined).sort((a, b) => a.pos - b.pos));
       return held.map((a) => a.handle);
     });

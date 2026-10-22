@@ -227,6 +227,18 @@ describe('the fold', () => {
     expect((await events('ask.batched')).flatMap((e) => ((e.data as Obj).asks as Obj[]).map((a) => a.ask))).toContain(held);
   });
 
+  it('a provisional ask held for your message that joins an exception shows there at once when its session is held on it', async () => {
+    await start('S1');
+    for (const k of [1, 2, 3, 4, 5, 6]) await asks.raise(core('S1'), sourceOf('taste'), ask('taste', `screen ${k}`));
+    await at(T0 + 4 * HOUR);
+    const exception = (await asks.needsYou()).find((c) => c.folded.length > 0)!.ask;
+    await record.append({ writer: 'hook', ...you, session: 'S1' }, { v: 1, id: id(now), kind: 'user.ask', ts: now, data: { msg: 1, text: 'use the brand blue', tasks: [], from: 'person' } });
+    const held = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'footer', { provisional: true }));
+    expect((await asks.card(exception)).folded).not.toContain(held);
+    expect(await asks.holds('S1', { leaves_machine: true })).toEqual([held]);
+    expect((await asks.card(exception)).folded).toContain(held);
+  });
+
   it('an ask that folds into an exception already shown is recorded as shown before it can default', async () => {
     settings({ every: '2d', cap: 10 });
     await start('S1');
