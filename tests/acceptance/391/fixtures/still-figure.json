@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "id": "still-figure",
+  "profile": "figure",
+  "title": "Still until its placement",
+  "description": "Nothing moves until a placement starts at 3 s; its clip springs the dot from 20 to 100 and settles at the clip's last key, 1.2 s later, at 4.2 s.",
+  "size": [320, 180],
+  "transport": { "span": "5s" },
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "card": {
+      "id": "card", "kind": "rect@1", "layer": "main", "name": "Card", "order": "a0",
+      "params": { "box": [0, 0, 320, 180], "paint": { "fill": { "role": "ground" } } }
+    },
+    "label": {
+      "id": "label", "kind": "text@1", "layer": "main", "name": "Label", "order": "a1",
+      "params": { "text": "Waiting", "font": "body", "size": 13, "box": { "w": 200, "h": 20 } },
+      "at": { "pos": [16, 16, 0] }
+    },
+    "dot": {
+      "id": "dot", "kind": "circle@1", "layer": "main", "name": "Dot", "order": "a2",
+      "params": { "center": [0, 90], "r": 8, "paint": { "fill": { "role": "accent" } } }
+    }
+  },
+  "clips": {
+    "rise": {
+      "slots": { "target": { "type": "circle@1", "required": true } },
+      "span": "auto",
+      "channels": {
+        "x": {
+          "target": "slot:target/at/pos/0", "type": "f32",
+          "keys": {
+            "k0": { "t": "0s", "value": 20, "interp": { "spring": { "freq_hz": 2, "damping_ratio": 1 } } },
+            "k1": { "t": "1.2s", "value": 100, "interp": "linear" }
+          }
+        }
+      }
+    }
+  },
+  "placements": {
+    "rise-1": { "clip": "rise", "slots": { "target": "dot" }, "start": "3s", "extend": { "after": "hold" } }
+  }
+}
