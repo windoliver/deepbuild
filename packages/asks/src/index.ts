@@ -635,6 +635,11 @@ class AsksCore implements Asks {
     return holder !== undefined && (!holder.closed || holder.closed.answer === FOLD_DEFAULTS);
   }
 
+  /** Whether an ask is in sight now: shown, and not put off with Later. */
+  private visible(ask: Ask): boolean {
+    return ask.shown && ask.later === undefined;
+  }
+
   /** Shows these asks now, outside any batch. */
   private async showNow(asks: Ask[]): Promise<boolean> {
     if (!asks.length) return false;
@@ -677,7 +682,7 @@ class AsksCore implements Asks {
     const next = batches ? last + batches.every : Infinity;
     // An ask held by an exception that has shown shows there, recorded like any other showing; one from a turn that
     // hasn't read your message waits, as on its own card, for the agent's next step or a deadline before the next batch.
-    const joined = this.open().filter((a) => !a.shown && this.inFold(a) && this.asks.get(bare(a.folded!))!.shown);
+    const joined = this.open().filter((a) => !a.shown && this.inFold(a) && this.visible(this.asks.get(bare(a.folded!))!));
     if (await this.showNow(joined.filter((a) => !a.unread || this.dueBy(a) <= next))) acted = true;
     if (!batches) return (await this.showNow(waiting())) || acted;
     const { cap } = batches;
@@ -799,6 +804,8 @@ class AsksCore implements Asks {
         if (!ask || ask.closed || isAgent(e.writer)) return;
         ask.closed = { outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts, ...(typeof d.answer === 'string' ? { answer: d.answer } : {}) };
         if (e.kind === 'ask.answered') ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision) };
+        // An ask the exception held but hadn't shown yet wasn't in what you closed: it gets its own card.
+        if (ask.fold) for (const a of this.open()) if (a.folded === ask.handle && !a.shown) delete a.folded;
         return;
       }
       case 'ask.batched': {
@@ -876,7 +883,8 @@ class AsksCore implements Asks {
   /** Appends what the state calls for until it calls for nothing more. */
   private async settle(): Promise<void> {
     // The asks that had shown before this call: only they can take a default in it, whatever the clock reads.
-    const seen = new Set(this.open().filter((a) => a.shown).map((a) => a.handle));
+    // One under Later wasn't in sight.
+    const seen = new Set(this.open().filter((a) => this.visible(a)).map((a) => a.handle));
     for (let acted = true; acted;) {
       // What shows comes first, so no ask takes its default before it has shown.
       acted = await this.show();

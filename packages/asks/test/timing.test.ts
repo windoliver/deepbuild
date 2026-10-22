@@ -227,6 +227,22 @@ describe('the fold', () => {
     expect((await events('ask.batched')).flatMap((e) => ((e.data as Obj).asks as Obj[]).map((a) => a.ask))).toContain(held);
   });
 
+  it('an ask held for your message when you leave the exception to its defaults gets its own card, not a default unseen', async () => {
+    await start('S1');
+    for (const k of [1, 2, 3, 4, 5, 6]) await asks.raise(core('S1'), sourceOf('taste'), ask('taste', `screen ${k}`));
+    await at(T0 + 4 * HOUR);
+    const exception = (await asks.needsYou()).find((c) => c.folded.length > 0)!.ask;
+    const hook = { writer: 'hook', ...you, session: 'S1' };
+    await record.append(hook, { v: 1, id: id(now), kind: 'user.ask', ts: now, data: { msg: 1, text: 'use the brand blue', tasks: [], from: 'person' } });
+    const held = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'footer'));
+    await asks.answer(card, exception, { option: 'defaults' });
+    await record.append(hook, { v: 1, id: id(now), kind: 'tool.before', ts: now, data: { kind: 'read', paths: ['src/a.ts'], command: null } });
+    await asks.tick();
+    expect((await asks.inbox()).find((r) => r.ask === held)?.status).toBe('queued');
+    await at(T0 + 12 * HOUR);
+    expect(await shown()).toContain(held);
+  });
+
   it('a provisional ask held for your message that joins an exception shows there at once when its session is held on it', async () => {
     await start('S1');
     for (const k of [1, 2, 3, 4, 5, 6]) await asks.raise(core('S1'), sourceOf('taste'), ask('taste', `screen ${k}`));
@@ -274,6 +290,33 @@ describe('the hub stopped and started', () => {
 });
 
 describe('an ask past its deadline', () => {
+  it('while hidden by Later, when the hub was down, shows again and defaults only on a later call', async () => {
+    settings({});
+    await start('S1');
+    const h = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));
+    await asks.later(card, h, T0 + DAY);
+    now = T0 + 4 * DAY;
+    await asks.tick();
+    expect(await about(h, 'ask.defaulted')).toEqual([]);
+    expect(await shown()).toContain(h);
+    await asks.tick();
+    expect(await about(h, 'ask.defaulted')).toHaveLength(1);
+  });
+
+  it('that joined an exception hidden by Later, when the hub was down, shows with it and defaults only on a later call', async () => {
+    settings({});
+    await start('S1');
+    const { exception } = await fold('S1', ask('taste', 'S1 footer'));
+    await asks.later(card, exception, T0 + DAY);
+    const joined = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'S1 term', { deadline: T0 + 2 * DAY }));
+    now = T0 + 4 * DAY;
+    await asks.tick();
+    expect(await about(joined, 'ask.defaulted')).toEqual([]);
+    expect((await asks.card(exception)).folded).toContain(joined);
+    await asks.tick();
+    expect(await about(joined, 'ask.defaulted')).toHaveLength(1);
+  });
+
   it('first shown by one call defaults on the next, even on a clock that has not moved', async () => {
     await start('S1');
     const raised = id(now);
