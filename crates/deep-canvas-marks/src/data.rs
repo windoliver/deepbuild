@@ -4,16 +4,20 @@
 //! through scales, and an axis is generated from its scale, never drawn by hand.
 //!
 //! Columns hold `data` as base64 of little-endian values of their `dtype` (`f64`, `f32`, `i64`,
-//! `i32`, `u32`, `u16`, `u8`), or a JSON list for `str`, or a `const`. A time scale's domain is
-//! milliseconds since the Unix epoch, UTC, as the record's times are, and its ticks fall on
-//! calendar units.
+//! `i32`, `u32`, `u16`, `u8`, and `bool` and `role` a byte each), or a JSON list for `str`, or a
+//! `const`. A time scale's domain is milliseconds since the Unix epoch, UTC, as the record's times
+//! are, and its ticks fall on calendar units.
+//!
+//! Issue #373 adds R2's mark types: rects from (x, y) to (x2, y2), bars from their y scale's zero
+//! (or `y2`), a path and an area as one line through the rows in order (an area down to the
+//! zero), symbols, and images from an `asset` column with its `alt`. A key is unique across rows.
 
 use serde_json::{Map, Value};
 
 use deep_canvas::ops;
 
 use crate::path;
-use crate::scene::{Align, Fill, Geometry, Mark, Palette, Refused, TextSpec};
+use crate::scene::{Align, Fill, Geometry, ImageFit, Mark, Palette, Refused, TextSpec};
 
 fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
     Err(Refused {
@@ -24,6 +28,8 @@ fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> 
 
 /// The most rows a mark set holds (Mark set: "exceed 1M rows per set" it can never).
 const MAX_ROWS: u64 = 1_000_000;
+/// The most rows a document's mark sets hold together.
+pub const MAX_DOCUMENT_ROWS: u64 = 16_000_000;
 
 /// One column's values.
 #[derive(Clone, Debug, PartialEq)]
@@ -110,11 +116,12 @@ fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
     let Some(bytes) = c.get("data").and_then(Value::as_str).and_then(base64) else {
         return refuse("bad_column", format!("{path}/data"));
     };
+    // A bool is a byte, 0 or 1; a role an index into the set's roles, one byte.
     let width = match dtype {
         "f64" | "i64" => 8,
         "f32" | "i32" | "u32" => 4,
         "u16" => 2,
-        "u8" => 1,
+        "u8" | "bool" | "role" => 1,
         _ => return refuse("bad_column", format!("{path}/dtype")),
     };
     if bytes.len() != n * width {
@@ -405,39 +412,100 @@ pub fn mark_set(
             Encoded::Const(v) => v.as_str().map(str::to_string),
         }
     };
-    let key_column = p
-        .get("key")
-        .and_then(Value::as_str)
-        .and_then(|k| decoded.get(k));
-    let fill_role = p
-        .get("paint")
+    let key_column = match p.get("key").and_then(Value::as_str) {
+        None => None,
+        Some(k) => Some(
+            decoded
+                .get(k)
+                .ok_or(Refused {
+                    code: "ref_unresolved",
+                    path: format!("{path}/key"),
+                })
+                .map(|c| (k, c))?,
+        ),
+    };
+    let keys: Vec<String> = (0..n)
+        .map(|i| {
+            key_column
+                .and_then(|(_, k)| k.text(i))
+                .unwrap_or_else(|| i.to_string())
+        })
+        .collect();
+    // A key is unique and stable (Mark set: `key`), so a row can be picked and patched by it.
+    if let Some((k, _)) = key_column {
+        let mut seen = std::collections::BTreeSet::new();
+        if !keys.iter().all(|key| seen.insert(key)) {
+            return refuse("key_not_unique", format!("{path}/columns/{k}"));
+        }
+    }
+    let paint = p.get("paint");
+    let fill_role = paint
         .and_then(|pt| pt.get("fill").or(pt.get("stroke")))
         .and_then(|f| f.get("role"))
         .and_then(Value::as_str)
         .unwrap_or("ink");
-    let color = role(palette, fill_role, &format!("{path}/paint"))?;
     let mark = p.get("mark").and_then(Value::as_str).unwrap_or("point");
+    // An image set draws its assets, not a role.
+    let color = if mark == "image" {
+        [0, 0, 0]
+    } else {
+        role(palette, fill_role, &format!("{path}/paint"))?
+    };
+    let stroke_width = paint
+        .and_then(|pt| pt.get("stroke"))
+        .and_then(|s| s.get("width"))
+        .and_then(Value::as_f64)
+        .unwrap_or(1.0);
+    // A bar's or an area's base: its `y2`, else its y scale's zero, else 0.
+    let zero = match props.get("y") {
+        Some(Encoded::Column {
+            scale: Some(scale), ..
+        }) => scale.map(0.0),
+        _ => 0.0,
+    };
+    // A column the set reads by name, through `encode` or as itself (an image's asset and alt).
+    let column_text = |name: &str, i: usize| -> Option<String> {
+        match props.get(name) {
+            Some(Encoded::Column { column, .. }) => decoded.get(column)?.text(i),
+            Some(Encoded::Const(v)) => v.as_str().map(str::to_string),
+            None => decoded.get(name)?.text(i),
+        }
+    };
+    let fit = match p.get("fit").and_then(Value::as_str) {
+        None | Some("contain") => ImageFit::Contain,
+        Some("cover") => ImageFit::Cover,
+        Some("fill") => ImageFit::Fill,
+        Some("none") => ImageFit::None,
+        Some(_) => return refuse("bad_doc", format!("{path}/fit")),
+    };
     let mut out = Vec::with_capacity(n);
-    for i in 0..n {
-        let key = key_column
-            .and_then(|k| k.text(i))
-            .unwrap_or_else(|| i.to_string());
+    // A path's and an area's rows are one line through the rows in order.
+    let mut line: Vec<[f64; 2]> = Vec::new();
+    for (i, key) in keys.iter().enumerate() {
         let name = format!("{id}#{key}");
         let (Some(x), Some(y)) = (number("x", i), number("y", i)) else {
             return refuse("bad_encode", format!("{path}/encode"));
         };
         let at = [x + pos[0], y + pos[1]];
+        let x2 = number("x2", i).unwrap_or(x) + pos[0];
+        let y2 = number("y2", i).unwrap_or(y) + pos[1];
+        let span = |a: [f64; 2], b: [f64; 2]| {
+            [
+                a[0].min(b[0]),
+                a[1].min(b[1]),
+                (a[0] - b[0]).abs(),
+                (a[1] - b[1]).abs(),
+            ]
+        };
         match mark {
-            "point" => out.push(Mark::Circle {
+            "point" | "symbol" => out.push(Mark::Circle {
                 item: name,
                 center: at,
-                r: number("size", i).unwrap_or(6.0) / 2.0,
+                r: number("size", i).unwrap_or(if mark == "point" { 6.0 } else { 10.0 }) / 2.0,
                 inner_r: 0.0,
                 color,
             }),
             "rule" => {
-                let x2 = number("x2", i).unwrap_or(x) + pos[0];
-                let y2 = number("y2", i).unwrap_or(y) + pos[1];
                 out.push(rule(
                     name,
                     at,
@@ -445,6 +513,42 @@ pub fn mark_set(
                     number("size", i).unwrap_or(1.0),
                     color,
                 ));
+            }
+            "rect" => out.push(Mark::Rect {
+                item: name,
+                bounds: span(at, [x2, y2]),
+                radius: 0.0,
+                fill: Fill::Solid(color),
+            }),
+            "bar" => {
+                let base = number("y2", i).unwrap_or(zero) + pos[1];
+                out.push(Mark::Rect {
+                    item: name,
+                    bounds: span(at, [x2, base]),
+                    radius: 0.0,
+                    fill: Fill::Solid(color),
+                });
+            }
+            "path" | "area" => line.push(at),
+            "image" => {
+                let Some(asset) = column_text("asset", i) else {
+                    return refuse("bad_doc", format!("{path}/columns/asset"));
+                };
+                if asset.len() != 64 || !asset.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    return refuse("bad_asset", format!("{path}/columns/asset"));
+                }
+                if column_text("alt", i).is_none_or(|a| a.is_empty()) {
+                    return refuse("alt_missing", format!("{path}/columns/alt"));
+                }
+                out.push(Mark::Image {
+                    item: name,
+                    asset: asset.to_ascii_lowercase(),
+                    bounds: span(at, [x2, y2]),
+                    fit,
+                    crop: None,
+                    opacity: 1.0,
+                    adjust: crate::paint::Adjust::default(),
+                });
             }
             "text" => out.push(Mark::Text {
                 item: name,
@@ -460,9 +564,37 @@ pub fn mark_set(
                 origin: at,
                 color,
             }),
-            // Bars, areas and the rest of the marks land in R2.
-            _ => return refuse("mark_r2", format!("{path}/mark")),
+            _ => return refuse("out_of_range", format!("{path}/mark")),
         }
+    }
+    if !line.is_empty() {
+        let mut d = String::new();
+        for (k, p) in line.iter().enumerate() {
+            d.push_str(&format!(
+                "{} {} {} ",
+                if k == 0 { "M" } else { "L" },
+                p[0],
+                p[1]
+            ));
+        }
+        let area = mark == "area";
+        if area {
+            let (first, last) = (line[0], line[line.len() - 1]);
+            let base = zero + pos[1];
+            d.push_str(&format!("L {} {base} L {} {base} Z", last[0], first[0]));
+        }
+        let d = d.trim_end().to_string();
+        out.push(Mark::Path {
+            item: id.to_string(),
+            geometry: Geometry {
+                verbs: path::parse(&d).unwrap_or_default(),
+                stroke: (!area).then_some(stroke_width),
+                fill: area,
+            },
+            d,
+            offset: [0.0, 0.0],
+            color,
+        });
     }
     Ok(out)
 }

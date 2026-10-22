@@ -325,6 +325,10 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: the render's JSON lines. Already in the workspace tree."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {

@@ -1805,6 +1805,7 @@ dependencies = [
  "gpui-pre-apple",
  "image",
  "serde_json",
+ "vello_cpu",
 ]
 
 [[package]]

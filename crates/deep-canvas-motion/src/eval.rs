@@ -274,6 +274,7 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
         };
         let run = &state.slots[field.slot..field.slot + field.width];
         let value = match run {
+            [one] if field.boolean => json!(*one >= 0.5),
             [one] => json!(one),
             many => json!(many),
         };
