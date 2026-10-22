@@ -1,0 +1,530 @@
+#331 acceptance tests at the base commit bddb8099fd259985b5e3155247a99b62d938e47c, run before any implementation.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/331 --no-file-parallelism
+(Node 24.22.0, macOS 14 / Darwin 23.6.0, Docker daemon not running). Result: 8 of 8 files, 27 of 27 tests fail,
+exit 1. Nothing passes. tsc -p tests/acceptance/331/tsconfig.json: one error, the missing packages/env-local.
+
+Why each test fails at base (each for the missing surface, none for a bug in the tests):
+- stacks (AC1, AC2, AC6 x3, AC9), leases AC5, AC10, crash (AC7 x2), budgets AC8 timing, health AC3 first test:
+  `deep env up` isn't built (the CLI answers "Unsupported command", exit 2).
+- leases AC10 (wrong program) x3: the hub refuses to start with DEEP_HUB_PLANT=env-kills-by-port,
+  env-leases-port-again, env-holds-lease-for-helper ("names no planted program"), so each is BLOCKED.
+- health AC3 second test: run.start ignores `environment: true`; the check ran with no stack and finished
+  `failed`, not `missing`. Control: the check got no leased port in `web` (and so reached nothing).
+- kit AC4: environment@1 plants no `starts-in-worktree` (the other three plants exist and pass their part, so the
+  one test over all four fails naming only that one); its fills get no checkout; packages/env-local doesn't exist.
+- budgets AC8: benchmarks/budgets.json has no env-up/env-down task, and benchmarks/env.mjs doesn't exist. This
+  Mac passed the reference-Mac gate, so the timing test reached `deep env up` and failed there.
+- compose AC11 x2: BLOCKED, the Docker daemon is unreachable on this Mac.
+- blocked (AC4 at install, AC9 child session): BLOCKED by design on #348/#349 and #18/#26.
+
+Output:
+
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/331
+
+ ❯ kit.test.ts (3 tests | 3 failed) 7319ms
+   ❯ AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it, naming the route, the port, the process or the worktree (3)
+     × AC4 the kit plants the four environments the issue names, and hands every fill a checkout: up(spec, lease, checkout) with a folder that exists 5ms
+     × AC4 each of the four planted environments fails the kit, a FAIL carrying its own message and naming the route, the port, the process or the worktree 7280ms
+     × AC4 env-local, on a real supervisor, passes environment@1 on its fixed and seeded parts 33ms
+ ❯ stacks.test.ts (6 tests | 6 failed) 6695ms
+   ❯ AC1 #331.cc7309c3 two worktrees get different ports and both stacks come up (1)
+     × AC1 `deep env up` in two worktrees of one repo at once leases each a different port, and both stacks answer their health route from their own worktree 1606ms
+   ❯ AC2 #331.86737f8a teardown stops only processes it started (1)
+     × AC2 `deep env down` stops the stack's server and the child it started, and leaves a look-alike started by hand in the same worktree running 1147ms
+   ❯ AC6 #331.6e85fa63 a port another program already listens on is never leased (3)
+     × AC6 with another program listening on 127.0.0.1 at the port the hub would lease first, `deep env up` leases another port and its stack comes up there 1074ms
+     × AC6 with another program listening on 0.0.0.0 at the port the hub would lease first, `deep env up` leases another port and its stack comes up there 1232ms
+     × AC6 with another program listening on :: at the port the hub would lease first, `deep env up` leases another port and its stack comes up there 877ms
+   ❯ AC9 #331.b23ec100 a child agent in its own worktree can't use a port its parent leased (1)
+     × AC9 with the parent's stack up on its leased port, `deep env up` in a child's own worktree gets another port, and the parent's stack still answers on its own 756ms
+ ❯ leases.test.ts (5 tests | 5 failed) 3844ms
+   ❯ AC5 #331.ba119c50 a port held past its lease's expiry is kept, a sibling gets another, the stale lease is a reading (1)
+     × AC5 a stack whose build runs past its lease's term comes up on its port and keeps it; the lease is marked stale, not ended; a sibling worktree gets a different port while the first still answers 932ms
+   ❯ AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port (4)
+     × AC10 after deep env down, the helper is reported with its PID and port 3000 and left running; the lease on 3000 ends after every recorded process is gone; the next up gets another port 1801ms
+     × AC10 (wrong program) a supervisor planted as env-kills-by-port fails this criterion, naming the port 281ms
+     × AC10 (wrong program) a supervisor planted as env-leases-port-again fails this criterion, naming the port 504ms
+     × AC10 (wrong program) a supervisor planted as env-holds-lease-for-helper fails this criterion, naming the port 322ms
+ ❯ health.test.ts (3 tests | 3 failed) 5773ms
+   ❯ AC3 #331.5001b4d0 a stack that fails its health check makes dependent checks BLOCKED with the cause (3)
+     × AC3 `deep env up` on a stack whose health route answers 503 exits 3 as BLOCKED, the cause naming the route and its answer, and leaves none of the stack running and no lease held 2016ms
+     × AC3 a check that needs the app, run in its checkout whose stack fails its health check, finishes missing (BLOCKED) with the cause, and its own process never runs 1103ms
+     × AC3 (control) the same check on a healthy stack started from its checkout runs, given the leased port in `web`, and reaches the stack 2652ms
+ ❯ crash.test.ts (2 tests | 2 failed) 2242ms
+   ❯ AC7 #331.cba94b5d a hub killed between recording a start and the process starting reaps or reports it on restart (2)
+     × AC7 killed after the start is recorded and before the spawn, the restarted hub finds the record and closes the start: run.cleaned for its run, its lease ended, and no process started late 981ms
+     × AC7 killed after the spawn and before the process is tracked, the restarted hub reaps the process the record names only as starting, or reports it by PID; it never stays untracked 1258ms
+ ❯ budgets.test.ts (4 tests | 4 failed) 3955ms
+   ❯ AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base (4)
+     × AC8 the perf lane has env-up and env-down tasks, a #331 first measurement, valid against the merge base's budgets 250ms
+     × AC8 `node benchmarks/env.mjs up` runs and exits 0 47ms
+     × AC8 `node benchmarks/env.mjs down` runs and exits 0 46ms
+     × AC8 on the reference Mac, deep env up takes under 1000 ms more than the repo's own start of the same stack, and deep env down under 5000 ms 3607ms
+ ❯ compose.test.ts (2 tests | 2 failed) 300ms
+   ❯ AC11 #331.14c365a0 two worktrees' compose stacks run as their own projects on different leased ports; down removes only its own (2)
+     × AC11 two compose projects named from their run tokens on different leased ports; down in one removes only its containers, its lease ends after them, the other still answers 273ms
+     × AC11 (wrong program) a runner that starts compose under the repo's default project name makes the second up replace the first, and fails this test naming the project 24ms
+ ❯ blocked.test.ts (2 tests | 2 failed) 7ms
+   ❯ AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install (1)
+     × AC4 installing each planted environment through deep.registerEnvironment is refused at install by environment@1, naming the route, the port, the process or the worktree, and env-local installs 4ms
+   ❯ AC9 #331.b23ec100 a child agent in its own worktree can't use a port its parent leased (1)
+     × AC9 a child session started in its own worktree, calling deep_env through deep mcp, gets none of the ports its parent session leased, and a lease it asks for on one is refused naming the parent 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 27 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blocked.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install > AC4 installing each planted environment through deep.registerEnvironment is refused at install by environment@1, naming the route, the port, the process or the worktree, and env-local installs
+Error: BLOCKED: the extension host (#348), which runs a package's kit before it loads, and the slot registry behind deep.registerEnvironment (#349) aren't built at this base, so nothing can be installed; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:11:9
+      9|
+     10| const blocked = (what: string): never => {
+     11|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     12| };
+     13|
+ ❯ blocked.test.ts:16:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/27]⎯
+
+ FAIL  blocked.test.ts > AC9 #331.b23ec100 a child agent in its own worktree can't use a port its parent leased > AC9 a child session started in its own worktree, calling deep_env through deep mcp, gets none of the ports its parent session leased, and a lease it asks for on one is refused naming the parent
+Error: BLOCKED: child sessions (session.child_started@1, mapped by the Claude Code adapter, #18) and the deep_env tool of deep mcp (#26) aren't built at this base, so no child agent can ask for its stack; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:11:9
+      9|
+     10| const blocked = (what: string): never => {
+     11|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     12| };
+     13|
+ ❯ blocked.test.ts:22:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/27]⎯
+
+ FAIL  budgets.test.ts > AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base > AC8 the perf lane has env-up and env-down tasks, a #331 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task env-up: expected undefined to be defined
+ ❯ budgets.test.ts:27:53
+     25|     for (const [id, arg] of [['env-up', 'up'], ['env-down', 'down']] a…
+     26|       const task = current.tasks.find((t) => t.id === id);
+     27|       expect(task, `budgets.json has a task ${id}`).toBeDefined();
+       |                                                     ^
+     28|       expect(task!.command).toEqual(['node', 'benchmarks/env.mjs', arg…
+     29|       expect(String(task!.initialReason), `${id} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/27]⎯
+
+ FAIL  budgets.test.ts > AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base > AC8 `node benchmarks/env.mjs up` runs and exits 0
+Error: Command failed: /Users/sophiawj/.nvm/versions/node/v24.22.0/bin/node /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs up
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ budgets.test.ts:34:5
+     32|
+     33|   it.each(['up', 'down'])('AC8 `node benchmarks/env.mjs %s` runs and e…
+     34|     execFileSync(NODE, [join(REPO, 'benchmarks/env.mjs'), arg], { cwd:…
+       |     ^
+     35|   }, 300_000);
+     36|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/27]⎯
+
+ FAIL  budgets.test.ts > AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base > AC8 `node benchmarks/env.mjs down` runs and exits 0
+Error: Command failed: /Users/sophiawj/.nvm/versions/node/v24.22.0/bin/node /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs down
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ budgets.test.ts:34:5
+     32|
+     33|   it.each(['up', 'down'])('AC8 `node benchmarks/env.mjs %s` runs and e…
+     34|     execFileSync(NODE, [join(REPO, 'benchmarks/env.mjs'), arg], { cwd:…
+       |     ^
+     35|   }, 300_000);
+     36|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/27]⎯
+
+ FAIL  budgets.test.ts > AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base > AC8 on the reference Mac, deep env up takes under 1000 ms more than the repo's own start of the same stack, and deep env down under 5000 ms
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ round budgets.test.ts:64:11
+ ❯ budgets.test.ts:73:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/27]⎯
+
+ FAIL  compose.test.ts > AC11 #331.14c365a0 two worktrees' compose stacks run as their own projects on different leased ports; down removes only its own > AC11 two compose projects named from their run tokens on different leased ports; down in one removes only its containers, its lease ends after them, the other still answers
+Error: BLOCKED: the Docker daemon is unreachable (docker info: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory), so no compose stack can come up; this criterion needs Docker running
+ ❯ blocked helpers.ts:33:56
+     31| export type Line = { [key: string]: any };
+     32| export const sleep = (ms: number) => new Promise<void>((resolve) => se…
+     33| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     34|
+     35| for (const key of Object.keys(process.env)) if (key.startsWith('CLAUDE…
+ ❯ dockerReady helpers.ts:455:24
+ ❯ scenario compose.test.ts:40:17
+ ❯ compose.test.ts:92:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/27]⎯
+
+ FAIL  compose.test.ts > AC11 #331.14c365a0 two worktrees' compose stacks run as their own projects on different leased ports; down removes only its own > AC11 (wrong program) a runner that starts compose under the repo's default project name makes the second up replace the first, and fails this test naming the project
+Error: BLOCKED: the Docker daemon is unreachable (docker info: failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /var/run/docker.sock: connect: no such file or directory), so no compose stack can come up; this criterion needs Docker running
+ ❯ blocked helpers.ts:33:56
+     31| export type Line = { [key: string]: any };
+     32| export const sleep = (ms: number) => new Promise<void>((resolve) => se…
+     33| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     34|
+     35| for (const key of Object.keys(process.env)) if (key.startsWith('CLAUDE…
+ ❯ dockerReady helpers.ts:455:24
+ ❯ scenario compose.test.ts:40:17
+ ❯ compose.test.ts:96:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/27]⎯
+
+ FAIL  crash.test.ts > AC7 #331.cba94b5d a hub killed between recording a start and the process starting reaps or reports it on restart > AC7 killed after the start is recorded and before the spawn, the restarted hub finds the record and closes the start: run.cleaned for its run, its lease ended, and no process started late
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ crashed crash.test.ts:18:14
+ ❯ crash.test.ts:37:48
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/27]⎯
+
+ FAIL  crash.test.ts > AC7 #331.cba94b5d a hub killed between recording a start and the process starting reaps or reports it on restart > AC7 killed after the spawn and before the process is tracked, the restarted hub reaps the process the record names only as starting, or reports it by PID; it never stays untracked
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ crashed crash.test.ts:18:14
+ ❯ crash.test.ts:54:48
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/27]⎯
+
+ FAIL  health.test.ts > AC3 #331.5001b4d0 a stack that fails its health check makes dependent checks BLOCKED with the cause > AC3 `deep env up` on a stack whose health route answers 503 exits 3 as BLOCKED, the cause naming the route and its answer, and leaves none of the stack running and no lease held
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ health.test.ts:29:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/27]⎯
+
+ FAIL  health.test.ts > AC3 #331.5001b4d0 a stack that fails its health check makes dependent checks BLOCKED with the cause > AC3 a check that needs the app, run in its checkout whose stack fails its health check, finishes missing (BLOCKED) with the cause, and its own process never runs
+AssertionError: the run is missing, which the verdict table makes BLOCKED ({"run":"run:01M5JW19XMD5091TWCAJ5E6Q2C","outcome":"failed","tests_run":0,"passed":0,"runs":1,"evidence":["e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],"check":"journey:home","assertion":null,"expected":null,"actual":null,"step":null,"points_to":null,"findings":[],"environment":"darwin-arm64"}): expected 'failed' to be 'missing' // Object.is equality
+
+Expected: "missing"
+Received: "failed"
+
+ ❯ health.test.ts:53:125
+     51|       const { run } = await client.call('run.start', { check: 'journey…
+     52|       const done = await finished(client, run as string);
+     53|       expect(done.data.outcome, `the run is missing, which the verdict…
+       |                                                                                                                             ^
+     54|       expect((done.data.findings as string[]).join(' | '), 'its findin…
+     55|       expect(existsSync(join(checkout, 'check.json')), 'the check\'s o…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/27]⎯
+
+ FAIL  health.test.ts > AC3 #331.5001b4d0 a stack that fails its health check makes dependent checks BLOCKED with the cause > AC3 (control) the same check on a healthy stack started from its checkout runs, given the leased port in `web`, and reaches the stack
+AssertionError: the check got a leased port in `web`: expected 0 to be greater than 0
+ ❯ health.test.ts:73:72
+     71|       expect(existsSync(join(checkout, 'check.json')), `the check ran …
+     72|       const seen = JSON.parse(readFileSync(join(checkout, 'check.json'…
+     73|       expect(Number(seen.web), 'the check got a leased port in `web`')…
+       |                                                                        ^
+     74|       expect(seen.status, `the check reached its stack on 127.0.0.1:${…
+     75|       expect(done.data.outcome).toBe('passed');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/27]⎯
+
+ FAIL  kit.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it, naming the route, the port, the process or the worktree > AC4 the kit plants the four environments the issue names, and hands every fill a checkout: up(spec, lease, checkout) with a folder that exists
+AssertionError: environment@1 plants starts-in-worktree: expected [ 'ready-before-health', …(2) ] to include 'starts-in-worktree'
+ ❯ kit.test.ts:42:71
+     40|     const k = kit();
+     41|     const names = k.planted.map((p) => p.name);
+     42|     for (const name of PLANTS) expect(names, `${ENV} plants ${name}`).…
+       |                                                                       ^
+     43|     const reference = cleanFills(k)[0]!;
+     44|     const given: unknown[] = [];
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/27]⎯
+
+ FAIL  kit.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it, naming the route, the port, the process or the worktree > AC4 each of the four planted environments fails the kit, a FAIL carrying its own message and naming the route, the port, the process or the worktree
+AssertionError: each planted environment fails environment@1, naming what it got wrong: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "environment@1 plants no starts-in-worktree",
++ ]
+
+ ❯ kit.test.ts:80:96
+     78|       for (const c of named) if (!says(c.message, (c.input ?? {}) as {…
+     79|     }
+     80|     expect(problems, 'each planted environment fails environment@1, na…
+       |                                                                                                ^
+     81|   }, 600_000);
+     82|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/27]⎯
+
+ FAIL  kit.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it, naming the route, the port, the process or the worktree > AC4 env-local, on a real supervisor, passes environment@1 on its fixed and seeded parts
+Error: env-local has no public entry at packages/env-local/src/index.ts (@deepbuild/env-local): Cannot find module '/packages/env-local/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/331/kit.test.ts
+ ❯ envLocalModule kit.test.ts:34:11
+     32|     return (await import('../../../packages/env-local/src/index.ts')) …
+     33|   } catch (error) {
+     34|     throw Error(`env-local has no public entry at packages/env-local/s…
+       |           ^
+     35|   }
+     36| }
+ ❯ kit.test.ts:84:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/27]⎯
+
+ FAIL  leases.test.ts > AC5 #331.ba119c50 a port held past its lease's expiry is kept, a sibling gets another, the stale lease is a reading > AC5 a stack whose build runs past its lease's term comes up on its port and keeps it; the lease is marked stale, not ended; a sibling worktree gets a different port while the first still answers
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ leases.test.ts:25:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/27]⎯
+
+ FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 after deep env down, the helper is reported with its PID and port 3000 and left running; the lease on 3000 ends after every recorded process is gone; the next up gets another port
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ scenario leases.test.ts:73:16
+ ❯ leases.test.ts:117:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/27]⎯
+
+ FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 (wrong program) a supervisor planted as env-kills-by-port fails this criterion, naming the port
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-OKDh5Y/root with DEEP_HUB_PLANT=env-kills-by-port): file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=env-kills-by-port names no planted program
+    at plantOf (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
+    at runHub (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
+    at hubCommand (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
+    at file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ blocked helpers.ts:33:56
+     31| export type Line = { [key: string]: any };
+     32| export const sleep = (ms: number) => new Promise<void>((resolve) => se…
+     33| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     34|
+     35| for (const key of Object.keys(process.env)) if (key.startsWith('CLAUDE…
+ ❯ startHub helpers.ts:331:21
+ ❯ scenario leases.test.ts:70:20
+ ❯ leases.test.ts:126:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/27]⎯
+
+ FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 (wrong program) a supervisor planted as env-leases-port-again fails this criterion, naming the port
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-kpOHQg/root with DEEP_HUB_PLANT=env-leases-port-again): file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=env-leases-port-again names no planted program
+    at plantOf (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
+    at runHub (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
+    at hubCommand (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
+    at file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ blocked helpers.ts:33:56
+     31| export type Line = { [key: string]: any };
+     32| export const sleep = (ms: number) => new Promise<void>((resolve) => se…
+     33| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     34|
+     35| for (const key of Object.keys(process.env)) if (key.startsWith('CLAUDE…
+ ❯ startHub helpers.ts:331:21
+ ❯ scenario leases.test.ts:70:20
+ ❯ leases.test.ts:126:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/27]⎯
+
+ FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 (wrong program) a supervisor planted as env-holds-lease-for-helper fails this criterion, naming the port
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-ArIeHE/root with DEEP_HUB_PLANT=env-holds-lease-for-helper): file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=env-holds-lease-for-helper names no planted program
+    at plantOf (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
+    at runHub (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
+    at hubCommand (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
+    at file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ blocked helpers.ts:33:56
+     31| export type Line = { [key: string]: any };
+     32| export const sleep = (ms: number) => new Promise<void>((resolve) => se…
+     33| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+       |                                                        ^
+     34|
+     35| for (const key of Object.keys(process.env)) if (key.startsWith('CLAUDE…
+ ❯ startHub helpers.ts:331:21
+ ❯ scenario leases.test.ts:70:20
+ ❯ leases.test.ts:126:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/27]⎯
+
+ FAIL  stacks.test.ts > AC1 #331.cc7309c3 two worktrees get different ports and both stacks come up > AC1 `deep env up` in two worktrees of one repo at once leases each a different port, and both stacks answer their health route from their own worktree
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ stacks.test.ts:30:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/27]⎯
+
+ FAIL  stacks.test.ts > AC2 #331.86737f8a teardown stops only processes it started > AC2 `deep env down` stops the stack's server and the child it started, and leaves a look-alike started by hand in the same worktree running
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ stacks.test.ts:54:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/27]⎯
+
+ FAIL  stacks.test.ts > AC6 #331.6e85fa63 a port another program already listens on is never leased > AC6 with another program listening on 127.0.0.1 at the port the hub would lease first, `deep env up` leases another port and its stack comes up there
+ FAIL  stacks.test.ts > AC6 #331.6e85fa63 a port another program already listens on is never leased > AC6 with another program listening on 0.0.0.0 at the port the hub would lease first, `deep env up` leases another port and its stack comes up there
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ stacks.test.ts:93:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/27]⎯
+
+ FAIL  stacks.test.ts > AC6 #331.6e85fa63 a port another program already listens on is never leased > AC6 with another program listening on :: at the port the hub would lease first, `deep env up` leases another port and its stack comes up there
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ stacks.test.ts:93:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/27]⎯
+
+ FAIL  stacks.test.ts > AC9 #331.b23ec100 a child agent in its own worktree can't use a port its parent leased > AC9 with the parent's stack up on its leased port, `deep env up` in a child's own worktree gets another port, and the parent's stack still answers on its own
+Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run deep --help for available commands.)
+ ❯ notBuilt helpers.ts:415:9
+    413| /** The command #331 builds is missing: this test fails (it is no othe…
+    414| const notBuilt = (what: string, ran: Ran): never => {
+    415|   throw Error(`${what} isn't built at this commit (exit ${ran.code}: $…
+       |         ^
+    416| };
+    417| export interface Up { ran: Ran; out: Line | undefined }
+ ❯ envUp helpers.ts:422:31
+ ❯ upReady helpers.ts:427:24
+ ❯ stacks.test.ts:112:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/27]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  27 failed (27)
+   Start at  15:34:25
+   Duration  32.88s (tests 96%, import 2%, transform 2%)
+
