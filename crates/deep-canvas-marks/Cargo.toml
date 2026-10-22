@@ -1,0 +1,16 @@
+[package]
+name = "deep-canvas-marks"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #391: R1's 2D marks on the CPU: the draw list of a writer layer (text, rect, circle and
+# path, solid fills and two-stop linear gradients, rect masks), path tessellation by content key
+# and zoom bucket, and the content keys of shaped text and writer layers. Named deep-canvas* so the
+# canvas lint reads it: checks read the flattened strokes and true shapes it computes. It draws
+# nothing: deep-marks-render hands the list to GPUI.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"

@@ -762,6 +762,10 @@ pub enum ColorSpace {
     Srgb = 0,
     /// The Oklab color space.
     Oklab = 1,
+    /// DeepBuild patch (windoliver/deepbuild#391): the exact gradient mode. Stops convert to Oklab
+    /// through the sRGB curve, not a 2.2 power, and mix premultiplied by their alpha, with no
+    /// dither, so a two-stop gradient reads the same codes on every row.
+    OklabExact = 2,
 }
 
 impl Display for ColorSpace {
@@ -769,6 +773,7 @@ impl Display for ColorSpace {
         match self {
             ColorSpace::Srgb => write!(f, "sRGB"),
             ColorSpace::Oklab => write!(f, "Oklab"),
+            ColorSpace::OklabExact => write!(f, "Oklab (exact)"),
         }
     }
 }

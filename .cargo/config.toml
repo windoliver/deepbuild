@@ -10,3 +10,8 @@ rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 # `AtlasKey::Mask`, `Window::paint_mask_sprite` and `Window::remove_mask_page` added, each marked
 # "DeepBuild patch". gpui-kit and gpui-shell still come from upstream, unforked.
 gpui-pre = { path = "vendor/gpui-pre" }
+# Issue #391: the GPUI patch's exact gradient mode (technical design: Conventions, "an exact
+# gradient mode (no dither, the sRGB curve, premultiplied stops)"). vendor/gpui-pre-apple is
+# gpui-pre-apple 0.3.9 from crates.io with `ColorSpace::OklabExact` drawn by its Metal shader,
+# each change marked "DeepBuild patch"; the variant itself is in vendor/gpui-pre's color.rs.
+gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
