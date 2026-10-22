@@ -1,19 +1,22 @@
-//! `deep-canvas-render <frames|session|render>`: JSON lines in, one JSON line out per input line, in
-//! order, exit 0. A line that can't be read, lacks a required field or names an unknown `planted`
-//! value answers `{"ok":false,"code":"bad_input"}`, before anything platform-specific; off macOS
-//! every other line answers `{"ok":false,"code":"unsupported_platform"}`. The surface is the #391
-//! acceptance README's.
+//! `deep-canvas-render <frames|session|render|check|look>`: JSON lines in, one JSON line out per
+//! input line, in order, exit 0. A line that can't be read, lacks a required field or names an
+//! unknown `planted` value answers `{"ok":false,"code":"bad_input"}`, before anything
+//! platform-specific; off macOS every drawing line answers `{"ok":false,"code":"unsupported_platform"}`.
+//! The surface is the #391 acceptance README's, with #392's added: `check` and `look` (on every
+//! platform), looks by ID or as look@1, status states, readings with their as-of time, replay and
+//! frame captures.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
-//! revision, view or reading, and when the presented frame's `valid_until` passes (canvas
-//! primitives: Frame clock and scheduler). The view's zoom is the window's scale factor.
+//! revision, view or reading, when the presented frame's `valid_until` passes, and at the pinned
+//! time a bound value on screen goes stale or the age it shows ticks (canvas primitives: Frame
+//! clock and scheduler). The view's zoom is the window's scale factor.
 
-use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
-use deep_canvas_marks::scene::Palette;
+use deep_canvas_marks::look::{self, Look};
+use deep_canvas_marks::scene::{Palette, Record};
 use serde_json::{json, Map, Value};
 
 fn bad_input() -> Value {
@@ -24,18 +27,11 @@ fn refused(code: &str, path: &str) -> Value {
     json!({"ok": false, "code": code, "path": path})
 }
 
-/// The look the roles resolve through, per theme.
-struct Look {
-    light: Palette,
-    dark: Option<Palette>,
-}
-
-impl Look {
-    fn palette(&self, theme: Theme) -> &Palette {
-        match theme {
-            Theme::Dark => self.dark.as_ref().unwrap_or(&self.light),
-            Theme::Light => &self.light,
-        }
+/// The look's roles in a theme.
+fn palette_of(look: &Look, theme: Theme) -> &Palette {
+    match theme {
+        Theme::Dark => &look.dark,
+        Theme::Light => &look.light,
     }
 }
 
@@ -52,12 +48,12 @@ struct View {
 }
 
 /// One step of a document session: a whole revision (or the last one), the time of its first
-/// frame, the view, the readings, and how many frames it presents.
+/// frame, the view, the record, and how many frames it presents.
 struct Step {
     doc: Option<Map<String, Value>>,
     t: i64,
     view: Option<View>,
-    readings: Option<BTreeMap<String, f64>>,
+    record: Option<Record>,
     frames: u32,
 }
 
@@ -66,10 +62,18 @@ enum Request {
         doc: Map<String, Value>,
         look: Look,
         view: View,
-        readings: BTreeMap<String, f64>,
+        record: Record,
         hz: i64,
         vsyncs: u32,
         store: Option<PathBuf>,
+        /// The host time of vsync 0.
+        start: i64,
+        /// In a replay, the record time vsync 0 maps to.
+        replay: Option<i64>,
+        /// Each vsync whose frame on screen is written as a PNG, and where.
+        captures: Vec<(u32, String)>,
+        /// #392 AC3's wrong program: a frame clock that arms only on readings.
+        arms_only_on_readings: bool,
     },
     Session {
         look: Look,
@@ -82,10 +86,17 @@ enum Request {
         look: Look,
         view: View,
         t: i64,
+        record: Record,
         /// The AC6 wrong build: gradients through GPUI's own OKLab option.
         gpui_oklab: bool,
         store: Option<PathBuf>,
     },
+}
+
+/// A line answered before any platform-specific work: a check, a look, or a refusal of either.
+enum Answer {
+    Now(Value),
+    Draw(Box<Request>),
 }
 
 fn palette(value: &Value) -> Option<Palette> {
@@ -104,15 +115,58 @@ fn palette(value: &Value) -> Option<Palette> {
         .collect()
 }
 
-fn look(value: Option<&Value>) -> Option<Look> {
-    let map = value?.as_object()?;
-    Some(Look {
-        light: palette(map.get("light")?)?,
-        dark: match map.get("dark") {
-            None => None,
-            Some(d) => Some(palette(d)?),
-        },
-    })
+/// A look as a request names it: a shipped look's ID, a look@1 definition, or #391's role map
+/// `{light, dark?}` (with no status map), with the definition it resolved from. The status guard
+/// refuses a look@1 that gives two states one glyph, naming the pair.
+fn look(value: Option<&Value>) -> Option<Result<(Look, Value), look::Refusal>> {
+    let def = match value? {
+        Value::String(id) => look::shipped(id)?,
+        Value::Object(map) if map.contains_key("status") || map.contains_key("palette") => {
+            Value::Object(map.clone())
+        }
+        Value::Object(map) => {
+            let light = palette(map.get("light")?)?;
+            let dark = match map.get("dark") {
+                None => light.clone(),
+                Some(d) => palette(d)?,
+            };
+            let roles = Look {
+                light,
+                dark,
+                status: None,
+            };
+            return Some(Ok((roles, Value::Object(map.clone()))));
+        }
+        _ => return None,
+    };
+    let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+    Some(look::resolve(&def, &bundled).map(|l| (l, def)))
+}
+
+/// The record a request pins: `readings` (a number, or `{value, as_of}` with its as-of time on the
+/// record's clock) and `states` (handle → state).
+fn record(input: &Map<String, Value>) -> Option<Record> {
+    let mut record = Record::default();
+    if let Some(value) = input.get("readings") {
+        for (h, r) in value.as_object()? {
+            let (value, as_of) = match r {
+                Value::Object(o) => (o.get("value")?, Some(o.get("as_of")?.as_i64()?)),
+                n => (n, None),
+            };
+            record
+                .readings
+                .insert(h.clone(), value.as_f64().filter(|n| n.is_finite())?);
+            if let Some(a) = as_of {
+                record.as_of.insert(h.clone(), a);
+            }
+        }
+    }
+    if let Some(value) = input.get("states") {
+        for (h, state) in value.as_object()? {
+            record.states.insert(h.clone(), state.as_str()?.to_string());
+        }
+    }
+    Some(record)
 }
 
 fn view(value: Option<&Value>) -> Option<View> {
@@ -137,17 +191,6 @@ fn view(value: Option<&Value>) -> Option<View> {
     Some(View { zoom, theme })
 }
 
-fn readings(value: Option<&Value>) -> Option<BTreeMap<String, f64>> {
-    let Some(value) = value else {
-        return Some(BTreeMap::new());
-    };
-    value
-        .as_object()?
-        .iter()
-        .map(|(h, n)| Some((h.clone(), n.as_f64().filter(|n| n.is_finite())?)))
-        .collect()
-}
-
 /// The content-addressed store an image is read from by its sha256: a directory whose files are
 /// named by their hashes. A document never names a path; only the request does.
 fn store(value: Option<&Value>) -> Option<Option<PathBuf>> {
@@ -162,27 +205,74 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
     value?.as_object().cloned()
 }
 
-fn parse(command: &str, input: &Map<String, Value>) -> Option<Request> {
-    match command {
+fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
+    // `check` reads the document and the look, `look` the look alone; both answer on every
+    // platform. A look the status guard refuses is the answer, and nothing is drawn.
+    let look = match (command, input.get("look")) {
+        ("check", None) => None,
+        (_, value) => match look(value)? {
+            Ok(found) => Some(found),
+            Err(refusal) => return Some(Answer::Now(refusal.to_json())),
+        },
+    };
+    if command == "look" {
+        let (_, def) = look?;
+        return Some(Answer::Now(json!({"ok": true, "look": def})));
+    }
+    if command == "check" {
+        let result = deep_canvas::document::check(&Value::Object(doc(input.get("doc"))?));
+        return Some(Answer::Now(json!({
+            "ok": result.ok,
+            "issues": result.issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
+            "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
+        })));
+    }
+    let (look, _) = look?;
+    let request = match command {
         "frames" => {
             let hz = match input.get("refresh_hz") {
                 None => 60,
                 Some(v) => v.as_i64().filter(|hz| *hz > 0 && 705_600_000 % hz == 0)?,
             };
-            Some(Request::Frames {
+            let arms_only_on_readings = match input.get("planted") {
+                None => false,
+                Some(Value::String(p)) if p == "arms_only_on_readings" => true,
+                Some(_) => return None,
+            };
+            let captures = match input.get("captures") {
+                None => Vec::new(),
+                Some(list) => list
+                    .as_array()?
+                    .iter()
+                    .map(|c| {
+                        let vsync = u32::try_from(c.get("vsync")?.as_u64()?).ok()?;
+                        Some((vsync, c.get("out")?.as_str()?.to_string()))
+                    })
+                    .collect::<Option<Vec<_>>>()?,
+            };
+            Request::Frames {
                 doc: doc(input.get("doc"))?,
-                look: look(input.get("look"))?,
+                look,
                 view: view(input.get("view"))?,
-                readings: readings(input.get("readings"))?,
+                record: record(input)?,
                 hz,
                 vsyncs: u32::try_from(input.get("vsyncs")?.as_u64()?)
                     .ok()
                     .filter(|n| *n <= 100_000)?,
                 store: store(input.get("store"))?,
-            })
+                start: match input.get("start") {
+                    None => 0,
+                    Some(t) => t.as_i64()?,
+                },
+                replay: match input.get("replay") {
+                    None => None,
+                    Some(r) => Some(r.get("record_t")?.as_i64()?),
+                },
+                captures,
+                arms_only_on_readings,
+            }
         }
         "session" => {
-            let look = look(input.get("look"))?;
             let steps = input
                 .get("steps")?
                 .as_array()?
@@ -199,9 +289,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Request> {
                             None => None,
                             v => Some(view(v)?),
                         },
-                        readings: match s.get("readings") {
-                            None => None,
-                            r => Some(readings(r)?),
+                        record: if s.contains_key("readings") || s.contains_key("states") {
+                            Some(record(s)?)
+                        } else {
+                            None
                         },
                         frames: match s.get("frames") {
                             None => 5,
@@ -214,11 +305,11 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Request> {
                 .collect::<Option<Vec<_>>>()?;
             // The first step opens the session, so it carries the document.
             steps.first()?.doc.as_ref()?;
-            Some(Request::Session {
+            Request::Session {
                 look,
                 steps,
                 store: store(input.get("store"))?,
-            })
+            }
         }
         "render" => {
             let gpui_oklab = match input.get("planted") {
@@ -226,27 +317,31 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Request> {
                 Some(Value::String(p)) if p == "gpui_oklab_gradient" => true,
                 Some(_) => return None,
             };
-            Some(Request::Render {
+            Request::Render {
                 out: input.get("out")?.as_str()?.to_string(),
                 doc: doc(input.get("doc"))?,
-                look: look(input.get("look"))?,
+                look,
                 view: view(input.get("view"))?,
                 t: match input.get("t") {
                     None => 0,
                     Some(t) => t.as_i64()?,
                 },
+                record: record(input)?,
                 gpui_oklab,
                 store: store(input.get("store"))?,
-            })
+            }
         }
-        _ => None,
-    }
+        _ => return None,
+    };
+    Some(Answer::Draw(Box::new(request)))
 }
 
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
-    if !["frames", "session", "render"].contains(&command.as_str()) {
-        eprintln!("deep-canvas-render: usage: deep-canvas-render frames | session | render");
+    if !["frames", "session", "render", "check", "look"].contains(&command.as_str()) {
+        eprintln!(
+            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look"
+        );
         std::process::exit(2);
     }
     let stdin = io::stdin();
@@ -269,10 +364,11 @@ fn main() {
         };
         let answer = match request {
             None => bad_input(),
-            Some(request) => {
+            Some(Answer::Now(answer)) => answer,
+            Some(Answer::Draw(request)) => {
                 #[cfg(target_os = "macos")]
                 {
-                    renderer.answer(request)
+                    renderer.answer(*request)
                 }
                 #[cfg(not(target_os = "macos"))]
                 {

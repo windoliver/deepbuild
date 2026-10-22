@@ -362,13 +362,24 @@ fn fill_of(palette: &Palette, fill: &Map<String, Value>, path: &str) -> Result<F
     )?))
 }
 
-/// How a bound value or a counter shows its number (canvas primitives: Bound value, `format`):
-/// R1's fixed and percent notations; compact and duration land later.
+/// A format's notation (Bound value: `fixed | compact | percent | duration`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Notation {
+    #[default]
+    Fixed,
+    /// 1.2K, 3.4M, 5.6B, 7.8T: one decimal unless `precision` says otherwise.
+    Compact,
+    Percent,
+    /// A reading in seconds (or in ms with `unit: ms`) as 450 ms, 3.5 s, 2 min 05 s or 1 h 02 min.
+    Duration,
+}
+
+/// How a bound value or a counter shows its number (canvas primitives: Bound value, `format`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Format {
     pub unit: Option<String>,
     pub precision: Option<u32>,
-    pub percent: bool,
+    pub notation: Notation,
     pub sign_always: bool,
     /// `group: locale`, the default: thousands grouped by commas.
     pub ungrouped: bool,
@@ -398,11 +409,18 @@ impl Format {
                 None => return refuse("bad_format", format!("{path}/format/precision")),
             },
         };
-        f.percent = match map.get("notation").and_then(Value::as_str) {
-            None | Some("fixed") => false,
-            Some("percent") => true,
+        f.notation = match map.get("notation").and_then(Value::as_str) {
+            None | Some("fixed") => Notation::Fixed,
+            Some("compact") => Notation::Compact,
+            Some("percent") => Notation::Percent,
+            Some("duration") => Notation::Duration,
             Some(_) => return refuse("format_notation", format!("{path}/format/notation")),
         };
+        if f.notation == Notation::Duration
+            && f.unit.as_deref().is_some_and(|u| u != "s" && u != "ms")
+        {
+            return refuse("bad_format", format!("{path}/format/unit"));
+        }
         f.sign_always = match map.get("sign").and_then(Value::as_str) {
             None | Some("auto") => false,
             Some("always") => true,
@@ -425,11 +443,35 @@ impl Format {
                 "—".into()
             };
         };
-        let v = if self.percent { n * 100.0 } else { n };
-        let body = match self.precision {
-            Some(p) => format!("{:.*}", p as usize, v.abs()),
-            None if v.fract() == 0.0 && v.abs() < 1e15 => format!("{}", v.abs() as i64),
-            None => format!("{}", v.abs()),
+        let (body, suffix) = match self.notation {
+            Notation::Fixed => (self.digits(n.abs(), self.precision), String::new()),
+            Notation::Percent => (self.digits(n.abs() * 100.0, self.precision), "%".into()),
+            Notation::Compact => self.compact(n.abs()),
+            Notation::Duration => (self.duration(n.abs()), String::new()),
+        };
+        let sign = if n < 0.0 && body.chars().any(|c| c.is_ascii_digit() && c != '0') {
+            "−"
+        } else if self.sign_always && n > 0.0 {
+            "+"
+        } else {
+            ""
+        };
+        let unit = match (&self.unit, self.notation) {
+            (_, Notation::Percent | Notation::Duration) => String::new(),
+            (Some(u), _) if u == "%" || u == "°" => u.clone(),
+            (Some(u), _) => format!(" {u}"),
+            (None, _) => String::new(),
+        };
+        format!("{sign}{body}{suffix}{unit}")
+    }
+
+    /// A magnitude's digits: `precision` decimals, or its shortest form; thousands grouped
+    /// unless `group: none`.
+    fn digits(&self, v: f64, precision: Option<u32>) -> String {
+        let body = match precision {
+            Some(p) => format!("{:.*}", p as usize, v),
+            None if v.fract() == 0.0 && v < 1e15 => format!("{}", v as i64),
+            None => format!("{v}"),
         };
         let (int, frac) = match body.split_once('.') {
             Some((i, f)) => (i.to_string(), Some(f.to_string())),
@@ -442,23 +484,59 @@ impl Format {
             }
             grouped.push(c);
         }
-        if let Some(frac) = frac {
-            grouped = format!("{grouped}.{frac}");
+        match frac {
+            Some(frac) => format!("{grouped}.{frac}"),
+            None => grouped,
         }
-        let sign = if v < 0.0 && grouped.chars().any(|c| c.is_ascii_digit() && c != '0') {
-            "−"
-        } else if self.sign_always && v > 0.0 {
-            "+"
+    }
+
+    /// A magnitude in thousands, millions, billions or trillions, moving up a step where
+    /// rounding reaches 1,000 of the step below (999,950 is 1.0M).
+    fn compact(&self, v: f64) -> (String, String) {
+        const STEPS: [(f64, &str); 5] =
+            [(1.0, ""), (1e3, "K"), (1e6, "M"), (1e9, "B"), (1e12, "T")];
+        let precision = self.precision.unwrap_or(1);
+        let scale = deep_canvas::ops::powi(10.0, precision as i32);
+        let round = |x: f64| (x * scale).round() / scale;
+        let mut pick = STEPS.iter().rposition(|(step, _)| v >= *step).unwrap_or(0);
+        while pick > 0 && pick + 1 < STEPS.len() && round(v / STEPS[pick].0) >= 1000.0 {
+            pick += 1;
+        }
+        if pick == 0 {
+            return (self.digits(v, self.precision), String::new());
+        }
+        let (step, letter) = STEPS[pick];
+        (self.digits(round(v / step), Some(precision)), letter.into())
+    }
+
+    /// Seconds (or ms with `unit: ms`) as 450 ms, 3.5 s, 2 min 05 s or 1 h 02 min.
+    fn duration(&self, v: f64) -> String {
+        let seconds = if self.unit.as_deref() == Some("ms") {
+            v / 1000.0
         } else {
-            ""
+            v
         };
-        let unit = match (&self.unit, self.percent) {
-            (_, true) => "%".to_string(),
-            (Some(u), false) if u == "%" || u == "°" => u.clone(),
-            (Some(u), false) => format!(" {u}"),
-            (None, false) => String::new(),
-        };
-        format!("{sign}{grouped}{unit}")
+        if seconds < 1.0 {
+            return format!(
+                "{} ms",
+                self.digits(seconds * 1000.0, Some(self.precision.unwrap_or(0)))
+            );
+        }
+        if seconds < 60.0 {
+            let p = self.precision.unwrap_or(1);
+            let mut text = self.digits(seconds, Some(p));
+            if self.precision.is_none() && text.ends_with(".0") {
+                text.truncate(text.len() - 2);
+            }
+            return format!("{text} s");
+        }
+        let whole = seconds.round() as i64;
+        if whole < 3600 {
+            format!("{} min {:02} s", whole / 60, whole % 60)
+        } else {
+            let minutes = (seconds / 60.0).round() as i64;
+            format!("{} h {:02} min", minutes / 60, minutes % 60)
+        }
     }
 }
 
@@ -468,15 +546,105 @@ pub fn format_reading(n: f64) -> String {
     Format::default().show(Some(n))
 }
 
-/// The shown text of every bound value and counter: item ID → its reading, formatted, or what its
-/// `missing` says where the run supplies none. A counter is a text whose `text` is `{counter:
-/// {source: <bound value ID>, format}}`: it formats that bound value's reading as it changes, with
-/// tabular figures (canvas primitives: Text animator and counter).
+/// The record as pinned to one frame (canvas primitives: Bound value; Status binding): each
+/// reading's value and as-of time, each status source's state, and the time the frame is pinned
+/// to, the host time live and the mapped record time in a replay, on the record's clock.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Record {
+    pub readings: BTreeMap<String, f64>,
+    pub as_of: BTreeMap<String, i64>,
+    pub states: BTreeMap<String, String>,
+    pub pinned: i64,
+}
+
+/// A bound value as a frame shows it: its text, whether it is stale and the age it shows, and the
+/// pinned time its text next changes (when it goes stale, or when the age it shows ticks).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shown {
+    pub bound: String,
+    pub text: String,
+    pub stale: bool,
+    pub age: Option<i64>,
+    pub changes_at: Option<i64>,
+}
+
+const FLICKS_PER_SECOND: i64 = 705_600_000;
+
+/// An age as a stale value shows it, whole seconds, minutes or hours, and the age it next ticks at.
+fn age_text(age: i64) -> (String, i64) {
+    let s = age.div_euclid(FLICKS_PER_SECOND);
+    let (n, unit, step) = if s < 60 {
+        (s, "s", 1)
+    } else if s < 3600 {
+        (s / 60, "min", 60)
+    } else {
+        (s / 3600, "h", 3600)
+    };
+    (
+        format!("{n} {unit} old"),
+        (n + 1) * step * FLICKS_PER_SECOND,
+    )
+}
+
+/// The text of a bound value's reading, stale or live, at the frame's pinned time.
+fn show(
+    doc: &Map<String, Value>,
+    bid: &str,
+    b: &Value,
+    format: &Format,
+    source: &str,
+    record: &Record,
+) -> Result<Shown, Refused> {
+    let path = format!("bound_values/{bid}/stale_after");
+    let stale_after = match b.get("stale_after") {
+        None => None,
+        Some(v) => Some(
+            deep_canvas::document::duration(&Value::Object(doc.clone()), v)
+                .or_else(|_| refuse("bad_time", &path))?,
+        ),
+    };
+    let value = record.readings.get(source).copied();
+    let text = format.show(value);
+    let (Some(after), Some(as_of), Some(_)) = (stale_after, record.as_of.get(source), value) else {
+        return Ok(Shown {
+            bound: bid.to_string(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: None,
+        });
+    };
+    let age = record.pinned - as_of;
+    if age < after {
+        return Ok(Shown {
+            bound: bid.to_string(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: Some(as_of + after),
+        });
+    }
+    // A stale value greys out and shows its age; the frame clock arms again when the age ticks.
+    let (shown_age, next) = age_text(age);
+    Ok(Shown {
+        bound: bid.to_string(),
+        text: format!("{text} · {shown_age}"),
+        stale: true,
+        age: Some(age),
+        changes_at: Some(as_of + next),
+    })
+}
+
+/// What every bound value and counter shows: item ID → its reading, formatted, or what its
+/// `missing` says where the run supplies none, stale once its reading is older than its
+/// `stale_after`. A counter is a text whose `text` is `{counter: {source: <bound value ID>,
+/// format}}`: it formats that bound value's reading as it changes, with tabular figures (canvas
+/// primitives: Text animator and counter).
 pub fn bound_texts(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    readings: &BTreeMap<String, f64>,
-) -> Result<BTreeMap<String, String>, Refused> {
+    record: &Record,
+) -> Result<BTreeMap<String, Shown>, Refused> {
     let mut out = BTreeMap::new();
     let empty = Map::new();
     let bound = doc
@@ -495,7 +663,7 @@ pub fn bound_texts(
         if let ["items", id, "params", "text"] = parts.as_slice() {
             out.insert(
                 (*id).to_string(),
-                format.show(readings.get(source).copied()),
+                show(doc, bid, b, &format, source, record)?,
             );
         }
     }
@@ -524,7 +692,173 @@ pub fn bound_texts(
             b.get("missing"),
             &path,
         )?;
-        out.insert(id.clone(), format.show(readings.get(source).copied()));
+        let bid = counter.get("source").and_then(Value::as_str).unwrap_or("");
+        out.insert(id.clone(), show(doc, bid, b, &format, source, record)?);
+    }
+    Ok(out)
+}
+
+/// The paint slot a status binding owns (Status binding: `fill | stroke | badge`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Slot {
+    /// The item's own fill: a rect or a circle drawn in the status color, its glyph and word inside.
+    Fill,
+    /// A ring of the look's `core_min_px` around the item, and a chip with the glyph at its corner.
+    Stroke,
+    /// A chip in the status color with the glyph, at the item's top right corner.
+    Badge,
+}
+
+impl Slot {
+    pub fn name(self) -> &'static str {
+        match self {
+            Slot::Fill => "fill",
+            Slot::Stroke => "stroke",
+            Slot::Badge => "badge",
+        }
+    }
+}
+
+/// A status mark: a status binding's item drawn in its source's state, after every writer layer,
+/// with the state's glyph and word in the same item (canvas primitives: Status binding; The
+/// status-color rule).
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatusMark {
+    pub item: String,
+    pub binding: String,
+    pub slot: Slot,
+    pub state: &'static str,
+    pub color: Rgb,
+    /// The item's box, in u.
+    pub bounds: [f64; 4],
+    /// A rect's corner radius; a circle's is half its box.
+    pub radius: f64,
+    pub glyph: String,
+    pub word: &'static str,
+    /// The label's color: the theme's ink or ground, whichever contrasts more with the color.
+    pub ink: Rgb,
+    /// The look's `core_min_px`: a stroke's width and a chip's smallest side.
+    pub core: f64,
+    /// The look's outline around the mark, `(px, color)`, if it has one.
+    pub outline: Option<(f64, Rgb)>,
+}
+
+/// An item's box in u, for a status mark: a rect's box, a circle's square, a text's box.
+fn status_box(kind: &str, item: &Value, params: Option<&Value>) -> Option<([f64; 4], f64)> {
+    let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
+    let p = |k: &str| params.and_then(|p| p.get(k));
+    match kind {
+        "rect@1" => {
+            let b: Option<Vec<f64>> = p("box")?.as_array()?.iter().map(|v| num(Some(v))).collect();
+            let [x, y, w, h] = <[f64; 4]>::try_from(b?.as_slice()).ok()?;
+            Some((
+                [x + pos[0], y + pos[1], w, h],
+                num(p("radius")).unwrap_or(0.0),
+            ))
+        }
+        "circle@1" => {
+            let c = pair(p("center"))?;
+            let r = num(p("r"))?;
+            Some(([c[0] + pos[0] - r, c[1] + pos[1] - r, 2.0 * r, 2.0 * r], r))
+        }
+        "text@1" => {
+            let b = p("box")?;
+            let size = num(p("size")).unwrap_or(13.0);
+            let h = num(b.get("h")).unwrap_or((1.3 * size).round());
+            Some(([pos[0], pos[1], num(b.get("w"))?, h], 0.0))
+        }
+        _ => None,
+    }
+}
+
+/// Every status binding's mark, in binding ID order, from the look's status map by the state the
+/// record gives its source. A fill colors a rect or a circle; a stroke rings and a badge marks a
+/// rect, a circle or a text. A source the record doesn't hold is `ref_unresolved`, never a guess,
+/// and a filled mark under the look's `core_min_px` is `status_too_small`.
+pub fn status_marks(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    record: &Record,
+    status: Option<&crate::look::Status>,
+    palette: &Palette,
+) -> Result<Vec<StatusMark>, Refused> {
+    let Some(Value::Object(bindings)) = doc.get("status_bindings") else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (bid, b) in bindings {
+        let path = format!("status_bindings/{bid}");
+        let Some(status) = status else {
+            return refuse("status_unmapped", format!("look: status, for {path}"));
+        };
+        let (Some(Value::String(target)), Some(Value::String(source))) =
+            (b.get("target"), b.get("source"))
+        else {
+            return refuse("bad_doc", path);
+        };
+        let parts: Vec<&str> = target.split('/').collect();
+        let (id, slot) = match parts.as_slice() {
+            ["items", id, "params", "paint", "fill"] => (*id, Slot::Fill),
+            ["items", id, "params", "paint", "stroke"] => (*id, Slot::Stroke),
+            ["items", id, "params", "paint", "badge"] => (*id, Slot::Badge),
+            _ => return refuse("bad_doc", format!("{path}/target")),
+        };
+        let Some(item) = items.get(id) else {
+            return refuse("ref_unresolved", format!("{path}/target"));
+        };
+        if item.get("visible") == Some(&Value::Bool(false)) {
+            continue;
+        }
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+        let params = item.get("params");
+        let Some((bounds, radius)) = status_box(kind, item, params) else {
+            return refuse("status_slot_kind", format!("{path}/target: {kind}"));
+        };
+        // A text's fill is its ink, which can't carry a status color and its glyph at once.
+        if slot == Slot::Fill && kind == "text@1" {
+            return refuse("status_slot_kind", format!("{path}/target: {kind}"));
+        }
+        if slot == Slot::Fill && bounds[2].min(bounds[3]) < status.core_min_px {
+            return refuse("status_too_small", format!("items/{id}"));
+        }
+        let Some(state) = record.states.get(source) else {
+            return refuse("ref_unresolved", format!("{path}/source: {source}"));
+        };
+        let Some(&state) = crate::look::STATES.iter().find(|s| *s == state) else {
+            return refuse("out_of_range", format!("{path}/source: {state}"));
+        };
+        let color = status.colors[state];
+        let named = |r: &str| {
+            role(
+                palette,
+                Some(&Value::String(r.into())),
+                &format!("look: {r}"),
+            )
+        };
+        let (ink, ground) = (named("ink")?, named("ground")?);
+        let ink = if crate::look::contrast(ink, color) >= crate::look::contrast(ground, color) {
+            ink
+        } else {
+            ground
+        };
+        let outline = match &status.outline {
+            Some((px, r)) => Some((*px, named(r)?)),
+            None => None,
+        };
+        out.push(StatusMark {
+            item: id.to_string(),
+            binding: bid.clone(),
+            slot,
+            state,
+            color,
+            bounds,
+            radius,
+            glyph: status.glyphs[state].clone(),
+            word: crate::look::word(state).unwrap_or(state),
+            ink,
+            core: status.core_min_px,
+            outline,
+        });
     }
     Ok(out)
 }
@@ -663,7 +997,7 @@ pub fn frame(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     palette: &Palette,
-    readings: &BTreeMap<String, f64>,
+    record: &Record,
     zoom: f64,
 ) -> Result<Frame, Refused> {
     let size = pair(doc.get("size")).ok_or(Refused {
@@ -675,7 +1009,7 @@ pub fn frame(
         path: "look: ground".into(),
     })?;
     let bucket = path::bucket(zoom);
-    let bound = bound_texts(doc, items, readings)?;
+    let bound = bound_texts(doc, items, record)?;
     let clips = clips_of(doc, items)?;
     // Each layer as (order, ID, its marks as (order, ID, mark)), sorted below.
     let mut layers: Vec<(String, String, Vec<Ordered>)> = Vec::new();
@@ -815,7 +1149,8 @@ pub fn frame(
                     }
                 }
                 "text@1" => {
-                    let text = bound.get(id).cloned().or_else(|| {
+                    let shown = bound.get(id);
+                    let text = shown.map(|s| s.text.clone()).or_else(|| {
                         params
                             .get("text")
                             .and_then(Value::as_str)
@@ -824,10 +1159,14 @@ pub fn frame(
                     let Some(text) = text else {
                         return refuse("bad_doc", format!("{path}/params/text"));
                     };
-                    let color_role = fill
-                        .and_then(|f| f.get("role"))
-                        .cloned()
-                        .unwrap_or(Value::String("ink".into()));
+                    // A stale value greys out (Bound value).
+                    let color_role = if shown.is_some_and(|s| s.stale) {
+                        Value::String("muted".into())
+                    } else {
+                        fill.and_then(|f| f.get("role"))
+                            .cloned()
+                            .unwrap_or(Value::String("ink".into()))
+                    };
                     Mark::Text {
                         item: id.clone(),
                         spec: TextSpec {
@@ -950,6 +1289,21 @@ mod tests {
             "−98765"
         );
         assert_eq!(f(serde_json::json!({})).show(None), "—");
+        let compact = f(serde_json::json!({"notation": "compact"}));
+        assert_eq!(compact.show(Some(950.0)), "950");
+        assert_eq!(compact.show(Some(1234.0)), "1.2K");
+        assert_eq!(compact.show(Some(-3_456_789.0)), "−3.5M");
+        assert_eq!(compact.show(Some(999_950.0)), "1.0M");
+        let duration = f(serde_json::json!({"notation": "duration"}));
+        assert_eq!(duration.show(Some(0.45)), "450 ms");
+        assert_eq!(duration.show(Some(3.5)), "3.5 s");
+        assert_eq!(duration.show(Some(2.0)), "2 s");
+        assert_eq!(duration.show(Some(125.0)), "2 min 05 s");
+        assert_eq!(duration.show(Some(3720.0)), "1 h 02 min");
+        assert_eq!(
+            f(serde_json::json!({"notation": "duration", "unit": "ms"})).show(Some(1500.0)),
+            "1.5 s"
+        );
         assert_eq!(
             Format::read(None, Some(&serde_json::json!("hide")), "f")
                 .unwrap()
@@ -957,9 +1311,13 @@ mod tests {
             ""
         );
         assert_eq!(
-            Format::read(Some(&serde_json::json!({"notation": "compact"})), None, "f")
-                .unwrap_err()
-                .code,
+            Format::read(
+                Some(&serde_json::json!({"notation": "engineering"})),
+                None,
+                "f"
+            )
+            .unwrap_err()
+            .code,
             "format_notation"
         );
     }
@@ -980,8 +1338,11 @@ mod tests {
             ("ink".to_string(), [0, 0, 0]),
         ]
         .into();
-        let readings = [("reading:01JB0000000000000000000001".to_string(), 0.75)].into();
-        let f = frame(doc, items, &palette, &readings, 1.0).unwrap();
+        let record = Record {
+            readings: [("reading:01JB0000000000000000000001".to_string(), 0.75)].into(),
+            ..Record::default()
+        };
+        let f = frame(doc, items, &palette, &record, 1.0).unwrap();
         let Mark::Text { spec, .. } = &f.layers[0].marks[0].mark else {
             panic!("a text mark")
         };
@@ -1009,7 +1370,7 @@ mod tests {
             doc,
             doc["items"].as_object().unwrap(),
             &palette,
-            &BTreeMap::new(),
+            &Record::default(),
             1.0,
         )
     }
