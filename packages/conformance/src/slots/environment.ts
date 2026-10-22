@@ -237,8 +237,16 @@ function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper =
     if (wait) {
       // The fixture itself not coming up (its port taken in the lease's open moment, say) is the kit's, not the fill's.
       if (!waitUntil(() => existsSync(ready), 5000)) { child.kill('SIGKILL'); throw new Finding('BLOCKED', `the kit's fixture environment on ${port} did not come up in 5 s`, ['fixture_down']); }
-      // The marker names the server's grandchild, if any: a process the kit started through the fill and may stop.
-      try { const marker = JSON.parse(readFileSync(ready, 'utf8')) as { helper?: number | null }; if (typeof marker.helper === 'number') record(marker.helper); } catch { /* an unreadable marker names nothing */ }
+      // The marker names the server's grandchild, if any: a process the kit started through the fill and may stop. A
+      // marker the kit can't read, or one that names no helper where one was asked for, leaves the kit's ownership
+      // of what it started unknown; that is the kit's own failure, BLOCKED, and the server is stopped before it is told.
+      let marker: { helper?: number | null } | null = null;
+      try { marker = JSON.parse(readFileSync(ready, 'utf8')) as { helper?: number | null }; } catch { marker = null; }
+      if (marker === null || (helper && typeof marker.helper !== 'number')) {
+        child.kill('SIGKILL');
+        throw new Finding('BLOCKED', `the kit's fixture environment on ${port} wrote no readable ready marker${helper ? ' naming its helper' : ''}, so what the kit started is unknown`, ['fixture_marker']);
+      }
+      if (typeof marker.helper === 'number') record(marker.helper);
     }
   } finally {
     // The early fill never reads its marker; the server writes it into a folder that is gone, and nothing is kept.
