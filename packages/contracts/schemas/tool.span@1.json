@@ -1,0 +1,128 @@
+{
+  "title": "tool.span@1",
+  "description": "One tool call as the agent's own telemetry saw it: how long it took and how long of that it waited on you.",
+  "x-feeds": [
+    "readings"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "tool.span"
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^ext:otlp$",
+      "description": "Who wrote it, from the connection: the OTLP receiver, from the agent's own telemetry."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool's name as the agent sent it.",
+          "maxLength": 8192
+        },
+        "tool_use_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "The tool call's ID, when the span carries one."
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The whole call, from the span."
+        },
+        "blocked_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "How long the call waited on you; null when it never asked."
+        },
+        "decision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "What you decided when it asked, as the agent names it; null when it never asked."
+        },
+        "reading": {
+          "type": "string",
+          "pattern": "^reading:[0-9A-Za-z]+$",
+          "description": "The reading it adds to, its model or tool name folded by the agent's facts: a name they don't list reads as other.",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "tool",
+        "tool_use_id",
+        "duration_ms",
+        "blocked_ms",
+        "decision",
+        "reading"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

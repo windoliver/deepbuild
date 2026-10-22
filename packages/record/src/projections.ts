@@ -50,6 +50,8 @@ export const TABLES: readonly TableDef[] = [
   T('open_items', ['task_ref', 'text'], 'task_ref TEXT, text TEXT, opened INTEGER, closed INTEGER'),
   T('notices', ['kind', 'key'], 'kind TEXT, key TEXT, id TEXT, subscribed_by TEXT, created INTEGER, sent INTEGER, cites TEXT'),
   T('readings', ['reading'], 'reading TEXT, value TEXT, unit TEXT, as_of INTEGER, source TEXT, n INTEGER, outside INTEGER'),
+  // A session's reported request cost (#42); a session with no row here has none captured, never $0.
+  T('session_costs', ['session_id'], 'session_id TEXT, usd REAL, n INTEGER'),
   T('plans', ['ask'], 'ask TEXT, steps TEXT, hash TEXT, diff TEXT, answered_hash TEXT'),
   T('deliveries', ['delivery'], 'delivery TEXT, via TEXT, outcome TEXT, recipient TEXT'),
   T('dry_merges', ['a', 'b'], 'a TEXT, b TEXT, conflicts TEXT, as_of INTEGER'),
@@ -151,6 +153,13 @@ export class Projector {
     const cols = Object.keys(values);
     const keys = Object.keys(where);
     this.stmt(`UPDATE ${table} SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE ${keys.map((k) => `${k} = ?`).join(' AND ')}`).run(...cols.map((c) => values[c] ?? null), ...keys.map((k) => where[k] ?? null));
+  }
+  /** Adds an amount to a running reading: its value the sum so far, n how many added, as of the newest. */
+  private accrue(reading: string | null, amount: number, unit: string, e: Projected): void {
+    if (reading === null) return;
+    this.stmt('INSERT INTO readings (reading, value, unit, as_of, source, n, outside) VALUES (?, ?, ?, ?, ?, 1, 0) ON CONFLICT (reading) DO UPDATE SET '
+      + 'value = CAST(CAST(readings.value AS REAL) + CAST(excluded.value AS REAL) AS TEXT), n = readings.n + 1, as_of = MAX(readings.as_of, excluded.as_of)')
+      .run(reading, JSON.stringify(amount), unit, e.ts, e.writer);
   }
 
   apply(e: Projected): void {
@@ -328,6 +337,19 @@ export class Projector {
       case 'reading.rollup':
         this.up('rollups', { source: str(d.source), span: str(d.span), start: int(d.start), evidence: str(d.file) });
         break;
+      // The OTLP receiver's events (#42): each adds to the reading its data names, already folded by the
+      // agent's facts, and a request's reported cost adds to its session's. A session no cost reached has no
+      // session_costs row, which reads as not captured, never $0.
+      case 'tool.span':
+        this.accrue(str(d.reading), typeof d.blocked_ms === 'number' ? d.blocked_ms : 0, 'ms', e);
+        break;
+      case 'request.cost': {
+        const usd = isObj(d.cost) && typeof d.cost.usd === 'number' ? d.cost.usd : null;
+        if (usd === null) break;
+        this.accrue(str(d.reading), usd, 'usd', e);
+        if (e.session) this.stmt('INSERT INTO session_costs (session_id, usd, n) VALUES (?, ?, 1) ON CONFLICT (session_id) DO UPDATE SET usd = usd + excluded.usd, n = n + 1').run(e.session, usd);
+        break;
+      }
       case 'layer.rows':
         this.up('layer_rows', { layer: str(d.layer), project: str(d.project), parent: str(d.parent) ?? '', level: int(d.level), evidence: str(d.file), log_pos: e.log_pos });
         break;
