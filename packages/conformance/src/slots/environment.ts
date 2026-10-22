@@ -129,7 +129,21 @@ const scanned = (run: string): Carrier[] => {
   if (left === null) throw PS_DOWN();
   return left;
 };
-const stop = (pid: number): void => { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } };
+/**
+ * Stops one of the kit's own processes, if it is still that process at the moment of the signal: one reading of the
+ * table gives its start time and command line together, and the SIGKILL follows only when the start is the recorded
+ * one and the command still carries the run token. What remains is the instant between that reading and the signal;
+ * a pid the OS reuses within it would have to carry this case's random token too. True when the signal was sent.
+ */
+function stop(pid: number, run: string): boolean {
+  const at = own.get(pid);
+  const read = ps(['-o', 'lstart=,command=', '-p', String(pid)]);
+  if (at === undefined || read.status !== 0 || read.error) return false;
+  const words = read.stdout.trim().split(/\s+/);
+  const start = Date.parse(words.slice(0, 5).join(' '));
+  if (!sameStart(Number.isFinite(start) ? start : null, at) || !words.slice(5).includes(run)) return false;
+  try { process.kill(pid, 'SIGKILL'); return true; } catch { return false; }
+}
 
 /**
  * The network probes, answered synchronously from one worker thread (runtime/environment/probes.mjs): the judge
@@ -339,8 +353,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // case found before; so is a process of the kit's own that a SIGKILL did not end.
     const left = carrying(lease.token);
     if (left === null) throw PS_DOWN();
-    const mine = left.map((p) => p.pid).filter(isOwn);
-    for (const p of mine) stop(p);
+    const mine = left.map((p) => p.pid).filter(isOwn).filter((p) => stop(p, lease.token));
     if (!waitUntil(() => mine.every((p) => alive(p) === false), 500)) throw new Finding('BLOCKED', `the kit's own process ${mine.filter((p) => alive(p) !== false).join(', ')} did not end within 500 ms of SIGKILL`, ['kit_leftover']);
     forget();
   }
