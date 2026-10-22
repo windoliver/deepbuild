@@ -365,7 +365,8 @@ mod tests {
                 continue;
             };
             let changed = patched.changed(&doc);
-            let incremental = recheck(&doc, &issues, &changed).expect("items only");
+            let incremental =
+                recheck(&doc, &issues, &changed, &crate::registry::core()).expect("items only");
             let full = check(&doc).issues;
             assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
             // Taken back out, the document is what it was, byte for byte.

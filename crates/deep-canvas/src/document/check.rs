@@ -168,11 +168,13 @@ fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
 /// document of only them and what they read (their ancestors, the items their params name and the
 /// camera); every other item keeps its issues. `None` when a full check is needed: the document
 /// holds entries of other maps keyed by ID, which read items by path. A patch that reached
-/// beyond items (a layer added) takes a full check, which the caller runs.
+/// beyond items (a layer added) takes a full check, which the caller runs. Checked in the build
+/// `sealed` describes, as [`check_in`] checks.
 pub fn recheck(
     doc: &Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
+    sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
     let maps_empty = ID_MAPS
@@ -235,7 +237,7 @@ pub fn recheck(
         .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
         .collect();
     reduced.insert("items".into(), Value::Object(subset));
-    let fresh = check(&Value::Object(reduced)).issues;
+    let fresh = check_in(&Value::Object(reduced), sealed).issues;
     let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
     let mut out: Vec<Issue> = prev_issues
         .iter()
