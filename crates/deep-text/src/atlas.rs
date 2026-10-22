@@ -3,7 +3,7 @@
 //! writer layer draws from these pages through the GPUI patch's tinted mask sprite; it never
 //! asks GPUI's text system for a glyph (canvas primitives: Text `text@1`, Semantics).
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use parley::FontData;
 use vello_cpu::color::palette::css::WHITE;
@@ -87,7 +87,7 @@ impl Page {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Key {
     blob: u64,
     index: u32,
@@ -99,7 +99,7 @@ struct Key {
 /// The atlas: its pages, the glyphs placed on them, and the rasterizer they come from.
 pub struct Atlas {
     pages: Vec<Page>,
-    placed: HashMap<Key, Option<Placed>>,
+    placed: BTreeMap<Key, Option<Placed>>,
     resources: Resources,
     settings: RenderSettings,
     rasterized: u64,
@@ -119,7 +119,7 @@ impl Atlas {
     pub fn new() -> Self {
         Atlas {
             pages: Vec::new(),
-            placed: HashMap::new(),
+            placed: BTreeMap::new(),
             resources: Resources::new(),
             settings: RenderSettings {
                 level: Level::fallback(),

@@ -12,6 +12,7 @@ pub mod draw;
 pub mod grammar;
 pub mod kinds;
 pub mod ops;
+pub mod registry;
 pub mod render;
 pub mod session;
 pub mod show;

@@ -352,6 +352,18 @@
         }
       }
     },
+    "crates/deep-canvas-test-modules/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #305: the manifest, registrar and kind-entry types a test canvas module registers through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #305: a kind param's default is a JSON value. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-canvas-motion/Cargo.toml": {
       "dependencies": {
         "deep-canvas": {
@@ -370,6 +382,10 @@
           "spec": "* path=../deep-canvas",
           "why": "Issue #391: the ops module on pinned libm that path flattening and stroking go through."
         },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #375: auto layout measures text leaves with the canvas's one shaper."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: reads the evaluated items and their params. Already in the workspace tree."
@@ -377,6 +393,10 @@
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #391: content keys, 128 bits of SHA-256 over length-prefixed fields, and the SHA-256 of each cached result. Already in the workspace tree."
+        },
+        "taffy": {
+          "spec": "^0.14",
+          "why": "Issue #375: auto layout's flexbox and grid, the engine GPUI already uses; already in the workspace tree at this version through GPUI."
         }
       }
     },
@@ -495,6 +515,10 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #393: evaluates a revision at the snapshot's declared time."
+        },
+        "deep-canvas-test-modules": {
+          "spec": "* path=../deep-canvas-test-modules",
+          "why": "Issue #305: the test canvas modules a test build compiles in under its test-* features, for the seal's planted faults and the optional-dependency proof; optional, so no shipped build holds them."
         },
         "deep-marks-vello": {
           "spec": "* path=../deep-marks-vello",
