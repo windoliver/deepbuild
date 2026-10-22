@@ -111,13 +111,20 @@ function doctor(json: boolean): number {
 }
 
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n\nRepository skeleton. Hub commands are not implemented yet.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep mcp    the MCP server an agent starts, on stdio\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor' && args.slice(1).every((arg) => arg === '--json') && args.length <= 2) {
   process.exitCode = doctor(args.includes('--json'));
 } else if (args.length === 1 && args[0] === '--version') {
   console.log(version());
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
   process.exitCode = explain(args[1], args.includes('--json'));
+} else if (args[0] === 'hub') {
+  // Loaded only for hub commands, so every other command starts without the hub's modules.
+  const { hubCommand } = await import('@deepbuild/hub');
+  process.exitCode = await hubCommand(args.slice(1), fileURLToPath(import.meta.url));
+} else if (args.length === 1 && args[0] === 'mcp') {
+  const { runMcp } = await import('@deepbuild/hub');
+  process.exitCode = await runMcp();
 } else if (args[0] === 'run' && args[1] === '--result' && args[2] && args.length === 3) {
   process.exitCode = run(args[2]);
 } else if (args[0] === 'run') {

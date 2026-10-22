@@ -1,0 +1,31 @@
+{
+  "title": "hook.ack@2",
+  "description": "The hub's first line back, within 20 ms of reading the request. Every socket line carries its version.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The line's protocol version: every socket line carries it."
+    },
+    "ack": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The request's id."
+    },
+    "hold_until_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "When a reply that waits is due, in ms since the epoch, or null."
+    }
+  },
+  "required": [
+    "v",
+    "ack",
+    "hold_until_ms"
+  ],
+  "additionalProperties": false
+}

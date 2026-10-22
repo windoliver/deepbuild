@@ -1289,6 +1289,16 @@ export interface Error {
   evidence: Array<string>;
 }
 
+/** error@2 */
+export interface ErrorV2 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+}
+
 /** evidence.put@1 */
 export interface EvidencePut {
   v: 1;
@@ -1417,6 +1427,13 @@ export interface HookAck {
   hold_until_ms: number | null;
 }
 
+/** hook.ack@2 */
+export interface HookAckV2 {
+  v: 1;
+  ack: string;
+  hold_until_ms: number | null;
+}
+
 /** hook.joined@1 */
 export interface HookJoined {
   order: Array<string>;
@@ -1438,6 +1455,14 @@ export interface HookReply {
   stderr: string;
 }
 
+/** hook.reply@2 */
+export interface HookReplyV2 {
+  v: 1;
+  exit: number;
+  stdout: string;
+  stderr: string;
+}
+
 /** hook.request@1 */
 export interface HookRequest {
   v: 1;
@@ -1449,6 +1474,24 @@ export interface HookRequest {
   ppid: number;
   matched: Array<string>;
   payload: unknown;
+}
+
+/** hub.stopped@1 */
+export interface HubStopped {
+  v: 1;
+  id: string;
+  kind: "hub.stopped";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reason: string;
+  };
+  evidence?: Array<string>;
 }
 
 /** layer.rows@1 */
@@ -2166,6 +2209,24 @@ export interface SessionChildStarted {
     parent: string;
     child: string;
     task_ref: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.end@1 */
+export interface SessionEnd {
+  v: 1;
+  id: string;
+  kind: "session.end";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reason: string;
   };
   evidence?: Array<string>;
 }
