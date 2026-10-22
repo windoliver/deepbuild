@@ -304,6 +304,8 @@ interface Ask {
   later?: number;
   /** Raised by a turn that hadn't read a message you typed: it waits until the agent has it, unless due first. */
   unread: boolean;
+  /** Since when it waits for a batch: raised, or read by the agent when raised held for your message. */
+  since: number;
 }
 
 /** Batches every `every` ms since the epoch, showing at most `cap` asks a UTC day. */
@@ -325,8 +327,6 @@ class AsksCore implements Asks {
   private readonly unread = new Set<string>();
   /** How many asks batches showed each UTC day, by day number. */
   private readonly batched = new Map<number, number>();
-  /** The last batch time this core ran. */
-  private ran = -1;
   /** Settings read in this call, by worktree: each call reads the files once. */
   private readonly read = new Map<string, Obj>();
 
@@ -700,16 +700,14 @@ class AsksCore implements Asks {
     const joined = this.open().filter((a) => !a.shown && this.inFold(a) && this.visible(this.asks.get(bare(a.folded!))!));
     if (await this.showNow(joined.filter((a) => !a.unread || this.dueBy(a) <= next))) acted = true;
     if (!batches) return (await this.showNow(waiting())) || acted;
-    const { cap } = batches;
-    if (last > this.ran) {
-      const room = cap - (this.batched.get(Math.floor(last / DAY)) ?? 0);
-      const due = waiting().filter((a) => a.created <= last && !a.unread).slice(0, Math.max(0, room));
-      if (due.length) {
-        await this.appendBatch(`batch:${new Date(last).toISOString()}`, due, now);
-        acted = true;
-      }
-      // Marked run only once its showing is in the log: a failed append runs it again.
-      this.ran = last;
+    // The latest batch shows every ask waiting for it since before its time, as the log stands: one held for your
+    // message and read after it waits for the next, and a showing that failed to append is appended on the next
+    // call, without showing again what the log already shows.
+    const room = batches.cap - (this.batched.get(Math.floor(last / DAY)) ?? 0);
+    const due = waiting().filter((a) => a.since < last && !a.unread).slice(0, Math.max(0, room));
+    if (due.length) {
+      await this.appendBatch(`batch:${new Date(last).toISOString()}`, due, now);
+      acted = true;
     }
     // A deadline at the next batch's own time counts as passing first: an ask first shown at its deadline would
     // default only on a later call, after its deadline, so it shows now instead.
@@ -790,7 +788,7 @@ class AsksCore implements Asks {
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), words: [], decided: new Set(), pending: {},
-          created: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
+          created: e.ts, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
         };
         // A newer ask on the same subject in the same thread supersedes the older one, and keeps what it decided.
         for (const older of open) {
@@ -839,8 +837,6 @@ class AsksCore implements Asks {
         const at = typeof d.batch === 'string' && d.batch.startsWith('batch:') ? Date.parse(d.batch.slice(6)) : NaN;
         if (Number.isNaN(at)) return;
         this.batched.set(Math.floor(at / DAY), (this.batched.get(Math.floor(at / DAY)) ?? 0) + shown.length);
-        // A batch the log holds isn't run again after a restart.
-        this.ran = Math.max(this.ran, at);
         return;
       }
       case 'ask.later':
@@ -850,7 +846,7 @@ class AsksCore implements Asks {
       case 'tool.before':
         // The agent's next step reads what you typed: asks held for it wait like any other now.
         if (!e.session || !this.unread.delete(e.session)) return;
-        for (const a of this.open()) if (a.session === e.session) a.unread = false;
+        for (const a of this.open()) if (a.session === e.session && a.unread) [a.unread, a.since] = [false, e.ts];
         return;
       case 'user.ask': {
         if (d.from === 'person' && e.session) this.unread.add(e.session);

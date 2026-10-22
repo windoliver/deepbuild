@@ -508,6 +508,46 @@ describe('showings', () => {
     expect(await shown()).toEqual([mine, theirs]);
   });
 
+  it("a batch whose showing for one scope failed to append shows that scope on the next call, in the same batch, without showing the other again", async () => {
+    const team = { actor: "ana", scope: "team:web" };
+    await start("S1");
+    await record.append({ writer: "hook", ...team, session: "S2" }, { v: 1, id: id(now), kind: "session.start", ts: now, data: { agent: "claude-code", worktree: join(dir, "none"), branch: "main", thread: "S2" } });
+    const mine = await asks.raise(core("S1"), sourceOf("taste"), ask("taste", "header"));
+    const theirs = await asks.raise(core("S2", team), sourceOf("taste"), ask("taste", "footer"));
+    // The record loses the second scope's showing once, after the first is in the log.
+    const append = record.append.bind(record);
+    let lost = false;
+    record.append = async (connection, event) => {
+      if (!lost && event.kind === "ask.batched" && connection.actor === "ana") { lost = true; throw new Error("disk full"); }
+      return append(connection, event);
+    };
+    now = T0 + 4 * HOUR;
+    await expect(asks.tick()).rejects.toThrow("disk full");
+    await asks.tick();
+    const batched = (await events("ask.batched")).map((e) => [e.actor, (e.data as Obj).batch, ((e.data as Obj).asks as Obj[]).map((a) => a.ask)]);
+    expect(batched).toEqual([["you", `batch:${new Date(T0 + 4 * HOUR).toISOString()}`, [mine]], ["ana", `batch:${new Date(T0 + 4 * HOUR).toISOString()}`, [theirs]]]);
+    expect(await shown()).toEqual([mine, theirs]);
+  });
+
+  it('an ask held for your message, read after its batch ran, waits for the next batch, across a restart too', async () => {
+    await start('S1');
+    const hook = { writer: 'hook', ...you, session: 'S1' };
+    await record.append(hook, { v: 1, id: id(now), kind: 'user.ask', ts: now, data: { msg: 1, text: 'use the brand blue', tasks: [], from: 'person' } });
+    const held = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'footer'));
+    // The 16:00 batch runs with the ask still held.
+    await at(T0 + 4 * HOUR);
+    expect(await shown()).toEqual([]);
+    await record.close();
+    now = T0 + 5 * HOUR;
+    await open();
+    await record.append(hook, { v: 1, id: id(now), kind: 'tool.before', ts: now, data: { kind: 'read', paths: ['src/a.ts'], command: null } });
+    await asks.tick();
+    expect(await shown()).toEqual([]);
+    expect((await asks.inbox()).find((r) => r.ask === held)?.status).toBe('queued');
+    await at(T0 + 12 * HOUR);
+    expect(await shown()).toEqual([held]);
+  });
+
   it('text you type answers only a question in sight, not one queued for a batch or put off with Later', async () => {
     await start('S1');
     const queued = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));
