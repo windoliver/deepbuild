@@ -1790,6 +1790,9 @@ version = "0.0.0"
 [[package]]
 name = "deep-hook"
 version = "0.0.0"
+dependencies = [
+ "deep-contracts",
+]
 
 [[package]]
 name = "deep-marks-render"
@@ -1819,6 +1822,23 @@ dependencies = [
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
  "serde_json",
+]
+
+[[package]]
+name = "deep-show"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-replica",
+ "deep-text",
+ "deep-text-gpui",
+ "gpui-kit",
+ "image",
+ "serde_json",
+ "sha2 0.10.9",
+ "vello_cpu",
 ]
 
 [[package]]
