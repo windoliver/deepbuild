@@ -2007,6 +2007,102 @@ export interface SessionStart {
   evidence?: Array<string>;
 }
 
+/** spend.approved@1 */
+export interface SpendApproved {
+  v: 1;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.asked@1 */
+export interface SpendAsked {
+  v: 1;
+  id: string;
+  kind: "spend.asked";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    inputs: string;
+    issue: string;
+    resource: string | null;
+    usd: number;
+    ask: string;
+    because: "raise" | "rerun" | "uncovered";
+    budgets: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.charged@1 */
+export interface SpendCharged {
+  v: 1;
+  id: string;
+  kind: "spend.charged";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    usd: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.reserved@1 */
+export interface SpendReserved {
+  v: 1;
+  id: string;
+  kind: "spend.reserved";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    inputs: string;
+    issue: string;
+    resource: string | null;
+    budgets: Array<{
+      budget: string;
+      usd: number;
+    }>;
+    ask: string | null;
+    decision: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** suggestion.filed@1 */
 export interface SuggestionFiled {
   v: 1;
