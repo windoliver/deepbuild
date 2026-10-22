@@ -68,8 +68,8 @@ function tablesFor(values: readonly string[]): Tables {
   return tables;
 }
 
-/** Scrubs bytes by value, in every printed form, and then by pattern. */
-export function scrub(text: Buffer, values: readonly string[]): Buffer {
+/** Scrubs bytes by value, in every printed form, and then, unless `patterns` is false, by pattern. */
+export function scrub(text: Buffer, values: readonly string[], patterns = true): Buffer {
   const latin = text.toString('latin1');
   const { bits, byValue, short } = tablesFor(values);
   const masks: [number, number][] = [];
@@ -85,7 +85,7 @@ export function scrub(text: Buffer, values: readonly string[]): Buffer {
   for (const form of short) for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) masks.push([at, at + form.length]);
 
   const { out, map } = mask(latin, masks);
-  return Buffer.from(redactPatterns(out, hits.map(([at, found]) => [map(at), found])), 'latin1');
+  return Buffer.from(patterns ? redactPatterns(out, hits.map(([at, found]) => [map(at), found])) : out, 'latin1');
 }
 
 /** Raw, and base64 after 0, 1 or 2 leading bytes in both alphabets: only the characters the value alone decides. */

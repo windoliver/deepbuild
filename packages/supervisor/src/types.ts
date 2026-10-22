@@ -34,6 +34,8 @@ export interface StartSpec {
   cwd: string;
   /** Added to its environment; the supervisor adds the run token, unless the caller names it as DEEP_RUN_TOKEN. */
   env?: Record<string, string>;
+  /** false: `env` and the run token are its whole environment, none of the host's own (a hermetic check run). */
+  inherit?: boolean;
   grant?: Grant;
   /** No key: any free key of that kind's pool. */
   leases?: { kind: string; key?: string }[];
