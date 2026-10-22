@@ -1,0 +1,246 @@
+{
+  "title": "extension.manifest@1",
+  "description": "What a package declares, in the one package envelope (package.envelope@1's fields at the root): the access words it uses, its panels and the media each uses, the output interfaces it provides and uses (each pinned to a minor), the shipped pieces it replaces, and the names it adds: event kinds, store kinds, check kinds, codes, notice kinds and actions, each ext.<plugin>.<name> unless the piece replaces the shipped piece of that name. The fields the later issues bring (conflicts, contract versions, secrets, sources, MCP commands, jobs, an out-of-process host, run-as-you, handoff, guards, lease kinds, hook context templates) arrive with their fixtures. The rules the node types can't write, a medium used without its access word and a name without its prefix, are checkManifest's.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+      "description": "owner/name: exactly one slash between two names. The name is the plug-in the ext.<plugin>. prefix names.",
+      "maxLength": 8192
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$",
+      "description": "The package's semantic version: major.minor.patch, then a pre-release and build metadata as semver 2.0.0 writes them.",
+      "maxLength": 8192
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^d1:[0-9a-f]{64}$",
+      "description": "The frozen digest of the package's contents, naming its algorithm.",
+      "maxLength": 8192
+    },
+    "publisher_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The key the publisher signed the package with, when it is signed."
+    },
+    "access": {
+      "type": "object",
+      "properties": {
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(files|programs|hosts|run_as_you|screen|sound|microphone|camera|clipboard|window|agent|edit_as_you|record|device:(ext\\.[a-z0-9][a-z0-9_-]*\\.)?[a-z][a-z0-9_]*@[1-9][0-9]*)$",
+            "description": "One access word, from access@1's closed list; notices, schedules and secrets are blocks, not words, so each fails here.",
+            "maxLength": 8192,
+            "x-closure": {
+              "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+              "reopens": "a new major of access that adds a word",
+              "mark": "exhaustive"
+            }
+          }
+        }
+      },
+      "required": [
+        "words"
+      ],
+      "additionalProperties": false
+    },
+    "panels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]*$",
+            "maxLength": 8192
+          },
+          "area": {
+            "type": "string",
+            "enum": [
+              "sidebar",
+              "home",
+              "tab",
+              "line"
+            ],
+            "description": "Where the panel sits: the sidebar, the home screen, a tab in any panel or the line.",
+            "x-closure": {
+              "closed": "each value is a place the app shell lays out, so a value outside the list has no meaning",
+              "reopens": "a new major of this schema",
+              "mark": "exhaustive"
+            }
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "sound",
+                "microphone",
+                "camera"
+              ],
+              "description": "A medium the panel uses, each only with its access word.",
+              "x-closure": {
+                "closed": "each value is a medium the device and media gate guards, so a value outside the list has no meaning",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            }
+          }
+        },
+        "required": [
+          "name",
+          "area"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "provides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "interface": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$",
+            "description": "The output interface, name@major.",
+            "maxLength": 8192
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reading",
+              "action",
+              "notice",
+              "view",
+              "check"
+            ],
+            "x-closure": {
+              "closed": "each value is an output kind the hub wires, so a value outside the list has no meaning",
+              "reopens": "a new major of this schema",
+              "mark": "exhaustive"
+            }
+          },
+          "minor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The interface's minor this package provides."
+          }
+        },
+        "required": [
+          "interface",
+          "kind",
+          "minor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "interface": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$",
+            "description": "The output interface used, name@major, never a piece.",
+            "maxLength": 8192
+          },
+          "minor": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "The minor the use was built against; the hub serves it at that minor."
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^d1:[0-9a-f]{64}$",
+            "description": "The frozen digest of the interface at that minor.",
+            "maxLength": 8192
+          }
+        },
+        "required": [
+          "interface",
+          "minor",
+          "digest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "replaces": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.@-]*$",
+        "description": "A shipped piece this package replaces, by its exact name; a bare name of its own in the lists below passes only when listed here.",
+        "maxLength": 8192
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": "An event kind the plug-in adds.",
+        "maxLength": 8192
+      }
+    },
+    "stores": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": "A store kind the plug-in adds.",
+        "maxLength": 8192
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": "A check kind the plug-in adds.",
+        "maxLength": 8192
+      }
+    },
+    "codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": "A code the plug-in adds.",
+        "maxLength": 8192
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": "A notice kind the plug-in adds.",
+        "maxLength": 8192
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*$",
+        "description": "An action the plug-in adds.",
+        "maxLength": 8192
+      }
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "digest"
+  ],
+  "additionalProperties": false
+}

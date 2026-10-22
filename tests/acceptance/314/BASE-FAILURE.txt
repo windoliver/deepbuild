@@ -1,0 +1,834 @@
+Base commit: b8a7ead1ad4bc79a44c9dc410c2ba2d9d368b252 (origin/main, no implementation of #314)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/314   (node = ~/.nvm/versions/node/v24.22.0/bin/node, the repo's .node-version; the same as npx vitest run --root tests/acceptance/314 with that node first on PATH)
+Date: 2026-10-21T09:08:07Z  Node v24.22.0  vitest 5.0.5  darwin-arm64
+Exit code: 1
+Why every suite fails: the surface the README defines does not exist at the base. packages/conformance/src/index.ts (#313's entry) exports no slotKits, cleanFills, seededCases or stalePaths, and runKit and kitProblems take only the adapter kit; packages/contracts/src/index.ts exports no checkManifest, and no extension.manifest@1 or package.envelope@1 schema is published. Vitest's module transform leaves a missing named import undefined instead of refusing the link, so two suites (check-kind, reading-source) fail at their top-level slotKit() call with "TypeError: slotKits is not a function" before any test runs (16 tests), and the other three collect their tests and fail every one: kits (28) and seeded (26) at slotKits(), manifest (31) at checkManifest (undefined) or at unknown_schema from getSchema, validate and fixtures for the two schemas. 85 failed | 0 passed of the 85 collected, plus the 16 in the two failed suites: 101 in all (README, Criteria to tests). Nothing else in the import graph is missing.
+Checked beside this run (not at the base): the tests type-check against a declaration-only copy of the surface, kept outside the repo and placed over packages/conformance/src/index.ts (re-exporting #313's entries and declaring the new ones) and appended to packages/contracts/src/index.ts (checkManifest) only for the check (node node_modules/typescript/bin/tsc -p tests/acceptance/314/tsconfig.json: no errors; tests/acceptance/313's tsconfig also type-checks against it), then both files restored to the base's. Run against that same copy as a runtime stub, whose declared functions compile to nothing so every call throws, the run reads the same: 2 suites failed at import, 85 failed | 0 passed of 85. No test passes at the base or against the stub.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/314
+
+ ❯ reading-source.test.ts (0 test)
+ ❯ check-kind.test.ts (0 test)
+ ❯ seeded.test.ts (26 tests | 26 failed) 7ms
+   ❯ AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases (17)
+     × check.kind@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded 3ms
+     × index@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded 0ms
+     × environment@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded 0ms
+     × source@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded 0ms
+     × reading.source@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded 0ms
+     × check.kind@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's 0ms
+     × index@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's 0ms
+     × environment@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's 0ms
+     × source@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's 0ms
+     × reading.source@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's 0ms
+     × check.kind@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input 0ms
+     × index@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input 0ms
+     × environment@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input 0ms
+     × source@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input 0ms
+     × reading.source@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input 0ms
+     × AC6 with no seed given, the runner draws one and records it, and the draws differ 0ms
+     × AC6 for any seed, the generator draws the same cases twice, and draws others at the next seed (1,000 cases) 0ms
+   ❯ AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed (9)
+     × check.kind@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed 0ms
+     × index@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed 0ms
+     × source@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed 0ms
+     × reading.source@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed 0ms
+     × environment@1: the memorizing fill fails the seeded part, naming the seed (its kit watches ports and processes, so its fixed part is not held to the memorizer) 0ms
+     × check.kind@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed 0ms
+     × index@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed 0ms
+     × source@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed 0ms
+     × reading.source@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed 0ms
+ ❯ kits.test.ts (28 tests | 28 failed) 11ms
+   ❯ the slot kits and their reference fills, so every failure below is the fault a planted fill carries (6)
+     × slotKits() ships a kit for each of the five slots, each naming how many pieces may fill it 4ms
+     × check.kind@1: every reference fill passes every case of its kit, fixed and seeded 2ms
+     × index@1: every reference fill passes every case of its kit, fixed and seeded 0ms
+     × environment@1: every reference fill passes every case of its kit, fixed and seeded 0ms
+     × source@1: every reference fill passes every case of its kit, fixed and seeded 0ms
+     × reading.source@1: every reference fill passes every case of its kit, fixed and seeded 0ms
+   ❯ AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message (22)
+     × check.kind@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes 0ms
+     × index@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes 0ms
+     × environment@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes 0ms
+     × source@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes 0ms
+     × reading.source@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes 0ms
+     × check.kind@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message 0ms
+     × index@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message 0ms
+     × environment@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message 0ms
+     × source@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message 0ms
+     × reading.source@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message 0ms
+     × AC3 the four check.kind@1 runners, the two indexes, the two environments and the stream reader each fail their kit; a runner that passes any fails this test, naming each fill it passed 0ms
+     × AC3 (wrong program) a kit that checks only each reply's shape passes every planted fill, and this test names each one it passed 0ms
+     × check.kind@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems 0ms
+     × index@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems 0ms
+     × environment@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems 0ms
+     × source@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems 0ms
+     × reading.source@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems 0ms
+     × check.kind@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits 0ms
+     × index@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits 0ms
+     × environment@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits 0ms
+     × source@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits 0ms
+     × reading.source@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits 0ms
+ ❯ manifest.test.ts (31 tests | 31 failed) 35ms
+   ❯ the shipped manifest and envelope contracts, so every refusal below is the fault planted and nothing else (3)
+     × extension.manifest@1 and package.envelope@1 are published, lint clean, and the fixture manifest passes the schema and the manifest check 8ms
+     × the contracts ship manifest and envelope fixtures, every one accepted, and one manifest fixture names the microphone 1ms
+     × the manifest check refuses whatever the schema refuses, so one check covers the manifest 2ms
+   ❯ AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field (9)
+     × AC1 a manifest with a field extension.manifest@1 doesn't define fails its schema, naming the field 0ms
+     × AC1 an access word outside the Access list fails its schema, naming the word 0ms
+     × AC1 every word the Access list names passes, and clipboard, window and agent pass together and each alone 0ms
+     × AC1 notices, schedules and secrets are blocks a manifest declares, not access words: each fails as a word 0ms
+     × AC1 for any word outside the list, the schema refuses it naming the word, and the listed words pass (1,000 cases) 3ms
+     × AC1 for any field name the schema doesn't define, the schema refuses it naming the field (1,000 cases) 1ms
+     × AC1 a package envelope whose id isn't owner/name fails, naming the field, in the envelope and at the manifest's root 1ms
+     × AC1 for any id without exactly one slash between two names, the envelope fails naming /id (1,000 cases) 8ms
+     × AC1 (wrong program) a schema that accepts unknown fields passes the first shipped fixture and fails this test 1ms
+   ❯ AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word (7)
+     × AC2 a panel that uses sound without its access word fails the manifest check, naming the word 3ms
+     × AC2 a panel that uses microphone without its access word fails the manifest check, naming the word 0ms
+     × AC2 a panel that uses camera without its access word fails the manifest check, naming the word 0ms
+     × AC2 the word that is missing is the one named: the microphone with sound granted names microphone, not sound 0ms
+     × AC2 for any media a panel uses and any media words granted, the check passes exactly when every used medium is granted, naming each missing one (1,000 cases) 2ms
+     × AC2 the published schema lists the microphone word, and a shipped fixture uses it with its word 0ms
+     × AC2 (wrong program) a schema that leaves the microphone word out fails on its fixture, and this test names the fixture's refusal 0ms
+   ❯ AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use (12)
+     × AC7 in events, ext.stocks.alert passes and stocks.alert fails, naming the name 0ms
+     × AC7 in stores, ext.stocks.alert passes and stocks.alert fails, naming the name 0ms
+     × AC7 in checks, ext.stocks.alert passes and stocks.alert fails, naming the name 0ms
+     × AC7 in codes, ext.stocks.alert passes and stocks.alert fails, naming the name 0ms
+     × AC7 in notices, ext.stocks.alert passes and stocks.alert fails, naming the name 0ms
+     × AC7 in actions, ext.stocks.alert passes and stocks.alert fails, naming the name 0ms
+     × AC7 an output interface a piece provides is named the same way: ext.stocks.quote@1 passes, quote@1 fails naming it 0ms
+     × AC7 the prefix is the plug-in's own: a name under another plug-in's prefix fails, naming the name 0ms
+     × AC7 a bare name passes when the manifest declares that it replaces the shipped piece of that name 0ms
+     × AC7 for any name without the prefix, each list refuses it naming the name, and the same name under ext.stocks. passes (1,000 cases) 1ms
+     × AC7 a manifest whose use names no minor fails its schema, naming the use 0ms
+     × AC7 for any list of uses, the one whose minor is left out is the use named (1,000 cases) 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  check-kind.test.ts [ check-kind.test.ts ]
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ checkKit helpers.ts:227:57
+ ❯ check-kind.test.ts:17:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/87]⎯
+
+ FAIL  reading-source.test.ts [ reading-source.test.ts ]
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ reading-source.test.ts:7:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/87]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 85 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  kits.test.ts > the slot kits and their reference fills, so every failure below is the fault a planted fill carries > slotKits() ships a kit for each of the five slots, each naming how many pieces may fill it
+TypeError: slotKits is not a function
+ ❯ kits.test.ts:29:19
+     27| describe('the slot kits and their reference fills, so every failure be…
+     28|   it('slotKits() ships a kit for each of the five slots, each naming h…
+     29|     const slots = slotKits().map((k) => k.slot);
+       |                   ^
+     30|     for (const slot of SLOTS) expect(slots, `a kit for ${slot}`).toCon…
+     31|     for (const slot of SLOTS) expect(slotKit(slot).fills, `${slot} fil…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/87]⎯
+
+ FAIL  kits.test.ts > the slot kits and their reference fills, so every failure below is the fault a planted fill carries > check.kind@1: every reference fill passes every case of its kit, fixed and seeded
+ FAIL  kits.test.ts > the slot kits and their reference fills, so every failure below is the fault a planted fill carries > index@1: every reference fill passes every case of its kit, fixed and seeded
+ FAIL  kits.test.ts > the slot kits and their reference fills, so every failure below is the fault a planted fill carries > environment@1: every reference fill passes every case of its kit, fixed and seeded
+ FAIL  kits.test.ts > the slot kits and their reference fills, so every failure below is the fault a planted fill carries > source@1: every reference fill passes every case of its kit, fixed and seeded
+ FAIL  kits.test.ts > the slot kits and their reference fills, so every failure below is the fault a planted fill carries > reading.source@1: every reference fill passes every case of its kit, fixed and seeded
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ kits.test.ts:36:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/87]⎯
+
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > check.kind@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > index@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > environment@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > source@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > reading.source@1: the kit lists the planted fills the issue names, each breaking one of its rules, each with its own message and its own codes
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ kits.test.ts:51:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/87]⎯
+
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > check.kind@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > index@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > environment@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > source@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > reading.source@1: each planted fill fails the kit, a FAIL carries its message and its codes, and no other planted fill's message
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ kits.test.ts:69:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/87]⎯
+
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > AC3 the four check.kind@1 runners, the two indexes, the two environments and the stream reader each fail their kit; a runner that passes any fails this test, naming each fill it passed
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ plantedPassed kits.test.ts:17:17
+ ❯ kits.test.ts:81:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/87]⎯
+
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > AC3 (wrong program) a kit that checks only each reply's shape passes every planted fill, and this test names each one it passed
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ plantedPassed kits.test.ts:17:17
+ ❯ kits.test.ts:86:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/87]⎯
+
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > check.kind@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > index@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > environment@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > source@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > reading.source@1: each rule has exactly one planted fill that breaks it alone, and the kit has no problems
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ kits.test.ts:93:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/87]⎯
+
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > check.kind@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > index@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > environment@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > source@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits
+ FAIL  kits.test.ts > AC3 each hub slot's kit fails each of its planted wrong fills with that fill's own message > reading.source@1: the preflight's kit check names a rule no planted fill isolates, and a planted fill the kit admits
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ kits.test.ts:102:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/87]⎯
+
+ FAIL  manifest.test.ts > the shipped manifest and envelope contracts, so every refusal below is the fault planted and nothing else > extension.manifest@1 and package.envelope@1 are published, lint clean, and the fixture manifest passes the schema and the manifest check
+AssertionError: expected [ 'access@1', …(82) ] to include 'extension.manifest@1'
+ ❯ manifest.test.ts:21:19
+     19|   it('extension.manifest@1 and package.envelope@1 are published, lint …
+     20|     const names = listSchemas().map((e) => e.name);
+     21|     expect(names).toContain(MANIFEST);
+       |                   ^
+     22|     expect(names).toContain(ENVELOPE);
+     23|     expect(lintSchemas(listSchemas()).filter((p) => p.schema === MANIF…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/87]⎯
+
+ FAIL  manifest.test.ts > the shipped manifest and envelope contracts, so every refusal below is the fault planted and nothing else > the contracts ship manifest and envelope fixtures, every one accepted, and one manifest fixture names the microphone
+AssertionError: fixtures/extension.manifest@1/*.json: expected 0 to be greater than 0
+ ❯ manifest.test.ts:31:68
+     29|   it('the contracts ship manifest and envelope fixtures, every one acc…
+     30|     const shipped = fixtures(MANIFEST);
+     31|     expect(shipped.length, 'fixtures/extension.manifest@1/*.json').toB…
+       |                                                                    ^
+     32|     for (const [i, m] of shipped.entries()) {
+     33|       expectAccepted(validate(MANIFEST, m), `shipped manifest fixture …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/87]⎯
+
+ FAIL  manifest.test.ts > the shipped manifest and envelope contracts, so every refusal below is the fault planted and nothing else > the manifest check refuses whatever the schema refuses, so one check covers the manifest
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:45:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 a manifest with a field extension.manifest@1 doesn't define fails its schema, naming the field
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:52:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 an access word outside the Access list fails its schema, naming the word
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:60:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 every word the Access list names passes, and clipboard, window and agent pass together and each alone
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:65:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 notices, schedules and secrets are blocks a manifest declares, not access words: each fails as a word
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:74:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 for any word outside the list, the schema refuses it naming the word, and the listed words pass (1,000 cases)
+Error: Property failed after 1 tests
+{ seed: 314, path: "0:0:0:0", endOnFailure: true }
+Counterexample: ["a","files"]
+Shrunk 3 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ manifest.test.ts:80:8
+     78|   it('AC1 for any word outside the list, the schema refuses it naming …
+     79|     const listed = new Set<string>(ACCESS_WORDS);
+     80|     fc.assert(fc.property(word, fc.constantFrom(...ACCESS_WORDS), (pla…
+       |        ^
+     81|       fc.pre(!listed.has(planted));
+     82|       expectRefusedWord(validate(MANIFEST, setAt(manifest(), '/access/…
+
+Caused by: ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:82:25
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'unknown_schema', retryable: false, remediation: 'Name a published contract schema.', path: '', evidence: [] }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 for any field name the schema doesn't define, the schema refuses it naming the field (1,000 cases)
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ getSchema ../../../packages/contracts/src/schemas.ts:40:33
+     38| export function getSchema(name: string): Schema {
+     39|   const text = textByName.get(name);
+     40|   if (text === undefined) throw new ContractError(issue('unknown_schem…
+       |                                 ^
+     41|   return JSON.parse(text) as Schema;
+     42| }
+ ❯ manifest.test.ts:88:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 a package envelope whose id isn't owner/name fails, naming the field, in the envelope and at the manifest's root
+ContractError: unknown_schema at /: package.envelope@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:97:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 for any id without exactly one slash between two names, the envelope fails naming /id (1,000 cases)
+Error: Property failed after 1 tests
+{ seed: 314, path: "0:0:0:0:0:0", endOnFailure: true }
+Counterexample: ["a","0","none"]
+Shrunk 5 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ manifest.test.ts:112:8
+    110|   it('AC1 for any id without exactly one slash between two names, the …
+    111|     const name = fc.stringMatching(/^[a-z0-9][a-z0-9_-]{0,11}$/);
+    112|     fc.assert(fc.property(name, name, fc.constantFrom('none', 'two', '…
+       |        ^
+    113|       const id = shape === 'none' ? owner : shape === 'two' ? `${owner…
+    114|       expectRefused(validate(ENVELOPE, setAt(envelope(), '/id', id)), …
+
+Caused by: ContractError: unknown_schema at /: package.envelope@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:114:21
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'unknown_schema', retryable: false, remediation: 'Name a published contract schema.', path: '', evidence: [] }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/87]⎯
+
+ FAIL  manifest.test.ts > AC1 a field the schema doesn't define, or an access word outside the Access list, fails naming it; clipboard, window and agent pass; an envelope id that isn't owner/name fails naming the field > AC1 (wrong program) a schema that accepts unknown fields passes the first shipped fixture and fails this test
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ getSchema ../../../packages/contracts/src/schemas.ts:40:33
+     38| export function getSchema(name: string): Schema {
+     39|   const text = textByName.get(name);
+     40|   if (text === undefined) throw new ContractError(issue('unknown_schem…
+       |                                 ^
+     41|   return JSON.parse(text) as Schema;
+     42| }
+ ❯ openSchemaValidate helpers.ts:246:22
+ ❯ manifest.test.ts:121:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/87]⎯
+
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 a panel that uses sound without its access word fails the manifest check, naming the word
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 a panel that uses microphone without its access word fails the manifest check, naming the word
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 a panel that uses camera without its access word fails the manifest check, naming the word
+TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+    128| export const envelope = (): JsonObject => fixture('envelopes', 'stocks…
+    129| /** The manifest contract: the schema and the rules its node types can…
+    130| export const check = (value: JsonValue): Validation => checkManifest(v…
+       |                                                        ^
+    131| /** The published schemas with one of them replaced. */
+    132| export const replacing = (name: string, schema: Schema, entries: reado…
+ ❯ manifest.test.ts:134:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/87]⎯
+
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 the word that is missing is the one named: the microphone with sound granted names microphone, not sound
+TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+    128| export const envelope = (): JsonObject => fixture('envelopes', 'stocks…
+    129| /** The manifest contract: the schema and the rules its node types can…
+    130| export const check = (value: JsonValue): Validation => checkManifest(v…
+       |                                                        ^
+    131| /** The published schemas with one of them replaced. */
+    132| export const replacing = (name: string, schema: Schema, entries: reado…
+ ❯ manifest.test.ts:139:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/87]⎯
+
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 for any media a panel uses and any media words granted, the check passes exactly when every used medium is granted, naming each missing one (1,000 cases)
+Error: Property failed after 1 tests
+{ seed: 314, path: "0:0", endOnFailure: true }
+Counterexample: [[],[]]
+Shrunk 1 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ manifest.test.ts:145:8
+    143|
+    144|   it('AC2 for any media a panel uses and any media words granted, the …
+    145|     fc.assert(fc.property(fc.subarray([...MEDIA]), fc.subarray([...MED…
+       |        ^
+    146|       const result = check(using(used, granted));
+    147|       const missing = used.filter((m) => !granted.includes(m));
+
+Caused by: TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+ ❯ manifest.test.ts:146:22
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2660:14
+ ❯ manifest.test.ts:145:8
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/87]⎯
+
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 the published schema lists the microphone word, and a shipped fixture uses it with its word
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ getSchema ../../../packages/contracts/src/schemas.ts:40:33
+     38| export function getSchema(name: string): Schema {
+     39|   const text = textByName.get(name);
+     40|   if (text === undefined) throw new ContractError(issue('unknown_schem…
+       |                                 ^
+     41|   return JSON.parse(text) as Schema;
+     42| }
+ ❯ manifest.test.ts:154:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/87]⎯
+
+ FAIL  manifest.test.ts > AC2 a manifest that uses sound, the microphone or the camera without its access word fails, naming the word > AC2 (wrong program) a schema that leaves the microphone word out fails on its fixture, and this test names the fixture's refusal
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ getSchema ../../../packages/contracts/src/schemas.ts:40:33
+     38| export function getSchema(name: string): Schema {
+     39|   const text = textByName.get(name);
+     40|   if (text === undefined) throw new ContractError(issue('unknown_schem…
+       |                                 ^
+     41|   return JSON.parse(text) as Schema;
+     42| }
+ ❯ withoutMicrophoneValidate helpers.ts:252:28
+ ❯ manifest.test.ts:162:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 in events, ext.stocks.alert passes and stocks.alert fails, naming the name
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 in stores, ext.stocks.alert passes and stocks.alert fails, naming the name
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 in checks, ext.stocks.alert passes and stocks.alert fails, naming the name
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 in codes, ext.stocks.alert passes and stocks.alert fails, naming the name
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 in notices, ext.stocks.alert passes and stocks.alert fails, naming the name
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 in actions, ext.stocks.alert passes and stocks.alert fails, naming the name
+TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+    128| export const envelope = (): JsonObject => fixture('envelopes', 'stocks…
+    129| /** The manifest contract: the schema and the rules its node types can…
+    130| export const check = (value: JsonValue): Validation => checkManifest(v…
+       |                                                        ^
+    131| /** The published schemas with one of them replaced. */
+    132| export const replacing = (name: string, schema: Schema, entries: reado…
+ ❯ manifest.test.ts:173:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 an output interface a piece provides is named the same way: ext.stocks.quote@1 passes, quote@1 fails naming it
+TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+    128| export const envelope = (): JsonObject => fixture('envelopes', 'stocks…
+    129| /** The manifest contract: the schema and the rules its node types can…
+    130| export const check = (value: JsonValue): Validation => checkManifest(v…
+       |                                                        ^
+    131| /** The published schemas with one of them replaced. */
+    132| export const replacing = (name: string, schema: Schema, entries: reado…
+ ❯ manifest.test.ts:179:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 the prefix is the plug-in's own: a name under another plug-in's prefix fails, naming the name
+TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+    128| export const envelope = (): JsonObject => fixture('envelopes', 'stocks…
+    129| /** The manifest contract: the schema and the rules its node types can…
+    130| export const check = (value: JsonValue): Validation => checkManifest(v…
+       |                                                        ^
+    131| /** The published schemas with one of them replaced. */
+    132| export const replacing = (name: string, schema: Schema, entries: reado…
+ ❯ manifest.test.ts:185:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 a bare name passes when the manifest declares that it replaces the shipped piece of that name
+TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+    128| export const envelope = (): JsonObject => fixture('envelopes', 'stocks…
+    129| /** The manifest contract: the schema and the rules its node types can…
+    130| export const check = (value: JsonValue): Validation => checkManifest(v…
+       |                                                        ^
+    131| /** The published schemas with one of them replaced. */
+    132| export const replacing = (name: string, schema: Schema, entries: reado…
+ ❯ manifest.test.ts:193:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 for any name without the prefix, each list refuses it naming the name, and the same name under ext.stocks. passes (1,000 cases)
+Error: Property failed after 1 tests
+{ seed: 314, path: "0:0:0:0:0", endOnFailure: true }
+Counterexample: ["a","events"]
+Shrunk 4 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ manifest.test.ts:200:8
+    198|
+    199|   it('AC7 for any name without the prefix, each list refuses it naming…
+    200|     fc.assert(fc.property(bareName, fc.constantFrom(...NAME_LISTS), (n…
+       |        ^
+    201|       expectRefusedWord(check(setAt(manifest(), `/${list}`, [name])), …
+    202|       expectAccepted(check(setAt(manifest(), `/${list}`, [`ext.${PLUGI…
+
+Caused by: TypeError: checkManifest is not a function
+ ❯ check helpers.ts:130:56
+ ❯ manifest.test.ts:201:25
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2660:14
+ ❯ manifest.test.ts:200:8
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 a manifest whose use names no minor fails its schema, naming the use
+ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+    233|     if (!found) {
+    234|       const schema = schemas.get(name);
+    235|       if (!schema) throw new ContractError(issue('unknown_schema', '',…
+       |                          ^
+    236|       found = { check: compile(schema), seq: seqTransform(schema) };
+    237|       compiled.set(name, found);
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:208:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/87]⎯
+
+ FAIL  manifest.test.ts > AC7 a name added without its ext.<plugin>. prefix fails, naming the name, unless the piece replaces the shipped piece of that name; a use that names no minor fails, naming the use > AC7 for any list of uses, the one whose minor is left out is the use named (1,000 cases)
+Error: Property failed after 1 tests
+{ seed: 314, path: "0:0", endOnFailure: true }
+Counterexample: [1,0]
+Shrunk 1 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ manifest.test.ts:217:8
+    215|   it('AC7 for any list of uses, the one whose minor is left out is the…
+    216|     const use = (i: number): JsonValue => ({ interface: `reading.batch…
+    217|     fc.assert(fc.property(fc.integer({ min: 1, max: 5 }), fc.nat(4), (…
+       |        ^
+    218|       fc.pre(which < count);
+    219|       const uses = Array.from({ length: count }, (_, i) => use(i));
+
+Caused by: ContractError: unknown_schema at /: extension.manifest@1
+ ❯ get ../../../packages/contracts/src/validate.ts:235:26
+ ❯ checked ../../../packages/contracts/src/validate.ts:243:23
+ ❯ validate ../../../packages/contracts/src/validate.ts:257:66
+ ❯ manifest.test.ts:221:22
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'unknown_schema', retryable: false, remediation: 'Name a published contract schema.', path: '', evidence: [] }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/87]⎯
+
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > check.kind@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > index@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > environment@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > source@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > reading.source@1: a run has a fixed part and a seeded part, records its seed, and the seed given is the seed recorded
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:17:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/87]⎯
+
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > check.kind@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > index@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > environment@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > source@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > reading.source@1: the same seed replays the same cases, and another seed draws others; the cases are the generator's
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:27:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/87]⎯
+
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > check.kind@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > index@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > environment@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > source@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > reading.source@1: the seeded cases are never the shipped fixtures: no generated input equals a fixture's input
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:39:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/87]⎯
+
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > AC6 with no seed given, the runner draws one and records it, and the draws differ
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:50:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/87]⎯
+
+ FAIL  seeded.test.ts > AC6 each kit runs a seeded part from a seed drawn at install and recorded; the same seed replays the same cases > AC6 for any seed, the generator draws the same cases twice, and draws others at the next seed (1,000 cases)
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:61:38
+ ❯ seeded.test.ts:61:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/87]⎯
+
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > check.kind@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > index@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > source@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > reading.source@1: the memorizing fill passes the fixed part and fails the seeded part, naming the seed
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:75:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/87]⎯
+
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > environment@1: the memorizing fill fails the seeded part, naming the seed (its kit watches ports and processes, so its fixed part is not held to the memorizer)
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:86:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/87]⎯
+
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > check.kind@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > index@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > source@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed
+ FAIL  seeded.test.ts > AC6 a planted fill that returns the shipped fixtures' expected answers by their inputs passes the fixed part and fails the seeded part, naming the seed > reading.source@1 (wrong program): fed to the reference fill's assertion, the memorizing fill is caught by the seeded part, and the failure names the seed
+TypeError: slotKits is not a function
+ ❯ slotKit helpers.ts:196:15
+    194| /** The shipped kit of a slot, failing the test when it isn't among th…
+    195| export function slotKit<F extends SlotFill = SlotFill>(slot: string): …
+    196|   const kit = slotKits().find((k) => k.slot === slot);
+       |               ^
+    197|   expect(kit, `slotKits() ships a kit for ${slot} (it has: ${slotKits(…
+    198|   return kit as SlotKit<F>;
+ ❯ seeded.test.ts:96:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/87]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  85 failed (85)
+   Start at  02:08:07
+   Duration  639ms (import 52%, transform 33%, tests 11%, worker 4%)
+
