@@ -57,6 +57,8 @@ pub struct Status {
     /// A ring of a role's color around every status mark, `(px, role)`, for a status color that
     /// can't keep 3:1 against the ground alone.
     pub outline: Option<(f64, String)>,
+    /// The status distance: how near (OKLab ΔE) a data color may come to a status color.
+    pub min_distance: f64,
 }
 
 /// A resolved look: each theme's roles, and the status map when the look has one.
@@ -185,7 +187,7 @@ fn theme(def: &Map<String, Value>, name: &'static str) -> Result<Palette, Refusa
 }
 
 /// OKLab ΔE between two sRGB-encoded colors.
-fn distance(a: Rgb, b: Rgb) -> f64 {
+pub fn distance(a: Rgb, b: Rgb) -> f64 {
     let lab = |c: Rgb| {
         srgb_to_oklab(Srgb {
             r: f64::from(c[0]) / 255.0,
@@ -281,11 +283,19 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
                 .to_string(),
         )),
     };
+    let min = match def.get("min_distance") {
+        None => 0.10,
+        Some(v) => v
+            .as_f64()
+            .filter(|d| d.is_finite() && *d >= 0.0)
+            .ok_or_else(|| Refusal::Bad("min_distance".into()))?,
+    };
     let mut status = Status {
         colors: BTreeMap::new(),
         glyphs: BTreeMap::new(),
         core_min_px,
         outline,
+        min_distance: min,
     };
     for state in STATES {
         let color = hex(status_map.and_then(|m| m.get(state)))
@@ -296,13 +306,6 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
         status.colors.insert(state, color);
         status.glyphs.insert(state, g.to_string());
     }
-    let min = match def.get("min_distance") {
-        None => 0.10,
-        Some(v) => v
-            .as_f64()
-            .filter(|d| d.is_finite() && *d >= 0.0)
-            .ok_or_else(|| Refusal::Bad("min_distance".into()))?,
-    };
     let (light, dark) = (theme(def, "light")?, theme(def, "dark")?);
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         let named = |role: &str, path: &str| {

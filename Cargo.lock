@@ -1801,6 +1801,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-marks-vello",
  "deep-replica",
  "deep-text",
  "deep-text-gpui",
@@ -1808,6 +1809,16 @@ dependencies = [
  "gpui-pre-apple",
  "image",
  "serde_json",
+ "vello_cpu",
+]
+
+[[package]]
+name = "deep-marks-vello"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "vello_cpu",
 ]
 
 [[package]]
@@ -1830,6 +1841,7 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-marks-vello",
  "deep-replica",
  "deep-text",
  "deep-text-gpui",

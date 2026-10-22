@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::{
-    as_f64, as_object, kind_text, member, sort_issues, sort_notices, Issue, Notice, AT_VECTORS,
-    ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
+    as_f64, as_object, kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS,
+    AT_VECTORS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
 use crate::grammar::{
     forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
@@ -649,6 +649,9 @@ fn check_item(
     if let Some(at_value) = fields.get("at") {
         check_at(key, at_value, issues);
     }
+    if let Some(adjust) = fields.get("adjust") {
+        check_adjust(key, adjust, issues);
+    }
 
     // `params` is always written, even `{}`, whatever the kind; only its members wait for one.
     if !fields.get("params").is_some_and(Value::is_object) {
@@ -736,6 +739,54 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
                 value.clone(),
                 "not a member of at in this slice",
             ));
+        }
+    }
+}
+
+/// An item's `adjust`: its known channels, each a number in range (`tint` a look role, `invert` a
+/// bool); opacity in 0..1, gamma above 0 and the rest that scale never below 0.
+fn check_adjust(key: &str, adjust: &Value, issues: &mut Vec<Issue>) {
+    let Some(members) = as_object(adjust) else {
+        issues.push(Issue::error(
+            "out_of_range",
+            key,
+            format!("items/{key}/adjust"),
+            adjust.clone(),
+            "not an object",
+        ));
+        return;
+    };
+    for (name, value) in members {
+        let path = format!("items/{key}/adjust/{name}");
+        if !ADJUST_FIELDS.contains(&name.as_str()) {
+            issues.push(Issue::error(
+                "unknown_field",
+                key,
+                path,
+                value.clone(),
+                "not a channel of adjust",
+            ));
+            continue;
+        }
+        let (fits, what) = match name.as_str() {
+            "invert" => (value.is_boolean(), "not a boolean"),
+            "tint" => (value.is_string(), "not a look role"),
+            "opacity" => (
+                as_f64(value).is_some_and(|v| (0.0..=1.0).contains(&v)),
+                "not a number in 0..1",
+            ),
+            "gamma" => (
+                fits_f32(value) && as_f64(value).is_some_and(|v| v > 0.0),
+                "not a number above 0",
+            ),
+            "hue" | "exposure" => (fits_f32(value), "not a number finite at f32"),
+            _ => (
+                fits_f32(value) && as_f64(value).is_some_and(|v| v >= 0.0),
+                "not a number at or above 0",
+            ),
+        };
+        if !fits {
+            issues.push(Issue::error("out_of_range", key, path, value.clone(), what));
         }
     }
 }
@@ -1144,6 +1195,7 @@ pub(crate) fn resolve(doc: &Value, path: &Path) -> Result<(), String> {
         ["at", name, index] if AT_VECTORS.contains(name) && ["0", "1", "2"].contains(index) => {
             Ok(())
         }
+        ["adjust", name] if ADJUST_FIELDS.contains(name) => Ok(()),
         [field] if ITEM_OWN_FIELDS.contains(field) => Ok(()),
         _ => unreachable(),
     }
