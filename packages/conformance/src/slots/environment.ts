@@ -326,18 +326,26 @@ function bounded(step: () => unknown, ms: number, what: string): unknown {
  * what the case reports, a first asking past its deadline included.
  */
 const downStep = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
+  // The second asking's own deadline is the kit's finding and takes precedence; its other failures leave the first to stand.
+  const blockedOr = (first: unknown) => (later: unknown): never => { throw later instanceof Finding && later.outcome === 'BLOCKED' ? later : first; };
   const again = (error: unknown): Promise<never> => {
     let second: unknown;
     try { second = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); } catch { return Promise.reject(error); }
-    return second instanceof Promise ? second.then(() => { throw error; }, () => { throw error; }) : Promise.reject(error);
+    return second instanceof Promise ? second.then(() => { throw error; }, blockedOr(error)) : Promise.reject(error);
   };
   let first: unknown;
   try { first = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); } catch (error) { return again(error); }
   return first instanceof Promise ? first.catch(again) : first;
 };
-/** Down for a case refused before its down step, awaited by the driver all the same; what it does or throws is not the finding. */
+/**
+ * Down for a case refused before its down step, awaited by the driver all the same; what the fill does or throws is
+ * not the finding, but a down past its deadline is the kit's own BLOCKED and supersedes the refusal.
+ */
 const quietDown = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
-  try { const r: unknown = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); return r instanceof Promise ? r.catch(() => undefined) : undefined; } catch { return undefined; }
+  try {
+    const r: unknown = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down');
+    return r instanceof Promise ? r.catch((later: unknown) => { if (later instanceof Finding && later.outcome === 'BLOCKED') throw later; }) : undefined;
+  } catch { return undefined; }
 };
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {

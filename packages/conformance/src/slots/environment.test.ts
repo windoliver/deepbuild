@@ -389,6 +389,40 @@ describe('the environment kit and the process table', () => {
     }
   }, 30_000);
 
+  it('reads BLOCKED when a down that threw is asked again and the second asking never settles', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const handles: Handle[] = [];
+    const stuckSecond: EnvironmentFill = {
+      ...clean!,
+      down: ((handle: Handle) => { handles.push(handle); if (handles.filter((h) => h.id === handle.id).length === 1) throw new Error('down refused'); return new Promise<void>(() => undefined); }) as unknown as EnvironmentFill['down'],
+    };
+    try {
+      const report = await runKit(k, stuckSecond, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'step_timeout'], ['BLOCKED', 'step_timeout']]);
+    } finally {
+      for (const h of handles) clean!.down(h);
+    }
+  }, 30_000);
+
+  it('reads BLOCKED when a case refused before its down step has a down that never settles', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const real: Handle[] = [];
+    // Refused at the handle's pid (never the environment), then a quiet down that never settles.
+    const refusedAndStuck: EnvironmentFill = {
+      ...clean!,
+      up: (spec, lease) => { const h = clean!.up(spec, lease); real.push(h); return { ...h, pid: 2 ** 30 }; },
+      down: (() => new Promise<void>(() => undefined)) as unknown as EnvironmentFill['down'],
+    };
+    try {
+      const report = await runKit(k, refusedAndStuck, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'step_timeout'], ['BLOCKED', 'step_timeout']]);
+    } finally {
+      for (const h of real) clean!.down(h);
+    }
+  }, 30_000);
+
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
     const reports = await Promise.all([0, 1].map(() => runKit(k, cleanFills(k)[0]!, { parts: ['fixed'] })));
