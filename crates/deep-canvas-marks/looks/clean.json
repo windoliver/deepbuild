@@ -1,0 +1,76 @@
+{
+  "id": "clean",
+  "format": 1,
+  "basis": "drawing",
+  "license": "Apache-2.0",
+  "description": "The clean pipeline look: flat ground and ink for the line, Needs you and receipts, one status map with a glyph and a word for each state, and an automatic legend.",
+  "palette": {
+    "white": "#ffffff",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "night": "#0b0c0e",
+    "snow": "#f2f3f5"
+  },
+  "roles": {
+    "ground": "white",
+    "ink": "graphite",
+    "muted": "slate"
+  },
+  "themes": {
+    "light": {},
+    "dark": {
+      "roles": {
+        "ground": "night",
+        "ink": "snow"
+      }
+    }
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  }
+}

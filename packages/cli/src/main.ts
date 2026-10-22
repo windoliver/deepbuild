@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exitCode, judge, type Verdict } from '@deepbuild/conformance';
 import { validate } from '@deepbuild/contracts';
+import { doctor as telemetryDoctor } from '@deepbuild/otlp';
 import { replaySession } from '../../../adapters/index.mjs';
 
 const args = process.argv.slice(2);
@@ -98,8 +99,21 @@ function run(path: string): number {
   return verdict(judged.verdict, judged.message);
 }
 
+// The doctor's items, one per line: for a person, each named by its agent; with --json, one doctor.item@1
+// object per line with its item and agent. Any failing item exits 1, as the exit family's FAIL.
+function doctor(json: boolean): number {
+  const agents: Record<string, string> = { 'claude-code': 'Claude Code' };
+  const items = telemetryDoctor(process.env);
+  for (const i of items) {
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} telemetry (${i.item}): ${i.level.toUpperCase()} ${i.code}\n  ${i.evidence}\n  Fix: ${i.fix}`);
+  }
+  return items.some((i) => i.level === 'fail') ? 1 : 0;
+}
+
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n\nRepository skeleton. Hub commands are not implemented yet.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n\nRepository skeleton. Hub commands are not implemented yet.`);
+} else if (args[0] === 'doctor' && args.slice(1).every((arg) => arg === '--json') && args.length <= 2) {
+  process.exitCode = doctor(args.includes('--json'));
 } else if (args.length === 1 && args[0] === '--version') {
   console.log(version());
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
