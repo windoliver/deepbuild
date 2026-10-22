@@ -10287,6 +10287,133 @@ impl Contract for LearnWidened {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct LearnCheckMadeV;
+
+impl Contract for LearnCheckMadeV {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "1").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("1").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnCheckMadeKind;
+
+impl Contract for LearnCheckMadeKind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"learn_check.made\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"learn_check.made\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnCheckMadeWriter;
+
+impl Contract for LearnCheckMadeWriter {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnCheckMadeData {
+    pub change: String,
+    pub reason: String,
+}
+
+impl Contract for LearnCheckMadeData {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["change", "reason"])?;
+        deep_contracts::check_member(members, at, "change", &RULE_86)?;
+        deep_contracts::check_member(members, at, "reason", &RULE_9)?;
+        Ok(Self {
+            change: deep_contracts::required(members, at, "change")?,
+            reason: deep_contracts::required(members, at, "reason")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("change".to_string(), self.change.to_json()));
+        members.push(("reason".to_string(), self.reason.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LearnCheckMade {
+    pub v: LearnCheckMadeV,
+    pub id: String,
+    pub kind: LearnCheckMadeKind,
+    pub subject: Option<String>,
+    pub writer: LearnCheckMadeWriter,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: LearnCheckMadeData,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for LearnCheckMade {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_3)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_5)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_6)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_6)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_7)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_8)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_12)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct LeaseAcquiredV;
 
 impl Contract for LeaseAcquiredV {
@@ -19663,6 +19790,7 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "learn.proposed@1" => <LearnProposed as Contract>::from_json(&value, "")?.to_json(),
         "learn.rolled_back@1" => <LearnRolledBack as Contract>::from_json(&value, "")?.to_json(),
         "learn.widened@1" => <LearnWidened as Contract>::from_json(&value, "")?.to_json(),
+        "learn_check.made@1" => <LearnCheckMade as Contract>::from_json(&value, "")?.to_json(),
         "lease.acquired@1" => <LeaseAcquired as Contract>::from_json(&value, "")?.to_json(),
         "lease.denied@1" => <LeaseDenied as Contract>::from_json(&value, "")?.to_json(),
         "lease.released@1" => <LeaseReleased as Contract>::from_json(&value, "")?.to_json(),

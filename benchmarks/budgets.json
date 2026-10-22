@@ -146,6 +146,28 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #14 first measurement: the merge base has no record package. One process appends a 100,000-event log, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the replay's own limits (60 s per million events, 100 MB of working memory) stay in tests/acceptance/14/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "record-learn-apply-rollback-1k",
+      "command": [
+        "node",
+        "benchmarks/record.mjs",
+        "learn-apply-rollback-1k"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process archives 10 transcripts of about 2,000 messages each in a temp evidence store, applies 1,000 learned changes one at a time, each read against its transcript (a different one each time, so no parse is reused), then rolls each back, so p50 includes Node's start and the per-change limit (100 ms to apply or roll back) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "record-learn-rebuild-10k",
+      "command": [
+        "node",
+        "benchmarks/record.mjs",
+        "learn-rebuild-10k"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process builds a 10,000-change learned layer over 200 archived transcripts, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the rebuild's own limit (5 s) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

@@ -1346,6 +1346,25 @@ export interface LearnWidened {
   evidence?: Array<string>;
 }
 
+/** learn_check.made@1 */
+export interface LearnCheckMade {
+  v: 1;
+  id: string;
+  kind: "learn_check.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    change: string;
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** lease.acquired@1 */
 export interface LeaseAcquired {
   v: 1;
