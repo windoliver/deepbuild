@@ -850,7 +850,9 @@ class AsksCore implements Asks {
         const open = this.open().filter((a) => a.thread === thread);
         // Typed text never answers an authority ask: it shows beside it, for one tap on the card.
         for (const a of open) if (a.data.kind === 'authority') a.words.push(d.text);
-        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold).at(-1);
+        // It answers only a question in sight: not one queued for a batch, put off with Later, or in a hidden exception.
+        const inSight = (a: Ask) => this.visible(a) && (!this.inFold(a) || this.visible(this.asks.get(bare(a.folded!))!));
+        const question = open.filter((a) => TYPED_KINDS.has(a.data.kind as string) && !a.fold && inSight(a)).at(-1);
         if (question && d.text && question.pending.typed === undefined) question.pending.typed = d.text;
         return;
       }

@@ -457,6 +457,36 @@ describe('showings', () => {
     expect(await shown()).toEqual([mine, theirs]);
   });
 
+  it('text you type answers only a question in sight, not one queued for a batch or put off with Later', async () => {
+    await start('S1');
+    const queued = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));
+    const hook = { writer: 'hook', ...you, session: 'S1' };
+    const typed = (text: string) => record.append(hook, { v: 1, id: id(now), kind: 'user.ask', ts: now, data: { msg: 1, text, tasks: [], from: 'person' } });
+    await typed('ship the docs first');
+    await asks.tick();
+    expect(await about(queued, 'ask.answered')).toEqual([]);
+    await at(T0 + 4 * HOUR);
+    expect(await shown()).toContain(queued);
+    await asks.later(card, queued, T0 + 6 * HOUR);
+    await typed('and the changelog');
+    await asks.tick();
+    expect(await about(queued, 'ask.answered')).toEqual([]);
+    await at(T0 + 6 * HOUR);
+    await typed('green');
+    await asks.tick();
+    expect((await about(queued, 'ask.answered')).map((e) => (e.data as Obj).answer)).toEqual(['green']);
+  });
+
+  it('text you type does not answer an ask inside an exception put off with Later', async () => {
+    settings({});
+    await start('S1');
+    const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
+    await asks.later(card, exception, T0 + HOUR);
+    await record.append({ writer: 'hook', ...you, session: 'S1' }, { v: 1, id: id(now), kind: 'user.ask', ts: now, data: { msg: 1, text: 'green', tasks: [], from: 'person' } });
+    await asks.tick();
+    expect(await about(folded, 'ask.answered')).toEqual([]);
+  });
+
   it('the fold\'s answer together from another scope is refused and closes nothing', async () => {
     settings({});
     await start('S1');
