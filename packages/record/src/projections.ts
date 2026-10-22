@@ -416,7 +416,11 @@ export class Projector {
         // change that supersedes or cites it. Only you, through the app or the CLI, or the core roll back, and
         // the base only you: the core's attempt on a rule you typed is refused and recorded, as its base changes are.
         const undone = str(d.supersedes);
-        if (e.kind !== 'learn.rolled_back' || !undone || !ROLLERS.has(e.writer)) break;
+        if (e.kind !== 'learn.rolled_back' || !undone) break;
+        if (!ROLLERS.has(e.writer)) {
+          this.stmt("UPDATE learned_layer SET state = 'refused', reason = ? WHERE id = ?").run(`a rollback takes a change out of force only from the app, the CLI or the core, not ${e.writer}`, e.id);
+          break;
+        }
         if (!YOURS.has(e.writer)) {
           const named = this.stmt("SELECT layer, target FROM learned_layer WHERE handle = ? AND kind IN ('learn.applied', 'learn.widened')").get(undone) as { layer: string | null; target: string | null } | undefined;
           if (named?.layer === 'base') {

@@ -77,6 +77,12 @@ describe('the learned layer', () => {
     await expect(record.rollBack({ writer: 'hook', actor: 'you', scope: 'you', session: S }, { change: id })).rejects.toBeInstanceOf(RecordError);
     expect((await record.read({ after: 0 })).length).toBe(before);
     expect(await stateOf(record, id)).toBe('applied');
+    // A hook's compensating event appended by hand takes nothing out of force, and its row says why.
+    // Failed on a projection that passed over it with no state or reason, which read like a rollback honoured.
+    const undo = ulidAt(T0 + 2000);
+    await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: S }, { v: 1, id: undo, kind: 'learn.rolled_back', ts: T0 + 2000, data: { replay: null, supersedes: `doc:${id}`, layer: 'learned', target: 'slice:api', diff: '- api on 4100', evidence: [], scope: `session:${S}`, applied_by: 'you' } as never });
+    expect(await stateOf(record, id)).toBe('applied');
+    expect(await stateOf(record, undo)).toBe('refused');
     await record.close();
   });
 
