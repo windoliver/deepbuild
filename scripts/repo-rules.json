@@ -260,6 +260,14 @@
         }
       }
     },
+    "crates/deep-hook/Cargo.toml": {
+      "dependencies": {
+        "deep-contracts": {
+          "spec": "* path=../deep-contracts",
+          "why": "Issue #16: the hook's JSON read and written by the contracts' own parser and RFC 8785 printer, the Rust side of the wire it shares with the hub."
+        }
+      }
+    },
     "crates/deep-text-render/Cargo.toml": {
       "dependencies": {
         "deep-replica": {
