@@ -1,0 +1,70 @@
+Base commit: a8f844fe8e8375d57097243bd3f52e6e48e4d3e7
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/42
+Date: 2026-10-21T21:02:56Z  Node v24.22.0  vitest vitest/5.0.5 darwin-arm64 node-v24.22.0
+Note: run through node node_modules/vitest/vitest.mjs, the same binary npx resolves, because a local shell hook rewrites npx vitest to a JSON reporter. The workspaces were built first (npm run build --workspaces), as the README says.
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/42
+
+ ❯ live.test.ts (0 test)
+ ❯ receiver.test.ts (0 test)
+ ❯ budgets.test.ts (0 test)
+ ❯ doctor.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts [ budgets.test.ts ]
+Error: Cannot find module '../../../packages/otlp/src/index.ts' imported from <checkout>/tests/acceptance/42/budgets.test.ts
+ ❯ budgets.test.ts:12:1
+     10| import { join } from 'node:path';
+     11| import { afterEach, describe, expect, it } from 'vitest';
+     12| import { startReceiver } from '../../../packages/otlp/src/index.ts';
+       | ^
+     13| import type { Receiver } from '../../../packages/otlp/src/index.ts';
+     14| import type { RecordStore } from '../../../packages/record/src/index.t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  doctor.test.ts [ doctor.test.ts ]
+Error: Cannot find module '../../../packages/otlp/src/index.ts' imported from <checkout>/tests/acceptance/42/doctor.test.ts
+ ❯ doctor.test.ts:10:1
+      8| import { afterAll, beforeAll, describe, expect, it, type TestContext }…
+      9| import { validate } from '../../../packages/contracts/src/index.ts';
+     10| import { startReceiver } from '../../../packages/otlp/src/index.ts';
+       | ^
+     11| import type { Receiver } from '../../../packages/otlp/src/index.ts';
+     12| import type { RecordStore } from '../../../packages/record/src/index.t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  live.test.ts [ live.test.ts ]
+Error: Cannot find module '../../../packages/otlp/src/index.ts' imported from <checkout>/tests/acceptance/42/live.test.ts
+ ❯ live.test.ts:7:1
+      5| import { promisify } from 'node:util';
+      6| import { afterEach, describe, expect, it } from 'vitest';
+      7| import { startReceiver } from '../../../packages/otlp/src/index.ts';
+       | ^
+      8| import type { Receiver } from '../../../packages/otlp/src/index.ts';
+      9| import type { Event, RecordStore } from '../../../packages/record/src/…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  receiver.test.ts [ receiver.test.ts ]
+Error: Cannot find module '../../../packages/otlp/src/index.ts' imported from <checkout>/tests/acceptance/42/receiver.test.ts
+ ❯ receiver.test.ts:5:1
+      3| import { networkInterfaces } from 'node:os';
+      4| import { afterEach, describe, expect, it } from 'vitest';
+      5| import { costOf, startReceiver } from '../../../packages/otlp/src/inde…
+       | ^
+      6| import type { Receiver } from '../../../packages/otlp/src/index.ts';
+      7| import type { RecordStore, Row } from '../../../packages/record/src/in…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  no tests
+   Start at  14:02:56
+   Duration  465ms (worker 96%, environment 4%)
+
