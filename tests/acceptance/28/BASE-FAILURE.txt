@@ -1,0 +1,124 @@
+Base commit: a8f844f (Merge pull request #649 from windoliver/feat/372-canvas-camera)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/28   (node = /Users/<user>/.nvm/versions/node/v24.22.0/bin/node, the repo's .node-version; the same as npx vitest run --root tests/acceptance/28 with that node first on PATH; the JSON reporter run, --reporter=json, gives the same: 8 suites, 8 failed, 0 tests)
+Date: 2026-10-21T21:12:43Z  Node v24.22.0  vitest 5.0.5  darwin-arm64
+Exit code: 1
+Why every suite fails: packages/verdicts/src/index.ts, the surface the README defines, does not exist at the base; each suite imports it and fails at its import, before any test runs. (record.test.ts imports it before packages/record, so the base failure is the missing engine, not the unbuilt @deepbuild/evidence that packages/record needs, as in tests/acceptance/14.)
+Checked beside this run (not at the base): the tests type-check under the root tsconfig against a declaration-only copy of the surface outside the repo (tsc -p tests/acceptance/28/tsconfig.json: no errors, 11 test files plus the surface checked). Run against a runtime stub of the surface whose every call throws, they read 96 failed | 8 passed | 1 skipped of 105 in 7 files (the skip is the AC22 budget, gated off a reference Mac) (record.test.ts not loaded there: @deepbuild/evidence unbuilt); the 8 are checks on the test code itself: the AC33 fixture, the AC2 and AC29 planted counts, and the five AC27 planted engines caught against the reference. The reference and generator alone, over 10,000 seeds: every planted variant disagrees with the reference (175 to 4,389 cases each), reordering and duplicating runs changes nothing, nothing throws.
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/28
+
+ ❯ contract.test.ts (0 test)
+ ❯ carry.test.ts (0 test)
+ ❯ budgets.test.ts (0 test)
+ ❯ rules.test.ts (0 test)
+ ❯ runs.test.ts (0 test)
+ ❯ reference.test.ts (0 test)
+ ❯ record.test.ts (0 test)
+ ❯ conformance.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts [ budgets.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/budgets.test.ts
+ ❯ budgets.test.ts:9:1
+      7| import { execFileSync } from 'node:child_process';
+      8| import { describe, expect, it, type TestContext } from 'vitest';
+      9| import { verdict } from '../../../packages/verdicts/src/index.ts';
+       | ^
+     10| import type { ClaimCheck, Run } from '../../../packages/verdicts/src/i…
+     11| import { check, claim, COMMIT, commitOf, failure, reqId, requirement, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  carry.test.ts [ carry.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/carry.test.ts
+ ❯ carry.test.ts:4:1
+      2| // AC17, AC18, AC21, AC28, AC31.
+      3| import { describe, expect, it } from 'vitest';
+      4| import { selectReruns, staleReason, verdict } from '../../../packages/…
+       | ^
+      5| import type { ClaimInput } from '../../../packages/verdicts/src/index.…
+      6| import { referenceSelect, referenceVerdict } from './reference.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  conformance.test.ts [ conformance.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/conformance.test.ts
+ ❯ conformance.test.ts:5:1
+      3| import fc from 'fast-check';
+      4| import { describe, expect, it } from 'vitest';
+      5| import { conductRun } from '../../../packages/verdicts/src/index.ts';
+       | ^
+      6| import { RUN_OUTCOMES } from './helpers.ts';
+      7|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  contract.test.ts [ contract.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/contract.test.ts
+ ❯ contract.test.ts:6:1
+      4| // ends at 1, an error of 2^-8 = 0.00390625: at most 4e-3, above 1e-3 …
+      5| import { describe, expect, it } from 'vitest';
+      6| import { runContract, verdict } from '../../../packages/verdicts/src/i…
+       | ^
+      7| import type { NumericContract, Outputs, Precision } from '../../../pac…
+      8| import { check, checkOf, claim, COMMIT, numbersIn, reqId, reqOf, requi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  record.test.ts [ record.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/record.test.ts
+ ❯ record.test.ts:7:1
+      5| import { join } from 'node:path';
+      6| import { afterEach, describe, expect, it } from 'vitest';
+      7| import { markStale, recordVerdict, selectReruns, verdict, verdictHash …
+       | ^
+      8| import type { ClaimCheck, Run } from '../../../packages/verdicts/src/i…
+      9| import { openRecord } from '../../../packages/record/src/index.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  reference.test.ts [ reference.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/reference.test.ts
+ ❯ reference.test.ts:7:1
+      5| import fc from 'fast-check';
+      6| import { describe, expect, it } from 'vitest';
+      7| import { openItemId, verdict } from '../../../packages/verdicts/src/in…
+       | ^
+      8| import type { ClaimCheck, ClaimInput, Result } from '../../../packages…
+      9| import { genClaim, GLOBS, PATHS, reorder } from './generate.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  rules.test.ts [ rules.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/rules.test.ts
+ ❯ rules.test.ts:6:1
+      4| import fc from 'fast-check';
+      5| import { describe, expect, it } from 'vitest';
+      6| import { verdict } from '../../../packages/verdicts/src/index.ts';
+       | ^
+      7| import type { ClaimCheck, ClaimInput, Result, Run, Waiver } from '../.…
+      8| import { genClaim } from './generate.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  runs.test.ts [ runs.test.ts ]
+Error: Cannot find module '../../../packages/verdicts/src/index.ts' imported from <checkout>/tests/acceptance/28/runs.test.ts
+ ❯ runs.test.ts:3:1
+      1| // #28 run counts and more runs: AC2, AC8, AC14, AC19, AC20, AC29.
+      2| import { describe, expect, it } from 'vitest';
+      3| import { moreRuns, runsNeeded, verdict } from '../../../packages/verdi…
+       | ^
+      4| import type { RunOutcome } from '../../../packages/verdicts/src/index.…
+      5| import { check, checkOf, claim, COMMIT, run, text } from './helpers.ts…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  no tests
+   Start at  14:11:22
+   Duration  744ms (worker 96%, environment 4%)
+
