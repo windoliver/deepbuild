@@ -1,4 +1,5 @@
 // Regression tests for the learned layer (#62) beyond its acceptance suite: each one failed on the program it names.
+import { createHash } from 'node:crypto';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -291,6 +292,27 @@ describe('the learned layer', () => {
     await record.append(you, { v: 1, id: ulidAt(T0 + 3000), kind: 'transcript.archived', ts: T0 + 3000, data: { session: `session:${S}`, evidence: put.evidence.sha256 } });
     expect(await stateOf(record, B3)).toBe('applied');
     expect(await stateOf(record, await apply(record, core, { ...claim, evidence: [{ at: `doc:${B3}`, quote: 'deploy with --force' }] }))).toBe('refused');
+    await record.close();
+  });
+
+  it('reads a transcript the store did not hold at the first citation once it arrives, within the same process', async () => {
+    // Failed on a parse cache that kept a missing file as nothing there, which refused every later true quote
+    // from that transcript, each refusal sealed into the log, until the process restarted.
+    const root = mkdtempSync(join(tmpdir(), 'deep-learned-'));
+    roots.push(root);
+    const store = await openEvidenceStore({ root: join(root, 'evidence'), now: () => T0 });
+    const record = await openRecord({ path: join(root, 'record.db'), now: () => T0, evidence: store });
+    const S = ulidAt(T0);
+    await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: S, project: 'shop' }, { v: 1, id: ulidAt(T0), kind: 'session.start', ts: T0, data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: S } });
+    const bytes = new Uint8Array(Buffer.from(`${JSON.stringify(said('m1', 'the api runs on 4100'))}\n`));
+    const sha = createHash('sha256').update(bytes).digest('hex');
+    // The link lands before the capture's bytes do.
+    await record.append(you, { v: 1, id: ulidAt(T0), kind: 'transcript.archived', ts: T0, data: { session: `session:${S}`, evidence: sha } });
+    const change = { layer: 'learned', target: 'slice:api', diff: '+ api on 4100', evidence: [{ at: `session:${S}#m1`, quote: 'runs on 4100' }], scope: `session:${S}`, applied_by: 'rule:localfirst' };
+    expect(await stateOf(record, await apply(record, core, change))).toBe('refused');
+    const put = await store.connect({ role: 'deepbuild', via: 'capture' }).put({ bytes, kind: 'transcript', source: 'claude-code', redaction: 'complete', license: { name: 'own', allows: [] } });
+    if (put.status !== 'stored' || put.evidence.sha256 !== sha) throw Error('transcript not stored under its hash');
+    expect(await stateOf(record, await apply(record, core, change))).toBe('applied');
     await record.close();
   });
 

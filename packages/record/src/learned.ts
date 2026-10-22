@@ -224,9 +224,13 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
       const b = await bytesOf(where.sha);
       return b ? { text: Buffer.from(b).toString('utf8'), outside: false } : undefined;
     }
+    // Only a parsed transcript is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
     let parsed = transcripts.get(where.sha);
     if (!parsed) {
-      parsed = bytesOf(where.sha).then((b) => (b ? readTranscript(b) : undefined));
+      parsed = bytesOf(where.sha).then((b) => {
+        if (!b) transcripts.delete(where.sha);
+        return b ? readTranscript(b) : undefined;
+      });
       transcripts.set(where.sha, parsed);
       parsed.catch(() => transcripts.delete(where.sha));
     }
