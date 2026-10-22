@@ -12,7 +12,7 @@ use super::{
 use crate::grammar::{
     forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
 };
-use crate::kinds::{lookup, parse_required, registry, Entry, Lookup, ParamType, Version};
+use crate::kinds::{lookup, parse_required, registry, Entry, Lookup, ParamType, Registry, Version};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -52,6 +52,12 @@ impl CheckResult {
 
 /// Checks `doc`.
 pub fn check(doc: &Value) -> CheckResult {
+    check_with(doc, &registry())
+}
+
+/// Checks `doc` as a build whose kinds are `registry`'s, as an earlier release with an older
+/// minor of some kind reads it (Document envelope: `requires`).
+pub fn check_with(doc: &Value, registry: &Registry) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
@@ -83,13 +89,14 @@ pub fn check(doc: &Value) -> CheckResult {
         None => {}
         Some(Value::Object(items)) => {
             for (key, item) in items.iter_mut() {
-                migrate_item(key, item, &mut notices);
+                migrate_item(key, item, &mut notices, registry);
             }
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
                 item_ids: &item_ids,
                 parents: &parents,
                 required: &required,
+                registry,
             };
             for (key, item) in items.iter_mut() {
                 if check_item(key, item, &ctx, &mut issues, &mut notices) {
@@ -120,6 +127,112 @@ pub fn check(doc: &Value) -> CheckResult {
         notices,
         draws,
         lowered,
+    }
+}
+
+/// The issues of `doc`, a patch's result that changed only the items `changed`, re-checked
+/// incrementally from `prev_issues`, the issues of the revision it was applied to (Patch: "re-checked incrementally"; the patch fuzzer's fifth
+/// law: the same issues, by code, IDs and path, as a full check). The items the patch changed are
+/// checked again, with those hanging from them and those whose params name one of them, in a
+/// document of only them and what they read (their ancestors, the items their params name and the
+/// camera); every other item keeps its issues. `None` when a full check is needed: the document
+/// holds entries of other maps keyed by ID, which read items by path. A patch that reached
+/// beyond items (a layer added) takes a full check, which the caller runs.
+pub fn recheck(
+    doc: &Value,
+    prev_issues: &[Issue],
+    changed: &BTreeSet<String>,
+) -> Option<Vec<Issue>> {
+    let after = doc.as_object()?;
+    let maps_empty = ID_MAPS
+        .iter()
+        .all(|m| member(doc, m).and_then(as_object).is_none_or(Map::is_empty));
+    if !maps_empty {
+        return None;
+    }
+    let items = member(doc, "items")?.as_object()?;
+    // The items to check again: those changed, those whose params name one, and below them, in
+    // passes over the items until a pass adds none.
+    let mut affected: BTreeSet<String> = changed.clone();
+    loop {
+        let more: Vec<&String> = items
+            .iter()
+            .filter(|(id, item)| {
+                !affected.contains(*id)
+                    && (member(item, "parent")
+                        .and_then(Value::as_str)
+                        .is_some_and(|p| affected.contains(p))
+                        || member(item, "params").is_some_and(|p| names_any(p, changed)))
+            })
+            .map(|(id, _)| id)
+            .collect();
+        if more.is_empty() {
+            break;
+        }
+        affected.extend(more.into_iter().cloned());
+    }
+    // What they read: their ancestors, the items their params name, and the camera.
+    let mut context: BTreeSet<String> = affected.clone();
+    if let Some(camera) = member(doc, "camera").and_then(Value::as_str) {
+        context.insert(camera.to_string());
+    }
+    for id in &affected {
+        let Some(item) = items.get(id) else { continue };
+        if let Some(params) = member(item, "params") {
+            strings_in(params, &mut |s| {
+                if items.contains_key(s) {
+                    context.insert(s.to_string());
+                }
+            });
+        }
+        let mut at = member(item, "parent").and_then(Value::as_str);
+        while let Some(p) = at.filter(|p| context.insert(p.to_string())) {
+            at = items
+                .get(p)
+                .and_then(|i| member(i, "parent"))
+                .and_then(Value::as_str);
+        }
+    }
+    let mut reduced = Map::new();
+    for (k, v) in after {
+        if k != "items" {
+            reduced.insert(k.clone(), v.clone());
+        }
+    }
+    let subset: Map<String, Value> = context
+        .iter()
+        .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
+        .collect();
+    reduced.insert("items".into(), Value::Object(subset));
+    let fresh = check(&Value::Object(reduced)).issues;
+    let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
+    let mut out: Vec<Issue> = prev_issues
+        .iter()
+        .filter(|i| !touches(i))
+        .cloned()
+        .chain(fresh.into_iter().filter(|i| touches(i)))
+        .collect();
+    sort_issues(&mut out);
+    Some(out)
+}
+
+/// Calls `f` with each string `value` holds, at any depth.
+fn strings_in(value: &Value, f: &mut dyn FnMut(&str)) {
+    match value {
+        Value::String(s) => f(s),
+        Value::Array(list) => list.iter().for_each(|v| strings_in(v, f)),
+        Value::Object(map) => map.values().for_each(|v| strings_in(v, f)),
+        _ => {}
+    }
+}
+
+/// Whether `value` holds, at any depth, a string in `ids`.
+fn names_any(value: &Value, ids: &BTreeSet<String>) -> bool {
+    match value {
+        Value::String(s) => ids.contains(s),
+        Value::Array(list) => list.iter().any(|v| names_any(v, ids)),
+        Value::Object(map) => map.values().any(|v| names_any(v, ids)),
+        _ => false,
     }
 }
 
@@ -427,12 +540,16 @@ fn check_layers(doc: &Value, issues: &mut Vec<Issue>) -> BTreeSet<String> {
 /// Runs an item's migrations in place, one major a step, with a notice per step. The check runs
 /// it on its lowered copy at load; `apply` runs it on the stored document for the writer's own
 /// items once a patch of theirs goes through.
-pub(super) fn migrate_item(key: &str, item: &mut Value, notices: &mut Vec<Notice>) {
+pub(super) fn migrate_item(
+    key: &str,
+    item: &mut Value,
+    notices: &mut Vec<Notice>,
+    registry: &Registry,
+) {
     let Some(text) = kind_text(item).map(str::to_string) else {
         return;
     };
-    let registry = registry();
-    let Lookup::Known { entry, saved } = lookup(&registry, &text) else {
+    let Lookup::Known { entry, saved } = lookup(registry, &text) else {
         return;
     };
     let Some(steps) = entry.steps_from(saved) else {
@@ -477,6 +594,7 @@ struct ItemContext<'a> {
     item_ids: &'a BTreeSet<String>,
     parents: &'a BTreeMap<String, String>,
     required: &'a BTreeMap<String, u32>,
+    registry: &'a Registry,
 }
 
 /// Checks one lowered item in place; true when it draws.
@@ -520,8 +638,7 @@ fn check_item(
     // The kind decides the params alone: an item of a kind this build does not know, or knows
     // only at a lower major, still meets the item contract core defines (its keys, its id, its
     // layer and parent, its common fields), and is kept byte for byte, its params unread.
-    let registry = registry();
-    let known = match lookup(&registry, &text) {
+    let known = match lookup(ctx.registry, &text) {
         Lookup::UnknownKind => {
             notices.push(Notice {
                 code: "unknown_kind",

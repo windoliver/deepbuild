@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Unknown kind round trip",
+  "description": "A board a newer release saved: bravo's layer holds a gizmo of a kind this build doesn't know, beside your two nodes.",
+  "size": [640, 360],
+  "layers": {
+    "you-main": { "writer": "you:you", "title": "You", "order": "a0" },
+    "alpha-main": { "writer": "agent:thread-alpha", "title": "Claude Code: diagram", "order": "a1" },
+    "bravo-main": { "writer": "agent:thread-bravo", "title": "Codex: labels", "order": "a2" }
+  },
+  "items": {
+    "you.n1": {
+      "id": "you.n1", "kind": "rect@1", "layer": "you-main", "name": "Node 1", "order": "a0",
+      "params": { "box": [0, 0, 120, 48], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [40, 40, 0] }
+    },
+    "you.n2": {
+      "id": "you.n2", "kind": "rect@1", "layer": "you-main", "name": "Node 2", "order": "a1",
+      "params": { "box": [0, 0, 120, 48], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [40, 200, 0] }
+    },
+    "bravo.gizmo": {
+      "id": "bravo.gizmo", "kind": "acme.gizmo@2", "layer": "bravo-main", "name": "Gizmo", "order": "a0",
+      "params": { "teeth": 12, "pitch": 1.5, "finish": { "tone": "brass", "gloss": true }, "spokes": [3, 5, 8], "note": "kept as written" },
+      "at": { "pos": [400, 120, 0] }
+    }
+  }
+}

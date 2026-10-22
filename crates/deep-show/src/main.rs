@@ -8,6 +8,7 @@
 
 mod evidence;
 mod hub;
+mod shared;
 mod snapshot;
 
 use std::collections::BTreeMap;
@@ -17,9 +18,10 @@ use std::path::PathBuf;
 use serde_json::{json, Map, Value};
 
 use hub::{
-    flicks, Call, Card, Claim, Fault, Hold, Include, Panel, Planted, Process, RecordObject,
-    Scenario, Session, Show, Via,
+    flicks, Body, Call, Card, Claim, Fault, Hold, Include, Panel, PatchCall, Planted, Process,
+    RecordObject, Scenario, Session, Show, Via,
 };
+use shared::{Clock, CommitFault, Quota};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
@@ -62,22 +64,69 @@ fn strings(value: Option<&Value>) -> Option<Vec<String>> {
     }
 }
 
-fn call(c: &Map<String, Value>) -> Option<Call> {
-    let name = c.get("call")?.as_str()?;
-    let via = match name {
-        "revisions" => return Some(Call::Revisions(c.get("doc")?.as_str()?.to_string())),
-        "screen" => return Some(Call::Screen),
+/// Who a call names: a `deep_show` call's session, or a `deep show` call's peer process.
+fn via(name: &str, c: &Map<String, Value>) -> Option<Via> {
+    match name {
         "deep_show" => match c.get("session")? {
-            Value::Null => Via::Mcp(None),
-            Value::String(s) => Via::Mcp(Some(s.clone())),
-            _ => return None,
+            Value::Null => Some(Via::Mcp(None)),
+            Value::String(s) => Some(Via::Mcp(Some(s.clone()))),
+            _ => None,
         },
         "deep show" => {
             let peer = c.get("peer")?.as_object()?;
-            Via::Cli(peer.get("pid")?.as_u64()?, peer.get("start")?.as_i64()?)
+            Some(Via::Cli(
+                peer.get("pid")?.as_u64()?,
+                peer.get("start")?.as_i64()?,
+            ))
         }
+        _ => None,
+    }
+}
+
+fn call(c: &Map<String, Value>) -> Option<Call> {
+    let name = c.get("call")?.as_str()?;
+    let doc = || Some(c.get("doc")?.as_str()?.to_string());
+    match name {
+        "revisions" => return Some(Call::Revisions(doc()?)),
+        "screen" => return Some(Call::Screen),
+        "by_writer" => return Some(Call::ByWriter(doc()?)),
+        "history" => {
+            return Some(Call::History {
+                doc: doc()?,
+                item: c.get("item")?.as_str()?.to_string(),
+            })
+        }
+        "read" => {
+            let as_writer = match (c.get("session"), c.get("peer")) {
+                (None, None) => None,
+                (Some(_), None) => Some(via("deep_show", c)?),
+                (None, Some(_)) => Some(via("deep show", c)?),
+                _ => return None,
+            };
+            return Some(Call::Read {
+                doc: doc()?,
+                via: as_writer,
+            });
+        }
+        _ => {}
+    }
+    let via = via(name, c)?;
+    let body = match (c.get("document"), c.get("patch"), c.get("undo")) {
+        (Some(_), None, None) => None,
+        (None, Some(p), None) => Some(Body::Patch(p.clone())),
+        (None, None, Some(u)) => Some(Body::Undo {
+            patch: u.get("patch")?.as_str()?.to_string(),
+            of: u.get("of")?.as_str()?.to_string(),
+        }),
         _ => return None,
     };
+    if let Some(body) = body {
+        return Some(Call::Patch(Box::new(PatchCall {
+            via,
+            doc: doc()?,
+            body,
+        })));
+    }
     let include = match c.get("include") {
         None => vec![Include::Issues],
         Some(v) => v
@@ -164,6 +213,38 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let docs = entries(input, "docs", |d| {
         Some(d.get("panel")?.as_str()?.to_string())
     })?;
+    let seeds = entries(input, "docs", |d| Some(d.get("document").cloned()))?
+        .into_iter()
+        .filter_map(|(id, seed)| Some((id, seed?)))
+        .collect();
+    let quotas = entries(input, "quotas", |q| {
+        let cap = |k: &str| match q.get(k) {
+            None => Some(None),
+            Some(v) => v.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some),
+        };
+        let known = ["patches_per_s", "items", "msg_bytes", "docs"];
+        if q.keys().any(|k| !known.contains(&k.as_str())) {
+            return None;
+        }
+        Some(Quota {
+            patches_per_s: cap("patches_per_s")?,
+            items: cap("items")?,
+            msg_bytes: cap("msg_bytes")?,
+            docs: cap("docs")?,
+        })
+    })?;
+    let clock = match input.get("clock") {
+        None => None,
+        Some(c) => {
+            let n = |k: &str| c.get(k)?.as_i64().filter(|n| *n >= 0);
+            let refresh_hz = n("refresh_hz").filter(|n| *n > 0)?;
+            Some(Clock {
+                refresh_hz,
+                lead: n("lead")?,
+                check: n("check")?,
+            })
+        }
+    };
     let record = entries(input, "record", |o| {
         Some(RecordObject {
             session: match o.get("session")? {
@@ -210,8 +291,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             rect: rect(c.get("rect"))?,
         }),
     };
+    let commit_fault = match input.get("fault") {
+        Some(f) if f.get("kill_after_layer_file").is_some() => Some(
+            CommitFault::KillAfterLayerFile(f.get("kill_after_layer_file")?.as_str()?.to_string()),
+        ),
+        Some(f) if f.get("layer_file_fails").is_some() => Some(CommitFault::LayerFileFails(
+            f.get("layer_file_fails")?.as_str()?.to_string(),
+        )),
+        _ => None,
+    };
     let fault = match input.get("fault") {
         None => None,
+        Some(_) if commit_fault.is_some() => None,
         Some(f) => Some(Fault {
             holds: match f.get("holds")?.as_str()? {
                 "fallback_pipeline" => Hold::FallbackPipeline,
@@ -230,14 +321,26 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "inlines_every_issue" => Planted::InlinesEveryIssue,
             "cuts_without_truncated" => Planted::CutsWithoutTruncated,
             "sorts_by_order_key_alone" => Planted::SortsByOrderKeyAlone,
+            "rebase_counts_op_targets_only" => Planted::RebaseCountsOpTargetsOnly,
+            "diffs_whole_document" => Planted::DiffsWholeDocument,
+            "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
+            "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
             _ => return None,
         }),
     };
-    let calls = input
-        .get("calls")?
-        .as_array()?
+    let list = input.get("calls")?.as_array()?;
+    let calls = list
         .iter()
         .map(|c| call(c.as_object()?))
+        .collect::<Option<_>>()?;
+    // On the clock every call says when it arrives.
+    let at = list
+        .iter()
+        .map(|c| match (c.get("at"), &clock) {
+            (Some(t), Some(_)) => t.as_i64().filter(|t| *t >= 0),
+            (None, None) => Some(0),
+            _ => None,
+        })
         .collect::<Option<_>>()?;
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
@@ -252,12 +355,21 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         fault,
         planted,
         calls,
+        at,
+        seeds,
+        state: match input.get("state") {
+            None => None,
+            Some(s) => Some(PathBuf::from(s.as_str()?)),
+        },
+        quotas,
+        clock,
+        commit_fault,
     })
 }
 
-/// Runs a scenario's calls in order, one reply each.
+/// Runs a scenario's calls, one reply each, in call order.
 fn run(hub: &mut hub::Hub<'_>) -> Vec<Value> {
-    hub.scenario.calls.iter().map(|c| hub.call(c)).collect()
+    hub.run_calls()
 }
 
 fn answer(command: &str, line: &str) -> Value {

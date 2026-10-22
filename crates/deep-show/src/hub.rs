@@ -6,6 +6,9 @@
 //! The scenario stands in for what the hub knows and this slice can't build: its bound sessions,
 //! the OS process table, the documents it minted, the record's objects and who may read them,
 //! claims and their deliverables, the window and the question card.
+//!
+//! Documents several writers share (issue #96) are in [`crate::shared`]: patches, undo, reads,
+//! history, the by-writer lens, the record and the clock's latch.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -22,7 +25,8 @@ use deep_canvas_marks::scene::Record;
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
-use crate::snapshot::{self, Renderer, Unfit};
+use crate::shared::{self, Clock, CommitFault, Quota, Shared};
+use crate::snapshot::{self, Drawn, Renderer, Unfit};
 
 /// deep_show answers within 2 s: a snapshot whose frame hasn't settled by then is not presented
 /// (Admission and latch; Render-back).
@@ -36,6 +40,14 @@ pub enum Planted {
     InlinesEveryIssue,
     CutsWithoutTruncated,
     SortsByOrderKeyAlone,
+    /// #96: a stale base rebases when no ID its ops target changed, parents and neighbors aside.
+    RebaseCountsOpTargetsOnly,
+    /// #96: a whole revision is diffed against every ID in the document.
+    DiffsWholeDocument,
+    /// #96: one check queue for every writer, in arrival order.
+    OneFifoCheckQueue,
+    /// #96: on restart, each layer is the newest layer file written for it.
+    NewestLayerFileCurrent,
 }
 
 /// What keeps a frame from settling.
@@ -114,8 +126,24 @@ pub struct Show {
     pub claim: Option<String>,
 }
 
+/// What a patch call carries: a patch, or the undo of an earlier one.
+pub enum Body {
+    Patch(Value),
+    Undo { patch: String, of: String },
+}
+
+pub struct PatchCall {
+    pub via: Via,
+    pub doc: String,
+    pub body: Body,
+}
+
 pub enum Call {
     Show(Box<Show>),
+    Patch(Box<PatchCall>),
+    Read { doc: String, via: Option<Via> },
+    History { doc: String, item: String },
+    ByWriter(String),
     Revisions(String),
     Screen,
 }
@@ -133,6 +161,16 @@ pub struct Scenario {
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
     pub calls: Vec<Call>,
+    /// Each call's arrival on the clock, in flicks (0 without one).
+    pub at: Vec<i64>,
+    /// The shared documents as a release stored them, by doc ID (#96).
+    pub seeds: BTreeMap<String, Value>,
+    /// The hub's state folder: layer files by hash and the record.
+    pub state: Option<PathBuf>,
+    /// Each session's quota (Writer connection).
+    pub quotas: BTreeMap<String, Quota>,
+    pub clock: Option<Clock>,
+    pub commit_fault: Option<CommitFault>,
 }
 
 /// One revision of a document (Revision).
@@ -150,6 +188,13 @@ pub struct Row {
 pub struct Hub<'a> {
     pub scenario: &'a Scenario,
     pub revisions: BTreeMap<String, Vec<Row>>,
+    pub shared: BTreeMap<String, Shared>,
+    /// The clock's time, in flicks: a read shows what is current then.
+    pub now: i64,
+    /// When each writer's applied patches were checked, for its quota.
+    pub applied_at: BTreeMap<String, Vec<i64>>,
+    /// The shared documents each writer has written, for its quota.
+    pub written: BTreeMap<String, std::collections::BTreeSet<String>>,
     pub look: Look,
     pub renderer: Renderer,
 }
@@ -175,6 +220,10 @@ impl<'a> Hub<'a> {
         Hub {
             scenario,
             revisions: BTreeMap::new(),
+            shared: BTreeMap::new(),
+            now: 0,
+            applied_at: BTreeMap::new(),
+            written: BTreeMap::new(),
             look: shipped_look(),
             renderer: Renderer::new(),
         }
@@ -237,7 +286,7 @@ impl<'a> Hub<'a> {
 
     /// Who a call writes as, with the name an agent's outline shows; `None` for a call bound to
     /// no session.
-    fn writer(&self, via: &Via) -> Option<(Writer, Option<&'a str>)> {
+    pub fn writer(&self, via: &Via) -> Option<(Writer, Option<&'a str>)> {
         match via {
             Via::Mcp(Some(id)) => {
                 let session = self.scenario.sessions.get(id)?;
@@ -256,7 +305,7 @@ impl<'a> Hub<'a> {
 
     /// Whether `writer` may read the record's object `handle`: its own session's, or one that
     /// belongs to no session; you read them all.
-    fn can_read(&self, writer: &Writer, handle: &str) -> bool {
+    pub fn can_read(&self, writer: &Writer, handle: &str) -> bool {
         let Some(object) = self.scenario.record.get(handle) else {
             return false;
         };
@@ -281,7 +330,13 @@ impl<'a> Hub<'a> {
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
         match call {
+            Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
             Call::Show(show) => self.show(show),
+            Call::Patch(p) => self.patch(p, None, self.now),
+            Call::Read { doc, via } => self.read(doc, via.as_ref()),
+            Call::History { doc, item } => self.history(doc, item),
+            Call::ByWriter(doc) => self.by_writer(doc),
+            Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),
             Call::Revisions(doc) => {
                 let rows: Vec<Value> = self
                     .revisions
@@ -313,18 +368,29 @@ impl<'a> Hub<'a> {
         let mut rows = Vec::new();
         for (doc, panel) in &self.scenario.docs {
             let visible = self.scenario.panels.get(panel).is_some_and(|p| p.visible);
+            if let Some(k) = self.shown(doc).filter(|_| visible) {
+                // A shared document: each writer's layer in its band.
+                let (shown, _) = self.shared[doc].at(k);
+                for (layer, entry) in shown["layers"].as_object().into_iter().flatten() {
+                    let Some(owner) = entry["writer"].as_str().and_then(shared::writer_of_text)
+                    else {
+                        continue;
+                    };
+                    rows.push(BandRow {
+                        doc: Some(doc.clone()),
+                        band: owner.band(),
+                        layer: layer.clone(),
+                        outline: owner.outlined(),
+                        name: self.agent_name(&owner),
+                        owner,
+                    });
+                }
+                continue;
+            }
             let Some(row) = self.current(doc).filter(|_| visible) else {
                 continue;
             };
-            let name = match row.writer.kind {
-                WriterKind::Agent => self
-                    .scenario
-                    .sessions
-                    .values()
-                    .find(|s| s.thread == row.writer.id)
-                    .map(|s| s.name.clone()),
-                _ => None,
-            };
+            let name = self.agent_name(&row.writer);
             rows.push(BandRow {
                 doc: Some(doc.clone()),
                 band: row.writer.band(),
@@ -349,6 +415,19 @@ impl<'a> Hub<'a> {
             });
         }
         rows
+    }
+
+    /// The name an agent's outline shows.
+    pub fn agent_name(&self, writer: &Writer) -> Option<String> {
+        match writer.kind {
+            WriterKind::Agent => self
+                .scenario
+                .sessions
+                .values()
+                .find(|s| s.thread == writer.id)
+                .map(|s| s.name.clone()),
+            _ => None,
+        }
     }
 
     fn show(&mut self, show: &Show) -> Value {
@@ -457,30 +536,12 @@ impl<'a> Hub<'a> {
             .map(|c| c.sha256)
             .unwrap_or_default();
 
-        // Every issue the checks raised, kept as evidence; the reply inlines up to the read cap.
-        let mut list: Vec<Value> = issues.iter().map(Issue::to_json).collect();
-        order_issues(&mut list);
-        let full = serde_json::to_vec(&list).expect("issues serialize");
-        let issues_evidence = evidence::put(&self.scenario.evidence, &full).ok();
-        let shown = match self.scenario.planted {
-            Some(Planted::InlinesEveryIssue) => list.len(),
-            _ => inline_count(&list),
-        };
         let mut reply = Map::new();
         // A payload refused before it could be stamped makes no revision.
         if stamped.is_some() {
             reply.insert("rev".into(), json!(rev));
         }
-        reply.insert("issues".into(), Value::Array(list[..shown].to_vec()));
-        if shown < list.len() && self.scenario.planted != Some(Planted::CutsWithoutTruncated) {
-            reply.insert("truncated".into(), truncated(&list, shown));
-        }
-        if let Some(sha) = issues_evidence {
-            reply.insert("issues_evidence".into(), json!(sha));
-        }
-        reply.insert("snapshots".into(), json!([]));
-
-        let error = list.iter().any(|i| i["severity"] == "error");
+        let error = self.issue_reply(&issues, &mut reply);
         let rows = self.revisions.entry(show.doc.clone()).or_default();
         let state = if error { "refused" } else { "current" };
         if !error {
@@ -517,16 +578,48 @@ impl<'a> Hub<'a> {
             reply.insert("created".into(), json!(created));
             reply.insert("removed".into(), json!(removed));
         }
+        self.present(show, panel.visible, drawn.as_ref(), reply)
+    }
 
-        // Presentation: a hidden session is neither evaluated nor called back; a snapshot is
-        // taken only once its frame has settled, or the reply says why not within 2 s.
+    /// Every issue the checks raised, kept as evidence; the reply inlines them up to the read
+    /// cap, with an empty list of snapshots. True when one is an error.
+    pub fn issue_reply(&self, issues: &[Issue], reply: &mut Map<String, Value>) -> bool {
+        let mut list: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        order_issues(&mut list);
+        let full = serde_json::to_vec(&list).expect("issues serialize");
+        let issues_evidence = evidence::put(&self.scenario.evidence, &full).ok();
+        let shown = match self.scenario.planted {
+            Some(Planted::InlinesEveryIssue) => list.len(),
+            _ => inline_count(&list),
+        };
+        reply.insert("issues".into(), Value::Array(list[..shown].to_vec()));
+        if shown < list.len() && self.scenario.planted != Some(Planted::CutsWithoutTruncated) {
+            reply.insert("truncated".into(), truncated(&list, shown));
+        }
+        if let Some(sha) = issues_evidence {
+            reply.insert("issues_evidence".into(), json!(sha));
+        }
+        reply.insert("snapshots".into(), json!([]));
+        list.iter().any(|i| i["severity"] == "error")
+    }
+
+    /// A revision that passed its checks, presented: a hidden session is neither evaluated nor
+    /// called back; a snapshot is taken only once its frame has settled, or the reply says why
+    /// not within 2 s.
+    pub fn present(
+        &mut self,
+        show: &Show,
+        visible: bool,
+        drawn: Option<&Drawn>,
+        mut reply: Map<String, Value>,
+    ) -> Value {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         let mut snapshot_taken = !wants_pixels;
-        if !panel.visible {
+        if !visible {
             reply.insert("outcome".into(), json!("not_presented"));
             reply.insert("reason".into(), json!("hidden"));
         } else if wants_pixels {
-            let drawn = drawn.as_ref().expect("a revision with no error was drawn");
+            let drawn = drawn.expect("a revision with no error was drawn");
             match self.settle() {
                 Err(()) => {
                     reply.insert("outcome".into(), json!("not_presented"));
@@ -566,6 +659,19 @@ impl<'a> Hub<'a> {
             reply.insert("result".into(), json!(self.verdict(show, snapshot_taken)));
         }
         Value::Object(reply)
+    }
+
+    /// The session a writer acts for: the MCP call's, or the agent's whose tree a CLI call ran in.
+    pub fn session_of(&self, via: &Via, writer: &Writer) -> Option<String> {
+        match via {
+            Via::Mcp(s) => s.clone(),
+            Via::Cli(..) => self
+                .scenario
+                .sessions
+                .iter()
+                .find(|(_, s)| writer.kind == WriterKind::Agent && s.thread == writer.id)
+                .map(|(id, _)| id.clone()),
+        }
     }
 
     /// What keeps the frame from settling at `now`, a call admitted at `admitted`: a pipeline it
