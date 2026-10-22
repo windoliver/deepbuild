@@ -64,6 +64,36 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('passes an environment whose health answer is far larger than the probe\'s buffer, token and all', async () => {
+    const k = kit();
+    // A server of its own: health answers the token beside 200 KB of diagnostics; its command line carries the run token.
+    const script = `
+      const [port, token] = process.argv.slice(1);
+      require('node:http').createServer((q, s) => { s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ ok: true, notes: 'x'.repeat(200_000), token })); })
+        .listen(Number(port), '127.0.0.1');
+      process.on('SIGTERM', () => process.exit(0));`;
+    const children: ChildProcess[] = [];
+    const big: EnvironmentFill = {
+      slot: 'environment@1', revision: 1,
+      up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
+        const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, lease.token], { stdio: 'ignore' });
+        children.push(child);
+        const until = Date.now() + 5000;
+        const poll = (): void => {
+          fetch(`http://127.0.0.1:${lease.port}${spec.health}`).then(() => resolve({ id: `big-${child.pid}`, port: lease.port, pid: child.pid! }), () => (Date.now() < until ? setTimeout(poll, 20) : reject(Error('the big server did not come up'))));
+        };
+        poll();
+      }) as unknown as Handle,
+      down: (handle) => { for (const c of children) if (c.pid === handle.pid) c.kill('SIGTERM'); },
+    };
+    try {
+      const report = await runKit(k, big, { parts: ['fixed'] });
+      expect(report.cases.map((c) => `${c.outcome}${c.message ? `: ${c.message}` : ''}`)).toEqual(['PASS', 'PASS']);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+    }
+  });
+
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
     const reports = await Promise.all([0, 1].map(() => runKit(k, cleanFills(k)[0]!, { parts: ['fixed'] })));

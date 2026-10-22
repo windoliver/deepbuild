@@ -138,7 +138,8 @@ export const leasePort = (): number => {
   if (!Number.isInteger(port) || (port as number) <= 0) throw new Finding('BLOCKED', 'no free port on the loopback to lease', ['no_port']);
   return port as number;
 };
-interface Probe { status: number | null; body: string; error: string | null }
+/** A GET's status and body, and the `token` field of the body as JSON, read whole in the worker (the body may arrive cut). */
+interface Probe { status: number | null; body: string; token?: unknown; error: string | null }
 const probe = (port: number, path: string): Probe => ask<Probe>({ op: 'probe', port, path });
 /** Whether something accepts connections on the loopback port: open, or refused; any other answer is unknown, BLOCKED. */
 const listening = (port: number): boolean => {
@@ -238,9 +239,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // The probe follows up at once, nothing between: an environment ready before its health answers is caught here.
     const answer = probe(lease.port, spec.health);
     if (answer.status !== 200) throw fail(RULES.health.message, ['ready_before_health'], `GET ${spec.health} on ${lease.port} right after up: ${answer.error ?? `status ${answer.status}`}`);
-    let token: unknown;
-    try { token = (JSON.parse(answer.body) as { token?: unknown }).token; } catch { token = undefined; }
-    if (token !== spec.token) throw fail(RULES.health.message, ['health_mismatch'], `health answered with token ${JSON.stringify(token)}, not the spec's`);
+    if (answer.token !== spec.token) throw fail(RULES.health.message, ['health_mismatch'], `health answered with token ${JSON.stringify(answer.token)}, not the spec's`);
     // The handle's pid is the fill's word until the process table shows it: a running process carrying the run
     // token. Otherwise "gone after down" would hold of a pid that never was the environment.
     if (!running(pid) || !scanned(lease.token).some((p) => p.pid === pid)) throw new Finding('FAIL', `handle/pid ${pid} is no running process carrying the run token`, ['pid_not_environment']);
