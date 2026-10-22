@@ -251,11 +251,16 @@ export class Projector {
         break;
       }
       case 'ask.later':
-        // Only an ask still waiting can wait longer.
-        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.until), bare(e.subject));
+        // Only an ask still waiting can wait longer, never to its deadline. The core records it, once your Later
+        // on the trusted path passes its checks; an app's or the CLI's own event changes nothing.
+        if (e.writer !== 'core') break;
+        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ?").run(int(d.until), bare(e.subject), int(d.until));
         break;
       case 'ask.batched':
-        if (Array.isArray(d.asks)) for (const a of d.asks) if (isObj(a)) this.set('asks', { batch_id: str(d.batch) }, { id: bare(a.ask) });
+        // Shown again: an ask hidden by Later is back to open.
+        // Only the core shows an ask, under the identity it was raised for.
+        if (e.writer !== 'core' || !Array.isArray(d.asks)) break;
+        for (const a of d.asks) if (isObj(a)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
         break;
       case 'decision.created':
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });
