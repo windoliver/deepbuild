@@ -1,0 +1,113 @@
+Acceptance tests for #86 on the base c9891b3 (origin/main, no implementation), run on 2026-10-21 on an Apple
+silicon Mac, Node 24.22.0, Vitest 5.0.5, after npm ci and npm run build --workspaces:
+
+  npx vitest run tests/acceptance/86
+
+Trimmed to each failure's reason. No local path appears in what is kept (<repo> is the checkout).
+
+== The base
+
+ Test Files  3 failed (3)
+      Tests  no tests
+
+FAIL  concurrent.test.ts, ledger.test.ts, plants.test.ts
+      Error: Cannot find module '../../../packages/budget/src/index.ts' imported from <repo>/tests/acceptance/86/helpers.ts
+  (Expected: the ledger doesn't exist, so none of the 24 tests can load. That covers every criterion. The base has no
+  package for this module, so a program that does nothing stands in for it below.)
+
+
+== A program that does nothing, standing in for the base
+
+So that each test is seen failing at its own assertion rather than at the import: packages/budget/src/index.ts holding
+a BudgetRefused class and an openLedger whose five methods resolve to undefined, copied in and removed afterwards.
+
+  Test Files 3 failed (3), Tests 23 failed | 1 passed (24)
+  concurrent.test.ts
+    #86.fb5b8d9b           of three $4 runs at once against budget undefined with $10, two start: expected +0 to be 2
+    #86.60e70718 (x6)      the ledger looks up each run's price while the others are still held: 0 of 3 lookups were
+                           open: expected +0 to be 3
+    #86.60e70718 raise     the first $4 run starts: expected undefined to match object { status: 'started' }
+    property               Property failed after 1 tests (at the same held-lookups assertion)
+  ledger.test.ts
+    #86.80a13633 price     run run:…01, whose check hosted.browser-journey has no known price, is BLOCKED for its price:
+                           expected undefined to match object { status: 'BLOCKED', cause: 'price' }
+    #86.80a13633 release   run run:…02 reserves its $4 and starts: expected undefined to match object { status: 'started', … }
+    #86.54597aa8           the agent's batch of five $2 live runs inside budget undefined ($20) all start: expected
+                           [ 'undefined', … ] to deeply equal [ 'started', … ]
+    #86.3dccb0b7           run run:…08 starts: expected undefined to match object { status: 'started' }
+    #86.40d0717c           run run:…09, $3 on the GPU for issue windoliver/deepbuild#41, starts: expected 'undefined' to be 'started'
+    #86.020ce247           run run:…0A, which no approved budget covers, is a request that waits on an ask: expected
+                           undefined to match object { status: 'asked' }
+    #86.97e5a476           run run:…0B starts: expected undefined to match object { status: 'started' }
+  plants.test.ts           not meaningful here: each scenario already fails before its plant matters (one plant test
+                           passes only because its scenario fails at the same assertion it expects).
+
+
+== The sample fix
+
+A sample fix, kept outside this checkout (not committed, not part of this change), to show the tests can pass:
+packages/budget/{package.json,tsconfig.json,src/index.ts} implementing the surface in README.md on the real record and
+asks core (about 230 lines: state replayed from the log; the price looked up outside the decision; each decision a read
+of the log and its one append, one at a time; all-or-none reservation in one budget.reserved event; asks raised through
+@deepbuild/asks from budget.raise and generation.paid), and three new schemas in packages/contracts/schemas/:
+budget.approved@1, budget.reserved@1, budget.charged@1 (writer core). Copied in, run, then removed.
+
+  npx vitest run tests/acceptance/86        Test Files 3 passed (3), Tests 24 passed (24); the property's 1,000 worlds
+                                            take 30 to 65 s, the rest under 3 s
+  npx tsc -p tests/acceptance/86            no errors in tests/acceptance/86. The sample's own `import type { Asks } from
+                                            '@deepbuild/asks'` reports TS7016 because packages/asks at the base emits no
+                                            declarations (its exports name only dist/index.js); with that one import
+                                            pointed at the asks source, tsc exits 0.
+
+
+== Planted wrong programs (plants.ts, run by plants.test.ts)
+
+Each is the real program with one part wrong, planted around the sample fix. On the sample fix each plant test passes
+because its scenario fails at the assertion below:
+
+  #86.80a13633  unknown price counted as free        run …, whose check hosted.browser-journey has no known price, is
+                                                     BLOCKED for its price
+  #86.80a13633  released when the run ends           run … ended with no cost reading: its reservation still holds, unpriced
+  #86.54597aa8  an ask for every paid run            an agent's own batch of paid runs inside the budget asks nothing
+  #86.3dccb0b7  failures never read                  run … re-runs failed run … on the same inputs without a change or your yes
+  #86.40d0717c  covered by the issue's budget only   run … reserves $3 against both the GPU's budget … and the issue's …
+  #86.020ce247  checks only that the budget exists   the resolver names budget …: expected the core to refuse it, naming
+                                                     {"budget":"budget:…"}
+  #86.97e5a476  any charge taken                     a planted extension reports a $5 charge for run …, which never reserved
+  #86.60e70718  keeps the first reservation          released in the order …: the budget budget:… of issue
+                (orders 1-2-3, 3-2-1, 2-1-3)         windoliver/deepbuild#4n, whose run was BLOCKED by the GPU's budget, is
+                                                     whole, with no reservation held
+
+
+== Mutants of the sample fix (outside the checkout; each one change, then concurrent.test.ts and ledger.test.ts)
+
+  decision without the lock (no exclusive)     #86.fb5b8d9b fails: of three $4 runs at once against budget … with $10, two
+                                               start: expected 3 to be 2
+  unknown price counted as free (?? 0)         #86.80a13633 (price) fails: run …, whose check hosted.browser-journey has no
+                                               known price, is BLOCKED for its price: expected { …(3) } to match object
+                                               { status: 'BLOCKED', cause: 'price' }
+  run.finished releases the reservation        #86.80a13633 (release) fails: run … ended with no cost reading: its
+                                               reservation still holds, unpriced: expected { reserved: 0 … } to … 4
+  an ask for every paid run                    #86.54597aa8 fails: … asks nothing: expected [ …(5) ] to deeply equal []
+  re-runs failed inputs                        #86.3dccb0b7 fails: run … re-runs failed run … on the same inputs without a
+                                               change or your yes: expected 'started' not to be 'started'
+  ignores your yes                             #86.3dccb0b7 fails: with your yes, run … re-runs the failed inputs
+  covered by the issue's budget only           #86.40d0717c fails: reserves $3 against both …; #86.60e70718 (all six
+                                               orders) fail: expected three started; the property fails after 2 cases
+  resolver checks only that the budget exists  #86.020ce247 fails: expected the core to refuse it, naming {"budget":…},
+                                               but it returned {… "status":"started" …}
+  resolver's room ignores reservations         #86.020ce247 fails: the same
+  resolver's answer not logged as decided      #86.020ce247 fails: ask … is logged as decided for you: expected false to be true
+  charge taken without a reservation           #86.97e5a476 fails: expected the core to refuse it, naming {"run":…}, but it
+                                               returned undefined
+  keeps the first reservation (budget by       #86.60e70718 (all six orders) fail: the budget … of issue …, whose run was
+    budget, issues approved first)             BLOCKED by the GPU's budget, is whole: expected { reserved: 3, left: 7 … };
+                                               the property fails after 1 case
+  a raise's default taken as yes (cap x2)      #86.60e70718 (raise) fails: budget … isn't raised by the default: expected 10 to be 5
+  a 2-day deadline on the raise                #86.60e70718 (raise) fails: the budget raise … has a 1-day deadline:
+                                               expected 1792670400000 to be 1792584000000
+  the price lookup held under the lock         #86.60e70718 (all six orders) fail: the ledger looks up each run's price
+                                               while the others are still held: 1 of 3 lookups were open; the property fails
+
+The held-open tests release one lookup and let the ledger run before the next, so "decision without the lock" is
+caught by #86.fb5b8d9b's three-at-once run (its lookups answer at once) rather than by the held orders.
