@@ -77,9 +77,10 @@ const workloads = {
     const ids = await learn(record, store, 10, 1_000, 2_000);
     for (const id of ids.reverse()) await record.rollBack(you, { change: id });
   },
-  // A 10,000-change learned layer, then its projections dropped and rebuilt by replay.
+  // A 10,000-change learned layer, its newer half rolled back to a date, then its projections dropped and rebuilt by replay.
   async 'learn-rebuild-10k'(record, store) {
     await learn(record, store, 200, 10_000);
+    await record.rollBack(you, { since: T0 + 15_000 });
     await record.rebuild();
   },
   // 20,000 stream events fired 200 at a time, as the issue's throughput budget counts them.

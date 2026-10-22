@@ -15,8 +15,12 @@ const LEARNED = ['wiki:', 'slice:', 'offer:', 'ext:', 'playbook:', 'step:', 'dra
 const LOCAL_FIRST = 'rule:localfirst';
 /** The rule that applies the claims learned at install, at the scope their evidence covers. */
 const INSTALL = 'rule:install';
-/** Tools whose results are outside content: what the agent fetched, searched for or got from an MCP server. */
-const OUTSIDE = /^(WebFetch|WebSearch|Glob|Grep|mcp__.+)$/;
+/**
+ * Tools whose results are no first-hand source: what the agent fetched, searched for, got from an MCP server, or a
+ * subagent's report. Any other tool's result reads as first-hand, as the issue defines outside content: a check's
+ * output is the evidence this product runs on, though a file the agent wrote and read back is its own words.
+ */
+const OUTSIDE = /^(WebFetch|WebSearch|Glob|Grep|Task|Agent|mcp__.+)$/;
 /** The writers that speak for you: only through them does a change reach the base. */
 export const YOURS = new Set(['app', 'cli']);
 /** The writers whose learn.rolled_back takes a change out of force: you, through the app or the CLI, and the core. */
@@ -45,7 +49,10 @@ const textOf = (stored: string | null): string => {
   return typeof value === 'string' ? value : JSON.stringify(value);
 };
 
-/** One Claude Code transcript entry: its text, and whether it is the result of a tool that brings outside content. */
+/**
+ * One Claude Code transcript entry: its text, and whether it is no first-hand source: the result of a tool that
+ * brings outside content, or the agent's own words, which may repeat it (an agent's word is never evidence).
+ */
 interface Entry { text: string; outside: boolean }
 function readTranscript(bytes: Uint8Array): Map<string, Entry> {
   const entries = new Map<string, Entry>();
@@ -56,7 +63,9 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
     if (!isObj(entry) || typeof entry.uuid !== 'string' || !isObj(entry.message)) continue;
     const content = entry.message.content;
     const parts: string[] = [];
-    let outside = false;
+    // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
+    // and a subagent's run, whose prompt the agent composed.
+    let outside = entry.message.role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true;
     if (typeof content === 'string') parts.push(content);
     else if (Array.isArray(content)) {
       for (const block of content) {
@@ -64,7 +73,9 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
         if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text);
         if (block.type === 'tool_use' && typeof block.id === 'string' && typeof block.name === 'string') tools.set(block.id, block.name);
         if (block.type === 'tool_result') {
-          if (OUTSIDE.test(tools.get(String(block.tool_use_id)) ?? '')) outside = true;
+          // A result whose call the transcript doesn't hold is nobody's: no first-hand source either.
+          const tool = tools.get(String(block.tool_use_id));
+          if (tool === undefined || OUTSIDE.test(tool)) outside = true;
           if (typeof block.content === 'string') parts.push(block.content);
           else if (Array.isArray(block.content)) for (const c of block.content) if (isObj(c) && typeof c.text === 'string') parts.push(c.text);
         }
@@ -224,27 +235,48 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
   /** Whether a learned change rests only on outside content, through every change it cites: a citation inherits it. */
   // Each cited change is judged once and its answer reused wherever it is cited again; one being judged reads
   // false to a citation back to it, though a change cites only changes already in force, so none can.
-  const judged = new Map<string, Promise<boolean>>();
-  const outsideOnly = (handle: string): Promise<boolean> => {
+  /**
+   * The clauses (normalized) of the decisions of yours among the quotes: each line of an answer, cut at '; ', and
+   * of a labelled line ("promote: X") what follows its last label, never the label ("X: no" promotes only "no").
+   */
+  const decisionsAmong = (quotes: Quote[]): string[] => quotes.filter((q) => q.at.startsWith('decision:')).flatMap((q) => {
+    const where = locate(db, q.at);
+    return where?.in === 'record' ? where.entry.text.split('\n').flatMap((l) => norm(l).split('; ')).map((c) => c.slice(c.lastIndexOf(': ') + 1).trim()).filter((c) => c !== '') : [];
+  });
+  /** What a cited change rests on: whether only outside content, and the decisions it and its citations cite. */
+  interface Rests { outside: boolean; decisions: string[] }
+  const judged = new Map<string, Promise<Rests>>();
+  const restsOn = (handle: string): Promise<Rests> => {
     let answer = judged.get(handle);
     if (!answer) {
-      judged.set(handle, Promise.resolve(false));
+      judged.set(handle, Promise.resolve({ outside: false, decisions: [] }));
       answer = (async () => {
         const row = db.prepare('SELECT evidence FROM learned_layer WHERE handle = ?').get(handle) as { evidence: string | null } | undefined;
-        const sources = (row?.evidence ? (JSON.parse(row.evidence) as Quote[]) : []).filter((q) => !q.at.startsWith('decision:'));
-        if (!sources.length) return false;
+        const quotes = row?.evidence ? (JSON.parse(row.evidence) as Quote[]) : [];
+        const decisions = decisionsAmong(quotes);
+        const sources = quotes.filter((q) => !q.at.startsWith('decision:'));
+        // A source nobody can read now (a link rolled back since, a transcript gone) is no first-hand source either,
+        // and a change resting on your decisions alone carries only what they hold.
+        let outside = true;
         for (const { at } of sources) {
           const where = locate(db, at);
-          const outside = where?.in === 'store' ? (await read(where))?.outside === true : where?.in === 'record' && at.startsWith('doc:') ? await outsideOnly(at) : false;
-          if (!outside) return false;
+          if (where?.in === 'store') outside &&= (await read(where))?.outside !== false;
+          else if (where?.in === 'record' && at.startsWith('doc:')) {
+            const rests = await restsOn(at);
+            outside &&= rests.outside;
+            decisions.push(...rests.decisions);
+          } else outside &&= where === undefined;
         }
-        return true;
+        return { outside, decisions };
       })();
       judged.set(handle, answer);
     }
     return answer;
   };
   const cited: { at: string; entry: Entry | undefined }[] = [];
+  // The decisions the change cites, and those its cited changes rest on: a citation inherits a promotion as it
+  // inherits outside-ness, but only for the lines the decision holds.
+  const decisions = decisionsAmong(change.evidence);
   for (const quote of change.evidence) {
     const where = locate(db, quote.at);
     let entry = where?.in === 'record' ? where.entry : undefined;
@@ -252,15 +284,21 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
       entry = await read(where);
       if (!entry || !quoted(entry, quote.quote)) return notAt(quote);
     }
-    if (entry && quote.at.startsWith('doc:')) entry = { ...entry, outside: await outsideOnly(quote.at) };
+    if (entry && quote.at.startsWith('doc:')) {
+      const rests = await restsOn(quote.at);
+      entry = { ...entry, outside: rests.outside };
+      decisions.push(...rests.decisions);
+    }
     cited.push({ at: quote.at, entry });
   }
-  // A start-slice claim resting only on outside content goes in only when your decision promoted it.
+  // A start-slice claim resting only on outside content, or on your decisions alone, goes in only when a decision
+  // promoted it: a clause of it is each line the claim adds, not a run of words inside one ("never deploy with
+  // --force" promotes nothing).
   if (change.layer === 'learned' && change.target.startsWith('slice:')) {
     const sources = cited.filter((c) => !c.at.startsWith('decision:'));
-    if (sources.length && sources.every((c) => c.entry?.outside)) {
-      const decisions = cited.filter((c) => c.at.startsWith('decision:') && c.entry).map((c) => norm(c.entry!.text));
-      const promoted = linesOf(change.diff, '+').every((line) => decisions.some((d) => d.includes(norm(line))));
+    if (sources.every((c) => c.entry?.outside)) {
+      const clauses = new Set(decisions);
+      const promoted = linesOf(change.diff, '+').every((line) => clauses.has(norm(line).trim()));
       if (!promoted) return { outcome: 'refused', reason: `${clip(change.target, 4000)} would rest only on outside content, which goes into the start slice only when your decision promotes it` };
     }
   }
@@ -270,11 +308,29 @@ export async function readEvidence(db: Db, store: EvidenceStore | undefined, cha
 /** Parsed transcripts by hash: the store's files never change, so a parse is kept across appends. */
 export type Transcripts = Map<string, Promise<Map<string, Entry> | undefined>>;
 
-/** Which transcript each session a change cites names now: the append's reading holds only while this is unchanged. */
-export function transcriptsCited(db: Db, change: LearnedChange): string {
-  const sessions = new Set(change.evidence.map((q) => /^session:([0-9A-Za-z]+)#/.exec(q.at)?.[1]).filter((s) => s !== undefined));
+/**
+ * What a change's reading depends on, as text the append compares: which transcript each session it cites names
+ * now, through the changes it cites too, and the layer's newest position among what can be in force, which an
+ * agent's proposal never moves. The reading holds only while this is unchanged.
+ */
+export function dependsOn(db: Db, change: LearnedChange): string {
+  const sessions = new Set<string>();
+  const seen = new Set<string>();
+  const walk = (quotes: Quote[]): void => {
+    for (const { at } of quotes) {
+      const session = /^session:([0-9A-Za-z]+)#/.exec(at)?.[1];
+      if (session !== undefined) sessions.add(session);
+      else if (at.startsWith('doc:') && !seen.has(at)) {
+        seen.add(at);
+        const row = db.prepare('SELECT evidence FROM learned_layer WHERE handle = ?').get(at) as { evidence: string | null } | undefined;
+        if (row?.evidence) walk(JSON.parse(row.evidence) as Quote[]);
+      }
+    }
+  };
+  walk(change.evidence);
   const of = db.prepare('SELECT transcript FROM sessions WHERE id = ?');
-  return [...sessions].map((s) => `${s}=${(of.get(s) as { transcript: string | null } | undefined)?.transcript ?? ''}`).join(' ');
+  const newest = (db.prepare("SELECT MAX(log_pos) AS at FROM learned_layer WHERE kind <> 'learn.proposed'").get() as { at: number | null }).at ?? 0;
+  return [`@${newest}`, ...[...sessions].map((s) => `${s}=${(of.get(s) as { transcript: string | null } | undefined)?.transcript ?? ''}`)].join(' ');
 }
 
 interface FoldRow { target: string; scope: string; diff: string | null }

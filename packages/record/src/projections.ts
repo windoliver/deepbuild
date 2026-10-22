@@ -59,7 +59,9 @@ export const TABLES: readonly TableDef[] = [
   T('notes', ['note'], 'note TEXT, doc TEXT, item TEXT, rev INTEGER, region TEXT, text TEXT, state TEXT, opened INTEGER, closed INTEGER, by TEXT'),
   T('suggestions', ['suggestion'], 'suggestion TEXT, doc TEXT, item TEXT, writer TEXT, base INTEGER, filed INTEGER, outcome TEXT, rev INTEGER'),
   T('returns', ['id'], 'id TEXT, session TEXT, turn INTEGER, did_work INTEGER, at INTEGER'),
-  T('learned_layer', ['id'], 'id TEXT, kind TEXT, layer TEXT, target TEXT, scope TEXT, created INTEGER, state TEXT, reason TEXT, flagged TEXT, handle TEXT, diff TEXT, evidence TEXT, supersedes TEXT, applied_by TEXT, log_pos INTEGER', ['handle', 'supersedes', 'layer, target']),
+  T('learned_layer', ['id'], 'id TEXT, kind TEXT, layer TEXT, target TEXT, scope TEXT, created INTEGER, state TEXT, reason TEXT, flagged TEXT, handle TEXT, diff TEXT, evidence TEXT, supersedes TEXT, applied_by TEXT, log_pos INTEGER', ['handle', 'supersedes', 'layer, target', 'log_pos']),
+  // Which learned change cites which change's handle, so a rollback finds what it flags without reading every row.
+  T('learned_cites', ['handle', 'id'], 'handle TEXT, id TEXT'),
   // The record's reading of each session's turns: which turn each event belongs to and its place in it.
   T('turns', ['session_id', 'idx'], 'session_id TEXT, idx INTEGER, number INTEGER, start_seq INTEGER, start_id TEXT, stop_seq INTEGER, stopped INTEGER NOT NULL DEFAULT 0, last_seq INTEGER, last_id TEXT'),
   T('turn_events', ['event_id'], 'event_id TEXT, session_id TEXT, turn_idx INTEGER, eff_seq INTEGER, eff_id TEXT, log_pos INTEGER'),
@@ -407,13 +409,16 @@ export class Projector {
         const state = e.kind === 'learn.proposed' ? 'proposed' : e.kind === 'learn.rolled_back' ? null : judged?.outcome ?? 'applied';
         const handle = `doc:${e.id}`;
         this.up('learned_layer', { id: e.id, kind: e.kind, layer: str(d.layer), target: str(d.target), scope: str(d.scope), created: e.ts, state, reason: judged?.reason ?? null, handle, diff: str(d.diff), evidence: json(d.evidence), supersedes: str(d.supersedes), applied_by: str(d.applied_by), log_pos: e.log_pos });
+        if (e.kind !== 'learn.rolled_back' && Array.isArray(d.evidence)) {
+          for (const q of d.evidence) if (isObj(q) && typeof q.at === 'string' && q.at.startsWith('doc:')) this.up('learned_cites', { handle: q.at, id: e.id });
+        }
         // A rollback is a compensating event: it takes the change it names out of force and flags every later
         // change that supersedes or cites it. Only you, through the app or the CLI, or the core roll back.
         const undone = str(d.supersedes);
         if (e.kind !== 'learn.rolled_back' || !undone || !ROLLERS.has(e.writer)) break;
         this.stmt("UPDATE learned_layer SET state = 'rolled_back' WHERE handle = ? AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened')").run(undone);
         this.stmt("UPDATE learned_layer SET flagged = COALESCE(flagged || ' ', '') || ? WHERE kind <> 'learn.rolled_back' AND log_pos > (SELECT log_pos FROM learned_layer WHERE handle = ?)"
-          + ' AND (supersedes = ? OR (instr(evidence, ?) > 0 AND EXISTS (SELECT 1 FROM json_each(learned_layer.evidence) q WHERE json_extract(q.value, \'$.at\') = ?)))').run(undone, undone, undone, undone, undone);
+          + ' AND id IN (SELECT id FROM learned_layer WHERE supersedes = ? UNION SELECT id FROM learned_cites WHERE handle = ?)').run(undone, undone, undone, undone);
         break;
       }
       case 'learn_check.made':

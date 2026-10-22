@@ -8,7 +8,7 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, readEvidence, ROLLERS, startSlice, toRollBack, transcriptsCited, type LearnedChange, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type LearnedChange, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
@@ -470,15 +470,16 @@ class SqliteRecord implements RecordStore {
     if (CHECKED.has(input.kind) && !this.db.prepare('SELECT 1 FROM events WHERE id = ?').get(input.id)) {
       const change = prepared.data as unknown as LearnedChange;
       // The reading must be of what the change's handles name at its place in the log: while anything is queued
-      // (a transcript link, a change it cites), or a link moved during the read, it waits for the queue and reads again.
+      // (a transcript link, a change it cites), or a link moved or a change took effect during the read, it waits
+      // for the queue and reads again.
       let found;
       for (;;) {
         if (this.queue.length) { await this.settle(); continue; }
-        const before = transcriptsCited(this.db, change);
+        const before = dependsOn(this.db, change);
         found = await readEvidence(this.db, this.options.evidence, change, this.transcripts).catch((error: unknown) => {
           throw new RecordError('storage', `the evidence ${input.id} cites could not be read, so it isn't appended: ${error instanceof Error ? error.message : String(error)}`, { id: input.id });
         });
-        if (!this.queue.length && transcriptsCited(this.db, change) === before) break;
+        if (!this.queue.length && dependsOn(this.db, change) === before) break;
       }
       while (this.transcripts.size > TRANSCRIPTS_KEPT) this.transcripts.delete(this.transcripts.keys().next().value!);
       if (found) {

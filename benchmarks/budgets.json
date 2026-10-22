@@ -167,7 +167,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process builds a 10,000-change learned layer over 200 archived transcripts, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the rebuild's own limit (5 s) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process builds a 10,000-change learned layer over 200 archived transcripts, rolls back the newer 5,000 to a date, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the rebuild's own limit (5 s) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
