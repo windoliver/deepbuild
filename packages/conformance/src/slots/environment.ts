@@ -43,29 +43,25 @@ const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule
 // ---- Processes and ports, synchronously -------------------------------------------------------------
 
 const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
-/** Whether the process still runs; an exited child not yet reaped (a zombie) counts as gone. */
-export function alive(pid: number): boolean {
+const PS_DOWN = (): Finding => new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so the state of the environment\'s processes is unknown', ['ps_unavailable']);
+/**
+ * Whether the process still runs; an exited child not yet reaped (a zombie) counts as gone. Null when the process
+ * exists but the process table can't be read: unknown, which no caller reads as gone.
+ */
+export function alive(pid: number): boolean | null {
   // A signal of 0 asks without sending; a pid no process has fails it, and then `ps` has nothing to add.
   try { process.kill(pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false; }
   const ps = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' });
+  if (ps.error || ps.status === null) return null;
   const state = (ps.stdout ?? '').trim();
   return ps.status === 0 && state.length > 0 && !state.startsWith('Z');
 }
+/** `alive`, for a judge: unknown is BLOCKED. */
+const running = (pid: number): boolean => { const a = alive(pid); if (a === null) throw PS_DOWN(); return a; };
 function waitUntil(done: () => boolean, ms: number): boolean {
   const end = Date.now() + ms;
   while (Date.now() < end) { if (done()) return true; sleep(10); }
   return done();
-}
-/**
- * Whether `pid` is the kit's own fixture server for this case (the server script on the leased port with the
- * spec's token, read from the process's command line). This decides only what the kit may signal in cleanup: a
- * fill's handle is never kill authority, and a pid that isn't provably the kit's own is never signalled. A fill
- * serving the slot with a server of its own is judged on the lease, the health answer and the process state alone.
- */
-function isThisServer(pid: number, port: number, run: string): boolean {
-  const ps = spawnSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf8' });
-  const words = (ps.stdout ?? '').trim().split(/\s+/);
-  return ps.status === 0 && words.includes(SERVER) && words.includes(String(port)) && words.includes(run);
 }
 interface Carrier { pid: number; command: string }
 /**
@@ -89,19 +85,22 @@ function carrying(run: string): Carrier[] | null {
  * run token; a command line a fill could dress up with the kit's words is no proof the kit started it, and a pid
  * the OS has given to another process since is not that process. Each case's end drops the records of what is gone.
  */
-const own = new Map<number, string>();
-const startTime = (pid: number): string | null => {
+const own = new Map<number, number>();
+/** The process's start time in ms since the epoch, as the process table gives it; null for no process or no table. */
+const startTime = (pid: number): number | null => {
   const ps = spawnSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' });
-  const at = (ps.stdout ?? '').trim();
-  return ps.status === 0 && at ? at : null;
+  const at = Date.parse((ps.stdout ?? '').trim());
+  return ps.status === 0 && Number.isFinite(at) ? at : null;
 };
+/** The same start, within the second a table derives it to (Linux recomputes it from the boot time, which can move). */
+const sameStart = (a: number | null, b: number | undefined): boolean => a !== null && b !== undefined && Math.abs(a - b) <= 1500;
 const record = (pid: number): void => { const at = startTime(pid); if (at !== null) own.set(pid, at); };
 /** Whether `pid` is one the kit started and is still that process. */
-const isOwn = (pid: number): boolean => own.has(pid) && startTime(pid) === own.get(pid);
-const forget = (): void => { for (const [pid, at] of own) if (startTime(pid) !== at) own.delete(pid); };
+const isOwn = (pid: number): boolean => own.has(pid) && sameStart(startTime(pid), own.get(pid));
+const forget = (): void => { for (const [pid, at] of own) if (!sameStart(startTime(pid), at)) own.delete(pid); };
 const scanned = (run: string): Carrier[] => {
   const left = carrying(run);
-  if (left === null) throw new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so whether down left a process is unknown', ['ps_unavailable']);
+  if (left === null) throw PS_DOWN();
   return left;
 };
 const stop = (pid: number): void => { try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ } };
@@ -113,22 +112,28 @@ const stop = (pid: number): void => { try { process.kill(pid, 'SIGKILL'); } catc
  */
 const PROBES = fileURLToPath(new URL('../../runtime/environment/probes.mjs', import.meta.url));
 let probes: { worker: Worker; flags: Int32Array; out: Uint8Array } | null = null;
+/** A probe the kit itself couldn't make is BLOCKED: the fill did nothing the kit saw. */
 function ask<T>(request: { op: 'lease' | 'probe' | 'listening'; port?: number; path?: string }, timeout = 3000): T {
   if (probes === null) {
     const shared = new SharedArrayBuffer(8 + 65_536);
     const worker = new Worker(PROBES, { workerData: shared });
     worker.unref();
-    probes = { worker, flags: new Int32Array(shared, 0, 2), out: new Uint8Array(shared, 8) };
+    const mine = { worker, flags: new Int32Array(shared, 0, 2), out: new Uint8Array(shared, 8) };
+    // A thread that died is replaced at the next probe rather than waited on.
+    worker.on('error', () => { if (probes === mine) probes = null; });
+    worker.on('exit', () => { if (probes === mine) probes = null; });
+    probes = mine;
   }
-  Atomics.store(probes.flags, 0, 0);
-  probes.worker.postMessage(request);
-  if (Atomics.wait(probes.flags, 0, 0, timeout) === 'timed-out') { probes.worker.terminate(); probes = null; throw Error(`the ${request.op} probe answered nothing in ${timeout} ms`); }
-  return JSON.parse(Buffer.from(probes.out.subarray(0, Atomics.load(probes.flags, 1))).toString('utf8')) as T;
+  const { worker, flags, out } = probes;
+  Atomics.store(flags, 0, 0);
+  worker.postMessage(request);
+  if (Atomics.wait(flags, 0, 0, timeout) === 'timed-out') { void worker.terminate(); probes = null; throw new Finding('BLOCKED', `the kit's ${request.op} probe answered nothing in ${timeout} ms`, ['probe_unanswered']); }
+  try { return JSON.parse(Buffer.from(out.subarray(0, Atomics.load(flags, 1))).toString('utf8')) as T; } catch { throw new Finding('BLOCKED', `the kit's ${request.op} probe answered unreadably`, ['probe_unanswered']); }
 }
 /** A free port on the loopback, leased by binding it once. */
 export const leasePort = (): number => {
   const { port } = ask<{ port?: number }>({ op: 'lease' });
-  if (!Number.isInteger(port) || (port as number) <= 0) throw Error('no free port on the loopback');
+  if (!Number.isInteger(port) || (port as number) <= 0) throw new Finding('BLOCKED', 'no free port on the loopback to lease', ['no_port']);
   return port as number;
 };
 interface Probe { status: number | null; body: string; error: string | null }
@@ -144,10 +149,15 @@ function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper =
   child.unref();
   const pid = child.pid ?? -1;
   record(pid);
-  if (wait && !waitUntil(() => existsSync(ready), 5000)) { child.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); throw Error(`the environment on ${port} did not come up in 5 s`); }
-  if (wait) {
-    // The marker names the server's grandchild, if any: a process the kit started through the fill and may stop.
-    try { const marker = JSON.parse(readFileSync(ready, 'utf8')) as { helper?: number | null }; if (typeof marker.helper === 'number') record(marker.helper); } catch { /* an unreadable marker names nothing */ }
+  try {
+    if (wait) {
+      // The fixture itself not coming up (its port taken in the lease's open moment, say) is the kit's, not the fill's.
+      if (!waitUntil(() => existsSync(ready), 5000)) { child.kill('SIGKILL'); throw new Finding('BLOCKED', `the kit's fixture environment on ${port} did not come up in 5 s`, ['fixture_down']); }
+      // The marker names the server's grandchild, if any: a process the kit started through the fill and may stop.
+      try { const marker = JSON.parse(readFileSync(ready, 'utf8')) as { helper?: number | null }; if (typeof marker.helper === 'number') record(marker.helper); } catch { /* an unreadable marker names nothing */ }
+    }
+  } finally {
+    // The early fill never reads its marker; the server writes it into a folder that is gone, and nothing is kept.
     rmSync(dir, { recursive: true, force: true });
   }
   return { handle: { id: `env-${pid}`, port, pid }, child };
@@ -163,7 +173,10 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
   return {
     slot: ENVIRONMENT, revision: 1,
     up(spec, lease) {
-      const { handle, child } = start(spec, fault === 'own-port' ? leasePort() : lease.port, lease.token, fault !== 'early', fault === 'leaves');
+      // The own-port fault binds a port of its own: one the lease didn't name (a lease draw can repeat it).
+      let port = lease.port;
+      if (fault === 'own-port') do port = leasePort(); while (port === lease.port);
+      const { handle, child } = start(spec, port, lease.token, fault !== 'early', fault === 'leaves');
       started.set(handle.id, child);
       return handle;
     },
@@ -172,7 +185,8 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
       if (!child) return;
       started.delete(handle.id);
       child.kill('SIGTERM');
-      if (!waitUntil(() => child.exitCode !== null || child.signalCode !== null || !alive(child.pid ?? -1), 2000)) child.kill('SIGKILL');
+      // Unknown (no process table) is not gone: the wait runs out and the child is killed outright.
+      if (!waitUntil(() => child.exitCode !== null || child.signalCode !== null || alive(child.pid ?? -1) === false, 2000)) child.kill('SIGKILL');
     },
   };
 }
@@ -186,12 +200,14 @@ const plantedFills = (): PlantedFill<EnvironmentFill>[] => [
 
 const toCase = (id: string, part: 'fixed' | 'seeded', spec: EnvSpec): SlotCase => ({ id, part, input: spec as unknown as JsonValue, expected: { status: 200, token: spec.token } });
 const fixtures: Fixture[] = [
-  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 40 }),
-  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 30 }),
+  // Warm-ups well past the kit's own latency between up and its probe (one worker round-trip), so an environment
+  // ready before its health answers is caught on a loaded machine too.
+  toCase('health-route', 'fixed', { health: '/health', token: 'fixture-token-a', warmup: 120 }),
+  toCase('status-route', 'fixed', { health: '/status/ready', token: 'fixture-token-b', warmup: 100 }),
 ].map(({ id, input, expected }) => ({ id, input, expected }));
 
 /** Two environments from the draw, each with its own health route, token and warm-up (long enough that ready before it is caught). */
-const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(40, 80) }));
+const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seeded-${i + 1}`, 'seeded', { health: `/health-${word(random, 6)}`, token: word(random, 12), warmup: random.int(120, 180) }));
 
 function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, void, unknown> {
   const spec = c.input as unknown as EnvSpec;
@@ -206,21 +222,23 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
   if (!Number.isInteger(handle.pid)) throw new Finding('FAIL', `handle/pid ${JSON.stringify(handle.pid)} is not a pid`, ['type']);
   const pid = handle.pid as number;
-  // Only a process the kit started itself and can identify as this case's server is ever signalled; another pid is the fill's claim alone.
-  const owned = isOwn(pid) && isThisServer(pid, handle.port as number, lease.token);
   try {
     if (handle.port !== lease.port) throw fail(RULES.port.message, ['unleased_port'], `bound ${handle.port}; the lease is ${lease.port}`);
+    // The probe follows up at once, nothing between: an environment ready before its health answers is caught here.
     const answer = probe(lease.port, spec.health);
     if (answer.status !== 200) throw fail(RULES.health.message, ['ready_before_health'], `GET ${spec.health} on ${lease.port} right after up: ${answer.error ?? `status ${answer.status}`}`);
     let token: unknown;
     try { token = (JSON.parse(answer.body) as { token?: unknown }).token; } catch { token = undefined; }
     if (token !== spec.token) throw fail(RULES.health.message, ['health_mismatch'], `health answered with token ${JSON.stringify(token)}, not the spec's`);
+    // The handle's pid is the fill's word until the process table shows it: a running process carrying the run
+    // token. Otherwise "gone after down" would hold of a pid that never was the environment.
+    if (!running(pid) || !scanned(lease.token).some((p) => p.pid === pid)) throw new Finding('FAIL', `handle/pid ${pid} is no running process carrying the run token`, ['pid_not_environment']);
     yield () => fill.down(handle as unknown as Handle);
     // Gone means all of: the pid the handle names is no process, nothing answers on the leased port any more, and
     // no process carries the run token (a grandchild the handle never named is caught there).
-    if (!waitUntil(() => !alive(pid) && !listening(lease.port) && scanned(lease.token).length === 0, 150)) {
+    if (!waitUntil(() => !running(pid) && !listening(lease.port) && scanned(lease.token).length === 0, 150)) {
       const left = scanned(lease.token);
-      const why = alive(pid) ? `pid ${pid} still runs 150 ms after down${owned ? '' : ' (not the kit\'s server, so left as it is)'}`
+      const why = running(pid) ? `pid ${pid} still runs 150 ms after down${isOwn(pid) ? '' : ' (not the kit\'s own process, so left as it is)'}`
         : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} still accepts connections 150 ms after down`
         : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`
         : `pid ${pid}, the port and the run token were not all clear within 150 ms of down`;
@@ -229,7 +247,6 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   } finally {
     // The kit stops only processes it started through the reference fill (its fixture server and helper, by pid and
     // start time as their ready marker reported them) that still carry this case's run token; any other pid is left.
-    if (owned && alive(pid) && isOwn(pid) && isThisServer(pid, handle.port as number, lease.token)) stop(pid);
     for (const p of carrying(lease.token) ?? []) if (isOwn(p.pid)) stop(p.pid);
     forget();
   }

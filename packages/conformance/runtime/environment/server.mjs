@@ -8,7 +8,7 @@
 // that leaves a process after down.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const [port, health, token, warmup, ready, run, helper] = process.argv.slice(2);
@@ -25,8 +25,10 @@ const server = createServer((request, response) => {
 });
 setTimeout(() => {
   server.listen(Number(port), '127.0.0.1', () => {
-    // The ready marker names the processes this environment is made of, so the kit knows what it started.
-    writeFileSync(ready, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild?.pid ?? null }));
+    // The ready marker names the processes this environment is made of, so the kit knows what it started; written
+    // whole, then moved into place, so a reader never sees half of it.
+    writeFileSync(`${ready}.tmp`, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild?.pid ?? null }));
+    renameSync(`${ready}.tmp`, ready);
   });
 }, Number(warmup));
 // A fixture server never outlives its run by much.

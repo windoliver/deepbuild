@@ -5,7 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanFills, runKit, slotKits } from '../index.js';
-import type { EnvironmentFill } from './environment.js';
+import type { EnvironmentFill, Handle } from './environment.js';
 
 const kit = () => slotKits().find((k) => k.slot === 'environment@1')!;
 const path = process.env.PATH;
@@ -42,6 +42,25 @@ describe('the environment kit and the process table', () => {
       expect(decoys.map((d) => d.exitCode === null && d.signalCode === null)).toEqual([true, true]);
     } finally {
       for (const d of decoys) d.kill('SIGKILL');
+    }
+  });
+
+  it('refuses a handle whose pid is no process of the environment, so "gone after down" has something to be gone from', async () => {
+    const k = kit();
+    // A fill that runs the fixture server as the reference does, but names a pid that was never its environment.
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const real = new Map<string, Handle>();
+    const bogus: EnvironmentFill = {
+      ...clean!,
+      up: (spec, lease) => { const h = clean!.up(spec, lease); real.set('bogus', h); return { ...h, pid: 2 ** 30 }; },
+      down: () => { const h = real.get('bogus'); if (h) clean!.down(h); },
+    };
+    try {
+      const report = await runKit(k, bogus, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'pid_not_environment'], ['FAIL', 'pid_not_environment']]);
+    } finally {
+      const h = real.get('bogus');
+      if (h) clean!.down(h);
     }
   });
 

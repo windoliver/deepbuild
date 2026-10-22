@@ -14,8 +14,10 @@ const lease = () => new Promise((resolve, reject) => {
   server.once('error', reject);
   server.listen(0, '127.0.0.1', () => { const { port } = server.address(); server.close(() => resolve({ port })); });
 });
-const probe = ({ port, path }) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(2500) })
-  .then((r) => r.text().then((body) => ({ status: r.status, body, error: null })))
+// One connection, closed after the answer (a kept-alive socket would hold an environment's graceful close open),
+// and a body cut to what the shared buffer holds.
+const probe = ({ port, path }) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(2500), headers: { connection: 'close' } })
+  .then((r) => r.text().then((body) => ({ status: r.status, body: body.slice(0, 16_384), error: null })))
   .catch((e) => ({ status: null, body: '', error: String(e) }));
 const listening = ({ port }) => new Promise((resolve) => {
   const socket = connect(port, '127.0.0.1');
