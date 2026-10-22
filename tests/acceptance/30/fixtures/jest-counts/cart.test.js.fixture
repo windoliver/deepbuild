@@ -1,0 +1,13 @@
+const totalOf = (prices) => prices.reduce((sum, price) => sum + price, 0);
+
+test('an empty cart totals nothing', () => {
+  expect(totalOf([])).toBe(0);
+});
+
+test('adds the prices', () => {
+  expect(totalOf([1, 2, 3])).toBe(6);
+});
+
+test('applies the bulk discount', () => {
+  expect(totalOf([10, 10, 10])).toBe(27);
+});

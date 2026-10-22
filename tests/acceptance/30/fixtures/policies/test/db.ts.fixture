@@ -1,0 +1,24 @@
+// A small in-memory stand-in for the app's database, enough for the check: rows by table.
+export interface Db {
+  run(sql: string, args: unknown[]): void;
+  get(sql: string, args: unknown[]): Record<string, unknown> | undefined;
+}
+
+export function memoryDb(): Db {
+  const tables = new Map<string, Record<string, unknown>[]>();
+  return {
+    run(sql, args) {
+      const m = /^INSERT INTO (\w+) \(([^)]*)\)/.exec(sql);
+      if (!m) throw Error(`unsupported: ${sql}`);
+      const columns = m[2]!.split(',').map((c) => c.trim());
+      const rows = tables.get(m[1]!) ?? [];
+      rows.push(Object.fromEntries(columns.map((c, i) => [c, args[i]])));
+      tables.set(m[1]!, rows);
+    },
+    get(sql, args) {
+      const m = /FROM (\w+) WHERE (\w+) = \?/.exec(sql);
+      if (!m) throw Error(`unsupported: ${sql}`);
+      return (tables.get(m[1]!) ?? []).find((row) => row[m[2]!] === args[0]);
+    },
+  };
+}

@@ -1,0 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { expect, test } from 'vitest';
+import { priceOf } from './prices';
+
+test('prices an apple from the price table', () => {
+  const table = JSON.parse(readFileSync(new URL('../fixtures/prices.json', import.meta.url), 'utf8')) as Record<string, number>;
+  expect(priceOf(table, 'apple')).toBe(3);
+});
