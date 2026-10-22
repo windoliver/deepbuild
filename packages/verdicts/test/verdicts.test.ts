@@ -129,6 +129,12 @@ describe('predictions first', () => {
     expect(v.outcome).toBe('PASS');
     expect(v.contradictions).toHaveLength(1000);
   });
+  it('a prediction with no time hides nothing another prediction shows', () => {
+    const runs = [run(c, 'failed', { started: 10, ended: 11, failures: [failure('t')] }), run(c, 'failed', { started: 12, ended: 13, failures: [failure('t')] })];
+    const malformed = { check: 'unit', expects: 'passed' } as unknown as { check: string; expects: 'passed'; at: number };
+    const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'passed', at: 1 }, malformed] }));
+    expect(v.contradictions.map((x) => x.late)).toEqual([false, false]);
+  });
   it('a run with no start time can\'t be shown to follow its prediction, so the prediction reads late', () => {
     const runs = [run(c, 'failed', { ended: 20, failures: [failure('t')] }), run(c, 'failed', { ended: 22, failures: [failure('t')] })];
     const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'failed', at: 1 }] }));

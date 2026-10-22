@@ -535,6 +535,8 @@ export function staleReason(v: Verdict, commit: string, state?: readonly string[
 function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradiction[] {
   const span = new Map<string, { first: number; last: number }>();
   for (const p of claim.predictions ?? []) {
+    // A prediction with no time can't be placed before or after anything; it hides nothing the others show.
+    if (!Number.isFinite(p.at)) continue;
     const key = `${p.check}\0${p.expects}`;
     const at = span.get(key);
     if (!at) span.set(key, { first: p.at, last: p.at });
