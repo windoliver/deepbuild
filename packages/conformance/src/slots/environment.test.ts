@@ -2,7 +2,7 @@
 // can't see is BLOCKED, never a pass.) Two kit runs on the same fixture at once share no run token, so neither
 // sees the other's processes.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,22 @@ describe('the environment kit and the process table', () => {
     const report = await runKit(k, fill!, { parts: ['fixed'] });
     expect(report.cases.map((c) => c.outcome)).toEqual(['BLOCKED', 'BLOCKED']);
     expect(report.cases[0]!.message).toMatch(/ps failed/);
+  });
+
+  it('reads BLOCKED, not PASS or FAIL, when lsof ends with 1 and an error, as it does when it found nothing', async () => {
+    const k = kit();
+    const [fill] = cleanFills(k);
+    // An lsof that fails the way the real one does on an operational error: status 1 with a word on stderr.
+    const dir = mkdtempSync(join(tmpdir(), 'deep-env-lsof-'));
+    writeFileSync(join(dir, 'lsof'), '#!/bin/sh\necho "lsof: can\'t read the open files table" >&2\nexit 1\n');
+    chmodSync(join(dir, 'lsof'), 0o755);
+    process.env.PATH = `${dir}:/bin:/usr/bin:/usr/sbin`;
+    try {
+      const report = await runKit(k, fill!, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'listeners_unknown'], ['BLOCKED', 'listeners_unknown']]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('never signals a process it did not start, however its command line is dressed', async () => {

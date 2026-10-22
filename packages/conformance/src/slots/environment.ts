@@ -78,11 +78,11 @@ function table(): Row[] | null {
 }
 /**
  * The TCP ports the given processes listen on, read from the open files table (lsof); null when it can't be read.
- * lsof ends with 1 when it found nothing, which is an answer, and otherwise on failure.
+ * lsof ends with 1 both when it found nothing and on a failure it reports on stderr; only the silent 1 is an answer.
  */
 function listeners(pids: number[]): number[] | null {
   const read = spawnSync('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn'], { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } });
-  if (read.error || (read.status !== 0 && read.status !== 1)) return null;
+  if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
   const ports = new Set<number>();
   for (const line of read.stdout.split('\n')) if (line.startsWith('n')) { const port = Number(line.slice(line.lastIndexOf(':') + 1)); if (Number.isInteger(port)) ports.add(port); }
   return [...ports].sort((a, b) => a - b);
@@ -302,12 +302,17 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // process without it is refused here; the tree is remembered, by pid and start time, to be gone after down.
     // One that forks between two reads of the table and is reparented before the next is beyond what a process
     // table shows; the table is read again at every step of the wait after down to leave that gap as small as it gets.
-    const members = new Map<number, number | null>();
+    const members = new Map<number, number>();
     const refused = (row: Row): never => { throw fail(RULES.down.message, ['untagged_process'], `pid ${row.pid} (${row.command}), a process of the environment, carries no run token, so down could leave it unseen`); };
+    // A member joins with its start time, its identity from here on; one the table can't give for a process that is
+    // still there is BLOCKED, never a member the wait could lose track of. A process gone meanwhile is no member.
+    const START_UNKNOWN = (p: number) => new Finding('BLOCKED', `the start time of pid ${p}, a process of the environment, can't be read, so it can't be told from another process later`, ['start_unknown']);
+    const join = (p: number): void => { const at = startTime(p); if (at !== null) members.set(p, at); else if (alive(p) !== false) throw START_UNKNOWN(p); };
     const grow = (rows: Row[]): void => {
-      for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); members.set(row.pid, startTime(row.pid)); }
+      for (const parent of [...members.keys()]) for (const row of descendants(rows, parent)) if (!members.has(row.pid)) { if (!carries(row, lease.token)) refused(row); join(row.pid); }
     };
-    members.set(pid, startTime(pid));
+    join(pid);
+    if (!members.has(pid)) throw START_UNKNOWN(pid);
     grow(before);
     // The environment's processes listen on the leased port and no other; the open files table shows which, here
     // and again at every step of the wait after down for whatever still runs then. A listener bound and closed
@@ -321,8 +326,14 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (!bound.includes(lease.port)) throw fail(RULES.port.message, ['unleased_port'], `no process of the environment listens on ${lease.port}, though health answered there (${bound.length ? `it listens on ${bound.join(', ')}` : 'it listens on nothing'})`);
     const extra = bound.filter((port) => port !== lease.port);
     if (extra.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listens on ${extra.join(', ')} besides the lease ${lease.port}`);
-    // A member is still there when the table shows its pid alive (not a zombie) with the start time it was remembered with.
-    const stillThere = (rows: Row[]): { pid: number }[] => [...members].filter(([p, start]) => rows.some((row) => row.pid === p && !row.zombie) && sameStart(startTime(p), start ?? undefined)).map(([p]) => ({ pid: p }));
+    // A member is still there when the table shows its pid alive (not a zombie) with the start time it was remembered
+    // with; a pid the table shows whose start time then can't be read is unknown, not gone.
+    const stillThere = (rows: Row[]): { pid: number }[] => [...members].filter(([p, start]) => {
+      if (!rows.some((row) => row.pid === p && !row.zombie)) return false;
+      const at = startTime(p);
+      if (at === null && alive(p) !== false) throw START_UNKNOWN(p);
+      return sameStart(at, start);
+    }).map(([p]) => ({ pid: p }));
     const read = (): Row[] => { const rows = table(); if (rows === null) throw PS_DOWN(); return rows; };
     const clear = (): boolean => {
       const rows = read();
