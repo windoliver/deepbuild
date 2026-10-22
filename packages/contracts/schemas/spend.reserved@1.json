@@ -1,0 +1,170 @@
+{
+  "title": "spend.reserved@1",
+  "description": "A paid run reserved its price against every budget that covers it, all of them in this one event, before it started. The reservation holds, unpriced, until the run's cost reading lands. Only the core appends it.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "spend.reserved"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^run:[0-9A-Za-z]+$",
+      "description": "The paid run this event is about.",
+      "maxLength": 8192
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "The paid run.",
+          "maxLength": 8192
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The check the run belongs to."
+        },
+        "inputs": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The digest of the run's inputs.",
+          "maxLength": 8192
+        },
+        "issue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The issue the run is for."
+        },
+        "resource": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The key of the resource it runs on, or null."
+        },
+        "budgets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "budget": {
+                "type": "string",
+                "format": "ulid",
+                "description": "A budget's ID: the ULID of the spend.approved event that approved it, or, for the one-run budget your yes to an uncovered run approved, of that ask."
+              },
+              "usd": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "The price reserved against it, in US dollars."
+              }
+            },
+            "required": [
+              "budget",
+              "usd"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Each budget the run reserved against, with its price."
+        },
+        "ask": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The ask a resolver answered for you by naming a budget, or null."
+        },
+        "decision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^decision:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The decision that resolver applied, which its decision.applied must name, or null."
+        }
+      },
+      "required": [
+        "run",
+        "check",
+        "inputs",
+        "issue",
+        "resource",
+        "budgets",
+        "ask",
+        "decision"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

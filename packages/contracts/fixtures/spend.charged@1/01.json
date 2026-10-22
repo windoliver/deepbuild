@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74G3C8E0G2J4M6N8Q0S2T4W",
+  "kind": "spend.charged",
+  "subject": "run:01K74G2A4C6E8G0J2M4N6Q8S0V",
+  "data": {
+    "run": "run:01K74G2A4C6E8G0J2M4N6Q8S0V",
+    "usd": 3.5
+  },
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760020711123
+}

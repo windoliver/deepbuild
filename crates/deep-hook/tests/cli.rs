@@ -23,12 +23,12 @@ fn help_marks_the_skeleton() {
 }
 
 #[test]
-fn an_unimplemented_hook_never_claims_success() {
+fn a_call_with_no_agent_and_event_never_claims_success() {
     let output = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
         .output()
         .unwrap();
-    assert!(!output.status.success());
+    assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8(output.stderr)
         .unwrap()
-        .contains("not implemented"));
+        .contains("Usage: deep-hook <agent> <event>"));
 }

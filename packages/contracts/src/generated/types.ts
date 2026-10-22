@@ -693,6 +693,120 @@ export interface AskCreated {
   evidence?: Array<string>;
 }
 
+export type AskCreatedV2PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedV2Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+/** ask.created@2 */
+export interface AskCreatedV2 {
+  v: 2;
+  id: string;
+  kind: "ask.created";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "authority";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  } | {
+    kind: "unblock";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+  } | {
+    kind: "taste";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+    dropped?: Array<{
+      option: string;
+      same_as: string;
+    }>;
+  } | {
+    kind: "exception";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  } | {
+    kind: "choice";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  } | {
+    kind: "definition";
+    question: string;
+    options: AskCreatedV2Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV2PinnedTo;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.defaulted@1 */
 export interface AskDefaulted {
   v: 1;
@@ -1159,7 +1273,7 @@ export interface DocPatched {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "not_checked" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -1168,6 +1282,16 @@ export interface DoctorItem {
 /** error@1 */
 export interface Error {
   code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+}
+
+/** error@2 */
+export interface ErrorV2 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large";
   retryable: boolean;
   remediation: string;
   path: string;
@@ -1270,6 +1394,13 @@ export interface HookAck {
   hold_until_ms: number | null;
 }
 
+/** hook.ack@2 */
+export interface HookAckV2 {
+  v: 1;
+  ack: string;
+  hold_until_ms: number | null;
+}
+
 /** hook.joined@1 */
 export interface HookJoined {
   order: Array<string>;
@@ -1291,6 +1422,14 @@ export interface HookReply {
   stderr: string;
 }
 
+/** hook.reply@2 */
+export interface HookReplyV2 {
+  v: 1;
+  exit: number;
+  stdout: string;
+  stderr: string;
+}
+
 /** hook.request@1 */
 export interface HookRequest {
   v: 1;
@@ -1302,6 +1441,24 @@ export interface HookRequest {
   ppid: number;
   matched: Array<string>;
   payload: unknown;
+}
+
+/** hub.stopped@1 */
+export interface HubStopped {
+  v: 1;
+  id: string;
+  kind: "hub.stopped";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reason: string;
+  };
+  evidence?: Array<string>;
 }
 
 /** layer.rows@1 */
@@ -1506,6 +1663,25 @@ export interface LearnWidened {
     replay: LearnWidenedReplay;
     applied_by: string;
     supersedes: LearnWidenedSupersedes;
+  };
+  evidence?: Array<string>;
+}
+
+/** learn_check.made@1 */
+export interface LearnCheckMade {
+  v: 1;
+  id: string;
+  kind: "learn_check.made";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    change: string;
+    reason: string;
   };
   evidence?: Array<string>;
 }
@@ -1896,6 +2072,35 @@ export interface ReadingRollup {
   evidence?: Array<string>;
 }
 
+/** request.cost@1 */
+export interface RequestCost {
+  v: 1;
+  id: string;
+  kind: "request.cost";
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    model: string;
+    request_id: string | null;
+    cost: {
+      basis: "reported";
+      usd: number;
+    };
+    tokens: {
+      input: number;
+      cached: number;
+      output: number;
+      exact: boolean;
+    };
+    reading: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.finished@1 */
 export interface RunFinished {
   v: 1;
@@ -1986,6 +2191,24 @@ export interface SessionChildStarted {
   evidence?: Array<string>;
 }
 
+/** session.end@1 */
+export interface SessionEnd {
+  v: 1;
+  id: string;
+  kind: "session.end";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** session.start@1 */
 export interface SessionStart {
   v: 1;
@@ -2003,6 +2226,102 @@ export interface SessionStart {
     worktree: string;
     branch: string | null;
     thread: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.approved@1 */
+export interface SpendApproved {
+  v: 1;
+  id: string;
+  kind: "spend.approved";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    scope: {
+      kind: "issue" | "resource" | "project" | "work";
+      ref: string;
+    };
+    cap_usd: number;
+    ends: number;
+    via: "card" | "inbox";
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.asked@1 */
+export interface SpendAsked {
+  v: 1;
+  id: string;
+  kind: "spend.asked";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    inputs: string;
+    issue: string;
+    resource: string | null;
+    usd: number;
+    ask: string;
+    because: "raise" | "rerun" | "uncovered";
+    budgets: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.charged@1 */
+export interface SpendCharged {
+  v: 1;
+  id: string;
+  kind: "spend.charged";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    usd: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** spend.reserved@1 */
+export interface SpendReserved {
+  v: 1;
+  id: string;
+  kind: "spend.reserved";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    check: string;
+    inputs: string;
+    issue: string;
+    resource: string | null;
+    budgets: Array<{
+      budget: string;
+      usd: number;
+    }>;
+    ask: string | null;
+    decision: string | null;
   };
   evidence?: Array<string>;
 }
@@ -2205,6 +2524,28 @@ export interface ToolBefore {
     kind: "unknown";
     paths: Array<string>;
     command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** tool.span@1 */
+export interface ToolSpan {
+  v: 1;
+  id: string;
+  kind: "tool.span";
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    tool: string;
+    tool_use_id: string | null;
+    duration_ms: number;
+    blocked_ms: number | null;
+    decision: string | null;
+    reading: string;
   };
   evidence?: Array<string>;
 }

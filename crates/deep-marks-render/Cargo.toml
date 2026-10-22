@@ -10,7 +10,8 @@ rust-version = "1.95"
 # drawn headless with GPUI's offscreen Metal renderer, frames presented only when the frame clock
 # arms one, with path tessellations, shaped text and writer-layer caches by content key and
 # two-stop gradients through the GPUI patch's exact gradient mode. It draws canvas text, so the
-# text lint reads it.
+# text lint reads it. Issue #392 adds the document check and the look (on every platform), status
+# marks with their glyphs and legend, and bound values that go stale on time.
 [package.metadata.deep]
 canvas_text = true
 
@@ -19,6 +20,7 @@ name = "deep-canvas-render"
 path = "src/main.rs"
 
 [dependencies]
+deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-replica = { path = "../deep-replica" }

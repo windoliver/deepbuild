@@ -1,0 +1,314 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Release checklist",
+  "description": "Seven rows, each a bar and its label, with two section markers, drawn by a test agent through deep_show.",
+  "size": [
+    640,
+    400
+  ],
+  "transport": {
+    "span": "2s"
+  },
+  "items": {
+    "row-1": {
+      "id": "row-1",
+      "kind": "rect@1",
+      "name": "Alpha row",
+      "order": "a0",
+      "params": {
+        "box": [
+          16,
+          16,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-1": {
+      "id": "label-1",
+      "kind": "text@1",
+      "name": "Alpha label",
+      "order": "a1",
+      "params": {
+        "text": "Alpha",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          26,
+          0
+        ]
+      }
+    },
+    "row-2": {
+      "id": "row-2",
+      "kind": "rect@1",
+      "name": "Bravo row",
+      "order": "a2",
+      "params": {
+        "box": [
+          16,
+          68,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-2": {
+      "id": "label-2",
+      "kind": "text@1",
+      "name": "Bravo label",
+      "order": "a3",
+      "params": {
+        "text": "Bravo",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          78,
+          0
+        ]
+      }
+    },
+    "row-3": {
+      "id": "row-3",
+      "kind": "rect@1",
+      "name": "Charlie row",
+      "order": "a4",
+      "params": {
+        "box": [
+          16,
+          120,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-3": {
+      "id": "label-3",
+      "kind": "text@1",
+      "name": "Charlie label",
+      "order": "a5",
+      "params": {
+        "text": "Charlie",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          130,
+          0
+        ]
+      }
+    },
+    "row-4": {
+      "id": "row-4",
+      "kind": "rect@1",
+      "name": "Delta row",
+      "order": "a6",
+      "params": {
+        "box": [
+          16,
+          172,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-4": {
+      "id": "label-4",
+      "kind": "text@1",
+      "name": "Delta label",
+      "order": "a7",
+      "params": {
+        "text": "Delta",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          182,
+          0
+        ]
+      }
+    },
+    "row-5": {
+      "id": "row-5",
+      "kind": "rect@1",
+      "name": "Echo row",
+      "order": "a8",
+      "params": {
+        "box": [
+          16,
+          224,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-5": {
+      "id": "label-5",
+      "kind": "text@1",
+      "name": "Echo label",
+      "order": "a9",
+      "params": {
+        "text": "Echo",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          234,
+          0
+        ]
+      }
+    },
+    "row-6": {
+      "id": "row-6",
+      "kind": "rect@1",
+      "name": "Foxtrot row",
+      "order": "aA",
+      "params": {
+        "box": [
+          16,
+          276,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-6": {
+      "id": "label-6",
+      "kind": "text@1",
+      "name": "Foxtrot label",
+      "order": "aB",
+      "params": {
+        "text": "Foxtrot",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          286,
+          0
+        ]
+      }
+    },
+    "row-7": {
+      "id": "row-7",
+      "kind": "rect@1",
+      "name": "Golf row",
+      "order": "aC",
+      "params": {
+        "box": [
+          16,
+          328,
+          200,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-7": {
+      "id": "label-7",
+      "kind": "text@1",
+      "name": "Golf label",
+      "order": "aD",
+      "params": {
+        "text": "Golf",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 160,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          232,
+          338,
+          0
+        ]
+      }
+    }
+  },
+  "markers": {
+    "start": {
+      "t": "0s",
+      "kind": "section",
+      "name": "Start"
+    },
+    "review": {
+      "t": "1s",
+      "kind": "section",
+      "name": "Review"
+    }
+  }
+}

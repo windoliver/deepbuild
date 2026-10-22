@@ -234,10 +234,10 @@ impl Shaper {
             let candidate = format!("{}…", spec.text[..end].trim_end());
             let layout = self.layout(spec, &candidate);
             let shaped = Self::collect(&layout, spec.max_lines, &candidate);
-            let fits = !spec.width.is_some_and(|w| shaped.width > w + 0.01)
-                && !spec
+            let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
+                && spec
                     .max_lines
-                    .is_some_and(|max| layout.lines().count() > usize::from(max));
+                    .is_none_or(|max| layout.lines().count() <= usize::from(max));
             if fits {
                 best = shaped;
                 low = mid;
@@ -259,10 +259,10 @@ impl Shaper {
         let text = widest.unwrap_or(spec.text);
         let layout = self.layout(spec, text);
         let shaped = Self::collect(&layout, None, text);
-        let fits = !spec.width.is_some_and(|w| shaped.width > w + 0.01)
-            && !spec
+        let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
+            && spec
                 .max_lines
-                .is_some_and(|max| shaped.lines > usize::from(max));
+                .is_none_or(|max| shaped.lines <= usize::from(max));
         Fit {
             fits,
             width: shaped.width,
