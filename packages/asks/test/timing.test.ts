@@ -456,4 +456,17 @@ describe('showings', () => {
     expect(batched).toEqual([['you', 'you', [mine]], ['ana', 'team:web', [theirs]]]);
     expect(await shown()).toEqual([mine, theirs]);
   });
+
+  it('Later from another scope neither is taken nor, recorded, hides the ask in the inbox or the asks table', async () => {
+    settings({});
+    const team = { actor: 'ana', scope: 'team:web' };
+    await start('S1');
+    const mine = await asks.raise(core('S1'), sourceOf('taste'), ask('taste', 'header'));
+    const refusal = await asks.later({ writer: 'app', ...team }, mine, T0 + HOUR).catch((e: unknown) => e);
+    expect((refusal as AskRefused).field).toBe('ask');
+    expect(await about(mine, 'ask.later')).toEqual([]);
+    await record.append({ writer: 'core', ...team }, { v: 1, id: id(now), kind: 'ask.later', ts: now, subject: mine, data: { until: T0 + HOUR } });
+    expect((await asks.inbox()).find((r) => r.ask === mine)?.status).toBe('shown');
+    expect((await record.table('asks')).rows.find((r) => `ask:${String(r.id)}` === mine)?.status).toBe('open');
+  });
 });

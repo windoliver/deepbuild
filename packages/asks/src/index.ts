@@ -528,6 +528,8 @@ class AsksCore implements Asks {
       const ask = this.asks.get(bare(handle));
       if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
       if (ask.closed) throw new AskRefused(`${ask.handle} closed as ${ask.closed.outcome}`, { ask: ask.handle, outcome: ask.closed.outcome, closed_at: ask.closed.at });
+      // Later hides an ask from the person it was raised for, so only they put it off.
+      if (ask.who.actor !== connection.actor || ask.who.scope !== connection.scope) throw new AskRefused(`${ask.handle} was raised for ${ask.who.actor} in ${ask.who.scope}`, { field: 'ask', ask: ask.handle });
       // An ask the fold holds shows only through its exception, so Later goes there.
       if (this.inFold(ask)) throw new AskRefused(`${ask.handle} shows in ${ask.folded}; put that off instead`, { field: 'ask', ask: ask.handle });
       // For the exception, the earliest deadline among the asks it holds: none of them may pass hidden.
@@ -830,7 +832,7 @@ class AsksCore implements Asks {
       }
       case 'ask.later':
         // The core records your Later once later() has checked it against every deadline it could hide.
-        if (target && !target.closed && e.writer === 'core' && typeof d.until === 'number' && d.until < this.dueBy(target)) target.later = d.until;
+        if (target && !target.closed && e.writer === 'core' && target.who.actor === e.actor && target.who.scope === e.scope && typeof d.until === 'number' && d.until < this.dueBy(target)) target.later = d.until;
         return;
       case 'tool.before':
         // The agent's next step reads what you typed: asks held for it wait like any other now.

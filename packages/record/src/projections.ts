@@ -252,9 +252,10 @@ export class Projector {
       }
       case 'ask.later':
         // Only an ask still waiting can wait longer, never to its deadline. The core records it, once your Later
-        // on the trusted path passes its checks; an app's or the CLI's own event changes nothing.
+        // on the trusted path passes its checks, under the identity the ask was raised for; an app's or the CLI's
+        // own event changes nothing.
         if (e.writer !== 'core') break;
-        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ?").run(int(d.until), bare(e.subject), int(d.until));
+        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(int(d.until), bare(e.subject), int(d.until), e.actor, e.scope);
         break;
       case 'ask.batched':
         // Shown again: an ask hidden by Later is back to open.
