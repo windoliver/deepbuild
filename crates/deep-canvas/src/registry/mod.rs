@@ -2408,6 +2408,32 @@ mod tests {
     }
 
     #[test]
+    fn a_reader_runs_after_its_writer_whatever_their_names_and_readers_share() {
+        // Bevy's schedule `ambiguity` and `read_only` cases: a read and a write of one value
+        // are ordered by the read, never by name, and two reads of it seal clean.
+        fn a(r: &mut Registrar) {
+            r.operator("read", "items", &["z.x"], &[]);
+            r.operator("also", "items", &["z.x"], &[]);
+        }
+        fn z(r: &mut Registrar) {
+            r.array("z.x", "f64", "item", "layout", "items");
+            r.operator("write", "items", &["self"], &["z.x"]);
+        }
+        let sealed = Registry::new(BuildSet::Core)
+            .with(Module {
+                manifest: manifest("a", &[("z", false)]),
+                register: a,
+            })
+            .with(Module {
+                manifest: manifest("z", &[]),
+                register: z,
+            })
+            .seal()
+            .unwrap();
+        assert_eq!(sealed.plan["items"], ["z.write", "a.also", "a.read"]);
+    }
+
+    #[test]
     fn the_cores_own_modules_satisfy_any_range() {
         let sealed = core();
         let caret = Range::parse("^1").unwrap();
