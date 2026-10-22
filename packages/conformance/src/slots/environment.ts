@@ -49,15 +49,17 @@ const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArra
  * A system tool run once more when it could not be started at all (a fork refused under load, say): the second
  * attempt's answer is the answer. A tool that started and failed is not retried.
  */
+let lastFailure = '';
 function tool(command: string, args: string[]): SpawnSyncReturns<string> {
   const options = { encoding: 'utf8' as const, env: { ...process.env, LC_ALL: 'C' } };
-  const first = spawnSync(command, args, options);
-  if (!first.error) return first;
-  sleep(20);
-  return spawnSync(command, args, options);
+  let result = spawnSync(command, args, options);
+  if (result.error) { sleep(20); result = spawnSync(command, args, options); }
+  // What a failed tool said, for the finding that reads the table as unknown.
+  if (result.error || result.status !== 0) lastFailure = `${command} ${args[0]}: ${result.error ? (result.error as NodeJS.ErrnoException).code ?? result.error.message : `status ${result.status}${result.signal ? ` on ${result.signal}` : ''}`}${result.stderr?.trim() ? ` ${result.stderr.trim()}` : ''}`;
+  return result;
 }
 const ps = (args: string[]): SpawnSyncReturns<string> => tool('ps', args);
-const PS_DOWN = (): Finding => new Finding('BLOCKED', 'the process table can\'t be read (ps failed), so the state of the environment\'s processes is unknown', ['ps_unavailable']);
+const PS_DOWN = (): Finding => new Finding('BLOCKED', `the process table can't be read (ps failed${lastFailure ? `: ${lastFailure}` : ''}), so the state of the environment's processes is unknown`, ['ps_unavailable']);
 /**
  * Whether the process still runs; an exited child not yet reaped (a zombie) counts as gone. Null when the process
  * exists but the process table can't be read: unknown, which no caller reads as gone.
@@ -385,8 +387,9 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
       }
       return there.length === 0 && !listening(lease.port) && !rows.some((row) => carries(row, lease.token));
     };
-    downed = true;
+    // Down counts as asked only once it returned: a down that threw gets the case's end to ask once more.
     yield () => fill.down(handle as unknown as Handle);
+    downed = true;
     // Gone means all of: the pid the handle names and every process that was under it are no process, nothing answers
     // on the leased port any more, and no process carries the run token (a grandchild that left the tree is caught there).
     if (!waitUntil(clear, 150)) {
@@ -411,10 +414,11 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     const mine = left.map((p) => p.pid).filter(isOwn);
     for (const p of mine) if (stop(p, lease.token) === 'unreadable') throw PS_DOWN();
     // Every owned pid, signalled or not, must be gone or another process by now; one still the kit's and alive is BLOCKED.
+    // Gone, or still the kit's; a start time the table can't give is gone only if the process is, else unknown.
     const remaining = (): number[] => mine.filter((p) => {
       if (alive(p) === false) return false;
       const at = startTime(p);
-      if (at === null) throw PS_DOWN();
+      if (at === null) { if (alive(p) === false) return false; throw PS_DOWN(); }
       return sameStart(at, own.get(p));
     });
     if (!waitUntil(() => remaining().length === 0, 500)) throw new Finding('BLOCKED', `the kit's own process ${remaining().join(', ')} did not end within 500 ms of SIGKILL`, ['kit_leftover']);

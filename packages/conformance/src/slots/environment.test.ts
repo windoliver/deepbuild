@@ -278,6 +278,23 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('asks a down that threw once more at the case\'s end, so the fill\'s failure leaves nothing it can stop', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const asked: Handle[] = [];
+    // A fill whose down throws the first time it is asked and works the second.
+    const flaky: EnvironmentFill = {
+      ...clean!,
+      down: (handle) => { asked.push(handle); if (asked.filter((h) => h.id === handle.id).length === 1) throw new Error('down refused'); clean!.down(handle); },
+    };
+    const report = await runKit(k, flaky, { parts: ['fixed'] });
+    expect(report.cases.map((c) => `${c.outcome}: ${c.message}`)).toEqual(['FAIL: the fill threw: Error: down refused', 'FAIL: the fill threw: Error: down refused']);
+    // Each environment was asked twice, and the second time it went down: nothing of them is left.
+    expect(asked.map((h) => h.id)).toEqual([asked[0]!.id, asked[0]!.id, asked[2]!.id, asked[2]!.id]);
+    const left = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/server.mjs') && asked.some((h) => l.includes(` ${h.port} `)));
+    expect(left).toEqual([]);
+  });
+
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
     const reports = await Promise.all([0, 1].map(() => runKit(k, cleanFills(k)[0]!, { parts: ['fixed'] })));
