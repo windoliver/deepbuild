@@ -1,0 +1,64 @@
+Base commit: a8f844f (branch feat/62-learned-layer, identical to the base)
+Command: NO_COLOR=1 npx vitest run tests/acceptance/62
+Date: 2026-10-21T21:07:28Z  Node v24.22.0  vitest vitest/5.0.5 darwin-arm64 node-v24.22.0
+Note: run through node node_modules/vitest/vitest.mjs, the same binary npx resolves, because a local shell hook
+rewrites npx vitest to a JSON reporter. Before it: npm ci and npm run build --workspaces (the packages export
+dist/). The machine is a Mac15,12 on battery, so the three budget tests skip as INCONCLUSIVE (below).
+Exit code: 1
+
+ ❯ tests/acceptance/62/drafting.test.ts (1 test | 1 failed)
+     × AC7 dropping app.e2e, named in a FAIL verdict, is held, naming it; dropping app.lint (only PASS) or app.flaky (only INVALID) is applied
+ ❯ tests/acceptance/62/base.test.ts (2 tests | 2 failed)
+     × AC9 layer: learned aimed at spec:shop, a decision, an approved check and a rule you typed are each refused, naming the target, and so is one removing your rule 'never push without asking' from the start slice
+     × AC1 each attempt, applied or widened, is refused and recorded, stays refused after a rebuild, and a base change you apply goes through
+ ❯ tests/acceptance/62/proof.test.ts (2 tests | 2 failed)
+     × Proof the week lists every learned change with its evidence and scope; one rollback and a rollback to a date leave the log whole, the slices as they were at the date, and the dependants flagged
+     × AC12 after the week, learned_layer and every start slice rebuild to exactly what the appends built
+ ❯ tests/acceptance/62/evidence.test.ts (3 tests | 3 failed)
+     × AC2 an applied change lists its handles and quotes; one whose handle resolves to nothing, or with no evidence, is never applied
+     × AC10 a quote from another message, a quote nowhere, a whole-session handle and a second bad handle are refused, each naming the handle; a quote at its handle up to NFC and whitespace is applied
+     × AC5 a start-slice claim citing only a fetch's result is refused, so is one citing an unrelated decision, and one citing your decision that promotes it is applied
+ ❯ tests/acceptance/62/scope.test.ts (3 tests | 3 failed)
+     × AC3 a session's change reaches neither its repo's other sessions nor another repo; a rule's own widening to all is refused; your OK widens it to the repo, then to all
+     × AC3 a rule you typed reaches every open session, in every repo, at its next prompt, and every session started after
+     × AC6 a claim from one repo's sessions applies only to that repo; a habit seen across repos applies everywhere
+ ❯ tests/acceptance/62/rollback.test.ts (2 tests | 2 failed)
+     × AC11 rolling back one change appends one learn.rolled_back, keeps every event, and flags the change that supersedes it and the one that cites it, not an unrelated one
+     × AC4 AC11 everything learned since a date is compensated newest first, one learn.rolled_back each, nothing deleted; every session reads at its start exactly what it read then; a pending change built on a rolled-back one is flagged
+ ↓ tests/acceptance/62/budgets.test.ts (3 tests | 3 skipped)
+     ↓ AC8 applying a learned change takes under 100 ms … [INCONCLUSIVE (reading only): not on mains power: Now drawing from 'Battery Power']
+     ↓ AC8 rolling back a learned change takes under 100 ms … [INCONCLUSIVE (reading only): not on mains power: Now drawing from 'Battery Power']
+     ↓ AC8 the layer rebuilds from its events (10,000 learned events) in under 5 s [INCONCLUSIVE (reading only): not on mains power: Now drawing from 'Battery Power']
+
+Why each fails (the stub learned_layer keeps one row per learn.* event with no state, reason, flag or
+handle; the record has no startSlice or rollBack):
+
+ AC9   the rule you typed: state of 01M45MN8HT5SYWRXDE1RQNXF45 (reason: ): expected undefined to be 'applied'
+ AC1   a learned change aimed at kernel:pass-needs-real-runs: state of 01M45MN8HSF630BTT8YQMV2VDQ (reason: ): expected undefined to be 'refused'
+ AC7   dropping a check that once caught a real bug: state of 01M45MNBFHE6VSAY21G8K63BBN (reason: ): expected undefined to be 'held'
+ AC2   a change whose quotes are at their handles: state of 01M45MN8HS18VHY7SAQGKWMVS7 (reason: ): expected undefined to be 'applied'
+ AC10  a quote from another message: state of 01M45MN7JH9JA8X6434ST18B57 (reason: ): expected undefined to be 'refused'
+ AC5   a start-slice claim resting only on a fetch: state of 01M45MN7JHF91MA8ZKTQBB0NKQ (reason: ): expected undefined to be 'refused'
+ Proof learned_layer row 01M45MN8HT5SYWRXDE1RQNXF45 has a handle that fits the frozen record-handle pattern: expected '' to match /^(task|ask|claim|verdict|run|req|deci…/
+ AC12  learned_layer row 01M45MN8HT10THGDK846PQRVB6 has a handle that fits the frozen record-handle pattern: expected '' to match /^(task|ask|claim|verdict|run|req|deci…/
+ AC11  learned_layer row 01M45MN7JHBCRM32A9GAZ0TJBY has a handle that fits the frozen record-handle pattern: expected '' to match /^(task|ask|claim|verdict|run|req|deci…/
+ AC4   TypeError: w.record.startSlice is not a function
+ AC3   the local-first rule applies a change to its own session: state of 01M45MN9H3E6VSAY21G8K63BBN (reason: ): expected undefined to be 'applied'
+ AC3   TypeError: w.record.startSlice is not a function
+ AC6   an install claim at the repo its evidence covers: state of 01M45MNAGC02NKCC171RFD6AKX (reason: ): expected undefined to be 'applied'
+
+ Test Files  6 failed | 1 passed (7)
+      Tests  13 failed | 3 skipped (16)
+
+The budget tests with the reference-Mac gate lifted (a temporary copy, deleted after the run), to show they
+fail on the base for the expected reason rather than skip:
+
+     × AC8 applying a learned change takes under 100 ms (p95 of 40 applies, five runs)
+     × AC8 rolling back a learned change takes under 100 ms (p95 of 40 rollbacks, five runs)
+     × AC8 the layer rebuilds from its events (10,000 learned events) in under 5 s
+ AssertionError: a timed apply: state of 01M45NXYD43NEQC30QFTW3Q94F (reason: ): expected undefined to be 'applied'
+ TypeError: w.record.rollBack is not a function
+ TypeError: w.record.rollBack is not a function
+
+Type check: tsc -p (root tsconfig.json strict options plus noEmit and allowImportingTsExtensions, over
+tests/acceptance/62/*.ts) exits 0 at the base.

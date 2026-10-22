@@ -14,3 +14,4 @@ pub mod kinds;
 pub mod ops;
 pub mod render;
 pub mod session;
+pub mod show;

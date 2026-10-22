@@ -50,8 +50,10 @@ pub fn p90_delta_e(a: &Still, b: &Still) -> Option<f64> {
     }
     let mut d: Vec<f64> = a
         .rgba
-        .as_chunks::<4>().0.iter()
-        .zip(b.rgba.as_chunks::<4>().0.iter())
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.rgba.as_chunks::<4>().0)
         .map(|(p, q)| {
             let (p, q) = (oklab(p), oklab(q));
             let (dl, da, db) = (p.l - q.l, p.a - q.a, p.b - q.b);
@@ -403,7 +405,9 @@ pub fn render(still: &Still, treatment: Treatment) -> Vec<u8> {
         Treatment::None => still.rgba.clone(),
         Treatment::Mono => still
             .rgba
-            .as_chunks::<4>().0.iter()
+            .as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|px| {
                 let grey = oklab_to_srgb(Oklab {
                     l: oklab(px).l,
@@ -416,7 +420,9 @@ pub fn render(still: &Still, treatment: Treatment) -> Vec<u8> {
             .collect(),
         Treatment::Reversed => still
             .rgba
-            .as_chunks::<4>().0.iter()
+            .as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|px| [255 - px[0], 255 - px[1], 255 - px[2], px[3]])
             .collect(),
         _ if w == 0 || h == 0 => still.rgba.clone(),
