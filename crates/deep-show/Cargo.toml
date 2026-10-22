@@ -1,0 +1,35 @@
+[package]
+name = "deep-show"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #393: `deep-show`, the proof surface for deep_show and `deep show --check --snap`: a
+# scenario of calls against the hub's canvas side (the agent's own writer layer stamped from its
+# connection or the peer check, whole revisions with their diff, issues inlined up to the read
+# cap, render-back snapshots of settled frames on the CPU through Vello CPU), and on macOS the
+# window those calls leave, composed by band with the question card last through GPUI's offscreen
+# Metal renderer. It draws canvas text, so the text lint reads it.
+[package.metadata.deep]
+canvas_text = true
+
+[[bin]]
+name = "deep-show"
+path = "src/main.rs"
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-text = { path = "../deep-text" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+deep-replica = { path = "../deep-replica" }
+deep-text-gpui = { path = "../deep-text-gpui" }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }

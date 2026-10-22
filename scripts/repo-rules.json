@@ -357,6 +357,56 @@
           "why": "Issue #394: the taste call's ask data and the deep-sheet CLI's JSON lines. Already in the workspace tree."
         }
       }
+    },
+    "crates/deep-show/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #393: the document check, canonical revision hash, and the show module that stamps a writer's layer, diffs whole revisions and caps a reply's issues."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #393: the draw list, status marks and look render-back snapshots and layer pictures are drawn from."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #393: evaluates a revision at the snapshot's declared time."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #393: the canvas's own shaper for text in snapshots, and the bundled faces the look resolves against."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #393: decodes an image asset from the evidence store and encodes snapshots as PNG; already in the workspace tree."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #393: the deep-show CLI's JSON lines and the documents it stamps. Already in the workspace tree."
+        },
+        "sha2": {
+          "spec": "^0.10",
+          "why": "Issue #393: names evidence by its SHA-256 as the evidence store does. Already in the workspace tree."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #393: render-back's 2D snapshots on the CPU, as the design says; already in the workspace tree under deep-text."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "deep-replica": {
+          "spec": "* path=../deep-replica",
+          "why": "Issue #393: the headless app context the window draws in, as deep-canvas-render uses it."
+        },
+        "deep-text-gpui": {
+          "spec": "* path=../deep-text-gpui",
+          "why": "Issue #393: paints the card's and outlines' labels through the canvas's atlas, never GPUI's text system."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #393: the headless window, its frames and the offscreen capture of the composed window."
+        }
+      }
     }
   },
   "allowedFindings": [

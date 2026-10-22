@@ -1821,6 +1821,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-show"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-replica",
+ "deep-text",
+ "deep-text-gpui",
+ "gpui-kit",
+ "image",
+ "serde_json",
+ "sha2 0.10.9",
+ "vello_cpu",
+]
+
+[[package]]
 name = "deep-text"
 version = "0.0.0"
 dependencies = [
