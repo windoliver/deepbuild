@@ -421,7 +421,7 @@ fn along(ctx: &mut RenderContext, path: &BezPath, ramp: &Ramp, opacity: f64, wid
 /// An image's straight RGBA pixels, adjusted and at `opacity`, as Vello's premultiplied pixmap.
 pub fn image(rgba: Vec<u8>, size: [u16; 2], opacity: f64, adjust: &Adjust) -> Pixmap {
     let mut bytes = rgba;
-    for px in bytes.chunks_exact_mut(4) {
+    for px in bytes.as_chunks_mut::<4>().0 {
         let c = adjust.color(paint::unit([px[0], px[1], px[2]]));
         let a = f64::from(px[3]) / 255.0 * opacity;
         for k in 0..3 {
