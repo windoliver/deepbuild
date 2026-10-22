@@ -282,7 +282,7 @@ impl Mesh {
 
     /// Each triangle's three corners, in u.
     pub fn triangles(&self) -> impl Iterator<Item = [[f32; 2]; 3]> + '_ {
-        self.indices.chunks_exact(3).map(|t| {
+        self.indices.as_chunks::<3>().0.iter().map(|t| {
             [
                 self.vertices[t[0] as usize],
                 self.vertices[t[1] as usize],
