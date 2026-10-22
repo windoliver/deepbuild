@@ -1,0 +1,156 @@
+{
+  "title": "request.cost@1",
+  "description": "One model request's cost and tokens as the agent itself reported them in its telemetry; a request with no export has none, never $0.",
+  "x-feeds": [
+    "session_costs",
+    "readings"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "request.cost"
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^ext:otlp$",
+      "description": "Who wrote it, from the connection: the OTLP receiver, from the agent's own telemetry."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The model that answered, as the agent sent it.",
+          "maxLength": 8192
+        },
+        "request_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192,
+          "description": "The provider's request ID, when the export carries one."
+        },
+        "cost": {
+          "type": "object",
+          "properties": {
+            "basis": {
+              "const": "reported"
+            },
+            "usd": {
+              "type": "number",
+              "minimum": 0,
+              "description": "What the agent itself reported; a free tier reports 0."
+            }
+          },
+          "required": [
+            "basis",
+            "usd"
+          ],
+          "additionalProperties": false
+        },
+        "tokens": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "cached": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "exact": {
+              "type": "boolean",
+              "description": "The agent's own count, or an estimate."
+            }
+          },
+          "required": [
+            "input",
+            "cached",
+            "output",
+            "exact"
+          ],
+          "additionalProperties": false
+        },
+        "reading": {
+          "type": "string",
+          "pattern": "^reading:[0-9A-Za-z]+$",
+          "description": "The reading it adds to, its model or tool name folded by the agent's facts: a name they don't list reads as other.",
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "model",
+        "request_id",
+        "cost",
+        "tokens",
+        "reading"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

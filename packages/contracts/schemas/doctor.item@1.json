@@ -17,6 +17,7 @@
         "signed_out",
         "nested_session",
         "timing_relation_broken",
+        "telemetry_unreadable",
         "not_checked",
         "unknown"
       ],

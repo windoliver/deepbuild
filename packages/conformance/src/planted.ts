@@ -48,6 +48,7 @@ const DOCTOR_FIXES: Record<string, string> = {
   signed_out: 'Sign in to the agent; a run is BLOCKED until it is.',
   nested_session: 'Start the session outside another agent session, or clear the variables that mark one.',
   timing_relation_broken: 'Change the setting the relation names so both values hold.',
+  telemetry_unreadable: "Change the agent's telemetry setting the item names to a protocol and address the OTLP receiver reads.",
   not_checked: 'Run deep doctor, which runs the check; an item nobody ran is never OK.',
   unknown: "Update deep: this doctor code was added after the reader's minor.",
 };
