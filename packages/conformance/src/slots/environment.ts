@@ -193,9 +193,12 @@ const PROBES = fileURLToPath(new URL('../../runtime/environment/probes.mjs', imp
 let probes: { worker: Worker; flags: Int32Array; out: Uint8Array } | null = null;
 /** A probe the kit itself couldn't make is BLOCKED: the fill did nothing the kit saw. */
 function ask<T>(request: { op: 'lease' | 'probe' | 'listening'; port?: number; path?: string }, timeout = 3000): T {
+  // A thread that can't be made or spoken to is the kit's own failure, BLOCKED, never a word about the fill.
+  const unavailable = (error: unknown): Finding => new Finding('BLOCKED', `the kit's ${request.op} probe has no thread to answer it: ${error instanceof Error ? error.message : String(error)}`, ['probe_unanswered']);
   if (probes === null) {
     const shared = new SharedArrayBuffer(8 + 65_536);
-    const worker = new Worker(PROBES, { workerData: shared });
+    let worker: Worker;
+    try { worker = new Worker(PROBES, { workerData: shared }); } catch (error) { throw unavailable(error); }
     worker.unref();
     const mine = { worker, flags: new Int32Array(shared, 0, 2), out: new Uint8Array(shared, 8) };
     // A thread that died is replaced at the next probe rather than waited on.
@@ -205,7 +208,7 @@ function ask<T>(request: { op: 'lease' | 'probe' | 'listening'; port?: number; p
   }
   const { worker, flags, out } = probes;
   Atomics.store(flags, 0, 0);
-  worker.postMessage(request);
+  try { worker.postMessage(request); } catch (error) { probes = null; void worker.terminate(); throw unavailable(error); }
   if (Atomics.wait(flags, 0, 0, timeout) === 'timed-out') { void worker.terminate(); probes = null; throw new Finding('BLOCKED', `the kit's ${request.op} probe answered nothing in ${timeout} ms`, ['probe_unanswered']); }
   try { return JSON.parse(Buffer.from(out.subarray(0, Atomics.load(flags, 1))).toString('utf8')) as T; } catch { throw new Finding('BLOCKED', `the kit's ${request.op} probe answered unreadably`, ['probe_unanswered']); }
 }
