@@ -10,6 +10,7 @@
 
 pub mod canvas;
 pub mod events;
+pub mod hub;
 pub mod text;
 pub mod views;
 
