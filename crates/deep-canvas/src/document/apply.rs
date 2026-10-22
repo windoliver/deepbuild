@@ -487,7 +487,7 @@ fn set(doc: &mut Value, layer: &str, j: usize, op: &Value) -> Result<(), Refused
                 json!([0, 0, 0])
             };
             let vector = at.entry((*name).to_string()).or_insert(default.clone());
-            if !vector.as_array().is_some_and(|a| a.len() == 3) {
+            if vector.as_array().is_none_or(|a| a.len() != 3) {
                 *vector = default;
             }
             if let Some(list) = vector.as_array_mut() {

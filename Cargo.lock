@@ -1744,6 +1744,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-graph"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "deep-canvas-marks"
 version = "0.0.0"
 dependencies = [
@@ -1761,17 +1768,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-record"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "deep-canvas-sheet"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-marks",
+ "serde_json",
+]
+
+[[package]]
 name = "deep-contracts"
 version = "0.0.0"
 
 [[package]]
 name = "deep-hook"
 version = "0.0.0"
+dependencies = [
+ "deep-contracts",
+]
 
 [[package]]
 name = "deep-marks-render"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-replica",

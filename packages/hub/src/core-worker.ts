@@ -1,0 +1,44 @@
+// The core's worker thread: the core answers each request the event loop forwards, in order, and streams
+// appended events back for subscribers.
+import { parentPort, workerData } from 'node:worker_threads';
+import { Core, type CallContext } from './core.js';
+import { shedStartup } from './settle.js';
+import { Refused, refusal, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+
+export type CoreRequest =
+  | { op: 'call'; method: string; params: unknown; context: CallContext }
+  | { op: 'mcp-hello'; parent: { pid: number; start: string } }
+  | { op: 'health' }
+  | { op: 'subscribe'; sub: string; after: number }
+  | { op: 'stop'; reason: string };
+export type CoreMessage =
+  | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
+  | { op: 'unsubscribe'; sub: string }
+  | (CoreRequest & { n: number });
+
+/** Runs one request against the core: the core's answer, or the refusal to write back. */
+export async function answer(core: Core, request: CoreRequest): Promise<unknown> {
+  switch (request.op) {
+    case 'call': return core.call(request.method, request.params, request.context);
+    case 'mcp-hello': return core.mcpHello(request.parent);
+    case 'health': return core.health();
+    case 'subscribe': return core.subscribe(request.sub, request.after);
+    case 'stop': return core.stop(request.reason);
+  }
+}
+export const asRefusal = (error: unknown) => (error instanceof Refused ? error.refusal : refusal('unavailable', '', error instanceof Error ? error.message : String(error), '', true));
+
+if (parentPort && workerData?.core) {
+  const port = parentPort;
+  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }));
+  core.started().then(
+    () => { shedStartup(); port.postMessage({ op: 'started' }); },
+    (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
+  );
+  port.on('message', (message: CoreMessage) => {
+    if (message.op === 'hook') return void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
+    if (message.op === 'unsubscribe') return core.unsubscribe(message.sub);
+    const { n } = message;
+    answer(core, message).then((result) => port.postMessage({ n, result }), (error: unknown) => port.postMessage({ n, error: asRefusal(error) }));
+  });
+}

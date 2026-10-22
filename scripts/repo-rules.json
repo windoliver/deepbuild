@@ -184,6 +184,38 @@
         }
       }
     },
+    "packages/hub/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "better-sqlite3": {
+          "spec": "13.0.3",
+          "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
+        }
+      }
+    },
+    "packages/otlp/package.json": {
+      "dependencies": {
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #42: the record the receiver appends tool.span and request.cost events to, and reads a session's and a task's cost from."
+        }
+      }
+    },
     "packages/asks/package.json": {
       "dependencies": {
         "@deepbuild/contracts": {
@@ -225,6 +257,14 @@
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #390: the window the mask sprites go into, through the GPUI patch's paint_mask_sprite."
+        }
+      }
+    },
+    "crates/deep-hook/Cargo.toml": {
+      "dependencies": {
+        "deep-contracts": {
+          "spec": "* path=../deep-contracts",
+          "why": "Issue #16: the hook's JSON read and written by the contracts' own parser and RFC 8785 printer, the Rust side of the wire it shares with the hub."
         }
       }
     },
@@ -282,6 +322,10 @@
     },
     "crates/deep-marks-render/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #392: the `check` subcommand runs the document check, with the honest-numbers and status-color rules."
+        },
         "deep-canvas-marks": {
           "spec": "* path=../deep-canvas-marks",
           "why": "Issue #391: the frame draw list, path tessellations and content keys the render draws and caches."
@@ -319,6 +363,38 @@
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #391: the GPU ledger the GPUI patch adds to the Metal renderer (frame command buffers committed and their GPU time), which shows a still view uses none. Already in the tree under gpui-kit, as the vendored copy."
+        }
+      }
+    },
+    "crates/deep-canvas-graph/Cargo.toml": {
+      "dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #394: the deep-graph CLI's JSON lines and the layout memory it reads and writes. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-canvas-record/Cargo.toml": {
+      "dependencies": {
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #394: the deep-salience CLI's JSON lines. Already in the workspace tree."
+        }
+      }
+    },
+    "crates/deep-canvas-sheet/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #394: the OKLab conversion and the ops module on pinned libm the stills' ΔE goes through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #394: the content keys a cell's texture is cached by (content, size, treatment, look)."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #394: the taste call's ask data and the deep-sheet CLI's JSON lines. Already in the workspace tree."
         }
       }
     }

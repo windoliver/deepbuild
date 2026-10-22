@@ -1,0 +1,854 @@
+Base commit: 4f6dec56bf3d4dcb4ab4e377ddbbdd43f2c65226 (origin/main, no implementation)
+Command: npm run build --workspaces, then NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/16 --no-file-parallelism   (node = ~/.local/share/fnm/node-versions/v24.22.0, the repo's .node-version; the same as npx vitest run --root tests/acceptance/16 --no-file-parallelism with that node first on PATH; cargo on PATH)
+Date: 2026-10-21T20:10Z  Node v24.22.0  vitest 5.0.5  darwin-arm64 (Mac15,7, Apple M3 Pro: a reference Mac, so the three timing tests ran instead of skipping)
+Exit code: 1
+Result: 13 files, 110 tests, 110 failed, 0 passed, 0 skipped.
+Why each test fails: there is no hub at the base. `deep hub run`, `deep hub start` and `deep hub status` are "Unsupported command" (exit 2), so every test that starts a hub fails with "BLOCKED: the hub didn't start (deep hub run) ... Unsupported command" (or its waiting forms: "the hub didn't answer within 10 s", "timed out ... waiting for the hub `deep hub start` started", "exactly one start reports ready: [exit 2, exit 2]", "the first deep hub start: Unsupported command"). The rest fail on the other pieces this issue adds: benchmarks/budgets.json has no hub-cold-start task and benchmarks/hub.mjs doesn't exist (AC12), and deep-hook has no plant-f-test feature (AC23: "the package 'deep-hook' does not contain this feature"). No test fails on its own setup: the idle budget seeded its 30 days of history through @deepbuild/record before failing at the hub's start, and deep-hook's plain build succeeded.
+Checked beside this run (not at the base): the tests type-check with no errors (node node_modules/typescript/bin/tsc -p tests/acceptance/16/tsconfig.json). They import no hub module (README, The surface under test), so there was no declaration-only copy of a hub entry to place; the check covers their use of @deepbuild/contracts, @deepbuild/record and @deepbuild/evidence as published. The harness itself (helpers.ts's socket client, sendHook, control, allEvents, the agent stand-in and its hook and deep mcp children, a hook through a shell, the forwarder, fixtures/load.mjs with a 1 MB call, fixtures/preload.mjs's loaded line, fixtures/launcher.mjs on a plist) was run once against a throwaway stand-in hub of about 80 lines kept outside the repo and passed; that stand-in and its smoke test were deleted. No wrong program could be run: each is a plant inside the hub.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/16
+
+ ❯ address.test.ts (6 tests | 6 failed) 14388ms
+   ❯ AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket (4)
+     × AC2 the CLI: `deep hub status` reaches the hub through the forwarded socket the setting names, and exits 3 naming the address when it is gone 295ms
+     × AC2 deep-hook (#315): a PreToolUse goes through the forwarded socket the setting names, and the hub records it 13774ms
+     × AC2 deep mcp (#26): deep_status goes through the forwarded socket the setting names and succeeds 73ms
+     × AC2 the app (#34): its socket client's tests pass against the hub through the forwarded socket the setting names 72ms
+   ❯ AC6 #16.a88e65ab a dev hub with its own root runs beside the installed hub; sessions that didn't opt in still reach the installed one (2)
+     × AC6 the dev hub has its own socket, ledger, evidence and control token, and each hub records only what reached it 91ms
+     × AC6 with a dev hub running, the CLI, deep-hook (#315) and deep mcp (#26) from a worktree that didn't opt in reach the installed hub 79ms
+ ❯ features.test.ts (2 tests | 2 failed) 3144ms
+   ❯ AC23 #16.6279113a a deep-hook built with a planted feature f_test, against a hub that doesn't list it (2)
+     × AC23 sends no f_test and is decided as before; forced, the hub refuses it naming the field and deep-hook acts as with the hub down 3047ms
+     × AC23 (wrong program) a hub that ignores the field fails this test 96ms
+ ❯ service.test.ts (2 tests | 2 failed) 30254ms
+   ❯ AC7 #16.d8339694 closing the terminal or SSH session that started the hub leaves it running; every stop records its reason (2)
+     × AC7 started by `deep hub start`, the hub outlives the terminal that started it and its hangups, with the secret store and the network still reachable 30065ms
+     × AC7 every stop records its reason: SIGTERM, SIGINT, hub.stop from the CLI, and a kill -9 found at the next start 187ms
+ ❯ budgets.test.ts (7 tests | 7 failed) 14834ms
+   ❯ AC12 #16.6034dec3 budgets, compared with the merge base in the local preflight (4)
+     × AC12 the perf lane has the hub's three tasks, each a #16 first measurement, valid against the merge base's budgets 119ms
+     × AC12 `node benchmarks/hub.mjs cold-start` runs and exits 0 43ms
+     × AC12 `node benchmarks/hub.mjs round-trip` runs and exits 0 40ms
+     × AC12 `node benchmarks/hub.mjs idle` runs and exits 0 34ms
+   ❯ AC12 #16.6034dec3 the issue's numbers on the reference Mac (3)
+     × AC12 cold start under 500 ms: from spawning `deep hub run` to the socket answering 10043ms
+     × AC12 a socket round trip under 2 ms at p95: 1,000 PreToolUse requests to their replies 312ms
+     × AC12 with 30 days of history: idle CPU under 0.5% of one core and resident memory under 150 MB 4243ms
+ ❯ lock.test.ts (12 tests | 12 failed) 1341ms
+   ❯ AC1 #16.90def3b3 two hub starts at once leave exactly one hub running (2)
+     × AC1 two `deep hub run` on one root, started together, leave one hub; the other exits (5 rounds) 72ms
+     × AC1 two `deep hub start` at once, through the login service, leave one hub running 78ms
+   ❯ AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub (6)
+     × AC5 after kill -9 the next start is ready within 5 s, three times over, with the old socket file left behind 105ms
+     × AC5 a stale hub.pid naming another live program, or a dead one, never stops the hub from starting 95ms
+     × AC5 a stale hub.lock naming another live program, or a dead one, never stops the hub from starting 119ms
+     × AC5 a stale deep.pid naming another live program, or a dead one, never stops the hub from starting 297ms
+     × AC5 a stale deep-hub.pid naming another live program, or a dead one, never stops the hub from starting 116ms
+     × AC5 a stale deepbuild.pid naming another live program, or a dead one, never stops the hub from starting 80ms
+   ❯ AC16 #16.689b55b1 a second start exits on the lock; the accept loop survives EMFILE (4)
+     × AC16 a second hub start exits on the lock and the next hook still reaches the first hub 90ms
+     × AC16 (wrong program) a hub that unlinks hub.sock before taking the lock fails this test 101ms
+     × AC16 with the descriptor limit at the open count plus 4, a burst of 50 hooks is each answered or refused, and the next hook is answered 93ms
+     × AC16 (wrong program) a hub whose accept loop stops at EMFILE fails this test 94ms
+ ❯ roles.test.ts (48 tests | 48 failed) 654ms
+   ❯ AC15 #16.ffcc7e73 the role table: every role against every socket method (40)
+     × AC15 hook from hook is allowed 86ms
+     × AC15 hook from mcp:A is refused 0ms
+     × AC15 hook from app is refused 0ms
+     × AC15 hook from cli is refused 0ms
+     × AC15 hub.health from hook is refused 0ms
+     × AC15 hub.health from mcp:A is refused 0ms
+     × AC15 hub.health from app is allowed 0ms
+     × AC15 hub.health from cli is allowed 0ms
+     × AC15 events.read from hook is refused 0ms
+     × AC15 events.read from mcp:A is refused 0ms
+     × AC15 events.read from app is allowed 0ms
+     × AC15 events.read from cli is allowed 0ms
+     × AC15 stream.subscribe from hook is refused 0ms
+     × AC15 stream.subscribe from mcp:A is refused 0ms
+     × AC15 stream.subscribe from app is allowed 0ms
+     × AC15 stream.subscribe from cli is allowed 0ms
+     × AC15 ask.answer from hook is refused 0ms
+     × AC15 ask.answer from mcp:A is refused 0ms
+     × AC15 ask.answer from app is allowed 0ms
+     × AC15 ask.answer from cli is allowed 0ms
+     × AC15 gates.off from hook is refused 0ms
+     × AC15 gates.off from mcp:A is refused 0ms
+     × AC15 gates.off from app is allowed 0ms
+     × AC15 gates.off from cli is allowed 0ms
+     × AC15 mcp.call from hook is refused 0ms
+     × AC15 mcp.call from mcp:A is allowed 0ms
+     × AC15 mcp.call from app is refused 0ms
+     × AC15 mcp.call from cli is refused 0ms
+     × AC15 evidence.paste from hook is refused 0ms
+     × AC15 evidence.paste from mcp:A is refused 0ms
+     × AC15 evidence.paste from app is allowed 0ms
+     × AC15 evidence.paste from cli is refused 0ms
+     × AC15 run.start from hook is refused 0ms
+     × AC15 run.start from mcp:A is refused 0ms
+     × AC15 run.start from app is allowed 0ms
+     × AC15 run.start from cli is allowed 0ms
+     × AC15 test.load from hook is refused 0ms
+     × AC15 test.load from mcp:A is refused 0ms
+     × AC15 test.load from app is allowed 0ms
+     × AC15 test.load from cli is allowed 0ms
+   ❯ AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own (4)
+     × AC15 hub.stop from hook is refused 74ms
+     × AC15 hub.stop from mcp:A is refused 100ms
+     × AC15 hub.stop from app is allowed 54ms
+     × AC15 hub.stop from cli is allowed 65ms
+   ❯ AC15 #16.ffcc7e73 a hook connection that subscribes, answers an ask or calls deep off is refused, naming its role (1)
+     × AC15 a hook connection is refused stream.subscribe, ask.answer and gates.off, naming hook, and none of them takes effect 61ms
+   ❯ AC15 #16.ffcc7e73 the writer comes from the connection, never the payload (2)
+     × AC15 a hook request whose payload sets writer: app is stored with writer hook 62ms
+     × AC15 (wrong program) a hub that takes writer from the payload fails, naming the event 57ms
+   ❯ AC15 #16.ffcc7e73 credentials: the control token is new each launch, yours alone, and never on a command line (1)
+     × AC15 control.token has mode 0600, changes at each launch, is not on the hub's command line, and an old or wrong one is refused 52ms
+ ❯ hotpath.test.ts (6 tests | 6 failed) 401ms
+   ❯ AC14 #16.82e2f65c during 1,000 hooks, nothing on the hub's main thread runs a child process, reads a directory or lists processes (2)
+     × AC14 the preload finds no child_process call, directory read or process listing on the main thread during 1,000 hooks 69ms
+     × AC14 (wrong program) a planted hub that runs `git rev-parse` in its hook handler fails, naming the call 73ms
+   ❯ AC18 #16.0edb254f with every sync held 50 ms, the socket round trip stays under 2 ms at p95 and no reply takes 50 ms (2)
+     × AC18 30 sessions send 1,000 PreToolUse hooks while the hub commits ten FULL verdicts, checkpoints and backfills 50,000 transcript events 68ms
+     × AC18 (wrong program) a hub that commits through the synchronous binding on its event loop fails, naming the first late reply 60ms
+   ❯ AC19 #16.8f097301 a 16 MB tool output holds up no other session, and its event keeps only catalogue fields and no form of a scrub-list value (2)
+     × AC19 every other session's ack within 20 ms, round trip under 2 ms at p95, and the large event appended once, small and scrubbed 63ms
+     × AC19 (wrong program) a hub that parses and scrubs on its event loop holds the next acknowledgements past 20 ms and fails, naming the first late one 67ms
+ ❯ evidence.test.ts (7 tests | 7 failed) 694ms
+   ❯ AC20 #16.769081da origin comes from the credential: deep_evidence stores origin agent, the app's paste origin you (3)
+     × AC20 a deep_evidence payload saying origin deepbuild stores origin agent; a paste through the app stores origin you 69ms
+     × AC20 (wrong program) a hub that passes the payload's origin to the store fails, naming the file 58ms
+     × AC20 whatever origin the payload names, or none, the store takes it from the credential (40 cases, seed 16) 86ms
+   ❯ AC21 #16.dfe5f026 a run's output is stored with neither its injected token nor its BUILD_ID in any form (2)
+     × AC21 a run with an injected token and a 24-character BUILD_ID stores its output with neither, raw, URL-encoded or base64 at any offset 71ms
+     × AC21 (wrong program) a hub that hands the store no run values stores both and fails, naming the run 67ms
+   ❯ AC22 #16.6e2b63bc on a test clock, the retention pass on day 31 keeps what the record cites and removes the rest (2)
+     × AC22 day 31 removes an uncited day-0 file and keeps a decision's file and an archived transcript 202ms
+     × AC22 (wrong program) a hub that hands the pass an empty set of cited hashes removes the decision's file and fails, naming its hash 140ms
+ ❯ socket.test.ts (3 tests | 3 failed) 194ms
+   ❯ AC4 #16.e6b88436 the socket is not readable by another user (2)
+     × AC4 the installed hub's socket, started under umask 000, appears with mode 0600, owned by you, and keeps it 64ms
+     × AC4 the dev hub's socket, started under umask 000, appears with mode 0600, owned by you, and keeps it 70ms
+   ❯ AC10 #16.03f71eb5 the hub listens on no network port of its own (1)
+     × AC10 with no plug-in turned on, the hub holds no TCP or UDP socket: idle, and after hooks, a paste and a run 59ms
+ ❯ blocked.test.ts (1 test | 1 failed) 89ms
+   ❯ AC8 #16.29f3d795 when an append fails the hub stops acknowledging claims and every gate turns watch-only, BLOCKED, until appends work (1)
+     × AC8 a full disk: claims refused and gates watch-only with a BLOCKED reason; both back once writes succeed 88ms
+ ❯ sessions.test.ts (5 tests | 5 failed) 310ms
+   ❯ AC9 #16.077ffde2 an event that claims a session it can't be checked against is recorded as unverified and never takes it over (3)
+     × AC9 a SessionStart claiming session S that fails only the process tree check 66ms
+     × AC9 a SessionStart claiming session S that fails only the working folder check 67ms
+     × AC9 a SessionStart claiming session S that fails only the transcript check 56ms
+   ❯ AC17 #16.7d3e3988 a SessionEnd for B stamped by hand in session A on one Codex daemon is unverified; B's deep_claim still binds (2)
+     × AC17 the hand-run SessionEnd for B is unverified, and B's deep_claim still binds to B 62ms
+     × AC17 (wrong program) a hub that ends the binding fails, naming B 57ms
+ ❯ crash.test.ts (1 test | 1 failed) 159ms
+   ❯ AC3 #16.dcb0bc5f cut at each durable write point of a scripted 200-event scenario, then restart (1)
+     × AC3 every restart keeps every FULL commit, no ID twice, no log_pos reused, every spooled event once, projections equal their rebuild, and an in-flight run stopped and run again 124ms
+ ❯ protocol.test.ts (10 tests | 10 failed) 60ms
+   ❯ AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why (6)
+     × AC11 "9223372036854775808" is refused naming /seq and why, with no ack, and nothing is appended for it 54ms
+     × AC11 "-1" is refused naming /seq and why, with no ack, and nothing is appended for it 0ms
+     × AC11 "0123" is refused naming /seq and why, with no ack, and nothing is appended for it 0ms
+     × AC11 the JSON number 1760013451123456789 is refused naming /seq and why, with no ack, and nothing is appended for it 0ms
+     × AC11 the stamps 1760013451123456789 and 1760013451123456790, 0 and 9223372036854775807 are taken and read back as the same strings 0ms
+     × AC11 every seq is taken exactly when it is a canonical decimal from 0 to 2^63-1, and otherwise refused naming /seq (1,000 cases, seed 16) 0ms
+   ❯ AC13 #16.4e090bc0 every socket message is one JSON line with a version field (4)
+     × AC13 every line the hub writes to a hook, an unbound deep mcp, the app and the CLI, refusals and stream frames included, is one JSON object with v 0ms
+     × AC13 a request line without a version field is refused naming /v: a method call, a hello and a hook request 0ms
+     × AC13 a line is read whole however it arrives: one request in single bytes, two requests in one write 0ms
+     × AC13 any sequence of requests, cut into writes anywhere, gets one framed, versioned reply per request (1,000 cases, seed 16) 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 110 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  address.test.ts > AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket > AC2 the CLI: `deep hub status` reaches the hub through the forwarded socket the setting names, and exits 3 naming the address when it is gone
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ forwarded address.test.ts:49:17
+ ❯ address.test.ts:56:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/110]⎯
+
+ FAIL  address.test.ts > AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket > AC2 deep-hook (#315): a PreToolUse goes through the forwarded socket the setting names, and the hub records it
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ forwarded address.test.ts:49:17
+ ❯ address.test.ts:69:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/110]⎯
+
+ FAIL  address.test.ts > AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket > AC2 deep mcp (#26): deep_status goes through the forwarded socket the setting names and succeeds
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ forwarded address.test.ts:49:17
+ ❯ address.test.ts:81:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/110]⎯
+
+ FAIL  address.test.ts > AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket > AC2 the app (#34): its socket client's tests pass against the hub through the forwarded socket the setting names
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ forwarded address.test.ts:49:17
+ ❯ address.test.ts:90:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/110]⎯
+
+ FAIL  address.test.ts > AC6 #16.a88e65ab a dev hub with its own root runs beside the installed hub; sessions that didn't opt in still reach the installed one > AC6 the dev hub has its own socket, ledger, evidence and control token, and each hub records only what reached it
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ address.test.ts:100:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/110]⎯
+
+ FAIL  address.test.ts > AC6 #16.a88e65ab a dev hub with its own root runs beside the installed hub; sessions that didn't opt in still reach the installed one > AC6 with a dev hub running, the CLI, deep-hook (#315) and deep mcp (#26) from a worktree that didn't opt in reach the installed hub
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ address.test.ts:130:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/110]⎯
+
+ FAIL  blocked.test.ts > AC8 #16.29f3d795 when an append fails the hub stops acknowledging claims and every gate turns watch-only, BLOCKED, until appends work > AC8 a full disk: claims refused and gates watch-only with a BLOCKED reason; both back once writes succeed
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ blocked.test.ts:18:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 budgets, compared with the merge base in the local preflight > AC12 the perf lane has the hub's three tasks, each a #16 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task hub-cold-start: expected undefined to be defined
+ ❯ budgets.test.ts:32:53
+     30|     for (const [id, mode] of Object.entries(TASKS)) {
+     31|       const task = current.tasks.find((t) => t.id === id);
+     32|       expect(task, `budgets.json has a task ${id}`).toBeDefined();
+       |                                                     ^
+     33|       expect(task!.command, `${id} runs the hub bench in ${mode} mode`…
+     34|       expect(String(task!.initialReason), `${id} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 budgets, compared with the merge base in the local preflight > AC12 `node benchmarks/hub.mjs cold-start` runs and exits 0
+AssertionError: benchmarks/hub.mjs cold-start: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/hub.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:40:63
+     38|   it.each(Object.values(TASKS))('AC12 `node benchmarks/hub.mjs %s` run…
+     39|     const r = await run(NODE, [join(REPO, 'benchmarks/hub.mjs'), mode]…
+     40|     expect(r.code, `benchmarks/hub.mjs ${mode}: ${r.stderr}`).toBe(0);
+       |                                                               ^
+     41|   }, 600_000);
+     42| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 budgets, compared with the merge base in the local preflight > AC12 `node benchmarks/hub.mjs round-trip` runs and exits 0
+AssertionError: benchmarks/hub.mjs round-trip: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/hub.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:40:63
+     38|   it.each(Object.values(TASKS))('AC12 `node benchmarks/hub.mjs %s` run…
+     39|     const r = await run(NODE, [join(REPO, 'benchmarks/hub.mjs'), mode]…
+     40|     expect(r.code, `benchmarks/hub.mjs ${mode}: ${r.stderr}`).toBe(0);
+       |                                                               ^
+     41|   }, 600_000);
+     42| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 budgets, compared with the merge base in the local preflight > AC12 `node benchmarks/hub.mjs idle` runs and exits 0
+AssertionError: benchmarks/hub.mjs idle: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/hub.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:40:63
+     38|   it.each(Object.values(TASKS))('AC12 `node benchmarks/hub.mjs %s` run…
+     39|     const r = await run(NODE, [join(REPO, 'benchmarks/hub.mjs'), mode]…
+     40|     expect(r.code, `benchmarks/hub.mjs ${mode}: ${r.stderr}`).toBe(0);
+       |                                                               ^
+     41|   }, 600_000);
+     42| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 the issue's numbers on the reference Mac > AC12 cold start under 500 ms: from spawning `deep hub run` to the socket answering
+Error: BLOCKED: the hub didn't answer within 10 s: Unsupported command. Run deep --help for available commands.
+
+ ❯ once budgets.test.ts:58:52
+     56|           break;
+     57|         } catch { await new Promise((r) => setTimeout(r, 2)); }
+     58|         if (performance.now() - t0 > 10_000) throw Error(`BLOCKED: the…
+       |                                                    ^
+     59|       }
+     60|       const took = performance.now() - t0;
+ ❯ budgets.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 the issue's numbers on the reference Mac > AC12 a socket round trip under 2 ms at p95: 1,000 PreToolUse requests to their replies
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ budgets.test.ts:73:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/110]⎯
+
+ FAIL  budgets.test.ts > AC12 #16.6034dec3 the issue's numbers on the reference Mac > AC12 with 30 days of history: idle CPU under 0.5% of one core and resident memory under 150 MB
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ budgets.test.ts:98:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/110]⎯
+
+ FAIL  crash.test.ts > AC3 #16.dcb0bc5f cut at each durable write point of a scripted 200-event scenario, then restart > AC3 every restart keeps every FULL commit, no ID twice, no log_pos reused, every spooled event once, projections equal their rebuild, and an in-flight run stopped and run again
+Error: BLOCKED: the hub didn't start under the test VFS: {"exit":{"code":2,"signal":null}} Unsupported command. Run deep --help for available commands.
+
+ ❯ scenario crash.test.ts:73:28
+     71|   await sleep(50);
+     72|   if (exited?.signal === 'SIGKILL' || r.exit?.signal === 'SIGKILL') ou…
+     73|   else if (!r.ready) throw Error(`BLOCKED: the hub didn't start under …
+       |                            ^
+     74|   else await stopHub({ pid: proc.pid, proc });
+     75|   out.points = readPoints(pointsFile);
+ ❯ crash.test.ts:152:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/110]⎯
+
+ FAIL  evidence.test.ts > AC20 #16.769081da origin comes from the credential: deep_evidence stores origin agent, the app's paste origin you > AC20 a deep_evidence payload saying origin deepbuild stores origin agent; a paste through the app stores origin you
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ stored evidence.test.ts:26:17
+ ❯ evidence.test.ts:54:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/110]⎯
+
+ FAIL  evidence.test.ts > AC20 #16.769081da origin comes from the credential: deep_evidence stores origin agent, the app's paste origin you > AC20 (wrong program) a hub that passes the payload's origin to the store fails, naming the file
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ stored evidence.test.ts:26:17
+ ❯ evidence.test.ts:57:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/110]⎯
+
+ FAIL  evidence.test.ts > AC20 #16.769081da origin comes from the credential: deep_evidence stores origin agent, the app's paste origin you > AC20 whatever origin the payload names, or none, the store takes it from the credential (40 cases, seed 16)
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ evidence.test.ts:62:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/110]⎯
+
+ FAIL  evidence.test.ts > AC21 #16.dfe5f026 a run's output is stored with neither its injected token nor its BUILD_ID in any form > AC21 a run with an injected token and a 24-character BUILD_ID stores its output with neither, raw, URL-encoded or base64 at any offset
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ runOutput evidence.test.ts:90:17
+ ❯ evidence.test.ts:110:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/110]⎯
+
+ FAIL  evidence.test.ts > AC21 #16.dfe5f026 a run's output is stored with neither its injected token nor its BUILD_ID in any form > AC21 (wrong program) a hub that hands the store no run values stores both and fails, naming the run
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ runOutput evidence.test.ts:90:17
+ ❯ evidence.test.ts:114:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/110]⎯
+
+ FAIL  evidence.test.ts > AC22 #16.6e2b63bc on a test clock, the retention pass on day 31 keeps what the record cites and removes the rest > AC22 day 31 removes an uncited day-0 file and keeps a decision's file and an archived transcript
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ retention evidence.test.ts:143:22
+ ❯ evidence.test.ts:155:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/110]⎯
+
+ FAIL  evidence.test.ts > AC22 #16.6e2b63bc on a test clock, the retention pass on day 31 keeps what the record cites and removes the rest > AC22 (wrong program) a hub that hands the pass an empty set of cited hashes removes the decision's file and fails, naming its hash
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ retention evidence.test.ts:143:22
+ ❯ evidence.test.ts:158:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/110]⎯
+
+ FAIL  features.test.ts > AC23 #16.6279113a a deep-hook built with a planted feature f_test, against a hub that doesn't list it > AC23 sends no f_test and is decided as before; forced, the hub refuses it naming the field and deep-hook acts as with the hub down
+Error: BLOCKED: cargo build of deep-hook --features plant-f-test --target-dir <checkout>/target/plant-f-test failed: error: the package 'deep-hook' does not contain this feature: plant-f-test
+
+ ❯ buildDeepHook helpers.ts:175:32
+
+ ❯ observe features.test.ts:28:3
+ ❯ features.test.ts:82:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/110]⎯
+
+ FAIL  features.test.ts > AC23 #16.6279113a a deep-hook built with a planted feature f_test, against a hub that doesn't list it > AC23 (wrong program) a hub that ignores the field fails this test
+Error: BLOCKED: cargo build of deep-hook --features plant-f-test --target-dir <checkout>/target/plant-f-test failed: error: the package 'deep-hook' does not contain this feature: plant-f-test
+
+ ❯ buildDeepHook helpers.ts:175:32
+
+ ❯ observe features.test.ts:28:3
+ ❯ features.test.ts:85:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/110]⎯
+
+ FAIL  hotpath.test.ts > AC14 #16.82e2f65c during 1,000 hooks, nothing on the hub's main thread runs a child process, reads a directory or lists processes > AC14 the preload finds no child_process call, directory read or process listing on the main thread during 1,000 hooks
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ watched hotpath.test.ts:32:17
+ ❯ hotpath.test.ts:52:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/110]⎯
+
+ FAIL  hotpath.test.ts > AC14 #16.82e2f65c during 1,000 hooks, nothing on the hub's main thread runs a child process, reads a directory or lists processes > AC14 (wrong program) a planted hub that runs `git rev-parse` in its hook handler fails, naming the call
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ watched hotpath.test.ts:32:17
+ ❯ hotpath.test.ts:55:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/110]⎯
+
+ FAIL  hotpath.test.ts > AC18 #16.0edb254f with every sync held 50 ms, the socket round trip stays under 2 ms at p95 and no reply takes 50 ms > AC18 30 sessions send 1,000 PreToolUse hooks while the hub commits ten FULL verdicts, checkpoints and backfills 50,000 transcript events
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ heldSyncs hotpath.test.ts:81:17
+ ❯ hotpath.test.ts:107:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/110]⎯
+
+ FAIL  hotpath.test.ts > AC18 #16.0edb254f with every sync held 50 ms, the socket round trip stays under 2 ms at p95 and no reply takes 50 ms > AC18 (wrong program) a hub that commits through the synchronous binding on its event loop fails, naming the first late reply
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ heldSyncs hotpath.test.ts:81:17
+ ❯ hotpath.test.ts:110:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/110]⎯
+
+ FAIL  hotpath.test.ts > AC19 #16.8f097301 a 16 MB tool output holds up no other session, and its event keeps only catalogue fields and no form of a scrub-list value > AC19 every other session's ack within 20 ms, round trip under 2 ms at p95, and the large event appended once, small and scrubbed
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ bigOutput hotpath.test.ts:126:17
+ ❯ hotpath.test.ts:162:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/110]⎯
+
+ FAIL  hotpath.test.ts > AC19 #16.8f097301 a 16 MB tool output holds up no other session, and its event keeps only catalogue fields and no form of a scrub-list value > AC19 (wrong program) a hub that parses and scrubs on its event loop holds the next acknowledgements past 20 ms and fails, naming the first late one
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ bigOutput hotpath.test.ts:126:17
+ ❯ hotpath.test.ts:167:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/110]⎯
+
+ FAIL  lock.test.ts > AC1 #16.90def3b3 two hub starts at once leave exactly one hub running > AC1 two `deep hub run` on one root, started together, leave one hub; the other exits (5 rounds)
+AssertionError: round 1: exactly one start reports ready: [{"exit":{"code":2,"signal":null}},{"exit":{"code":2,"signal":null}}]; stderr: Unsupported command. Run deep --help for available commands.
+ | Unsupported command. Run deep --help for available commands.
+: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ lock.test.ts:23:147
+     21|       const [ra, rb] = await Promise.all([settle(a), settle(b)]);
+     22|       const ready = [ra, rb].filter((r) => r.ready);
+     23|       expect(ready.length, `round ${round}: exactly one start reports …
+       |                                                                                                                                                   ^
+     24|       const [winner, loser] = ra.ready ? [a, b] : [b, a];
+     25|       const lost = ra.ready ? rb : ra;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/110]⎯
+
+ FAIL  lock.test.ts > AC1 #16.90def3b3 two hub starts at once leave exactly one hub running > AC1 two `deep hub start` at once, through the login service, leave one hub running
+AssertionError: the first deep hub start: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ lock.test.ts:47:65
+     45|     const env = { DEEP_HUB_LAUNCHER: launcher, DEEP_TEST_LAUNCHER_LOG:…
+     46|     const [one, two] = await Promise.all([deep(home, ['hub', 'start'],…
+     47|     expect(one.code, `the first deep hub start: ${one.stderr}`).toBe(0…
+       |                                                                 ^
+     48|     expect(two.code, `the second deep hub start: ${two.stderr}`).toBe(…
+     49|     await sleep(1000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/110]⎯
+
+ FAIL  lock.test.ts > AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub > AC5 after kill -9 the next start is ready within 5 s, three times over, with the old socket file left behind
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ lock.test.ts:63:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/110]⎯
+
+ FAIL  lock.test.ts > AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub > AC5 a stale hub.pid naming another live program, or a dead one, never stops the hub from starting
+ FAIL  lock.test.ts > AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub > AC5 a stale hub.lock naming another live program, or a dead one, never stops the hub from starting
+ FAIL  lock.test.ts > AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub > AC5 a stale deep.pid naming another live program, or a dead one, never stops the hub from starting
+ FAIL  lock.test.ts > AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub > AC5 a stale deep-hub.pid naming another live program, or a dead one, never stops the hub from starting
+ FAIL  lock.test.ts > AC5 #16.a89956a3 kill -9 leaves no lock that blocks the next start; a stale PID file never stops the hub > AC5 a stale deepbuild.pid naming another live program, or a dead one, never stops the hub from starting
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ lock.test.ts:92:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/110]⎯
+
+ FAIL  lock.test.ts > AC16 #16.689b55b1 a second start exits on the lock; the accept loop survives EMFILE > AC16 a second hub start exits on the lock and the next hook still reaches the first hub
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ secondStart lock.test.ts:108:19
+ ❯ lock.test.ts:130:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/110]⎯
+
+ FAIL  lock.test.ts > AC16 #16.689b55b1 a second start exits on the lock; the accept loop survives EMFILE > AC16 (wrong program) a hub that unlinks hub.sock before taking the lock fails this test
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ secondStart lock.test.ts:108:19
+ ❯ lock.test.ts:133:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/110]⎯
+
+ FAIL  lock.test.ts > AC16 #16.689b55b1 a second start exits on the lock; the accept loop survives EMFILE > AC16 with the descriptor limit at the open count plus 4, a burst of 50 hooks is each answered or refused, and the next hook is answered
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ burst lock.test.ts:142:17
+ ❯ lock.test.ts:157:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/110]⎯
+
+ FAIL  lock.test.ts > AC16 #16.689b55b1 a second start exits on the lock; the accept loop survives EMFILE > AC16 (wrong program) a hub whose accept loop stops at EMFILE fails this test
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ burst lock.test.ts:142:17
+ ❯ lock.test.ts:163:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/110]⎯
+
+ FAIL  protocol.test.ts > AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why > AC11 "9223372036854775808" is refused naming /seq and why, with no ack, and nothing is appended for it
+ FAIL  protocol.test.ts > AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why > AC11 "-1" is refused naming /seq and why, with no ack, and nothing is appended for it
+ FAIL  protocol.test.ts > AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why > AC11 "0123" is refused naming /seq and why, with no ack, and nothing is appended for it
+ FAIL  protocol.test.ts > AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why > AC11 the JSON number 1760013451123456789 is refused naming /seq and why, with no ack, and nothing is appended for it
+ FAIL  protocol.test.ts > AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why > AC11 the stamps 1760013451123456789 and 1760013451123456790, 0 and 9223372036854775807 are taken and read back as the same strings
+ FAIL  protocol.test.ts > AC11 #16.7fa39565 a seq outside 0..2^63-1 or in any other form is refused at the hub, naming the field and why > AC11 every seq is taken exactly when it is a canonical decimal from 0 to 2^63-1, and otherwise refused naming /seq (1,000 cases, seed 16)
+ FAIL  protocol.test.ts > AC13 #16.4e090bc0 every socket message is one JSON line with a version field > AC13 every line the hub writes to a hook, an unbound deep mcp, the app and the CLI, refusals and stream frames included, is one JSON object with v
+ FAIL  protocol.test.ts > AC13 #16.4e090bc0 every socket message is one JSON line with a version field > AC13 a request line without a version field is refused naming /v: a method call, a hello and a hook request
+ FAIL  protocol.test.ts > AC13 #16.4e090bc0 every socket message is one JSON line with a version field > AC13 a line is read whole however it arrives: one request in single bytes, two requests in one write
+ FAIL  protocol.test.ts > AC13 #16.4e090bc0 every socket message is one JSON line with a version field > AC13 any sequence of requests, cut into writes anywhere, gets one framed, versioned reply per request (1,000 cases, seed 16)
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ protocol.test.ts:18:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/110]⎯
+
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from hook is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from app is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hook from cli is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 hub.health from cli is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 events.read from cli is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 stream.subscribe from cli is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 ask.answer from cli is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 gates.off from cli is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from mcp:A is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from app is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 mcp.call from cli is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 evidence.paste from cli is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 run.start from cli is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: every role against every socket method > AC15 test.load from cli is allowed
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ setUp roles.test.ts:55:15
+ ❯ roles.test.ts:100:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/110]⎯
+
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from hook is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from mcp:A is refused
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from app is allowed
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the role table: hub.stop, each role on a hub of its own > AC15 hub.stop from cli is allowed
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ setUp roles.test.ts:55:15
+ ❯ roles.test.ts:111:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/110]⎯
+
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 a hook connection that subscribes, answers an ask or calls deep off is refused, naming its role > AC15 a hook connection is refused stream.subscribe, ask.answer and gates.off, naming hook, and none of them takes effect
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ setUp roles.test.ts:55:15
+ ❯ roles.test.ts:123:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/110]⎯
+
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the writer comes from the connection, never the payload > AC15 a hook request whose payload sets writer: app is stored with writer hook
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ payloadSaysApp roles.test.ts:148:17
+ ❯ roles.test.ts:165:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/110]⎯
+
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 the writer comes from the connection, never the payload > AC15 (wrong program) a hub that takes writer from the payload fails, naming the event
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ payloadSaysApp roles.test.ts:148:17
+ ❯ roles.test.ts:168:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/110]⎯
+
+ FAIL  roles.test.ts > AC15 #16.ffcc7e73 credentials: the control token is new each launch, yours alone, and never on a command line > AC15 control.token has mode 0600, changes at each launch, is not on the hub's command line, and an old or wrong one is refused
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ roles.test.ts:177:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/110]⎯
+
+ FAIL  service.test.ts > AC7 #16.d8339694 closing the terminal or SSH session that started the hub leaves it running; every stop records its reason > AC7 started by `deep hub start`, the hub outlives the terminal that started it and its hangups, with the secret store and the network still reachable
+Error: timed out after 30000 ms waiting for the hub `deep hub start` started
+ ❯ waitFor helpers.ts:405:38
+    403|     const value = await probe();
+    404|     if (value !== undefined && value !== false) return value;
+    405|     if (Date.now() > deadline) throw Error(`timed out after ${timeoutM…
+       |                                      ^
+    406|     await sleep(20);
+    407|   }
+ ❯ service.test.ts:37:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/110]⎯
+
+ FAIL  service.test.ts > AC7 #16.d8339694 closing the terminal or SSH session that started the hub leaves it running; every stop records its reason > AC7 every stop records its reason: SIGTERM, SIGINT, hub.stop from the CLI, and a kill -9 found at the next start
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ service.test.ts:74:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/110]⎯
+
+ FAIL  sessions.test.ts > AC9 #16.077ffde2 an event that claims a session it can't be checked against is recorded as unverified and never takes it over > AC9 a SessionStart claiming session S that fails only the process tree check
+ FAIL  sessions.test.ts > AC9 #16.077ffde2 an event that claims a session it can't be checked against is recorded as unverified and never takes it over > AC9 a SessionStart claiming session S that fails only the working folder check
+ FAIL  sessions.test.ts > AC9 #16.077ffde2 an event that claims a session it can't be checked against is recorded as unverified and never takes it over > AC9 a SessionStart claiming session S that fails only the transcript check
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ sessions.test.ts:31:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[48/110]⎯
+
+ FAIL  sessions.test.ts > AC17 #16.7d3e3988 a SessionEnd for B stamped by hand in session A on one Codex daemon is unverified; B's deep_claim still binds > AC17 the hand-run SessionEnd for B is unverified, and B's deep_claim still binds to B
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ daemon sessions.test.ts:89:17
+ ❯ sessions.test.ts:119:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[49/110]⎯
+
+ FAIL  sessions.test.ts > AC17 #16.7d3e3988 a SessionEnd for B stamped by hand in session A on one Codex daemon is unverified; B's deep_claim still binds > AC17 (wrong program) a hub that ends the binding fails, naming B
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ daemon sessions.test.ts:89:17
+ ❯ sessions.test.ts:122:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[50/110]⎯
+
+ FAIL  socket.test.ts > AC4 #16.e6b88436 the socket is not readable by another user > AC4 the installed hub's socket, started under umask 000, appears with mode 0600, owned by you, and keeps it
+ FAIL  socket.test.ts > AC4 #16.e6b88436 the socket is not readable by another user > AC4 the dev hub's socket, started under umask 000, appears with mode 0600, owned by you, and keeps it
+Error: BLOCKED: the hub didn't start: {"exit":{"code":2,"signal":null}} Unsupported command. Run deep --help for available commands.
+
+ ❯ socket.test.ts:40:27
+     38|       watching = false;
+     39|       await watch;
+     40|       if (!r.ready) throw Error(`BLOCKED: the hub didn't start: ${JSON…
+       |                           ^
+     41|       expect(r.ready.socket).toBe(socket);
+     42|       const st = statSync(socket);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[51/110]⎯
+
+ FAIL  socket.test.ts > AC10 #16.03f71eb5 the hub listens on no network port of its own > AC10 with no plug-in turned on, the hub holds no TCP or UDP socket: idle, and after hooks, a paste and a run
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":2,"signal":null}; stderr: Unsupported command. Run deep --help for available commands.
+
+ ❯ startHub helpers.ts:249:11
+
+ ❯ socket.test.ts:74:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[52/110]⎯
+
+
+ Test Files  13 failed (13)
+      Tests  110 failed (110)
+   Start at  13:09:26
+   Duration  68.61s (tests 99%, import 1%)
+
