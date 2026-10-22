@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-canvas-motion", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-marks-render", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
+members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-canvas-motion", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-marks-render", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
