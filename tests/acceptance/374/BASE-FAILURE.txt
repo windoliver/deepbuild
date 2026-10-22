@@ -1,0 +1,216 @@
+Base commit: 7222b16 (Merge pull request #672 from windoliver/feat/96-shared-documents)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/374 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: deep-canvas-render builds and has check and raster. 10 of 11 tests fail for the expected reason (a #374 field the base lacks or ignores: span, stop opacity, stroke opacity, kind along, steps, scale_stroke, dash count; no stroke is drawn on a rect or a plain circle). The sw to ne square already passes: #373 built from/to as box points.
+Date: 2026-10-22T20:00:36Z  Node v23.9.0  darwin-arm64
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/374
+
+ ❯ steps.test.ts (2 tests | 2 failed) 11818ms
+   ❯ AC3 steps give each member of a group one solid color mixed from the stops by its rank (2)
+     × AC3 steps {over: children, stops: [{at: 0, role: a}, {at: 1, role: b}], by: order} over 5 squares colors the third at the OKLab midpoint within 0.001 ΔEOK, and the first and last exactly a and b 1883ms
+     × AC3 members take their rank from their order keys, not from their position or their ID 98ms
+ ❯ stroke.test.ts (2 tests | 2 failed) 4817ms
+   ❯ AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle (2)
+     × AC2 a circle with a 4 u stroke scaled 3× by its parent keeps a 4 ± 0.1 u stroke, and 12 ± 0.1 u with scale_stroke: true 2593ms
+     × AC2 count: 12 on a circle draws 12 dashes and 12 gaps of equal length within 0.5 px 245ms
+ ❯ paint.test.ts (7 tests | 6 failed) 6142ms
+   ❯ AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's (7)
+     × AC1 with span: parent over three squares in a row, the middle square's centre reads the stops' OKLab midpoint within 0.001 ΔEOK 193ms
+     × AC1 fill opacity 0.5 under stroke opacity 1 draws the outline's centre line at alpha ≥ 0.99 over a fill at 0.5 ± 0.01 195ms
+     × AC1 the stroke's own opacity applies to the stroke alone, and the paint's opacity multiplies both 194ms
+     × AC1 a stop's opacity is its own: a ramp from opacity 0 to 1 in one role reads that role at alpha t 207ms
+     × AC1 kind: along colors a stroke by arc length from the path's start, around a bend where a box-wise gradient differs 96ms
+     × AC1 stops naming a status role are refused in a steps fill, an along stroke and a stop with opacity, naming the item 634ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  paint.test.ts > AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's > AC1 with span: parent over three squares in a row, the middle square's centre reads the stops' OKLab midpoint within 0.001 ΔEOK
+AssertionError: the left sample (70, 70) reads the one gradient at t = 0.148: expected 78.33541839134773 to be less than or equal to 1
+ ❯ paint.test.ts:57:156
+     55|     for (const [x, name] of [[70, 'left'], [310, 'right'], [30, 'left …
+     56|       const expected = oklabRamp(PS, (x + 0.5 - 20) / 341);
+     57|       expect(codeError(pixel(image, x, 70), expected), `the ${name} sa…
+       |                                                                                                                                                            ^
+     58|     }
+     59|   }, 300_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  paint.test.ts > AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's > AC1 fill opacity 0.5 under stroke opacity 1 draws the outline's centre line at alpha ≥ 0.99 over a fill at 0.5 ± 0.01
+AssertionError: the fill at (110, 80) holds alpha 1.000, not 0.5 ± 0.01: expected 0.5 to be less than or equal to 0.01
+ ❯ paint.test.ts:71:116
+     69|     const { image } = raster(dir, doc, LOOK, 'fill 0.5, stroke 1');
+     70|     const fillAlpha = alphaOver(pixel(image, 110, 80), white, fill);
+     71|     expect(Math.abs(fillAlpha - 0.5), `the fill at (110, 80) holds alp…
+       |                                                                                                                    ^
+     72|     const behind: Rgb = pixel(image, 110, 80);
+     73|     const overGround = alphaOver(pixel(image, 110, 39), white, stroke);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  paint.test.ts > AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's > AC1 the stroke's own opacity applies to the stroke alone, and the paint's opacity multiplies both
+AssertionError: B's stroke over the ground (row 39): alpha 0.000, expected 0.5: expected 0.5 to be less than or equal to 0.01
+ ❯ near paint.test.ts:89:139
+     87|     expectClean(doc, LOOK, 'stroke opacity apart from the fill\'s, and…
+     88|     const { image } = raster(dir, doc, LOOK, 'stroke 0.5; paint 0.5');
+     89|     const near = (a: number, b: number, what: string): void => { expec…
+       |                                                                                                                                           ^
+     90|     near(alphaOver(pixel(image, 110, 39), white, stroke), 0.5, 'B\'s s…
+     91|     expect(codeError(pixel(image, 110, 80), fill), 'B\'s fill at its c…
+ ❯ paint.test.ts:90:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  paint.test.ts > AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's > AC1 a stop's opacity is its own: a ramp from opacity 0 to 1 in one role reads that role at alpha t
+AssertionError: the ramp over the ground: expected [ …(16) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "column 20 (t = 0.002) reads [180,60,20], 234.54 code values from [254.9,254.6,254.5]",
++   "column 36 (t = 0.064) reads [180,60,20], 219.85 code values from [250.2,242.4,239.9]",
++   "column 52 (t = 0.127) reads [180,60,20], 205.17 code values from [245.5,230.2,225.2]",
++   "column 68 (t = 0.189) reads [180,60,20], 190.48 code values from [240.8,218.1,210.5]",
++   "column 84 (t = 0.252) reads [180,60,20], 175.79 code values from [236.1,205.9,195.8]",
++   "column 100 (t = 0.314) reads [180,60,20], 161.10 code values from [231.4,193.7,181.1]",
++   "column 116 (t = 0.377) reads [180,60,20], 146.42 code values from [226.7,181.5,166.4]",
++   "column 132 (t = 0.439) reads [180,60,20], 131.73 code values from [222,169.3,151.7]",
++   "column 148 (t = 0.502) reads [180,60,20], 117.04 code values from [217.4,157.1,137]",
++   "column 164 (t = 0.564) reads [180,60,20], 102.35 code values from [212.7,144.9,122.4]",
++   "column 180 (t = 0.627) reads [180,60,20], 87.67 code values from [208,132.7,107.7]",
++   "column 196 (t = 0.689) reads [180,60,20], 72.98 code values from [203.3,120.6,93]",
++   "column 212 (t = 0.752) reads [180,60,20], 58.29 code values from [198.6,108.4,78.3]",
++   "column 228 (t = 0.814) reads [180,60,20], 43.60 code values from [193.9,96.2,63.6]",
++   "column 244 (t = 0.877) reads [180,60,20], 28.92 code values from [189.2,84,48.9]",
++   "column 260 (t = 0.939) reads [180,60,20], 14.23 code values from [184.5,71.8,34.2]",
++ ]
+
+ ❯ paint.test.ts:110:50
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  paint.test.ts > AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's > AC1 kind: along colors a stroke by arc length from the path's start, around a bend where a box-wise gradient differs
+AssertionError: an along stroke over data roles: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "gradient_kind bend items/bend/params/paint/stroke/gradient/kind",
++ ]
+
+ ❯ expectClean helpers.ts:190:109
+    188|   const result = check(doc, look);
+    189|   const errors = errorsOf(result);
+    190|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    191|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    192| }
+ ❯ paint.test.ts:118:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  paint.test.ts > AC1 a gradient across a box or a group, and a stroke opacity apart from the fill's > AC1 stops naming a status role are refused in a steps fill, an along stroke and a stop with opacity, naming the item
+AssertionError: the along stroke over data roles: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "gradient_kind a items/a/params/paint/stroke/gradient/kind",
++ ]
+
+ ❯ expectClean helpers.ts:190:109
+    188|   const result = check(doc, look);
+    189|   const errors = errorsOf(result);
+    190|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    191|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    192| }
+ ❯ paint.test.ts:153:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+ FAIL  steps.test.ts > AC3 steps give each member of a group one solid color mixed from the stops by its rank > AC3 steps {over: children, stops: [{at: 0, role: a}, {at: 1, role: b}], by: order} over 5 squares colors the third at the OKLab midpoint within 0.001 ΔEOK, and the first and last exactly a and b
+AssertionError: steps over five children: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_paint sq0 items/sq0/params/paint/fill/role",
++ ]
+
+ ❯ expectClean helpers.ts:190:109
+    188|   const result = check(doc, look);
+    189|   const errors = errorsOf(result);
+    190|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    191|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    192| }
+ ❯ steps.test.ts:28:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  steps.test.ts > AC3 steps give each member of a group one solid color mixed from the stops by its rank > AC3 members take their rank from their order keys, not from their position or their ID
+AssertionError: steps with shuffled order keys: the check raises no error: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "bad_paint sq0 items/sq0/params/paint/fill/role",
++ ]
+
+ ❯ expectClean helpers.ts:190:109
+    188|   const result = check(doc, look);
+    189|   const errors = errorsOf(result);
+    190|   expect(errors.map((e) => `${e.code} ${e.ids.join(',')} ${e.path}`), …
+       |                                                                                                             ^
+    191|   expect(result.ok, `${what}: the check passes`).toBe(true);
+    192| }
+ ❯ steps.test.ts:49:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  stroke.test.ts > AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle > AC2 a circle with a 4 u stroke scaled 3× by its parent keeps a 4 ± 0.1 u stroke, and 12 ± 0.1 u with scale_stroke: true
+AssertionError: the unscaled-stroke ring's crossing is centred at x = -1.00, not 240 (the parent's 3× scale applied to the geometry): expected 241 to be less than or equal to 0.3
+ ❯ stroke.test.ts:36:177
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  stroke.test.ts > AC2 a stroke keeps its width under a parent's scale unless scale_stroke is true, and a dash count fits a closed circle > AC2 count: 12 on a circle draws 12 dashes and 12 gaps of equal length within 0.5 px
+AssertionError: 12 dashes and 12 gaps make 24 edges along the centre line, found 0: expected +0 to be 24 // Object.is equality
+
+- Expected
++ Received
+
+- 24
++ 0
+
+ ❯ stroke.test.ts:65:118
+     63|       previous = value;
+     64|     }
+     65|     expect(crossings.length, `12 dashes and 12 gaps make 24 edges alon…
+       |                                                                                                                      ^
+     66|     const wanted = (2 * Math.PI * R) / 24;
+     67|     const lengths = crossings.map((c, i) => (i + 1 < crossings.length …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  10 failed | 1 passed (11)
+   Start at  13:00:13
+   Duration  23.14s (tests 100%)
+
