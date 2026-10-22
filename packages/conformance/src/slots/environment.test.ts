@@ -327,6 +327,25 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('has its fixture server end the helper it started when the ready marker cannot be written', async () => {
+    const server = fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url));
+    const run = 'run-marker-test-token';
+    // The marker's folder does not exist, so the marker can't be written after the helper was started.
+    const child = spawn(process.execPath, [server, '0', '/health', 'tok', '10', '/nonexistent-deep-env/ready', run, 'helper'], { stdio: 'ignore' });
+    const helpers = (): string[] => execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/helper.mjs') && l.includes(run));
+    try {
+      // The server listens (on a port of its own) and the marker step has run once the helper is gone; give it a moment.
+      const until = Date.now() + 3000;
+      while (Date.now() < until && (helpers().length > 0 || child.exitCode !== null)) await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(child.exitCode).toBeNull();
+      expect(helpers()).toEqual([]);
+    } finally {
+      child.kill('SIGKILL');
+      for (const line of helpers()) { const pid = Number(line.trim().split(/\s+/)[0]); if (pid > 1) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+    }
+  });
+
   it('passes the clean fill on the same fixture in two kit runs at once', async () => {
     const k = kit();
     const reports = await Promise.all([0, 1].map(() => runKit(k, cleanFills(k)[0]!, { parts: ['fixed'] })));

@@ -353,6 +353,9 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     // An environment can take the request at once and hold its answer until it is ready: then ready was reported
     // before health answered all the same. Its next answer, from a server now surely ready, is the measure of what
     // an answer costs on this machine at this moment, so a slow machine slows both and only a held first answer stands out.
+    // A route that is slow by the same measure on every answer looks, from outside, like one the fill waited for before
+    // returning; whether it did is the fill's own request, which no probe of the kit's can see. That is the limit of a
+    // judgment made from outside the fill.
     const askedAgain = Date.now();
     const again = probe(lease.port, spec.health);
     const second = Date.now() - askedAgain;

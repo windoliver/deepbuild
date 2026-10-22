@@ -21,7 +21,7 @@ const startHelper = () => {
     : helper === 'quiet' ? spawn(process.execPath, [HELPER], { detached: true, stdio: 'ignore' })
     : null;
   grandchild?.unref();
-  return grandchild?.pid ?? null;
+  return grandchild;
 };
 const server = createServer((request, response) => {
   if (request.method === 'GET' && request.url === health) {
@@ -39,11 +39,12 @@ setTimeout(() => {
     const grandchild = startHelper();
     // The ready marker names the processes this environment is made of, so the kit knows what it started; written
     // whole, then moved into place, so a reader never sees half of it. A fill that never waits for the marker has
-    // removed its folder already; the server serves on regardless, so that fill is judged on its health answer.
+    // removed its folder already; the server serves on regardless, so that fill is judged on its health answer, but
+    // a helper nobody was told of is ended here, so no marker means no process the kit could not have known.
     try {
-      writeFileSync(`${ready}.tmp`, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild }));
+      writeFileSync(`${ready}.tmp`, JSON.stringify({ port: Number(port), pid: process.pid, helper: grandchild?.pid ?? null }));
       renameSync(`${ready}.tmp`, ready);
-    } catch { /* nobody is waiting for the marker */ }
+    } catch { grandchild?.kill('SIGKILL'); }
   });
 }, Number(warmup));
 // A fixture server never outlives its run by much.
