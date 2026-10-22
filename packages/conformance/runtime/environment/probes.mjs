@@ -18,9 +18,11 @@ const lease = () => new Promise((resolve, reject) => {
 // a redirect is an error, since the answer must come from the leased port itself.
 // The token is read from the whole body here, where it is whole: the body that crosses the buffer may be cut.
 const tokenIn = (body) => { try { const parsed = JSON.parse(body); return parsed !== null && typeof parsed === 'object' && 'token' in parsed ? parsed.token : undefined; } catch { return undefined; } };
+// A request given up on after the limit is marked so: the kit reads it as its own limit reached, not as the environment's answer.
+const timedOut = (e) => [e?.name, e?.cause?.name].some((name) => name === 'TimeoutError' || name === 'AbortError');
 const probe = ({ port, path }) => fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(2500), headers: { connection: 'close' }, redirect: 'error' })
-  .then((r) => r.text().then((body) => ({ status: r.status, body, token: tokenIn(body), error: null })))
-  .catch((e) => ({ status: null, body: '', token: undefined, error: String(e) }));
+  .then((r) => r.text().then((body) => ({ status: r.status, body, token: tokenIn(body), error: null, timedOut: false })))
+  .catch((e) => ({ status: null, body: '', token: undefined, error: String(e), timedOut: timedOut(e) }));
 // Open, or the error code the connect gave: only a refusal proves nothing listens; the kit reads anything else as unknown.
 const listening = ({ port }) => new Promise((resolve) => {
   const socket = connect(port, '127.0.0.1');

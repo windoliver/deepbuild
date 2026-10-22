@@ -21,7 +21,8 @@ const SERVER = fileURLToPath(new URL('../../runtime/environment/server.mjs', imp
 
 export interface EnvSpec { health: string; token: string; warmup: number }
 /**
- * What the hub leases a run: a loopback port, and the run token every process of the environment carries on its
+ * What the hub leases a run: a port on the IPv4 loopback address 127.0.0.1 (the address the kit's probes speak to;
+ * a listener on ::1 alone is not on the lease), and the run token every process of the environment carries on its
  * command line, so that after down the hub can tell nothing of the run is left. The kit issues one per case.
  */
 export interface Lease { port: number; token: string }
@@ -34,8 +35,8 @@ export interface EnvironmentFill extends SlotFill {
 }
 
 const RULES = {
-  health: { id: 'ready-means-healthy', rule: 'up returns only once the environment\'s health route answers on the leased port with the spec\'s token.', message: 'reported ready before its health check answered' },
-  port: { id: 'binds-leased-port', rule: 'The environment binds the port the hub leased it and no other.', message: 'bound a port outside its lease' },
+  health: { id: 'ready-means-healthy', rule: 'up returns only once the environment\'s health route answers on the leased port, at 127.0.0.1, with the spec\'s token.', message: 'reported ready before its health check answered' },
+  port: { id: 'binds-leased-port', rule: 'The environment binds the port the hub leased it, at 127.0.0.1, and no other.', message: 'bound a port outside its lease' },
   down: { id: 'down-stops-process', rule: 'After down, the environment\'s process is gone, nothing listens on the leased port, and no process carries the run token.', message: 'left its process running after down' },
 };
 const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule }));
@@ -181,8 +182,17 @@ export const leasePort = (): number => {
   return port as number;
 };
 /** A GET's status and body, and the `token` field of the body as JSON, read whole in the worker (the body may arrive cut). */
-interface Probe { status: number | null; body: string; token?: unknown; error: string | null }
-const probe = (port: number, path: string): Probe => ask<Probe>({ op: 'probe', port, path });
+interface Probe { status: number | null; body: string; token?: unknown; error: string | null; timedOut?: boolean }
+const PROBE_LIMIT_MS = 2500;
+/**
+ * One GET on the loopback port. A request the worker gave up on after the kit's own limit is no answer about the
+ * environment: no rule names a deadline, so it is BLOCKED, never a failing of the fill.
+ */
+function probe(port: number, path: string): Probe {
+  const answer = ask<Probe>({ op: 'probe', port, path });
+  if (answer.timedOut) throw new Finding('BLOCKED', `GET ${path} on ${port} gave no answer within ${PROBE_LIMIT_MS} ms, the kit's probe limit, so whether the environment answers there is unknown`, ['probe_timeout']);
+  return answer;
+}
 /** Whether something accepts connections on the loopback port: open, or refused; any other answer is unknown, BLOCKED. */
 const listening = (port: number): boolean => {
   const answer = ask<{ open?: unknown; code?: unknown }>({ op: 'listening', port });

@@ -150,6 +150,25 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('reads BLOCKED, not FAIL, when the health route gives no answer within the kit\'s own probe limit', async () => {
+    const k = kit();
+    // The health answer is held past 2.5 s; no rule names a deadline, so the kit has no answer, not a wrong one.
+    const script = `
+      const [port, token] = process.argv.slice(1);
+      require('node:http').createServer((q, s) => {
+        if (q.url === '/ping') { s.writeHead(204); s.end(); return; }
+        setTimeout(() => { s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ ok: true, token })); }, 4000);
+      }).listen(Number(port), '127.0.0.1');
+      process.on('SIGTERM', () => process.exit(0));`;
+    const children: ChildProcess[] = [];
+    try {
+      const report = await runKit(k, scripted(script, children), { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'probe_timeout'], ['BLOCKED', 'probe_timeout']]);
+    } finally {
+      for (const c of children) c.kill('SIGKILL');
+    }
+  }, 15_000);
+
   it('refuses an environment that listens on a second port besides its lease', async () => {
     const k = kit();
     const script = `
