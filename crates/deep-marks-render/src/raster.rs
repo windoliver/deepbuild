@@ -2,32 +2,24 @@
 //! pipeline at the scalar SIMD level, the configuration goldens and snapshots render with
 //! (technical design: Decided, The 2D renderer), and an item's outline as marks2d builds it.
 //!
-//! Gradients reach Vello as the OKLab ramp's sRGB-encoded stops (paint), so Vello mixes them in
-//! encoded space as 2D composites. A rect mask and a frame's overflow are scissors; an alpha or
-//! luminance mask renders its own paint, takes its coverage (luminance in linear light) and draws
-//! its items through one mask layer; a group below opacity 1 draws through one opacity layer.
+//! Paints, outlines and scopes come from deep-marks-vello, shared with render-back's snapshots.
 //! Status marks and their legend draw last, outside every scope, so no mask reaches them.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use deep_canvas::color::srgb_decode;
 use deep_canvas_marks::look::Look;
-use deep_canvas_marks::paint::{self, Extend, Geometry, Ramp};
 use deep_canvas_marks::path::Verb;
-use deep_canvas_marks::scene::{self, Fill, ImageFit, Mark, Planted, Record, Rgb, Scope};
+use deep_canvas_marks::scene::{self, ImageFit, Mark, Planted, Record, Rgb};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
+use deep_marks_vello::{
+    bez, brush, image, rasterizer, rect, settings, shape, solid, stroke, Scopes,
+};
 use serde_json::{json, Map, Value};
-use vello_cpu::color::{AlphaColor, DynamicColor, Srgb};
-use vello_cpu::kurbo::{Affine, BezPath, Cap, Join, Rect, RoundedRect, Shape, Stroke};
-use vello_cpu::peniko::{
-    self, ColorStop, ColorStops, Fill as FillRule, Gradient, ImageAlphaType, ImageSampler,
-};
-use vello_cpu::{
-    Image, ImageSource, Level, Mask, PaintType, PixelMetadata, Pixmap, RasterizerSettings,
-    RenderContext, RenderMode, RenderSettings, Resources,
-};
+use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
+use vello_cpu::peniko::{Fill as FillRule, ImageAlphaType, ImageSampler};
+use vello_cpu::{Image, ImageSource, Pixmap, RenderContext, Resources};
 
 use crate::asset;
 use crate::status::{self, label_of, Prim};
@@ -45,127 +37,6 @@ pub struct Request {
     pub planted: Planted,
     /// #373 AC6's wrong program: a luminance mask that reads encoded luma.
     pub encoded_luma: bool,
-}
-
-fn settings() -> RenderSettings {
-    RenderSettings {
-        level: Level::fallback(),
-        num_threads: 0,
-    }
-}
-
-fn rgba(c: [f64; 3]) -> AlphaColor<Srgb> {
-    AlphaColor::new([c[0] as f32, c[1] as f32, c[2] as f32, 1.0])
-}
-
-fn solid(c: Rgb) -> PaintType {
-    AlphaColor::from_rgba8(c[0], c[1], c[2], 255).into()
-}
-
-/// A ramp as Vello's gradient, its stops already the OKLab ramp in encoded sRGB.
-fn gradient(ramp: &Ramp) -> PaintType {
-    let p = |q: [f64; 2]| (q[0], q[1]);
-    let mut g = match ramp.geometry {
-        Geometry::Linear { from, to } => Gradient::new_linear(p(from), p(to)),
-        Geometry::Radial {
-            center,
-            radius,
-            focal,
-        } => Gradient::new_two_point_radial(p(focal), 0.0, p(center), radius as f32),
-        Geometry::Sweep { center, start, end } => Gradient::new_sweep(
-            p(center),
-            start.to_radians() as f32,
-            end.to_radians() as f32,
-        ),
-    };
-    g.extend = match ramp.extend {
-        Extend::Pad => peniko::Extend::Pad,
-        Extend::Repeat => peniko::Extend::Repeat,
-        Extend::Reflect => peniko::Extend::Reflect,
-    };
-    let stops: Vec<ColorStop> = finest_table(&ramp.stops)
-        .iter()
-        .map(|(t, c)| ColorStop {
-            offset: *t as f32,
-            color: DynamicColor::from_alpha_color(rgba(*c)),
-        })
-        .collect();
-    g.stops = ColorStops::from(stops.as_slice());
-    g.into()
-}
-
-/// Vello reads a gradient from a lookup table it sizes from the narrowest stop interval, 1,024
-/// entries for these ramps and 4,096 once an interval is under 1/2,048, at ⌊t × (size − 1)⌋; at
-/// 1,024 a steep ramp's step reaches 0.4 code values. One stop 1/4,096 past the first, mixed in
-/// encoded sRGB as Vello mixes between stops, changes no color and gets the 4,096-entry table.
-fn finest_table(stops: &[(f64, [f64; 3])]) -> Vec<(f64, [f64; 3])> {
-    const STEP: f64 = 1.0 / 4096.0;
-    let mut out = stops.to_vec();
-    let narrow = stops.windows(2).any(|w| w[1].0 - w[0].0 < 2.0 * STEP);
-    let Some(k) = stops.windows(2).position(|w| w[1].0 - w[0].0 >= 2.0 * STEP) else {
-        return out;
-    };
-    if !narrow {
-        let ((t0, a), (t1, b)) = (stops[k], stops[k + 1]);
-        let f = STEP / (t1 - t0);
-        out.insert(
-            k + 1,
-            (t0 + STEP, [0, 1, 2].map(|i| a[i] + (b[i] - a[i]) * f)),
-        );
-    }
-    out
-}
-
-/// A fill's paint over `bounds`; R1's two-stop gradient runs west to east of them, in OKLab.
-fn brush(fill: &Fill, bounds: [f64; 4]) -> PaintType {
-    match fill {
-        Fill::Solid(c) => solid(*c),
-        Fill::Linear { from, to, at } => {
-            let [x, y, w, h] = bounds;
-            gradient(&Ramp {
-                geometry: Geometry::Linear {
-                    from: [x, y + h / 2.0],
-                    to: [x + w, y + h / 2.0],
-                },
-                extend: Extend::Pad,
-                stops: paint::dense(&[(at[0], *from), (at[1], *to)]),
-            })
-        }
-        Fill::Ramp(r) => gradient(r),
-    }
-}
-
-/// Vello flattens curves within 0.25 px, which shaves an arc's area (about 26 u² off a quarter
-/// circle of r 100); curves reach it flattened within this, in u at zoom 1.
-const FLATTEN: f64 = 0.01;
-
-fn bez(verbs: &[Verb], by: [f64; 2], zoom: f64) -> BezPath {
-    let m = |p: [f64; 2]| (p[0] + by[0], p[1] + by[1]);
-    let mut path = BezPath::new();
-    for v in verbs {
-        match *v {
-            Verb::Move(p) => path.move_to(m(p)),
-            Verb::Line(p) => path.line_to(m(p)),
-            Verb::Quad(a, b) => path.quad_to(m(a), m(b)),
-            Verb::Cubic(a, b, c) => path.curve_to(m(a), m(b), m(c)),
-            Verb::Close => path.close_path(),
-        }
-    }
-    let mut flat = BezPath::new();
-    vello_cpu::kurbo::flatten(&path, FLATTEN / zoom, |e| flat.push(e));
-    flat
-}
-
-fn rect(b: [f64; 4]) -> Rect {
-    Rect::new(b[0], b[1], b[0] + b[2], b[1] + b[3])
-}
-
-/// Strokes as SVG draws them by default: butt caps and miter joins with a limit of 4.
-fn stroke(width: f64) -> Stroke {
-    Stroke::new(width)
-        .with_caps(Cap::Butt)
-        .with_join(Join::Miter)
-        .with_miter_limit(4.0)
 }
 
 /// A rect, rounded when `radius` is above 0.
@@ -221,10 +92,7 @@ struct Painter<'a> {
     ctx: RenderContext,
     resources: Resources,
     store: Option<&'a std::path::Path>,
-    encoded_luma: bool,
-    /// The scopes open now, outermost first: (item, a layer rather than a clip).
-    open: Vec<(String, bool)>,
-    offscreen: u32,
+    scopes: Scopes,
     zoom: f64,
 }
 
@@ -243,82 +111,6 @@ impl Painter<'_> {
                 .font_size(g.size)
                 .hint(false)
                 .fill_glyphs(std::iter::once(glyph));
-        }
-    }
-
-    /// A soft mask's coverage over the frame: its paint over its rect, as alpha or as linear-light
-    /// luminance (Rec. 709 weights), and nothing outside the rect.
-    fn mask(&mut self, rect_u: [f64; 4], luminance: bool, fill: &Fill) -> Mask {
-        let (w, h) = (self.ctx.width(), self.ctx.height());
-        let mut ctx = RenderContext::new_with(w, h, settings());
-        ctx.set_transform(*self.ctx.transform());
-        ctx.set_paint(brush(fill, rect_u));
-        ctx.fill_rect(&rect(rect_u));
-        let mut pixmap = Pixmap::new(w, h);
-        ctx.render_with(
-            &mut pixmap,
-            &mut self.resources,
-            RasterizerSettings {
-                render_mode: RenderMode::OptimizeQuality,
-                ..RasterizerSettings::default()
-            },
-        );
-        let data = pixmap
-            .data()
-            .iter()
-            .map(|p| {
-                let a = f64::from(p.a) / 255.0;
-                if !luminance || a == 0.0 {
-                    return p.a;
-                }
-                let c = [p.r, p.g, p.b].map(|v| f64::from(v) / 255.0 / a);
-                let lin = |v: f64| if self.encoded_luma { v } else { srgb_decode(v) };
-                let y = 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
-                (y * a * 255.0).round().clamp(0.0, 255.0) as u8
-            })
-            .collect();
-        Mask::from_parts(data, w, h)
-    }
-
-    /// Closes the scopes the next mark isn't in and opens those it is.
-    fn enter(&mut self, scopes: &[Scope]) {
-        let keep = self
-            .open
-            .iter()
-            .zip(scopes)
-            .take_while(|((id, _), s)| id == s.item())
-            .count();
-        while self.open.len() > keep {
-            match self.open.pop() {
-                Some((_, true)) => self.ctx.pop_layer(),
-                _ => self.ctx.pop_clip(),
-            }
-        }
-        for s in &scopes[keep..] {
-            let layer = match s {
-                Scope::Clip { rect: r, .. } => {
-                    self.ctx.push_clip_rect(&rect(*r));
-                    false
-                }
-                Scope::Mask {
-                    rect: r,
-                    luminance,
-                    fill,
-                    ..
-                } => {
-                    let mask = self.mask(*r, *luminance, fill);
-                    self.ctx.push_mask_layer(mask);
-                    // Its own paint's pass, and the layer its items draw through.
-                    self.offscreen += 2;
-                    true
-                }
-                Scope::Opacity { alpha, .. } => {
-                    self.ctx.push_opacity_layer(*alpha as f32);
-                    self.offscreen += 1;
-                    true
-                }
-            };
-            self.open.push((s.item().to_string(), layer));
         }
     }
 
@@ -371,20 +163,13 @@ impl Painter<'_> {
                 fill,
                 stroke: line,
                 ..
-            } => {
-                let path = bez(verbs, [0.0, 0.0], self.zoom);
-                let b = path.bounding_box();
-                let bounds = [b.x0, b.y0, b.width(), b.height()];
-                if let Some(f) = fill {
-                    self.ctx.set_paint(brush(f, bounds));
-                    self.ctx.fill_path(&path);
-                }
-                if let Some((w, f)) = line {
-                    self.ctx.set_paint(brush(f, bounds));
-                    self.ctx.set_stroke(stroke(*w));
-                    self.ctx.stroke_path(&path);
-                }
-            }
+            } => shape(
+                &mut self.ctx,
+                verbs,
+                fill.as_ref(),
+                line.as_ref(),
+                self.zoom,
+            ),
             Mark::Text {
                 item,
                 spec,
@@ -406,30 +191,13 @@ impl Painter<'_> {
             } => {
                 let source = asset::decoded(self.store, hash, *crop, item)?;
                 let (w, h) = source.dimensions();
-                let mut bytes = source.into_raw();
-                for px in bytes.chunks_exact_mut(4) {
-                    let c = adjust.color(paint::unit([px[0], px[1], px[2]]));
-                    let a = f64::from(px[3]) / 255.0 * opacity;
-                    for k in 0..3 {
-                        px[k] = (c[k] * a * 255.0).round().clamp(0.0, 255.0) as u8;
-                    }
-                    px[3] = (a * 255.0).round() as u8;
-                }
                 let (Ok(pw), Ok(ph)) = (u16::try_from(w), u16::try_from(h)) else {
                     return Err(refused(
                         "asset_undecodable",
                         &format!("items/{item}/params/asset"),
                     ));
                 };
-                let pixmap = Pixmap::from_parts(
-                    bytes,
-                    pw,
-                    ph,
-                    PixelMetadata {
-                        may_have_transparency: true,
-                        alpha_type: ImageAlphaType::AlphaPremultiplied,
-                    },
-                );
+                let pixmap = image(source.into_raw(), [pw, ph], *opacity, adjust);
                 let to = fitted(*bounds, [w, h], *fit);
                 self.ctx.set_paint(Image {
                     image: ImageSource::Pixmap(Arc::new(pixmap)),
@@ -519,9 +287,7 @@ fn draw(req: &Request) -> Result<Value, Value> {
         ctx: RenderContext::new_with(w, h, settings()),
         resources: Resources::new(),
         store: req.store.as_deref(),
-        encoded_luma: req.encoded_luma,
-        open: Vec::new(),
-        offscreen: 0,
+        scopes: Scopes::new(req.encoded_luma),
         zoom,
     };
     p.ctx.set_transform(Affine::scale(zoom));
@@ -529,29 +295,23 @@ fn draw(req: &Request) -> Result<Value, Value> {
     p.ctx
         .fill_rect(&rect([0.0, 0.0, frame.size[0], frame.size[1]]));
     for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
-        p.enter(&drawn.scopes);
+        p.scopes.enter(&mut p.ctx, &mut p.resources, &drawn.scopes);
         p.mark(&drawn.mark)?;
     }
-    p.enter(&[]);
+    p.scopes.enter(&mut p.ctx, &mut p.resources, &[]);
     for prim in &prims {
         p.prim(prim);
     }
     let mut pixmap = Pixmap::new(w, h);
-    p.ctx.render_with(
-        &mut pixmap,
-        &mut p.resources,
-        RasterizerSettings {
-            render_mode: RenderMode::OptimizeQuality,
-            ..RasterizerSettings::default()
-        },
-    );
+    p.ctx
+        .render_with(&mut pixmap, &mut p.resources, rasterizer());
     let bytes = pixmap.take_rgba8(ImageAlphaType::Alpha);
     let image = image::RgbaImage::from_raw(u32::from(w), u32::from(h), bytes)
         .ok_or_else(|| refused("not_written", &req.out))?;
     image
         .save_with_format(&req.out, image::ImageFormat::Png)
         .map_err(|_| refused("not_written", &req.out))?;
-    Ok(json!({"ok": true, "width": w, "height": h, "offscreen": p.offscreen}))
+    Ok(json!({"ok": true, "width": w, "height": h, "offscreen": p.scopes.offscreen}))
 }
 
 /// Every look role a document names, in black: geometry needs the outline, never its colors.

@@ -13,6 +13,7 @@ use deep_canvas_marks::scene::{
 };
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
+use deep_marks_vello::{brush, image, shape, Scopes};
 use deep_text::{Align, Role, Shaper, Spec};
 use serde_json::{Map, Value};
 use vello_cpu::kurbo::{Affine, BezPath, Circle, Rect, RoundedRect, Shape};
@@ -172,25 +173,6 @@ impl Renderer {
                 }
             }
         }
-        // R2's marks (#373) draw through `deep-canvas-render raster`; render-back's snapshot draws
-        // R1's, and refuses the rest naming the item, never drawing them wrong.
-        for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
-            let r2 = matches!(
-                &drawn.mark,
-                Mark::Shape { .. }
-                    | Mark::Rect {
-                        fill: Fill::Ramp(_),
-                        ..
-                    }
-            ) || matches!(&drawn.mark, Mark::Image { adjust, .. } if !adjust.is_identity())
-                || drawn
-                    .scopes
-                    .iter()
-                    .any(|s| !matches!(s, scene::Scope::Clip { .. }));
-            if r2 {
-                return unfit("module_missing", format!("items/{}", drawn.mark.item()));
-            }
-        }
         // Each text mark's font names a role the shaper bundles.
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -221,16 +203,15 @@ impl Renderer {
         let [dw, dh] = drawn.frame.size;
         let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
         let at = Affine::scale(scale);
+        // The scopes each mark draws inside (#373): scissors, soft masks and group opacity.
+        let mut scopes = Scopes::new(false);
         for d in drawn.frame.layers.iter().flat_map(|l| &l.marks) {
             ctx.set_transform(at);
-            if let Some([x, y, w, h]) = d.clip {
-                ctx.push_clip_layer(&Rect::new(x, y, x + w, y + h).to_path(0.01));
-            }
+            scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
             self.mark(&mut ctx, &d.mark, drawn, at);
-            if d.clip.is_some() {
-                ctx.pop_layer();
-            }
         }
+        ctx.set_transform(at);
+        scopes.enter(&mut ctx, &mut self.resources, &[]);
         for s in &drawn.status {
             ctx.set_transform(at);
             self.status_mark(&mut ctx, s, at);
@@ -263,8 +244,7 @@ impl Renderer {
                         ]);
                         ctx.set_paint(gradient);
                     }
-                    // `prepare` refuses R2's ramps.
-                    Fill::Ramp(_) => return,
+                    Fill::Ramp(_) => ctx.set_paint(brush(fill, *bounds)),
                 }
                 ctx.fill_path(&rect_path(*bounds, *radius));
             }
@@ -310,8 +290,12 @@ impl Renderer {
                 ctx.set_paint(color(*c));
                 ctx.fill_path(&p);
             }
-            // `prepare` refuses R2's outlines.
-            Mark::Shape { .. } => {}
+            Mark::Shape {
+                verbs,
+                fill,
+                stroke,
+                ..
+            } => shape(ctx, verbs, fill.as_ref(), stroke.as_ref(), scale_of(at)),
             Mark::Text {
                 spec,
                 origin,
@@ -351,10 +335,23 @@ impl Renderer {
                 bounds,
                 fit,
                 opacity,
+                adjust,
                 ..
             } => {
                 let Some(pixmap) = drawn.images.get(asset) else {
                     return;
+                };
+                // An item's adjust (#373) reaches every pixel of its image.
+                let adjusted;
+                let pixmap = if adjust.is_identity() {
+                    pixmap
+                } else {
+                    let size = [pixmap.width(), pixmap.height()];
+                    let straight = (**pixmap)
+                        .clone()
+                        .take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha);
+                    adjusted = Arc::new(image(straight, size, 1.0, adjust));
+                    &adjusted
                 };
                 let size = [u32::from(pixmap.width()), u32::from(pixmap.height())];
                 let [x, y, w, h] = fitted(*bounds, size, *fit);
@@ -487,4 +484,59 @@ pub fn png(rgba: Vec<u8>, size: [u16; 2]) -> Vec<u8> {
         .write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
         .expect("a PNG encodes into memory");
     out
+}
+
+/// The scale of a uniform transform, which sets how finely outlines are flattened.
+fn scale_of(at: Affine) -> f64 {
+    at.as_coeffs()[0]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Render-back draws #373's R2 marks: a star, and a group at half opacity whose overlapping
+    /// children draw through one pass, so their overlap reads as either alone.
+    #[test]
+    fn render_back_draws_stars_and_group_opacity() {
+        let doc = json!({"format": 1, "id": "r2", "size": [200, 100],
+            "layers": {"main": {"writer": "agent-a", "order": "a0"}},
+            "items": {
+                "star": {"id": "star", "kind": "star@1", "layer": "main", "name": "Star", "order": "a0",
+                    "params": {"center": [50, 50], "points": 5, "outer_r": 40, "inner_r": 20,
+                        "paint": {"fill": {"role": "ink"}}}},
+                "veil": {"id": "veil", "kind": "group@1", "layer": "main", "name": "Veil", "order": "a1",
+                    "params": {"opacity": 0.5}},
+                "a": {"id": "a", "kind": "rect@1", "layer": "main", "name": "A", "order": "a2", "parent": "veil",
+                    "params": {"box": [110, 20, 50, 40], "paint": {"fill": {"role": "ink"}}}},
+                "b": {"id": "b", "kind": "rect@1", "layer": "main", "name": "B", "order": "a3", "parent": "veil",
+                    "params": {"box": [130, 40, 50, 40], "paint": {"fill": {"role": "ink"}}}}}});
+        let palette: Palette = [
+            ("ground".to_string(), [255, 255, 255]),
+            ("ink".to_string(), [0, 0, 0]),
+        ]
+        .into();
+        let mut r = Renderer::new();
+        let drawn = r
+            .prepare(
+                doc.as_object().unwrap(),
+                0,
+                &palette,
+                None,
+                &Record::default(),
+                Path::new("."),
+            )
+            .expect("render-back draws R2's marks");
+        let rgba = r.raster(&drawn, [200, 100], Some([255, 255, 255]));
+        let at = |x: usize, y: usize| rgba[(y * 200 + x) * 4];
+        assert_eq!(at(50, 50), 0, "the star's center is ink");
+        assert_eq!(at(50, 5), 255, "above its top spike is ground");
+        let (alone, overlap) = (at(115, 25), at(145, 50));
+        assert!(
+            (126..=129).contains(&alone),
+            "half ink over white, got {alone}"
+        );
+        assert_eq!(overlap, alone, "the overlap draws as either rect alone");
+    }
 }

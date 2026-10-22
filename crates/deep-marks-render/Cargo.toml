@@ -24,6 +24,7 @@ path = "src/main.rs"
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-marks-vello = { path = "../deep-marks-vello" }
 deep-replica = { path = "../deep-replica" }
 deep-text = { path = "../deep-text" }
 deep-text-gpui = { path = "../deep-text-gpui" }
