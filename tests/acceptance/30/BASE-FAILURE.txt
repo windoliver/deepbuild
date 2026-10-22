@@ -27,13 +27,13 @@ Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/30/tsconfig
 Output of the run (ANSI colors stripped):
 
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30
+ RUN  v5.0.5 <repo>/tests/acceptance/30
 
 node:internal/modules/cjs/loader:1568
   throw err;
   ^
 
-Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/benchmarks/command-check.mjs'
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
@@ -51,7 +51,7 @@ node:internal/modules/cjs/loader:1568
   throw err;
   ^
 
-Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/benchmarks/command-check.mjs'
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
@@ -108,7 +108,7 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯ Failed Suites 13 ⎯⎯⎯⎯⎯⎯
 
  FAIL  added.test.ts [ added.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/added.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/added.test.ts
  ❯ added.test.ts:6:1
       4| // INCONCLUSIVE or FAIL from these runs, are the gate runner's (#29), …
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -120,7 +120,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/27]⎯
 
  FAIL  contract.test.ts [ contract.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/contract.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/contract.test.ts
  ❯ contract.test.ts:6:1
       4| // the gate runner's (#29); the timing check's flushed repeats are #87…
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -132,7 +132,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/27]⎯
 
  FAIL  ending.test.ts [ ending.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/ending.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/ending.test.ts
  ❯ ending.test.ts:8:1
       6| import { join } from 'node:path';
       7| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -144,7 +144,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/27]⎯
 
  FAIL  hermetic.test.ts [ hermetic.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/hermetic.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/hermetic.test.ts
  ❯ hermetic.test.ts:6:1
       4| import { userInfo } from 'node:os';
       5| import { afterAll, afterEach, beforeAll, describe, expect, it } from '…
@@ -156,7 +156,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/27]⎯
 
  FAIL  kind.test.ts [ kind.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/kind.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/kind.test.ts
  ❯ kind.test.ts:6:1
       4| // check kind as the kit builds them from its reference, each fail the…
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -168,7 +168,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/27]⎯
 
  FAIL  mask.test.ts [ mask.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/mask.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/mask.test.ts
  ❯ mask.test.ts:6:1
       4| // that variant runs too. The claim's INVALID ("exit status masked by …
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -180,7 +180,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/27]⎯
 
  FAIL  places.test.ts [ places.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/places.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/places.test.ts
  ❯ places.test.ts:7:1
       5| // line apart from an AttributeError raised before one.
       6| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -192,7 +192,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/27]⎯
 
  FAIL  privacy.test.ts [ privacy.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/privacy.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/privacy.test.ts
  ❯ privacy.test.ts:6:1
       4| import { randomBytes } from 'node:crypto';
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -204,7 +204,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/27]⎯
 
  FAIL  reads.test.ts [ reads.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/reads.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/reads.test.ts
  ❯ reads.test.ts:5:1
       3| // the read set lists it, and not fixtures/unused.json, which nothing …
       4| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -216,7 +216,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/27]⎯
 
  FAIL  record.test.ts [ record.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/record.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/record.test.ts
  ❯ record.test.ts:6:1
       4| // its own changes nothing.
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -228,7 +228,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/27]⎯
 
  FAIL  retries.test.ts [ retries.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/retries.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/retries.test.ts
  ❯ retries.test.ts:6:1
       4| // naming the test is the gate runner's (#29), in blocked.test.ts.
       5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -240,7 +240,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/27]⎯
 
  FAIL  sandbox.test.ts [ sandbox.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/sandbox.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/sandbox.test.ts
  ❯ sandbox.test.ts:8:1
       6| import { join } from 'node:path';
       7| import { afterAll, afterEach, describe, expect, it } from 'vitest';
@@ -252,7 +252,7 @@ Error: Cannot find module '../../../packages/checks-command/src/index.ts' import
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/27]⎯
 
  FAIL  standin.test.ts [ standin.test.ts ]
-Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/tests/acceptance/30/standin.test.ts
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/standin.test.ts
  ❯ standin.test.ts:7:1
       5| // INCONCLUSIVE) is the claim's verdict, the gate runner's (#29), in b…
       6| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -422,12 +422,12 @@ AssertionError: budgets.json has a task command-check-count: expected undefined 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/27]⎯
 
  FAIL  budgets.test.ts > AC12 #30.542330be counting tests run adds under 1% to the check's time, on the reference Mac, compared with the merge base > AC12 `node benchmarks/command-check.mjs` runs, exits 0 and prints the two medians
-Error: Command failed: /Users/sophiawj/.nvm/versions/node/v24.22.0/bin/node /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/benchmarks/command-check.mjs
+Error: Command failed: ~/.nvm/versions/node/v24.22.0/bin/node <repo>/benchmarks/command-check.mjs
 node:internal/modules/cjs/loader:1568
   throw err;
   ^
 
-Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/benchmarks/command-check.mjs'
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
@@ -454,12 +454,12 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/27]⎯
 
  FAIL  budgets.test.ts > AC12 #30.542330be counting tests run adds under 1% to the check's time, on the reference Mac, compared with the merge base > AC12 on the reference Mac, counting adds under 1% to the check's time (five bench runs, by the timing rule)
-Error: Command failed: /Users/sophiawj/.nvm/versions/node/v24.22.0/bin/node /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/benchmarks/command-check.mjs
+Error: Command failed: ~/.nvm/versions/node/v24.22.0/bin/node <repo>/benchmarks/command-check.mjs
 node:internal/modules/cjs/loader:1568
   throw err;
   ^
 
-Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-30-a8bcd1/benchmarks/command-check.mjs'
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
