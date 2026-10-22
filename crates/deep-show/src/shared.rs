@@ -1528,6 +1528,10 @@ impl Hub<'_> {
                 _ => break,
             }
         }
+        // A patch reply the queue built itself, or a superseded one, skipped `call`'s stamp.
+        for reply in &mut replies {
+            self.stamp(reply);
+        }
         replies
     }
 }
