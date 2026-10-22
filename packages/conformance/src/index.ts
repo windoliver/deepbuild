@@ -1,8 +1,16 @@
-// The conformance package's public entry (#313): kits and their reference fill, the runner, the fake proofs,
-// the code families and their judgement, the codes pages, the closure rules, and the schema generator.
+// The conformance package's public entry (#313, #314): kits and their reference fill, the slot kits and their
+// reference fills, the one runner in both forms, the fake proofs, the code families and their judgement, the
+// codes pages, the closure rules, the schema generator, the seeded cases and the stale rule.
 export * from './types.js';
+export type {
+  CheckContext, CheckResult, CheckRunnerFill, CheckSpec, Failure, Fixture, PlantedFill, RunOutcome, SeededCase, SlotCaseResult, SlotFill, SlotKit, SlotReport,
+  SlotRule, SlotRunOptions,
+} from './slot-types.js';
 export { cleanFill, kits } from './kit.js';
-export { kitProblems, proveFake, replay, runKit } from './runner.js';
+export { cleanFills, slotKits } from './slots/kits.js';
+export { kitProblems, runKit } from './dispatch.js';
+export { proveFake, replay } from './runner.js';
+export { seededCases, stalePaths } from './slot-runner.js';
 export { codeFamilies, exitCode, judge, unmappedCodes } from './families.js';
 export { codesPage } from './pages.js';
 export { contractStep, serveAt } from './closures.js';

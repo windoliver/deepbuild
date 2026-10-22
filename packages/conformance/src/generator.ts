@@ -15,7 +15,7 @@ const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const CODE_OF: Record<MutationKind, string> = { required_removed: 'required', enum_off_list: 'enum', number_past_range: 'range', unknown_field: 'unlisted_field' };
 
 /** mulberry32: a small seeded generator, the same stream for the same seed on every machine. */
-class Random {
+export class Random {
   private state: number;
   constructor(seed: number) { this.state = seed >>> 0; }
   next(): number {

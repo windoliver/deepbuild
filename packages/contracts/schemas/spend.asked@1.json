@@ -1,0 +1,162 @@
+{
+  "title": "spend.asked@1",
+  "description": "A paid run didn't start and waits on an ask: to raise the budgets with no room for it, each by its price (raise), to run again inputs whose paid run didn't pass, once (rerun), or to approve its price for that run alone when no budget covers it (uncovered). It names the run, its price and what your yes does. Your yes is that ask's ask.answered with decision allow, the durable approval: a raise adds the run's price to each budget listed and holds that room for the run until it starts, and an uncovered run's yes approves a budget for that run alone at its price, ending a day after the answer, whose ID is the ask's. Only the core appends it.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "spend.asked"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^run:[0-9A-Za-z]+$",
+      "description": "The paid run this event is about.",
+      "maxLength": 8192
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "The paid run.",
+          "maxLength": 8192
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The check the run belongs to."
+        },
+        "inputs": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The digest of the run's inputs.",
+          "maxLength": 8192
+        },
+        "issue": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The issue the run is for."
+        },
+        "resource": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The key of the resource it runs on, or null."
+        },
+        "usd": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The run's price, in US dollars."
+        },
+        "ask": {
+          "type": "string",
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "description": "The ask it waits on.",
+          "maxLength": 8192
+        },
+        "because": {
+          "type": "string",
+          "enum": [
+            "raise",
+            "rerun",
+            "uncovered"
+          ],
+          "description": "Why it waits.",
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "budgets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "ulid",
+            "description": "A budget's ID: the ULID of the spend.approved event that approved it, or, for the one-run budget your yes to an uncovered run approved, of that ask."
+          },
+          "description": "For a raise, every budget your yes raises by the run's price; otherwise empty."
+        }
+      },
+      "required": [
+        "run",
+        "check",
+        "inputs",
+        "issue",
+        "resource",
+        "usd",
+        "ask",
+        "because",
+        "budgets"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
