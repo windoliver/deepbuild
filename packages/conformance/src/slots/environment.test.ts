@@ -40,6 +40,22 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('reads BLOCKED, not PASS, when ps starts and then hangs', async () => {
+    const k = kit();
+    const [fill] = cleanFills(k);
+    const dir = mkdtempSync(join(tmpdir(), 'deep-env-ps-'));
+    writeFileSync(join(dir, 'ps'), '#!/bin/sh\nsleep 60\n');
+    chmodSync(join(dir, 'ps'), 0o755);
+    process.env.PATH = `${dir}:/bin:/usr/bin:/usr/sbin`;
+    try {
+      const report = await runKit(k, fill!, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'ps_unavailable'], ['BLOCKED', 'ps_unavailable']]);
+      expect(report.cases[0]!.message).toMatch(/ETIMEDOUT/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it('never signals a process it did not start, however its command line is dressed', async () => {
     const k = kit();
     const [clean] = cleanFills(k) as EnvironmentFill[];

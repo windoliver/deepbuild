@@ -50,10 +50,12 @@ const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArra
  * attempt's answer is the answer. A tool that started and failed is not retried.
  */
 let lastFailure = '';
+/** A tool that started and then hangs is ended after this and read as unreadable; a healthy ps or lsof answers in tens of ms. */
+const TOOL_LIMIT_MS = 3000;
 function tool(command: string, args: string[]): SpawnSyncReturns<string> {
-  const options = { encoding: 'utf8' as const, env: { ...process.env, LC_ALL: 'C' } };
+  const options = { encoding: 'utf8' as const, env: { ...process.env, LC_ALL: 'C' }, timeout: TOOL_LIMIT_MS, killSignal: 'SIGKILL' as const };
   let result = spawnSync(command, args, options);
-  if (result.error) { sleep(20); result = spawnSync(command, args, options); }
+  if (result.error && (result.error as NodeJS.ErrnoException).code !== 'ETIMEDOUT') { sleep(20); result = spawnSync(command, args, options); }
   // What a failed tool said, for the finding that reads the table as unknown.
   if (result.error || result.status !== 0) lastFailure = `${command} ${args[0]}: ${result.error ? (result.error as NodeJS.ErrnoException).code ?? result.error.message : `status ${result.status}${result.signal ? ` on ${result.signal}` : ''}`}${result.stderr?.trim() ? ` ${result.stderr.trim()}` : ''}`;
   return result;
@@ -313,12 +315,17 @@ const generate = (random: Random): SlotCase[] => [0, 1].map((i) => toCase(`seede
  */
 const UP_LIMIT_MS = 10_000;
 const DOWN_LIMIT_MS = 5000;
+/** The value as a promise when it is one or thenable from any realm; null for a plain value. */
+const thenable = (value: unknown): Promise<unknown> | null => (value !== null && (typeof value === 'object' || typeof value === 'function') && typeof (value as { then?: unknown }).then === 'function' ? Promise.resolve(value) : null);
+// A step that blocks the thread itself, never returning, is beyond a deadline set on that thread: the fill is an
+// object in the kit's own process, as every in-process fill is, and nothing in that process runs while it blocks.
 function bounded(step: () => unknown, ms: number, what: string): unknown {
   const out = step();
-  if (!(out instanceof Promise)) return out;
+  const pending = thenable(out);
+  if (pending === null) return out;
   let timer: NodeJS.Timeout | undefined;
   const deadline = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Finding('BLOCKED', `the fill's ${what} did not settle within ${ms} ms, so the case can't go on and nothing of it is known`, ['step_timeout'])), ms); });
-  return Promise.race([out, deadline]).finally(() => clearTimeout(timer));
+  return Promise.race([pending, deadline]).finally(() => clearTimeout(timer));
 }
 /**
  * The down step: asked once more, inside the step the driver runs and awaits, when the first asking threw or
@@ -329,13 +336,14 @@ const downStep = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
   // The second asking's own deadline is the kit's finding and takes precedence; its other failures leave the first to stand.
   const blockedOr = (first: unknown) => (later: unknown): never => { throw later instanceof Finding && later.outcome === 'BLOCKED' ? later : first; };
   const again = (error: unknown): Promise<never> => {
-    let second: unknown;
-    try { second = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); } catch { return Promise.reject(error); }
-    return second instanceof Promise ? second.then(() => { throw error; }, blockedOr(error)) : Promise.reject(error);
+    let second: Promise<unknown> | null;
+    try { second = thenable(bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down')); } catch { return Promise.reject(error); }
+    return second !== null ? second.then(() => { throw error; }, blockedOr(error)) : Promise.reject(error);
   };
   let first: unknown;
   try { first = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'); } catch (error) { return again(error); }
-  return first instanceof Promise ? first.catch(again) : first;
+  const pending = thenable(first);
+  return pending !== null ? pending.catch(again) : first;
 };
 /**
  * Down for a case refused before its down step, awaited by the driver all the same; what the fill does or throws is
@@ -343,8 +351,8 @@ const downStep = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
  */
 const quietDown = (fill: EnvironmentFill, handle: Handle) => (): unknown => {
   try {
-    const r: unknown = bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down');
-    return r instanceof Promise ? r.catch((later: unknown) => { if (later instanceof Finding && later.outcome === 'BLOCKED') throw later; }) : undefined;
+    const pending = thenable(bounded(() => fill.down(handle), DOWN_LIMIT_MS, 'down'));
+    return pending !== null ? pending.catch((later: unknown) => { if (later instanceof Finding && later.outcome === 'BLOCKED') throw later; }) : undefined;
   } catch { return undefined; }
 };
 
