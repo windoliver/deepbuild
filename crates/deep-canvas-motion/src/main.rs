@@ -6,9 +6,10 @@ use std::io::{self, BufRead, Write};
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas_motion::clock::{run, Mode};
-use deep_canvas_motion::doc::{read, Refused};
+use deep_canvas_motion::doc::Refused;
 use deep_canvas_motion::eval::{frame, position, Validity};
 use deep_canvas_motion::insert::insert;
+use deep_canvas_motion::program::Program;
 use serde_json::{json, Map, Value};
 
 fn bad_input() -> Value {
@@ -36,16 +37,17 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     else {
         return bad_input();
     };
-    let motion = match read(&Value::Object(doc.clone())) {
-        Ok(m) => m,
+    let program = match Program::compile(&Value::Object(doc.clone())) {
+        Ok(p) => p,
         Err(r) => return refusal(r),
     };
+    let motion = &program.motion;
     let mut frames = Vec::with_capacity(times.len());
     let mut previous: Option<i64> = None;
     for &t in &times {
-        let f = frame(doc, &motion, t, Validity::Full);
+        let f = frame(doc, &program, t, Validity::Full);
         let passes = previous.map_or(0, |p| {
-            let (_, before) = position(&motion, p);
+            let (_, before) = position(motion, p);
             (f.pass - before).max(0)
         });
         let channels: Map<String, Value> = f
@@ -67,9 +69,8 @@ fn eval_line(input: &Map<String, Value>) -> Value {
             .iter()
             .zip(&f.placements)
             .map(|(p, (id, local))| {
-                let wraps = previous.map_or(0, |prev| {
-                    p.wraps(&motion, position(&motion, prev).0, f.doc_t)
-                });
+                let wraps =
+                    previous.map_or(0, |prev| p.wraps(motion, position(motion, prev).0, f.doc_t));
                 (
                     id.clone(),
                     json!({
@@ -151,14 +152,14 @@ fn run_line(input: &Map<String, Value>) -> Value {
     if FLICKS_PER_SECOND % hz != 0 || to < 0 {
         return bad_input();
     }
-    let motion = match read(&Value::Object(doc.clone())) {
-        Ok(m) => m,
+    let program = match Program::compile(&Value::Object(doc.clone())) {
+        Ok(p) => p,
         Err(r) => return refusal(r),
     };
     let mut vsyncs = Vec::new();
     run(
         doc,
-        &motion,
+        &program,
         to,
         FLICKS_PER_SECOND / hz,
         mode,

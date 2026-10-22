@@ -67,21 +67,26 @@ impl Curve {
 
     /// The value at `t`. Before the first key and after the last it holds (`extrapolate` hold).
     pub fn sample(&self, t: i64) -> Sample {
-        let held = |k: &Key| Sample {
-            value: k.value.clone(),
-            iterations: 0,
+        let mut value = vec![0.0; self.keys.first().map_or(0, |k| k.value.len())];
+        let iterations = self.sample_into(t, &mut value);
+        Sample { value, iterations }
+    }
+
+    /// [`Curve::sample`] into `out`, one slot per component, with no allocation; returns the
+    /// Bézier solver's step count.
+    pub fn sample_into(&self, t: i64, out: &mut [f64]) -> u32 {
+        let held = |k: &Key, out: &mut [f64]| {
+            out.iter_mut().zip(&k.value).for_each(|(o, v)| *o = *v);
+            0
         };
         let Some(i) = self.owner(t) else {
-            return self.keys.first().map(held).unwrap_or(Sample {
-                value: Vec::new(),
-                iterations: 0,
-            });
+            return self.keys.first().map_or(0, |k| held(k, out));
         };
         let a = &self.keys[i];
         let Some(b) = self.keys.get(i + 1) else {
-            return held(a);
+            return held(a, out);
         };
-        segment(a, b, t)
+        segment_into(a, b, t, out)
     }
 
     /// The earliest time after `t` at which the value may differ from its value at `t`: the next
@@ -111,36 +116,37 @@ fn moves(a: &Key, b: &Key) -> bool {
 
 /// The value inside the segment `a → b` at `t`, with `a.t <= t < b.t`.
 pub fn segment(a: &Key, b: &Key, t: i64) -> Sample {
+    let mut value = vec![0.0; a.value.len()];
+    let iterations = segment_into(a, b, t, &mut value);
+    Sample { value, iterations }
+}
+
+/// [`segment`] into `out`, with no allocation; returns the Bézier solver's step count.
+pub fn segment_into(a: &Key, b: &Key, t: i64, out: &mut [f64]) -> u32 {
+    let mix = |w: f64, out: &mut [f64]| {
+        for ((o, &va), &vb) in out.iter_mut().zip(&a.value).zip(&b.value) {
+            *o = va + (vb - va) * w;
+        }
+    };
     // At its own time a key shows its own value, bit for bit, whatever it interpolates by.
     if t == a.t {
-        return Sample {
-            value: a.value.clone(),
-            iterations: 0,
-        };
+        out.iter_mut().zip(&a.value).for_each(|(o, v)| *o = *v);
+        return 0;
     }
     let u = (t - a.t) as f64 / (b.t - a.t) as f64;
-    let mix = |w: f64| -> Vec<f64> {
-        a.value
-            .iter()
-            .zip(&b.value)
-            .map(|(&va, &vb)| va + (vb - va) * w)
-            .collect()
-    };
     match a.interp {
-        Interp::Hold => Sample {
-            value: a.value.clone(),
-            iterations: 0,
-        },
-        Interp::Linear => Sample {
-            value: mix(u),
-            iterations: 0,
-        },
+        Interp::Hold => {
+            out.iter_mut().zip(&a.value).for_each(|(o, v)| *o = *v);
+            0
+        }
+        Interp::Linear => {
+            mix(u, out);
+            0
+        }
         Interp::Bezier { x1, y1, x2, y2 } => {
             let solved = Bezier::new(x1, y1, x2, y2).solve(u);
-            Sample {
-                value: mix(solved.y),
-                iterations: solved.steps,
-            }
+            mix(solved.y, out);
+            solved.steps
         }
         Interp::Spring {
             freq_hz,
@@ -148,15 +154,10 @@ pub fn segment(a: &Key, b: &Key, t: i64) -> Sample {
         } => {
             let seconds = (t - a.t) as f64 / FLICKS_PER_SECOND as f64;
             let e = spring_from_rest(freq_hz, damping_ratio, seconds);
-            Sample {
-                value: a
-                    .value
-                    .iter()
-                    .zip(&b.value)
-                    .map(|(&va, &vb)| vb + (va - vb) * e)
-                    .collect(),
-                iterations: 0,
+            for ((o, &va), &vb) in out.iter_mut().zip(&a.value).zip(&b.value) {
+                *o = vb + (va - vb) * e;
             }
+            0
         }
     }
 }

@@ -4,8 +4,8 @@
 
 use serde_json::{Map, Value};
 
-use crate::doc::Motion;
 use crate::eval::{frame, Frame, Validity};
+use crate::program::Program;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -26,7 +26,7 @@ pub struct Vsync<'a> {
 /// `each` once per vsync in order.
 pub fn run(
     doc: &Map<String, Value>,
-    motion: &Motion,
+    program: &Program,
     to: i64,
     period: i64,
     mode: Mode,
@@ -42,7 +42,7 @@ pub fn run(
             (Some(f), Mode::Armed) => f.valid_until.is_some_and(|v| v <= t),
         };
         if armed {
-            shown = Some(frame(doc, motion, t, validity));
+            shown = Some(frame(doc, program, t, validity));
         }
         if let Some(f) = &shown {
             each(Vsync {

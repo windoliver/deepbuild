@@ -4,22 +4,23 @@
 
 use deep_canvas_motion::doc::read;
 use deep_canvas_motion::eval::{frame, Validity};
+use deep_canvas_motion::program::Program;
 use serde_json::{json, Map, Value};
 
 const S: i64 = 705_600_000;
 
 fn x_at(doc: &Value, item: &str, t: i64) -> f64 {
-    let motion = read(doc).expect("the document reads");
+    let program = Program::compile(doc).expect("the document reads");
     let doc = doc.as_object().expect("an object");
-    let f = frame(doc, &motion, t, Validity::Full);
+    let f = frame(doc, &program, t, Validity::Full);
     f.items[item]["at"]["pos"][0].as_f64().expect("a number")
 }
 
 fn y_at(doc: &Value, item: &str, t: i64) -> f64 {
-    let motion = read(doc).expect("the document reads");
+    let program = Program::compile(doc).expect("the document reads");
     let f = frame(
         doc.as_object().expect("an object"),
-        &motion,
+        &program,
         t,
         Validity::Full,
     );
@@ -240,10 +241,10 @@ fn a_cut_switches_placements_with_no_hold_across_it() {
     // At the cut the incoming clip starts at once.
     assert_eq!(x_at(&d, "p", S), 500.0);
     // The frame before the cut knows the cut is coming.
-    let motion = read(&d).unwrap();
-    let f = frame(d.as_object().unwrap(), &motion, S - 1, Validity::Full);
+    let program = Program::compile(&d).unwrap();
+    let f = frame(d.as_object().unwrap(), &program, S - 1, Validity::Full);
     assert!(f.valid_until.is_some_and(|v| v <= S));
-    assert_eq!(motion.cuts[0].at, S);
+    assert_eq!(program.motion.cuts[0].at, S);
 }
 
 #[test]

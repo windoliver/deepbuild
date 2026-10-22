@@ -25,7 +25,8 @@ use deep_canvas_marks::dirty::{Class, Dirty};
 use deep_canvas_marks::key::{sha256_hex, ContentKey, KeyBuilder};
 use deep_canvas_marks::path::{self, Mesh};
 use deep_canvas_marks::scene::{self, Align, Drawn, Fill, ImageFit, Mark, Rgb};
-use deep_canvas_motion::{doc as motion_doc, eval};
+use deep_canvas_motion::eval;
+use deep_canvas_motion::program::{Program, State};
 use deep_text::Role;
 use deep_text_gpui::Label;
 use gpui_apple::metal_renderer::gpu_ledger::{self, Ledger};
@@ -240,6 +241,8 @@ struct Session {
     dirty: Dirty,
     /// Each item's layer on the last presented frame, for one that was deleted since.
     last_layers: BTreeMap<String, String>,
+    /// The revision's program and the state its frames evaluate into.
+    compiled: Option<(Program, State)>,
     /// The dirty classes the frames since the last report stamped.
     stamped: BTreeSet<(String, Class)>,
     /// The content-addressed store images are read from, and each decoded image with its size
@@ -304,6 +307,15 @@ fn image_of(
     );
     session.images.insert(key, found.clone());
     Ok(found)
+}
+
+/// Compiles a revision once, so its frames only evaluate.
+fn compile(session: &mut Session, doc: &Map<String, Value>) -> Result<(), Value> {
+    let program =
+        Program::compile(&Value::Object(doc.clone())).map_err(|r| refused(r.code, &r.path))?;
+    let state = program.state();
+    session.compiled = Some((program, state));
+    Ok(())
 }
 
 /// Where an image of `size` pixels maps for its box and fit, centered in the box.
@@ -650,24 +662,30 @@ impl Renderer {
         gpui_oklab: bool,
         by_clock: bool,
     ) -> Result<(), Value> {
-        let doc_value = Value::Object(doc.clone());
-        let motion = motion_doc::read(&doc_value).map_err(|r| refused(r.code, &r.path))?;
-        let evaluated = eval::frame(doc, &motion, t, eval::Validity::Full);
+        // The revision's program evaluates into its state with no allocation; only the items the
+        // draw list reads are written out.
+        let (items, valid_until) = {
+            let (program, state) = session
+                .compiled
+                .as_mut()
+                .ok_or_else(|| refused("bad_doc", ""))?;
+            program.evaluate(t, eval::Validity::Full, state);
+            (eval::items(doc, program, state), state.valid_until)
+        };
         let palette = look.palette(view.theme);
-        let frame = scene::frame(doc, &evaluated.items, palette, readings, view.zoom)
+        let frame = scene::frame(doc, &items, palette, readings, view.zoom)
             .map_err(|r| refused(r.code, &r.path))?;
-        let shown = scene::bound_texts(doc, &evaluated.items, readings)
-            .map_err(|r| refused(r.code, &r.path))?;
-        let changes = session.dirty.advance(&evaluated.items, &shown, by_clock);
+        let shown =
+            scene::bound_texts(doc, &items, readings).map_err(|r| refused(r.code, &r.path))?;
+        let changes = session.dirty.advance(&items, &shown, by_clock);
         // The layers an item changed in, this frame: a mark's item is its own ID before any `#`.
         let changed_layers: BTreeSet<String> = changes
             .iter()
             .filter_map(|(id, _)| {
-                layer_of(&evaluated.items, id).or_else(|| session.last_layers.get(id).cloned())
+                layer_of(&items, id).or_else(|| session.last_layers.get(id).cloned())
             })
             .collect();
-        session.last_layers = evaluated
-            .items
+        session.last_layers = items
             .iter()
             .filter_map(|(id, item)| Some((id.clone(), item.get("layer")?.as_str()?.to_string())))
             .collect();
@@ -810,7 +828,7 @@ impl Renderer {
             session.layers.clear();
         }
         session.stable = stable;
-        session.valid_until = evaluated.valid_until;
+        session.valid_until = valid_until;
         session.read = read;
 
         let main = session
@@ -836,6 +854,7 @@ impl Renderer {
             stamped: BTreeSet::new(),
             store: None,
             images: HashMap::new(),
+            compiled: None,
             last_layers: BTreeMap::new(),
         }
     }
@@ -857,6 +876,7 @@ impl Renderer {
         let mut out = Vec::with_capacity(vsyncs as usize);
         // The windows open before vsync 0, so their setup isn't counted.
         let result = (|| -> Result<(), Value> {
+            compile(&mut session, doc)?;
             for k in 0..i64::from(vsyncs) {
                 let t = k * period;
                 let armed = k == 0 || session.valid_until.is_some_and(|v| v <= t);
@@ -896,6 +916,7 @@ impl Renderer {
             for step in steps {
                 if let Some(d) = step.doc {
                     doc = d;
+                    compile(&mut session, &doc)?;
                 }
                 if let Some(v) = step.view {
                     view = v;
@@ -940,16 +961,18 @@ impl Renderer {
     ) -> Value {
         let mut session = Self::new_session();
         session.store = store;
-        let result = self.present(
-            &mut session,
-            doc,
-            look,
-            view,
-            &BTreeMap::new(),
-            t,
-            gpui_oklab,
-            false,
-        );
+        let result = compile(&mut session, doc).and_then(|()| {
+            self.present(
+                &mut session,
+                doc,
+                look,
+                view,
+                &BTreeMap::new(),
+                t,
+                gpui_oklab,
+                false,
+            )
+        });
         let answer = match result {
             Err(refusal) => refusal,
             Ok(_) => {

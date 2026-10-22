@@ -3,11 +3,11 @@
 //! channels and placements write their items' fields; the frame's `valid_until` is the earliest
 //! time anything it shows changes next.
 
-use deep_canvas::ops;
 use serde_json::{json, Map, Value};
 
 use crate::curve::Sample;
-use crate::doc::{Channel, Extend, Motion, Placement, Target};
+use crate::doc::{Extend, Motion, Placement};
+use crate::program::{Program, State, TRANSFORM};
 
 /// Where a placement is at a timeline position: the pass the time falls in and the local time
 /// within it, or nothing where it writes nothing.
@@ -48,7 +48,7 @@ impl Placement {
     /// The pass and local time of a target `delay` after the start, at timeline position `p`:
     /// active on [start, end) with local time 0 at each wrap (right-continuous); before the start
     /// or from the end on, what `extend` holds.
-    fn local_after(&self, motion: &Motion, p: i64, delay: i64) -> Option<Local> {
+    pub(crate) fn local_after(&self, motion: &Motion, p: i64, delay: i64) -> Option<Local> {
         let span = self.span(motion);
         let start = self.start + delay;
         if p < start {
@@ -142,13 +142,6 @@ pub enum Validity {
     IgnorePlacements,
 }
 
-fn number_value(sample: &Sample) -> Value {
-    match sample.value.as_slice() {
-        [one] => json!(one),
-        many => json!(many),
-    }
-}
-
 /// `at` with `pos`, `rot` and `scale` as three numbers each, whatever the item wrote.
 fn normalize_at(item: &mut Map<String, Value>) {
     let at = item
@@ -222,125 +215,20 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     }
 }
 
-fn apply(items: &mut Map<String, Value>, owner: &str, target: &Target, sample: &Sample) {
-    if let Some(item) = items.get_mut(owner) {
-        write(item, &target.field, number_value(sample));
-    }
-}
-
-fn channel_write(items: &mut Map<String, Value>, channel: &Channel, sample: &Sample) {
-    apply(items, &channel.target.owner, &channel.target, sample);
-}
-
-fn triple(item: &Value, name: &str) -> [f64; 3] {
-    let mut out = [0.0; 3];
-    if let Some(Value::Array(parts)) = item.get("at").and_then(|a| a.get(name)) {
-        for (slot, part) in out.iter_mut().zip(parts) {
-            *slot = part.as_f64().unwrap_or(0.0);
-        }
-    }
-    out
-}
-
-/// Child-of parenting (canvas primitives: Constraint, R1 `child_of`): the child's evaluated
-/// transform, scaled, then turned about z by the parent's and moved by its position, so the child
-/// rides its parent. Rotation and scale compose, as the transform order says.
-fn parent_to(items: &mut Map<String, Value>, child: &str, parent: &str) {
-    let Some(p) = items.get(parent) else { return };
-    let (p_pos, p_rot, p_scale) = (triple(p, "pos"), triple(p, "rot"), triple(p, "scale"));
-    let Some(c) = items.get_mut(child) else {
-        return;
-    };
-    let (c_pos, c_rot, c_scale) = (triple(c, "pos"), triple(c, "rot"), triple(c, "scale"));
-    let (x, y) = (c_pos[0] * p_scale[0], c_pos[1] * p_scale[1]);
-    let a = ops::rad(p_rot[2]);
-    let (cos, sin) = if p_rot[2] == 0.0 {
-        (1.0, 0.0)
-    } else {
-        (ops::cos(a), ops::sin(a))
-    };
-    let pos = [
-        p_pos[0] + x * cos - y * sin,
-        p_pos[1] + x * sin + y * cos,
-        p_pos[2] + c_pos[2] * p_scale[2],
-    ];
-    let rot = [
-        p_rot[0] + c_rot[0],
-        p_rot[1] + c_rot[1],
-        p_rot[2] + c_rot[2],
-    ];
-    let scale = [
-        p_scale[0] * c_scale[0],
-        p_scale[1] * c_scale[1],
-        p_scale[2] * c_scale[2],
-    ];
-    if let Some(at) = c.get_mut("at").and_then(Value::as_object_mut) {
-        at.insert("pos".into(), json!(pos));
-        at.insert("rot".into(), json!(rot));
-        at.insert("scale".into(), json!(scale));
-    }
-}
-
-/// Evaluates `doc` (whose motion is `motion`) at `t`.
-pub fn frame(doc: &Map<String, Value>, motion: &Motion, t: i64, validity: Validity) -> Frame {
-    let (doc_t, pass) = position(motion, t);
-    let mut items = match doc.get("items") {
-        Some(Value::Object(items)) => items.clone(),
-        _ => Map::new(),
-    };
-    for item in items.values_mut() {
-        if let Some(map) = item.as_object_mut() {
-            normalize_at(map);
-        }
-    }
-    let mut channels = Vec::with_capacity(motion.channels.len());
-    for channel in &motion.channels {
-        let sample = channel.curve.sample(doc_t);
-        channel_write(&mut items, channel, &sample);
-        channels.push((channel.id.clone(), sample));
-    }
-    let mut placements = Vec::with_capacity(motion.placements.len());
-    for placement in &motion.placements {
-        if let Some(clip) = motion.clip(&placement.clip) {
-            for binding in &placement.bindings {
-                let Some(l) = placement.local_after(motion, doc_t, binding.delay) else {
-                    continue;
-                };
-                for channel in clip
-                    .channels
-                    .iter()
-                    .filter(|c| c.target.owner == binding.slot)
-                {
-                    let sample = channel.curve.sample(l.local);
-                    apply(&mut items, &binding.item, &channel.target, &sample);
-                }
-            }
-        }
-        let local = placement.local(motion, doc_t);
-        placements.push((placement.id.clone(), local));
-    }
-
-    for (child, parent) in &motion.parents {
-        parent_to(&mut items, child, parent);
-    }
-
-    // The earliest change, in timeline positions, then back on the clock.
-    let mut next: Option<i64> = None;
-    let mut take = |c: Option<i64>| {
-        if let Some(c) = c {
-            next = Some(next.map_or(c, |n: i64| n.min(c)));
-        }
-    };
-    for channel in &motion.channels {
-        take(channel.curve.next_change(doc_t));
-    }
-    if validity == Validity::Full {
-        for placement in &motion.placements {
-            take(placement.next_change(motion, doc_t));
-        }
-    }
+/// The frame's `valid_until`: the earliest `t` at which anything it shows changes next.
+pub(crate) fn valid_until(motion: &Motion, t: i64, doc_t: i64, validity: Validity) -> Option<i64> {
+    let channels = motion
+        .channels
+        .iter()
+        .filter_map(|c| c.curve.next_change(doc_t));
+    let placements = motion
+        .placements
+        .iter()
+        .filter(|_| validity == Validity::Full)
+        .filter_map(|p| p.next_change(motion, doc_t));
+    let next = channels.chain(placements).min();
     let tr = motion.transport;
-    let valid_until = match tr.span {
+    match tr.span {
         Some(span) if tr.wrap => {
             let wrap_at = tr.start + span;
             // Anything that changes within the pass changes on the clock by the same offset; at
@@ -354,14 +242,76 @@ pub fn frame(doc: &Map<String, Value>, motion: &Motion, t: i64, validity: Validi
             }
         }
         _ => next,
+    }
+}
+
+/// The evaluated items of `doc` from a program's state: each item as authored, with `at.pos`,
+/// `at.rot` and `at.scale` as three numbers from its slots, and each field a channel writes.
+pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    let mut items = match doc.get("items") {
+        Some(Value::Object(items)) => items.clone(),
+        _ => Map::new(),
     };
+    for (i, id) in program.items.iter().enumerate() {
+        let Some(item) = items.get_mut(id).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        normalize_at(item);
+        let slots = &state.slots[i * TRANSFORM..(i + 1) * TRANSFORM];
+        if let Some(at) = item.get_mut("at").and_then(Value::as_object_mut) {
+            at.insert("pos".into(), json!(slots[0..3]));
+            at.insert("rot".into(), json!(slots[3..6]));
+            at.insert("scale".into(), json!(slots[6..9]));
+        }
+    }
+    for field in &program.fields {
+        let Some(item) = field
+            .item
+            .and_then(|i| program.items.get(i))
+            .and_then(|id| items.get_mut(id))
+        else {
+            continue;
+        };
+        let run = &state.slots[field.slot..field.slot + field.width];
+        let value = match run {
+            [one] => json!(one),
+            many => json!(many),
+        };
+        write(item, &field.path, value);
+    }
+    items
+}
+
+/// Evaluates `doc`, compiled as `program`, at `t`.
+pub fn frame(doc: &Map<String, Value>, program: &Program, t: i64, validity: Validity) -> Frame {
+    let mut state = program.state();
+    program.evaluate(t, validity, &mut state);
+    let motion = &program.motion;
+    let mut at = 0;
+    let channels = motion
+        .channels
+        .iter()
+        .zip(&state.iterations)
+        .map(|(c, &iterations)| {
+            let width = c.curve.keys.first().map_or(1, |k| k.value.len());
+            let value = state.values[at..at + width].to_vec();
+            at += width;
+            (c.id.clone(), Sample { value, iterations })
+        })
+        .collect();
+    let placements = motion
+        .placements
+        .iter()
+        .zip(&state.locals)
+        .map(|(p, l)| (p.id.clone(), *l))
+        .collect();
     Frame {
         t,
-        doc_t,
-        pass,
-        items,
+        doc_t: state.doc_t,
+        pass: state.pass,
+        items: items(doc, program, &state),
         channels,
         placements,
-        valid_until,
+        valid_until: state.valid_until,
     }
 }
