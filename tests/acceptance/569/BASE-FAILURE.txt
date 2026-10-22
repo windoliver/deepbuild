@@ -1,0 +1,130 @@
+Base: 7fc4f14 (origin/main, no proof lanes). Node v24.22.0, git version 2.47.0.
+StrykerJS: absent; cargo-mutants: absent.
+
+$ node --test 'tests/acceptance/569/*.test.mjs'
+One line per test (from the TAP reporter), then its error. Every test fails on its first
+assertion about the implementation: scripts/proof.mjs is missing, or scripts/lanes.mjs has no
+proof lane. Each scenario's scratch repository, commits, signed approval tags and issue
+body were built before that assertion, without error.
+
+not ok - #569.a7450c6d a fix test asserting 1 === 1 passes on the merge base and fails the preflight, naming the test; the real fix test, failing its assertion there, passes
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a7450c6d a fix test that fails on the merge base only because its import is missing there fails the preflight, naming "failed on the base before its assertion"
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a7450c6d a fix test that fails on the merge base only with a TypeError from calling a function the fix adds fails the preflight, naming "failed on the base before its assertion"
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.46c12530 a new test of code the merge base lacks passes when it fails on the planted wrong program its criterion names
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.46c12530 a new test that fails neither on the merge base at its assertion nor on its planted wrong program fails the preflight, naming the criterion
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.26d13489 a test that cannot run on the merge base because its base checkout cannot install is BLOCKED, naming the cause, never a pass
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.ec1582c6 rewording invariant 3 in AGENTS.md fails the guard, naming the file and the line
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.ec1582c6 editing the Reopens if cell of the Decided row "Work-in-progress commits" fails the guard, naming the file and the line
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.ec1582c6 the same two edits, each sent as its own proposal and approved by you, pass the guard
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.ec1582c6 an approval that names only AGENTS.md lets the Decisions edit in the same proposal fail, naming its file and line
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.ec1582c6 a change elsewhere in AGENTS.md and the design, outside the invariants and the Decisions rows, passes the guard
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a14ef07d it.skip added to a tagged test fails the guard, naming the test and its criterion
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a14ef07d it.skip left uncommitted in the worktree fails the guard too
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a14ef07d deleting a tagged test, its file kept, fails the guard, naming the test and its criterion
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a14ef07d rewriting a tagged test's expected value to the new output fails the guard, naming the test and its criterion
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a14ef07d re-recording the golden a tagged test reads fails the guard, naming the golden, the test and its criterion
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.a14ef07d the default local proof run includes the guard: it.skip fails it
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.9a8442f7 the it.skip edit sent as its own proposal and approved by you passes the guard
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.9a8442f7 an approval for one test lets no other test's edit through, naming the second test
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.9a8442f7 an approved proposal that also carries the change it would let pass is not its own proposal, and fails
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.9a8442f7 an approval unsigned is no approval: the edit fails the guard
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.9a8442f7 an approval signed by a key the approvers file does not list is no approval: the edit fails the guard
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.fe787486 a change that only adds tests, to a tagged file and in a new file, passes the guard
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.fe787486 edits to tests no criterion of the issue tags pass the guard: an untagged test beside tagged ones, another issue's test and an untagged file
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.60ea8a8b the mutation lane lists every surviving mutant on an added line a tagged test executes, with its diff, and a test that asserts nothing makes its criterion INVALID
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.60ea8a8b the mutation lane runs in the release preflight and on demand, never in the local run
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.46c12530 a new test with no planted wrong program counts once it kills a mutant; one that kills none fails, naming its criterion
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.60ea8a8b #569.f7197598 the local preflight runs every proof lane once, as node scripts/proof.mjs with no mode
+    the local lanes run scripts/proof.mjs 0 times: []
+not ok - #569.60ea8a8b #569.f7197598 the release preflight runs the proof lanes with --release, and npm run release:check is scripts/preflight --release
+    'scripts/lanes.mjs exports no releaseChecks'
+not ok - #569.bc10b010 a planted precedence change that turns a seeded case's FAIL into INVALID, failing no test, is listed with both verdicts and fails without the maintainer's yes
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.bc10b010 with the maintainer's yes on that list the replay passes, still listing both verdicts; a yes on another list does not
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.f7197598 a table edit that leaves a lease with no move to a final state fails the local preflight, naming the table; the crash suite does not run
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.f7197598 a table edit that keeps every state reaching a final one passes the local enumerator
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.f7197598 an edit to the hub core's storage interface runs the crash suite in the local preflight
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.f7197598 a change to neither runs neither locally; the release preflight runs both in full
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f raising a tagged fixture's tolerance from 1e-6 to 1e-4 in place fails the guard, naming the fixture and both values
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f the in-place raise still fails when sent as its own approved proposal, naming the fixture and both values
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f the 1e-4 bound added as a new case beside the old, same criterion, proposed with both bounds and runs of both on the same inputs, passes once approved
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f the new looser case without your approval fails the guard, naming the fixture
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f the old case's removal fails unapproved, and fails inside the proposal that adds the looser case
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f the old case's removal passes as its own approved proposal
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.7b34ed5f lowering the bound to 1e-7 passes as an approved proposal, and fails without approval
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.4ad4295a tests tagging criteria 1 and 2 of a three-criterion issue: Closes is refused, the change reads Part of, naming criterion 3
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.4ad4295a with every criterion tagged by a test that ran, failed on the merge base and passes, Closes passes the trace lane
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.4ad4295a a change that says Part of passes the trace lane and still names criterion 3 as open
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.4ad4295a a skipped test for criterion 3 is no test that ran: Closes is refused, naming criterion 3
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.4ad4295a a test for criterion 3 that passes on the merge base failed on no wrong program: Closes is refused, naming criterion 3
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+not ok - #569.4ad4295a a tag naming a criterion the edited issue no longer holds fails the lane, naming the tag
+    'scripts/proof.mjs does not exist: the proof lanes are not implemented'
+# tests 48
+# pass 0
+# fail 48
+# duration_ms 5053.047167
+
+Spec reporter: the first failure in full (the rest fail the same way):
+✖ failing tests:
+
+test at tests/acceptance/569/before.test.mjs:38:1
+✖ #569.a7450c6d a fix test asserting 1 === 1 passes on the merge base and fails the preflight, naming the test; the real fix test, failing its assertion there, passes (570.249833ms)
+  AssertionError [ERR_ASSERTION]: scripts/proof.mjs does not exist: the proof lanes are not implemented
+      at proof (file://<checkout>/tests/acceptance/569/helpers.mjs:118:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/569/before.test.mjs:41:18)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+spec exit 1
