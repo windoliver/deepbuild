@@ -374,6 +374,10 @@ class AsksCore implements Asks {
       if (fallsTo.decision === 'allow' && !options.some((o) => o.decision === 'deny')) {
         throw new AskRefused(`the default ${fallsTo.id} approves, and the ask has no option that says no to take at its deadline`, { field: 'default' });
       }
+      // An authority ask takes no at its deadline, and the no it takes is one of its options.
+      if (data.kind === 'authority' && !options.some((o) => o.decision === 'deny')) {
+        throw new AskRefused('an authority ask takes no at its deadline, and this one has no option that says no', { field: 'options' });
+      }
       // A taste call names the candidates it dropped as near copies of ones it still offers (#394).
       for (const copy of (data.dropped ?? []) as { option: string; same_as: string }[]) {
         if (ids.has(copy.option) || !ids.has(copy.same_as)) throw new AskRefused(`dropped candidate ${copy.option} must be gone from the options and count as one with an option offered`, { option: copy.option });
@@ -923,10 +927,10 @@ class AsksCore implements Asks {
           // Shown before this call: an ask the hub first shows now, after downtime past its deadline, stays in
           // Needs you until a later call, so it can be seen before its default.
           // Past its deadline the default applies; nothing defaults to allow, and an authority ask defaults to no.
+          // Either takes the option that says no, which raise() made sure of; the decision is that option's own.
           const option = ask.options.find((o) => o.id === ask.data.default);
-          const deny = ask.data.kind === 'authority' || option?.decision === 'allow';
-          const answer = deny ? ask.options.find((o) => o.decision === 'deny') ?? option : option;
-          const decision: Decision = deny ? 'deny' : option?.decision ?? 'none';
+          const answer = ask.data.kind === 'authority' || option?.decision === 'allow' ? ask.options.find((o) => o.decision === 'deny') : option;
+          const decision: Decision = answer?.decision ?? 'none';
           await this.options.record.append(as, { ...base, kind: 'ask.defaulted', data: { answer: answer?.id ?? 'no', plan_hash: null, decision } });
           await this.sync();
           this.hand(ask, answer?.id ?? null, null, false, decision);

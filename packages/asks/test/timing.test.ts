@@ -342,6 +342,26 @@ describe('an ask past its deadline', () => {
     await asks.tick();
     expect(await about(h, 'ask.defaulted')).toHaveLength(1);
   });
+
+  it('an authority ask with no option that says no is refused when raised, so its deadline never records a no its options never offered', async () => {
+    await start('S1');
+    const options = [{ id: 'now', label: 'Push now', decision: 'none' }, { id: 'wait', label: 'Push later', decision: 'none' }];
+    const refusal = await asks.raise(core('S1'), sourceOf('authority'), ask('authority', 'login', { options, recommended: 'now', default: 'wait' })).catch((e: unknown) => e);
+    expect(refusal).toBeInstanceOf(AskRefused);
+    expect((refusal as AskRefused).field).toBe('options');
+    expect(await events('ask.created')).toEqual([]);
+  });
+
+  it('an authority ask whose default names an option that neither allows nor denies still takes the option that says no', async () => {
+    settings({});
+    await start('S1');
+    const options = [...OPTIONS.authority!, { id: 'wait', label: 'Not yet', decision: 'none' }];
+    const h = await asks.raise(core('S1'), sourceOf('authority'), ask('authority', 'login', { options, default: 'wait' }));
+    expect(await shown()).toContain(h);
+    await at(T0 + DAY);
+    const [defaulted] = await about(h, 'ask.defaulted');
+    expect(defaulted?.data).toMatchObject({ answer: 'hold', decision: 'deny' });
+  });
 });
 
 describe('Later', () => {
