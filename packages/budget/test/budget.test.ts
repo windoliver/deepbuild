@@ -57,6 +57,9 @@ const wrap = (store: RecordStore): RecordStore => ({
   session: (id) => store.session(id),
   rebuild: () => store.rebuild(),
   raw: (sql) => store.raw(sql),
+  sync: () => store.sync(),
+  startSlice: (id) => store.startSlice(id),
+  rollBack: (connection, what) => store.rollBack(connection, what),
   close: () => store.close(),
 });
 const approve = (cap: number): Promise<string> => ledger.approve(card, { scope: { kind: 'issue', ref: ISSUE }, cap_usd: cap, ends: T0 + 30 * DAY });
