@@ -1,5 +1,6 @@
 // @deepbuild/asks: the asks core (#318). An ask is raised only from a place in ask.sources@1, holds to
-// ask.created@1, and ends: answered on the trusted path, superseded, moot, or defaulted at its deadline.
+// ask.created@1 (@2 for a taste call that names the near copies it dropped, #394), and ends: answered on
+// the trusted path, superseded, moot, or defaulted at its deadline.
 //
 // Its state is a function of the record: every method first reads what the log gained, then appends what
 // that state calls for (a supersede, a moot, a typed answer, a default, the fold's exception), so a core
@@ -350,11 +351,12 @@ class AsksCore implements Asks {
       const now = this.options.now();
       const input = this.fill(connection.session, raised, now);
       const id = ulid(now);
-      const event = { v: 1, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
-      const checked = validate('ask.created@1', event);
+      const v = isObj(input) && 'dropped' in input ? 2 : 1;
+      const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
+      const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
         const [first] = checked.issues;
-        throw new AskRefused(`ask.created@1 refuses the ask at ${first!.path}: ${first!.remediation}`, { field: first!.path });
+        throw new AskRefused(`ask.created@${v} refuses the ask at ${first!.path}: ${first!.remediation}`, { field: first!.path });
       }
       const data = input as Obj;
       const options = data.options as Option[];
@@ -371,6 +373,10 @@ class AsksCore implements Asks {
       const fallsTo = options.find((o) => o.id === data.default)!;
       if (fallsTo.decision === 'allow' && !options.some((o) => o.decision === 'deny')) {
         throw new AskRefused(`the default ${fallsTo.id} approves, and the ask has no option that says no to take at its deadline`, { field: 'default' });
+      }
+      // A taste call names the candidates it dropped as near copies of ones it still offers (#394).
+      for (const copy of (data.dropped ?? []) as { option: string; same_as: string }[]) {
+        if (ids.has(copy.option) || !ids.has(copy.same_as)) throw new AskRefused(`dropped candidate ${copy.option} must be gone from the options and count as one with an option offered`, { option: copy.option });
       }
       if (data.provisional && (!PROVISIONAL_KINDS.has(row.kind) || data.recommended === null)) {
         throw new AskRefused('only a taste call or a choice with a recommendation goes on provisionally', { field: 'provisional' });
@@ -396,7 +402,7 @@ class AsksCore implements Asks {
       if (!open.some((a) => a.fold) && open.length >= (typeof foldAt === 'number' ? foldAt : FOLD_AT)) {
         await this.raiseFold(thread, connection.session, { actor: connection.actor, scope: connection.scope }, [`ask:${id}`], data.deadline as number);
       }
-      await this.options.record.append(connection, { v: 1, id, kind: 'ask.created', ts: now, data: data });
+      await this.options.record.append(connection, { v, id, kind: 'ask.created', ts: now, data: data });
       if (proposed) await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'plan.proposed', ts: now, data: proposed });
       await this.sync();
       const ask = this.asks.get(id)!;

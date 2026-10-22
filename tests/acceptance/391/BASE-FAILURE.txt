@@ -1,0 +1,171 @@
+Base commit: 4f6dec56bf3d4dcb4ab4e377ddbbdd43f2c65226
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/391 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: no deep-motion or deep-canvas-render bin target exists there.
+Date: 2026-10-21T19:58:55Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/391
+
+ ❯ rebuild.test.ts (3 tests | 3 failed) 15767ms
+   ❯ AC2 parity/2d/patch-equals-rebuild.board: after each kind of change, the cached output equals a clean rebuild byte for byte (3)
+     × AC2 tessellation, shaped text and writer-layer caches of one session through every change equal a clean rebuild in a fresh process 5ms
+     × AC2 each change kind changes the clean rebuild's entry it touches, so a cache gone stale would differ from the rebuild 1ms
+     × a deep-canvas-render line that is not JSON, or a session whose first step has no doc, is bad_input with no panic 0ms
+ ❯ subdivision.test.ts (6 tests | 6 failed) 12201ms
+   ❯ AC4 a key inserted at the curve's own value on a linear segment changes nothing within 1 ulp in f64 (parity/animation/subdivision-stable.film) (4)
+     × AC4 lin: a linear channel, a quarter of the way along its one segment 6ms
+     × AC4 held: the linear segment after a hold segment 1ms
+     × AC4 curve: the linear segment after a Bézier segment 1ms
+     × AC4 tint: an OKLab color channel, a quarter of the way along 0ms
+   ❯ AC4 Blender's Bézier subdivision, ported: a key inserted at the curve's own value on a Bézier segment splits its handles so the curve keeps its shape (2)
+     × AC4 the split handles and the new key's value are Blender's, within its EXPECT_FLOAT_EQ 0ms
+     × AC4 the subdivided curve keeps its shape: every sample within EXPECT_FLOAT_EQ of the original 0ms
+ ❯ bezier.test.ts (5 tests | 5 failed) 1581ms
+   ❯ AC3 Bézier timing with handles at x = 0 and x = 1, a linear pair and near-vertical handles stays finite and monotonic in x with a fixed iteration count in f64 (5)
+     × AC3 every sample of every handle set is finite, and the segment ends on its keys 4ms
+     × AC3 WPT's cubic-bezier cases, ported: our channel matches testcommon.js's bisection reference within WPT's 0.02 at its sample times 0ms
+     × AC3 Blender's extreme handles, ported: finite, increasing, and its stored value at each frame 0ms
+     × AC3 monotonic in x: for every handle set whose y never falls, no later sample is lower than an earlier one 0ms
+     × AC3 a fixed iteration count: every sample inside a Bézier segment reports the same positive solver count, near-vertical handles included 0ms
+ ❯ loops.test.ts (4 tests | 4 failed) 874ms
+   ❯ AC3 at an exact wrap time a loop shows its start pose, right-continuous like keys, and frames spanning 0, 1 and 3 loops count every pass (4)
+     × AC3 WPT's iteration cases on a placement of three repeats: the boundary restarts at 0 of the next iteration, and 1 only at the end of the active interval 4ms
+     × AC3 a placement repeating 1 s passes: frames spanning 0, 1 and 3 loops count 0, 1 and 3 passes, and an exact wrap counts one 0ms
+     × AC3 the transport's loop: at an exact wrap the timeline is back at its start pose, and frames spanning 0, 1 and 3 loops count every pass 0ms
+     × a deep-motion line that is not JSON, or has no doc, is bad_input with no panic 0ms
+ ❯ gradient.test.ts (2 tests | 2 failed) 890ms
+   ❯ AC6 a two-stop OKLab gradient from black to sRGB 0.2, drawn by GPUI through the patch's exact gradient mode, reads 13 at its midpoint, with identical rows (2)
+     × AC6 the exact mode: the midpoint reads 13 and every row of the horizontal gradient is identical 4ms
+     × AC6 a build that draws it through GPUI's own OKLab option reads about 20 there, with rows that differ by its dither, and fails this test, naming the pixel 0ms
+ ❯ clock.test.ts (3 tests | 3 failed) 914ms
+   ❯ AC5 a still figure whose placement starts at 3 s and whose spring settles at 4.2 s presents frames at both times by the frame clock alone (3)
+     × AC5 the armed run presents its first frame, then nothing until 3 s, every vsync while the spring moves, the settled frame at 4.2 s, and nothing after 4ms
+     × AC5 the every-vsync run's evaluated data equals the armed run's at each vsync, and the figure really moves 1ms
+     × AC5 a planted valid_until that ignores placements stops at 0 s and fails this comparison, naming the item 0ms
+ ❯ still.test.ts (3 tests | 3 failed) 979ms
+   ❯ AC1 a still view uses no GPU time (3)
+     × AC1 after its first frame, a still board commits no command buffer and spends no GPU time at any vsync 4ms
+     × AC1 the same board while its live layer moves uses GPU time at every vsync, so the counters are not a fixed zero 1ms
+     × AC1 once the motion ends the view goes still again: no GPU time from the vsync after its last change 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 26 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bezier.test.ts > AC3 Bézier timing with handles at x = 0 and x = 1, a linear pair and near-vertical handles stays finite and monotonic in x with a fixed iteration count in f64 > AC3 every sample of every handle set is finite, and the segment ends on its keys
+ FAIL  bezier.test.ts > AC3 Bézier timing with handles at x = 0 and x = 1, a linear pair and near-vertical handles stays finite and monotonic in x with a fixed iteration count in f64 > AC3 WPT's cubic-bezier cases, ported: our channel matches testcommon.js's bisection reference within WPT's 0.02 at its sample times
+ FAIL  bezier.test.ts > AC3 Bézier timing with handles at x = 0 and x = 1, a linear pair and near-vertical handles stays finite and monotonic in x with a fixed iteration count in f64 > AC3 Blender's extreme handles, ported: finite, increasing, and its stored value at each frame
+ FAIL  bezier.test.ts > AC3 Bézier timing with handles at x = 0 and x = 1, a linear pair and near-vertical handles stays finite and monotonic in x with a fixed iteration count in f64 > AC3 monotonic in x: for every handle set whose y never falls, no later sample is lower than an earlier one
+ FAIL  bezier.test.ts > AC3 Bézier timing with handles at x = 0 and x = 1, a linear pair and near-vertical handles stays finite and monotonic in x with a fixed iteration count in f64 > AC3 a fixed iteration count: every sample inside a Bézier segment reports the same positive solver count, near-vertical handles included
+ FAIL  clock.test.ts > AC5 a still figure whose placement starts at 3 s and whose spring settles at 4.2 s presents frames at both times by the frame clock alone > AC5 the armed run presents its first frame, then nothing until 3 s, every vsync while the spring moves, the settled frame at 4.2 s, and nothing after
+ FAIL  clock.test.ts > AC5 a still figure whose placement starts at 3 s and whose spring settles at 4.2 s presents frames at both times by the frame clock alone > AC5 the every-vsync run's evaluated data equals the armed run's at each vsync, and the figure really moves
+ FAIL  clock.test.ts > AC5 a still figure whose placement starts at 3 s and whose spring settles at 4.2 s presents frames at both times by the frame clock alone > AC5 a planted valid_until that ignores placements stops at 0 s and fails this comparison, naming the item
+ FAIL  loops.test.ts > AC3 at an exact wrap time a loop shows its start pose, right-continuous like keys, and frames spanning 0, 1 and 3 loops count every pass > AC3 WPT's iteration cases on a placement of three repeats: the boundary restarts at 0 of the next iteration, and 1 only at the end of the active interval
+ FAIL  loops.test.ts > AC3 at an exact wrap time a loop shows its start pose, right-continuous like keys, and frames spanning 0, 1 and 3 loops count every pass > AC3 a placement repeating 1 s passes: frames spanning 0, 1 and 3 loops count 0, 1 and 3 passes, and an exact wrap counts one
+ FAIL  loops.test.ts > AC3 at an exact wrap time a loop shows its start pose, right-continuous like keys, and frames spanning 0, 1 and 3 loops count every pass > AC3 the transport's loop: at an exact wrap the timeline is back at its start pose, and frames spanning 0, 1 and 3 loops count every pass
+ FAIL  loops.test.ts > AC3 at an exact wrap time a loop shows its start pose, right-continuous like keys, and frames spanning 0, 1 and 3 loops count every pass > a deep-motion line that is not JSON, or has no doc, is bad_input with no panic
+ FAIL  subdivision.test.ts > AC4 a key inserted at the curve's own value on a linear segment changes nothing within 1 ulp in f64 (parity/animation/subdivision-stable.film) > AC4 lin: a linear channel, a quarter of the way along its one segment
+ FAIL  subdivision.test.ts > AC4 a key inserted at the curve's own value on a linear segment changes nothing within 1 ulp in f64 (parity/animation/subdivision-stable.film) > AC4 held: the linear segment after a hold segment
+ FAIL  subdivision.test.ts > AC4 a key inserted at the curve's own value on a linear segment changes nothing within 1 ulp in f64 (parity/animation/subdivision-stable.film) > AC4 curve: the linear segment after a Bézier segment
+ FAIL  subdivision.test.ts > AC4 a key inserted at the curve's own value on a linear segment changes nothing within 1 ulp in f64 (parity/animation/subdivision-stable.film) > AC4 tint: an OKLab color channel, a quarter of the way along
+ FAIL  subdivision.test.ts > AC4 Blender's Bézier subdivision, ported: a key inserted at the curve's own value on a Bézier segment splits its handles so the curve keeps its shape > AC4 the split handles and the new key's value are Blender's, within its EXPECT_FLOAT_EQ
+ FAIL  subdivision.test.ts > AC4 Blender's Bézier subdivision, ported: a key inserted at the curve's own value on a Bézier segment splits its handles so the curve keeps its shape > AC4 the subdivided curve keeps its shape: every sample within EXPECT_FLOAT_EQ of the original
+AssertionError: the binaries build: deep-motion: expected 'cargo build --bin deep-motion failed:…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-motion failed:
++ error: no bin target named `deep-motion` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-contracts
++     deep-hook
++     deep-live
++     deep-replica
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:91:79
+     89|   let error = '';
+     90|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     91|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+     92| }
+     93|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/26]⎯
+
+ FAIL  gradient.test.ts > AC6 a two-stop OKLab gradient from black to sRGB 0.2, drawn by GPUI through the patch's exact gradient mode, reads 13 at its midpoint, with identical rows > AC6 the exact mode: the midpoint reads 13 and every row of the horizontal gradient is identical
+ FAIL  gradient.test.ts > AC6 a two-stop OKLab gradient from black to sRGB 0.2, drawn by GPUI through the patch's exact gradient mode, reads 13 at its midpoint, with identical rows > AC6 a build that draws it through GPUI's own OKLab option reads about 20 there, with rows that differ by its dither, and fails this test, naming the pixel
+ FAIL  still.test.ts > AC1 a still view uses no GPU time > AC1 after its first frame, a still board commits no command buffer and spends no GPU time at any vsync
+ FAIL  still.test.ts > AC1 a still view uses no GPU time > AC1 the same board while its live layer moves uses GPU time at every vsync, so the counters are not a fixed zero
+ FAIL  still.test.ts > AC1 a still view uses no GPU time > AC1 once the motion ends the view goes still again: no GPU time from the vsync after its last change
+AssertionError: the binaries build: deep-canvas-render: expected 'cargo build --bin deep-canvas-render …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-canvas-render failed:
++ error: no bin target named `deep-canvas-render` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-contracts
++     deep-hook
++     deep-live
++     deep-replica
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:91:79
+     89|   let error = '';
+     90|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     91|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+     92| }
+     93|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/26]⎯
+
+ FAIL  rebuild.test.ts > AC2 parity/2d/patch-equals-rebuild.board: after each kind of change, the cached output equals a clean rebuild byte for byte > AC2 tessellation, shaped text and writer-layer caches of one session through every change equal a clean rebuild in a fresh process
+ FAIL  rebuild.test.ts > AC2 parity/2d/patch-equals-rebuild.board: after each kind of change, the cached output equals a clean rebuild byte for byte > AC2 each change kind changes the clean rebuild's entry it touches, so a cache gone stale would differ from the rebuild
+ FAIL  rebuild.test.ts > AC2 parity/2d/patch-equals-rebuild.board: after each kind of change, the cached output equals a clean rebuild byte for byte > a deep-canvas-render line that is not JSON, or a session whose first step has no doc, is bad_input with no panic
+AssertionError: the binaries build: deep-canvas-render: expected 'cargo build --bin deep-canvas-render …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-canvas-render failed:
++  Downloading crates ...
++   Downloaded unicode-normalization v0.1.26
++ error: no bin target named `deep-canvas-render` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-contracts
++     deep-hook
++     deep-live
++     deep-replica
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:91:79
+     89|   let error = '';
+     90|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+     91|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+     92| }
+     93|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/26]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  26 failed (26)
+   Start at  12:58:58
+   Duration  34.18s (tests 100%)
+
