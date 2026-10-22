@@ -32,6 +32,8 @@ export function removeTemporaries() {
 export function childEnv(extra = {}) {
   const environment = { ...process.env, ...extra };
   delete environment.NODE_TEST_CONTEXT;
+  // A test under a mutant that runs the lanes itself mustn't hand that mutant to their own runs.
+  delete environment.__STRYKER_ACTIVE_MUTANT__;
   return environment;
 }
 

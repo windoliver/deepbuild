@@ -132,12 +132,12 @@ function testEdits(root, commit, file, before, relevant) {
   const hit = new Set();
   const inner = (line) => tests.filter((test) => test.start <= line && line <= test.end).sort((a, b) => b.from - a.from)[0];
   const lines = file.status === 'D' ? before.split('\n').map((_, index) => index + 1) : removedLines(file);
-  // A line that holds code outside every test, such as a helper written after a test on its line,
-  // is outside every test too.
+  // A removed line holding code outside every test, such as a helper the tests read or one written
+  // after a test on its line, edits every tagged test; a blank one, as a deleted test leaves, doesn't.
   const loose = (line) => /[^\s;,]/.test(outsideTests(before, tests).split('\n')[line - 1] ?? '');
   for (const line of lines) {
     const test = inner(line);
-    if (!test || loose(line)) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
+    if (loose(line)) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
     if (!test) continue;
     if (tagsOf(test).length) hit.add(test);
     // A suite's own line, such as its describe.skip or a hook, edits the tagged tests inside it.
