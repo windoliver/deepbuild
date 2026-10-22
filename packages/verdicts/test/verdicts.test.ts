@@ -119,10 +119,10 @@ describe('predictions first', () => {
     const v = verdict(claim({ checks: [c], runs, predictions: [{ check: 'unit', expects: 'failed', at: 75 }] }));
     expect(v.contradictions.map((x) => x.late)).toEqual([true, true]);
   });
-  it('a thousand predictions on a thousand runs are judged in well under a verdict budget', () => {
+  it('ten thousand predictions, each at its own time, on a thousand runs are judged in well under a verdict budget', () => {
     const wide = check('unit', { runs: 1000 });
-    const runs = Array.from({ length: 1000 }, (_, i) => run(wide, 'passed', { started: 10, ended: i + 11 }));
-    const predictions = Array.from({ length: 1000 }, (_, i) => ({ check: 'unit', expects: 'failed' as const, at: i % 7 }));
+    const runs = Array.from({ length: 1000 }, (_, i) => run(wide, 'passed', { started: 20_000, ended: i + 20_001 }));
+    const predictions = Array.from({ length: 10_000 }, (_, i) => ({ check: 'unit', expects: 'failed' as const, at: i }));
     const started = performance.now();
     const v = verdict(claim({ checks: [wide], runs, predictions }));
     expect(performance.now() - started).toBeLessThan(100);
@@ -151,6 +151,12 @@ describe('a verdict on a workspace', () => {
     expect(v.reasons.join(' ')).toContain('host:gpu-box');
     expect(v.open_items).toHaveLength(1);
     expect(v.open_items[0]!.closes_with.evidence).toContain('sha256');
+  });
+  it('a state entry that isn\'t a sha256 is judged once as INVALID, never again as drift', () => {
+    const odd = ['host:gpu-box', '1'.repeat(64)];
+    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed')], state: odd }));
+    expect(staleReason(v, D, odd)).toBeNull();
+    expect(staleReason(v, D, ['host:gpu-box', '2'.repeat(64)])).toContain('2'.repeat(64));
   });
   it('is recorded, and marked stale on drift, through the record', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'deep-verdicts-'));

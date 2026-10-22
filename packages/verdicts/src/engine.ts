@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
   CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo,
-  Prediction, Requirement, RequirementOutcome, Result, Run, SendBack, Verdict, VerdictAsk, VerdictKey,
+  Requirement, RequirementOutcome, Result, Run, SendBack, Verdict, VerdictAsk, VerdictKey,
 } from './types.js';
 
 /** A sha256 as evidence records it: only captured evidence with one supports a PASS. */
@@ -520,38 +520,46 @@ function key(claim: ClaimInput): VerdictKey {
 export function staleReason(v: Verdict, commit: string, state?: readonly string[]): string | null {
   if (commit !== v.commit) return `the verdict covers commit ${v.commit}, and the claim is now at ${commit}`;
   if (state === undefined) return null;
-  const now = new Set(state), was = new Set(v.key.state_digests);
+  // An entry that isn't a digest was judged once, as INVALID; it is never drift.
+  const now = new Set(state.filter((d) => HEX64.test(d))), was = new Set(v.key.state_digests);
   const drifted = sorted([...[...now].filter((d) => !was.has(d)), ...[...was].filter((d) => !now.has(d))]);
   return drifted.length ? `the state the verdict read changed: ${drifted.join(', ')}` : null;
 }
 
 /**
- * Each counted run a prediction disagrees with, and each a prediction was recorded only after it started. One pass
- * per check over its distinct predictions and the runs already counted, so the agent's count of predictions can't
- * slow the verdict; a run with no start, or a start past its end, can't be shown to follow any prediction.
+ * Each counted run a prediction disagrees with, and each a prediction was recorded only after it started. Only the
+ * earliest and latest prediction of each outcome can change what a run shows, so one pass over the predictions and
+ * one over the counted runs decide it, whatever the agent's count of predictions. A run with no start, or a start
+ * past its end, can't be shown to follow any prediction.
  */
 function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradiction[] {
-  const byCheck = new Map<string, Map<string, Prediction>>();
+  const span = new Map<string, { first: number; last: number }>();
   for (const p of claim.predictions ?? []) {
-    const of = byCheck.get(p.check) ?? new Map<string, Prediction>();
-    of.set(`${p.expects}\0${p.at}`, p);
-    byCheck.set(p.check, of);
+    const key = `${p.check}\0${p.expects}`;
+    const at = span.get(key);
+    if (!at) span.set(key, { first: p.at, last: p.at });
+    else { at.first = Math.min(at.first, p.at); at.last = Math.max(at.last, p.at); }
   }
-  const out = new Map<string, Contradiction>();
+  const out: Contradiction[] = [];
   for (const j of judged) {
-    const predictions = byCheck.get(j.check.check);
-    if (!predictions) continue;
+    const expected = (['passed', 'failed'] as const).flatMap((expects) => {
+      const at = span.get(`${j.check.check}\0${expects}`);
+      return at ? [{ expects, ...at }] : [];
+    });
+    if (!expected.length) continue;
     for (const r of j.runs) {
       if (r.outcome !== 'passed' && r.outcome !== 'failed' && r.outcome !== 'overran') continue;
-      for (const p of predictions.values()) {
-        const late = r.started === undefined || p.at >= Math.min(r.started, r.ended);
-        if (!late && (r.outcome === 'passed') === (p.expects === 'passed')) continue;
-        const key = `${r.run}\0${p.expects}\0${late}`;
-        if (!out.has(key)) out.set(key, { check: j.check.check, run: r.run, predicted: p.expects, outcome: r.outcome, late });
+      const began = r.started === undefined ? undefined : Math.min(r.started, r.ended);
+      for (const { expects, first, last } of expected) {
+        if (began === undefined || last >= began) out.push({ check: j.check.check, run: r.run, predicted: expects, outcome: r.outcome, late: true });
+        if (began !== undefined && first < began && (r.outcome === 'passed') !== (expects === 'passed')) {
+          out.push({ check: j.check.check, run: r.run, predicted: expects, outcome: r.outcome, late: false });
+        }
       }
     }
   }
-  return [...out.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([, x]) => x);
+  const order = (x: Contradiction): string => `${x.run}\0${x.predicted}\0${x.late}`;
+  return out.sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0));
 }
 
 /** The verdict record's hash, leaving out display fields: reasons, open item words, ask questions and contradictions. */
