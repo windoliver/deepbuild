@@ -228,6 +228,33 @@ describe('the environment kit and the process table', () => {
     }
   });
 
+  it('refuses an environment whose down clears everything and then starts a tagged process right after', async () => {
+    const k = kit();
+    const [clean] = cleanFills(k) as EnvironmentFill[];
+    const tokens = new Map<string, string>();
+    // A spawner of its own (no token on its command line; the token rides in its environment) that, 40 ms on, starts a
+    // detached process carrying the run token and exits. The judge holds the thread while it watches, so the delay
+    // must come from another process, as a fill's real stragglers would.
+    const spawner = 'setTimeout(() => { require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 20_000)", process.env.RUN], { detached: true, stdio: "ignore" }).unref(); process.exit(0); }, 40);';
+    const respawning: EnvironmentFill = {
+      ...clean!,
+      up: (spec, lease) => { const h = clean!.up(spec, lease); tokens.set(h.id, lease.token); return h; },
+      down: (handle) => {
+        clean!.down(handle);
+        spawn(process.execPath, ['-e', spawner], { stdio: 'ignore', env: { ...process.env, RUN: tokens.get(handle.id)! } }).unref();
+      },
+    };
+    const stragglers = (): number[] => execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => [...tokens.values()].some((t) => l.includes(t))).map((l) => Number(l.trim().split(/\s+/)[0]));
+    try {
+      const report = await runKit(k, respawning, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'process_left'], ['FAIL', 'process_left']]);
+      expect(report.cases[0]!.message).toMatch(/after down had cleared/);
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const pid of stragglers()) if (pid > 1) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+    }
+  });
+
   it('refuses an environment whose tagged sibling has a child without the run token', async () => {
     const k = kit();
     const [clean] = cleanFills(k) as EnvironmentFill[];

@@ -83,6 +83,12 @@ function waitUntil(done: () => boolean, ms: number): boolean {
   while (Date.now() < end) { if (done()) return true; sleep(10); }
   return done();
 }
+/** Whether `clear` holds at every sample through `ms`, the last one at or after the end. */
+function stillClear(clear: () => boolean, ms: number): boolean {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { if (!clear()) return false; sleep(10); }
+  return clear();
+}
 interface Row { pid: number; ppid: number; zombie: boolean; command: string }
 interface Carrier { pid: number; command: string }
 /** The whole process table, one row per process; null when it can't be read, never an empty list. */
@@ -459,13 +465,18 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     yield downStep(fill, handle as unknown as Handle);
     // Gone means all of: the pid the handle names and every process that was under it are no process, nothing answers
     // on the leased port any more, and no process carries the run token (a grandchild that left the tree is caught there).
-    if (!waitUntil(clear, 150)) {
+    // The state has 150 ms to clear, and must then stay clear through a further 100 ms of samples: a process the fill
+    // schedules for right after its down returns is caught there, not left to appear once the kit has looked away.
+    const cleared = waitUntil(clear, 150);
+    const quiet = cleared && stillClear(clear, 100);
+    if (!quiet) {
+      const when = cleared ? 'in the 100 ms after down had cleared' : '150 ms after down';
       const left = scanned(lease.token);
       const there = stillThere(read());
-      const why = there.length > 0 ? `${there.map((m) => `pid ${m.pid}`).join(', ')} still run${there.length === 1 ? 's' : ''} 150 ms after down${left.length > 0 ? ` and still carries the run token` : ''}${there.every((m) => isOwn(m.pid)) ? '' : ' (not the kit\'s own, so left as they are)'}`
-        : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} still accepts connections 150 ms after down`
-        : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} still carries the run token 150 ms after down`
-        : `pid ${pid}, the port and the run token were not all clear within 150 ms of down`;
+      const why = there.length > 0 ? `${there.map((m) => `pid ${m.pid}`).join(', ')} ${cleared ? 'appeared' : `still run${there.length === 1 ? 's' : ''}`} ${when}${left.length > 0 ? ` and ${cleared ? '' : 'still '}carries the run token` : ''}${there.every((m) => isOwn(m.pid)) ? '' : ' (not the kit\'s own, so left as they are)'}`
+        : listening(lease.port) ? `pid ${pid} is gone, but ${lease.port} accepts connections ${when}`
+        : left.length > 0 ? `pid ${pid} is gone, but ${left.map((p) => `pid ${p.pid} (${p.command})`).join(', ')} carries the run token ${when}`
+        : `pid ${pid}, the port and the run token were not all clear ${when}`;
       throw fail(RULES.down.message, ['process_left'], why);
     }
   } catch (error) {
