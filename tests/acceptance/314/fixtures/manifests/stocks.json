@@ -1,0 +1,16 @@
+{
+  "id": "acme/stocks",
+  "version": "1.2.0",
+  "digest": "d1:5f3c1a0e9b7d2c4a6e8f0b1d3c5a7e9f2b4d6c8a0e1f3b5d7c9a2e4f6b8d0c1a",
+  "access": { "words": ["files", "hosts", "clipboard", "window", "agent", "microphone"] },
+  "panels": [{ "name": "ext.stocks.watchlist", "area": "sidebar", "media": ["microphone"] }],
+  "provides": [{ "interface": "ext.stocks.quote@1", "kind": "reading", "minor": 0 }],
+  "uses": [{ "interface": "reading.batch@1", "minor": 0, "digest": "d1:0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9" }],
+  "replaces": [],
+  "events": ["ext.stocks.alert"],
+  "stores": ["ext.stocks.watchlist"],
+  "checks": ["ext.stocks.quote_fresh"],
+  "codes": ["ext.stocks.quote_stale"],
+  "notices": ["ext.stocks.alert"],
+  "actions": ["ext.stocks.add_symbol"]
+}

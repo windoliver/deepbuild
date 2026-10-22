@@ -71,6 +71,7 @@ pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Ref
     let value = match ch.ty {
         ValueType::F32 => json!(value[0]),
         ValueType::Color => json!(value),
+        ValueType::Bool => json!(value[0] != 0.0),
     };
     let mut out = doc.clone();
     let Some(Value::Object(keys_json)) = out

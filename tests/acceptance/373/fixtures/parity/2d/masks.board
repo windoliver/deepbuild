@@ -1,0 +1,178 @@
+{
+  "format": 1,
+  "id": "parity-masks",
+  "profile": "board",
+  "title": "Masks",
+  "description": "A luminance mask over a status mark and a plain rect, beside four nested rect masks over one rect.",
+  "size": [
+    480,
+    240
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "veil": {
+      "id": "veil",
+      "kind": "mask@1",
+      "layer": "main",
+      "name": "Veil",
+      "order": "a00",
+      "params": {
+        "shape": "rect",
+        "box": [
+          16,
+          16,
+          200,
+          100
+        ],
+        "mode": "luminance",
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        },
+        "applies_to": "children"
+      }
+    },
+    "gate": {
+      "id": "gate",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Status of the release",
+      "order": "a01",
+      "params": {
+        "box": [
+          32,
+          40,
+          96,
+          24
+        ]
+      },
+      "parent": "veil"
+    },
+    "plain": {
+      "id": "plain",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Plain",
+      "order": "a02",
+      "params": {
+        "box": [
+          140,
+          40,
+          60,
+          60
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "parent": "veil"
+    },
+    "m1": {
+      "id": "m1",
+      "kind": "mask@1",
+      "layer": "main",
+      "name": "Mask 1",
+      "order": "a03",
+      "params": {
+        "shape": "rect",
+        "box": [
+          240,
+          16,
+          224,
+          208
+        ],
+        "applies_to": "children"
+      }
+    },
+    "m2": {
+      "id": "m2",
+      "kind": "mask@1",
+      "layer": "main",
+      "name": "Mask 2",
+      "order": "a04",
+      "params": {
+        "shape": "rect",
+        "box": [
+          256,
+          32,
+          192,
+          176
+        ],
+        "applies_to": "children"
+      },
+      "parent": "m1"
+    },
+    "m3": {
+      "id": "m3",
+      "kind": "mask@1",
+      "layer": "main",
+      "name": "Mask 3",
+      "order": "a05",
+      "params": {
+        "shape": "rect",
+        "box": [
+          272,
+          48,
+          160,
+          144
+        ],
+        "applies_to": "children"
+      },
+      "parent": "m2"
+    },
+    "m4": {
+      "id": "m4",
+      "kind": "mask@1",
+      "layer": "main",
+      "name": "Mask 4",
+      "order": "a06",
+      "params": {
+        "shape": "rect",
+        "box": [
+          288,
+          64,
+          128,
+          112
+        ],
+        "applies_to": "children"
+      },
+      "parent": "m3"
+    },
+    "deep": {
+      "id": "deep",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Deep",
+      "order": "a07",
+      "params": {
+        "box": [
+          240,
+          16,
+          224,
+          208
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "parent": "m4"
+    }
+  },
+  "status_bindings": {
+    "gate-state": {
+      "target": "items/gate/params/paint/fill",
+      "source": "verdict:01JB3730000000000000000001"
+    }
+  }
+}

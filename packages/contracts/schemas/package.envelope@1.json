@@ -1,0 +1,37 @@
+{
+  "title": "package.envelope@1",
+  "description": "The one envelope extensions, packs, blueprints and kits share: the package's id as owner/name, its version, the frozen digest of its contents and, when signed, the publisher's key. Nothing else: a manifest carries these same fields at its root.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+      "description": "owner/name: exactly one slash between two names.",
+      "maxLength": 8192
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$",
+      "description": "The package's semantic version: major.minor.patch, then a pre-release and build metadata as semver 2.0.0 writes them.",
+      "maxLength": 8192
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^d1:[0-9a-f]{64}$",
+      "description": "The frozen digest of the package's contents, naming its algorithm: d1:<64 lower-case hex>.",
+      "maxLength": 8192
+    },
+    "publisher_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The key the publisher signed the package with, when it is signed."
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "digest"
+  ],
+  "additionalProperties": false
+}

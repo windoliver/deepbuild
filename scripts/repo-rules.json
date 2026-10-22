@@ -184,6 +184,14 @@
         }
       }
     },
+    "packages/verdicts/package.json": {
+      "dependencies": {
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #28: the record a verdict is appended to as verdict.made and verdict.stale, as the core; only its types are imported."
+        }
+      }
+    },
     "packages/hub/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
@@ -370,6 +378,10 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #391: evaluates the document at each frame time and gives the frame clock its valid_until."
         },
+        "deep-marks-vello": {
+          "spec": "* path=../deep-marks-vello",
+          "why": "Issue #373: the draw list in Vello CPU terms (paints, OKLab ramps, outlines, scopes) that raster shares with render-back."
+        },
         "deep-replica": {
           "spec": "* path=../deep-replica",
           "why": "Issue #391: the headless app context the view draws in, as deep-text-render uses it."
@@ -393,12 +405,32 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: the render's JSON lines. Already in the workspace tree."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #391: the GPU ledger the GPUI patch adds to the Metal renderer (frame command buffers committed and their GPU time), which shows a still view uses none. Already in the tree under gpui-kit, as the vendored copy."
+        }
+      }
+    },
+    "crates/deep-marks-vello/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #373: the sRGB transfer a luminance mask reads linear light through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #373: the draw list it draws: fills and ramps, outlines and scopes."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
         }
       }
     },
@@ -447,6 +479,10 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #393: evaluates a revision at the snapshot's declared time."
+        },
+        "deep-marks-vello": {
+          "spec": "* path=../deep-marks-vello",
+          "why": "Issue #373: render-back draws R2 marks (outlines, gradient ramps, soft masks, group opacity, adjusted images) as raster does."
         },
         "deep-text": {
           "spec": "* path=../deep-text",

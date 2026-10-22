@@ -200,7 +200,7 @@ impl Render for View {
 
 /// A straight RGBA raster as the BGRA picture GPUI paints.
 fn picture(mut rgba: Vec<u8>, size: [u16; 2]) -> Option<Arc<RenderImage>> {
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
     }
     let frame = image::RgbaImage::from_raw(u32::from(size[0]), u32::from(size[1]), rgba)?;
@@ -224,14 +224,23 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             keyed.push((CARD_ORDER.into(), Entry::Card));
             continue;
         };
-        let current = hub
-            .current(doc)
-            .expect("a layer on screen has a current revision");
-        let stamped = current
-            .doc
-            .as_object()
-            .expect("a revision is an object")
-            .clone();
+        // A shared document draws one band row per writer layer: that layer's items that draw.
+        let stamped = match hub.shown(doc) {
+            Some(k) => {
+                let mut shown = crate::shared::drawable(&hub.shared[doc].at(k).0);
+                if let Some(Value::Object(items)) = shown.get_mut("items") {
+                    items.retain(|_, i| i["layer"].as_str() == Some(row.layer.as_str()));
+                }
+                shown.as_object().expect("a document is an object").clone()
+            }
+            None => hub
+                .current(doc)
+                .expect("a layer on screen has a current revision")
+                .doc
+                .as_object()
+                .expect("a revision is an object")
+                .clone(),
+        };
         let panel_id = &hub.scenario.docs[doc];
         let panel = hub.scenario.panels[panel_id].rect;
         let size = [

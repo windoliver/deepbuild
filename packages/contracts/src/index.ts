@@ -12,3 +12,4 @@ export { generateRust } from './codegen-rust.js';
 export { buildCatalogue, catalogue, catalogueDrift, checkViewBindings, type CatalogueEntry } from './catalogue.js';
 export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles.js';
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';
+export { checkManifest } from './manifest.js';
