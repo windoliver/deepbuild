@@ -194,6 +194,22 @@ describe('compiled code the checkout holds', () => {
     const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
     expect(r.outcome, r.output.stderr).toBe('failed');
   }, 300_000);
+
+  it('a bundle in Vite\'s dependency cache, written by a run and then edited, isn\'t run in place of the source', async () => {
+    const checkout = folder({
+      'package.json': '{ "type": "module" }\n',
+      'src/sum.js': 'export const sum = (a, b) => a - b;\n',
+      'test/sum.test.js': `import { expect, test } from 'vitest';\nimport { sum } from 'mylib';\ntest('adds', () => { expect(sum(1, 2)).toBe(3); });\n`,
+      'vitest.config.mjs': `import { fileURLToPath } from 'node:url';\nexport default { resolve: { alias: { mylib: fileURLToPath(new URL('./src/sum.js', import.meta.url)) } }, test: { deps: { optimizer: { ssr: { enabled: true, include: ['mylib'] } } } } };\n`,
+    }, true);
+    const run = () => runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    await run();
+    const forged = execFileSync('/usr/bin/grep', ['-rl', '(a, b) => a - b', join(checkout, 'node_modules/.vite')], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    expect(forged.length, 'the run bundled the source into the cache').toBeGreaterThan(0);
+    for (const file of forged) writeFileSync(file, readFileSync(file, 'utf8').replace('(a, b) => a - b', '(a, b) => a + b'));
+    const r = await run();
+    expect(r.outcome, r.output.stdout).toBe('failed');
+  }, 300_000);
 });
 
 describe('added tests', () => {
