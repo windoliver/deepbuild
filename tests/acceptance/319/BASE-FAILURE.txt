@@ -1,0 +1,118 @@
+Acceptance tests for #319 on the base c9891b3 (origin/main: #318's asks core, no implementation of #319), run on
+2026-10-21 on an Apple silicon Mac (Mac15,12, on battery), Node 24.22.0, Vitest 5.0.5:
+
+  npx vitest run tests/acceptance/319
+  npx tsc -p tests/acceptance/319
+
+Trimmed to each failure's reason. No local path appears in what is kept (<repo> is the checkout).
+
+
+== The base
+
+ Test Files  6 failed | 1 skipped (7)
+      Tests  14 failed | 1 passed | 2 skipped (17)
+
+FAIL  timing.test.ts    #319.ed496876  AskRefused: ask.created@1 refuses the ask at /data/deadline: Add the field the schema requires.
+FAIL  timing.test.ts    #319.eaa6ea10  (the same)
+FAIL  restart.test.ts   #319.1ad1ab09  (the same)
+FAIL  deadlines.test.ts #319.466f1905  (the same)
+FAIL  deadlines.test.ts #319.ba0ff138  three tests, (the same)
+FAIL  deadlines.test.ts #319.3699b37e  (the same)
+FAIL  fold.test.ts      #319.e94e8d14  (the same)
+FAIL  fold.test.ts      #319.b1bf1877  (the same)
+  (Expected: the base core reads no settings, so an ask raised without its deadline, which your settings are to
+  supply, fails its schema at raise. Each test raises at least one such ask before its first assertion on timing.)
+FAIL  settings.test.ts  #319.49a0402f  TypeError: (0 , __vite_ssr_import_6__.draftAskSettings) is not a function
+  (Expected: setup's drafting doesn't exist.)
+FAIL  settings.test.ts  #319.d452dc28  AssertionError: the choice ask in a repo whose done.yaml declares no choice
+                                       deadline is raised, not refused as undeclared: expected AskRefused: ask.created@1
+                                       refuses the ask… to be undefined
+FAIL  plants.test.ts    #319.1ad1ab09  expected [Function] to throw error matching /ask ask:[0-9A-Za-z]+, whose deadline …/
+                                       but got 'ask.created@1 refuses the ask at /dat…'
+FAIL  plants.test.ts    #319.466f1905  expected [Function] to throw error matching /ask ask:[0-9A-Za-z]+ is recorded as d…/
+                                       but got 'ask.created@1 refuses the ask at /dat…'
+PASS  plants.test.ts    #319.d452dc28  (not meaningful on the base: the base refuses the choice ask for the same
+                                       reason the plant does, so the scenario fails on the plant either way)
+SKIP  budgets.test.ts   #319.43d13eb3  two tests: INCONCLUSIVE (reading only): not on mains power: Now drawing from
+                                       'Battery Power'
+
+  npx tsc -p tests/acceptance/319: 13 errors in 3 files, each the surface the README defines and the base lacks:
+    helpers.ts         TS2305 no exported member 'draftAskSettings'; TS2305 no exported member 'InboxRow';
+                       TS2353 'home' does not exist in type 'AsksOptions'; TS2339 'inbox' does not exist on type 'Asks'
+    deadlines.test.ts  TS2339 'later' does not exist on type 'Asks' (2x); TS2339 'inbox' (1x)
+    budgets.test.ts    TS2339 'inbox' does not exist on type 'Asks' (2x)
+    and 4 TS7006 implicit-any parameters that follow from 'inbox' being unknown.
+
+
+== The sample fix
+
+A sample fix, kept in a scratch copy of the base outside this checkout (not committed, not part of this change), to
+show the tests can pass: about 190 lines added to packages/asks/src/index.ts on #318's core. It reads <home>/config.json
+and the flow-map lines of a repo's done.yaml asks: block, merged key by key; fills the deadline and default at raise;
+records each show as an ask.batched event (a batch "batch:<ms>" or "now:<ms>"); runs batches with the day's cap; shows
+at once an ask held by holds(), or one whose deadline (the exception's: the earliest it holds) comes before the next
+batch; holds an ask raised after a person's unread message until the session's next tool.before; and adds Later,
+inbox() and the exception's "together" bulk answer. No schema changed.
+
+  npx vitest run tests/acceptance/319 tests/acceptance/318   all 319 tests pass but the budgets (below); all 27 of #318's pass
+  npx tsc -p tests/acceptance/319                            no errors in the tests (against the sample's surface)
+
+  The budgets, with the reference-Mac check removed in the scratch copy only, as readings (a reference Mac model, but
+  on battery, so they don't count):
+    #319 create an ask, p50 (ms): 2.501, 2.247, 2.671, 2.770, 2.814 against 5 (margin 25%)
+    #319 answer an ask, p50 (ms): 4.902, 4.740, 5.006, 4.820, 4.807 against 5 (margin 6%)   -> INCONCLUSIVE
+    #319 inbox with 10,000 asks (ms): 1.293, 0.818, 0.678, 0.666, 0.686 against 100 (margin 94%)
+  (An answer commits with synchronous=FULL; on battery it straddles the 5 ms budget.)
+
+
+== Planted wrong programs (plants.ts, run by plants.test.ts)
+
+Each is the sample fix with one part wrong, planted around it. On the sample fix each plant test passes because its
+scenario fails; run bare (the scenario on the plant), each fails with:
+
+  #319.1ad1ab09  hub waits for its next batch        ask ask:…5ZBP, whose deadline comes before the next batch, didn't show
+                                                     in Needs you within 5 s of the hub's start
+  #319.466f1905  escalated with nobody to take it    ask ask:…ZWFK is recorded as defaulted at its deadline, never as
+                                                     escalated with nobody to take it: expected [ 'ask.escalated' ] to
+                                                     deeply equal [ 'ask.defaulted' ]
+  #319.d452dc28  repo's asks block in place of yours the choice ask in a repo whose done.yaml declares no choice deadline
+                                                     is raised, not refused as undeclared: expected AskRefused:
+                                                     asks.deadline.choice is decla… to be undefined
+
+
+== Mutants of the sample fix (scratch copy; each one change, then the suite without the budgets)
+
+  no batches: every ask shows at once         #319.ed496876 taste calls whose deadlines come after the 16:00 batch wait for
+                                              it: expected [ …(4) ] to deeply equal []; #319.eaa6ea10 the 16:00 batch
+                                              reaches the day's cap of two: … got 3; #319.1ad1ab09 asks whose deadlines
+                                              come after the 16:00 batch wait for it
+  no cap                                      #319.ed496876 the 16:00 batch shows three of the four, the day's cap: … got 4;
+                                              #319.eaa6ea10 … got 3
+  nothing shows at once for its deadline      #319.ed496876 ask …, whose 4-hour deadline passes before the next batch, shows
+                                              at once, cap or not; #319.eaa6ea10 the early question … shows at once;
+                                              #319.1ad1ab09 ask …, whose deadline comes before the next batch, didn't show in
+                                              Needs you within 5 s of the hub's start; #319.b1bf1877 the exception holding
+                                              ask … shows at once; #319.3699b37e ask … took its default without ever showing
+                                              in Needs you
+  a held session shows nothing at once        #319.ed496876 ask … shows at once once its session is held on it, cap or not
+  the exception ignores its folded deadlines  #319.b1bf1877 the exception holding ask … shows at once: its deadline comes
+                                              before the next batch: expected undefined to be 'exception'
+  a repo's done.yaml ignored                  #319.d452dc28 the taste ask … takes the repo's 5-day deadline
+  deadlines hard-coded, your settings ignored #319.d452dc28 the choice ask … takes the choice deadline from your own settings
+  the default policy takes the first option   #319.ba0ff138 (default) expected [ … 'blue' ] to deeply equal [ … 'green' ];
+                                              #319.3699b37e; #319.49a0402f (taste) defaults to its recommended option;
+                                              #319.d452dc28 expected 'sqlite' to be 'files'
+  bulk answer closes only the exception       #319.e94e8d14 ask … is answered by the bulk answer, with its recommended option
+  bulk answer closes only the folded asks     #319.e94e8d14 (the same, for the first of the five)
+  Later past the deadline accepted            #319.ba0ff138 (Later) no Later is recorded past its deadline
+  Later hides nothing                         #319.ba0ff138 (Later) ask … hides until the time you picked
+  inbox age always 0                          #319.ed496876 ask …, beyond the cap, waits in the inbox, 4 hours old:
+                                              expected [ 'queued', +0 ] to deeply equal [ 'queued', 14400000 ]
+  an approving default is taken               #319.ba0ff138 (irreversible) ask …, whose default would approve, takes no at
+                                              its deadline: expected [ 'allow' ] to deeply equal [ 'deny' ]
+  the default isn't announced to the agent    #319.466f1905 the agent hears the no once; #319.ba0ff138 (default and
+                                              irreversible); #319.3699b37e its default is announced to the agent;
+                                              #319.49a0402f the early question hands the agent "leave it out"
+  the deadline only once it has passed (>)    #319.466f1905, #319.ba0ff138 (default, Later), #319.3699b37e, #319.b1bf1877,
+                                              #319.1ad1ab09, #319.49a0402f, #319.d452dc28, #319.eaa6ea10: each takes its
+                                              default at its deadline: expected [] to …
