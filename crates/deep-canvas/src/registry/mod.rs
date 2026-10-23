@@ -32,6 +32,9 @@ pub fn core_name() -> String {
     format!("core@{CORE_VERSION}")
 }
 
+/// The name the core's own arrays and operators carry (`core.<x>`); no module takes it.
+pub const CORE: &str = "core";
+
 /// The closed list of check phases, in order (canvas primitives: Phase).
 const CHECK_PHASES: &[&str] = &[
     "load", "expand", "resolve", "validate", "plan", "build", "estimate", "check",
@@ -77,8 +80,12 @@ const TABLE_BUILDS: &[&str] = &["seal", "check"];
 /// Carried state is a bake, a tail or a checkpoint.
 const CARRIED_KINDS: &[&str] = &["bake", "tail", "checkpoint"];
 
-/// The read-set terms that are not an array or a table (Operator and read set: `reads`).
-const READ_TERMS: &[&str] = &[
+/// The read-set terms that are not an array or a table (Operator and read set: `reads`). Beside
+/// the design's list, `look` (the look's tokens an operator uses) and `seed` (the document's seed)
+/// are terms of their own, since the content key holds both (Content key) and an operator that
+/// uses one declares it like any read; a stepping operator also reads `earlier(<array>)`, the
+/// array as earlier steps left it, which orders nothing at one time (Phase: simulate).
+pub const READ_TERMS: &[&str] = &[
     "self",
     "parent",
     "children",
@@ -98,6 +105,8 @@ const READ_TERMS: &[&str] = &[
     "input",
     "reading",
     "asset",
+    "look",
+    "seed",
 ];
 
 /// The build sets, each the canvas modules a build holds (Registry and seal: `build_set`).
@@ -211,6 +220,9 @@ pub struct Array {
     pub phase: String,
     /// A private array is read only by its owner and left out of its digest.
     pub private: bool,
+    /// The owner's array this one contributes to: the owner's next reader folds it in, in phase
+    /// then canvas-module-name order, and the owner never names its contributor (Array and table).
+    pub contributes_to: Option<String>,
 }
 
 /// A table, built once at the seal or at check, over arrays of any phase: a table over a
@@ -222,6 +234,36 @@ pub struct Table {
     /// `seal | check`.
     pub build: String,
     pub reads: Vec<String>,
+    /// Builds the table's value the first time a check reads it; immutable once built.
+    pub make: Option<MakeTable>,
+}
+
+/// A table's value: built once, shared by key, never changed.
+pub type TableValue = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+/// Builds a table's value.
+pub type MakeTable = fn() -> TableValue;
+
+/// An operator's body: a pure function of the typed view the core builds from its read set.
+pub type Run = fn(&mut crate::schedule::View<'_>) -> Result<(), crate::schedule::OpError>;
+
+/// Which items an operator per item has a node on: `(document, item ID, item)`; per document,
+/// whether the document has its node (`(document, "", null)`).
+pub type Applies = fn(&Value, &str, &Value) -> bool;
+
+/// What an operator runs per (Operator and read set: `per`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Per {
+    Item,
+    Document,
+}
+
+/// A fixture a canvas module registers: a document its operators run on, with the record's
+/// readings its bound values read, for clean rebuilds, read-set perturbation and shuffled orders.
+#[derive(Clone, Debug)]
+pub struct Fixture {
+    pub name: String,
+    pub document: Value,
+    pub record: Option<Value>,
 }
 
 /// A CPU operator with its full read set (canvas primitives: Operator and read set).
@@ -233,6 +275,40 @@ pub struct Operator {
     pub reads: Vec<String>,
     /// Its own arrays.
     pub writes: Vec<String>,
+    pub per: Per,
+    /// The items (or the document) it has a node on; `None` is every item, or the document.
+    pub applies: Option<Applies>,
+    /// Its body; an operator without one is a shape only and has no node.
+    pub run: Option<Run>,
+    /// A stepping operator's step length in flicks: it steps in simulate at every multiple of it.
+    pub step: Option<i64>,
+}
+
+impl Operator {
+    /// Runs once per document.
+    pub fn document(&mut self) -> &mut Self {
+        self.per = Per::Document;
+        self
+    }
+
+    /// Has a node only where `applies` says.
+    pub fn applies(&mut self, applies: Applies) -> &mut Self {
+        self.applies = Some(applies);
+        self
+    }
+
+    /// Its body.
+    pub fn run(&mut self, run: Run) -> &mut Self {
+        self.run = Some(run);
+        self
+    }
+
+    /// Steps in simulate every `flicks`, once per document.
+    pub fn steps(&mut self, flicks: i64) -> &mut Self {
+        self.step = Some(flicks);
+        self.per = Per::Document;
+        self
+    }
 }
 
 /// Carried state: a bake, tail or checkpoint, with a key and a byte budget.
@@ -277,6 +353,7 @@ pub struct Registrar {
     pub passes: Vec<Pass>,
     pub checks: Vec<Check>,
     pub tool_entries: Vec<ToolEntry>,
+    pub fixtures: Vec<Fixture>,
 }
 
 impl Registrar {
@@ -304,7 +381,25 @@ impl Registrar {
             class: class.into(),
             phase: phase.into(),
             private: false,
+            contributes_to: None,
         });
+        self
+    }
+
+    /// An array that contributes to `to`, another module's array.
+    pub fn contribution(
+        &mut self,
+        name: &str,
+        ty: &str,
+        domain: &str,
+        class: &str,
+        phase: &str,
+        to: &str,
+    ) -> &mut Self {
+        self.array(name, ty, domain, class, phase);
+        if let Some(last) = self.arrays.last_mut() {
+            last.contributes_to = Some(to.into());
+        }
         self
     }
 
@@ -328,7 +423,17 @@ impl Registrar {
             name: name.into(),
             build: build.into(),
             reads: reads.iter().map(|s| s.to_string()).collect(),
+            make: None,
         });
+        self
+    }
+
+    /// A table built at check by `make`, the first time an operator reads it.
+    pub fn built_table(&mut self, name: &str, make: MakeTable) -> &mut Self {
+        self.table(name, "check", &[]);
+        if let Some(last) = self.tables.last_mut() {
+            last.make = Some(make);
+        }
         self
     }
 
@@ -338,12 +443,26 @@ impl Registrar {
         phase: &str,
         reads: &[&str],
         writes: &[&str],
-    ) -> &mut Self {
+    ) -> &mut Operator {
         self.operators.push(Operator {
             name: name.into(),
             phase: phase.into(),
             reads: reads.iter().map(|s| s.to_string()).collect(),
             writes: writes.iter().map(|s| s.to_string()).collect(),
+            per: Per::Item,
+            applies: None,
+            run: None,
+            step: None,
+        });
+        self.operators.last_mut().expect("just pushed")
+    }
+
+    /// A fixture document, with the record's readings its bound values read.
+    pub fn fixture(&mut self, name: &str, document: Value, record: Option<Value>) -> &mut Self {
+        self.fixtures.push(Fixture {
+            name: name.into(),
+            document,
+            record,
         });
         self
     }
@@ -440,6 +559,26 @@ pub struct SealedArray {
     pub class: String,
     pub phase: String,
     pub private: bool,
+    pub contributes_to: Option<String>,
+}
+
+/// One operator the seal kept, the core's own among them (module `core`).
+#[derive(Debug)]
+pub struct SealedOp {
+    /// `module.operator`.
+    pub key: String,
+    pub module: String,
+    /// Its canvas module's version (the core's for the core's own), which every key it makes holds.
+    pub version: Semver,
+    pub op: Operator,
+}
+
+/// One table the seal kept.
+#[derive(Debug)]
+pub struct SealedTable {
+    pub owner: String,
+    pub build: String,
+    pub make: Option<MakeTable>,
 }
 
 /// The registry after the seal; it never changes.
@@ -451,6 +590,13 @@ pub struct Sealed {
     pub arrays: BTreeMap<String, SealedArray>,
     /// The operators in each phase, as `module.operator`, in the order the seal derived.
     pub plan: BTreeMap<String, Vec<String>>,
+    /// Every operator the plan holds, in phase order and, inside a phase, in the plan's order.
+    pub ops: Vec<SealedOp>,
+    /// Each array's contributions, in phase then canvas-module-name order.
+    pub contributions: BTreeMap<String, Vec<String>>,
+    pub tables: BTreeMap<String, SealedTable>,
+    /// Every module's fixtures, the core's first, as `(module, fixture)`.
+    pub fixtures: Vec<(String, Fixture)>,
     /// `module.operator` → the missing optional module whose array it read.
     left_out: BTreeMap<String, String>,
     /// `family.name` → the missing optional module whose array the kind needs.
@@ -463,6 +609,43 @@ impl Sealed {
     /// `sealed`, the state after a successful seal.
     pub fn state(&self) -> &'static str {
         "sealed"
+    }
+
+    /// Where the sealed plan is published: `deep://schedule/<core version>`.
+    pub fn schedule_uri(&self) -> String {
+        format!("deep://schedule/{}", core_name())
+    }
+
+    /// The sealed plan as published (Registry and seal): every phase's operators in the order
+    /// the scheduler runs them, each with its canvas module and version, its read set as its
+    /// module registered it, its writes, what it runs per and its step, and every array's
+    /// contributions in the order they fold in. It is compared with a committed snapshot.
+    pub fn schedule(&self) -> Value {
+        let mut phases = serde_json::Map::new();
+        for o in &self.ops {
+            let mut entry = json!({
+                "operator": o.key, "module": o.module, "version": o.version.to_string(),
+                "reads": o.op.reads, "writes": o.op.writes,
+                "per": match o.op.per { Per::Item => "item", Per::Document => "document" },
+            });
+            if let Some(step) = o.op.step {
+                entry["step"] = json!(step);
+            }
+            phases
+                .entry(o.op.phase.clone())
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .expect("a list")
+                .push(entry);
+        }
+        json!({
+            "uri": self.schedule_uri(),
+            "core": core_name(),
+            "build_set": self.build_set.name(),
+            "set_digest": self.set_digest,
+            "phases": phases,
+            "contributions": self.contributions,
+        })
     }
 
     /// The module named `name`, if this build holds it.
@@ -607,7 +790,7 @@ impl Registry {
                     format!("`{name}` is not [a-z0-9]+ segments joined by `.`"),
                 ));
             }
-            if self.modules[..i].iter().any(|o| o.manifest.name == m.name) {
+            if name == CORE || self.modules[..i].iter().any(|o| o.manifest.name == m.name) {
                 return Err(SealError::new(
                     "duplicate_module",
                     &[name],
@@ -684,8 +867,11 @@ impl Registry {
                 ));
             }
         }
-        // Register.
+        // Register: the core's own shapes first, under the name `core`, then each module's.
         let mut shapes: Vec<(String, Registrar)> = Vec::new();
+        let mut core_registrar = Registrar::default();
+        crate::schedule::core_ops::register(&mut core_registrar);
+        shapes.push((CORE.to_string(), core_registrar));
         for module in &self.modules {
             let mut registrar = Registrar::default();
             (module.register)(&mut registrar);
@@ -740,8 +926,40 @@ impl Registry {
                         class: a.class.clone(),
                         phase: a.phase.clone(),
                         private: a.private,
+                        contributes_to: a.contributes_to.clone(),
                     },
                 );
+            }
+        }
+        // A contribution names a public array another module owns, of its phase or a later one,
+        // so the owner's readers fold it in where they read the owner's array.
+        for (name, r) in &shapes {
+            for a in r.arrays.iter().filter(|a| a.contributes_to.is_some()) {
+                let to = a.contributes_to.as_deref().unwrap_or_default();
+                let Some(target) = arrays.get(to) else {
+                    return Err(SealError::new(
+                        "unresolved_read",
+                        &[name],
+                        &[&a.name, to],
+                        format!("array `{}` of `{name}` contributes to `{to}`, which no module registers", a.name),
+                    ));
+                };
+                if target.owner == *name || target.private {
+                    return Err(SealError::new(
+                        "illegal_contribution",
+                        &[name, &target.owner],
+                        &[&a.name, to],
+                        format!("array `{}` of `{name}` contributes to `{to}`; a contribution names another module's public array", a.name),
+                    ));
+                }
+                if phase_index(&a.phase) > phase_index(&target.phase) {
+                    return Err(SealError::new(
+                        "later_phase",
+                        &[name, &target.owner],
+                        &[&a.name, to],
+                        format!("array `{}` of `{name}` in `{}` contributes to `{to}`, of the earlier phase `{}`", a.name, a.phase, target.phase),
+                    ));
+                }
             }
         }
         // Table name → the module that builds it and when: one builder per table, as one
@@ -1236,6 +1454,20 @@ impl Registry {
                         format!("operator `{}` of `{name}` is in phase `{}`, which is not one of the closed lists", op.name, op.phase),
                     ));
                 }
+                // Steps run in simulate, at a positive step; only a step reads what earlier steps
+                // left (Phase: simulate).
+                let earlier = op.reads.iter().any(|r| r.starts_with("earlier("));
+                if op.step.is_some_and(|s| s <= 0)
+                    || (op.step.is_some() && op.phase != "simulate")
+                    || (earlier && op.step.is_none())
+                {
+                    return Err(SealError::new(
+                        "illegal_step",
+                        &[name],
+                        &[],
+                        format!("operator `{}` of `{name}` steps outside simulate, at a step that isn't positive, or reads `earlier(…)` without stepping", op.name),
+                    ));
+                }
                 for w in &op.writes {
                     if let Some(prior) = r.operators[..i].iter().find(|o| o.writes.contains(w)) {
                         return Err(SealError::new(
@@ -1321,6 +1553,14 @@ impl Registry {
                     if READ_TERMS.contains(&read.as_str()) {
                         continue;
                     }
+                    // A step's read of what earlier steps left resolves as the array's read.
+                    let read = &match read
+                        .strip_prefix("earlier(")
+                        .and_then(|r| r.strip_suffix(')'))
+                    {
+                        Some(inner) => inner.to_string(),
+                        None => read.clone(),
+                    };
                     // Reading what it writes would keep a previous value (Operator and read
                     // set): a cycle of one, whatever build the operator lands in.
                     if op.writes.contains(read) {
@@ -1408,6 +1648,22 @@ impl Registry {
                                 op.name, op.phase, array.phase
                             ),
                         ));
+                    }
+                    // What contributes to the array is folded in where it's read.
+                    for (c, a) in &arrays {
+                        if a.contributes_to.as_deref() == Some(read.as_str())
+                            && phase_index(&a.phase) > Some(op_phase)
+                        {
+                            return Err(SealError::new(
+                                "later_phase",
+                                &[name, &a.owner],
+                                &[read, c],
+                                format!(
+                                    "operator `{}` of `{name}` in `{}` reads `{read}`, to which `{c}` contributes in the later phase `{}`",
+                                    op.name, op.phase, a.phase
+                                ),
+                            ));
+                        }
                     }
                 }
                 if let Some(cause) = causes.into_iter().min() {
@@ -1521,11 +1777,18 @@ impl Registry {
             let mut edges: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
             for (key, _, op) in &nodes {
                 // An operator reading what it writes would keep a previous value (Operator
-                // and read set), so the self-edge stays and is a cycle of one.
+                // and read set), so the self-edge stays and is a cycle of one. A reader of an
+                // array also reads what contributes to it, so it comes after their writers too.
                 for read in &op.reads {
-                    if let Some(from) = writer_of.get(read.as_str()) {
-                        edges.entry(from).or_default().push(key.as_str());
-                        *indegree.entry(key.as_str()).or_default() += 1;
+                    let contributed = arrays
+                        .iter()
+                        .filter(|(_, a)| a.contributes_to.as_deref() == Some(read.as_str()))
+                        .map(|(c, _)| c.as_str());
+                    for array in std::iter::once(read.as_str()).chain(contributed) {
+                        if let Some(from) = writer_of.get(array) {
+                            edges.entry(from).or_default().push(key.as_str());
+                            *indegree.entry(key.as_str()).or_default() += 1;
+                        }
                     }
                 }
             }
@@ -1577,9 +1840,74 @@ impl Registry {
             plan.insert(phase.to_string(), order);
         }
 
-        // Digests.
+        // The operators the plan holds, in its order, with their modules' versions.
+        let version_of = |name: &str| {
+            self.modules
+                .iter()
+                .find(|m| m.manifest.name == name)
+                .map_or(core, |m| m.manifest.version)
+        };
+        let mut ops = Vec::new();
+        for phase in CHECK_PHASES.iter().chain(FRAME_PHASES).chain(AUDIO_PHASES) {
+            for key in plan.get(*phase).into_iter().flatten() {
+                let found = shapes.iter().find_map(|(name, r)| {
+                    r.operators
+                        .iter()
+                        .find(|o| format!("{name}.{}", o.name) == *key)
+                        .map(|o| (name, o))
+                });
+                if let Some((name, op)) = found {
+                    ops.push(SealedOp {
+                        key: key.clone(),
+                        module: name.clone(),
+                        version: version_of(name),
+                        op: op.clone(),
+                    });
+                }
+            }
+        }
+        // Contributions in phase then canvas-module-name order.
+        let mut contributions: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut contributing: Vec<(&String, &SealedArray)> = arrays
+            .iter()
+            .filter(|(_, a)| a.contributes_to.is_some())
+            .collect();
+        contributing.sort_by(|a, b| {
+            (phase_index(&a.1.phase), &a.1.owner, a.0).cmp(&(
+                phase_index(&b.1.phase),
+                &b.1.owner,
+                b.0,
+            ))
+        });
+        for (name, a) in contributing {
+            if let Some(to) = &a.contributes_to {
+                contributions
+                    .entry(to.clone())
+                    .or_default()
+                    .push(name.clone());
+            }
+        }
+        let mut sealed_tables = BTreeMap::new();
+        let mut fixtures = Vec::new();
+        for (name, r) in &shapes {
+            for t in &r.tables {
+                if !table_cause.contains_key(&t.name) {
+                    sealed_tables.insert(
+                        t.name.clone(),
+                        SealedTable {
+                            owner: name.clone(),
+                            build: t.build.clone(),
+                            make: t.make,
+                        },
+                    );
+                }
+            }
+            fixtures.extend(r.fixtures.iter().map(|f| (name.clone(), f.clone())));
+        }
+
+        // Digests: each module's own; the core's shapes are no module's.
         let mut modules = Vec::new();
-        for ((name, shapes), module) in shapes.into_iter().zip(&self.modules) {
+        for ((name, shapes), module) in shapes.into_iter().skip(1).zip(&self.modules) {
             let digest = module_digest(&shapes)
                 .map_err(|e| SealError::new("bad_shape", &[&name], &[], e.to_string()))?;
             modules.push(SealedModule {
@@ -1601,6 +1929,10 @@ impl Registry {
             modules,
             arrays,
             plan,
+            ops,
+            contributions,
+            tables: sealed_tables,
+            fixtures,
             left_out,
             left_out_kinds,
             set_digest,
@@ -1608,8 +1940,8 @@ impl Registry {
     }
 }
 
-/// The core's own sealed set: no canvas module, since R1's canvas code stays the core's own
-/// until #137 lays it out as canvas modules. The empty set always seals.
+/// The core's own sealed set: the core's arrays and operators and no canvas module. It always
+/// seals.
 pub fn core() -> Sealed {
     Registry::new(BuildSet::Core)
         .seal()
@@ -1634,11 +1966,12 @@ fn core_held(name: &str) -> bool {
         .any(|(known, set)| *known == name && *set <= BuildSet::R1)
 }
 
-/// True when `name`'s manifest names `dep` in `depends_on`.
+/// True when `name`'s manifest names `dep` in `depends_on`; every module reads the core's own.
 fn declares(modules: &[Module], name: &str, dep: &str) -> bool {
-    modules
-        .iter()
-        .any(|m| m.manifest.name == name && m.manifest.depends_on.contains_key(dep))
+    dep == CORE
+        || modules
+            .iter()
+            .any(|m| m.manifest.name == name && m.manifest.depends_on.contains_key(dep))
 }
 
 /// What a module's kind entry breaks of the kind registry's contract beyond its majors, if
@@ -1826,7 +2159,7 @@ fn module_digest(r: &Registrar) -> Result<String, CanonError> {
         .arrays
         .iter()
         .filter(|a| !a.private)
-        .map(|a| json!({"class": a.class, "domain": a.domain, "name": a.name, "phase": a.phase, "type": a.ty}))
+        .map(|a| json!({"class": a.class, "contributes_to": a.contributes_to, "domain": a.domain, "name": a.name, "phase": a.phase, "type": a.ty}))
         .collect();
     sort_values(&mut arrays)?;
     let mut tables: Vec<Value> = r
@@ -1892,6 +2225,14 @@ fn d1(value: &Value) -> Result<String, CanonError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A phase's plan without the core's own operators, which every set holds.
+    fn modules_only(plan: &[String]) -> Vec<&str> {
+        plan.iter()
+            .map(String::as_str)
+            .filter(|k| !k.starts_with("core."))
+            .collect()
+    }
 
     fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
         Manifest {
@@ -1974,7 +2315,10 @@ mod tests {
             .unwrap();
         let names: Vec<&str> = sealed.modules.iter().map(|m| m.name.as_str()).collect();
         assert_eq!(names, ["a", "b"]);
-        assert_eq!(sealed.plan["items"], ["a.write_x", "b.own", "b.read_a"]);
+        assert_eq!(
+            modules_only(&sealed.plan["items"]),
+            ["a.write_x", "b.own", "b.read_a"]
+        );
         assert!(sealed.left_out.is_empty());
         assert_eq!(sealed.set_digest.len(), 64);
     }
@@ -1986,7 +2330,7 @@ mod tests {
             sealed.left_out.get("b.read_a").map(String::as_str),
             Some("a")
         );
-        assert_eq!(sealed.plan["items"], ["b.own"]);
+        assert_eq!(modules_only(&sealed.plan["items"]), ["b.own"]);
         assert_eq!(sealed.missing_for("b", "read_a").as_deref(), Some("a"));
         assert_eq!(sealed.missing_for("b", "own"), None);
         assert_eq!(sealed.missing_for("a", "write_x").as_deref(), Some("a"));
@@ -2337,7 +2681,7 @@ mod tests {
             })
             .seal()
             .unwrap();
-        assert_eq!(sealed.plan["items"], ["x.z", "x.a.b"]);
+        assert_eq!(modules_only(&sealed.plan["items"]), ["x.z", "x.a.b"]);
     }
 
     #[test]
@@ -2363,7 +2707,10 @@ mod tests {
             })
             .seal()
             .unwrap();
-        assert_eq!(sealed.plan["items"], ["z.write", "a.also", "a.read"]);
+        assert_eq!(
+            modules_only(&sealed.plan["items"]),
+            ["z.write", "a.also", "a.read"]
+        );
     }
 
     #[test]
@@ -2553,7 +2900,10 @@ mod tests {
             .unwrap();
         assert_eq!(sealed.missing_for("b", "use").as_deref(), Some("a"));
         assert_eq!(sealed.missing_for("b", "use_u").as_deref(), Some("a"));
-        assert_eq!(sealed.plan.get("items"), None);
+        assert!(sealed
+            .plan
+            .get("items")
+            .is_none_or(|p| modules_only(p).is_empty()));
     }
 
     #[test]

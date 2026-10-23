@@ -15,5 +15,6 @@ pub mod kinds;
 pub mod ops;
 pub mod registry;
 pub mod render;
+pub mod schedule;
 pub mod session;
 pub mod show;
