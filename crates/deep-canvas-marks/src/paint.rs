@@ -21,7 +21,7 @@ use deep_canvas::color::{oklab_to_srgb, oklch_to_srgb, srgb_decode, srgb_encode}
 use deep_canvas::color::{srgb_to_oklab, srgb_to_oklch, Oklab, Srgb};
 use deep_canvas::ops;
 
-use crate::scene::{Palette, Refused, Rgb};
+use crate::scene::{num, refuse, Palette, Refused, Rgb};
 
 /// An sRGB-encoded color, 0..1 per channel.
 pub type Color = [f64; 3];
@@ -34,17 +34,6 @@ pub const MAX_STOPS: usize = 8;
 /// a saturated blue and the ramp must hold within one code value once drawn.
 const RAMP_TOLERANCE: f64 = 0.001;
 const RAMP_CODE_TOLERANCE: f64 = 0.1 / 255.0;
-
-fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
-    Err(Refused {
-        code,
-        path: path.into(),
-    })
-}
-
-fn num(v: Option<&Value>) -> Option<f64> {
-    v.and_then(Value::as_f64).filter(|n| n.is_finite())
-}
 
 pub fn unit(c: Rgb) -> Color {
     c.map(|v| f64::from(v) / 255.0)

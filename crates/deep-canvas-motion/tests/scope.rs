@@ -10,14 +10,14 @@ use serde_json::{json, Map, Value};
 const S: i64 = 705_600_000;
 
 fn x_at(doc: &Value, item: &str, t: i64) -> f64 {
-    let program = Program::compile(doc).expect("the document reads");
+    let program = Program::compile(doc.as_object().unwrap()).expect("the document reads");
     let doc = doc.as_object().expect("an object");
     let f = frame(doc, &program, t, Validity::Full);
     f.items[item]["at"]["pos"][0].as_f64().expect("a number")
 }
 
 fn y_at(doc: &Value, item: &str, t: i64) -> f64 {
-    let program = Program::compile(doc).expect("the document reads");
+    let program = Program::compile(doc.as_object().unwrap()).expect("the document reads");
     let f = frame(
         doc.as_object().expect("an object"),
         &program,
@@ -94,7 +94,7 @@ fn a_parent_cycle_is_refused_naming_an_item() {
         ],
         json!({}),
     );
-    let refused = read(&d).expect_err("a cycle never resolves");
+    let refused = read(d.as_object().unwrap()).expect_err("a cycle never resolves");
     assert_eq!(refused.code, "parent_cycle");
     assert!(refused.path.starts_with("items/"), "{}", refused.path);
 }
@@ -125,7 +125,9 @@ fn markers_that_name_each_other_are_refused() {
         json!({"markers": {"a": {"t": "@b"}, "b": {"t": "@a"}}}),
     );
     assert_eq!(
-        read(&d).expect_err("never resolves").code,
+        read(d.as_object().unwrap())
+            .expect_err("never resolves")
+            .code,
         "time_unresolved"
     );
 }
@@ -152,7 +154,9 @@ fn a_series_that_loops_back_on_itself_is_refused() {
             "b": {"clip": "slide", "slots": {"target": "p"}, "after": "a"}}}),
     );
     assert_eq!(
-        read(&d).expect_err("never resolves").code,
+        read(d.as_object().unwrap())
+            .expect_err("never resolves")
+            .code,
         "placement_cycle"
     );
 }
@@ -241,7 +245,7 @@ fn a_cut_switches_placements_with_no_hold_across_it() {
     // At the cut the incoming clip starts at once.
     assert_eq!(x_at(&d, "p", S), 500.0);
     // The frame before the cut knows the cut is coming.
-    let program = Program::compile(&d).unwrap();
+    let program = Program::compile(d.as_object().unwrap()).unwrap();
     let f = frame(d.as_object().unwrap(), &program, S - 1, Validity::Full);
     assert!(f.valid_until.is_some_and(|v| v <= S));
     assert_eq!(program.motion.cuts[0].at, S);
@@ -256,9 +260,15 @@ fn a_cut_between_placements_that_do_not_meet_is_refused() {
             "two": {"clip": "slide", "slots": {"target": "p"}, "start": "2s"}},
             "transitions": {"t": {"from": "one", "to": "two", "kind": "cut"}}}),
     );
-    assert_eq!(read(&d).expect_err("a gap").code, "transition_gap");
+    assert_eq!(
+        read(d.as_object().unwrap()).expect_err("a gap").code,
+        "transition_gap"
+    );
     let mut d = d;
     d["placements"]["two"]["start"] = json!("1s");
     d["transitions"]["t"]["kind"] = json!("cross_fade");
-    assert_eq!(read(&d).expect_err("R6").code, "transition_kind");
+    assert_eq!(
+        read(d.as_object().unwrap()).expect_err("R6").code,
+        "transition_kind"
+    );
 }

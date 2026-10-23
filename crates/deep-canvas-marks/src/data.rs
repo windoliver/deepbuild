@@ -18,15 +18,8 @@ use deep_canvas::ops;
 
 use crate::path;
 use crate::scene::{
-    Align, Fill, Geometry, ImageFit, ImageSampling, Mark, Palette, Refused, TextSpec,
+    refuse, Align, Fill, Geometry, ImageFit, ImageSampling, Mark, Palette, Refused, TextSpec,
 };
-
-fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
-    Err(Refused {
-        code,
-        path: path.into(),
-    })
-}
 
 /// The most rows a mark set holds (Mark set: "exceed 1M rows per set" it can never).
 const MAX_ROWS: u64 = 1_000_000;
@@ -60,35 +53,6 @@ impl Column {
     }
 }
 
-fn base64(text: &str) -> Option<Vec<u8>> {
-    let value = |c: u8| -> Option<u32> {
-        Some(match c {
-            b'A'..=b'Z' => u32::from(c - b'A'),
-            b'a'..=b'z' => u32::from(c - b'a') + 26,
-            b'0'..=b'9' => u32::from(c - b'0') + 52,
-            b'+' => 62,
-            b'/' => 63,
-            _ => return None,
-        })
-    };
-    let body = text.trim_end_matches('=').as_bytes();
-    let mut out = Vec::with_capacity(body.len() * 3 / 4);
-    for chunk in body.chunks(4) {
-        let mut acc = 0u32;
-        for (k, &c) in chunk.iter().enumerate() {
-            acc |= value(c)? << (18 - 6 * k as u32);
-        }
-        let bytes = acc.to_be_bytes();
-        match chunk.len() {
-            4 => out.extend(&bytes[1..4]),
-            3 => out.extend(&bytes[1..3]),
-            2 => out.push(bytes[1]),
-            _ => return None,
-        }
-    }
-    Some(out)
-}
-
 fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
     let Value::Object(c) = c else {
         return refuse("bad_column", path);
@@ -120,7 +84,11 @@ fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refused> {
     if c.get("data").and_then(|d| d.get("sidecar")).is_some() {
         return refuse("asset_missing", format!("{path}/data"));
     }
-    let Some(bytes) = c.get("data").and_then(Value::as_str).and_then(base64) else {
+    let Some(bytes) = c
+        .get("data")
+        .and_then(Value::as_str)
+        .and_then(deep_canvas::base64::decode)
+    else {
         return refuse("bad_column", format!("{path}/data"));
     };
     // A bool is a byte, 0 or 1; a role an index into the set's roles, one byte.
@@ -368,12 +336,12 @@ pub fn mark_set(
         Some(n) if n <= MAX_ROWS => n as usize,
         _ => return refuse("out_of_range", format!("{path}/n")),
     };
-    let mut columns = Map::new();
+    let columns = p
+        .get("columns")
+        .and_then(Value::as_object)
+        .unwrap_or(&empty);
     let mut decoded = std::collections::BTreeMap::new();
-    if let Some(Value::Object(cs)) = p.get("columns") {
-        columns = cs.clone();
-    }
-    for (name, c) in &columns {
+    for (name, c) in columns {
         decoded.insert(
             name.clone(),
             column_of(c, n, &format!("{path}/columns/{name}"))?,
@@ -737,13 +705,6 @@ pub fn axis(
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn base64_reads_padded_and_unpadded_groups() {
-        assert_eq!(base64("AAECAw==").unwrap(), vec![0, 1, 2, 3]);
-        assert_eq!(base64("AAEC").unwrap(), vec![0, 1, 2]);
-        assert!(base64("A$").is_none());
-    }
 
     #[test]
     fn a_linear_scale_ticks_on_one_two_five_and_maps_its_nice_domain() {
