@@ -543,6 +543,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "diffs_whole_document" => Planted::DiffsWholeDocument,
             "one_fifo_check_queue" => Planted::OneFifoCheckQueue,
             "newest_layer_file_current" => Planted::NewestLayerFileCurrent,
+            "seeds_noise_from_clock" => Planted::SeedsNoiseFromClock,
             "key_without_locale" => Planted::KeyWithoutLocale,
             "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
             "key_hashes_positions" => Planted::KeyHashesPositions,
