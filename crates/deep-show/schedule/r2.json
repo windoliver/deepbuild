@@ -1,0 +1,174 @@
+{
+  "uri": "deep://schedule/core@0.0.0",
+  "core": "core@0.0.0",
+  "build_set": "r2",
+  "set_digest": "7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad",
+  "phases": {
+    "validate": [
+      {
+        "operator": "core.lower",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "core.lowered"
+        ],
+        "per": "item"
+      }
+    ],
+    "plan": [
+      {
+        "operator": "motion.compile",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.program"
+        ],
+        "per": "document"
+      }
+    ],
+    "items": [
+      {
+        "operator": "core.fields",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.lowered"
+        ],
+        "writes": [
+          "core.fields"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.transform",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.lowered"
+        ],
+        "writes": [
+          "core.transform"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "look.palette",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "look.palette"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "motion.channels",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t"
+        ],
+        "writes": [
+          "motion.at",
+          "motion.fields"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.counter",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.lowered",
+          "refs",
+          "reading",
+          "view(locale)"
+        ],
+        "writes": [
+          "text.counter"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.shape",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "text.counter",
+          "view(locale)",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "text.run"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.animate",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "text.run",
+          "view(reduced_motion)"
+        ],
+        "writes": [
+          "text.animated"
+        ],
+        "per": "item"
+      }
+    ],
+    "extract": [
+      {
+        "operator": "marks2d.frame",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "reading",
+          "core.world",
+          "core.fields",
+          "text.counter",
+          "text.run",
+          "text.animated",
+          "look.palette"
+        ],
+        "writes": [
+          "marks2d.frame"
+        ],
+        "per": "document"
+      }
+    ]
+  },
+  "contributions": {
+    "core.fields": [
+      "motion.fields"
+    ],
+    "core.transform": [
+      "motion.at"
+    ]
+  }
+}
