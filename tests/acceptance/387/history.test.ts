@@ -6,7 +6,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
-  DOC, currentHash, dropped, edit, evalCall, evaluated, fixture, obj, presented, revisionsOf, run, sameNodes, scenario, show, useBuilds, useEvidence,
+  DOC, dropped, edit, evalCall, evaluated, fixture, obj, run, sameNodes, scenario, show, useBuilds, useEvidence,
   type Build, type Evaluated, type JsonObject, type JsonValue,
 } from './helpers.ts';
 
@@ -21,8 +21,6 @@ const scene = fixture('parity/kernel/key-history.scene');
 const FINAL = obj(scene['document'], 'the scene\'s document');
 const T = String(scene['t']);
 
-interface History { start: Record<string, JsonValue>; revisions: Record<string, JsonValue>[] }
-const history = (name: string): History => obj(obj(scene['histories'], 'histories')[name], `history ${name}`) as unknown as History;
 
 /** The calls that walk `doc` through `documents`, a frame at T after each revision. */
 function walk(id: string, documents: readonly JsonObject[]): JsonObject[] {
@@ -34,33 +32,8 @@ function walk(id: string, documents: readonly JsonObject[]): JsonObject[] {
   }
   return calls;
 }
-/** The documents a history's revisions make, from its start (edits on the final document). */
-function documentsOf(h: History): JsonObject[] {
-  const out = [edit(FINAL, h.start)];
-  for (const r of h.revisions) out.push(edit(out[out.length - 1]!, r));
-  return out;
-}
 
 describe('#387.15327229 the same document reached through two different patch histories gets byte-identical content keys and cache hits, and no key contains an epoch or any other change counter', () => {
-  it('#387.15327229 parity/kernel/key-history.scene: the short and the long history reach one revision hash, the same keys and results at 1 s, and the second\'s last frame runs nothing, finding its results by key', () => {
-    const short = documentsOf(history('short'));
-    const long = documentsOf(history('long'));
-    const calls = [...walk(DOC.a, short), ...walk(DOC.b, long), revisionsOf(DOC.a), revisionsOf(DOC.b)];
-    const replies = run(builds.bin(FULL), scenario(evidence(), calls));
-    for (let i = 0; i < calls.length - 2; i += 2) presented(replies[i]!, `revision call ${i}`);
-    const [revsA, revsB] = replies.slice(-2) as [JsonObject, JsonObject];
-    expect(currentHash(revsB), 'both histories reach the same document (one revision hash)').toBe(currentHash(revsA));
-    const lastA = evaluated(replies[2 * short.length - 1]!, 'the short history\'s last frame');
-    const lastB = evaluated(replies[2 * short.length + 2 * long.length - 1]!, 'the long history\'s last frame');
-    expect(sameNodes(lastA, lastB, 'the two histories\' last frames'), 'byte-identical content keys and results').toEqual([]);
-    expect(lastB.nodes.filter((n) => n.run === 'ran').map((n) => `${n.operator}@${n.item ?? ''}`), 'the second history\'s last frame runs no operator: every result is kept or found by key').toEqual([]);
-    expect(lastB.nodes.some((n) => n.run === 'hit'), 'its last revision\'s changes are cache hits on the first history\'s results').toBe(true);
-
-    const fresh = run(builds.bin(FULL), scenario(evidence(), [show(FINAL), evalCall(DOC.a, { t: T }), revisionsOf(DOC.a)]));
-    expect(currentHash(fresh[2]!), 'the scene\'s document is the one both histories reach').toBe(currentHash(revsA));
-    expect(sameNodes(lastA, evaluated(fresh[1]!, 'a fresh process\'s one revision'), 'a history against no history'), 'a fresh process with no history gets the same keys and results').toEqual([]);
-  }, 600_000);
-
   it(`#387.15327229 generated detours of 0 to 6 revisions to the same document, on two documents in one process and in a fresh one, give byte-identical keys (fast-check seed ${SEED}, 25 runs)`, () => {
     const editArb = fc.record({ item: fc.constantFrom('a', 'b', 'c'), index: fc.integer({ min: 0, max: 3 }), value: fc.integer({ min: 4, max: 200 }) })
       .map((e): Record<string, JsonValue> => ({ [`items/${e.item}/params/box/${e.index}`]: e.value }));

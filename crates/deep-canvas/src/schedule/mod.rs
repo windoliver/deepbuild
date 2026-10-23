@@ -431,12 +431,101 @@ enum Bound {
     Asset,
 }
 
+/// The dirty classes a change stamps (Dirty classes), in the order an item keeps their epochs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Class {
+    Transform,
+    Geometry,
+    Shading,
+    Presence,
+    Text,
+    Reading,
+    Time,
+}
+
+/// Every dirty class, in order.
+pub const CLASSES: [Class; 7] = [
+    Class::Transform,
+    Class::Geometry,
+    Class::Shading,
+    Class::Presence,
+    Class::Text,
+    Class::Reading,
+    Class::Time,
+];
+
+/// The text kind's params the shaper reads: a change to one is a change of text.
+const TEXT_PARAMS: [&str; 8] = [
+    "text",
+    "font",
+    "size",
+    "weight",
+    "box",
+    "numerals",
+    "align",
+    "animators",
+];
+
+/// The classes a revision's change to one item falls in, by the paths that differ: `at` is
+/// transform, `visible` presence, `adjust` and a paint shading, a text's shaped params text,
+/// any other field geometry.
+pub fn classes_changed(old: &Value, new: &Value) -> Vec<Class> {
+    let kind = new.get("kind").and_then(Value::as_str).unwrap_or("");
+    let mut out = Vec::new();
+    let mut keys: Vec<&String> = old
+        .as_object()
+        .into_iter()
+        .chain(new.as_object())
+        .flat_map(|m| m.keys())
+        .collect();
+    keys.sort();
+    keys.dedup();
+    for k in keys {
+        let (a, b) = (old.get(k), new.get(k));
+        if a == b {
+            continue;
+        }
+        let class = match k.as_str() {
+            "at" => Class::Transform,
+            "visible" => Class::Presence,
+            "adjust" => Class::Shading,
+            "params" => {
+                let mut names: Vec<&String> = a
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .chain(b.and_then(Value::as_object))
+                    .flat_map(|m| m.keys())
+                    .collect();
+                names.sort();
+                names.dedup();
+                for name in names {
+                    if a.and_then(|p| p.get(name)) == b.and_then(|p| p.get(name)) {
+                        continue;
+                    }
+                    out.push(match name.as_str() {
+                        "paint" => Class::Shading,
+                        n if kind == "text@1" && TEXT_PARAMS.contains(&n) => Class::Text,
+                        _ => Class::Geometry,
+                    });
+                }
+                continue;
+            }
+            _ => Class::Geometry,
+        };
+        out.push(class);
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 #[derive(Clone, Debug)]
 struct Item {
     id: String,
     value: Arc<Value>,
     key: Key,
-    changed_at: u32,
+    /// The epoch each dirty class last changed at.
+    changed_at: [u32; CLASSES.len()],
     parent: Option<usize>,
     depth: u32,
     order: String,
@@ -652,6 +741,8 @@ pub struct Session {
     mode: Mode,
     /// The last evaluation's report.
     pub report: Report,
+    /// The operator's panic that froze this session, until a new revision loads.
+    frozen: Option<OpIssue>,
 }
 
 fn look_key(look: &Tokens) -> Key {
@@ -710,12 +801,24 @@ impl Session {
             perturb: None,
             mode: Mode::Live,
             report: Report::default(),
+            frozen: None,
         }
     }
 
     /// The session's current epoch.
     pub fn epoch(&self) -> u32 {
         self.epoch
+    }
+
+    /// The epoch an item's dirty class last changed at, in the current revision.
+    pub fn changed_at(&self, id: &str, class: Class) -> Option<u32> {
+        let l = self.loaded.as_ref()?;
+        Some(l.items[*l.index.get(id)?].changed_at[class as usize])
+    }
+
+    /// The panic that froze this session, if one did.
+    pub fn frozen(&self) -> Option<&OpIssue> {
+        self.frozen.as_ref()
     }
 
     /// The current revision's load count: an interned handle's generation.
@@ -762,7 +865,7 @@ impl Session {
         all.extend(self.view_at);
         all.extend(self.group_run.iter().copied());
         if let Some(l) = &self.loaded {
-            all.extend(l.items.iter().map(|i| i.changed_at));
+            all.extend(l.items.iter().flat_map(|i| i.changed_at));
             all.extend(l.nodes.iter().flat_map(|n| [n.changed_at, n.last_run]));
             all.extend(l.array_at.iter().copied());
         }
@@ -783,7 +886,9 @@ impl Session {
         self.view_at.iter_mut().for_each(r);
         self.group_run.iter_mut().for_each(r);
         if let Some(l) = &mut self.loaded {
-            l.items.iter_mut().for_each(|i| r(&mut i.changed_at));
+            l.items
+                .iter_mut()
+                .for_each(|i| i.changed_at.iter_mut().for_each(r));
             for n in &mut l.nodes {
                 r(&mut n.changed_at);
                 r(&mut n.last_run);
@@ -863,7 +968,7 @@ impl Session {
         match self.loaded.take() {
             None => {
                 for i in &mut next.items {
-                    i.changed_at = epoch;
+                    i.changed_at = [epoch; CLASSES.len()];
                 }
                 self.items_at = epoch;
                 self.refs_at = epoch;
@@ -874,8 +979,17 @@ impl Session {
                 for i in &mut next.items {
                     match o.index.get(&i.id).map(|k| &o.items[*k]) {
                         Some(was) if was.key == i.key => i.changed_at = was.changed_at,
-                        _ => {
-                            i.changed_at = epoch;
+                        // A changed item stamps the classes its changed fields fall in.
+                        Some(was) => {
+                            i.changed_at = was.changed_at;
+                            for c in classes_changed(&was.value, &i.value) {
+                                i.changed_at[c as usize] = epoch;
+                            }
+                            any = true;
+                        }
+                        // A made item is a change of presence, and of everything it holds.
+                        None => {
+                            i.changed_at = [epoch; CLASSES.len()];
                             any = true;
                         }
                     }
@@ -930,6 +1044,8 @@ impl Session {
         }
         self.generation += 1;
         self.loaded = Some(next);
+        // A new revision is the way out of a panic: its operators run again.
+        self.frozen = None;
         let mut report = Report::default();
         self.frames += 1;
         let frame = self.frames;
@@ -954,6 +1070,10 @@ impl Session {
         self.report.access.clear();
         self.report.steps.clear();
         if self.loaded.is_none() {
+            return 0;
+        }
+        if let Some(issue) = &self.frozen {
+            self.report.issues.push(issue.clone());
             return 0;
         }
         let mut stamp = 0;
@@ -1144,7 +1264,8 @@ impl Session {
             return true;
         }
         n.reads.iter().any(|b| match b {
-            Bound::SelfItem(i) => l.items[*i].changed_at > last,
+            // `self` reads every class of the item.
+            Bound::SelfItem(i) => l.items[*i].changed_at.iter().any(|e| *e > last),
             Bound::SelfDoc | Bound::Refs | Bound::Asset => self.refs_at > last,
             Bound::Parent(p) => p.is_some_and(|p| l.nodes[p].changed_at > last),
             Bound::Array {
@@ -1224,14 +1345,19 @@ impl Session {
         if let Some(e) = &err {
             // A read that failed upstream is that writer's issue, reported once.
             if e.code != "input_failed" {
-                report.issues.push(OpIssue {
+                let issue = OpIssue {
                     code: e.code,
                     module: sop.module.clone(),
                     operator: sop.key.clone(),
                     item: l.nodes[n].item.map(|i| l.items[i].id.clone()),
                     path: e.path.clone(),
                     read: e.read.clone(),
-                });
+                };
+                // A panic freezes this session alone: every other session goes on.
+                if e.code == "operator_panic" && mode == Mode::Live && self.frozen.is_none() {
+                    self.frozen = Some(issue.clone());
+                }
+                report.issues.push(issue);
             }
         }
         let node = &mut l.nodes[n];
@@ -1597,7 +1723,7 @@ fn items_of(doc: &Value) -> (Vec<Item>, BTreeMap<String, usize>) {
                 id: (*id).clone(),
                 value: Arc::new(value.clone()),
                 key: Hasher::new("self").bytes(&canonical(value)).finish(),
-                changed_at: 0,
+                changed_at: [0; CLASSES.len()],
                 parent: value
                     .get("parent")
                     .and_then(Value::as_str)
@@ -1907,3 +2033,6 @@ fn shuffled_ops(s: &Scheduler<'_>, sh: &mut Shuffle) -> Vec<usize> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests;

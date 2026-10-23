@@ -185,6 +185,8 @@ pub enum Call {
     /// The sealed set as the build holds it (#305).
     Registry,
     Screen,
+    /// The sealed plan as published at `deep://schedule/<core version>` (#387).
+    Schedule,
     /// Every canvas module's fixtures (#387).
     Fixtures,
     /// One frame of a document's session (#387).
@@ -504,6 +506,7 @@ impl<'a> Hub<'a> {
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
             Call::Fixtures => self.fixtures_reply(),
+            Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
             Call::Frames {
                 doc,

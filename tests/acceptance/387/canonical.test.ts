@@ -7,7 +7,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
-  DOC, arr, board, currentHash, doc, evalCall, evaluated, label, obj, outcome, presented, rect, revisionsOf, run, sameNodes, scenario, show, str,
+  DOC, arr, board, doc, evalCall, evaluated, label, obj, outcome, rect, revisionsOf, run, sameNodes, scenario, show, str,
   useBuilds, useEvidence, type Build, type JsonObject,
 } from './helpers.ts';
 
@@ -42,24 +42,6 @@ function signedText(calls: JsonObject[], negative: (i: number, call: number) => 
 }
 
 describe('#387.a0eea545 a revision whose param is −0 gets the same content key and canonical bytes as one with +0, and a NaN or an infinity in a param is refused with out_of_range, naming the path', () => {
-  it('#387.a0eea545 a board with −0 in a rect\'s box, radius and at.pos and a label\'s at.pos has the revision hash, node keys and results of the board with +0, in one process and in two', () => {
-    const calls = [show(SIGNED, { doc: DOC.a }), show(SIGNED, { doc: DOC.b }), revisionsOf(DOC.a), revisionsOf(DOC.b), evalCall(DOC.a), evalCall(DOC.b)];
-    // The first call's board is +0 throughout, the second's −0 throughout.
-    const raw = signedText(calls, (_, k) => k === 1);
-    expect(raw, 'the scenario text spells −0').toContain('-0.0');
-    const replies = run(builds.bin(FULL), { raw, calls: calls.length });
-    presented(replies[0]!, 'the +0 board');
-    presented(replies[1]!, 'the −0 board');
-    expect(currentHash(replies[3]!), 'the canonical bytes are the same: one revision hash').toBe(currentHash(replies[2]!));
-    const plus = evaluated(replies[4]!, 'the +0 board\'s frame');
-    const minus = evaluated(replies[5]!, 'the −0 board\'s frame');
-    expect(sameNodes(plus, minus, '+0 against −0'), 'every node has the same content key and result').toEqual([]);
-
-    const alone = [show(SIGNED, { doc: DOC.a }), evalCall(DOC.a)];
-    const lone = run(builds.bin(FULL), { raw: signedText(alone, () => true), calls: alone.length });
-    expect(sameNodes(plus, evaluated(lone[1]!, 'the −0 board in a fresh process'), '+0 against −0 in another process'), 'the same keys in another process').toEqual([]);
-  }, 600_000);
-
   it(`#387.a0eea545 −0 at any of the board's zero params gives the keys of +0 (fast-check seed ${SEED}, 30 runs)`, () => {
     fc.assert(fc.property(fc.array(fc.boolean(), { minLength: ZEROS, maxLength: ZEROS }), (signs) => {
       const calls = [show(SIGNED, { doc: DOC.a }), show(SIGNED, { doc: DOC.b }), evalCall(DOC.a), evalCall(DOC.b)];

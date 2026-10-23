@@ -284,6 +284,17 @@ is neither inside nor outside (what it wrote is what was changed) and is left ou
 | `#387.a0eea545` | A revision whose param is −0 gets the same content key and canonical bytes as one with +0, and a NaN or an infinity in a param is refused with out_of_range, naming the path | `canonical.test.ts`, on `full`: a board with −0 (written `-0.0` in the scenario text) at six zeros (a rect's `box` y and `radius`, its `at.pos` x and z, a label's `at.pos` z, another rect's `box` x) has the revision hash and every node's key and result of the same board with +0, on two documents in one process and in a fresh process; a generated property (`SEED` recorded, 30 runs) puts −0 at a random subset of the six; a rect's `radius` of `1e999`, a rect's `box` width of `-1e999` and a label's `size` of `1e39` (past `f32`) are each refused with `out_of_range` naming a path under `items/<id>/params/<name>`, and no revision of them becomes current. Wrong programs: a key that hashes −0's bits; the base's `bad_input` for the whole line holding a JSON number past f64 |
 | `#387.45eee1e5` | In a data view whose mark set of 100,000 points takes its positions from a layout operator, the draw operator's key takes the layout operator's key, and a counting hash sees no pass over the positions' values to make it; the source column the layout reads is hashed once when a new batch arrives, never per frame; and the document reached by two patch histories gets byte-identical keys. A planted key that hashes the positions array passes the history fixture and fails this test, naming the array | `positions.test.ts`, on `full,test-scatter`, a chart with one `test.scatter@1` of 100,000 points: each batch's reply lists exactly one pass over `pts.v`; the frames after it list none over `pts.v` or `test.scatter.positions`; a new batch with other values moves the layout's key and the draw's, one with the same values moves neither; two documents reached by two revision histories, each sent the same batch, get the same keys. `planted: "key_hashes_positions"` passes the history part and fails the counting hash, naming `test.scatter.positions`. Wrong programs: the planted key; a source column hashed per frame |
 
+## Blind redrafts that replaced first drafts
+
+Two first drafts couldn't pass on any implementation, so each went to a blind redraft of this job (design:
+Dogfooding). On October 22 the owner approved each redraft in place of its first draft, and the first drafts were
+removed. The criteria table above describes the first drafts; for these two tests, read the redraft.
+
+| Criterion | First draft (removed) | Why it couldn't hold | Redraft | Notes |
+|---|---|---|---|---|
+| `#387.a0eea545` | `canonical.test.ts`, first test | compared the revision hash of the +0 board on `DOC.a` with the −0 board's on `DOC.b`; the canonical document holds its `id`, which `deep_show` stamps from the call's doc ID, so two doc IDs always hash apart | `canonical-redraft.test.ts` | `A9-REDRAFT.md` |
+| `#387.15327229` | `history.test.ts`, first test | compared the short history's revision hash on `DOC.a` with the long one's on `DOC.b`, the same impossibility | `history-redraft.test.ts` | `A4-REDRAFT.md` |
+
 ## Readings where the issue and design leave a choice
 
 - **One binary, more calls.** The scheduler is observed through `deep-show run`, the binary #305 left with the

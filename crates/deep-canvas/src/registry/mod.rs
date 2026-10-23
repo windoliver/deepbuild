@@ -611,6 +611,43 @@ impl Sealed {
         "sealed"
     }
 
+    /// Where the sealed plan is published: `deep://schedule/<core version>`.
+    pub fn schedule_uri(&self) -> String {
+        format!("deep://schedule/{}", core_name())
+    }
+
+    /// The sealed plan as published (Registry and seal): every phase's operators in the order
+    /// the scheduler runs them, each with its canvas module and version, its read set as its
+    /// module registered it, its writes, what it runs per and its step, and every array's
+    /// contributions in the order they fold in. It is compared with a committed snapshot.
+    pub fn schedule(&self) -> Value {
+        let mut phases = serde_json::Map::new();
+        for o in &self.ops {
+            let mut entry = json!({
+                "operator": o.key, "module": o.module, "version": o.version.to_string(),
+                "reads": o.op.reads, "writes": o.op.writes,
+                "per": match o.op.per { Per::Item => "item", Per::Document => "document" },
+            });
+            if let Some(step) = o.op.step {
+                entry["step"] = json!(step);
+            }
+            phases
+                .entry(o.op.phase.clone())
+                .or_insert_with(|| json!([]))
+                .as_array_mut()
+                .expect("a list")
+                .push(entry);
+        }
+        json!({
+            "uri": self.schedule_uri(),
+            "core": core_name(),
+            "build_set": self.build_set.name(),
+            "set_digest": self.set_digest,
+            "phases": phases,
+            "contributions": self.contributions,
+        })
+    }
+
     /// The module named `name`, if this build holds it.
     pub(crate) fn module(&self, name: &str) -> Option<&SealedModule> {
         self.modules.iter().find(|m| m.name == name)
