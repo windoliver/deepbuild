@@ -69,8 +69,7 @@ impl Writer {
     /// The ID of this writer's layer: its kind and the first 48 bits of the SHA-256 of its text,
     /// so any thread ID gives a layer ID the ID grammar reads, and one writer one layer.
     pub fn layer_id(&self) -> String {
-        let digest = Sha256::digest(self.text().as_bytes());
-        let hex: String = digest[..6].iter().map(|b| format!("{b:02x}")).collect();
+        let hex = crate::canon::hex(&Sha256::digest(self.text().as_bytes())[..6]);
         format!("{}-{hex}", self.kind.name())
     }
 

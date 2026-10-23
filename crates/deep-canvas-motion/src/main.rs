@@ -37,7 +37,7 @@ fn eval_line(input: &Map<String, Value>) -> Value {
     else {
         return bad_input();
     };
-    let program = match Program::compile(&Value::Object(doc.clone())) {
+    let program = match Program::compile(doc) {
         Ok(p) => p,
         Err(r) => return refusal(r),
     };
@@ -152,7 +152,7 @@ fn run_line(input: &Map<String, Value>) -> Value {
     if FLICKS_PER_SECOND % hz != 0 || to < 0 {
         return bad_input();
     }
-    let program = match Program::compile(&Value::Object(doc.clone())) {
+    let program = match Program::compile(doc) {
         Ok(p) => p,
         Err(r) => return refusal(r),
     };

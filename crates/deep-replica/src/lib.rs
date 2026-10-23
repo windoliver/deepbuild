@@ -57,6 +57,33 @@ pub fn panel_dir(name: &str) -> PathBuf {
     repo_root().join("crates/deep-app/panels").join(name)
 }
 
+/// `--view <id> --out <out>` from the command line, the view a shipped one; else the usage error
+/// is printed under `bin`'s name and the exit code is 2.
+pub fn view_args(bin: &str, out: &str) -> Result<(String, PathBuf), i32> {
+    let (mut view, mut path) = (None, None);
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--view" => view = args.next(),
+            "--out" => path = args.next().map(PathBuf::from),
+            other => {
+                eprintln!("{bin}: unknown argument {other}");
+                return Err(2);
+            }
+        }
+    }
+    let (Some(view), Some(path)) = (view, path) else {
+        eprintln!("usage: {bin} --view <id> --out <{out}>");
+        return Err(2);
+    };
+    if !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
+        let shipped = deep_app::views::SHIPPED_VIEWS;
+        eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");
+        return Err(2);
+    }
+    Ok((view, path))
+}
+
 /// The fixture record's inbox as of its last event, on the virtual clock.
 pub fn load_state() -> AppState {
     let fixture = Fixture::load(&fixture_path()).expect("the fixture record parses");

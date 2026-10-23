@@ -1,0 +1,148 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Checks this week",
+  "description": "A test agent's figure: a title, three bars from a mark set with a stroke gradient, the middle bar bound to a reading, a badge colored by a verdict, and a marker that crosses the chart in two seconds.",
+  "size": [
+    640,
+    400
+  ],
+  "transport": {
+    "span": "2s"
+  },
+  "items": {
+    "title": {
+      "id": "title",
+      "kind": "text@1",
+      "name": "Title",
+      "order": "a0",
+      "params": {
+        "text": "Checks passed this week",
+        "font": "body",
+        "size": 20,
+        "box": {
+          "w": 400,
+          "h": 28
+        }
+      },
+      "at": {
+        "pos": [
+          24,
+          20,
+          0
+        ]
+      }
+    },
+    "ys": {
+      "id": "ys",
+      "kind": "scale@1",
+      "name": "Bar scale",
+      "order": "a1",
+      "params": {
+        "type": "linear",
+        "domain": [
+          0,
+          100
+        ],
+        "range": [
+          340,
+          100
+        ],
+        "nice": false
+      }
+    },
+    "chart": {
+      "id": "chart",
+      "kind": "marks@1",
+      "name": "Checks by day",
+      "order": "a2",
+      "params": {
+        "mark": "bar",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AADAQgAAgEMAANBD"
+          },
+          "x2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABQQwAAuEMAAARE"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AAAgQgAAAAAAAHBC"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "x2": {
+            "column": "x2"
+          },
+          "y": {
+            "column": "y",
+            "scale": "ys"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "muted"
+          },
+          "stroke": {
+            "width": 4,
+            "gradient": {
+              "kind": "linear",
+              "stops": [
+                {
+                  "at": 0,
+                  "role": "muted"
+                },
+                {
+                  "at": 1,
+                  "role": "ink"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "badge": {
+      "id": "badge",
+      "kind": "rect@1",
+      "name": "Verdict badge",
+      "order": "a3",
+      "params": {
+        "box": [
+          520,
+          20,
+          96,
+          24
+        ]
+      }
+    }
+  },
+  "channels": {},
+  "bound_values": {
+    "middle-bar": {
+      "target": "items/chart#2/y",
+      "source": "reading:01JB7R00000000000000000670"
+    }
+  },
+  "status_bindings": {
+    "badge-verdict": {
+      "target": "items/badge/params/paint/fill",
+      "source": "verdict:01JB7V00000000000000000670"
+    }
+  }
+}

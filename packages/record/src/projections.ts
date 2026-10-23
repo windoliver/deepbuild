@@ -503,24 +503,20 @@ export class Projector {
     const session = e.session!;
     const turns = this.turnsOf(session);
     const open = turns.length && !turns[turns.length - 1]!.stopped ? turns[turns.length - 1]! : undefined;
-    const lastStop = turns.reduce<bigint | null>((max, t) => (t.stopSeq !== null && (max === null || t.stopSeq > max) ? t.stopSeq : max), null);
     let turn: Turn | undefined;
-    if (e.kind === 'user.ask') {
+    if (e.kind === 'user.ask' || e.kind === 'agent.stop') {
+      // Only a prompt or a stop reads the latest stop so far, so only they scan the turns for it.
+      const lastStop = turns.reduce<bigint | null>((max, t) => (t.stopSeq !== null && (max === null || t.stopSeq > max) ? t.stopSeq : max), null);
       if (open) turn = open;
       else {
         turn = { idx: turns.length, number: null, startSeq: e.seq, startId: e.id, stopSeq: null, stopped: false, lastSeq: null, lastId: '' };
         turns.push(turn);
       }
-      if (e.seq !== null && lastStop !== null && e.seq < lastStop) this.add('session_readings', { session_id: session, reading: 'clock went back', since: e.log_pos });
-    } else if (e.kind === 'agent.stop') {
-      if (open) turn = open;
-      else {
-        turn = { idx: turns.length, number: null, startSeq: e.seq, startId: e.id, stopSeq: null, stopped: false, lastSeq: null, lastId: '' };
-        turns.push(turn);
+      if (e.kind === 'agent.stop') {
+        turn.stopped = true;
+        turn.stopSeq = e.seq;
+        turn.number = int(d.turn);
       }
-      turn.stopped = true;
-      turn.stopSeq = e.seq;
-      turn.number = int(d.turn);
       if (e.seq !== null && lastStop !== null && e.seq < lastStop) this.add('session_readings', { session_id: session, reading: 'clock went back', since: e.log_pos });
     } else if (TOOL.has(e.kind) && e.seq !== null) {
       // The turn its call began in: the open turn when its stamp is in it, else the stopped turn whose
