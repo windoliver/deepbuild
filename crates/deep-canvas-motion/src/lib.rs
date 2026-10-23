@@ -9,4 +9,5 @@ pub mod curve;
 pub mod doc;
 pub mod eval;
 pub mod insert;
+pub mod module;
 pub mod program;
