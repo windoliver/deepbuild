@@ -4,7 +4,8 @@
 // that skips the run's tracer, a go test run that passes though its reads were never traced, and Jest's own clock.
 // Each runs a real project through the real supervisor, but for the command's text, read with no run.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -166,6 +167,33 @@ describe('compiled code the checkout holds', () => {
     const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
     expect(r.outcome, r.output.stdout).toBe('failed');
   }, 120_000);
+
+  it('a Vitest module cache in the checkout, written by a run and then edited, isn\'t run in place of the source', async () => {
+    const checkout = folder({ 'package.json': '{ "type": "module" }\n', 'sum.js': 'export const sum = (a, b) => a - b;\n', 'sum.test.js': `import { expect, test } from 'vitest';\nimport { sum } from './sum.js';\ntest('adds', () => { expect(sum(2, 3)).toBe(5); });\n` }, true);
+    const run = () => runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    expect((await run()).outcome).toBe('failed');
+    const cache = join(checkout, 'node_modules/.vitest-cache');
+    for (const name of existsSync(cache) ? readdirSync(cache) : []) {
+      const text = readFileSync(join(cache, name), 'utf8');
+      if (text.includes('(a, b) => a - b')) writeFileSync(join(cache, name), text.replace('(a, b) => a - b', '(a, b) => a + b'));
+    }
+    const r = await run();
+    expect(r.outcome, r.output.stdout).toBe('failed');
+  }, 300_000);
+
+  it('a Jest transform cache in a folder the checkout\'s config names, edited with a matching checksum, isn\'t run in place of the source', async () => {
+    const checkout = folder({ 'package.json': '{ "name": "unit", "private": true, "jest": { "cacheDirectory": "<rootDir>/.jc" } }\n', 'sum.js': 'module.exports = (a, b) => a - b;\n', 'sum.test.js': `const sum = require('./sum.js');\ntest('adds', () => { expect(sum(2, 3)).toBe(5); });\n` }, true);
+    // The agent's own Jest run, outside any check, fills the cache; each entry is a checksum line, then the code.
+    spawnSync(join(checkout, 'node_modules/.bin/jest'), [], { cwd: checkout });
+    const forged = execFileSync('/usr/bin/grep', ['-rl', '(a, b) => a - b', join(checkout, '.jc')], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    expect(forged.length, 'the cache holds the transformed source').toBeGreaterThan(0);
+    for (const file of forged) {
+      const code = readFileSync(file, 'utf8').split('\n').slice(1).join('\n').replace('(a, b) => a - b', '(a, b) => a + b');
+      writeFileSync(file, `${createHash('sha1').update(code).digest('hex').slice(0, 32)}\n${code}`);
+    }
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
+    expect(r.outcome, r.output.stderr).toBe('failed');
+  }, 300_000);
 });
 
 describe('added tests', () => {

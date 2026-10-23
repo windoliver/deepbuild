@@ -13,9 +13,10 @@ try {
 } catch { /* no script: node -e, or a REPL */ }
 const report = process.env.DEEP_CHECK_REPORT;
 const reporter = (name) => fileURLToPath(new URL(name, import.meta.url));
-// Each tool's own process, by its entry script: the runner's reporter joins the tool's default one.
-const tool = entry.endsWith('/vitest/vitest.mjs') ? ['--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
-  : /\/jest(-cli)?\/bin\/jest\.js$/.test(entry) ? ['--watchman=false', '--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
+// Each tool's own process, by its entry script: the runner's reporter joins the tool's default one. Each transforms
+// afresh: a cache in the checkout, which only a checksum of its own guards, would run code no source holds.
+const tool = entry.endsWith('/vitest/vitest.mjs') ? ['--no-fsModuleCache', '--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
+  : /\/jest(-cli)?\/bin\/jest\.js$/.test(entry) ? ['--watchman=false', '--no-cache', '--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
 if (report && tool) {
   globalThis[Symbol.for('deepbuild.check.report')] = report;
   delete process.env.DEEP_CHECK_REPORT;
