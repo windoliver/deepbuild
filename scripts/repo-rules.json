@@ -14,6 +14,10 @@
           "spec": "5.9.3",
           "why": "Issue #12: the typecheck lane and the workspace builds."
         },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #30: AC3's Jest run, which the acceptance tests run from the repo's node_modules; the user approved adding it."
+        },
         "vitest": {
           "spec": "5.0.5",
           "why": "Issue #12: the unit lane's TypeScript tests."
@@ -189,6 +193,22 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #28: the record a verdict is appended to as verdict.made and verdict.stale, as the core; only its types are imported."
+        }
+      }
+    },
+    "packages/checks-command/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the check.kind@1 result shape and the read and spawn tracer every command check run loads (#314)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the scrub of a run's output by the values its environment and secrets held, before it is digested or shown."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
         }
       }
     },

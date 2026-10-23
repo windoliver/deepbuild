@@ -375,7 +375,7 @@ class LocalSupervisor implements Supervisor {
     const cwd = real(spec.cwd);
     const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
-    const env = { ...process.env, ...spec.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
     const grant: Grant = spec.grant ?? {};
     // The profile first: a grant the sandbox can't enforce refuses the start before anything is held or recorded.
     const launch = sandboxed ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run) : { argv: spec.argv, cwd, env };
@@ -463,6 +463,8 @@ class LocalSupervisor implements Supervisor {
   async signal(run: string, signal: NodeJS.Signals): Promise<void> {
     const r = this.runs.get(run);
     if (!r) throw Error(`${run} is no run of this supervisor`);
+    // A scan first, as cleanup does: a process the run started since the last scan is tracked, so the signal reaches it after its leader is gone.
+    await this.scanOnce().catch(() => undefined);
     const proven = await this.provable(r);
     // Its process group at once, as the group's own members see a group signal; then each proven process outside it.
     if (r.pgid !== undefined && proven.some((p) => p.pgid === r.pgid)) try { process.kill(-r.pgid, signal); } catch { /* gone */ }

@@ -1,0 +1,1 @@
+export const priceOf = (table: Record<string, number>, sku: string): number => table[sku] ?? 0;

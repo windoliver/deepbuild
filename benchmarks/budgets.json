@@ -2,9 +2,10 @@
   "preflight": {
     "margin": 0.5,
     "limits": {
-      "elapsedMs": 300000
+      "elapsedMs": 900000
     },
-    "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin."
+    "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin.",
+    "changeReason": "Raised from 300 s to 900 s on 2026-10-22: the checks outgrew five minutes on the reference Mac (Mac15,12, M3, 16 GB, mains power). At a036872, at load 6 to 14, the unit lane alone took about 790 s: the parallel vitest block 135 s, the one-at-a-time block 557 s (#16 339 s of it: budgets.test.ts 128 s, crash-redraft 116 s), cargo test 62 s and node --test 38 s; typecheck, lint, catalogue drift, corpus and parity add about 40 s. The files that time a frozen budget must run with nothing beside them (#664), and they alone take about 260 s, 115 s of it the fixed sleep of #16's idle-CPU test, so no schedule brings the checks under 300 s; with everything that may overlap overlapped, the floor is about 450 to 500 s. Full preflights read 706 to 1118 s, all on a loaded machine."
   },
   "harness": {
     "limits": {
@@ -269,6 +270,26 @@
       "initialReason": "Issue #96 first measurement: the merge base has no merge by ID. One process merges two writers' 10,000-item revisions of one base through `deep-canvas merge`, reading and writing its JSON line, so p50 includes Node's and the binary's start; the issue's 200 ms a merge stays in tests/acceptance/96/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "sandbox-setup",
+      "command": [
+        "node",
+        "benchmarks/sandbox.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #236 first measurement: the merge base has no supervisor. One process opens a record, the asks core and the supervisor in a temp folder, then starts, waits for and cleans up 20 runs of /usr/bin/true in the platform sandbox, interleaved with 20 bare spawns, so p50 includes Node's start, the denial stream's warm-up and the record's appends; the issue's 300 ms per check over a bare start stays in tests/acceptance/236/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "command-check-count",
+      "command": [
+        "node",
+        "benchmarks/command-check.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #30 first measurement: the merge base has no command check kind. One process opens a record, the asks core and the supervisor in a temp folder and runs a 200-test Vitest project through the platform sandbox 10 times as the command check kind (runCommandCheck, counting from its reporter) and 10 times as a plain run under the same hermetic environment and loaders, interleaved, so p50 includes Node's start and both arms; the issue's 1% for counting tests stays in tests/acceptance/30/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-seal",
       "command": [
         "node",
@@ -278,16 +299,6 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #305 first measurement: the merge base has no canvas-module registry or seal. One process starts `deep-show run` in the shipped build, which registers and seals its canvas modules once, asks for the registry, draws one board at six times and asks again, failing unless the seal ran once with an unchanged time; p50 includes Node's and the binary's start. The issue's 50 ms for registration and the seal stays in tests/acceptance/305/budgets.test.ts, read from the binary's own clock. p50 and peak memory get a 50% margin against the merge base once main has this task."
-    },
-    {
-      "id": "sandbox-setup",
-      "command": [
-        "node",
-        "benchmarks/sandbox.mjs"
-      ],
-      "margin": 0.5,
-      "limits": {},
-      "initialReason": "Issue #236 first measurement: the merge base has no supervisor. One process opens a record, the asks core and the supervisor in a temp folder, then starts, waits for and cleans up 20 runs of /usr/bin/true in the platform sandbox, interleaved with 20 bare spawns, so p50 includes Node's start, the denial stream's warm-up and the record's appends; the issue's 300 ms per check over a bare start stays in tests/acceptance/236/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
