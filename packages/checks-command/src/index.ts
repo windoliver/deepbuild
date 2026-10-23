@@ -199,6 +199,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);
     const filters = filtersIn(spec.runner);
+    // Vitest reports its pattern's source, in which a `/` the command gave is escaped.
+    const named = (filter: string): boolean => [...filters].some((v) => v === filter || v.replaceAll('/', '\\/') === filter);
     if (refused.length) return { run: result('uncounted', { mask: `venv ${refused[0]}: name the venv's program by its path` }), ran: [] };
     const hidden = plant === 'exit-code-only' ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
     if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
@@ -281,7 +283,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const vitestReport = evidence(files.vitest, true);
       const reported: Reported[] = [
         ...(nodeReport ? [nodeTest(nodeReport.lines, checkout, stderr)] : []),
-        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', (filter) => filters.has(filter))] : []),
+        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', named)] : []),
         ...(go ? [goTest(stdout, checkout)] : []),
       ];
       const malformed = reported.reduce((n, r) => n + r.malformed, 0);

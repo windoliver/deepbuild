@@ -260,6 +260,11 @@ describe('what a checkout\'s config makes the run leave out', () => {
     }, true);
     const v = await runCommandCheck(check(vitest, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
     expect(v.outcome, v.output.stdout).toBe('failed');
+    // The check's own filter, quoted after `=` and holding a slash Vitest escapes in its pattern, is the command's.
+    writeFileSync(join(vitest, 'vitest.config.mjs'), 'export default {};\n');
+    writeFileSync(join(vitest, 'a.test.js'), `import { expect, test } from 'vitest';\ntest('total is 12', () => { expect(11).toBe(12); });\ntest('GET /users lists them', () => { expect(1).toBe(1); });\n`);
+    const ownVitest = await runCommandCheck(check(vitest, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run --testNamePattern="GET /users"' } }));
+    expect(ownVitest.outcome, ownVitest.failures.map((f) => f.message).join('\n')).toBe('passed');
     const jest = folder({
       'package.json': '{ "name": "unit", "private": true, "jest": { "testNamePattern": "^cart" } }\n',
       'a.test.js': `test('total is 12', () => { expect(11).toBe(12); });\ntest('cart exists', () => { expect(1).toBe(1); });\n`,
@@ -279,6 +284,15 @@ describe('what a checkout\'s config makes the run leave out', () => {
     writeFileSync(join(pytest, 'pytest.ini'), '[pytest]\npython_functions = test_exists\n');
     const uncollected = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
     expect(uncollected.outcome, uncollected.output.stdout).toBe('failed');
+    const marked = folder({
+      'pytest.ini': '[pytest]\nmarkers =\n    slow: slow tests\naddopts = -m "not slow"\n',
+      'tests/test_cart.py': 'import pytest\n\n\n@pytest.mark.slow\ndef test_total():\n    assert 11 == 12\n\n\ndef test_exists():\n    pass\n',
+    });
+    const unmarked = await runCommandCheck(check(marked, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(unmarked.outcome, unmarked.output.stdout).toBe('failed');
+    // `python3 -m pytest` names no filter; the command's own -m does.
+    const ownMark = await runCommandCheck(check(marked, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider -m "not slow" tests' } }));
+    expect(ownMark.outcome, ownMark.output.stdout).toBe('passed');
     const classes = folder({ 'pytest.ini': '[pytest]\npython_classes = Nothing\n', 'tests/test_cart.py': 'class TestTotal:\n    def test_total(self):\n        assert 11 == 12\n\n\ndef test_exists():\n    pass\n' });
     const uncollectedClass = await runCommandCheck(check(classes, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
     expect(uncollectedClass.outcome, uncollectedClass.output.stdout).toBe('failed');
