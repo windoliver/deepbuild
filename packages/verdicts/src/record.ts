@@ -1,5 +1,5 @@
 // Verdicts into the record: each one a new verdict.made event from the core, never an edit of a row.
-import { randomBytes } from 'node:crypto';
+import { ulid } from '@deepbuild/record';
 import type { Connection, RecordStore } from '@deepbuild/record';
 import { staleReason } from './engine.js';
 import type { RecordedVerdict, Verdict } from './types.js';
@@ -10,15 +10,6 @@ const CAP = 8192;
 const cut = (s: string): string => (s.length > CAP ? s.slice(0, CAP) : s);
 /** Its run counts are u16: a count past it reads as the most the field holds. */
 const U16 = 65535;
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-function ulid(ms: number): string {
-  let out = '';
-  let time = BigInt(ms);
-  for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${randomBytes(10).toString('hex')}`);
-  for (let i = 0; i < 16; i++) { out += CROCKFORD[Number(random & 31n)]; random >>= 5n; }
-  return out;
-}
 
 /** Appends the verdict as a new verdict.made event at `at`. A pending verdict isn't made yet, so it is refused. */
 export async function recordVerdict(record: RecordStore, verdict: Verdict, at: number): Promise<RecordedVerdict> {

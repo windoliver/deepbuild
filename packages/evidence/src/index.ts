@@ -279,9 +279,12 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       const receipt: Receipt = { sent: [], withheld: [] };
       for (const sha of files) {
         const record = index.get(sha);
+        if (!record) {
+          receipt.withheld.push({ sha256: sha, reason: `evidence ${sha} is missing` });
+          continue;
+        }
         let bytes: Uint8Array;
         try {
-          if (!record) throw new EvidenceError('missing', `evidence ${sha} is missing`, sha);
           bytes = await read(sha);
         } catch (error) {
           receipt.withheld.push({ sha256: sha, reason: (error as Error).message });
