@@ -281,11 +281,26 @@ export class Projector {
         break;
       }
       case 'ask.later':
-        // Only an ask still waiting can wait longer.
-        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.until), bare(e.subject));
+        // Only an ask still waiting can wait longer, never to its deadline. The core records it, once your Later
+        // on the trusted path passes its checks, under the identity the ask was raised for; an app's or the CLI's
+        // own event changes nothing.
+        if (e.writer !== 'core') break;
+        // For the exception, never past the earliest deadline among the open asks it holds: those raised after it in
+        // the log, in its thread under its identity, as the core counts them; not one from the same instant before it.
+        this.stmt(`UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ?
+          AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)
+          AND NOT EXISTS (SELECT 1 FROM asks held JOIN events he ON he.id = held.id JOIN events ee ON ee.id = asks.id
+            WHERE asks.kind = 'exception' AND held.kind != 'exception' AND held.status IN ('open', 'later')
+              AND he.log_pos > ee.log_pos AND he.actor = ee.actor AND he.scope = ee.scope
+              AND COALESCE((SELECT thread_id FROM sessions WHERE id = held.session_id), held.session_id)
+                = COALESCE((SELECT thread_id FROM sessions WHERE id = asks.session_id), asks.session_id)
+              AND held.deadline <= ?)`).run(int(d.until), bare(e.subject), int(d.until), e.actor, e.scope, int(d.until));
         break;
       case 'ask.batched':
-        if (Array.isArray(d.asks)) for (const a of d.asks) if (isObj(a)) this.set('asks', { batch_id: str(d.batch) }, { id: bare(a.ask) });
+        // Shown again: an ask hidden by Later is back to open.
+        // Only the core shows an ask, under the identity it was raised for.
+        if (e.writer !== 'core' || !Array.isArray(d.asks)) break;
+        for (const a of d.asks) if (isObj(a)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
         break;
       case 'decision.created':
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });
@@ -492,24 +507,20 @@ export class Projector {
     const session = e.session!;
     const turns = this.turnsOf(session);
     const open = turns.length && !turns[turns.length - 1]!.stopped ? turns[turns.length - 1]! : undefined;
-    const lastStop = turns.reduce<bigint | null>((max, t) => (t.stopSeq !== null && (max === null || t.stopSeq > max) ? t.stopSeq : max), null);
     let turn: Turn | undefined;
-    if (e.kind === 'user.ask') {
+    if (e.kind === 'user.ask' || e.kind === 'agent.stop') {
+      // Only a prompt or a stop reads the latest stop so far, so only they scan the turns for it.
+      const lastStop = turns.reduce<bigint | null>((max, t) => (t.stopSeq !== null && (max === null || t.stopSeq > max) ? t.stopSeq : max), null);
       if (open) turn = open;
       else {
         turn = { idx: turns.length, number: null, startSeq: e.seq, startId: e.id, stopSeq: null, stopped: false, lastSeq: null, lastId: '' };
         turns.push(turn);
       }
-      if (e.seq !== null && lastStop !== null && e.seq < lastStop) this.add('session_readings', { session_id: session, reading: 'clock went back', since: e.log_pos });
-    } else if (e.kind === 'agent.stop') {
-      if (open) turn = open;
-      else {
-        turn = { idx: turns.length, number: null, startSeq: e.seq, startId: e.id, stopSeq: null, stopped: false, lastSeq: null, lastId: '' };
-        turns.push(turn);
+      if (e.kind === 'agent.stop') {
+        turn.stopped = true;
+        turn.stopSeq = e.seq;
+        turn.number = int(d.turn);
       }
-      turn.stopped = true;
-      turn.stopSeq = e.seq;
-      turn.number = int(d.turn);
       if (e.seq !== null && lastStop !== null && e.seq < lastStop) this.add('session_readings', { session_id: session, reading: 'clock went back', since: e.log_pos });
     } else if (TOOL.has(e.kind) && e.seq !== null) {
       // The turn its call began in: the open turn when its stamp is in it, else the stopped turn whose

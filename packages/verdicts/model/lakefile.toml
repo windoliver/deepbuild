@@ -1,0 +1,9 @@
+name = "verdicts-model"
+defaultTargets = ["Verdicts", "vectors"]
+
+[[lean_lib]]
+name = "Verdicts"
+
+[[lean_exe]]
+name = "vectors"
+root = "Vectors"

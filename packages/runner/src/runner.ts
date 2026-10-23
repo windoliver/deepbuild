@@ -672,7 +672,7 @@ class LocalRunner implements Runner {
     const out: Buffer[] = [];
     let stderr = '';
     const started = await this.o.supervisor.start({
-      run, argv, cwd, env, only: true, grant, ...(input ? { input } : {}),
+      run, argv, cwd, env, inherit: false, grant, ...(input ? { input } : {}),
       output: { stdout: (c) => { out.push(c); }, stderr: (c) => { stderr += c.toString('utf8'); } },
     });
     if (started.status !== 'started') return { code: null, stdout: Buffer.alloc(0), stderr: `BLOCKED on ${started.kind}` };
@@ -729,7 +729,7 @@ class LocalRunner implements Runner {
     // Read before its process starts, so its run covers every hook its process sends.
     const from = Date.now();
     const started = await this.o.supervisor.start({
-      run: job.rec.job, argv, cwd: job.rec.folder, env, only: true, grant,
+      run: job.rec.job, argv, cwd: job.rec.folder, env, inherit: false, grant,
       // The prompt goes only to the bytes it verified: swapped during the start, its process reads nothing and is stopped.
       input: () => (this.unchanged(binary) && !job.cancelled ? Buffer.from(job.spec.prompt, 'utf8') : undefined),
       ...(job.spec.leases ? { leases: job.spec.leases } : {}),

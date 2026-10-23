@@ -19,7 +19,7 @@ import { openSupervisor, type Grant, type Host, type Supervisor } from '@deepbui
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { disk, testVfs, type Durable } from './vfs.js';
-import { Refused, refusal, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { Refused, refusal, startOf, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
 /** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
@@ -43,7 +43,7 @@ export interface CallContext { role: string; session?: string | null; parent?: {
 /** A session as its own hooks established it: the agent process, its working folder and its transcript. */
 interface Session { id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
-interface Stamp { session: string; tool: string; digest: string; spent: boolean }
+interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable. */
 interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant }
 /** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
@@ -80,7 +80,8 @@ export class Core {
   private readonly ready: Promise<void>;
   private readonly sessions = new Map<string, Session>();
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
-  private readonly stamps: Stamp[] = [];
+  /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
+  private stamps: Stamp[] = [];
   /** Each process's start time, as `ps -o lstart=` prints it: how a process is told apart from a reused PID. */
   private readonly starts = new Map<number, Promise<string | undefined>>();
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
@@ -171,10 +172,6 @@ export class Core {
     renameSync(`${this.root.state}.tmp`, this.root.state);
   }
 
-  private get held(): string[] {
-    return this.options.held;
-  }
-
   // ---- Appends.
 
   private connection(writer: string, extra: Partial<Connection> = {}): Connection {
@@ -239,9 +236,9 @@ export class Core {
       // Only an event checked against its session acts on it: an unverified SessionEnd ends nothing.
       if (meta.event === 'SessionEnd') {
         session.ended = true;
-        for (const stamp of this.stamps) if (stamp.session === session.id) stamp.spent = true;
+        this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
       }
-      if (verified && meta.stamp) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest, spent: false });
+      if (verified && meta.stamp) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
     }
     const count = this.counters.get(meta.session) ?? { msgs: 0, turns: 0, worked: false };
     this.counters.set(meta.session, count);
@@ -310,13 +307,7 @@ export class Core {
   private startOf(pid: number, fresh = false): Promise<string | undefined> {
     const known = this.starts.get(pid);
     if (known && !fresh) return known;
-    const read = new Promise<string | undefined>((done) => {
-      try {
-        execFile('ps', ['-o', 'lstart=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => done(error ? undefined : stdout.trim() || undefined));
-      } catch {
-        done(undefined);
-      }
-    });
+    const read = startOf(pid);
     this.starts.set(pid, read);
     return read;
   }
@@ -464,11 +455,11 @@ export class Core {
     const digest = sha256Hex(canonicalize(args as JsonValue));
     const matches = parent ? this.stamps.filter((s) => {
       const session = live(s.session);
-      return !s.spent && s.tool === tool && s.digest === digest && session !== undefined && session.pid === parent.pid && session.start === parent.start;
+      return s.tool === tool && s.digest === digest && session !== undefined && session.pid === parent.pid && session.start === parent.start;
     }) : [];
     // A call more than one unspent stamp matches binds to none.
     if (matches.length !== 1) throw new Refused(refusal('unbound', '/params/arguments', `This ${tool} call binds to no session: ${matches.length ? 'more than one' : 'no'} PreToolUse stamped for it is unspent.`, tool));
-    matches[0]!.spent = true;
+    this.stamps.splice(this.stamps.indexOf(matches[0]!), 1);
     return matches[0]!.session;
   }
   private async claim(session: string, args: Obj): Promise<Obj> {
@@ -580,7 +571,7 @@ export class Core {
     await this.appendCore('run.started', { run: run.run, check: run.check, claim: run.claim, commit: run.commit }, { subject: run.run });
     const token = randomBytes(24).toString('base64url');
     const env = { ...run.env, DEEP_RUN_TOKEN: token };
-    const values = this.options.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.held] };
+    const values = this.options.plant === 'no-run-values' ? undefined : { env, held: [token, ...this.options.held] };
     const writer = this.store.connect({ role: 'deepbuild', via: 'job' });
     const label = { source: run.run, redaction: 'complete' as const, license: { name: 'local', allows: [] }, ...(values ? { run: values } : {}) };
     const sinks = [writer.text({ kind: 'run.stdout', ...label }), writer.text({ kind: 'run.stderr', ...label })];
@@ -673,7 +664,7 @@ export class Core {
           process.stderr.write(`deep hub: ${file}: refused a cut line at offset ${offset}\n`);
           break;
         }
-        const parsed = parseLine(text.subarray(offset, end), true, this.held);
+        const parsed = parseLine(text.subarray(offset, end), true, this.options.held);
         if (parsed.kind === 'hook') {
           const { drafts, meta } = parsed;
           await this.queue(() => this.handleHook(drafts, meta, 'hook'), true).then(({ settled }) => settled).catch(() => { failed = true; });
@@ -743,7 +734,7 @@ export class Core {
         // A person's prompt; a user line that only carries tool results is part of the turn.
         if (parts.length && parts.every((c) => c.type === 'tool_result')) continue;
         const said = typeof content === 'string' ? content : parts.flatMap((c) => (typeof c.text === 'string' ? [c.text] : [])).join('\n');
-        appends.push(this.append(connection, { v: 1, id, kind: 'user.ask', ts, data: { msg: msg++, text: scrubText(said, { held: this.held }), tasks: [], from: 'person' } }, true));
+        appends.push(this.append(connection, { v: 1, id, kind: 'user.ask', ts, data: { msg: msg++, text: scrubText(said, { held: this.options.held }), tasks: [], from: 'person' } }, true));
       } else if (parts.some((c) => c.type === 'tool_use')) {
         worked = true;
       } else if (handle) {

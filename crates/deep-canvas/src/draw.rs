@@ -117,6 +117,18 @@ fn number(params: &Map<String, Value>, name: &str, path: &str) -> Result<f64, Re
     }
 }
 
+/// The document's `size`, two numbers.
+pub(crate) fn size(doc: &Value) -> Result<[f64; 2], Refused> {
+    let size = member(doc, "size").and_then(Value::as_array);
+    let (Some(w), Some(h)) = (
+        size.and_then(|s| s.first()).and_then(Value::as_f64),
+        size.and_then(|s| s.get(1)).and_then(Value::as_f64),
+    ) else {
+        return Err(Refused::new("out_of_range", "size", "not two numbers"));
+    };
+    Ok([w, h])
+}
+
 fn vec3_at(item: &Value, keys: &[&str]) -> Vec3 {
     let mut value = item;
     for key in keys {
@@ -462,13 +474,7 @@ pub fn scene(doc: &Value) -> Result<Scene, Refused> {
                 }
             }
         }
-        let size = member(doc, "size").and_then(Value::as_array);
-        let (Some(w), Some(h)) = (
-            size.and_then(|s| s.first()).and_then(Value::as_f64),
-            size.and_then(|s| s.get(1)).and_then(Value::as_f64),
-        ) else {
-            return Err(Refused::new("out_of_range", "size", "not two numbers"));
-        };
+        let [w, h] = size(doc)?;
         if let Some(bounds) = union(kept.into_iter()) {
             spec.frame(&mut rig, bounds, [w, h], &params_path)?;
         }
