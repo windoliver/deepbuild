@@ -257,8 +257,8 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
         .map((r) => ({ ...r, failures: r.failures.filter((f) => !waivedFailure(claim, r.check, f)) }));
       const overran = fails.some((r) => r.outcome === 'overran') ? [`overran its deadline ${c.deadline ?? '(none stated)'}`] : [];
       if (fails.length && !passes.length) {
-        inherited = c.base?.outcome === 'failed' && !isFix(claim, c)
-          && fails.every((r) => r.failures.length > 0 && r.failures.every((f) => onBase(base, f)));
+        // With no failed merge base (or for a fix), no failure is on the base, so none is inherited.
+        inherited = fails.every((r) => r.failures.length > 0 && r.failures.every((f) => onBase(base, f)));
         const tests = sorted(fails.flatMap((r) => r.failures).filter((f) => inherited || !onBase(base, f)).map((f) => f.test));
         const what = [...tests, ...overran].join(', ') || 'failed';
         if (inherited) row('BLOCKED', `inherited: also fails on the merge base: ${what}`, undefined, 'a fix on the default branch for each cause');

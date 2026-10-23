@@ -41,7 +41,10 @@ fn bezier_json(b: &Bezier) -> Value {
 /// Inserts a key into `channel` at `t`, strictly inside one of its segments. Returns the new
 /// document and the new key's ID.
 pub fn insert(doc: &Value, channel: &str, t: i64) -> Result<(Value, String), Refused> {
-    let motion = doc::read(doc)?;
+    let Value::Object(map) = doc else {
+        return refused("bad_doc", "");
+    };
+    let motion = doc::read(map)?;
     let Some(ch) = motion.channels.iter().find(|c| c.id == channel) else {
         return refused("ref_unresolved", format!("channels/{channel}"));
     };

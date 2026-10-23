@@ -13,10 +13,15 @@ try {
 } catch { /* no script: node -e, or a REPL */ }
 const report = process.env.DEEP_CHECK_REPORT;
 const reporter = (name) => fileURLToPath(new URL(name, import.meta.url));
-// Each tool's own process, by its entry script: the runner's reporter joins the tool's default one. Each transforms
-// afresh: a cache in the checkout, which only a checksum of its own guards, would run code no source holds.
-const tool = entry.endsWith('/vitest/vitest.mjs') ? ['--no-fsModuleCache', '--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
-  : /\/jest(-cli)?\/bin\/jest\.js$/.test(entry) ? ['--watchman=false', '--no-cache', '--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
+// Each tool's own process, by its entry script. Each transforms afresh, whether or not it reports: a cache in the
+// checkout, which only a checksum of its own guards, would run code no source holds. The runner's reporter joins the
+// tool's default one.
+const vitest = entry.endsWith('/vitest/vitest.mjs');
+const jest = /\/jest(-cli)?\/bin\/jest\.js$/.test(entry);
+if (vitest) process.argv.push('--no-fsModuleCache');
+if (jest) process.argv.push('--watchman=false', '--no-cache');
+const tool = vitest ? ['--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
+  : jest ? ['--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
 // pnpm's own shell emulator runs a package script's programs itself, so no shell line shows how the script ends.
 if (/\/pnpm\/bin\/pnpm\.c?js$/.test(entry)) process.argv.splice(2, 0, '--config.shell-emulator=false');
 if (report && tool) {

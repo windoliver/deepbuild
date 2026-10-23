@@ -1158,6 +1158,15 @@ impl Projector {
         })
     }
 
+    /// A pixel's offset from the panel's centre, the view's roll taken out.
+    fn unroll(&self, x: f64, y: f64) -> (f64, f64) {
+        let (dx, dy) = (x - self.centre[0], y - self.centre[1]);
+        (
+            dx * self.cos_roll + dy * self.sin_roll,
+            -dx * self.sin_roll + dy * self.cos_roll,
+        )
+    }
+
     /// The depth at which a pixel's line of sight meets the plane through `point` with
     /// `normal`, both in the view's frame: the plane's depth under that pixel, what a shape
     /// on it is drawn and picked by. A flat document's depth is 1 everywhere; a plane seen
@@ -1166,11 +1175,7 @@ impl Projector {
         if self.pose.flat {
             return 1.0;
         }
-        let (dx, dy) = (x - self.centre[0], y - self.centre[1]);
-        let (ux, uy) = (
-            dx * self.cos_roll + dy * self.sin_roll,
-            -dx * self.sin_roll + dy * self.cos_roll,
-        );
+        let (ux, uy) = self.unroll(x, y);
         let (sx, sy) = (ux / self.scale, -uy / self.scale);
         if self.perspective {
             // The line from the eye through the pixel: t · (sx, sy, 1), at depth t.
@@ -1190,11 +1195,7 @@ impl Projector {
 
     /// The point of a flat document under a pixel.
     pub fn unproject_flat(&self, x: f64, y: f64) -> [f64; 2] {
-        let (dx, dy) = (x - self.centre[0], y - self.centre[1]);
-        let (ux, uy) = (
-            dx * self.cos_roll + dy * self.sin_roll,
-            -dx * self.sin_roll + dy * self.cos_roll,
-        );
+        let (ux, uy) = self.unroll(x, y);
         [
             self.pose.target[0] + ux / self.scale,
             self.pose.target[1] + uy / self.scale,
@@ -1203,11 +1204,7 @@ impl Projector {
 
     /// The point of the plane through the target, facing the eye, under a pixel of a 3D view.
     pub fn unproject_at_target(&self, x: f64, y: f64) -> Vec3 {
-        let (dx, dy) = (x - self.centre[0], y - self.centre[1]);
-        let (ux, uy) = (
-            dx * self.cos_roll + dy * self.sin_roll,
-            -dx * self.sin_roll + dy * self.cos_roll,
-        );
+        let (ux, uy) = self.unroll(x, y);
         // Perspective: px per m at the target's depth is focal ÷ distance.
         let per_m = if self.perspective {
             self.scale / self.pose.distance

@@ -7,10 +7,10 @@
 // Its state is a function of the record: every method first reads what the log gained, then decides on
 // what it read and appends, with no await between that read and the append. Price lookups run before the
 // decision, so a slow lookup never holds the others. Your yes reaches it only as the asks core's answer.
-import { randomBytes } from 'node:crypto';
 import { canonicalize, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
+import { ulid } from '@deepbuild/record';
 import type { Connection, Event, EventInput, RecordStore } from '@deepbuild/record';
 
 export type ScopeKind = 'issue' | 'resource' | 'project' | 'work';
@@ -96,13 +96,6 @@ const microDown = (usd: number): number => Math.floor(usd * 1e6 + 1e-6);
 const usd = (m: number): number => m / 1e6;
 const dollars = (m: number): string => `$${usd(m).toFixed(2)}`;
 const isPrice = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v * 1e6 <= Number.MAX_SAFE_INTEGER;
-
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-function ulid(ms: number): string {
-  let time = '';
-  for (let t = ms, i = 0; i < 10; i++, t = Math.floor(t / 32)) time = CROCKFORD[t % 32] + time;
-  return time + Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('');
-}
 
 interface Budget {
   id: string;
