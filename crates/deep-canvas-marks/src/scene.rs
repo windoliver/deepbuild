@@ -1489,6 +1489,31 @@ pub fn bound_text(
     Ok(out)
 }
 
+/// The readings bound to mark sets' cells (`items/<set>#<key>/<column>`): set ID → its cells'
+/// readings.
+fn bound_rows(doc: &Map<String, Value>, record: &Record) -> BTreeMap<String, data::BoundRows> {
+    let mut out: BTreeMap<String, data::BoundRows> = BTreeMap::new();
+    let Some(Value::Object(bound)) = doc.get("bound_values") else {
+        return out;
+    };
+    for b in bound.values() {
+        let (Some(Value::String(target)), Some(Value::String(source))) =
+            (b.get("target"), b.get("source"))
+        else {
+            continue;
+        };
+        if let ["items", part, column] = target.split('/').collect::<Vec<_>>().as_slice() {
+            if let Some((set, key)) = part.split_once('#') {
+                out.entry(set.to_string()).or_default().insert(
+                    (key.to_string(), (*column).to_string()),
+                    record.readings.get(source).copied(),
+                );
+            }
+        }
+    }
+    out
+}
+
 /// The paint slot a status binding owns (Status binding: `fill | stroke | badge`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Slot {
@@ -1901,19 +1926,38 @@ pub fn frame_planted(
     planted: Planted,
 ) -> Result<Frame, Refused> {
     let bound = bound_texts(doc, items, record)?;
-    frame_shown(doc, items, palette, zoom, planted, &bound)
+    frame_shown(
+        doc,
+        items,
+        palette,
+        zoom,
+        planted,
+        &bound,
+        &bound_rows(doc, record),
+    )
 }
 
 /// The draw list for evaluated `items`, with what each bound value and counter shows already
-/// formatted (the text module's counters, in the view's locale).
+/// formatted (the text module's counters, in the view's locale); `record` gives the readings
+/// bound to mark sets' rows.
 pub fn frame_with(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     palette: &Palette,
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
+    record: &Record,
 ) -> Result<Frame, Refused> {
-    frame_shown(doc, items, palette, zoom, Planted::None, bound)
+    let row_readings = bound_rows(doc, record);
+    frame_shown(
+        doc,
+        items,
+        palette,
+        zoom,
+        Planted::None,
+        bound,
+        &row_readings,
+    )
 }
 
 fn frame_shown(
@@ -1923,14 +1967,32 @@ fn frame_shown(
     zoom: f64,
     planted: Planted,
     bound: &BTreeMap<String, Shown>,
+    row_readings: &BTreeMap<String, data::BoundRows>,
 ) -> Result<Frame, Refused> {
-    let (frame, wants_boxes) = build(doc, items, palette, bound, zoom, planted, None)?;
+    let (frame, wants_boxes) = build(
+        doc,
+        items,
+        palette,
+        (bound, row_readings),
+        zoom,
+        planted,
+        None,
+    )?;
     if !wants_boxes {
         return Ok(frame);
     }
     // A span or a step by position: the first pass's boxes, then the frame drawn with them.
     let boxes = boxes_of(&frame, items);
-    Ok(build(doc, items, palette, bound, zoom, planted, Some(&boxes))?.0)
+    Ok(build(
+        doc,
+        items,
+        palette,
+        (bound, row_readings),
+        zoom,
+        planted,
+        Some(&boxes),
+    )?
+    .0)
 }
 
 /// The frame, and whether a paint asked for boxes that `boxes` doesn't yet hold.
@@ -1938,7 +2000,8 @@ fn build(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     palette: &Palette,
-    bound: &BTreeMap<String, Shown>,
+    // What each bound value and counter shows, and the readings bound to mark sets' rows.
+    (bound, row_readings): (&BTreeMap<String, Shown>, &BTreeMap<String, data::BoundRows>),
     zoom: f64,
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
@@ -2120,7 +2183,16 @@ fn build(
                 }
                 vec![paints.shape(id, verbs, place, paint, &paint_path)?]
             }
-            "marks@1" => data::mark_set(id, item, items, palette, pos)?,
+            "marks@1" => data::mark_set(
+                id,
+                item,
+                items,
+                palette,
+                pos,
+                row_readings
+                    .get(id.as_str())
+                    .unwrap_or(&data::BoundRows::new()),
+            )?,
             "axis@1" => data::axis(id, item, items, palette, pos)?,
             "image@1" => {
                 let Some(Value::String(asset)) = params.get("asset") else {
