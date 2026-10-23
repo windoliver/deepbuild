@@ -48,7 +48,7 @@ def pytest_configure(config):
     config.pluginmanager.register(_Reporter(), 'deep_check_reporter')
     # Tests chosen from pytest's cache (the last run's failures, or where a stepwise run stopped) aren't the suite:
     # one the cache leaves out never runs, so such a run can't pass.
-    chosen = [flag for flag, dest in (('--lf', 'lf'), ('--sw', 'stepwise')) if config.getoption(dest, False)]
+    chosen = [flag for flag, dest in (('--lf', 'lf'), ('--sw', 'stepwise'), ('--sw-skip', 'stepwise_skip')) if config.getoption(dest, False)]
     if chosen:
         _write({'type': 'run:error', 'file': None, 'errors': [{'name': 'Error', 'message': f"tests chosen from pytest's cache ({' '.join(chosen)})", 'stack': None, 'frames': []}]})
 

@@ -3,7 +3,7 @@
 // a process the run left running, the moved clock breaking `Date()`, and an added test file that never ran; a Python
 // that skips the run's tracer, a go test run that passes though its reads were never traced, and Jest's own clock.
 // Each runs a real project through the real supervisor, but for the command's text, read with no run.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -89,7 +89,7 @@ test('leaves a child', () => {
 
   it('a suite that skips every test and writes a pass into the runner\'s report, wherever it can find it, is never counted', async () => {
     const checkout = project({
-      'a.test.ts': `import { execFileSync } from 'node:child_process';
+      'a.test.ts': `import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 const found: string[] = [];
@@ -251,7 +251,7 @@ describe('programs the tracers can\'t see into', () => {
     expect(r.outcome).not.toBe('passed');
   }, 120_000);
 
-  it('a pytest run whose tests its cache chooses (--lf) can\'t pass: a test the cache leaves out never ran', async () => {
+  it('a pytest or Jest run whose tests its cache chooses (--lf, --sw-skip, onlyFailures) can\'t pass: a test the cache leaves out never ran', async () => {
     const checkout = folder({
       'tests/test_x.py': 'def test_a():\n    pass\n\n\ndef test_b():\n    assert 0\n',
       '.pytest_cache/v/cache/lastfailed': '{"tests/test_x.py::test_a": true}\n',
@@ -259,7 +259,21 @@ describe('programs the tracers can\'t see into', () => {
     const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'python3 -m pytest --lf tests' } }));
     expect(r.outcome, r.output.stdout).toBe('failed');
     expect(r.failures.map((f) => f.message).join('\n')).toMatch(/tests chosen from pytest's cache \(--lf\)/);
-  }, 120_000);
+    const skip = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'python3 -m pytest --sw-skip tests' } }));
+    expect(skip.failures.map((f) => f.message).join('\n')).toMatch(/tests chosen from pytest's cache \(--sw-skip\)/);
+    // Jest's record of the last run, in a cache folder the checkout's config names: a.test.js failed then, and passes now.
+    const jestCheckout = folder({
+      'package.json': '{ "name": "unit", "private": true, "jest": { "cacheDirectory": "<rootDir>/.jestcache" } }\n',
+      'a.test.js': `test('a', () => { expect(1).toBe(2); });\n`,
+      'b.test.js': `test('b', () => { expect(1).toBe(2); });\n`,
+    }, true);
+    spawnSync(join(jestCheckout, 'node_modules/.bin/jest'), ['a.test.js'], { cwd: jestCheckout });
+    writeFileSync(join(jestCheckout, 'a.test.js'), `test('a', () => {});\n`);
+    const jest = await runCommandCheck(check(jestCheckout, { spec: { ...VITEST, runner: 'node_modules/.bin/jest --onlyFailures' } }));
+    expect(jest.testsRun, 'only the test the cache names ran').toBe(1);
+    expect(jest.outcome, jest.output.stderr).toBe('failed');
+    expect(jest.failures.map((f) => f.message).join('\n')).toMatch(/tests chosen from Jest's cache \(onlyFailures\)/);
+  }, 300_000);
 
   it('a Python a test starts the usual way, with the run\'s environment, is traced: the run counts and the child\'s read is in its read set', async () => {
     const r = await runCommandCheck(check(folder({
@@ -283,7 +297,7 @@ describe('programs the tracers can\'t see into', () => {
     expect(nodeFromPython.mask).toBe('untraced program node');
     const fromNode = await runCommandCheck(check(folder({
       'data.txt': 'x',
-      'test/a.test.mjs': `import { execFileSync } from 'node:child_process';\nimport test from 'node:test';\ntest('reads through python', () => { execFileSync('python3', ['-c', "open('data.txt').read()"], { env: { PATH: process.env.PATH } }); });\n`,
+      'test/a.test.mjs': `import { execFileSync, spawnSync } from 'node:child_process';\nimport test from 'node:test';\ntest('reads through python', () => { execFileSync('python3', ['-c', "open('data.txt').read()"], { env: { PATH: process.env.PATH } }); });\n`,
     }), { spec: { ...VITEST, runner: 'python3 --version && node --test' } }));
     expect(fromNode.outcome, fromNode.output.stdout + fromNode.output.stderr).toBe('uncounted');
     expect(fromNode.mask).toBe('untraced program python3');
