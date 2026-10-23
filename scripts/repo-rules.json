@@ -1,5 +1,13 @@
 {
   "deps": {
+    "lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #684: core Lean for the verdict table's model, its proofs and its generator, installed under .lean/; no Mathlib or other Lake packages."
+        }
+      }
+    },
     "package.json": {
       "devDependencies": {
         "@types/node": {
@@ -13,6 +21,10 @@
         "typescript": {
           "spec": "5.9.3",
           "why": "Issue #12: the typecheck lane and the workspace builds."
+        },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #30: AC3's Jest run, which the acceptance tests run from the repo's node_modules; the user approved adding it."
         },
         "vitest": {
           "spec": "5.0.5",
@@ -192,11 +204,35 @@
         }
       }
     },
+    "packages/checks-command/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the check.kind@1 result shape and the read and spawn tracer every command check run loads (#314)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the scrub of a run's output by the values its environment and secrets held, before it is digested or shown."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        }
+      }
+    },
     "packages/hub/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
           "spec": "0.0.0",
           "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
+        },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
         },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
@@ -209,6 +245,14 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #159: DeepBuild's own headless jobs, run by the hub through host@1, whose hooks the hub records as each job's events."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -241,6 +285,18 @@
         "@deepbuild/conformance": {
           "spec": "0.0.0",
           "why": "Issue #685: the check.kind@1 slot's fill and kit types, and the Finding a proof kit's judge ends a case with, so the one kit runner judges the proof kind."
+        }
+      }
+    },
+    "packages/supervisor/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
         }
       }
     },
@@ -531,6 +587,30 @@
           "why": "Issue #393: the headless window, its frames and the offscreen capture of the composed window."
         }
       }
+    },
+    "packages/runner/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the window, first-reading and smoke-test asks a job raises while it waits, through the asks core."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #159: a job that bills an API key starts only within a budget the ledger reserves, and is charged its cost."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the canonical digest that keys each ask a job raises, so the same question is never asked twice."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #159: each job is recorded before it starts and its end appended, so a restart finds it and never runs it twice."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #159: host@1, through which every process of a job starts sandboxed with only what it declares, and is reaped."
+        }
+      }
     }
   },
   "allowedFindings": [
@@ -551,6 +631,12 @@
       "kind": "home path",
       "sha256": "9e63dffb43b4deffde5e7fc73fe70a38ede39f591e7c44dd8bd08d9f742fff36",
       "why": "Issue #79: a planted Windows home path under the placeholder user someone, proving the acceptance privacy check catches one."
+    },
+    {
+      "path": "tests/acceptance/159/plan.test.ts",
+      "kind": "API key",
+      "sha256": "b6ed1522e39bfb90264f23b3d61616e541544f92f2cd649feee07defeac421cc",
+      "why": "Issue #159: a made-up API key prefix (dh159FAKE) the AC8 test sets in a job's environment, proving the runner names the variable and never its value."
     }
   ]
 }

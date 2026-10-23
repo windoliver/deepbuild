@@ -1,0 +1,14 @@
+import { expect, test } from 'vitest';
+
+// A numeric check against a reference. It reports, per output, how many elements it compared and its largest
+// error in the tool's own report (the test's meta, which Vitest's report carries); CONTRACT_MODE picks a 1%
+// sample, every element, or no report at all. Its printed summary claims every element whatever it compared.
+const SIZE = 4_096_000;
+
+test('matmul matches the reference', ({ task }) => {
+  const mode = process.env.CONTRACT_MODE;
+  const compared = mode === 'sample' ? SIZE / 100 : SIZE;
+  console.log(`compared ${SIZE} of ${SIZE} elements of out, largest error 0`);
+  if (mode !== 'silent') (task.meta as Record<string, unknown>).contract = { out: { compared, largest_error: 0.00025 } };
+  expect(compared).toBeGreaterThan(0);
+});

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
   CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo,
-  Requirement, RequirementOutcome, Result, Run, SendBack, Verdict, VerdictAsk, VerdictKey,
+  Requirement, RequirementOutcome, Result, Run, RunOutcome, SendBack, Verdict, VerdictAsk, VerdictKey,
 } from './types.js';
 
 /** A sha256 as evidence records it: only captured evidence with one supports a PASS. */
@@ -108,10 +108,27 @@ class Selection {
   private readonly reads = new Map<string, Set<string>>();
   /** Whether some check on the claim declares a glob that matches a path. */
   private readonly covered = new Map<string, boolean>();
+  /** Run IDs whose records differ, by check: none of those records counts, whichever arrived first. */
+  readonly conflicts = new Map<string, Map<string, Set<RunOutcome>>>();
   constructor(private readonly claim: ClaimInput) {
-    const seen = new Set<string>();
-    this.runs = claim.runs.filter((r) => !seen.has(r.run) && seen.add(r.run)).sort(byEnd);
-    for (const r of this.runs) {
+    const byId = new Map<string, Map<string, Run>>();
+    for (const r of claim.runs) {
+      const copies = byId.get(r.run) ?? new Map<string, Run>();
+      copies.set(canonical(r), r);
+      byId.set(r.run, copies);
+    }
+    this.runs = [];
+    for (const [id, copies] of byId) {
+      if (copies.size === 1) { this.runs.push(...copies.values()); continue; }
+      for (const r of copies.values()) {
+        const byCheck = this.conflicts.get(r.check) ?? new Map<string, Set<RunOutcome>>();
+        byCheck.set(id, (byCheck.get(id) ?? new Set<RunOutcome>()).add(r.outcome));
+        this.conflicts.set(r.check, byCheck);
+      }
+    }
+    this.runs.sort(byEnd);
+    // Reads count from every record of the check on a commit, a conflicting one included.
+    for (const r of claim.runs) {
       const at = `${r.check}\0${r.commit}`;
       const reads = this.reads.get(at) ?? new Set<string>();
       for (const path of r.reads) reads.add(path);
@@ -129,14 +146,21 @@ class Selection {
     const key = `${c.check}\0${from}`;
     let carries = this.carries.get(key);
     if (carries === undefined) {
-      const paths = this.changes.get(from);
-      const reads = this.reads.get(key) ?? new Set<string>();
-      carries = paths !== undefined && !paths.some((p) =>
-        declared(c).length === 0 || declared(c).some((g) => globMatch(g, p)) || reads.has(p)
-        || !this.isCovered(p));
+      carries = this.declaredCarry(c, from) && !this.readChanged(c, from).length;
       this.carries.set(key, carries);
     }
     return carries;
+  }
+  /** The change from `from` is named and touches no declared input of the check, nor a path no check declares. */
+  private declaredCarry(c: ClaimCheck, from: string): boolean {
+    const paths = this.changes.get(from);
+    return paths !== undefined && !paths.some((p) =>
+      declared(c).length === 0 || declared(c).some((g) => globMatch(g, p)) || !this.isCovered(p));
+  }
+  /** The changed paths, in order, that runs of the check on `from` read. */
+  private readChanged(c: ClaimCheck, from: string): string[] {
+    const reads = this.reads.get(`${c.check}\0${from}`);
+    return reads ? sorted(this.changes.get(from) ?? []).filter((p) => reads.has(p)) : [];
   }
   private isCovered(path: string): boolean {
     let covered = this.covered.get(path);
@@ -146,11 +170,32 @@ class Selection {
     }
     return covered;
   }
+  /** A run whose key matches its check and whose evidence is kept. */
+  private keyed(c: ClaimCheck, r: Run): boolean {
+    return r.check === c.check && r.outcome !== 'uncounted' && r.digest === c.digest
+      && sameMap(r.environment, c.environment) && sameMap(r.tools, c.tools) && r.kept;
+  }
   /** A check's counted runs: its key matches, its evidence is kept, and it ran on the claim's commit or carries. */
   counted(c: ClaimCheck): Run[] {
-    return this.runs.filter((r) => r.check === c.check && r.outcome !== 'uncounted' && r.digest === c.digest
-      && sameMap(r.environment, c.environment) && sameMap(r.tools, c.tools) && r.kept
-      && (r.commit === this.claim.commit || this.carry(c, r.commit)));
+    return this.runs.filter((r) => this.keyed(c, r) && (r.commit === this.claim.commit || this.carry(c, r.commit)));
+  }
+  /**
+   * Why the check's result is stale: results its declarations would carry from earlier commits are withdrawn,
+   * because runs of it there read paths the changes touched, and no run of it on the claim's commit counts yet.
+   * Null otherwise. Its inputs changed, so it runs again on the claim's commit.
+   */
+  stale(c: ClaimCheck): string | null {
+    if (this.counted(c).some((r) => r.commit === this.claim.commit)) return null;
+    const withdrawn = new Map<string, { runs: string[]; paths: string[] }>();
+    for (const r of this.runs) {
+      if (r.commit === this.claim.commit || !this.keyed(c, r) || !this.declaredCarry(c, r.commit)) continue;
+      const paths = this.readChanged(c, r.commit);
+      if (paths.length) withdrawn.set(r.commit, { runs: [...(withdrawn.get(r.commit)?.runs ?? []), r.run], paths });
+    }
+    if (!withdrawn.size) return null;
+    const why = [...withdrawn].sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([commit, w]) => `its runs on ${commit} read ${w.paths.join(', ')}, which changed, so ${w.runs.join(', ')} no longer carry`);
+    return `stale: ${why.join('; ')}; it runs again on ${this.claim.commit}`;
   }
   /** The newest passed run of a check with journey steps, on any commit. */
   lastPass(check: string): Run | undefined {
@@ -158,7 +203,10 @@ class Selection {
   }
 }
 
-/** Which checks run again on the claim's commit: those with no counted run there or carried to it. */
+/**
+ * Which checks run again on the claim's commit: those with no counted run there or carried to it, and those whose
+ * carried result was withdrawn (stale).
+ */
 export function selectReruns(claim: ClaimInput): { rerun: string[]; kept: Record<string, string[]> } {
   const sel = new Selection(claim);
   const rerun: string[] = [];
@@ -166,7 +214,7 @@ export function selectReruns(claim: ClaimInput): { rerun: string[]; kept: Record
   for (const c of claim.checks) {
     const runs = sel.counted(c);
     if (runs.length) kept[c.check] = runs.map((r) => r.run);
-    else rerun.push(c.check);
+    if (!runs.length || sel.stale(c) !== null) rerun.push(c.check);
   }
   return { rerun, kept };
 }
@@ -214,6 +262,8 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
   const needed = need.ok ? need.needed : 0;
   const base = baseFailed(claim, c);
   const passes = runs.filter((r) => r.outcome === 'passed' && r.tests_run > 0);
+  // A mark, not a row: the withdrawn runs don't count, and the check runs again on the claim's commit.
+  const stale = c.state === 'never_started' ? null : sel.stale(c);
   const rows: Row[] = [];
   const row = (result: Result, reason: string, item = reason, closes = item, unblock?: string): void => {
     rows.push({ result, reason: `${id}: ${reason}`, item, closes, ...(unblock === undefined ? {} : { unblock }) });
@@ -243,7 +293,13 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       row('BLOCKED', `missing ${cause}, owner ${r.missing?.owner ?? 'unknown'}`, `missing ${cause}`, cause, r.missing?.owner === 'you' ? cause : undefined);
     }
     if (runs.some((r) => r.outcome === 'ran_nothing' || (r.outcome === 'passed' && r.tests_run === 0))) row('INVALID', 'ran nothing');
+    for (const [run, outcomes] of [...(sel.conflicts.get(id) ?? [])].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      row('INVALID', `two records of ${run} differ (${sorted(outcomes).join(', ')}), so neither counts`, 'two records of one run ID differ', 'one record per run ID');
+    }
     for (const reason of unique(runs.flatMap((r) => (r.contract?.outcome === 'INVALID' ? r.contract.reasons : [])))) row('INVALID', reason);
+    // An INVALID report makes its check INVALID whether or not it gives reasons.
+    const silent = runs.filter((r) => r.contract?.outcome === 'INVALID' && !r.contract.reasons.length).map((r) => r.run);
+    if (silent.length) row('INVALID', `contract report INVALID with no reasons from ${silent.join(', ')}`, 'a contract report is INVALID with no reasons');
     // A contract's run reports its twin and its compared counts; without that report nothing shows the twin ran.
     const unreported = c.contract ? runs.filter((r) => (r.outcome === 'passed' || r.outcome === 'failed') && !r.contract) : [];
     if (unreported.length) row('INVALID', `no contract report from ${unreported.map((r) => r.run).join(', ')}`, 'a run has no contract report');
@@ -305,7 +361,7 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
     check: c, rows, runs, fails, short, inherits: inherited, base, unblocks: rows.flatMap((r) => (r.result === outcome && r.unblock !== undefined ? [r.unblock] : [])),
     result: {
       check: id, outcome, reasons, counted: runs.map((r) => r.run), clean: passes.length, needed,
-      inherited: inherited && outcome === 'BLOCKED', never_started: c.state === 'never_started',
+      inherited: inherited && outcome === 'BLOCKED', never_started: c.state === 'never_started', stale,
     },
   };
 }

@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "session.reading",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "reading": "works in the folder of DeepBuild's job run:01K74FKZVK8Q2X5R7M3N9P4T6W"
+  }
+}
