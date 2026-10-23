@@ -541,10 +541,8 @@ fn register_scatter(r: &mut Registrar) {
             .columns
             .get(&name)
             .map(|c| {
-                c.bytes
-                    .chunks_exact(8)
-                    .map(|b| f64::from_le_bytes(b.try_into().expect("eight bytes")))
-                    .collect()
+                let (eights, _) = c.bytes.as_chunks::<8>();
+                eights.iter().map(|b| f64::from_le_bytes(*b)).collect()
             })
             .unwrap_or_default();
         let rows = n.min(values.len());
