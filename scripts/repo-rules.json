@@ -14,6 +14,10 @@
           "spec": "5.9.3",
           "why": "Issue #12: the typecheck lane and the workspace builds."
         },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #30: AC3's Jest run, which the acceptance tests run from the repo's node_modules; the user approved adding it."
+        },
         "vitest": {
           "spec": "5.0.5",
           "why": "Issue #12: the unit lane's TypeScript tests."
