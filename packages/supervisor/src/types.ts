@@ -96,8 +96,9 @@ export interface SupervisorOptions {
   /** What your settings give an unblock ask. */
   settings: { asks: { unblock: { deadline_ms: number } } };
   resources?: ResourceKind[];
-  /** Paths no run may write, whatever its grant: the hub's record, and where agents read their hooks. */
-  guarded?: string[];
+  /** Paths no run may write, whatever its grant: the hub's record, and where agents read their hooks. One with
+   * `except` leaves those folders under it to each run's own grant (the hub's jobs/ under its root). */
+  guarded?: (string | { path: string; except: string[] })[];
   plant?: Plant;
 }
 export interface Supervisor extends Host {

@@ -125,9 +125,10 @@ export class Core {
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;
-      // the sandbox profile itself keeps every project's agent hook and MCP files.
+      // the sandbox profile itself keeps every project's agent hook and MCP files. The runner's jobs/ is left to
+      // each run's own grant: a job's checkout writes only its own folder.
       guarded: [
-        this.root.dir, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
+        { path: this.root.dir, except: [join(this.root.dir, 'jobs')] }, join(homedir(), '.claude'), join(homedir(), '.codex'), realpathSync(resolve(fileURLToPath(import.meta.url), '../../..')),
         join(homedir(), 'Library', 'LaunchAgents'),
         process.execPath, resolve(process.execPath, '../../lib/node_modules'),
         ...[process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME].filter((p): p is string => !!p && isAbsolute(p)),

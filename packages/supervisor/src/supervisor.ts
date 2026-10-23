@@ -100,7 +100,9 @@ class LocalSupervisor implements Supervisor {
   constructor(private readonly options: SupervisorOptions) {
     // The supervisor's own package, whose helper it runs outside any sandbox, is guarded like the caller's paths.
     const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
-    this.sandbox = seatbeltWith('seatbelt', guarded.map((p) => `(deny file-write* (subpath ${quote(real(p))}))`));
+    this.sandbox = seatbeltWith('seatbelt', guarded.map((g) => (typeof g === 'string'
+      ? `(deny file-write* (subpath ${quote(real(g))}))`
+      : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`)));
     for (const kind of options.resources ?? []) {
       this.kinds.set(kind.kind, kind);
       for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
