@@ -1,3 +1,3 @@
-import { checks, runLanes } from './lanes.mjs';
+import { checks, releaseChecks, runLanes } from './lanes.mjs';
 
-process.exitCode = runLanes(checks);
+process.exitCode = runLanes(process.argv.includes('--release') ? releaseChecks : checks);

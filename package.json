@@ -16,9 +16,10 @@
   "scripts": {
     "build": "npm run build --workspaces && cargo build --workspace --locked",
     "preflight": "scripts/preflight",
-    "release:check": "scripts/preflight"
+    "release:check": "scripts/preflight --release"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "10.0.0",
     "@types/better-sqlite3": "7.6.13",
     "@types/node": "24.19.2",
     "fast-check": "4.10.2",

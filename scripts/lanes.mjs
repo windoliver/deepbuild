@@ -43,7 +43,12 @@ export const checks = [
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
+  // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
+  // lifecycle enumerator, crash suite and verdict replay when the change touches their paths.
+  { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs']], fix: 'Follow the Fix line under each proof lane finding above.' },
 ];
+// The release preflight adds the mutation lane and runs the lifecycle enumerator and crash suite in full.
+export const releaseChecks = checks.map((lane) => (lane.name === 'proof' ? { ...lane, commands: [[process.execPath, 'scripts/proof.mjs', '--release']] } : lane));
 
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
