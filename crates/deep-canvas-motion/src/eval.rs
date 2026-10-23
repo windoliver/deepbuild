@@ -142,28 +142,15 @@ pub enum Validity {
     IgnorePlacements,
 }
 
-/// `at` with `pos`, `rot` and `scale` as three numbers each, whatever the item wrote.
-fn normalize_at(item: &mut Map<String, Value>) {
+/// The item's `at` as an object, whatever the item wrote.
+fn at_object(item: &mut Map<String, Value>) -> &mut Map<String, Value> {
     let at = item
         .entry("at")
         .or_insert_with(|| Value::Object(Map::new()));
     if !at.is_object() {
         *at = Value::Object(Map::new());
     }
-    let at = at.as_object_mut().into_iter().next();
-    if let Some(at) = at {
-        for (name, fill) in [("pos", 0.0), ("rot", 0.0), ("scale", 1.0)] {
-            let mut parts: Vec<Value> = match at.get(name) {
-                Some(Value::Array(a)) => a.clone(),
-                _ => Vec::new(),
-            };
-            parts.truncate(3);
-            while parts.len() < 3 {
-                parts.push(json!(fill));
-            }
-            at.insert(name.into(), Value::Array(parts));
-        }
-    }
+    at.as_object_mut().expect("an object")
 }
 
 /// Writes `value` at `field` inside `item`, making objects and growing arrays on the way.
@@ -256,13 +243,11 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
         let Some(item) = items.get_mut(id).and_then(Value::as_object_mut) else {
             continue;
         };
-        normalize_at(item);
         let slots = &state.slots[i * TRANSFORM..(i + 1) * TRANSFORM];
-        if let Some(at) = item.get_mut("at").and_then(Value::as_object_mut) {
-            at.insert("pos".into(), json!(slots[0..3]));
-            at.insert("rot".into(), json!(slots[3..6]));
-            at.insert("scale".into(), json!(slots[6..9]));
-        }
+        let at = at_object(item);
+        at.insert("pos".into(), json!(slots[0..3]));
+        at.insert("rot".into(), json!(slots[3..6]));
+        at.insert("scale".into(), json!(slots[6..9]));
     }
     for field in &program.fields {
         let Some(item) = field

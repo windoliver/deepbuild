@@ -1,5 +1,6 @@
 // What crosses the socket and the threads: every socket line is one JSON object with `v`, and every refusal
 // is error@2's shape. Shared by the main thread, the parser workers and the core.
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
 export const VERSION = 1;
@@ -21,6 +22,18 @@ export class Refused extends Error {
 
 /** One socket line: the object with the protocol version first; a bigint (a seq) is written as its decimal string. */
 export const line = (o: object): string => `${JSON.stringify({ v: VERSION, ...o }, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v))}\n`;
+
+/**
+ * A process's start time, as `ps -o lstart=` prints it: how a process is told apart from a reused PID.
+ * Undefined when it can't be read.
+ */
+export const startOf = (pid: number): Promise<string | undefined> => new Promise((done) => {
+  try {
+    execFile('ps', ['-o', 'lstart=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => done(error ? undefined : stdout.trim() || undefined));
+  } catch {
+    done(undefined);
+  }
+});
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 /** A ULID at `ms`: 48 bits of time, 80 random. */

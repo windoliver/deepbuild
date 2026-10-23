@@ -1,0 +1,517 @@
+# Run on base e9c601b: npx vitest run --root tests/acceptance/684 (Node 24.22.0). Local paths redacted to <repo>, <tmp>, <home>.
+# All 25 tests fail. AC5, AC6 and AC7 (engine) fail at their assertions on the base engine; AC8 gating finds no lane named "verdict proofs";
+# the rest fail because lean-toolchain, scripts/verdict-proofs.mjs and the model do not exist.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/684
+
+ ❯ engine.test.ts (4 tests | 4 failed) 9ms
+   ❯ AC5 two records with one run ID and different outcomes (1)
+     × AC5 give the same verdict in both orders: INVALID, naming the run ID, while one record sent twice changes nothing (on the merge base, PASS in one order and FAIL in the other) 6ms
+   ❯ AC6 a contract report INVALID with empty reasons (1)
+     × AC6 makes a passed run's check INVALID, naming the check, while one whose report counts passes (on the merge base, PASS) 1ms
+   ❯ AC7 a late run on the parent whose reads withdraw a carried result (the spike's counterexample) (2)
+     × AC7 a carried missing run, then a late run of k on C that read src/x.ts: k is stale naming src/x.ts, runs again on the claim's commit, and the claim never passes on the withdrawn carry (on the merge base it falls from BLOCKED to pending, with no stale mark) 1ms
+     × AC7 a carried PASS withdrawn the same way is stale, never PASS 0ms
+stdout | lean.test.ts
+#684 agreement seed 1371975080 (replay with AC684_SEED=1371975080)
+
+ ❯ lean.test.ts (16 tests | 16 failed) 293ms
+   ❯ AC1 the lane builds the model and prints each property theorem's axioms (1)
+     × AC1 on the model, the lane passes and prints the axioms of each of the five property theorems, each only propext, Quot.sound or Classical.choice 4ms
+   ❯ AC1 and AC2 planted wrong models fail the lane (5)
+     × AC1 a planted sorry in verdict_closed's proof fails the lane, naming the theorem and sorryAx, though Lean builds it with only a warning 1ms
+     × AC1 a planted axiom used by verdict_rises fails the lane, naming the theorem and the axiom 0ms
+     × AC2 a planted wrong model, pending ranked below PASS, fails the lane at a named theorem or lemma 0ms
+     × AC2 a planted wrong model, "ran nothing" raising a PASS row, fails the lane at a named theorem or lemma 0ms
+     × AC2 a planted wrong model, a count that reads only the first run record, fails the lane at a named theorem or lemma 0ms
+   ❯ AC3 the engine equals the model on the generated vectors (8)
+     × AC3 on 10,000 vectors from a seed drawn in this run, the engine equals the model, and every one of the model's rows applies in some vector 1ms
+     × AC3 the agreement test fails, naming the row and the seed, when one of the model's rows applies in no vector 0ms
+     × AC3 the vectors are seeded and come from the model: a seed prints the same vectors each time, another seed others, and a copy with no engine source prints the same 42ms
+     × AC3 a copy of the engine that swaps the ranks of PASS and pending disagrees with the model on at least one vector, and the failure names its seed 0ms
+     × AC3 a copy of the engine that swaps the ranks of pending and INCONCLUSIVE disagrees with the model on at least one vector, and the failure names its seed 0ms
+     × AC3 a copy of the engine that swaps the ranks of INCONCLUSIVE and BLOCKED disagrees with the model on at least one vector, and the failure names its seed 0ms
+     × AC3 a copy of the engine that swaps the ranks of BLOCKED and INVALID disagrees with the model on at least one vector, and the failure names its seed 0ms
+     × AC3 a copy of the engine that swaps the ranks of INVALID and FAIL disagrees with the model on at least one vector, and the failure names its seed 0ms
+   ❯ AC4 a planted engine row the model doesn't have (1)
+     × AC4 an engine with one more row, and no model edit, fails the agreement test, naming a vector where the two differ 0ms
+   ❯ AC7 the model's side of a late run that withdraws a carry (1)
+     × AC7 the lane proves verdict_rises (inputs fixed) and late_read_stale (a late run whose reads withdraw a carry marks that check stale with no counted run), each on the standard axioms only 0ms
+ ❯ lanes.test.ts (5 tests | 5 failed) 1243ms
+   ❯ AC8 when the proof lane runs (4)
+     × AC8 the local preflight doesn't run the lane for a change that touches neither the engine's source nor the model 495ms
+     × AC8 the local preflight runs the lane for a committed change to the engine's source 246ms
+     × AC8 the local preflight runs the lane for an uncommitted change to the model, and for a new file in it 202ms
+     × AC8 the release preflight runs the lane every time, even with no change at all, and npm run release:check is that preflight 185ms
+   ❯ AC8 without the pinned toolchain (1)
+     × AC8 the lane reports BLOCKED, naming the toolchain and its version, never a pass 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  engine.test.ts > AC5 two records with one run ID and different outcomes > AC5 give the same verdict in both orders: INVALID, naming the run ID, while one record sent twice changes nothing (on the merge base, PASS in one order and FAIL in the other)
+AssertionError: passed then failed: PASS; failed then passed: FAIL: expected 'PASS' to be 'INVALID' // Object.is equality
+
+Expected: "INVALID"
+Received: "PASS"
+
+ ❯ engine.test.ts:63:33
+     61|     const second = verdict(claim({ checks: [unit], runs: [failed, pass…
+     62|     const both = `passed then failed: ${first.outcome}; failed then pa…
+     63|     expect(first.outcome, both).toBe('INVALID');
+       |                                 ^
+     64|     expect(second.outcome, both).toBe('INVALID');
+     65|     for (const v of [first, second]) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/25]⎯
+
+ FAIL  engine.test.ts > AC6 a contract report INVALID with empty reasons > AC6 makes a passed run's check INVALID, naming the check, while one whose report counts passes (on the merge base, PASS)
+AssertionError: expected 'PASS' to be 'INVALID' // Object.is equality
+
+Expected: "INVALID"
+Received: "PASS"
+
+ ❯ engine.test.ts:90:50
+     88|   it('AC6 makes a passed run\'s check INVALID, naming the check, while…
+     89|     const v = verdict(claim({ requirements: numbers, checks: [kernel],…
+     90|     expect(checkOf(v, 'kernel:softmax').outcome).toBe('INVALID');
+       |                                                  ^
+     91|     expect(v.outcome).toBe('INVALID');
+     92|     expect(said(v), 'the reasons name the check').toContain('kernel:so…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/25]⎯
+
+ FAIL  engine.test.ts > AC7 a late run on the parent whose reads withdraw a carried result (the spike's counterexample) > AC7 a carried missing run, then a late run of k on C that read src/x.ts: k is stale naming src/x.ts, runs again on the claim's commit, and the claim never passes on the withdrawn carry (on the merge base it falls from BLOCKED to pending, with no stale mark)
+AssertionError: k is marked stale, naming src/x.ts; stale is undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ engine.test.ts:120:142
+    118|     const after = verdict(withLate);
+    119|     const stale = staleOf(after, 'k');
+    120|     expect(typeof stale === 'string' && stale.includes('src/x.ts'), `k…
+       |                                                                                                                                              ^
+    121|     expect(checkOf(after, 'k').counted, 'k counts no run: neither the …
+    122|     expect(checkOf(after, 'k').outcome).toBe('pending');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/25]⎯
+
+ FAIL  engine.test.ts > AC7 a late run on the parent whose reads withdraw a carried result (the spike's counterexample) > AC7 a carried PASS withdrawn the same way is stale, never PASS
+AssertionError: k is marked stale, naming src/x.ts; stale is undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ engine.test.ts:142:142
+    140|     const after = verdict(withLate);
+    141|     const stale = staleOf(after, 'k');
+    142|     expect(typeof stale === 'string' && stale.includes('src/x.ts'), `k…
+       |                                                                                                                                              ^
+    143|     expect(checkOf(after, 'k').counted).toEqual([]);
+    144|     expect(after.outcome).not.toBe('PASS');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/25]⎯
+
+ FAIL  lanes.test.ts > AC8 when the proof lane runs > AC8 the local preflight doesn't run the lane for a change that touches neither the engine's source nor the model
+AssertionError: committed, uncommitted and untracked changes outside the engine and the model
+exit 3
+--- stdout (end)
+NO LANE: scripts/lanes.mjs has no lane named verdict proofs
+
+--- stderr (end)
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ expectSkipped lanes.test.ts:62:45
+     60| }
+     61| function expectSkipped(r: h.Ran, why: string): void {
+     62|   expect(r.status, `${why}\n${h.shown(r)}`).toBe(0);
+       |                                             ^
+     63|   expect(r.stdout, `${why}: the lane doesn't run\n${h.shown(r)}`).not.…
+     64|   expect(r.lines.some((l) => l.startsWith(`SKIP ${h.LANE_NAME}:`)), `$…
+ ❯ lanes.test.ts:76:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/25]⎯
+
+ FAIL  lanes.test.ts > AC8 when the proof lane runs > AC8 the local preflight runs the lane for a committed change to the engine's source
+AssertionError: a committed change to packages/verdicts/src/engine.ts: the lane runs
+exit 3
+--- stdout (end)
+NO LANE: scripts/lanes.mjs has no lane named verdict proofs
+
+--- stderr (end)
+: expected 'NO LANE: scripts/lanes.mjs has no lan…' to contain 'MARK the verdict proofs lane ran'
+
+- Expected
++ Received
+
+- MARK the verdict proofs lane ran
++ NO LANE: scripts/lanes.mjs has no lane named verdict proofs
++
+
+ ❯ expectRan lanes.test.ts:57:60
+     55| }
+     56| function expectRan(r: h.Ran, why: string): void {
+     57|   expect(r.stdout, `${why}: the lane runs\n${h.shown(r)}`).toContain(M…
+       |                                                            ^
+     58|   expect(r.lines.some((l) => l.startsWith(`PASS ${h.LANE_NAME} (`)), h…
+     59|   expect(r.status, h.shown(r)).toBe(0);
+ ❯ lanes.test.ts:83:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/25]⎯
+
+ FAIL  lanes.test.ts > AC8 when the proof lane runs > AC8 the local preflight runs the lane for an uncommitted change to the model, and for a new file in it
+AssertionError: an uncommitted change to packages/verdicts/model/Verdicts.lean: the lane runs
+exit 3
+--- stdout (end)
+NO LANE: scripts/lanes.mjs has no lane named verdict proofs
+
+--- stderr (end)
+: expected 'NO LANE: scripts/lanes.mjs has no lan…' to contain 'MARK the verdict proofs lane ran'
+
+- Expected
++ Received
+
+- MARK the verdict proofs lane ran
++ NO LANE: scripts/lanes.mjs has no lane named verdict proofs
++
+
+ ❯ expectRan lanes.test.ts:57:60
+     55| }
+     56| function expectRan(r: h.Ran, why: string): void {
+     57|   expect(r.stdout, `${why}: the lane runs\n${h.shown(r)}`).toContain(M…
+       |                                                            ^
+     58|   expect(r.lines.some((l) => l.startsWith(`PASS ${h.LANE_NAME} (`)), h…
+     59|   expect(r.status, h.shown(r)).toBe(0);
+ ❯ lanes.test.ts:89:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/25]⎯
+
+ FAIL  lanes.test.ts > AC8 when the proof lane runs > AC8 the release preflight runs the lane every time, even with no change at all, and npm run release:check is that preflight
+AssertionError: the release preflight on a checkout with no change: the lane runs
+exit 3
+--- stdout (end)
+NO LANE: scripts/lanes.mjs has no lane named verdict proofs
+
+--- stderr (end)
+: expected 'NO LANE: scripts/lanes.mjs has no lan…' to contain 'MARK the verdict proofs lane ran'
+
+- Expected
++ Received
+
+- MARK the verdict proofs lane ran
++ NO LANE: scripts/lanes.mjs has no lane named verdict proofs
++
+
+ ❯ expectRan lanes.test.ts:57:60
+     55| }
+     56| function expectRan(r: h.Ran, why: string): void {
+     57|   expect(r.stdout, `${why}: the lane runs\n${h.shown(r)}`).toContain(M…
+       |                                                            ^
+     58|   expect(r.lines.some((l) => l.startsWith(`PASS ${h.LANE_NAME} (`)), h…
+     59|   expect(r.status, h.shown(r)).toBe(0);
+ ❯ lanes.test.ts:97:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/25]⎯
+
+ FAIL  lanes.test.ts > AC8 without the pinned toolchain > AC8 the lane reports BLOCKED, naming the toolchain and its version, never a pass
+AssertionError: lean-toolchain pins the toolchain: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ lanes.test.ts:110:70
+    108|   it('AC8 the lane reports BLOCKED, naming the toolchain and its versi…
+    109|     const pinFile = join(h.ROOT, 'lean-toolchain');
+    110|     expect(existsSync(pinFile), 'lean-toolchain pins the toolchain').t…
+       |                                                                      ^
+    111|     const pin = readFileSync(pinFile, 'utf8').split('\n')[0]!.trim();
+    112|     expect(pin, 'the pin names a released core Lean version').toMatch(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/25]⎯
+
+ FAIL  lean.test.ts > AC1 the lane builds the model and prints each property theorem's axioms > AC1 on the model, the lane passes and prints the axioms of each of the five property theorems, each only propext, Quot.sound or Classical.choice
+AssertionError: exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<repo>/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ lean.test.ts:58:40
+     56|   it('AC1 on the model, the lane passes and prints the axioms of each …
+     57|     needToolchain(ctx, lane);
+     58|     expect(lane.status, h.shown(lane)).toBe(0);
+       |                                        ^
+     59|     expect(h.problemLines(lane), h.shown(lane)).toEqual([]);
+     60|     for (const theorem of h.PROPERTY_THEOREMS) expectStandardAxioms(la…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/25]⎯
+
+ FAIL  lean.test.ts > AC1 and AC2 planted wrong models fail the lane > AC1 a planted sorry in verdict_closed's proof fails the lane, naming the theorem and sorryAx, though Lean builds it with only a warning
+AssertionError: the unplanted scratch copy passes the lane, so a failure below comes from the plant
+exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<tmp>/deep-684-control-dCimzh/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ planted lean.test.ts:72:136
+     70|   function planted(ctx: TestContext, label: string, keyword: 'def' | '…
+     71|     needToolchain(ctx, control);
+     72|     expect(control.status, `the unplanted scratch copy passes the lane…
+       |                                                                                                                                        ^
+     73|     const dir = h.scratchCopy(label, { toolchain: true });
+     74|     h.plant(dir, keyword, name, text);
+ ❯ lean.test.ts:81:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/25]⎯
+
+ FAIL  lean.test.ts > AC1 and AC2 planted wrong models fail the lane > AC1 a planted axiom used by verdict_rises fails the lane, naming the theorem and the axiom
+AssertionError: the unplanted scratch copy passes the lane, so a failure below comes from the plant
+exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<tmp>/deep-684-control-dCimzh/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ planted lean.test.ts:72:136
+     70|   function planted(ctx: TestContext, label: string, keyword: 'def' | '…
+     71|     needToolchain(ctx, control);
+     72|     expect(control.status, `the unplanted scratch copy passes the lane…
+       |                                                                                                                                        ^
+     73|     const dir = h.scratchCopy(label, { toolchain: true });
+     74|     h.plant(dir, keyword, name, text);
+ ❯ lean.test.ts:88:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/25]⎯
+
+ FAIL  lean.test.ts > AC1 and AC2 planted wrong models fail the lane > AC2 a planted wrong model, pending ranked below PASS, fails the lane at a named theorem or lemma
+ FAIL  lean.test.ts > AC1 and AC2 planted wrong models fail the lane > AC2 a planted wrong model, "ran nothing" raising a PASS row, fails the lane at a named theorem or lemma
+ FAIL  lean.test.ts > AC1 and AC2 planted wrong models fail the lane > AC2 a planted wrong model, a count that reads only the first run record, fails the lane at a named theorem or lemma
+AssertionError: the unplanted scratch copy passes the lane, so a failure below comes from the plant
+exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<tmp>/deep-684-control-dCimzh/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ planted lean.test.ts:72:136
+     70|   function planted(ctx: TestContext, label: string, keyword: 'def' | '…
+     71|     needToolchain(ctx, control);
+     72|     expect(control.status, `the unplanted scratch copy passes the lane…
+       |                                                                                                                                        ^
+     73|     const dir = h.scratchCopy(label, { toolchain: true });
+     74|     h.plant(dir, keyword, name, text);
+ ❯ lean.test.ts:108:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/25]⎯
+
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 on 10,000 vectors from a seed drawn in this run, the engine equals the model, and every one of the model's rows applies in some vector
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 the agreement test fails, naming the row and the seed, when one of the model's rows applies in no vector
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 a copy of the engine that swaps the ranks of PASS and pending disagrees with the model on at least one vector, and the failure names its seed
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 a copy of the engine that swaps the ranks of pending and INCONCLUSIVE disagrees with the model on at least one vector, and the failure names its seed
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 a copy of the engine that swaps the ranks of INCONCLUSIVE and BLOCKED disagrees with the model on at least one vector, and the failure names its seed
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 a copy of the engine that swaps the ranks of BLOCKED and INVALID disagrees with the model on at least one vector, and the failure names its seed
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 a copy of the engine that swaps the ranks of INVALID and FAIL disagrees with the model on at least one vector, and the failure names its seed
+ FAIL  lean.test.ts > AC4 a planted engine row the model doesn't have > AC4 an engine with one more row, and no model edit, fails the agreement test, naming a vector where the two differ
+Error: the generator didn't print vectors for seed 1371975080:
+exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<repo>/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ Module.readVectors helpers.ts:216:29
+    214| /** The generator's output, read strictly: a header line, then `count`…
+    215| export function readVectors(r: Ran, seed: number, count: number): Vect…
+    216|   if (r.status !== 0) throw new Error(`the generator didn't print vect…
+       |                             ^
+    217|   const lines = r.stdout.split('\n').filter((l) => l.trim() !== '');
+    218|   const parse = (line: string, i: number): unknown => {
+ ❯ lean.test.ts:31:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/25]⎯
+
+ FAIL  lean.test.ts > AC3 the engine equals the model on the generated vectors > AC3 the vectors are seeded and come from the model: a seed prints the same vectors each time, another seed others, and a copy with no engine source prints the same
+AssertionError: exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<repo>/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ lean.test.ts:144:40
+    142|     const once = h.generate(h.ROOT, SEED, 200);
+    143|     needToolchain(ctx, once);
+    144|     expect(once.status, h.shown(once)).toBe(0);
+       |                                        ^
+    145|     expect(h.readVectors(once, SEED, 200).vectors).toHaveLength(200);
+    146|     expect(h.generate(h.ROOT, SEED, 200).stdout, `seed ${SEED} replays…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/25]⎯
+
+ FAIL  lean.test.ts > AC7 the model's side of a late run that withdraws a carry > AC7 the lane proves verdict_rises (inputs fixed) and late_read_stale (a late run whose reads withdraw a carry marks that check stale with no counted run), each on the standard axioms only
+AssertionError: exit 1
+--- stdout (end)
+
+--- stderr (end)
+Error: Cannot find module '<repo>/scripts/verdict-proofs.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ lean.test.ts:191:40
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/25]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  25 failed (25)
+   Start at  10:58:34
+   Duration  1.36s (tests 82%, import 9%, transform 8%)
+

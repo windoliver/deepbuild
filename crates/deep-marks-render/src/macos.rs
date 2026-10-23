@@ -29,7 +29,7 @@ use deep_canvas_marks::dirty::{Class, Dirty};
 use deep_canvas_marks::key::{sha256_hex, ContentKey, KeyBuilder};
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::{self, Mesh};
-use deep_canvas_marks::scene::{self, Drawn, Fill, ImageFit, Mark, Record, Rgb, StatusMark};
+use deep_canvas_marks::scene::{self, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
 use deep_text_gpui::Label;
@@ -204,6 +204,7 @@ struct LayerCache {
 struct Read {
     tessellation: Vec<(String, i32, Entry)>,
     text: Vec<(String, Entry)>,
+    images: Vec<(String, Entry)>,
     layers: Vec<(String, Entry)>,
 }
 
@@ -219,6 +220,10 @@ impl Read {
                 let (key, len, sha256) = entry(e);
                 json!({"item": item, "key": key, "len": len, "sha256": sha256})
             }).collect::<Vec<_>>(),
+            "images": self.images.iter().map(|(item, e)| {
+                let (key, len, sha256) = entry(e);
+                json!({"item": item, "key": key, "len": len, "sha256": sha256})
+            }).collect::<Vec<_>>(),
             "layers": self.layers.iter().map(|(layer, e)| {
                 let (key, len, sha256) = entry(e);
                 json!({"layer": layer, "key": key, "len": len, "sha256": sha256})
@@ -231,6 +236,13 @@ impl Read {
 /// pixels.
 type ImageKey = (String, [u64; 4], u64);
 type Decoded = (Arc<RenderImage>, [u32; 2]);
+
+/// A nearest or cubic image's copy resampled on the CPU, by its decoding, its sampling and its
+/// drawn size in device pixels (GPUI's sprite sampler is linear and can't change per draw).
+type ResampleKey = (ImageKey, ImageSampling, [u32; 2]);
+
+/// The most a document holds decoded, resampled copies included (Image `image@1`: cost).
+const DECODED_CAP: u64 = 64 << 20;
 
 /// A document session: its windows, its caches and the frame on screen.
 struct Session {
@@ -260,6 +272,14 @@ struct Session {
     /// in pixels, by (sha256, crop, opacity).
     store: Option<PathBuf>,
     images: HashMap<ImageKey, Decoded>,
+    /// The resampled copies the frame on screen draws, and how many the session has made.
+    resampled: HashMap<ResampleKey, Arc<RenderImage>>,
+    resamples: u64,
+}
+
+fn image_key(asset: &str, crop: Option<[f64; 4]>, opacity: f64) -> ImageKey {
+    let crop_bits = crop.map_or([u64::MAX; 4], |c| c.map(f64::to_bits));
+    (asset.to_string(), crop_bits, opacity.to_bits())
 }
 
 /// Reads, checks and decodes an image once per session: its bytes by hash from the store, the
@@ -272,8 +292,7 @@ fn image_of(
     opacity: f64,
     item: &str,
 ) -> Result<Decoded, Value> {
-    let crop_bits = crop.map_or([u64::MAX; 4], |c| c.map(f64::to_bits));
-    let key = (asset.to_string(), crop_bits, opacity.to_bits());
+    let key = image_key(asset, crop, opacity);
     if let Some(found) = session.images.get(&key) {
         return Ok(found.clone());
     }
@@ -295,33 +314,74 @@ fn image_of(
     Ok(found)
 }
 
+/// Where a nearest or cubic image lands, as its copy's key and the rect it is drawn 1:1 in: the
+/// fitted rect's corner rounded to a whole device pixel and its size rounded to whole pixels, so
+/// moving the image by whole pixels keeps the key.
+fn resample_at(
+    key: ImageKey,
+    sampling: ImageSampling,
+    to: [f64; 4],
+    zoom: f64,
+) -> (ResampleKey, [f64; 4]) {
+    let dev = |v: f64| (v * zoom).round();
+    let (w, h) = (dev(to[2]).max(1.0), dev(to[3]).max(1.0));
+    let (x, y) = (dev(to[0]), dev(to[1]));
+    (
+        (key, sampling, [w as u32, h as u32]),
+        [x / zoom, y / zoom, w / zoom, h / zoom],
+    )
+}
+
+/// An image's copy resampled to its drawn size, made once and then reused. The copies and the
+/// decodings hold at most `DECODED_CAP`: a copy past it is refused, naming the image's asset.
+fn resampled(
+    session: &mut Session,
+    key: &ResampleKey,
+    source: &RenderImage,
+    size: [u32; 2],
+    item: &str,
+) -> Result<Arc<RenderImage>, Value> {
+    if let Some(found) = session.resampled.get(key) {
+        return Ok(found.clone());
+    }
+    // Named as a missing asset is: the field and the asset's hash.
+    let path = format!("items/{item}/params/asset: {}", key.0 .0);
+    let bytes = |[w, h]: [u32; 2]| u64::from(w) * u64::from(h) * 4;
+    let held: u64 = session.images.values().map(|(_, s)| bytes(*s)).sum::<u64>()
+        + session.resampled.keys().map(|k| bytes(k.2)).sum::<u64>();
+    let to = key.2;
+    if held + bytes(to) > DECODED_CAP {
+        return Err(refused("over_budget", &path));
+    }
+    let narrow = |[w, h]: [u32; 2]| Some([u16::try_from(w).ok()?, u16::try_from(h).ok()?]);
+    let (Some(from16), Some(to16), Some(bgra)) = (narrow(size), narrow(to), source.as_bytes(0))
+    else {
+        return Err(refused("asset_undecodable", &path));
+    };
+    let mut rgba = bgra.to_vec();
+    rgba.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px.swap(0, 2));
+    let mut out = deep_marks_vello::resample(rgba, from16, key.1, to16);
+    out.as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .for_each(|px| px.swap(0, 2));
+    let frame = image::RgbaImage::from_raw(to[0], to[1], out)
+        .ok_or_else(|| refused("asset_undecodable", &path))?;
+    let copy = Arc::new(RenderImage::new([image::Frame::new(frame)]));
+    session.resamples += 1;
+    session.resampled.insert(key.clone(), copy.clone());
+    Ok(copy)
+}
+
 /// Compiles a revision once, so its frames only evaluate.
 fn compile(session: &mut Session, doc: &Map<String, Value>) -> Result<(), Value> {
-    let program =
-        Program::compile(&Value::Object(doc.clone())).map_err(|r| refused(r.code, &r.path))?;
+    let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
     let state = program.state();
     session.compiled = Some((program, state));
     Ok(())
-}
-
-/// Where an image of `size` pixels maps for its box and fit, centered in the box.
-fn fitted(bounds: [f64; 4], size: [u32; 2], fit: ImageFit) -> [f64; 4] {
-    let [x, y, w, h] = bounds;
-    let (iw, ih) = (f64::from(size[0]), f64::from(size[1]));
-    let (sx, sy) = match fit {
-        ImageFit::Fill => (w / iw, h / ih),
-        ImageFit::Contain => {
-            let s = (w / iw).min(h / ih);
-            (s, s)
-        }
-        ImageFit::Cover => {
-            let s = (w / iw).max(h / ih);
-            (s, s)
-        }
-        ImageFit::None => (1.0, 1.0),
-    };
-    let (dw, dh) = (iw * sx, ih * sy);
-    [x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh]
 }
 
 /// The layer an item is in, by its ID or the ID of the set a generated mark (`<id>#<key>`) is from.
@@ -359,10 +419,10 @@ fn tessellation<'a>(
     geometry: &scene::Geometry,
     d: &str,
     bucket: i32,
-    used: &mut Vec<(ContentKey, i32)>,
+    used: &mut BTreeSet<(ContentKey, i32)>,
 ) -> &'a Tessellation {
     let key = geometry.key(d, bucket);
-    used.push((key, bucket));
+    used.insert((key, bucket));
     session
         .tessellations
         .entry((key, bucket))
@@ -518,8 +578,9 @@ impl Renderer {
         session: &mut Session,
         marks: &[&Drawn],
         bucket: i32,
+        zoom: f64,
         gpui_oklab: bool,
-        used: &mut Vec<(ContentKey, i32)>,
+        used: &mut BTreeSet<(ContentKey, i32)>,
     ) -> Result<Vec<Placed>, Value> {
         let mut out: Vec<Placed> = Vec::with_capacity(marks.len());
         for drawn in marks {
@@ -610,15 +671,25 @@ impl Renderer {
                     asset,
                     bounds,
                     fit,
+                    sampling,
                     crop,
                     opacity,
                     ..
                 } => {
                     let (image, size) = image_of(session, asset, *crop, *opacity, item)?;
+                    let to = fit.fitted(*bounds, size);
+                    let (image, image_bounds) = if *sampling == ImageSampling::Linear {
+                        (image, to)
+                    } else {
+                        // The sprite sampler is linear, so the copy is drawn 1:1 on whole pixels.
+                        let (key, at) =
+                            resample_at(image_key(asset, *crop, *opacity), *sampling, to, zoom);
+                        (resampled(session, &key, &image, size, item)?, at)
+                    };
                     push(Draw::Picture {
                         image,
                         bounds: Some(rect(*bounds)),
-                        image_bounds: Some(rect(fitted(*bounds, size, *fit))),
+                        image_bounds: Some(rect(image_bounds)),
                     });
                 }
             }
@@ -710,6 +781,30 @@ impl Renderer {
             return Err(refused("no_window", ""));
         }
         let bucket = path::bucket(view.zoom);
+        // A resampled copy lives while the frame on screen draws it, so a zoom or a resize frees
+        // the copies of the size it left before the cap counts them.
+        let mut copies = Vec::new();
+        for drawn in frame.layers.iter().flat_map(|l| l.marks.iter()) {
+            if let Mark::Image {
+                item,
+                asset,
+                bounds,
+                fit,
+                sampling,
+                crop,
+                opacity,
+                ..
+            } = &drawn.mark
+            {
+                if *sampling != ImageSampling::Linear {
+                    let (_, size) = image_of(session, asset, *crop, *opacity, item)?;
+                    let to = fit.fitted(*bounds, size);
+                    let key = image_key(asset, *crop, *opacity);
+                    copies.push(resample_at(key, *sampling, to, view.zoom).0);
+                }
+            }
+        }
+        session.resampled.retain(|k, _| copies.contains(k));
 
         // Each prefix of the writer layers, ground first, keyed by everything it composites.
         let mut prefixes = Vec::with_capacity(frame.layers.len());
@@ -736,7 +831,7 @@ impl Renderer {
             })
             .collect();
 
-        let mut used = Vec::new();
+        let mut used = BTreeSet::new();
         let ground = fill_quad(
             Bounds {
                 origin: Point::default(),
@@ -754,7 +849,9 @@ impl Renderer {
                     .flat_map(|l| l.marks.iter())
                     .collect();
                 let mut list: Vec<Placed> = vec![(Draw::Quad(ground.clone()), None)];
-                list.extend(Self::draws(session, &marks, bucket, gpui_oklab, &mut used)?);
+                list.extend(Self::draws(
+                    session, &marks, bucket, view.zoom, gpui_oklab, &mut used,
+                )?);
                 let (handle, draws) = {
                     let cache = session
                         .cache
@@ -808,7 +905,9 @@ impl Renderer {
             .iter()
             .flat_map(|l| l.marks.iter())
             .collect();
-        list.extend(Self::draws(session, &live, bucket, gpui_oklab, &mut used)?);
+        list.extend(Self::draws(
+            session, &live, bucket, view.zoom, gpui_oklab, &mut used,
+        )?);
         // Status colors last, over every writer layer, with their legend.
         let snapshot = status_draws(
             &status,
@@ -839,6 +938,18 @@ impl Renderer {
                         let shaped = deep_text_gpui::shape(&label);
                         read.text
                             .push((item.clone(), Entry::of(spec.key(), &shaped_bytes(&shaped))));
+                    }
+                    Mark::Image {
+                        item,
+                        asset,
+                        crop,
+                        opacity,
+                        ..
+                    } => {
+                        let (image, _) = image_of(session, asset, *crop, *opacity, item)?;
+                        let pixels = image.as_bytes(0).unwrap_or_default();
+                        read.images
+                            .push((item.clone(), Entry::of(drawn.mark.key(bucket), pixels)));
                     }
                     _ => {}
                 }
@@ -895,6 +1006,8 @@ impl Renderer {
             stamped: BTreeSet::new(),
             store: None,
             images: HashMap::new(),
+            resampled: HashMap::new(),
+            resamples: 0,
             compiled: None,
             last_layers: BTreeMap::new(),
         }
@@ -979,6 +1092,7 @@ impl Renderer {
         let mut out = Vec::with_capacity(steps.len());
         let result = (|| -> Result<(), Value> {
             for step in steps {
+                let resampled_before = session.resamples;
                 if let Some(d) = step.doc {
                     doc = d;
                     compile(&mut session, &doc)?;
@@ -1005,7 +1119,11 @@ impl Renderer {
                     .into_iter()
                     .map(|(item, class)| json!({"item": item, "class": class.name()}))
                     .collect();
-                out.push(json!({"caches": session.read.to_json(), "dirty": dirty}));
+                out.push(json!({
+                    "caches": session.read.to_json(),
+                    "dirty": dirty,
+                    "resamples": session.resamples - resampled_before,
+                }));
             }
             Ok(())
         })();

@@ -12,6 +12,10 @@ use crate::eval::{Local, Validity};
 /// Slots each item's transform takes: pos, rot and scale, three each.
 pub const TRANSFORM: usize = 9;
 
+/// One item's evaluated transform (pos, rot and scale) and the fields a channel writes on it,
+/// each with its path in the item.
+pub type ItemValues = ([f64; TRANSFORM], Vec<(Vec<String>, Value)>);
+
 /// A field outside the transform that a channel writes, with its run of slots.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Field {
@@ -94,7 +98,7 @@ fn authored(item: &Value, path: &[String], width: usize, out: &mut [f64]) {
 
 impl Program {
     /// Compiles `doc`: reads its motion, then gives every target its slots.
-    pub fn compile(doc: &Value) -> Result<Program, Refused> {
+    pub fn compile(doc: &Map<String, Value>) -> Result<Program, Refused> {
         let motion = doc::read(doc)?;
         let empty = Map::new();
         let items_json = doc
@@ -156,7 +160,11 @@ impl Program {
             }
             program.placements.push(writes);
         }
-        let index = |id: &str| program.items.iter().position(|i| i == id);
+        let mut at = std::collections::BTreeMap::new();
+        for (i, id) in program.items.iter().enumerate() {
+            at.entry(id.as_str()).or_insert(i);
+        }
+        let index = |id: &str| at.get(id).copied();
         program.parents = motion
             .parents
             .iter()
@@ -235,6 +243,15 @@ impl Program {
 
     /// Evaluates the document at `t` into `state`, allocating nothing.
     pub fn evaluate(&self, t: i64, validity: Validity, state: &mut State) {
+        self.evaluate_local(t, validity, state);
+        for &(child, parent) in &self.parents {
+            parent_to(&mut state.slots, child, parent);
+        }
+    }
+
+    /// [`Program::evaluate`] without child-of parenting: each item's own transform, as the
+    /// scheduler's motion operator writes it and the core composes it with its parent's.
+    pub fn evaluate_local(&self, t: i64, validity: Validity, state: &mut State) {
         let motion = &self.motion;
         let (doc_t, pass) = crate::eval::position(motion, t);
         state.t = t;
@@ -262,10 +279,30 @@ impl Program {
                 state.slots[w.slot..w.slot + run.len()].copy_from_slice(run);
             }
         }
-        for &(child, parent) in &self.parents {
-            parent_to(&mut state.slots, child, parent);
-        }
         state.valid_until = crate::eval::valid_until(motion, t, doc_t, validity);
+    }
+
+    /// The item `id`'s own transform (pos, rot and scale, three each) and every field a channel
+    /// writes on it (its path in the item and its value), from an evaluated state.
+    pub fn item_values(&self, state: &State, id: &str) -> Option<ItemValues> {
+        let i = self.items.iter().position(|x| x == id)?;
+        let mut transform = [0.0; TRANSFORM];
+        transform.copy_from_slice(&state.slots[i * TRANSFORM..(i + 1) * TRANSFORM]);
+        let fields = self
+            .fields
+            .iter()
+            .filter(|f| f.item == Some(i))
+            .map(|f| {
+                let run = &state.slots[f.slot..f.slot + f.width];
+                let value = match run {
+                    [one] if f.boolean => Value::Bool(*one >= 0.5),
+                    [one] => serde_json::json!(one),
+                    many => serde_json::json!(many),
+                };
+                (f.path.clone(), value)
+            })
+            .collect();
+        Some((transform, fields))
     }
 }
 

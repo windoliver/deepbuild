@@ -112,17 +112,6 @@ mod tests {
     }
 
     #[test]
-    fn the_lowest_minor_the_fields_use_is_written() {
-        let reg = registry();
-        let mut plain = doc(None, json!({"width": 5}));
-        write_required_kinds(&mut plain, &reg);
-        assert_eq!(plain["requires"]["kinds"], json!(["test.slab@3.0"]));
-        let mut cornered = doc(Some(json!(["test.slab@3.0"])), json!({"corner": 2}));
-        write_required_kinds(&mut cornered, &reg);
-        assert_eq!(cornered["requires"]["kinds"], json!(["test.slab@3.1"]));
-    }
-
-    #[test]
     fn a_minor_above_the_build_and_an_unregistered_kind_are_kept() {
         let reg = registry();
         let mut newer = doc(

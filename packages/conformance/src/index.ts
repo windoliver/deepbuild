@@ -8,6 +8,7 @@ export type {
 } from './slot-types.js';
 export { cleanFill, kits } from './kit.js';
 export { cleanFills, slotKits } from './slots/kits.js';
+export { CHECK_RUNTIME } from './slots/check-kind.js';
 export { kitProblems, runKit } from './dispatch.js';
 export { proveFake, replay } from './runner.js';
 export { seededCases, stalePaths } from './slot-runner.js';

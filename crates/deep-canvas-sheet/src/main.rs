@@ -130,29 +130,10 @@ fn render_line(input: &Map<String, Value>) -> Option<Value> {
         let pixels = render(&still, treatment);
         out.insert(
             id,
-            json!({"key": cell_key(&still, treatment, look).hex(), "rgba": encode64(&pixels)}),
+            json!({"key": cell_key(&still, treatment, look).hex(), "rgba": deep_canvas::base64::encode(&pixels)}),
         );
     }
     Some(json!({"ok": true, "cells": out}))
-}
-
-fn encode64(bytes: &[u8]) -> String {
-    const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let n = chunk
-            .iter()
-            .enumerate()
-            .fold(0u32, |n, (i, &b)| n | u32::from(b) << (16 - 8 * i));
-        for i in 0..4 {
-            out.push(if i <= chunk.len() {
-                char::from(ABC[(n >> (18 - 6 * i) & 63) as usize])
-            } else {
-                '='
-            });
-        }
-    }
-    out
 }
 
 fn view_line(input: &Map<String, Value>) -> Option<Value> {

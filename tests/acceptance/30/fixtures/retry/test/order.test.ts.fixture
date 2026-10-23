@@ -1,0 +1,13 @@
+import { expect, test } from 'vitest';
+
+let attempt = 0;
+
+test('settles the order', { retry: 1 }, () => {
+  attempt += 1;
+  console.log(`attempt ${attempt}`);
+  expect(attempt).toBe(2);
+});
+
+test('totals the order', () => {
+  expect(2 + 2).toBe(4);
+});

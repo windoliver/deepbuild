@@ -6,17 +6,10 @@
 use deep_canvas::ops;
 
 use crate::path::Verb;
-use crate::scene::Refused;
+use crate::scene::{refuse, Refused};
 
 /// The most vertices a star has (Star: "exceed 200 vertices" it can never).
 pub const MAX_STAR_VERTICES: usize = 200;
-
-fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
-    Err(Refused {
-        code,
-        path: path.into(),
-    })
-}
 
 fn at(center: [f64; 2], r: f64, degrees: f64) -> [f64; 2] {
     let a = ops::rad(degrees);
