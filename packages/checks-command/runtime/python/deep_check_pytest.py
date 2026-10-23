@@ -3,6 +3,7 @@
 # (vitest-reporter.mjs), written to the file the runner names. testsRun, each attempt and each failure's place and
 # kind come from pytest's own outcome and the exception it caught, never from printed output: a test that prints
 # "AssertionError" and then raises an AttributeError is an AttributeError. It ends with a trailer counting its lines.
+import inspect
 import json
 import os
 
@@ -56,13 +57,31 @@ def pytest_configure(config):
         value = config.getoption(dest, None)
         if value:
             _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by {flag} {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
-    # Which functions and classes are tests is pytest's own filter too: one that leaves test_* out drops tests silently.
-    for name, default in (('python_functions', ['test']), ('python_classes', ['Test'])):
-        if config.getini(name) != default:
-            value = f"{name}={' '.join(config.getini(name))}"
-            _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
+    # Tests a file imports are tests of that file; without the unittest plugin its TestCase classes are never collected.
+    try:
+        imported = config.getini('collect_imported_tests')
+    except ValueError:
+        imported = True  # a pytest older than the option
+    if not imported:
+        _write({'type': 'run:error', 'file': None, 'filter': 'collect_imported_tests=false', 'errors': [{'name': 'Error', 'message': "tests a file imports left out by collect_imported_tests=false that the check's command doesn't name", 'stack': None, 'frames': []}]})
+    if config.pluginmanager.is_blocked('unittest'):
+        _write({'type': 'run:error', 'file': None, 'errors': [{'name': 'Error', 'message': 'unittest test cases left out by -p no:unittest', 'stack': None, 'frames': []}]})
     for value in config.getoption('deselect', None) or []:
         _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by --deselect {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_pycollect_makeitem(collector, name, obj):
+    # Which functions and classes are tests is pytest's own filter too (python_functions, python_classes): a test_*
+    # function or Test* class the project's patterns leave out is a test dropped from a file that still runs.
+    result = yield
+    if result is None and collector.config is _owner:
+        function = inspect.isfunction(obj) or isinstance(obj, (staticmethod, classmethod))
+        ini = 'python_functions' if function and name.startswith('test') else 'python_classes' if inspect.isclass(obj) and name.startswith('Test') else None
+        if ini:
+            value = f"{ini}={' '.join(collector.config.getini(ini))}"
+            _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"{collector.nodeid}::{name} left out by {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
+    return result
 
 
 @pytest.hookimpl(hookwrapper=True)
