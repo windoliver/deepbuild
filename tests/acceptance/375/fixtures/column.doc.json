@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "id": "auto-layout-column",
+  "profile": "figure",
+  "title": "A card that hugs three texts",
+  "description": "A column frame with gap 12 and padding 8 holding a title, a status line and a note, each a text leaf measured by the shaper; the frame hugs them.",
+  "size": [480, 320],
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "card": {
+      "id": "card", "kind": "frame@1", "layer": "main", "name": "Card", "order": "a0",
+      "at": { "pos": [40, 32, 0] },
+      "params": { "layout": "column", "gap": 12, "padding": 8 }
+    },
+    "note": {
+      "id": "note", "kind": "text@1", "layer": "main", "name": "Note", "parent": "card", "order": "a2",
+      "params": { "text": "Updated a moment ago", "font": "body", "size": 13 }
+    },
+    "title": {
+      "id": "title", "kind": "text@1", "layer": "main", "name": "Title", "parent": "card", "order": "a0",
+      "params": { "text": "Review the plan", "font": "body", "size": 20, "weight": 600 }
+    },
+    "status": {
+      "id": "status", "kind": "text@1", "layer": "main", "name": "Status", "parent": "card", "order": "a1",
+      "params": { "text": "Checks are waiting on you", "font": "body", "size": 13 }
+    }
+  }
+}

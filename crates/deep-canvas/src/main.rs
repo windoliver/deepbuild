@@ -289,12 +289,14 @@ fn answer(command: &[String], line: &str) -> Value {
                 return bad_input();
             };
             match merge(base, a, b, &registry()) {
-                Merged::Clean(doc) => match revision_hash(&doc, &DocShape::new(&doc)) {
-                    Ok(hash) => json!({"outcome": "merged", "doc": doc, "hash": hash}),
-                    Err(e) => {
-                        json!({"ok": false, "code": "out_of_range", "path": e.path, "what": e.what})
+                Merged::Clean(doc) => {
+                    match revision_hash(&doc, &DocShape::new(&doc, &registry())) {
+                        Ok(hash) => json!({"outcome": "merged", "doc": doc, "hash": hash}),
+                        Err(e) => {
+                            json!({"ok": false, "code": "out_of_range", "path": e.path, "what": e.what})
+                        }
                     }
-                },
+                }
                 Merged::Conflict(entries) => json!({
                     "outcome": "conflict",
                     "conflicts": entries
