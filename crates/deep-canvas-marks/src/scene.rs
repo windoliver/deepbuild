@@ -19,7 +19,7 @@
 //! item's box, then with them.
 
 use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value};
 
@@ -48,7 +48,7 @@ pub struct Refused {
     pub path: String,
 }
 
-fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
+pub(crate) fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
     Err(Refused {
         code,
         path: path.into(),
@@ -225,6 +225,28 @@ pub enum ImageFit {
     Cover,
     Fill,
     None,
+}
+
+impl ImageFit {
+    /// Where an image of `size` px draws in `bounds` (`[x, y, w, h]`) under this fit, centred.
+    pub fn fitted(self, bounds: [f64; 4], size: [u32; 2]) -> [f64; 4] {
+        let [x, y, w, h] = bounds;
+        let (iw, ih) = (f64::from(size[0]), f64::from(size[1]));
+        let (sx, sy) = match self {
+            ImageFit::Fill => (w / iw, h / ih),
+            ImageFit::Contain => {
+                let s = (w / iw).min(h / ih);
+                (s, s)
+            }
+            ImageFit::Cover => {
+                let s = (w / iw).max(h / ih);
+                (s, s)
+            }
+            ImageFit::None => (1.0, 1.0),
+        };
+        let (dw, dh) = (iw * sx, ih * sy);
+        [x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh]
+    }
 }
 
 /// How an image's pixels are sampled when it is drawn at another size (Image `image@1`:
@@ -528,7 +550,7 @@ pub struct Frame {
     pub layers: Vec<Layer>,
 }
 
-fn num(v: Option<&Value>) -> Option<f64> {
+pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|n| n.is_finite())
 }
 
@@ -1159,12 +1181,6 @@ impl Format {
     }
 }
 
-/// A reading as a bound value's text in the default format: whole numbers grouped by thousands,
-/// others in their shortest exact form.
-pub fn format_reading(n: f64) -> String {
-    Format::default().show(Some(n))
-}
-
 /// The record as pinned to one frame (canvas primitives: Bound value; Status binding): each
 /// reading's value and as-of time, each status source's state, and the time the frame is pinned
 /// to, the host time live and the mapped record time in a replay, on the record's clock.
@@ -1207,7 +1223,7 @@ fn age_text(age: i64) -> (String, i64) {
 
 /// The text of a bound value's reading, stale or live, at the frame's pinned time.
 fn show(
-    doc: &Map<String, Value>,
+    clock: &Value,
     bid: &str,
     b: &Value,
     format: &Format,
@@ -1217,10 +1233,9 @@ fn show(
     let path = format!("bound_values/{bid}/stale_after");
     let stale_after = match b.get("stale_after") {
         None => None,
-        Some(v) => Some(
-            deep_canvas::document::duration(&Value::Object(doc.clone()), v)
-                .or_else(|_| refuse("bad_time", &path))?,
-        ),
+        Some(v) => {
+            Some(deep_canvas::document::duration(clock, v).or_else(|_| refuse("bad_time", &path))?)
+        }
     };
     let value = record.readings.get(source).copied();
     let text = format.show(value);
@@ -1266,6 +1281,8 @@ pub fn bound_texts(
 ) -> Result<BTreeMap<String, Shown>, Refused> {
     let mut out = BTreeMap::new();
     let empty = Map::new();
+    // All a stale-after duration reads of the document is its transport's frame rate.
+    let clock = serde_json::json!({"transport": doc.get("transport")});
     let bound = doc
         .get("bound_values")
         .and_then(Value::as_object)
@@ -1282,7 +1299,7 @@ pub fn bound_texts(
         if let ["items", id, "params", "text"] = parts.as_slice() {
             out.insert(
                 (*id).to_string(),
-                show(doc, bid, b, &format, source, record)?,
+                show(&clock, bid, b, &format, source, record)?,
             );
         }
     }
@@ -1312,7 +1329,7 @@ pub fn bound_texts(
             &path,
         )?;
         let bid = counter.get("source").and_then(Value::as_str).unwrap_or("");
-        out.insert(id.clone(), show(doc, bid, b, &format, source, record)?);
+        out.insert(id.clone(), show(&clock, bid, b, &format, source, record)?);
     }
     Ok(out)
 }
@@ -1483,7 +1500,8 @@ pub fn status_marks(
 }
 
 /// A mark with its item's order key and ID, which sort it within its layer.
-type Ordered = (String, String, Drawn);
+/// A mark in its layer's draw order: its item's order key, its row, its item's ID.
+type Ordered<'a> = (&'a str, usize, &'a str, Drawn);
 
 /// The most masks that may clip one item (Mask: "nest deeper than 4" it can never).
 const MASK_DEPTH: usize = 4;
@@ -1605,7 +1623,7 @@ fn scopes_of(
     };
     let shown =
         |id: &str| items.get(id).and_then(|i| i.get("visible")) != Some(&Value::Bool(false));
-    let mut collection_masks: Vec<(String, Vec<String>)> = Vec::new();
+    let mut collection_masks: Vec<(String, BTreeSet<String>)> = Vec::new();
     for (id, item) in items {
         if item.get("kind").and_then(Value::as_str) != Some("mask@1") || !shown(id) {
             continue;
@@ -2096,11 +2114,7 @@ fn build(
                 _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
             }],
         };
-        let order = item
-            .get("order")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string();
+        let order = item.get("order").and_then(Value::as_str).unwrap_or("");
         let Some(slot) = layers.iter_mut().find(|l| l.1 == layer) else {
             return refuse("ref_unresolved", format!("{path}/layer"));
         };
@@ -2118,8 +2132,9 @@ fn build(
         for (k, mark) in marks.into_iter().enumerate() {
             // A generated row keeps its set's place, in row order.
             slot.2.push((
-                format!("{order}\u{0}{k:08}"),
-                id.clone(),
+                order,
+                k,
+                id,
                 Drawn {
                     mark,
                     clip,
@@ -2132,8 +2147,8 @@ fn build(
     let layers = layers
         .into_iter()
         .map(|(_, id, mut marks)| {
-            marks.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-            let marks: Vec<Drawn> = marks.into_iter().map(|(_, _, m)| m).collect();
+            marks.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+            let marks: Vec<Drawn> = marks.into_iter().map(|(_, _, _, m)| m).collect();
             let mut k = KeyBuilder::new("layer@marks2d.1");
             k.text(&id).number(size[0]).number(size[1]).number(zoom);
             for m in &marks {
@@ -2169,10 +2184,11 @@ mod tests {
 
     #[test]
     fn a_reading_groups_its_thousands() {
-        assert_eq!(format_reading(1234.0), "1,234");
-        assert_eq!(format_reading(98765.0), "98,765");
-        assert_eq!(format_reading(12.0), "12");
-        assert_eq!(format_reading(0.5), "0.5");
+        let show = |n| Format::default().show(Some(n));
+        assert_eq!(show(1234.0), "1,234");
+        assert_eq!(show(98765.0), "98,765");
+        assert_eq!(show(12.0), "12");
+        assert_eq!(show(0.5), "0.5");
     }
 
     #[test]

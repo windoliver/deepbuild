@@ -372,11 +372,6 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     })
 }
 
-/// Runs a scenario's calls, one reply each, in call order.
-fn run(hub: &mut hub::Hub<'_>) -> Vec<Value> {
-    hub.run_calls()
-}
-
 fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     let Ok(Value::Object(input)) = serde_json::from_str::<Value>(line) else {
         return bad_input();
@@ -386,8 +381,7 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     };
     match command {
         "run" => {
-            let mut hub = hub::Hub::new(&scenario, startup);
-            let replies = run(&mut hub);
+            let replies = hub::Hub::new(&scenario, startup).run_calls();
             json!({"ok": true, "replies": replies})
         }
         "screen" => {
@@ -404,7 +398,7 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
 #[cfg(target_os = "macos")]
 fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
     let mut hub = hub::Hub::new(scenario, startup);
-    let replies = run(&mut hub);
+    let replies = hub.run_calls();
     window::draw(&mut hub, replies, out)
 }
 

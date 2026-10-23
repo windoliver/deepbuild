@@ -382,16 +382,24 @@ fn box_pass(rgba: &[u8], width: usize, height: usize, radius: usize, rows: bool)
             (i * width + line) * 4
         }
     };
+    if len == 0 {
+        return out;
+    }
     let n = (2 * radius + 1) as u32;
+    let r = radius as isize;
+    // The sample at `t` along a line, the line's ends held past its ends.
+    let sample = |line: usize, t: isize, c: usize| {
+        u32::from(rgba[at(line, t.clamp(0, len as isize - 1) as usize) + c])
+    };
+    // A running sum over the window: each step adds the sample entering it and drops the one
+    // leaving it, so a pass costs the same at any radius.
     for line in 0..lines {
-        for i in 0..len {
-            for c in 0..3 {
-                let sum: u32 = (0..n as usize)
-                    .map(|k| {
-                        u32::from(rgba[at(line, (i + k).saturating_sub(radius).min(len - 1)) + c])
-                    })
-                    .sum();
+        for c in 0..3 {
+            let mut sum: u32 = (-r..=r).map(|t| sample(line, t, c)).sum();
+            for i in 0..len {
                 out[at(line, i) + c] = ((sum + n / 2) / n) as u8;
+                let i = i as isize;
+                sum = sum + sample(line, i + r + 1, c) - sample(line, i - r, c);
             }
         }
     }
