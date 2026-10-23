@@ -1,0 +1,7 @@
+import type { Db } from '../test/db';
+
+// The app reads the refund window from the policies table; nothing in the app writes that table.
+export function refundWindow(db: Db): number {
+  const row = db.get('SELECT days FROM policies WHERE name = ?', ['refunds']);
+  return Number(row?.days ?? 0);
+}
