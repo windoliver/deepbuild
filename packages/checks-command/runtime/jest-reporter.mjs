@@ -58,6 +58,8 @@ export default class DeepCheckJestReporter {
   }
 
   onTestResult(_test, result) {
+    // Each file that ran, so the runner can list its tests from its source and find any that never ran.
+    write({ type: 'file:ran', tool: 'jest', file: result.testFilePath, errors: [] });
     if (result.testExecError) write({ type: 'file:fail', file: result.testFilePath, errors: [errorOf(result.testExecError)] });
     for (const t of result.testResults ?? []) {
       // A skipped, pending or todo test didn't run.

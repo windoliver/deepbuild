@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Failure } from '@deepbuild/conformance';
+import type { Left, Listed } from './listing.js';
 
 /** A file's lines without its trailers, and why it isn't the run's whole record when it isn't. */
 export interface Evidence { lines: string[]; altered: string | null }
@@ -90,15 +91,18 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
   return { ran, failures, malformed: lines.length - all.length };
 }
 
-interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown }
+interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown; tool?: unknown; line?: unknown }
+/** What a Vitest-format report says besides its tests: each Vitest or Jest file it ran, and pytest's listing and the tests it left out. */
+export interface Listing { files: { file: string; tool: 'vitest' | 'jest' }[]; listed: Listed[]; left: Left[] }
 /**
  * Vitest's report, as the command check kind's reporter writes it (runtime/vitest-reporter.mjs), and Jest's and
  * pytest's in the same format. A run error that names a filter is no failure when `named` (the check's command) holds it.
  */
-export function vitest(lines: string[], checkout: string, lastAttemptOnly = false, named: (filter: string) => boolean = () => false): Reported {
+export function vitest(lines: string[], checkout: string, lastAttemptOnly = false, named: (filter: string) => boolean = () => false): Reported & Listing {
   const all = parsed<VitestLine>(lines);
   const ran: Ran[] = [];
   const failures: Failure[] = [];
+  const listing: Listing = { files: [], listed: [], left: [] };
   let malformed = lines.length - all.length;
   // Every test of a file names it: each is placed once.
   const placed = new Map<string, string | null>();
@@ -115,11 +119,18 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
       ran.push({ test: l.name ?? '', file, attempts: [...Array<Attempt>(before).fill('failed'), final], meta: l.meta ?? {} });
       if (lastAttemptOnly && final === 'passed') continue;
       for (const e of l.errors) failures.push(failure(checkout, l.name ?? '', file, e));
+    } else if (l.type === 'file:ran' || l.type === 'test:listed' || l.type === 'test:left') {
+      // A file outside the checkout isn't the check's: nothing of it is listed.
+      if (!file) continue;
+      if (l.type === 'file:ran' && (l.tool === 'vitest' || l.tool === 'jest')) listing.files.push({ file, tool: l.tool });
+      else if (l.type === 'test:listed' && typeof l.name === 'string' && Number.isSafeInteger(l.line)) listing.listed.push({ test: l.name, file, line: l.line as number, tagged: false });
+      else if (l.type === 'test:left' && typeof l.name === 'string' && typeof l.filter === 'string') listing.left.push({ test: l.name, file, filter: l.filter });
+      else malformed += 1;
     } else if (!(l.type === 'run:error' && typeof l.filter === 'string' && named(l.filter))) {
       for (const e of l.errors) failures.push(failure(checkout, file ?? '(run)', file, e));
     }
   }
-  return { ran, failures, malformed };
+  return { ran, failures, malformed, ...listing };
 }
 
 interface GoEvent { Action?: unknown; Package?: unknown; Test?: unknown; Output?: unknown }
