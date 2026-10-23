@@ -31,11 +31,12 @@ beforeAll(async () => {
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
   sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 172_800_000 } } } });
 });
+// Many tests clone the repo's dependencies into their folders: deleting them all takes a while.
 afterAll(async () => {
   await sup?.close();
   await record?.close();
   rmSync(dir, { recursive: true, force: true });
-});
+}, 120_000);
 
 /** A Vitest project of these test files and other files at its root, its dependencies cloned from the repo's. */
 function project(files: Record<string, string>, root_files: Record<string, string> = {}): string {
