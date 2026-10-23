@@ -36,8 +36,13 @@ export interface StartSpec {
   cwd: string;
   /** Added to its environment; the supervisor adds the run token, unless the caller names it as DEEP_RUN_TOKEN. */
   env?: Record<string, string>;
-  /** false: `env` and the run token are its whole environment, none of the host's own (a hermetic check run). */
+  /** false: `env` and the run token are its whole environment, none of the host's own (a hermetic check run, a runner job that allowlists it). */
   inherit?: boolean;
+  /**
+   * Written to its stdin once its process is tracked, then stdin is closed; with none, stdin is closed from the start.
+   * A function is asked only then, and its undefined closes stdin with nothing written.
+   */
+  input?: Buffer | (() => Buffer | undefined);
   grant?: Grant;
   /** No key: any free key of that kind's pool. `env`: the variable its key is passed to the process in. */
   leases?: { kind: string; key?: string; env?: string }[];
@@ -97,8 +102,9 @@ export interface SupervisorOptions {
   /** What your settings give an unblock ask. */
   settings: { asks: { unblock: { deadline_ms: number } } };
   resources?: ResourceKind[];
-  /** Paths no run may write, whatever its grant: the hub's record, and where agents read their hooks. */
-  guarded?: string[];
+  /** Paths no run may write, whatever its grant: the hub's record, and where agents read their hooks. One with
+   * `except` leaves those folders under it to each run's own grant (the hub's jobs/ under its root). */
+  guarded?: (string | { path: string; except: string[] })[];
   /** How long a lease is granted for; past it a lease whose holder still runs is only stale. A day unless a test sets it. */
   lease_ms?: number;
   plant?: Plant;

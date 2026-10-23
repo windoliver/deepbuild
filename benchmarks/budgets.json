@@ -280,6 +280,16 @@
       "initialReason": "Issue #236 first measurement: the merge base has no supervisor. One process opens a record, the asks core and the supervisor in a temp folder, then starts, waits for and cleans up 20 runs of /usr/bin/true in the platform sandbox, interleaved with 20 bare spawns, so p50 includes Node's start, the denial stream's warm-up and the record's appends; the issue's 300 ms per check over a bare start stays in tests/acceptance/236/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "runner-job",
+      "command": [
+        "node",
+        "benchmarks/runner.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #159 first measurement: the merge base has no runner. One process opens a record, the asks core, the budget ledger, the supervisor and the runner in a temp folder, then runs 10 read-only jobs on a stand-in claude that answers at once, interleaved with 10 bare spawns of the same launch, so p50 includes Node's start, the binary's verification once, the sandbox and the record's appends; the issue's limits (300 ms a start, 5% parsing, 30 MB a job, 1 ms a status line update) stay in tests/acceptance/159/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "command-check-count",
       "command": [
         "node",
