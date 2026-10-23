@@ -1,0 +1,276 @@
+#236 acceptance tests at the base commit 33eaad3 (origin/main), run before any implementation.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/236 --no-file-parallelism
+(Node 24.22.0, macOS 14 / Darwin 23.6.0). Result: 9 of 9 files fail, exit 1. Nothing passes.
+
+Why each file fails at base:
+- budgets, cleanup, contain, devices, host, pool, suite (.test.ts): the suite won't load, because
+  packages/supervisor/src/index.ts (openSupervisor, seatbelt, sandboxSuite, plantedBackends, ...) doesn't
+  exist. That covers AC1, AC3, AC4 (library half), AC5, AC6, AC7 (decoy), AC8, AC9, AC10, AC11, AC12 and
+  AC13 (host@1 contract).
+- hub.test.ts AC2: the hub's run.start doesn't sandbox, so the probe the run starts connects to the hub's
+  own socket.
+- hub.test.ts AC7: the hub doesn't record process.tracked for a run's processes, so a restart that has only
+  the record has nothing to reap from (timed out waiting for process.tracked).
+- hub.test.ts AC13: the hub doesn't start check runs through a host@1 module (DEEP_HUB_TEST_HOST is ignored),
+  so the recording host's log has no start. The planted program DEEP_HUB_PLANT=run-spawns-itself doesn't
+  exist, so the hub refuses to start and the test reports BLOCKED rather than the expected failure.
+- blocked.test.ts: BLOCKED by design. The surfaces these halves need aren't built at this base: the runner
+  (#159) for AC4's read-only job, the command check kind (#30), environments (#36/#331) and the check-kind
+  extension slots (#349) for AC13. A blind redraft writes them once those exist.
+
+Output:
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236
+
+ ❯ hub.test.ts (4 tests | 4 failed) 33380ms
+   ❯ AC2 #236.0c11913d a process your agent built can't reach the hub's socket or a session's inbox socket (1)
+     × AC2 run by the hub's supervisor, it fails to connect to the hub's socket and to CLAUDE_CODE_MESSAGING_SOCKET, and the message it tries to post starts no turn 10714ms
+   ❯ AC7 #236.61bc1ccd a crash's leftovers are reaped on restart, and a decoy survives (1)
+     × AC7 after kill -9 of the hub, a restart that finds only the record reaps every process of the run (setsid, bare and late-forked included) and leaves a look-alike with no token running 13844ms
+   ❯ AC13 #236.6e7cc737 check runs start, signal and wait only through host@1 (the hub's half) (2)
+     × AC13 with a recording host in place of local, a check run's start, wait and signal each show in its log, and its outcome and evidence equal those on local 6367ms
+     × AC13 (wrong program) a hub whose check runs spawn their process themselves leaves a start out of the log and fails, naming the check 2440ms
+ ❯ cleanup.test.ts (0 test)
+ ❯ contain.test.ts (0 test)
+ ❯ suite.test.ts (0 test)
+ ❯ pool.test.ts (0 test)
+ ❯ budgets.test.ts (0 test)
+ ❯ devices.test.ts (0 test)
+ ❯ host.test.ts (0 test)
+ ❯ blocked.test.ts (4 tests | 4 failed) 10ms
+   ❯ AC4 #236.cc0de139 a read-only job's undeclared write is refused by the sandbox, and recorded (1)
+     × AC4 a read-only job run by the runner (#159) whose extension or MCP server writes outside what it declared is refused by the sandbox and the refusal recorded 6ms
+   ❯ AC13 #236.6e7cc737 checks and environments start, signal and wait only through host@1 (3)
+     × AC13 a command check's run (#30), with a recording test host in place of local, shows every start, signal and wait, and its verdict and evidence equal those on local 1ms
+     × AC13 an environment's stack (#36), with a recording test host in place of local, shows every start, signal and wait in its log 0ms
+     × AC13 (wrong program) a check kind that spawns a child process itself leaves a start out of the log and fails, naming the check kind 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts [ budgets.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/world.ts
+ ❯ world.ts:8:1
+      6| import { openRecord, type Connection, type Event, type RecordStore } f…
+      7| import { openAsks, type Asks } from '../../../packages/asks/src/index.…
+      8| import { openSupervisor, type ResourceKind, type Supervisor, type Supe…
+       | ^
+      9| import { DAY, tempDir } from './helpers.ts';
+     10|
+ ❯ budgets.test.ts:12:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  cleanup.test.ts [ cleanup.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/world.ts
+ ❯ world.ts:8:1
+      6| import { openRecord, type Connection, type Event, type RecordStore } f…
+      7| import { openAsks, type Asks } from '../../../packages/asks/src/index.…
+      8| import { openSupervisor, type ResourceKind, type Supervisor, type Supe…
+       | ^
+      9| import { DAY, tempDir } from './helpers.ts';
+     10|
+ ❯ cleanup.test.ts:7:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  contain.test.ts [ contain.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/world.ts
+ ❯ world.ts:8:1
+      6| import { openRecord, type Connection, type Event, type RecordStore } f…
+      7| import { openAsks, type Asks } from '../../../packages/asks/src/index.…
+      8| import { openSupervisor, type ResourceKind, type Supervisor, type Supe…
+       | ^
+      9| import { DAY, tempDir } from './helpers.ts';
+     10|
+ ❯ contain.test.ts:10:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  devices.test.ts [ devices.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/world.ts
+ ❯ world.ts:8:1
+      6| import { openRecord, type Connection, type Event, type RecordStore } f…
+      7| import { openAsks, type Asks } from '../../../packages/asks/src/index.…
+      8| import { openSupervisor, type ResourceKind, type Supervisor, type Supe…
+       | ^
+      9| import { DAY, tempDir } from './helpers.ts';
+     10|
+ ❯ devices.test.ts:8:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  host.test.ts [ host.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/world.ts
+ ❯ world.ts:8:1
+      6| import { openRecord, type Connection, type Event, type RecordStore } f…
+      7| import { openAsks, type Asks } from '../../../packages/asks/src/index.…
+      8| import { openSupervisor, type ResourceKind, type Supervisor, type Supe…
+       | ^
+      9| import { DAY, tempDir } from './helpers.ts';
+     10|
+ ❯ host.test.ts:8:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  pool.test.ts [ pool.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/world.ts
+ ❯ world.ts:8:1
+      6| import { openRecord, type Connection, type Event, type RecordStore } f…
+      7| import { openAsks, type Asks } from '../../../packages/asks/src/index.…
+      8| import { openSupervisor, type ResourceKind, type Supervisor, type Supe…
+       | ^
+      9| import { DAY, tempDir } from './helpers.ts';
+     10|
+ ❯ pool.test.ts:8:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  suite.test.ts [ suite.test.ts ]
+Error: Cannot find module '../../../packages/supervisor/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-236/tests/acceptance/236/suite.test.ts
+ ❯ suite.test.ts:11:1
+      9|   bins, cleanup, closeListeners, DEVICES, devicesIn, expectDenied, hom…
+     10| } from './helpers.ts';
+     11| import { plantedBackends, sandboxSuite, seatbelt, type Grant, type San…
+       | ^
+     12|
+     13| afterEach(async () => { await closeListeners(); await cleanup(); }, 30…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blocked.test.ts > AC4 #236.cc0de139 a read-only job's undeclared write is refused by the sandbox, and recorded > AC4 a read-only job run by the runner (#159) whose extension or MCP server writes outside what it declared is refused by the sandbox and the refusal recorded
+Error: BLOCKED: the runner of DeepBuild's headless jobs (#159) has no surface at this base, so no read-only job can be started through it; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:10:9
+      8|
+      9| const blocked = (what: string): never => {
+     10|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     11| };
+     12|
+ ❯ blocked.test.ts:15:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  blocked.test.ts > AC13 #236.6e7cc737 checks and environments start, signal and wait only through host@1 > AC13 a command check's run (#30), with a recording test host in place of local, shows every start, signal and wait, and its verdict and evidence equal those on local
+Error: BLOCKED: the command check kind (#30) isn't built at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:10:9
+      8|
+      9| const blocked = (what: string): never => {
+     10|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     11| };
+     12|
+ ❯ blocked.test.ts:21:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  blocked.test.ts > AC13 #236.6e7cc737 checks and environments start, signal and wait only through host@1 > AC13 an environment's stack (#36), with a recording test host in place of local, shows every start, signal and wait in its log
+Error: BLOCKED: environments (#36: deep env up, #331) aren't built at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:10:9
+      8|
+      9| const blocked = (what: string): never => {
+     10|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     11| };
+     12|
+ ❯ blocked.test.ts:24:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  blocked.test.ts > AC13 #236.6e7cc737 checks and environments start, signal and wait only through host@1 > AC13 (wrong program) a check kind that spawns a child process itself leaves a start out of the log and fails, naming the check kind
+Error: BLOCKED: check kinds (#30, installed through the extension slots of #349) aren't built at this base, so no planted check kind can be installed; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:10:9
+      8|
+      9| const blocked = (what: string): never => {
+     10|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     11| };
+     12|
+ ❯ blocked.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  hub.test.ts > AC2 #236.0c11913d a process your agent built can't reach the hub's socket or a session's inbox socket > AC2 run by the hub's supervisor, it fails to connect to the hub's socket and to CLAUDE_CODE_MESSAGING_SOCKET, and the message it tries to post starts no turn
+AssertionError: a connect to the hub's socket: the sandbox let unix /private/tmp/dh236-qlaKYq/root/hub.sock through: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ expectDenied helpers.ts:187:72
+    185| /** A try the sandbox refused: not ok, with EPERM or EACCES (a refused…
+    186| export function expectDenied(t: Try, what: string): void {
+    187|   expect(t.ok, `${what}: the sandbox let ${t.op} ${t.target} through`)…
+       |                                                                        ^
+    188|   expect(['EPERM', 'EACCES'], `${what}: ${t.op} ${t.target} failed wit…
+    189| }
+ ❯ hub.test.ts:37:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  hub.test.ts > AC7 #236.61bc1ccd a crash's leftovers are reaped on restart, and a decoy survives > AC7 after kill -9 of the hub, a restart that finds only the record reaps every process of the run (setsid, bare and late-forked included) and leaves a look-alike with no token running
+Error: timed out after 10000 ms waiting for process.tracked for each of server 63894, a 63906, b 63907, g 63909
+ ❯ waitFor helpers.ts:244:38
+    242|     const value = await probe();
+    243|     if (value !== undefined && value !== false) return value;
+    244|     if (Date.now() > deadline) throw Error(`timed out after ${timeoutM…
+       |                                      ^
+    245|     await sleep(20);
+    246|   }
+ ❯ hub.test.ts:65:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  hub.test.ts > AC13 #236.6e7cc737 check runs start, signal and wait only through host@1 (the hub's half) > AC13 with a recording host in place of local, a check run's start, wait and signal each show in its log, and its outcome and evidence equal those on local
+Error: the check unit's run run:01M5HABB3P9EDTYBR1A22DNH26 started a process the host's log doesn't show
+ ❯ throughHost hub.test.ts:134:41
+
+ ❯ hub.test.ts:155:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  hub.test.ts > AC13 #236.6e7cc737 check runs start, signal and wait only through host@1 (the hub's half) > AC13 (wrong program) a hub whose check runs spawn their process themselves leaves a start out of the log and fails, naming the check
+AssertionError: expected [Function] to throw error matching /the check unit's run .* started a pro…/ but got 'BLOCKED: the hub didn\'t start (deep …'
+
+- Expected:
+/the check unit's run .* started a process the host's log doesn't show/
+
++ Received:
+"BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh236-5OR3zi/recorded): file://~/private/deepbuild-core/.claude/worktrees/github-issue-236/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=run-spawns-itself names no planted program
+    at plantOf (file://~/private/deepbuild-core/.claude/worktrees/github-issue-236/packages/hub/dist/wire.js:46:15)
+    at runHub (file://~/private/deepbuild-core/.claude/worktrees/github-issue-236/packages/hub/dist/server.js:402:19)
+    at hubCommand (file://~/private/deepbuild-core/.claude/worktrees/github-issue-236/packages/hub/dist/index.js:23:28)
+    at file://~/private/deepbuild-core/.claude/worktrees/github-issue-236/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+"
+
+ ❯ hub.test.ts:159:51
+    157|
+    158|   it('AC13 (wrong program) a hub whose check runs spawn their process …
+    159|     await expect(throughHost('run-spawns-itself')).rejects.toThrow(/th…
+       |                                                   ^
+    160|   }, 90_000);
+    161| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  8 failed (8)
+   Start at  01:05:55
+   Duration  43.08s (tests 98%, import 1%)
+
+    Isolate  9 workers spawned · ~533ms startup each (spawn + environment, per file)
+             at least ~4.27s faster with isolate: false — reuses workers across files instead of one per file
+
+exit=1

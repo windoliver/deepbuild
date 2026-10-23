@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "process.tracked",
+  "subject": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "run": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "pid": 4242,
+    "start": "Wed Oct 22 10:00:05 2026",
+    "pgid": 4242,
+    "cwd": "/tmp/you/src/app",
+    "token": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+  }
+}
