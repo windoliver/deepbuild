@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
@@ -200,5 +201,414 @@ pub fn missing_dep() -> Module {
     Module {
         manifest: manifest("test.orphan", &[("test.absent", false)]),
         register: |_| {},
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Issue #387: the test canvas modules of the #387 acceptance README (The test canvas modules).
+
+fn number(name: &'static str) -> Param {
+    Param {
+        name,
+        ty: ParamType::F32,
+        unit: "u",
+        default: json!(0),
+        min: Some(-1.0e6),
+        max: Some(1.0e6),
+        minor: 0,
+        module: "",
+        operator: "",
+    }
+}
+
+fn json_param(name: &'static str) -> Param {
+    Param {
+        name,
+        ty: ParamType::Json,
+        unit: "",
+        default: Value::Null,
+        min: None,
+        max: None,
+        minor: 0,
+        module: "",
+        operator: "",
+    }
+}
+
+fn of_kind(item: &Value, kind: &str) -> bool {
+    item.get("kind").and_then(Value::as_str) == Some(kind)
+}
+
+fn has_kind(doc: &Value, kind: &str) -> bool {
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.values().any(|i| of_kind(i, kind)))
+}
+
+fn with_version(name: &str, minor: u64) -> Manifest {
+    let mut m = manifest(name, &[]);
+    m.version.minor = minor;
+    m
+}
+
+fn register_up(r: &mut Registrar) {
+    r.kind(
+        kind("test", "up", vec![box_param(), number("value")]),
+        &[],
+        "rect@1",
+    );
+    r.array("test.up.value", "f32", "item", "geometry", "items");
+    r.array("test.up.audit", "bool", "item", "geometry", "check");
+    r.operator("value", "items", &["self"], &["test.up.value"])
+        .applies(|_, _, item| of_kind(item, "test.up@1"))
+        .run(|v| {
+            let value = v
+                .item()?
+                .pointer("/params/value")
+                .cloned()
+                .unwrap_or(json!(0));
+            v.write("test.up.value", Val::json(value))
+        });
+    r.operator("audit", "check", &["self"], &["test.up.audit"])
+        .applies(|_, _, item| of_kind(item, "test.up@1"))
+        .run(|v| {
+            let ok = v
+                .item()?
+                .pointer("/params/box")
+                .and_then(Value::as_array)
+                .is_some_and(|b| b.len() == 4);
+            v.write("test.up.audit", Val::json(json!(ok)))
+        });
+}
+
+/// `test.up` 1.0.0: a kind `test.up@1`, an items operator and a check whose results its
+/// version keys.
+pub fn up_1_0() -> Module {
+    Module {
+        manifest: with_version("test.up", 0),
+        register: register_up,
+    }
+}
+
+/// `test.up` 1.1.0, registered the same: an upgrade.
+pub fn up_1_1() -> Module {
+    Module {
+        manifest: with_version("test.up", 1),
+        register: register_up,
+    }
+}
+
+fn register_nudge(r: &mut Registrar) {
+    r.kind(
+        kind(
+            "test",
+            "nudge",
+            vec![box_param(), number("dx"), number("dy")],
+        ),
+        &[],
+        "rect@1",
+    );
+    r.contribution(
+        "test.nudge.offset",
+        "transform",
+        "item",
+        "transform",
+        "items",
+        "core.transform",
+    );
+    r.operator("offset", "items", &["self"], &["test.nudge.offset"])
+        .applies(|_, _, item| of_kind(item, "test.nudge@1"))
+        .run(|v| {
+            let item = v.item()?;
+            let at = |k: &str| {
+                item.pointer(&format!("/params/{k}"))
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+            };
+            let edits = json!([{"op": "add", "path": ["pos"], "value": [at("dx"), at("dy"), 0.0]}]);
+            v.write("test.nudge.offset", Val::json(edits))
+        });
+}
+
+/// `test.nudge`: its items move by `[dx, dy]`, contributed to the core's transform, which never
+/// names it.
+pub fn nudge() -> Module {
+    Module {
+        manifest: manifest("test.nudge", &[]),
+        register: register_nudge,
+    }
+}
+
+/// One step: this module's count one up from what its last step left, and the other module's
+/// count read at this step's time (`at_time`) or as earlier steps left it.
+fn step(v: &mut View<'_>, own: &str, other: &str, at_time: bool) -> Result<(), OpError> {
+    let count = v
+        .carried(own)
+        .and_then(|c| match c {
+            Val::Json(j) => j.as_i64(),
+            _ => None,
+        })
+        .unwrap_or(0)
+        + 1;
+    let read = if at_time {
+        v.array(other)?
+    } else {
+        v.earlier(other)?
+    };
+    let read = read
+        .and_then(|c| match c {
+            Val::Json(j) => j.as_i64(),
+            _ => None,
+        })
+        .unwrap_or(0);
+    v.note_step(count, read);
+    v.write(own, Val::json(json!(count)))
+}
+
+/// A stepping module `name` at `hz`, reading `other`'s count at its own step's time or as
+/// earlier steps left it.
+fn stepper(
+    r: &mut Registrar,
+    name: &'static str,
+    hz: i64,
+    reads: &str,
+    run: deep_canvas::registry::Run,
+) {
+    let (family, rest) = name.split_once('.').expect("a dotted name");
+    let short: &'static str = match rest {
+        "step.a" => "step.a",
+        "step.b" => "step.b",
+        "step.y" => "step.y",
+        "step.x" => "step.x",
+        "loop.p" => "loop.p",
+        _ => "loop.q",
+    };
+    r.kind(kind(leak(family), short, vec![]), &[], "");
+    let count = format!("{name}.count");
+    r.array(&count, "i64", "document", "time", "simulate");
+    r.operator("step", "simulate", &[reads], &[&count])
+        .steps(705_600_000 / hz)
+        .applies(match name {
+            "test.step.a" => |doc, _, _| has_kind(doc, "test.step.a@1"),
+            "test.step.b" => |doc, _, _| has_kind(doc, "test.step.b@1"),
+            "test.step.y" => |doc, _, _| has_kind(doc, "test.step.y@1"),
+            "test.step.x" => |doc, _, _| has_kind(doc, "test.step.x@1"),
+            "test.loop.p" => |doc, _, _| has_kind(doc, "test.loop.p@1"),
+            _ => |doc, _, _| has_kind(doc, "test.loop.q@1"),
+        })
+        .run(run);
+}
+
+fn leak(family: &str) -> &'static str {
+    match family {
+        "test" => "test",
+        _ => "",
+    }
+}
+
+/// `test.step.a` (60 Hz) and `test.step.b` (120 Hz): b reads a's count at its own step's time,
+/// a reads b's as earlier steps left it.
+pub fn steps() -> [Module; 2] {
+    [
+        Module {
+            manifest: manifest("test.step.a", &[("test.step.b", false)]),
+            register: |r| {
+                stepper(r, "test.step.a", 60, "earlier(test.step.b.count)", |v| {
+                    step(v, "test.step.a.count", "test.step.b.count", false)
+                })
+            },
+        },
+        Module {
+            manifest: manifest("test.step.b", &[("test.step.a", false)]),
+            register: |r| {
+                stepper(r, "test.step.b", 120, "test.step.a.count", |v| {
+                    step(v, "test.step.b.count", "test.step.a.count", true)
+                })
+            },
+        },
+    ]
+}
+
+/// The same pair renamed so b's name sorts first: `test.step.y` in a's role, `test.step.x` in
+/// b's.
+pub fn steps_renamed() -> [Module; 2] {
+    [
+        Module {
+            manifest: manifest("test.step.y", &[("test.step.x", false)]),
+            register: |r| {
+                stepper(r, "test.step.y", 60, "earlier(test.step.x.count)", |v| {
+                    step(v, "test.step.y.count", "test.step.x.count", false)
+                })
+            },
+        },
+        Module {
+            manifest: manifest("test.step.x", &[("test.step.y", false)]),
+            register: |r| {
+                stepper(r, "test.step.x", 120, "test.step.y.count", |v| {
+                    step(v, "test.step.x.count", "test.step.y.count", true)
+                })
+            },
+        },
+    ]
+}
+
+/// `test.loop.p` and `test.loop.q`, each reading the other's count at its own step's time: a
+/// cycle the seal refuses.
+pub fn steps_cycle() -> [Module; 2] {
+    [
+        Module {
+            manifest: manifest("test.loop.p", &[("test.loop.q", false)]),
+            register: |r| {
+                stepper(r, "test.loop.p", 60, "test.loop.q.count", |v| {
+                    step(v, "test.loop.p.count", "test.loop.q.count", true)
+                })
+            },
+        },
+        Module {
+            manifest: manifest("test.loop.q", &[("test.loop.p", false)]),
+            register: |r| {
+                stepper(r, "test.loop.q", 60, "test.loop.p.count", |v| {
+                    step(v, "test.loop.q.count", "test.loop.p.count", true)
+                })
+            },
+        },
+    ]
+}
+
+/// A placed point set: one position per row, in the item's box.
+#[derive(Debug)]
+pub struct Points(pub Vec<[f64; 2]>);
+
+fn points_val(points: Vec<[f64; 2]>) -> Val {
+    let mut bytes = Vec::with_capacity(points.len() * 16);
+    for p in &points {
+        bytes.extend_from_slice(&p[0].to_le_bytes());
+        bytes.extend_from_slice(&p[1].to_le_bytes());
+    }
+    Val::typed(Points(points), bytes)
+}
+
+fn register_scatter(r: &mut Registrar) {
+    r.kind(
+        kind(
+            "test",
+            "scatter",
+            vec![
+                box_param(),
+                json_param("source"),
+                json_param("column"),
+                number("n"),
+            ],
+        ),
+        &[],
+        "rect@1",
+    );
+    r.array("test.scatter.positions", "vec2", "row", "geometry", "items");
+    r.array(
+        "test.scatter.drawn",
+        "draw_list",
+        "row",
+        "geometry",
+        "items",
+    );
+    r.operator(
+        "layout",
+        "items",
+        &["self", "reading"],
+        &["test.scatter.positions"],
+    )
+    .applies(|_, _, item| of_kind(item, "test.scatter@1"))
+    .run(|v| {
+        let item = v.item()?;
+        let p = |k: &str| {
+            item.pointer(&format!("/params/{k}"))
+                .cloned()
+                .unwrap_or(Value::Null)
+        };
+        let b: Vec<f64> = p("box")
+            .as_array()
+            .map(|b| b.iter().filter_map(Value::as_f64).collect())
+            .unwrap_or_default();
+        let [x, y, w, h] = <[f64; 4]>::try_from(b.as_slice()).unwrap_or([0.0; 4]);
+        let n = p("n").as_u64().unwrap_or(0) as usize;
+        let name = format!(
+            "{}.{}",
+            p("source").as_str().unwrap_or(""),
+            p("column").as_str().unwrap_or("")
+        );
+        let outside = v.outside()?;
+        let values: Vec<f64> = outside
+            .columns
+            .get(&name)
+            .map(|c| {
+                c.bytes
+                    .chunks_exact(8)
+                    .map(|b| f64::from_le_bytes(b.try_into().expect("eight bytes")))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let rows = n.min(values.len());
+        let step = if rows > 1 { w / (rows - 1) as f64 } else { 0.0 };
+        let points = (0..rows)
+            .map(|i| [x + step * i as f64, y + h * (1.0 - values[i])])
+            .collect();
+        v.write("test.scatter.positions", points_val(points))
+    });
+    r.operator(
+        "draw",
+        "items",
+        &["self", "test.scatter.positions"],
+        &["test.scatter.drawn"],
+    )
+    .applies(|_, _, item| of_kind(item, "test.scatter@1"))
+    .run(|v| {
+        let item = v.item()?;
+        let b: Vec<f64> = item
+            .pointer("/params/box")
+            .and_then(Value::as_array)
+            .map(|b| b.iter().filter_map(Value::as_f64).collect())
+            .unwrap_or_default();
+        let [x, y, w, h] = <[f64; 4]>::try_from(b.as_slice()).unwrap_or([0.0; 4]);
+        let points = v
+            .typed::<Points>("test.scatter.positions")?
+            .map(|p| p.0.clone())
+            .unwrap_or_default();
+        // The draw list: each point inside the box, as one instance record.
+        let drawn = points
+            .into_iter()
+            .filter(|p| p[0] >= x && p[0] <= x + w && p[1] >= y && p[1] <= y + h)
+            .collect();
+        v.write("test.scatter.drawn", points_val(drawn))
+    });
+}
+
+/// `test.scatter`: a mark set of `n` points whose positions a layout operator places from a
+/// source's column, and a draw operator that reads them.
+pub fn scatter() -> Module {
+    Module {
+        manifest: manifest("test.scatter", &[]),
+        register: register_scatter,
+    }
+}
+
+fn register_peek(r: &mut Registrar) {
+    r.kind(kind("test", "peek", vec![box_param()]), &[], "rect@1");
+    r.array("test.peek.out", "str", "item", "text", "items");
+    // It asks for the view's locale, which it didn't declare: refused, and in a test build
+    // logged.
+    r.operator("out", "items", &["self"], &["test.peek.out"])
+        .applies(|_, _, item| of_kind(item, "test.peek@1"))
+        .run(|v| {
+            let _ = v.item()?;
+            let locale = v.locale()?.to_string();
+            v.write("test.peek.out", Val::json(json!(locale)))
+        });
+}
+
+/// `test.peek`: an operator that reads what it didn't declare.
+pub fn peek() -> Module {
+    Module {
+        manifest: manifest("test.peek", &[]),
+        register: register_peek,
     }
 }

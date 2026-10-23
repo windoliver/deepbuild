@@ -270,6 +270,70 @@ impl TextSpec {
     }
 }
 
+/// What a `text@1` item is shaped from: its text (or what its bound value or counter shows),
+/// font role, size, weight, box width, alignment, and tabular figures for a bound number.
+pub fn text_spec(
+    id: &str,
+    params: &Map<String, Value>,
+    shown: Option<&Shown>,
+) -> Result<TextSpec, Refused> {
+    let path = format!("items/{id}");
+    let text = shown.map(|s| s.text.clone()).or_else(|| {
+        params
+            .get("text")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    let Some(text) = text else {
+        return refuse("bad_doc", format!("{path}/params/text"));
+    };
+    Ok(TextSpec {
+        text,
+        font: params
+            .get("font")
+            .and_then(Value::as_str)
+            .unwrap_or("body")
+            .to_string(),
+        size: num(params.get("size")).unwrap_or(13.0),
+        weight: params
+            .get("weight")
+            .and_then(Value::as_u64)
+            .and_then(|w| u16::try_from(w).ok())
+            .unwrap_or(400),
+        width: params.get("box").and_then(|b| num(b.get("w"))),
+        bound: shown.is_some() || params.get("numerals").and_then(Value::as_str) == Some("tabular"),
+        align: match params.get("align").and_then(Value::as_str) {
+            None | Some("start") => Align::Start,
+            Some("center") => Align::Center,
+            Some("end") => Align::End,
+            Some(_) => return refuse("bad_doc", format!("{path}/params/align")),
+        },
+    })
+}
+
+impl TextSpec {
+    /// The shaper's spec for this text, or `None` for a font role the shaper doesn't bundle.
+    pub fn shaper_spec(&self) -> Option<deep_text::Spec<'_>> {
+        Some(deep_text::Spec {
+            text: &self.text,
+            role: deep_text::Role::parse(&self.font)?,
+            size: self.size as f32,
+            weight: self.weight,
+            line_height: None,
+            width: self.width.map(|w| w as f32),
+            max_lines: None,
+            align: match self.align {
+                Align::Start => deep_text::Align::Start,
+                Align::Center => deep_text::Align::Center,
+                Align::End => deep_text::Align::End,
+            },
+            bound: self.bound,
+            tabular: self.bound,
+            mask: false,
+        })
+    }
+}
+
 /// One mark to draw, in logical u at zoom 1.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Mark {
@@ -1004,6 +1068,47 @@ pub struct Format {
     pub ungrouped: bool,
     /// `missing: hide`: an empty text where the reading is missing, instead of a dash.
     pub hide_missing: bool,
+    /// The view's locale's group separator and decimal mark (`group: locale`).
+    pub marks: Marks,
+}
+
+/// A locale's thousands separator and decimal mark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Marks {
+    pub group: char,
+    pub decimal: char,
+}
+
+impl Default for Marks {
+    fn default() -> Self {
+        Marks::of("en")
+    }
+}
+
+impl Marks {
+    /// The marks a BCP 47 locale writes numbers with (CLDR's latn numbering for these
+    /// languages; any other takes English's).
+    pub fn of(locale: &str) -> Marks {
+        let language = locale
+            .split(['-', '_'])
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        match language.as_str() {
+            "de" | "es" | "it" | "nl" | "pt" | "da" | "id" | "tr" => Marks {
+                group: '.',
+                decimal: ',',
+            },
+            "fr" | "nb" | "sv" | "fi" | "cs" | "pl" | "ru" | "uk" => Marks {
+                group: '\u{202f}',
+                decimal: ',',
+            },
+            _ => Marks {
+                group: ',',
+                decimal: '.',
+            },
+        }
+    }
 }
 
 impl Format {
@@ -1099,12 +1204,12 @@ impl Format {
         let mut grouped = String::new();
         for (i, c) in int.chars().enumerate() {
             if !self.ungrouped && i > 0 && (int.len() - i) % 3 == 0 {
-                grouped.push(',');
+                grouped.push(self.marks.group);
             }
             grouped.push(c);
         }
         match frac {
-            Some(frac) => format!("{grouped}.{frac}"),
+            Some(frac) => format!("{grouped}{}{frac}", self.marks.decimal),
             None => grouped,
         }
     }
@@ -1144,7 +1249,7 @@ impl Format {
         if seconds < 60.0 {
             let p = self.precision.unwrap_or(1);
             let mut text = self.digits(seconds, Some(p));
-            if self.precision.is_none() && text.ends_with(".0") {
+            if self.precision.is_none() && text.ends_with(&format!("{}0", self.marks.decimal)) {
                 text.truncate(text.len() - 2);
             }
             return format!("{text} s");
@@ -1264,12 +1369,71 @@ pub fn bound_texts(
     items: &Map<String, Value>,
     record: &Record,
 ) -> Result<BTreeMap<String, Shown>, Refused> {
+    bound_texts_in(doc, items, record, "en")
+}
+
+/// [`bound_texts`], with numbers written as `locale` writes them.
+pub fn bound_texts_in(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    record: &Record,
+    locale: &str,
+) -> Result<BTreeMap<String, Shown>, Refused> {
     let mut out = BTreeMap::new();
+    for id in bound_ids(doc, items)? {
+        let item = items.get(&id).unwrap_or(&Value::Null);
+        if let Some(shown) = bound_text(doc, &id, item, record, locale)? {
+            out.insert(id, shown);
+        }
+    }
+    Ok(out)
+}
+
+/// Every item a bound value's text targets or that is a counter, in ID order.
+fn bound_ids(doc: &Map<String, Value>, items: &Map<String, Value>) -> Result<Vec<String>, Refused> {
+    let mut ids: Vec<String> = Vec::new();
+    if let Some(bound) = doc.get("bound_values").and_then(Value::as_object) {
+        for (bid, b) in bound {
+            let (Some(Value::String(target)), Some(Value::String(_))) =
+                (b.get("target"), b.get("source"))
+            else {
+                return refuse("bad_doc", format!("bound_values/{bid}"));
+            };
+            if let ["items", id, "params", "text"] = target.split('/').collect::<Vec<_>>()[..] {
+                ids.push(id.to_string());
+            }
+        }
+    }
+    for (id, item) in items {
+        if counter_of(item).is_some() {
+            ids.push(id.clone());
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
+fn counter_of(item: &Value) -> Option<&Map<String, Value>> {
+    item.get("params")?.get("text")?.get("counter")?.as_object()
+}
+
+/// What one item shows when a bound value's text targets it or it is a counter, its numbers
+/// written as `locale` writes them; `None` for any other item. A counter's own format wins
+/// over its bound value's.
+pub fn bound_text(
+    doc: &Map<String, Value>,
+    id: &str,
+    item: &Value,
+    record: &Record,
+    locale: &str,
+) -> Result<Option<Shown>, Refused> {
     let empty = Map::new();
     let bound = doc
         .get("bound_values")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
+    let mut out = None;
     for (bid, b) in bound {
         let path = format!("bound_values/{bid}");
         let (Some(Value::String(target)), Some(Value::String(source))) =
@@ -1277,23 +1441,14 @@ pub fn bound_texts(
         else {
             return refuse("bad_doc", path);
         };
-        let format = Format::read(b.get("format"), b.get("missing"), &path)?;
-        let parts: Vec<&str> = target.split('/').collect();
-        if let ["items", id, "params", "text"] = parts.as_slice() {
-            out.insert(
-                (*id).to_string(),
-                show(doc, bid, b, &format, source, record)?,
-            );
-        }
-    }
-    for (id, item) in items {
-        let Some(Value::Object(counter)) = item
-            .get("params")
-            .and_then(|p| p.get("text"))
-            .and_then(|t| t.get("counter"))
-        else {
+        if target.as_str() != format!("items/{id}/params/text") {
             continue;
-        };
+        }
+        let mut format = Format::read(b.get("format"), b.get("missing"), &path)?;
+        format.marks = Marks::of(locale);
+        out = Some(show(doc, bid, b, &format, source, record)?);
+    }
+    if let Some(counter) = counter_of(item) {
         let path = format!("items/{id}/params/text/counter");
         let Some(b) = counter
             .get("source")
@@ -1305,14 +1460,14 @@ pub fn bound_texts(
         let Some(Value::String(source)) = b.get("source") else {
             return refuse("bad_doc", format!("{path}/source"));
         };
-        // The counter's own format wins over its bound value's.
-        let format = Format::read(
+        let mut format = Format::read(
             counter.get("format").or(b.get("format")),
             b.get("missing"),
             &path,
         )?;
+        format.marks = Marks::of(locale);
         let bid = counter.get("source").and_then(Value::as_str).unwrap_or("");
-        out.insert(id.clone(), show(doc, bid, b, &format, source, record)?);
+        out = Some(show(doc, bid, b, &format, source, record)?);
     }
     Ok(out)
 }
@@ -1727,13 +1882,37 @@ pub fn frame_planted(
     zoom: f64,
     planted: Planted,
 ) -> Result<Frame, Refused> {
-    let (frame, wants_boxes) = build(doc, items, palette, record, zoom, planted, None)?;
+    let bound = bound_texts(doc, items, record)?;
+    frame_shown(doc, items, palette, zoom, planted, &bound)
+}
+
+/// The draw list for evaluated `items`, with what each bound value and counter shows already
+/// formatted (the text module's counters, in the view's locale).
+pub fn frame_with(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    zoom: f64,
+    bound: &BTreeMap<String, Shown>,
+) -> Result<Frame, Refused> {
+    frame_shown(doc, items, palette, zoom, Planted::None, bound)
+}
+
+fn frame_shown(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    zoom: f64,
+    planted: Planted,
+    bound: &BTreeMap<String, Shown>,
+) -> Result<Frame, Refused> {
+    let (frame, wants_boxes) = build(doc, items, palette, bound, zoom, planted, None)?;
     if !wants_boxes {
         return Ok(frame);
     }
     // A span or a step by position: the first pass's boxes, then the frame drawn with them.
     let boxes = boxes_of(&frame, items);
-    Ok(build(doc, items, palette, record, zoom, planted, Some(&boxes))?.0)
+    Ok(build(doc, items, palette, bound, zoom, planted, Some(&boxes))?.0)
 }
 
 /// The frame, and whether a paint asked for boxes that `boxes` doesn't yet hold.
@@ -1741,7 +1920,7 @@ fn build(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     palette: &Palette,
-    record: &Record,
+    bound: &BTreeMap<String, Shown>,
     zoom: f64,
     planted: Planted,
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
@@ -1755,7 +1934,6 @@ fn build(
         path: "look: ground".into(),
     })?;
     let bucket = path::bucket(zoom);
-    let bound = bound_texts(doc, items, record)?;
     // Mark sets' rows across the document, before any is built (Mark set: "exceed … 16M per
     // document" it can never); the set that crosses the limit is named.
     let mut rows: u64 = 0;
@@ -2040,15 +2218,6 @@ fn build(
                 }
                 "text@1" => {
                     let shown = bound.get(id);
-                    let text = shown.map(|s| s.text.clone()).or_else(|| {
-                        params
-                            .get("text")
-                            .and_then(Value::as_str)
-                            .map(str::to_string)
-                    });
-                    let Some(text) = text else {
-                        return refuse("bad_doc", format!("{path}/params/text"));
-                    };
                     // A stale value greys out (Bound value).
                     let color_role = if shown.is_some_and(|s| s.stale) {
                         Value::String("muted".into())
@@ -2059,32 +2228,7 @@ fn build(
                     };
                     Mark::Text {
                         item: id.clone(),
-                        spec: TextSpec {
-                            text,
-                            font: params
-                                .get("font")
-                                .and_then(Value::as_str)
-                                .unwrap_or("body")
-                                .to_string(),
-                            size: num(params.get("size")).unwrap_or(13.0),
-                            weight: params
-                                .get("weight")
-                                .and_then(Value::as_u64)
-                                .and_then(|w| u16::try_from(w).ok())
-                                .unwrap_or(400),
-                            width: params.get("box").and_then(|b| num(b.get("w"))),
-                            bound: bound.contains_key(id)
-                                || params.get("numerals").and_then(Value::as_str)
-                                    == Some("tabular"),
-                            align: match params.get("align").and_then(Value::as_str) {
-                                None | Some("start") => Align::Start,
-                                Some("center") => Align::Center,
-                                Some("end") => Align::End,
-                                Some(_) => {
-                                    return refuse("bad_doc", format!("{path}/params/align"))
-                                }
-                            },
-                        },
+                        spec: text_spec(id, params, shown)?,
                         origin: pos,
                         color: role(
                             palette,

@@ -17,6 +17,7 @@ pub mod dirty;
 pub mod key;
 pub mod layout;
 pub mod look;
+pub mod modules;
 pub mod outline;
 pub mod paint;
 pub mod path;
