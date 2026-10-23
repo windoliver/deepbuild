@@ -189,18 +189,17 @@ fn write_member<'a>(
         write_string(key, out);
         out.push(b':');
     };
-    let key = path.last().map(|k| k.to_string()).unwrap_or_default();
     match with_steps(path, |p| shape.default_at(p)) {
         Some(default) => {
             let mut at = owned(path);
             let member = canonical_at(member, shape, &mut at)?;
             if canonical_at(default, shape, &mut at)? != member {
-                separate(out, first, &key);
+                separate(out, first, at.last().map_or("", String::as_str));
                 write_value(&member, shape, &mut at, out);
             }
         }
         None => {
-            separate(out, first, &key);
+            separate(out, first, path.last().map_or("", |k| k.as_ref()));
             write_canonical(member, shape, path, out)?;
         }
     }
@@ -223,13 +222,23 @@ fn write_number(n: &Number, width: Width, out: &mut Vec<u8>) {
 
 /// The revision hash: lower-case hex SHA-256 of the canonical bytes.
 pub fn revision_hash(value: &Value, shape: &dyn Shape) -> Result<String, CanonError> {
-    let bytes = canonical_bytes(value, shape)?;
-    let digest = Sha256::digest(&bytes);
-    let mut hex = String::with_capacity(64);
-    for byte in digest {
-        hex.push_str(&format!("{byte:02x}"));
+    Ok(sha256_hex(&canonical_bytes(value, shape)?))
+}
+
+/// Lower-case hex SHA-256 of `bytes`.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
+}
+
+/// `bytes` as lower-case hex.
+pub fn hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(DIGITS[usize::from(b >> 4)] as char);
+        out.push(DIGITS[usize::from(b & 15)] as char);
     }
-    Ok(hex)
+    out
 }
 
 /// The same normalization as [`canonical_bytes`], as a value: keys in sorted order, defaults

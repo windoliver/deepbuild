@@ -5,7 +5,7 @@
 
 use serde_json::{json, Value};
 
-use crate::canon::{canonical_bytes, revision_hash, CanonError, Shape, Width};
+use crate::canon::{canonical_bytes, sha256_hex, CanonError, Shape, Width};
 use crate::kinds::{parse_kind, registry, Param, Registry};
 
 use super::requires::derived_kinds;
@@ -168,7 +168,7 @@ pub fn canonical(doc: &Value) -> Result<Canonical, CanonError> {
 pub fn canonical_in(doc: &Value, kinds: &Registry) -> Result<Canonical, CanonError> {
     let shape = DocShape::new(doc, kinds);
     let bytes = canonical_bytes(doc, &shape)?;
-    let sha256 = revision_hash(doc, &shape)?;
+    let sha256 = sha256_hex(&bytes);
     Ok(Canonical {
         bytes: String::from_utf8_lossy(&bytes).into_owned(),
         sha256,

@@ -99,7 +99,7 @@ fn a_frame_after_warm_up_allocates_nothing_while_the_json_path_does() {
         everything(),
     ];
     for doc in &docs {
-        let program = Program::compile(doc).unwrap();
+        let program = Program::compile(doc.as_object().unwrap()).unwrap();
         let mut state = program.state();
         // Warm-up: the first frame.
         program.evaluate(0, Validity::Full, &mut state);
@@ -123,7 +123,7 @@ fn a_frame_after_warm_up_allocates_nothing_while_the_json_path_does() {
     }
     // The counter sees allocations: the JSON frame, which builds maps, makes some per frame.
     let doc = everything();
-    let program = Program::compile(&doc).unwrap();
+    let program = Program::compile(doc.as_object().unwrap()).unwrap();
     let per_frame = allocations(|| {
         frame(
             doc.as_object().unwrap(),

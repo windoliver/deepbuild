@@ -81,6 +81,14 @@ pub struct Startup {
 /// `registry` reply's `seal.runs` is a measurement, not the binary's word; 1 whatever frames ran.
 pub static SEAL_RUNS: AtomicU32 = AtomicU32::new(0);
 
+/// A revision's diff, its four lists, in the reply.
+pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
+    reply.insert("changed".into(), json!(diff.changed));
+    reply.insert("unchanged".into(), json!(diff.unchanged));
+    reply.insert("created".into(), json!(diff.created));
+    reply.insert("removed".into(), json!(diff.removed));
+}
+
 /// What keeps a frame from settling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hold {
@@ -775,17 +783,8 @@ impl<'a> Hub<'a> {
             }
             return Value::Object(reply);
         }
-        if let Some(Diff {
-            changed,
-            unchanged,
-            created,
-            removed,
-        }) = diff
-        {
-            reply.insert("changed".into(), json!(changed));
-            reply.insert("unchanged".into(), json!(unchanged));
-            reply.insert("created".into(), json!(created));
-            reply.insert("removed".into(), json!(removed));
+        if let Some(diff) = diff {
+            diff_reply(diff, &mut reply);
         }
         let _ = panel;
         // The checked revision becomes the session's current one; a snapshot is the session's
