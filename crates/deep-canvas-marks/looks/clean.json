@@ -9,12 +9,14 @@
     "graphite": "#1b1d22",
     "slate": "#8b8f97",
     "night": "#0b0c0e",
-    "snow": "#f2f3f5"
+    "snow": "#f2f3f5",
+    "lagoon": "#1aa3c8"
   },
   "roles": {
     "ground": "white",
     "ink": "graphite",
-    "muted": "slate"
+    "muted": "slate",
+    "accent": "lagoon"
   },
   "themes": {
     "light": {},

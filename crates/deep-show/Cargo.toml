@@ -36,6 +36,18 @@ test-two-writers = ["dep:deep-canvas-test-modules"]
 test-later-phase = ["dep:deep-canvas-test-modules"]
 test-cycle = ["dep:deep-canvas-test-modules"]
 test-missing-dep = ["dep:deep-canvas-test-modules"]
+# Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
+# operator reads the look's accent role from a static, which the canvas lint keeps out of every
+# deep-canvas* crate, so it lives in this binary.
+test-accent = []
+test-peek = ["dep:deep-canvas-test-modules"]
+test-up-1-0 = ["dep:deep-canvas-test-modules"]
+test-up-1-1 = ["dep:deep-canvas-test-modules"]
+test-nudge = ["dep:deep-canvas-test-modules"]
+test-step = ["dep:deep-canvas-test-modules"]
+test-step-renamed = ["dep:deep-canvas-test-modules"]
+test-step-cycle = ["dep:deep-canvas-test-modules"]
+test-scatter = ["dep:deep-canvas-test-modules"]
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }

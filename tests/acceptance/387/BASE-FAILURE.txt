@@ -1,0 +1,867 @@
+Base commit: a5aa0a39ff36b72b8dbd3753736cf3c7bd8b7c0a
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/387 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci.
+Every test fails for the expected reason: deep-show run answers {"ok":false,"code":"bad_input"} to a scenario holding a call the
+base lacks (eval, frames, panel, intern, resolve, batch, fixtures) or a JSON number past f64 (1e999), its registry reply has no
+operators, versions or digests, and none of this suite's test-* Cargo features exists, so cargo refuses those builds ("none of
+the selected packages contains these features"). The property tests fail on their first case for the same reasons. The
+reference-Mac gate was open (the budgets tests ran and failed on bad_input rather than skipping).
+Date: 2026-10-23T00:07:00Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/387
+
+ ❯ perturb.test.ts (7 tests | 7 failed) 37893ms
+   ❯ #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build (7)
+     × #387.f46de50b every fixture of the full build is presented and evaluated, and every operator the registry lists has a node in some fixture 1088ms
+     × #387.f46de50b each fixture session lists its perturbation targets: the six view inputs, the seed, its look tokens with accent among them, and every array its nodes write 50ms
+     × #387.f46de50b a change to any one array, table, view input, look token, seed or asset outside an operator's read set leaves its key and result byte-identical, for every node of every fixture 29ms
+     × #387.f46de50b equal keys always give byte-identical results over fuzzed sequences of edits, views and times on the fixtures (fast-check seed 3870001, 40 sequences of up to 25 clean evaluations) 16ms
+     × #387.f46de50b a planted operator that reads the look's accent role from a static passes perturbation of its declared reads and fails this, naming test.accent.tint and accent 13ms
+     × #387.f46de50b a read outside the declared set fails a test build: test.peek.out asks for the view's locale it didn't declare, and the frame fails naming the module, the operator and the read, which the access log shows 45ms
+     × #387.f46de50b in a test build every access every shipped operator makes on every fixture is one of its declared reads (or a contribution to one) 35ms
+ ❯ view.test.ts (5 tests | 5 failed) 39578ms
+   ❯ #387.f71bf834 flipping the view's locale, and separately its reduced motion, changes the keys of every operator that formats numbers, shapes text or plays motion; both renditions in one process differ; a planted key without either reuses the other's result and fails, naming the operator (5)
+     × #387.f71bf834 en → de: the operators whose result moves (formatting and shaping the number) change the key of every node they have, the plain label's included 1140ms
+     × #387.f71bf834 reduced motion off → on: the operators whose result moves (the text animator) change the key of every node they have 67ms
+     × #387.f71bf834 in one process both locale renditions and both reduced-motion renditions draw different frames, each equal to its fresh clean rendition 23ms
+     × #387.f71bf834 a planted key without the locale (key_without_locale) reuses the en result for de and fails, naming the operator 33ms
+     × #387.f71bf834 a planted key without reduced motion (key_without_reduced_motion) reuses one rendition's text-animator result for the other and fails, naming the operator 33ms
+ ❯ steps.test.ts (5 tests | 5 failed) 299ms
+   ❯ #387.ade81ba6 two stepping test canvas modules run in time order with a first at a shared time; renaming keeps the order; a planted name order fails naming the step; a mutual read at one time is refused at the seal as a cycle; every hash is the same under 8 shuffled legal orders (5)
+     × #387.ade81ba6 at 1 s, test.step.b's step reads test.step.a's count from a's step at 1 s, a's step reads b's count from b's step before 1 s, a runs first, and each counts its own steps 10ms
+     × #387.ade81ba6 renamed so b's name sorts first (a → test.step.y, b → test.step.x), the order at 1 s is the same: y first, x reading y's count from 1 s 6ms
+     × #387.ade81ba6 a planted scheduler that orders steps at one time by name (--planted orders_steps_by_name) swaps the renamed pair and fails, naming test.step.x's step at 1 s 4ms
+     × #387.ade81ba6 two modules that each read the other's count at their own step's time are refused at the seal as a cycle, naming both 3ms
+     × #387.ade81ba6 under 8 shuffled legal orders (seeds 1 to 8) every node's key and result, the step log and the frame's snapshot equal the unshuffled frame's, and each order is legal 10ms
+ ❯ positions.test.ts (3 tests | 3 failed) 143ms
+   ❯ #387.45eee1e5 a 100,000-point mark set placed by a layout operator: the draw's key takes the layout's, no pass over the positions makes it, the source column is hashed once per batch and never per frame, two histories give the same keys, and a planted key that hashes the positions fails naming the array (3)
+     × #387.45eee1e5 each batch is hashed once on arrival; no frame passes over the source column or the positions to make a key; the draw's key moves exactly when the layout's does 27ms
+     × #387.45eee1e5 the chart reached by two revision histories, each sent the same batch, gets byte-identical keys 15ms
+     × #387.45eee1e5 a planted key that hashes the positions array (key_hashes_positions) passes the history fixture and fails this test, naming test.scatter.positions 9ms
+ ❯ canonical.test.ts (3 tests | 3 failed) 28420ms
+   ❯ #387.a0eea545 a revision whose param is −0 gets the same content key and canonical bytes as one with +0, and a NaN or an infinity in a param is refused with out_of_range, naming the path (3)
+     × #387.a0eea545 a board with −0 in a rect's box, radius and at.pos and a label's at.pos has the revision hash, node keys and results of the board with +0, in one process and in two 3716ms
+     × #387.a0eea545 −0 at any of the board's zero params gives the keys of +0 (fast-check seed 3870009, 30 runs) 23ms
+     × #387.a0eea545 an infinity in a param (1e999, -1e999, or 1e39 at the f32 param size) is refused with out_of_range naming the param's path, and no revision becomes current 22ms
+ ❯ epochs.test.ts (2 tests | 2 failed) 40264ms
+   ❯ #387.18d0b377 changes made while a session was hidden all apply when it shows again, and a session re-checked after a long run rebases its epochs without missing one (2)
+     × #387.18d0b377 parity/kernel/epoch-rebase.scene: hidden revisions aren't evaluated, every frame after the panel shows again equals a clean evaluation, and the epochs rebase across the u32 wrap without missing a change 5363ms
+     × #387.18d0b377 generated runs of hides, shows, revisions and frames from an epoch start within 24 of the wrap never miss a change (fast-check seed 3870002, 30 runs) 34ms
+ ❯ upgrade.test.ts (2 tests | 2 failed) 29324ms
+   ❯ #387.a793f31b a canvas module upgrade reruns exactly the checks whose results its version keyed, and a stale interned handle from an earlier revision is refused (2)
+     × #387.a793f31b test.up 1.0.0 → 1.1.0: the check-phase nodes whose keys move are exactly those of test.up's operators and of operators that read its arrays, and every other node keeps its key and result 40ms
+     × #387.a793f31b a handle interned in revision 1 is refused with stale_handle in revision 2, for a deleted item and a kept one, while revision 2's own handles resolve 1084ms
+ ❯ history.test.ts (2 tests | 2 failed) 10663ms
+   ❯ #387.15327229 the same document reached through two different patch histories gets byte-identical content keys and cache hits, and no key contains an epoch or any other change counter (2)
+     × #387.15327229 parity/kernel/key-history.scene: the short and the long history reach one revision hash, the same keys and results at 1 s, and the second's last frame runs nothing, finding its results by key 1169ms
+     × #387.15327229 generated detours of 0 to 6 revisions to the same document, on two documents in one process and in a fresh one, give byte-identical keys (fast-check seed 3870004, 25 runs) 21ms
+ ❯ contributes.test.ts (3 tests | 3 failed) 10736ms
+   ❯ #387.27c08b66 a test canvas module that contributes to the transform moves items in its build, leaves the transform's registration and every other module's digest byte-identical, and a build without it draws the other items unchanged (3)
+     × #387.27c08b66 test.nudge.offset names the transform in contributes_to; the transform's registration, its writers, and every other module's digest and version are the same with and without test.nudge 1120ms
+     × #387.27c08b66 in the build with test.nudge its items move: dx 40 draws what a box 40 to the right with dx 0 draws, and not what the first box with dx 0 draws 3ms
+     × #387.27c08b66 a build without test.nudge seals and draws the same document's other items unchanged: the same snapshot in full and in full,test-nudge 84ms
+ ❯ budgets.test.ts (2 tests | 2 failed) 19858ms
+   ❯ #387.5e573133 budgets on the reference Mac: no allocation per frame after warm-up and under 0.1 ms of scheduler CPU per frame for 10,000 unchanged items; a frame with nothing changed runs no operator (2)
+     × #387.5e573133 a frame with nothing changed runs no operator, and after 10 warm-up frames no frame allocates 1247ms
+     × #387.5e573133 the scheduler adds under 0.1 ms of CPU per frame for the 10,000-item board (median of frames 10–69, five fresh processes after a warm-up) 124ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 34 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #387.5e573133 budgets on the reference Mac: no allocation per frame after warm-up and under 0.1 ms of scheduler CPU per frame for 10,000 unchanged items; a frame with nothing changed runs no operator > #387.5e573133 a frame with nothing changed runs no operator, and after 10 warm-up frames no frame allocates
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ frames budgets.test.ts:27:26
+ ❯ budgets.test.ts:41:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/34]⎯
+
+ FAIL  budgets.test.ts > #387.5e573133 budgets on the reference Mac: no allocation per frame after warm-up and under 0.1 ms of scheduler CPU per frame for 10,000 unchanged items; a frame with nothing changed runs no operator > #387.5e573133 the scheduler adds under 0.1 ms of CPU per frame for the 10,000-item board (median of frames 10–69, five fresh processes after a warm-up)
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ frames budgets.test.ts:27:26
+ ❯ budgets.test.ts:51:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/34]⎯
+
+ FAIL  canonical.test.ts > #387.a0eea545 a revision whose param is −0 gets the same content key and canonical bytes as one with +0, and a NaN or an infinity in a param is refused with out_of_range, naming the path > #387.a0eea545 a board with −0 in a rect's box, radius and at.pos and a label's at.pos has the revision hash, node keys and results of the board with +0, in one process and in two
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ canonical.test.ts:50:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/34]⎯
+
+ FAIL  canonical.test.ts > #387.a0eea545 a revision whose param is −0 gets the same content key and canonical bytes as one with +0, and a NaN or an infinity in a param is refused with out_of_range, naming the path > #387.a0eea545 −0 at any of the board's zero params gives the keys of +0 (fast-check seed 3870009, 30 runs)
+Error: Property failed after 1 tests
+{ seed: 3870009, path: "0", endOnFailure: true }
+Counterexample: [[false,false,true,false,false,true]]
+Shrunk 0 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ canonical.test.ts:64:8
+     62|
+     63|   it(`#387.a0eea545 −0 at any of the board's zero params gives the key…
+     64|     fc.assert(fc.property(fc.array(fc.boolean(), { minLength: ZEROS, m…
+       |        ^
+     65|       const calls = [show(SIGNED, { doc: DOC.a }), show(SIGNED, { doc:…
+     66|       const replies = run(builds.bin(FULL), { raw: signedText(calls, (…
+
+Caused by: AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+ ❯ canonical.test.ts:66:23
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2660:14
+ ❯ canonical.test.ts:64:8
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/34]⎯
+
+ FAIL  canonical.test.ts > #387.a0eea545 a revision whose param is −0 gets the same content key and canonical bytes as one with +0, and a NaN or an infinity in a param is refused with out_of_range, naming the path > #387.a0eea545 an infinity in a param (1e999, -1e999, or 1e39 at the f32 param size) is refused with out_of_range naming the param's path, and no revision becomes current
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ canonical.test.ts:79:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/34]⎯
+
+ FAIL  contributes.test.ts > #387.27c08b66 a test canvas module that contributes to the transform moves items in its build, leaves the transform's registration and every other module's digest byte-identical, and a build without it draws the other items unchanged > #387.27c08b66 test.nudge.offset names the transform in contributes_to; the transform's registration, its writers, and every other module's digest and version are the same with and without test.nudge
+AssertionError: registry: operators is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:47:96
+     45| }
+     46| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     47|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     48|   return value as JsonObject;
+     49| }
+ ❯ registry helpers.ts:282:42
+ ❯ sealed helpers.ts:294:10
+ ❯ contributes.test.ts:26:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/34]⎯
+
+ FAIL  contributes.test.ts > #387.27c08b66 a test canvas module that contributes to the transform moves items in its build, leaves the transform's registration and every other module's digest byte-identical, and a build without it draws the other items unchanged > #387.27c08b66 in the build with test.nudge its items move: dx 40 draws what a box 40 to the right with dx 0 draws, and not what the first box with dx 0 draws
+AssertionError: the binary builds: deep-show with features full,test-nudge: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-nudge failed:
++ error: none of the selected packages contains this feature: test-nudge
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ contributes.test.ts:45:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/34]⎯
+
+ FAIL  contributes.test.ts > #387.27c08b66 a test canvas module that contributes to the transform moves items in its build, leaves the transform's registration and every other module's digest byte-identical, and a build without it draws the other items unchanged > #387.27c08b66 a build without test.nudge seals and draws the same document's other items unchanged: the same snapshot in full and in full,test-nudge
+AssertionError: registry: operators is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:47:96
+     45| }
+     46| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     47|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     48|   return value as JsonObject;
+     49| }
+ ❯ registry helpers.ts:282:42
+ ❯ sealed helpers.ts:294:10
+ ❯ contributes.test.ts:63:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/34]⎯
+
+ FAIL  epochs.test.ts > #387.18d0b377 changes made while a session was hidden all apply when it shows again, and a session re-checked after a long run rebases its epochs without missing one > #387.18d0b377 parity/kernel/epoch-rebase.scene: hidden revisions aren't evaluated, every frame after the panel shows again equals a clean evaluation, and the epochs rebase across the u32 wrap without missing a change
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ play epochs.test.ts:57:19
+ ❯ epochs.test.ts:87:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/34]⎯
+
+ FAIL  epochs.test.ts > #387.18d0b377 changes made while a session was hidden all apply when it shows again, and a session re-checked after a long run rebases its epochs without missing one > #387.18d0b377 generated runs of hides, shows, revisions and frames from an epoch start within 24 of the wrap never miss a change (fast-check seed 3870002, 30 runs)
+Error: Property failed after 1 tests
+{ seed: 3870002, path: "0", endOnFailure: true }
+Counterexample: [{__proto__:null,"start":4294967295,"steps":[{"edit":{"items/r4/params/box/2":80}},{"eval":"0s"},{"eval":"0s"},{"show":true},{"hide":true},{"edit":{"items/r1/params/box/1":80}},{"hide":true},{"show":true},{"eval":"2s"},{"edit":{"items/r2/params/box/3":50}},{"eval":"2s"},{"hide":true},{"eval":"0.9s"},{"show":true},{"show":true},{"show":true},{"hide":true},{"eval":"1.2s"},{"edit":{"items/r4/params/box/3":81}},{"edit":{"items/r4/params/box/0":85}},{"eval":"0.1s"},{"hide":true},{"eval":"0.1s"},{"eval":"0.1s"},{"hide":true},{"eval":"2s"}]}]
+Shrunk 0 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ epochs.test.ts:103:8
+    101|     );
+    102|     const runs = fc.record({ start: fc.integer({ min: 2 ** 32 - 24, ma…
+    103|     fc.assert(fc.property(runs, (r) => {
+       |        ^
+    104|       // Every run ends visible with two frames, so the last changes a…
+    105|       const steps: SceneStep[] = [{ eval: '0s' }, ...r.steps, { show: …
+
+Caused by: AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+ ❯ play epochs.test.ts:57:19
+ ❯ epochs.test.ts:106:14
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2660:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/34]⎯
+
+ FAIL  history.test.ts > #387.15327229 the same document reached through two different patch histories gets byte-identical content keys and cache hits, and no key contains an epoch or any other change counter > #387.15327229 parity/kernel/key-history.scene: the short and the long history reach one revision hash, the same keys and results at 1 s, and the second's last frame runs nothing, finding its results by key
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ history.test.ts:49:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/34]⎯
+
+ FAIL  history.test.ts > #387.15327229 the same document reached through two different patch histories gets byte-identical content keys and cache hits, and no key contains an epoch or any other change counter > #387.15327229 generated detours of 0 to 6 revisions to the same document, on two documents in one process and in a fresh one, give byte-identical keys (fast-check seed 3870004, 25 runs)
+Error: Property failed after 1 tests
+{ seed: 3870004, path: "0", endOnFailure: true }
+Counterexample: [[{"items/lbl/params/text":"Settled"}],[]]
+Shrunk 0 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ history.test.ts:75:8
+     73|     };
+     74|     let reference: Evaluated | undefined;
+     75|     fc.assert(fc.property(detour, detour, (x, y) => {
+       |        ^
+     76|       const a = path(x);
+     77|       const b = path(y);
+
+Caused by: AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+ ❯ history.test.ts:78:23
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../node_modules/fast-check/lib/fast-check.js:2655:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2660:14
+ ❯ history.test.ts:75:8
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b every fixture of the full build is presented and evaluated, and every operator the registry lists has a node in some fixture
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ fixturesOf perturb.test.ts:26:21
+ ❯ shipped perturb.test.ts:56:31
+ ❯ perturb.test.ts:62:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b each fixture session lists its perturbation targets: the six view inputs, the seed, its look tokens with accent among them, and every array its nodes write
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ fixturesOf perturb.test.ts:26:21
+ ❯ shipped perturb.test.ts:56:31
+ ❯ perturb.test.ts:73:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a change to any one array, table, view input, look token, seed or asset outside an operator's read set leaves its key and result byte-identical, for every node of every fixture
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ fixturesOf perturb.test.ts:26:21
+ ❯ shipped perturb.test.ts:56:31
+ ❯ perturb.test.ts:93:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b equal keys always give byte-identical results over fuzzed sequences of edits, views and times on the fixtures (fast-check seed 3870001, 40 sequences of up to 25 clean evaluations)
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ fixturesOf perturb.test.ts:26:21
+ ❯ shipped perturb.test.ts:56:31
+ ❯ perturb.test.ts:110:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a planted operator that reads the look's accent role from a static passes perturbation of its declared reads and fails this, naming test.accent.tint and accent
+AssertionError: the binary builds: deep-show with features full,test-accent: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-accent failed:
++ error: none of the selected packages contains this feature: test-accent
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ perturb.test.ts:162:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a read outside the declared set fails a test build: test.peek.out asks for the view's locale it didn't declare, and the frame fails naming the module, the operator and the read, which the access log shows
+AssertionError: the binary builds: deep-show with features full,test-peek: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-peek failed:
++ error: none of the selected packages contains this feature: test-peek
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ perturb.test.ts:184:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/34]⎯
+
+ FAIL  perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b in a test build every access every shipped operator makes on every fixture is one of its declared reads (or a contribution to one)
+AssertionError: the binary builds: deep-show with features full,test-peek: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-peek failed:
++ error: none of the selected packages contains this feature: test-peek
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ perturb.test.ts:196:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/34]⎯
+
+ FAIL  positions.test.ts > #387.45eee1e5 a 100,000-point mark set placed by a layout operator: the draw's key takes the layout's, no pass over the positions makes it, the source column is hashed once per batch and never per frame, two histories give the same keys, and a planted key that hashes the positions fails naming the array > #387.45eee1e5 each batch is hashed once on arrival; no frame passes over the source column or the positions to make a key; the draw's key moves exactly when the layout's does
+AssertionError: the binary builds: deep-show with features full,test-scatter: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-scatter failed:
++ error: none of the selected packages contains this feature: test-scatter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ session positions.test.ts:51:30
+ ❯ positions.test.ts:72:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/34]⎯
+
+ FAIL  positions.test.ts > #387.45eee1e5 a 100,000-point mark set placed by a layout operator: the draw's key takes the layout's, no pass over the positions makes it, the source column is hashed once per batch and never per frame, two histories give the same keys, and a planted key that hashes the positions fails naming the array > #387.45eee1e5 the chart reached by two revision histories, each sent the same batch, gets byte-identical keys
+AssertionError: the binary builds: deep-show with features full,test-scatter: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-scatter failed:
++ error: none of the selected packages contains this feature: test-scatter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ histories positions.test.ts:65:30
+ ❯ positions.test.ts:86:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/34]⎯
+
+ FAIL  positions.test.ts > #387.45eee1e5 a 100,000-point mark set placed by a layout operator: the draw's key takes the layout's, no pass over the positions makes it, the source column is hashed once per batch and never per frame, two histories give the same keys, and a planted key that hashes the positions fails naming the array > #387.45eee1e5 a planted key that hashes the positions array (key_hashes_positions) passes the history fixture and fails this test, naming test.scatter.positions
+AssertionError: the binary builds: deep-show with features full,test-scatter: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-scatter failed:
++ error: none of the selected packages contains this feature: test-scatter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ histories positions.test.ts:65:30
+ ❯ positions.test.ts:91:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/34]⎯
+
+ FAIL  steps.test.ts > #387.ade81ba6 two stepping test canvas modules run in time order with a first at a shared time; renaming keeps the order; a planted name order fails naming the step; a mutual read at one time is refused at the seal as a cycle; every hash is the same under 8 shuffled legal orders > #387.ade81ba6 at 1 s, test.step.b's step reads test.step.a's count from a's step at 1 s, a's step reads b's count from b's step before 1 s, a runs first, and each counts its own steps
+AssertionError: the binary builds: deep-show with features core,test-step: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-step failed:
++ error: none of the selected packages contains this feature: test-step
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ steps.test.ts:54:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/34]⎯
+
+ FAIL  steps.test.ts > #387.ade81ba6 two stepping test canvas modules run in time order with a first at a shared time; renaming keeps the order; a planted name order fails naming the step; a mutual read at one time is refused at the seal as a cycle; every hash is the same under 8 shuffled legal orders > #387.ade81ba6 renamed so b's name sorts first (a → test.step.y, b → test.step.x), the order at 1 s is the same: y first, x reading y's count from 1 s
+AssertionError: the binary builds: deep-show with features core,test-step-renamed: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-step-renamed failed:
++ error: none of the selected packages contains this feature: test-step-renamed
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ steps.test.ts:64:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/34]⎯
+
+ FAIL  steps.test.ts > #387.ade81ba6 two stepping test canvas modules run in time order with a first at a shared time; renaming keeps the order; a planted name order fails naming the step; a mutual read at one time is refused at the seal as a cycle; every hash is the same under 8 shuffled legal orders > #387.ade81ba6 a planted scheduler that orders steps at one time by name (--planted orders_steps_by_name) swaps the renamed pair and fails, naming test.step.x's step at 1 s
+AssertionError: the binary builds: deep-show with features core,test-step-renamed: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-step-renamed failed:
++ error: none of the selected packages contains this feature: test-step-renamed
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ steps.test.ts:71:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/34]⎯
+
+ FAIL  steps.test.ts > #387.ade81ba6 two stepping test canvas modules run in time order with a first at a shared time; renaming keeps the order; a planted name order fails naming the step; a mutual read at one time is refused at the seal as a cycle; every hash is the same under 8 shuffled legal orders > #387.ade81ba6 two modules that each read the other's count at their own step's time are refused at the seal as a cycle, naming both
+AssertionError: the binary builds: deep-show with features core,test-step-cycle: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-step-cycle failed:
++ error: none of the selected packages contains this feature: test-step-cycle
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ steps.test.ts:78:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/34]⎯
+
+ FAIL  steps.test.ts > #387.ade81ba6 two stepping test canvas modules run in time order with a first at a shared time; renaming keeps the order; a planted name order fails naming the step; a mutual read at one time is refused at the seal as a cycle; every hash is the same under 8 shuffled legal orders > #387.ade81ba6 under 8 shuffled legal orders (seeds 1 to 8) every node's key and result, the step log and the frame's snapshot equal the unshuffled frame's, and each order is legal
+AssertionError: the binary builds: deep-show with features core,test-step: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-step failed:
++ error: none of the selected packages contains this feature: test-step
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ steps.test.ts:84:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/34]⎯
+
+ FAIL  upgrade.test.ts > #387.a793f31b a canvas module upgrade reruns exactly the checks whose results its version keyed, and a stale interned handle from an earlier revision is refused > #387.a793f31b test.up 1.0.0 → 1.1.0: the check-phase nodes whose keys move are exactly those of test.up's operators and of operators that read its arrays, and every other node keeps its key and result
+AssertionError: the binary builds: deep-show with features core,test-up-1-0: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-up-1-0 failed:
++ error: none of the selected packages contains this feature: test-up-1-0
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:115:107
+    113|       const entry = made.get(buildName(build));
+    114|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    115|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    116|       return entry.bin;
+    117|     },
+ ❯ one upgrade.test.ts:31:46
+ ❯ upgrade.test.ts:35:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/34]⎯
+
+ FAIL  upgrade.test.ts > #387.a793f31b a canvas module upgrade reruns exactly the checks whose results its version keyed, and a stale interned handle from an earlier revision is refused > #387.a793f31b a handle interned in revision 1 is refused with stale_handle in revision 2, for a deleted item and a kept one, while revision 2's own handles resolve
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ upgrade.test.ts:68:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/34]⎯
+
+ FAIL  view.test.ts > #387.f71bf834 flipping the view's locale, and separately its reduced motion, changes the keys of every operator that formats numbers, shapes text or plays motion; both renditions in one process differ; a planted key without either reuses the other's result and fails, naming the operator > #387.f71bf834 en → de: the operators whose result moves (formatting and shaping the number) change the key of every node they have, the plain label's included
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ fresh view.test.ts:41:19
+ ❯ view.test.ts:63:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/34]⎯
+
+ FAIL  view.test.ts > #387.f71bf834 flipping the view's locale, and separately its reduced motion, changes the keys of every operator that formats numbers, shapes text or plays motion; both renditions in one process differ; a planted key without either reuses the other's result and fails, naming the operator > #387.f71bf834 reduced motion off → on: the operators whose result moves (the text animator) change the key of every node they have
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ fresh view.test.ts:41:19
+ ❯ view.test.ts:73:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/34]⎯
+
+ FAIL  view.test.ts > #387.f71bf834 flipping the view's locale, and separately its reduced motion, changes the keys of every operator that formats numbers, shapes text or plays motion; both renditions in one process differ; a planted key without either reuses the other's result and fails, naming the operator > #387.f71bf834 in one process both locale renditions and both reduced-motion renditions draw different frames, each equal to its fresh clean rendition
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ oneProcess view.test.ts:47:19
+ ❯ view.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/34]⎯
+
+ FAIL  view.test.ts > #387.f71bf834 flipping the view's locale, and separately its reduced motion, changes the keys of every operator that formats numbers, shapes text or plays motion; both renditions in one process differ; a planted key without either reuses the other's result and fails, naming the operator > #387.f71bf834 a planted key without the locale (key_without_locale) reuses the en result for de and fails, naming the operator
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ oneProcess view.test.ts:47:19
+ ❯ view.test.ts:89:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/34]⎯
+
+ FAIL  view.test.ts > #387.f71bf834 flipping the view's locale, and separately its reduced motion, changes the keys of every operator that formats numbers, shapes text or plays motion; both renditions in one process differ; a planted key without either reuses the other's result and fails, naming the operator > #387.f71bf834 a planted key without reduced motion (key_without_reduced_motion) reuses one rendition's text-animator result for the other and fails, naming the operator
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:152:101
+    150|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    151|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    152|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    153|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    154|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ oneProcess view.test.ts:47:19
+ ❯ view.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/34]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  34 failed (34)
+   Start at  17:07:00
+   Duration  219.35s (tests 100%)
+
