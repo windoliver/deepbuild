@@ -12,12 +12,15 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{canonical_in, check_in, Issue};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
+use deep_canvas::schedule::{
+    Options, Planted as SchedulePlanted, Scheduler, Session as DocSession,
+};
 use deep_canvas::show::{
     inline_count, order_issues, stamp, truncated, unreadable_handles, whole_diff, Band, Diff,
     Scope, Writer, WriterKind,
@@ -27,6 +30,7 @@ use deep_canvas_marks::scene::Record;
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
+use crate::frames::{op_issue, overflows, unfit_issue};
 use crate::shared::{self, Clock, CommitFault, Quota, Shared};
 use crate::snapshot::{self, Drawn, Renderer, Unfit};
 
@@ -54,6 +58,12 @@ pub enum Planted {
     ReplyWithoutDigest,
     /// #305: the check reads a logic program's bytes before refusing the document.
     ReadsWasmBytes,
+    /// #387: content keys leave out the view's locale.
+    KeyWithoutLocale,
+    /// #387: content keys leave out the view's reduced motion.
+    KeyWithoutReducedMotion,
+    /// #387: `test.scatter.draw`'s key hashes the values of `test.scatter.positions`.
+    KeyHashesPositions,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -61,24 +71,15 @@ pub enum Planted {
 pub struct Startup {
     pub sealed: Sealed,
     pub seal_ms: f64,
+    /// #387: the planted scheduler that orders steps at one time by canvas-module name.
+    pub steps_by_name: bool,
+    /// A build with a test canvas module: every read every operator makes is logged.
+    pub test_build: bool,
 }
 
 /// How many times this process registered and sealed: counted where it happens, so the
 /// `registry` reply's `seal.runs` is a measurement, not the binary's word; 1 whatever frames ran.
 pub static SEAL_RUNS: AtomicU32 = AtomicU32::new(0);
-
-/// The issue a part the marks module can't draw raises: on its item when `path` names one, else
-/// on the envelope.
-pub(crate) fn unfit_issue(code: &'static str, path: String) -> Issue {
-    let what = "the marks module can't draw this";
-    match path
-        .strip_prefix("items/")
-        .and_then(|p| p.split('/').next())
-    {
-        Some(id) => Issue::error(code, id, path.clone(), Value::Null, what),
-        None => Issue::envelope(code, path, Value::Null, what),
-    }
-}
 
 /// A revision's diff, its four lists, in the reply.
 pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
@@ -192,6 +193,52 @@ pub enum Call {
     /// The sealed set as the build holds it (#305).
     Registry,
     Screen,
+    /// The sealed plan as published at `deep://schedule/<core version>` (#387).
+    Schedule,
+    /// Every canvas module's fixtures (#387).
+    Fixtures,
+    /// One frame of a document's session (#387).
+    Eval(Box<Eval>),
+    /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
+    Frames {
+        doc: String,
+        count: usize,
+        from: i64,
+        step: i64,
+    },
+    /// Shows or hides a panel from this call on.
+    Panel {
+        panel: String,
+        visible: bool,
+    },
+    /// An item's interned handle in the session's current revision.
+    Intern {
+        doc: String,
+        id: String,
+    },
+    /// The item a handle names, or `stale_handle`.
+    Resolve {
+        doc: String,
+        handle: Value,
+    },
+    /// A new batch of outside data for a document's source: `<source>.<column>` → f64 bytes.
+    Batch {
+        doc: String,
+        source: String,
+        columns: BTreeMap<String, Vec<u8>>,
+    },
+}
+
+/// One `eval` call (#387).
+pub struct Eval {
+    pub doc: String,
+    pub t: i64,
+    /// `locale` and `reduced_motion`, over the document's defaults.
+    pub view: Map<String, Value>,
+    pub clean: bool,
+    pub perturb: Option<String>,
+    pub pixels: bool,
+    pub size: Option<[u16; 2]>,
 }
 
 pub struct Scenario {
@@ -217,6 +264,10 @@ pub struct Scenario {
     pub quotas: BTreeMap<String, Quota>,
     pub clock: Option<Clock>,
     pub commit_fault: Option<CommitFault>,
+    /// Each document session's epoch counter starts here (#387: a long run without running it).
+    pub epoch_start: u32,
+    /// Ties break by a shuffle from this seed instead of by name and order (#387).
+    pub shuffle: Option<u32>,
 }
 
 /// One revision of a document (Revision).
@@ -244,6 +295,12 @@ pub struct Hub<'a> {
     pub written: BTreeMap<String, std::collections::BTreeSet<String>>,
     pub look: Look,
     pub renderer: Renderer,
+    /// The scheduler every document session shares, with its content-key cache (#387).
+    pub sched: Scheduler<'a>,
+    /// Each document's session.
+    pub sessions: BTreeMap<String, DocSession>,
+    /// Panels a `panel` call showed or hid.
+    pub panels_shown: BTreeMap<String, bool>,
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -264,6 +321,26 @@ pub fn flicks(text: &str) -> Option<i64> {
 
 impl<'a> Hub<'a> {
     pub fn new(scenario: &'a Scenario, startup: &'a Startup) -> Self {
+        let planted = SchedulePlanted {
+            key_without_locale: scenario.planted == Some(Planted::KeyWithoutLocale),
+            key_without_reduced_motion: scenario.planted == Some(Planted::KeyWithoutReducedMotion),
+            key_hashes: (scenario.planted == Some(Planted::KeyHashesPositions))
+                .then(|| "test.scatter.positions".to_string()),
+            steps_by_name: startup.steps_by_name,
+        };
+        #[allow(unused_mut)]
+        let mut sched = Scheduler::new(
+            &startup.sealed,
+            Options {
+                access_log: startup.test_build,
+                shuffle: scenario.shuffle,
+                planted,
+            },
+        );
+        #[cfg(feature = "test-accent")]
+        {
+            sched.look_hook = Some(crate::planted::look_hook);
+        }
         Hub {
             scenario,
             startup,
@@ -274,7 +351,58 @@ impl<'a> Hub<'a> {
             written: BTreeMap::new(),
             look: shipped_look(),
             renderer: Renderer::new(),
+            sched,
+            sessions: BTreeMap::new(),
+            panels_shown: BTreeMap::new(),
         }
+    }
+
+    /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
+    pub fn panel_visible(&self, panel: &str) -> bool {
+        match self.panels_shown.get(panel) {
+            Some(v) => *v,
+            None => self.scenario.panels.get(panel).is_some_and(|p| p.visible),
+        }
+    }
+
+    /// Whether a document's panel is on screen.
+    pub fn doc_visible(&self, doc: &str) -> bool {
+        self.scenario
+            .docs
+            .get(doc)
+            .is_some_and(|p| self.panel_visible(p))
+    }
+
+    /// The record's readings as the scheduler reads them, from outside the document.
+    fn readings(&self) -> BTreeMap<String, Value> {
+        self.scenario
+            .record
+            .iter()
+            .map(|(h, o)| {
+                let mut v = Map::new();
+                if let Some(x) = o.value {
+                    v.insert("value".into(), json!(x));
+                }
+                if let Some(a) = o.as_of {
+                    v.insert("as_of".into(), json!(a));
+                }
+                if let Some(s) = &o.state {
+                    v.insert("state".into(), json!(s));
+                }
+                (h.clone(), Value::Object(v))
+            })
+            .collect()
+    }
+
+    /// A new session for a document: its epochs from the scenario's start, the look's tokens
+    /// and the record's readings.
+    pub(crate) fn new_session(&self) -> DocSession {
+        let mut s = DocSession::new(
+            self.scenario.epoch_start,
+            deep_canvas_marks::modules::tokens(&self.look.light),
+        );
+        s.set_readings(self.readings());
+        s
     }
 
     /// The record as one frame reads it: every object's state and reading.
@@ -384,30 +512,27 @@ impl<'a> Hub<'a> {
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
-            Call::Registry => {
-                let sealed = &self.startup.sealed;
-                let arrays: Map<String, Value> = sealed
-                    .arrays
-                    .iter()
-                    .map(|(k, a)| {
-                        (
-                            k.clone(),
-                            json!({
-                                "owner": a.owner, "type": a.ty, "domain": a.domain,
-                                "class": a.class, "phase": a.phase,
-                            }),
-                        )
-                    })
-                    .collect();
-                json!({
-                    "build_set": sealed.build_set.name(),
-                    "state": sealed.state(),
-                    "modules": sealed.modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
-                    "arrays": arrays,
-                    "plan": sealed.plan,
-                    "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed)},
-                })
+            Call::Registry => self.registry_reply(),
+            Call::Fixtures => self.fixtures_reply(),
+            Call::Schedule => self.startup.sealed.schedule(),
+            Call::Eval(e) => self.eval(e),
+            Call::Frames {
+                doc,
+                count,
+                from,
+                step,
+            } => self.frames(doc, *count, *from, *step),
+            Call::Panel { panel, visible } => {
+                self.panels_shown.insert(panel.clone(), *visible);
+                json!({"panel": panel, "visible": visible})
             }
+            Call::Intern { doc, id } => self.intern(doc, id),
+            Call::Resolve { doc, handle } => self.resolve(doc, handle),
+            Call::Batch {
+                doc,
+                source,
+                columns,
+            } => self.batch(doc, source, columns),
             Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),
             Call::Revisions(doc) => {
                 let rows: Vec<Value> = self
@@ -452,7 +577,7 @@ impl<'a> Hub<'a> {
     pub fn bands(&self) -> Vec<BandRow> {
         let mut rows = Vec::new();
         for (doc, panel) in &self.scenario.docs {
-            let visible = self.scenario.panels.get(panel).is_some_and(|p| p.visible);
+            let visible = self.panel_visible(panel);
             if let Some(k) = self.shown(doc).filter(|_| visible) {
                 // A shared document: each writer's layer in its band.
                 let (shown, _) = self.shared[doc].at(k);
@@ -590,26 +715,30 @@ impl<'a> Hub<'a> {
                 (Some(doc), issues, diff)
             }
         };
-        // What the marks module can't draw is an issue of the revision too.
-        let mut drawn = None;
+        // A number past f64's range is refused at its path (#387).
+        if let Some(doc) = &stamped {
+            issues.extend(overflows(doc));
+        }
+        // The revision's check phases and, for a session on screen, its frame at `t`, run clean
+        // before it becomes current: what an operator can't evaluate is an issue of the revision
+        // too, naming the operator's module (#387). A read an operator didn't declare is the
+        // module's fault, not the document's, so it fails the frame and refuses nothing.
+        let visible = self.doc_visible(&show.doc);
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
         {
-            let lowered = lower_module_kinds(doc, &self.startup.sealed);
-            let map = lowered
-                .as_object()
-                .expect("a stamped document is an object");
-            match self.renderer.prepare(
-                map,
-                show.t,
-                &self.look.light,
-                self.look.status.as_ref(),
-                &self.record(),
-                &self.scenario.evidence,
-            ) {
-                Ok(d) => drawn = Some(d),
-                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
+            let (op_issues, drawing) = self.probe(doc, show.t, visible);
+            for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
+                issues.push(op_issue(i));
+            }
+            if let Some(drawing) = drawing.filter(|_| op_issues.is_empty()) {
+                if let Err(Unfit { code, path }) = self
+                    .renderer
+                    .prepare_drawing(&drawing, &self.scenario.evidence)
+                {
+                    issues.push(unfit_issue(code, path));
+                }
             }
         }
         let hash = stamped
@@ -638,7 +767,7 @@ impl<'a> Hub<'a> {
                 writer: writer.clone(),
                 hash,
                 state,
-                doc: stamped.unwrap_or(Value::Null),
+                doc: stamped.clone().unwrap_or(Value::Null),
             });
         }
         if error {
@@ -657,7 +786,24 @@ impl<'a> Hub<'a> {
         if let Some(diff) = diff {
             diff_reply(diff, &mut reply);
         }
-        self.present(show, panel.visible, drawn.as_ref(), reply)
+        let _ = panel;
+        // The checked revision becomes the session's current one; a snapshot is the session's
+        // own frame at `t`.
+        let doc = stamped.unwrap_or(Value::Null);
+        if !self.sessions.contains_key(&show.doc) {
+            let fresh = self.new_session();
+            self.sessions.insert(show.doc.clone(), fresh);
+        }
+        if let Some(session) = self.sessions.get_mut(&show.doc) {
+            session.load(&mut self.sched, &doc);
+        }
+        let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
+        let drawn = if visible && wants_pixels {
+            self.live_drawn(&show.doc, show.t)
+        } else {
+            None
+        };
+        self.present(show, visible, drawn.as_ref(), reply)
     }
 
     /// Every issue the checks raised, kept as evidence; the reply inlines them up to the read
@@ -815,29 +961,6 @@ fn read_programs(doc: &Value, evidence: &std::path::Path) {
             }
         }
     }
-}
-
-/// The document as the marks module draws it: an item of a kind a sealed canvas module
-/// registered with a core kind to draw as (`rect@1`) becomes that kind, its `box` filled with
-/// the look's ink, until the module draws its own.
-fn lower_module_kinds(doc: &Value, sealed: &Sealed) -> Value {
-    let mut out = doc.clone();
-    if let Some(items) = out.get_mut("items").and_then(Value::as_object_mut) {
-        for item in items.values_mut() {
-            let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-            let Some(draws_as) = sealed.draws_as(kind).map(str::to_string) else {
-                continue;
-            };
-            let boxed = item
-                .get("params")
-                .and_then(|p| p.get("box"))
-                .cloned()
-                .unwrap_or(Value::Null);
-            item["kind"] = json!(draws_as);
-            item["params"] = json!({"box": boxed, "paint": {"fill": {"role": "ink"}}});
-        }
-    }
-    out
 }
 
 /// One layer on screen (Band), or the card.

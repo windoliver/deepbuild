@@ -34,7 +34,8 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::evidence;
-use crate::hub::{diff_reply, unfit_issue, Body, Call, Hub, PatchCall, Planted, Show, Via};
+use crate::frames::unfit_issue;
+use crate::hub::{diff_reply, Body, Call, Hub, PatchCall, Planted, Show, Via};
 use crate::snapshot::Unfit;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
