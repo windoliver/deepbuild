@@ -1,0 +1,496 @@
+Acceptance tests for #30, run on the base commit 2ccdfd6 (no implementation of #30).
+
+Command:  PATH=$HOME/.nvm/versions/node/v24.22.0/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/30 --no-file-parallelism
+          (with CLAUDECODE and AI_AGENT unset, so Vitest uses its usual reporter)
+Node:     v24.22.0
+Vitest:   5.0.5 darwin-arm64
+Date:     2026-10-22
+Machine:  Mac15,12 (Apple M3, 16 GiB), a reference Mac
+
+Result: 15 of 15 files fail, 14 of 14 collected tests fail, nothing passes.
+
+Why each file fails, all for the expected reason:
+- added, contract, ending, hermetic, kind, mask, places, privacy, reads, record, retries, sandbox, standin
+  (13 files): "Cannot find module '../../../packages/checks-command/src/index.ts'". The command check kind
+  doesn't exist at this base, so no test in them is collected.
+- blocked.test.ts (11 tests): each fails "BLOCKED: <what it waits on>": the gate runner (#29) for AC2, AC7 (2),
+  AC8, AC9, AC10, AC14, AC17, AC19; extension slots and host (#349, #348) for AC5's `replaces`; the timing
+  check (#87) for AC19's flushed repeats.
+- budgets.test.ts (3 tests): benchmarks/budgets.json has no task command-check-count, and
+  benchmarks/command-check.mjs doesn't exist (the bench and the reference-Mac number both fail on it).
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/30/tsconfig.json
+- at this base: 15 x TS2307 (cannot find module packages/checks-command/src/index.ts) and 26 x TS7006 (implicit
+  any on callbacks whose types come from that module). No other errors.
+- against a declaration-only copy of the surface README.md defines, in a scratch mirror of the repo: clean (exit 0).
+
+Output of the run (ANSI colors stripped):
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/30
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+ ❯ budgets.test.ts (3 tests | 3 failed) 241ms
+   ❯ AC12 #30.542330be counting tests run adds under 1% to the check's time, on the reference Mac, compared with the merge base (3)
+     × AC12 the perf lane has a command-check-count task running node benchmarks/command-check.mjs, a #30 first measurement, valid against the merge base's budgets 168ms
+     × AC12 `node benchmarks/command-check.mjs` runs, exits 0 and prints the two medians 23ms
+     × AC12 on the reference Mac, counting adds under 1% to the check's time (five bench runs, by the timing rule) 48ms
+ ❯ blocked.test.ts (11 tests | 11 failed) 4ms
+   ❯ AC2 #30.5f9be4a0 a suite that runs zero tests is INVALID (the claim's half; the run's is in record.test.ts) (1)
+     × AC2 a claim whose check's run ran zero tests is INVALID, naming the check, never PASS 2ms
+   ❯ AC5 #30.47dbce22 with the command check kind replaced by a test check kind installed with `replaces`, its checks are still sandboxed (the slot's half; the kind's is in sandbox.test.ts) (1)
+     × AC5 a test check kind installed with `replaces` in place of the command check kind runs a check that still can't reach the hub's socket or write outside its declared paths 0ms
+   ❯ AC7 #30.b213a878 an overrun counts as a failed run; a run a hub restart cuts short is INCONCLUSIVE, never PASS or FAIL (the claim's half; the run's is in ending.test.ts) (2)
+     × AC7 a check whose run overran its deadline counts it as a failed run in the claim's verdict; a crash of its own is a failed run too 0ms
+     × AC7 a check run in the hub that a hub restart cuts short is kept as stopped and makes the claim INCONCLUSIVE, never PASS or FAIL 0ms
+   ❯ AC8 #30.626ffab8 a stand-in can't pass a requirement about what real users get (the claim's half; the marking is in standin.test.ts) (1)
+     × AC8 a requirement about what real users get, covered by the stand-in check, stays INCONCLUSIVE; covered by its twin, it can pass 0ms
+   ❯ AC9 #30.506a2ee0 a failure in any of the six runs while another passes makes the claim INCONCLUSIVE; a test that fails every run is FAIL (the claim's half; the runs are in added.test.ts) (1)
+     × AC9 the claim that adds the test failing only a month ahead is INCONCLUSIVE, naming the test and keeping each failing run's output; the claim whose added test fails every run is FAIL 0ms
+   ❯ AC10 #30.9c363cec `pnpm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `pnpm test` is FAIL (the claim's half; the runs are in mask.test.ts) (1)
+     × AC10 the claim on the masked check is INVALID, naming "exit status masked by `|| true`"; the claim on the bare check is FAIL 0ms
+   ❯ AC14 #30.4df04268 the FAIL names src/cart.test.ts and line 30 (the claim's half; the stored output and the failure's place are in privacy.test.ts) (1)
+     × AC14 the claim's FAIL from the cart check names src/cart.test.ts:30 0ms
+   ❯ AC17 #30.a06dc35a a test that fails and then passes on its retry is a pass and a fail on that commit, so its check is INCONCLUSIVE naming the test (the claim's half; the attempts are in retries.test.ts) (1)
+     × AC17 the claim on the retry suite's check is INCONCLUSIVE, naming "settles the order" 0ms
+   ❯ AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts; a timing check's unflushed repeat is recorded as not flushed (the claim's and #87's halves; the counts are in contract.test.ts) (2)
+     × AC19 the claim on the check that compared 40,960 of out's 4,096,000 elements is INVALID, naming out; the claim on its twin, which compared them all, counts it 0ms
+     × AC19 a timing check whose report leaves out whether a repeat's caches were flushed records that repeat as not flushed, never cold 0ms
+ ❯ added.test.ts (0 test)
+ ❯ contract.test.ts (0 test)
+ ❯ ending.test.ts (0 test)
+ ❯ hermetic.test.ts (0 test)
+ ❯ kind.test.ts (0 test)
+ ❯ mask.test.ts (0 test)
+ ❯ places.test.ts (0 test)
+ ❯ privacy.test.ts (0 test)
+ ❯ reads.test.ts (0 test)
+ ❯ record.test.ts (0 test)
+ ❯ retries.test.ts (0 test)
+ ❯ sandbox.test.ts (0 test)
+ ❯ standin.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 13 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  added.test.ts [ added.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/added.test.ts
+ ❯ added.test.ts:6:1
+      4| // INCONCLUSIVE or FAIL from these runs, are the gate runner's (#29), …
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { runAddedTests, type CommandRun } from '../../../packages/chec…
+       | ^
+      7| import { command, DAY, openWorld, outputOf, project, VITEST, type Worl…
+      8|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/27]⎯
+
+ FAIL  contract.test.ts [ contract.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/contract.test.ts
+ ❯ contract.test.ts:6:1
+      4| // the gate runner's (#29); the timing check's flushed repeats are #87…
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      7| import type { NumericContract } from '../../../packages/verdicts/src/i…
+      8| import { command, openWorld, outputOf, project, VITEST, type World } f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/27]⎯
+
+ FAIL  ending.test.ts [ ending.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/ending.test.ts
+ ❯ ending.test.ts:8:1
+      6| import { join } from 'node:path';
+      7| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      8| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      9| import { alive, command, openWorld, outputOf, project, recording, VITE…
+     10|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/27]⎯
+
+ FAIL  hermetic.test.ts [ hermetic.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/hermetic.test.ts
+ ❯ hermetic.test.ts:6:1
+      4| import { userInfo } from 'node:os';
+      5| import { afterAll, afterEach, beforeAll, describe, expect, it } from '…
+      6| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      7| import { closeListeners, command, home, httpListener, lineAfter, NODE_…
+      8|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/27]⎯
+
+ FAIL  kind.test.ts [ kind.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/kind.test.ts
+ ❯ kind.test.ts:6:1
+      4| // check kind as the kit builds them from its reference, each fail the…
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { commandCheckKind } from '../../../packages/checks-command/src…
+       | ^
+      7| import { runKit, slotKits, type CheckResult, type CheckRunnerFill, typ…
+      8| import { openWorld, type World } from './helpers.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/27]⎯
+
+ FAIL  mask.test.ts [ mask.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/mask.test.ts
+ ❯ mask.test.ts:6:1
+      4| // that variant runs too. The claim's INVALID ("exit status masked by …
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      7| import { command, needPnpm, openWorld, outputOf, project, type World }…
+      8|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/27]⎯
+
+ FAIL  places.test.ts [ places.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/places.test.ts
+ ❯ places.test.ts:7:1
+      5| // line apart from an AttributeError raised before one.
+      6| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      7| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      8| import { command, needPytest, openWorld, outputOf, project, VITEST, ty…
+      9| import { everyTestFileFailureAnAssertion } from './wrong.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/27]⎯
+
+ FAIL  privacy.test.ts [ privacy.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/privacy.test.ts
+ ❯ privacy.test.ts:6:1
+      4| import { randomBytes } from 'node:crypto';
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      7| import { command, openWorld, outputOf, project, sha256, VITEST, type W…
+      8| import { scrubsEveryPassedValue } from './wrong.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/27]⎯
+
+ FAIL  reads.test.ts [ reads.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/reads.test.ts
+ ❯ reads.test.ts:5:1
+      3| // the read set lists it, and not fixtures/unused.json, which nothing …
+      4| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      5| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      6| import { command, openWorld, outputOf, project, VITEST, type World } f…
+      7| import { readsDeclaredOnly, readsEveryFile } from './wrong.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/27]⎯
+
+ FAIL  record.test.ts [ record.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/record.test.ts
+ ❯ record.test.ts:6:1
+      4| // its own changes nothing.
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      7| import { command, needGo, needJest, needPytest, openWorld, outputOf, p…
+      8|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/27]⎯
+
+ FAIL  retries.test.ts [ retries.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/retries.test.ts
+ ❯ retries.test.ts:6:1
+      4| // naming the test is the gate runner's (#29), in blocked.test.ts.
+      5| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      6| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      7| import { command, openWorld, outputOf, project, VITEST, type World } f…
+      8|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/27]⎯
+
+ FAIL  sandbox.test.ts [ sandbox.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/sandbox.test.ts
+ ❯ sandbox.test.ts:8:1
+      6| import { join } from 'node:path';
+      7| import { afterAll, afterEach, describe, expect, it } from 'vitest';
+      8| import { runCommandCheck } from '../../../packages/checks-command/src/…
+       | ^
+      9| import { closeListeners, command, dataOf, lineAfter, openWorld, output…
+     10|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/27]⎯
+
+ FAIL  standin.test.ts [ standin.test.ts ]
+Error: Cannot find module '../../../packages/checks-command/src/index.ts' imported from <repo>/tests/acceptance/30/standin.test.ts
+ ❯ standin.test.ts:7:1
+      5| // INCONCLUSIVE) is the claim's verdict, the gate runner's (#29), in b…
+      6| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+      7| import { runCommandCheck, type CommandRun } from '../../../packages/ch…
+       | ^
+      8| import { command, openWorld, outputOf, project, VITEST, type World } f…
+      9| import { everySeededTableAStandIn } from './wrong.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/27]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blocked.test.ts > AC2 #30.5f9be4a0 a suite that runs zero tests is INVALID (the claim's half; the run's is in record.test.ts) > AC2 a claim whose check's run ran zero tests is INVALID, naming the check, never PASS
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:18:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/27]⎯
+
+ FAIL  blocked.test.ts > AC5 #30.47dbce22 with the command check kind replaced by a test check kind installed with `replaces`, its checks are still sandboxed (the slot's half; the kind's is in sandbox.test.ts) > AC5 a test check kind installed with `replaces` in place of the command check kind runs a check that still can't reach the hub's socket or write outside its declared paths
+Error: BLOCKED: installing a check kind with `replaces` needs the extension slots (#349) and the extension host (#348), which have no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:24:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/27]⎯
+
+ FAIL  blocked.test.ts > AC7 #30.b213a878 an overrun counts as a failed run; a run a hub restart cuts short is INCONCLUSIVE, never PASS or FAIL (the claim's half; the run's is in ending.test.ts) > AC7 a check whose run overran its deadline counts it as a failed run in the claim's verdict; a crash of its own is a failed run too
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:30:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/27]⎯
+
+ FAIL  blocked.test.ts > AC7 #30.b213a878 an overrun counts as a failed run; a run a hub restart cuts short is INCONCLUSIVE, never PASS or FAIL (the claim's half; the run's is in ending.test.ts) > AC7 a check run in the hub that a hub restart cuts short is kept as stopped and makes the claim INCONCLUSIVE, never PASS or FAIL
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base, and no check runs in the hub through the command check kind until it does; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/27]⎯
+
+ FAIL  blocked.test.ts > AC8 #30.626ffab8 a stand-in can't pass a requirement about what real users get (the claim's half; the marking is in standin.test.ts) > AC8 a requirement about what real users get, covered by the stand-in check, stays INCONCLUSIVE; covered by its twin, it can pass
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base; and no requirement at this base says it is about what real users get; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/27]⎯
+
+ FAIL  blocked.test.ts > AC9 #30.506a2ee0 a failure in any of the six runs while another passes makes the claim INCONCLUSIVE; a test that fails every run is FAIL (the claim's half; the runs are in added.test.ts) > AC9 the claim that adds the test failing only a month ahead is INCONCLUSIVE, naming the test and keeping each failing run's output; the claim whose added test fails every run is FAIL
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base, and which tests a claim adds or changes is the gate's to say; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:45:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/27]⎯
+
+ FAIL  blocked.test.ts > AC10 #30.9c363cec `pnpm test || true` is INVALID naming "exit status masked by `|| true`", never PASS; the bare `pnpm test` is FAIL (the claim's half; the runs are in mask.test.ts) > AC10 the claim on the masked check is INVALID, naming "exit status masked by `|| true`"; the claim on the bare check is FAIL
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base, and the core's masked-exit rule it shares with the validity gate (#29) is not built either; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/27]⎯
+
+ FAIL  blocked.test.ts > AC14 #30.4df04268 the FAIL names src/cart.test.ts and line 30 (the claim's half; the stored output and the failure's place are in privacy.test.ts) > AC14 the claim's FAIL from the cart check names src/cart.test.ts:30
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:57:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/27]⎯
+
+ FAIL  blocked.test.ts > AC17 #30.a06dc35a a test that fails and then passes on its retry is a pass and a fail on that commit, so its check is INCONCLUSIVE naming the test (the claim's half; the attempts are in retries.test.ts) > AC17 the claim on the retry suite's check is INCONCLUSIVE, naming "settles the order"
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/27]⎯
+
+ FAIL  blocked.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts; a timing check's unflushed repeat is recorded as not flushed (the claim's and #87's halves; the counts are in contract.test.ts) > AC19 the claim on the check that compared 40,960 of out's 4,096,000 elements is INVALID, naming out; the claim on its twin, which compared them all, counts it
+Error: BLOCKED: the gate runner (#29), which builds a claim from its checks' runs and has the verdict engine judge it, has no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/27]⎯
+
+ FAIL  blocked.test.ts > AC19 #30.aebc2446 the sample check is INVALID naming the output and its twin counts; a timing check's unflushed repeat is recorded as not flushed (the claim's and #87's halves; the counts are in contract.test.ts) > AC19 a timing check whose report leaves out whether a repeat's caches were flushed records that repeat as not flushed, never cold
+Error: BLOCKED: the timing check (#87), its timed repeats and the report that says whether each repeat's caches were flushed have no surface at this base; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked blocked.test.ts:12:9
+     10|
+     11| const blocked = (what: string): never => {
+     12|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+     13| };
+     14| const GATE = 'the gate runner (#29), which builds a claim from its che…
+ ❯ blocked.test.ts:72:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/27]⎯
+
+ FAIL  budgets.test.ts > AC12 #30.542330be counting tests run adds under 1% to the check's time, on the reference Mac, compared with the merge base > AC12 the perf lane has a command-check-count task running node benchmarks/command-check.mjs, a #30 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task command-check-count: expected undefined to be defined
+ ❯ budgets.test.ts:32:53
+     30|     validateBudgets(current, JSON.parse(execFileSync('/usr/bin/git', […
+     31|     const task = current.tasks.find((t) => t.id === TASK);
+     32|     expect(task, `budgets.json has a task ${TASK}`).toBeDefined();
+       |                                                     ^
+     33|     expect(task!.command).toEqual(BENCH);
+     34|     expect(task!.initialReason, 'it says why, naming issue #30').toMat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/27]⎯
+
+ FAIL  budgets.test.ts > AC12 #30.542330be counting tests run adds under 1% to the check's time, on the reference Mac, compared with the merge base > AC12 `node benchmarks/command-check.mjs` runs, exits 0 and prints the two medians
+Error: Command failed: ~/.nvm/versions/node/v24.22.0/bin/node <repo>/benchmarks/command-check.mjs
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ bench budgets.test.ts:19:15
+     17| /** One run of the bench: its JSON line, with the two medians. */
+     18| function bench(): { checkMs: number; plainMs: number } {
+     19|   const out = execFileSync(NODE, [join(REPO, BENCH[1]!)], { cwd: REPO,…
+       |               ^
+     20|   const line = JSON.parse(out) as { checkMs: unknown; plainMs: unknown…
+     21|   if (typeof line.checkMs !== 'number' || typeof line.plainMs !== 'num…
+ ❯ budgets.test.ts:38:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/27]⎯
+
+ FAIL  budgets.test.ts > AC12 #30.542330be counting tests run adds under 1% to the check's time, on the reference Mac, compared with the merge base > AC12 on the reference Mac, counting adds under 1% to the check's time (five bench runs, by the timing rule)
+Error: Command failed: ~/.nvm/versions/node/v24.22.0/bin/node <repo>/benchmarks/command-check.mjs
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/command-check.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ bench budgets.test.ts:19:15
+     17| /** One run of the bench: its JSON line, with the two medians. */
+     18| function bench(): { checkMs: number; plainMs: number } {
+     19|   const out = execFileSync(NODE, [join(REPO, BENCH[1]!)], { cwd: REPO,…
+       |               ^
+     20|   const line = JSON.parse(out) as { checkMs: unknown; plainMs: unknown…
+     21|   if (typeof line.checkMs !== 'number' || typeof line.plainMs !== 'num…
+ ❯ budgets.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/27]⎯
+
+
+ Test Files  15 failed (15)
+      Tests  14 failed (14)
+   Start at  15:14:15
+   Duration  1.49s (tests 46%, transform 33%, import 16%, worker 5%)
+
+    Isolate  15 workers spawned · ~52ms startup each (spawn + environment, per file)
+             at least ~724ms faster with isolate: false — reuses workers across files instead of one per file
+

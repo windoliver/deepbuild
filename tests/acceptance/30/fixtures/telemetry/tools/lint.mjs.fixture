@@ -1,0 +1,23 @@
+// A fixture tool that, like many command-line tools, posts usage data to a listener unless DO_NOT_TRACK=1.
+// TELEMETRY_FORCE=1 makes it post whatever DO_NOT_TRACK says: the test's proof that the listener is reachable.
+import http from 'node:http';
+
+const port = Number(process.env.TELEMETRY_PORT);
+const send = process.env.DO_NOT_TRACK !== '1' || process.env.TELEMETRY_FORCE === '1';
+if (send && port) {
+  await new Promise((resolve) => {
+    const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/usage' }, (res) => {
+      res.resume();
+      res.on('end', resolve);
+    });
+    req.on('error', (e) => {
+      console.log(`usage not sent: ${e.code}`);
+      resolve();
+    });
+    req.end('{"event":"lint"}');
+  });
+  console.log('usage sent');
+} else {
+  console.log('usage off');
+}
+console.log('lint clean');

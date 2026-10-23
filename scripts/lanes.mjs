@@ -17,7 +17,7 @@ export const testGlobs = (extension) => testPaths
 const ownLane = ['tests/acceptance/684/lean.test.ts'];
 /** Vitest files the unit lane runs one at a time, after the parallel block (see the lane). */
 const alone = ['tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/',
-  'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
+  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
   'tests/acceptance/319/budgets.test.ts'];
 
 export const checks = [
@@ -30,7 +30,8 @@ export const checks = [
     // every other file has run in parallel. The hub's files (#16) start real hubs and time their
     // sockets to 2 ms, so they too run one at a time, with nothing beside them. So does each file
     // that times an issue's frozen budget on the reference Mac (gated by environmentProblem()): #14's
-    // 5,000 appends a second fell to 3,300-4,000/s beside the parallel block and passed alone.
+    // 5,000 appends a second fell to 3,300-4,000/s beside the parallel block and passed alone. The
+    // supervisor's files (#236) too: they read the system's one sandbox log stream.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
     ['cargo', 'test', '--workspace', '--locked'],

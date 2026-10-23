@@ -1,0 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { expect, test } from 'vitest';
+
+// The test the claim adds: a trial that ends two weeks after the fixture was written. It passes on today's clock
+// and fails on a clock a month ahead.
+const { ends } = JSON.parse(readFileSync(new URL('./trial.json', import.meta.url), 'utf8')) as { ends: number };
+
+test('the trial is still open', () => {
+  console.log(`NOW ${Date.now()}`);
+  expect(Date.now()).toBeLessThan(ends);
+});

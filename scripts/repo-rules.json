@@ -22,6 +22,10 @@
           "spec": "5.9.3",
           "why": "Issue #12: the typecheck lane and the workspace builds."
         },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #30: AC3's Jest run, which the acceptance tests run from the repo's node_modules; the user approved adding it."
+        },
         "vitest": {
           "spec": "5.0.5",
           "why": "Issue #12: the unit lane's TypeScript tests."
@@ -200,11 +204,31 @@
         }
       }
     },
+    "packages/checks-command/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the check.kind@1 result shape and the read and spawn tracer every command check run loads (#314)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the scrub of a run's output by the values its environment and secrets held, before it is digested or shown."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        }
+      }
+    },
     "packages/hub/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
           "spec": "0.0.0",
           "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
+        },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
         },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
@@ -217,6 +241,10 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -241,6 +269,18 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."
+        }
+      }
+    },
+    "packages/supervisor/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
         }
       }
     },
