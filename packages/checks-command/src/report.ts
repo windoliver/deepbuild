@@ -96,12 +96,15 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
   const ran: Ran[] = [];
   const failures: Failure[] = [];
   let malformed = lines.length - all.length;
+  // Every test of a file names it: each is placed once.
+  const placed = new Map<string, string | null>();
+  const inCheckout = (file: string): string | null => { if (!placed.has(file)) placed.set(file, under(checkout, file)); return placed.get(file)!; };
   for (const l of all) {
     const retries = l.retries ?? 0;
     const shaped = typeof l === 'object' && l !== null && (l.file === null || typeof l.file === 'string') && (l.name === undefined || typeof l.name === 'string')
       && Array.isArray(l.errors) && l.errors.every((e) => typeof e === 'object' && e !== null) && Number.isSafeInteger(retries) && retries >= 0 && retries <= 1000;
     if (!shaped) { malformed += 1; continue; }
-    const file = l.file && under(checkout, l.file);
+    const file = l.file && inCheckout(l.file);
     if (l.type === 'test:pass' || l.type === 'test:fail') {
       const final: Attempt = l.type === 'test:pass' ? 'passed' : 'failed';
       const before = lastAttemptOnly ? 0 : retries;

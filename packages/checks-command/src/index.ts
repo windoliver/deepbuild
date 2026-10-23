@@ -216,7 +216,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const ran = reported.flatMap((r) => r.ran);
       const failures = reported.flatMap((r) => r.failures);
       const read = new Set<string>();
-      for (const path of reads?.lines ?? []) { const rel = under(checkout, path); if (rel) read.add(rel); }
+      for (const path of new Set(reads?.lines ?? [])) { const rel = under(checkout, path); if (rel) read.add(rel); }
       for (const t of ran) if (t.file) read.add(t.file);
       const readSet = [...read].sort();
       const counts = (output: string): { compared: number | null; largest_error: number | null } => {
