@@ -10,6 +10,7 @@ import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
 import { CHECKED, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type LearnedChange, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
+import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
 export { PROJECTIONS, testStorage };
@@ -169,8 +170,8 @@ CREATE TABLE IF NOT EXISTS lost_sessions (session TEXT PRIMARY KEY) STRICT;
 type Obj = { [key: string]: JsonValue };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID minted now: 48 bits of time, 80 of randomness. */
-function ulid(ms: number): string {
+/** A ULID minted at `ms`: 48 bits of time, 80 of randomness. */
+export function ulid(ms: number): string {
   let out = '';
   let time = BigInt(ms);
   for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
@@ -209,6 +210,8 @@ type Outcome = { ok: true; appended: Appended; prepared: Prepared; log_pos: numb
 
 class SqliteRecord implements RecordStore {
   private readonly db: Db;
+  /** Statements on `events` and `meta`, which no rebuild drops, compiled once: appends run them per event. */
+  private readonly statements = new Map<string, Statement<unknown[]>>();
   private readonly backend: Backend;
   private readonly projector: Projector;
   private readonly registry: Registry;
@@ -282,11 +285,20 @@ class SqliteRecord implements RecordStore {
     if (wasRunning) this.recover(durable);
   }
 
+  private stmt(sql: string): Statement<unknown[]> {
+    let s = this.statements.get(sql);
+    if (!s) {
+      s = this.db.prepare(sql);
+      this.statements.set(sql, s);
+    }
+    return s;
+  }
+
   /** Runs `work` in one synchronous=FULL commit, which also records how far the log is durable. */
   private full(work: () => void): void {
     this.backend.commit(this.db, 'full', () => {
       work();
-      this.db.prepare("INSERT INTO meta (key, value) VALUES ('durable', (SELECT coalesce(max(log_pos), 0) FROM events)) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run();
+      this.stmt("INSERT INTO meta (key, value) VALUES ('durable', (SELECT coalesce(max(log_pos), 0) FROM events)) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run();
     });
   }
   private commitMeta(values: Record<string, string>): void {
@@ -440,7 +452,7 @@ class SqliteRecord implements RecordStore {
     if (prepared.whole !== undefined) {
       const bytes = Buffer.from(prepared.whole, 'utf8');
       // An event the log already holds needs no store: its retry is the same event, or a conflict.
-      const found = this.db.prepare('SELECT log_pos, hash FROM events WHERE id = ?').get(input.id) as { log_pos: number; hash: string } | undefined;
+      const found = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?').get(input.id) as { log_pos: number; hash: string } | undefined;
       if (found) {
         prepared.evidence.push(sha256Hex(bytes));
         this.sealed(prepared);
@@ -482,7 +494,7 @@ class SqliteRecord implements RecordStore {
     // event, queued right behind the change so both land in one commit, and the projection never reads bytes.
     // A retry of a change already in the log isn't read again.
     let checked: Prepared | undefined;
-    if (CHECKED.has(input.kind) && !this.db.prepare('SELECT 1 FROM events WHERE id = ?').get(input.id)) {
+    if (CHECKED.has(input.kind) && !this.stmt('SELECT 1 FROM events WHERE id = ?').get(input.id)) {
       const change = prepared.data as unknown as LearnedChange;
       // The reading must be of what the change's handles name at its place in the log: while anything is queued
       // (a transcript link, a change it cites), or a link moved or a change took effect during the read, it waits
@@ -546,8 +558,8 @@ class SqliteRecord implements RecordStore {
     const outcomes: Outcome[] = [];
     try {
       this.reserve(items.length);
-      const existing = this.db.prepare('SELECT log_pos, hash FROM events WHERE id = ?');
-      const insert = this.db.prepare('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+      const existing = this.stmt('SELECT log_pos, hash FROM events WHERE id = ?');
+      const insert = this.stmt('INSERT INTO events (id, log_pos, v, ts, project_id, session_id, seq, agent, writer, actor, scope, kind, subject, data, evidence, hash, unverified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
       const write = (work: () => void) => (mode === 'full' ? this.full(work) : this.backend.commit(this.db, 'normal', work));
       write(() => {
         for (const p of items) {
