@@ -158,6 +158,16 @@ describe('expected values', () => {
   }, 300_000);
 });
 
+describe('compiled code the checkout holds', () => {
+  it('a Python file compiled from other source, never checked against it, isn\'t run in place of the source', async () => {
+    const checkout = folder({ 'cart.py': 'def total():\n    return 2\n', 'tests/test_cart.py': 'from cart import total\n\n\ndef test_total():\n    assert total() == 2\n' });
+    execFileSync('python3', ['-c', `import py_compile; py_compile.compile('cart.py', invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)`], { cwd: checkout });
+    writeFileSync(join(checkout, 'cart.py'), 'def total():\n    return 1\n');
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(r.outcome, r.output.stdout).toBe('failed');
+  }, 120_000);
+});
+
 describe('added tests', () => {
   it('Date() without new still gives text on the moved clock, and a run in which one of the added files ran no test ran nothing, naming it', async () => {
     const checkout = project({
