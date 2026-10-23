@@ -375,7 +375,7 @@ class LocalSupervisor implements Supervisor {
     const cwd = real(spec.cwd);
     const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
-    const env = { ...process.env, ...spec.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    const env = { ...(spec.only ? {} : process.env), ...spec.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
     const grant: Grant = spec.grant ?? {};
     // The profile first: a grant the sandbox can't enforce refuses the start before anything is held or recorded.
     const launch = sandboxed ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run) : { argv: spec.argv, cwd, env };
@@ -387,8 +387,10 @@ class LocalSupervisor implements Supervisor {
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
     for (const lease of leases) await this.lease('lease.acquired', spec.run, lease);
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
     r.child = child;
+    // A process that exits before reading all of its input is no error of the supervisor's.
+    child.stdin?.on('error', () => undefined);
     const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
     child.stdout!.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
     child.stderr!.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
@@ -412,6 +414,8 @@ class LocalSupervisor implements Supervisor {
     // A process that is already gone and reaped leaves nothing to track; its group's members are still found.
     const start = (await table([pid])).get(pid)?.start ?? '';
     if (start) await this.track(r, pid, start, r.token);
+    // Its input only once its process is recorded, so a crash before this point leaves a process that read nothing.
+    if (spec.input) child.stdin!.end(typeof spec.input === 'function' ? spec.input() : spec.input);
     return { run: spec.run, status: 'started', pid, pgid: pid, start, leases };
   }
 
@@ -444,6 +448,8 @@ class LocalSupervisor implements Supervisor {
     const leader = r.pgid === undefined ? undefined : procs.get(r.pgid);
     const groupOurs = leader !== undefined && r.tracked.get(leader.pid)?.start === leader.start;
     if (groupOurs) for (const p of procs.values()) if (p.pgid === r.pgid) candidates.set(p.pid, p);
+    // macOS hides a platform binary's environment (perl, sh) from `ps -E`: its own sandbox then proves it in place of its token.
+    const boxed = r.sandboxed ? new Set((await scan([markerOf(r.run)]).catch(() => new Map<string, number[]>())).get(markerOf(r.run)) ?? []) : new Set<number>();
     const proven: Proc[] = [];
     for (const p of candidates.values()) {
       const tracked = r.tracked.get(p.pid);
@@ -453,7 +459,7 @@ class LocalSupervisor implements Supervisor {
       switch (this.options.plant) {
         case 'stops-token-bearing-group-members': ok = p.pgid === r.pgid && token === r.token; break;
         case 'requires-token-in-group': ok = token === r.token; break;
-        default: ok = !tracked?.token || token === tracked.token;
+        default: ok = !tracked?.token || token === tracked.token || (token === null && boxed.has(p.pid));
       }
       if (ok) proven.push(p);
     }

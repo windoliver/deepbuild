@@ -34,6 +34,13 @@ export interface StartSpec {
   cwd: string;
   /** Added to its environment; the supervisor adds the run token, unless the caller names it as DEEP_RUN_TOKEN. */
   env?: Record<string, string>;
+  /** Its whole environment is `env` and the run token, none of the hub's own: for a caller that allowlists it (the runner, #159). */
+  only?: boolean;
+  /**
+   * Written to its stdin once its process is tracked, then stdin is closed; with none, stdin is closed from the start.
+   * A function is asked only then, and its undefined closes stdin with nothing written.
+   */
+  input?: Buffer | (() => Buffer | undefined);
   grant?: Grant;
   /** No key: any free key of that kind's pool. */
   leases?: { kind: string; key?: string }[];

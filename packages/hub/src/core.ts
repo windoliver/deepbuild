@@ -10,9 +10,11 @@ import { homedir, networkInterfaces } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openAsks } from '@deepbuild/asks';
+import { openLedger } from '@deepbuild/budget';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
@@ -63,6 +65,12 @@ export class Core {
   private supervisor!: Supervisor;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
+  /** DeepBuild's own headless jobs (#159): their hooks are theirs, never a session's. */
+  private runner!: Runner;
+  /** Hooks from a running job's folder held until the runner reads that job's session ID, by job. */
+  private readonly parked = new Map<string, Promise<void>>();
+  /** Each session a reading named a job for, once. */
+  private readonly readings = new Set<string>();
   private readonly ready: Promise<void>;
   private readonly sessions = new Map<string, Session>();
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
@@ -101,6 +109,7 @@ export class Core {
     // Each event its own commit: the durable write points a run makes depend only on the events it appends,
     // never on how many arrived together, so a cut at any one can be replayed.
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
+    if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     // A start that finds the last run still marked running records that run's stop as a crash.
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
@@ -122,6 +131,13 @@ export class Core {
       ? ((await import(pathToFileURL(this.options.host).href)) as { default: (local: Host) => Host }).default(this.supervisor)
       : this.supervisor;
     this.timers.push(setInterval(() => void this.supervisor.tick().catch(() => undefined), 1000));
+    const config = this.config();
+    const ledger = await openLedger({ record: this.record, asks, now: this.now, price: async () => null });
+    // The runner reaps or reports what a crash cut, and ticks itself.
+    this.runner = await openRunner({
+      record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env,
+      settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
+    });
     await this.replaySpool();
     await this.recoverRuns();
     await this.retain();
@@ -129,6 +145,18 @@ export class Core {
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) this.blocked = undefined; }, 250));
     for (const timer of this.timers) timer.unref();
+  }
+
+  /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
+  private config(): { loginPath: string; reservePct: number } {
+    let c: Obj = {};
+    try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
+    const runner = isObj(c.runner) ? c.runner : {};
+    const plan = isObj(c.plan) ? c.plan : {};
+    return {
+      loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
+      reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
+    };
   }
 
   private writeState(state: 'running' | 'stopped'): void {
@@ -180,7 +208,24 @@ export class Core {
     this.chain = done.catch(() => undefined);
     return done;
   }
-  private async handleHook(drafts: Draft[], meta: HookMeta, writer: string): Promise<{ settled: Promise<void> }> {
+  private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, waited = false): Promise<{ settled: Promise<void> }> {
+    const whose = await this.whose(meta, drafts.find((d) => d.seq !== undefined)?.seq);
+    if (whose.job) {
+      const settled = this.appendCore('job.event', { job: whose.job, event: meta.event });
+      settled.catch(() => undefined);
+      return { settled };
+    }
+    if (whose.wait && !waited) {
+      // Held, not queued: the hooks behind it go on; it is read again once its job's session ID is known.
+      const settled = this.park(whose.wait).then(() => this.queue(() => this.handleHook(drafts, meta, writer, true))).then(({ settled: s }) => s);
+      settled.catch(() => undefined);
+      return { settled };
+    }
+    if (whose.reading && !this.readings.has(`${meta.session}\0${whose.reading.job}`)) {
+      this.readings.add(`${meta.session}\0${whose.reading.job}`);
+      const ts = this.now();
+      await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: whose.reading.text } }).catch(() => undefined);
+    }
     const verified = await this.verify(meta);
     const session = this.sessions.get(meta.session);
     if (session && (verified || this.options.plant === 'ends-binding')) {
@@ -217,6 +262,41 @@ export class Core {
     });
     settled.catch(() => undefined);
     return { settled };
+  }
+
+  /**
+   * Whose a hook is: a job's, when its session ID is the one the runner read from that job's own output and it was
+   * sent inside the job's run; held, when it comes from a running job's folder before that ID is read; otherwise
+   * the session's own, with a reading when it only looks like a job's.
+   */
+  private async whose(meta: HookMeta, seq: string | undefined): Promise<{ job?: string; wait?: string; reading?: { job: string; text: string } }> {
+    const jobs = await this.runner.list();
+    const at = seq ? Number(BigInt(seq) / 1_000_000n) : Date.now();
+    const during = (j: JobRecord) => j.ran !== undefined && at >= j.ran.from && (j.ran.to === undefined || at <= j.ran.to);
+    const own = jobs.find((j) => meta.session && j.session === meta.session && during(j));
+    if (own) return { job: own.job };
+    const there = jobs.find((j) => meta.cwd && (meta.cwd === j.folder || isUnder(meta.cwd, j.folder)));
+    if (there && there.session === undefined && (there.state === 'running' || there.state === 'stopping')) return { wait: there.job };
+    const resumed = jobs.find((j) => meta.session && j.session === meta.session);
+    if (resumed) return { reading: { job: resumed.job, text: `It resumes the session ID of DeepBuild's job ${resumed.job}, which it is not: it is judged as your own session.` } };
+    if (there) return { reading: { job: there.job, text: `It works in the folder of DeepBuild's job ${there.job} (${there.folder}), which it is not: it is judged as your own session.` } };
+    return {};
+  }
+  /** Resolves once the runner has read the job's session ID, or the job has ended without one. */
+  private park(job: string): Promise<void> {
+    let parked = this.parked.get(job);
+    if (!parked) {
+      parked = (async () => {
+        for (;;) {
+          const rec = await this.runner.status(job).catch(() => undefined);
+          if (!rec || rec.session !== undefined || (rec.state !== 'running' && rec.state !== 'stopping')) return;
+          await new Promise((done) => setTimeout(done, 50));
+        }
+      })();
+      this.parked.set(job, parked);
+      void parked.finally(() => this.parked.delete(job));
+    }
+    return parked;
   }
 
   /** A process's start time, or undefined when it can't be read. Read in this worker, never on the event loop. */
@@ -290,6 +370,11 @@ export class Core {
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
+      case 'job.submit': return this.runner.submit(params.spec as JobSpec);
+      case 'job.status': return this.runner.status(String(params.job));
+      case 'job.list': return { jobs: await this.runner.list() };
+      case 'job.output': return { stdout: await this.runner.output(String(params.job)) };
+      case 'windows.report': return this.runner.report(params as unknown as WindowReport).then(() => ({ reported: true }));
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
   }
@@ -679,10 +764,37 @@ export class Core {
     }
     await this.chain;
     for (const { stop } of this.runs.values()) stop();
+    // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.
+    const jobs = await this.runner.list().catch(() => [] as JobRecord[]);
+    await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
+    await this.runner.close();
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
     await this.supervisor.close();
     await this.record.close();
     this.writeState('stopped');
   }
+}
+
+/**
+ * The record, killed with SIGKILL right after the append a test names (DEEP_HUB_TEST_CRASH): job.recorded, once a
+ * job is recorded and before anything of it starts; job.started, once a job's process is tracked and before its
+ * prompt is written. Only tests set it.
+ */
+function crashing(record: RecordStore, point: string): RecordStore {
+  const jobs = new Set<string>();
+  const append: RecordStore['append'] = async (connection, input) => {
+    const event = await record.append(connection, input);
+    const run = isObj(input.data) ? String(input.data.job ?? input.data.run) : '';
+    if (input.kind === 'job.recorded') jobs.add(run);
+    if ((point === 'job.recorded' && input.kind === 'job.recorded') || (point === 'job.started' && input.kind === 'process.tracked' && jobs.has(run))) process.kill(process.pid, 'SIGKILL');
+    return event;
+  };
+  return new Proxy(record, {
+    get: (target, key) => {
+      if (key === 'append') return append;
+      const value = Reflect.get(target, key, target) as unknown;
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
 }

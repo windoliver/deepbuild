@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "job.recorded",
+  "subject": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "job": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "kind": "draft",
+    "agent": "claude-code",
+    "account": "0a0a0a0a-1111-4222-8333-444444444444",
+    "folder": "/opt/deepbuild/jobs/01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "prompt": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca",
+    "waiting": [
+      "claim:01K74FX2B4D6F8H0K2M4P6R8T0"
+    ]
+  }
+}
