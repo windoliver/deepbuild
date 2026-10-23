@@ -197,6 +197,32 @@ function checkDeps(files, listed) {
       }
     }
   }
+  // A Lean toolchain pin and a Lake package's requires are dependencies too (#684): the pin by its release, each
+  // require by everything its entry says.
+  for (const manifest of files.filter((path) => ['lean-toolchain', 'lakefile.toml', 'lakefile.lean'].includes(posix.basename(path)))) {
+    let text;
+    try {
+      text = readFileSync(join(root, manifest), 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') continue;
+      unread.add(manifest);
+      report('BLOCKED', 'deps', `${manifest} cannot be read (${error.code})`, fixes.read);
+      continue;
+    }
+    read.add(manifest);
+    if (posix.basename(manifest) === 'lean-toolchain') {
+      const pin = text.split('\n')[0].trim(), at = pin.lastIndexOf(':');
+      declared.set(JSON.stringify([manifest, 'toolchain', at < 0 ? pin : pin.slice(0, at)]), at < 0 ? '' : pin.slice(at + 1));
+    } else if (manifest.endsWith('.toml')) {
+      for (const block of text.split(/^\[\[require\]\]\s*$/m).slice(1)) {
+        const entry = block.split(/^\[/m)[0].trim().split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('#'));
+        const name = entry.find((line) => /^name\s*=/.test(line))?.replace(/^name\s*=\s*/, '').replace(/"/g, '') ?? '(unnamed)';
+        declared.set(JSON.stringify([manifest, 'require', name]), entry.filter((line) => !/^name\s*=/.test(line)).join(' '));
+      }
+    } else {
+      for (const m of text.matchAll(/^require\s+"?([^\s"]+)"?(.*)$/gm)) declared.set(JSON.stringify([manifest, 'require', m[1]]), m[2].trim());
+    }
+  }
   if (!packageFiles && !crates && !results.slice(before).length) return report('INVALID', 'deps', 'no package.json or Cargo.toml was read', 'Run this from the repository root.');
   const allowed = new Map();
   for (const [manifest, sections] of Object.entries(listed))

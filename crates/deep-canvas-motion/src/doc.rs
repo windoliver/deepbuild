@@ -328,10 +328,7 @@ fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), R
 }
 
 /// Reads a document's motion.
-pub fn read(doc: &Value) -> Result<Motion, Refused> {
-    let Value::Object(doc) = doc else {
-        return refuse("bad_doc", "");
-    };
+pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     let transport_map = match doc.get("transport") {
         None | Some(Value::Null) => None,
         Some(Value::Object(t)) => Some(t),
@@ -798,13 +795,15 @@ fn parents_of(doc: &Map<String, Value>) -> Result<Vec<(String, String)>, Refused
         }
     }
     edges.sort();
-    // A child is ready once its parent is no remaining edge's child.
+    // A child is ready once its parent is no remaining edge's child. The edges stay sorted by
+    // child (one parent each), so that is a binary search.
     let mut ordered: Vec<(String, String)> = Vec::with_capacity(edges.len());
     while !edges.is_empty() {
-        let (ready, waiting): (Vec<_>, Vec<_>) = edges
-            .iter()
-            .cloned()
-            .partition(|(_, parent)| !edges.iter().any(|(child, _)| child == parent));
+        let (ready, waiting): (Vec<_>, Vec<_>) = edges.iter().cloned().partition(|(_, parent)| {
+            edges
+                .binary_search_by(|(child, _)| child.as_str().cmp(parent))
+                .is_err()
+        });
         if ready.is_empty() {
             return refuse("parent_cycle", format!("items/{}/parent", edges[0].0));
         }

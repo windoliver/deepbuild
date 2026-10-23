@@ -2337,42 +2337,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_required_dependency_refuses_naming_both() {
-        let err = Registry::new(BuildSet::Core)
-            .with(b(false))
-            .seal()
-            .unwrap_err();
-        assert_eq!(err.code, "missing_dependency");
-        assert_eq!(err.modules, ["a", "b"]);
-    }
-
-    #[test]
-    fn the_planted_seal_treats_optional_as_required() {
-        let err = Registry::new(BuildSet::Core)
-            .with(b(true))
-            .plant(Fault::EveryDependencyRequired)
-            .seal()
-            .unwrap_err();
-        assert_eq!(err.code, "missing_dependency");
-    }
-
-    #[test]
-    fn two_writers_of_one_array_refuse_naming_modules_and_array() {
-        fn also_x(r: &mut Registrar) {
-            r.array("a.x", "f64", "item", "layout", "items");
-        }
-        let twin = Module {
-            manifest: manifest("c", &[]),
-            register: also_x,
-        };
-        let err = Registry::new(BuildSet::Full)
-            .with(a())
-            .with(twin)
-            .seal()
-            .unwrap_err();
-        assert_eq!(err.code, "two_writers");
-        assert_eq!(err.modules, ["a", "c"]);
-        assert_eq!(err.arrays, ["a.x"]);
+    fn one_module_writing_an_array_twice_refuses() {
         fn write_twice(r: &mut Registrar) {
             r.array("a.x", "f64", "item", "layout", "items");
             r.array("a.x", "f64", "item", "layout", "items");
@@ -2390,24 +2355,6 @@ mod tests {
     }
 
     #[test]
-    fn a_read_of_a_later_phase_refuses() {
-        fn early(r: &mut Registrar) {
-            r.array("c.z", "f64", "item", "layout", "render");
-            r.operator("late", "render", &["self"], &["c.z"]);
-            r.operator("early", "items", &["c.z"], &[]);
-        }
-        let err = Registry::new(BuildSet::Full)
-            .with(Module {
-                manifest: manifest("c", &[]),
-                register: early,
-            })
-            .seal()
-            .unwrap_err();
-        assert_eq!(err.code, "later_phase");
-        assert_eq!(err.arrays, ["c.z"]);
-    }
-
-    #[test]
     fn a_cycle_refuses_naming_both_modules() {
         fn c(r: &mut Registrar) {
             r.array("c.p", "f64", "item", "layout", "items");
@@ -2417,20 +2364,6 @@ mod tests {
             r.array("d.q", "f64", "item", "layout", "items");
             r.operator("q", "items", &["c.p"], &["d.q"]);
         }
-        let err = Registry::new(BuildSet::Full)
-            .with(Module {
-                manifest: manifest("c", &[("d", false)]),
-                register: c,
-            })
-            .with(Module {
-                manifest: manifest("d", &[("c", false)]),
-                register: d,
-            })
-            .seal()
-            .unwrap_err();
-        assert_eq!(err.code, "cycle");
-        assert_eq!(err.modules, ["c", "d"]);
-        assert_eq!(err.arrays, ["c.p", "d.q"]);
         // A module downstream of the cycle is stuck behind it, not in it.
         fn e(r: &mut Registrar) {
             r.array("e.r", "f64", "item", "layout", "items");

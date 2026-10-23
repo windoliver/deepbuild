@@ -1,0 +1,15 @@
+import { expect, test } from 'vitest';
+import { totalOf } from '../src/cart';
+
+test('an empty cart totals nothing', () => {
+  console.log('cart says hello');
+  expect(totalOf([])).toBe(0);
+});
+
+test('adds the prices', () => {
+  expect(totalOf([1, 2, 3])).toBe(6);
+});
+
+test('applies the bulk discount', () => {
+  expect(totalOf([10, 10, 10])).toBe(27);
+});
