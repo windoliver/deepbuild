@@ -222,6 +222,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
         "fixtures" => return Some(Call::Fixtures),
+        "schedule" => return Some(Call::Schedule),
         "eval" => {
             let view = match c.get("view") {
                 None => Map::new(),
@@ -853,6 +854,34 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&evidence);
+    }
+
+    /// #387: the sealed plan published at `deep://schedule/<core version>` equals its committed
+    /// snapshot for every build set, so a change to the plan is a reviewed change to a file.
+    #[test]
+    fn the_published_schedule_matches_its_committed_snapshot() {
+        let snapshots = [
+            (BuildSet::Core, include_str!("../schedule/core.json")),
+            (BuildSet::R1, include_str!("../schedule/r1.json")),
+            (BuildSet::R2, include_str!("../schedule/r2.json")),
+            (BuildSet::Full, include_str!("../schedule/full.json")),
+        ];
+        for (set, snapshot) in snapshots {
+            let mut registry = Registry::new(set);
+            for module in modules() {
+                registry = registry.with(module);
+            }
+            let published = registry.seal().expect("the shipped set seals").schedule();
+            let committed: Value = serde_json::from_str(snapshot).expect("the snapshot is JSON");
+            assert_eq!(
+                published,
+                committed,
+                "the {} schedule drifted from crates/deep-show/schedule/{}.json:\n{}",
+                set.name(),
+                set.name(),
+                serde_json::to_string_pretty(&published).unwrap_or_default()
+            );
+        }
     }
 
     #[test]

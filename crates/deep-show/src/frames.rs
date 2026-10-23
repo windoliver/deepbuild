@@ -126,7 +126,7 @@ impl<'a> Hub<'a> {
             "arrays": arrays,
             "operators": operators,
             "plan": sealed.plan,
-            "schedule": format!("deep://schedule/{}", deep_canvas::registry::core_name()),
+            "schedule": {"uri": sealed.schedule_uri(), "sha256": deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(&sealed.schedule()))},
             "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed)},
         })
     }
@@ -208,7 +208,7 @@ impl<'a> Hub<'a> {
             .collect();
         let report = &evaluated.report;
         let mut reply = json!({
-            "outcome": "evaluated",
+            "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
             "rev": rev,
             "t": e.t,
             "epoch": evaluated.epoch(),
