@@ -165,6 +165,47 @@ pub fn arc(center: [f64; 2], r: f64, inner_r: f64, from: f64, to: f64, close: Cl
     verbs
 }
 
+/// A whole circle as an outline from 0°, closed; with `inner_r` above 0 a ring, its inner circle
+/// running the other way.
+pub fn circle(center: [f64; 2], r: f64, inner_r: f64) -> Vec<Verb> {
+    let mut verbs = vec![Verb::Move(at(center, r, 0.0))];
+    arc_cubics(center, r, 0.0, 360.0, &mut verbs);
+    verbs.push(Verb::Close);
+    if inner_r > 0.0 {
+        verbs.push(Verb::Move(at(center, inner_r, 360.0)));
+        arc_cubics(center, inner_r, 360.0, 0.0, &mut verbs);
+        verbs.push(Verb::Close);
+    }
+    verbs
+}
+
+/// `rect@1`'s box `[x, y, w, h]` as an outline from its top left corner, clockwise on screen, its
+/// corners rounded by `radius`.
+pub fn rect([x, y, w, h]: [f64; 4], radius: f64) -> Vec<Verb> {
+    let r = radius.clamp(0.0, w.min(h) / 2.0);
+    if r == 0.0 {
+        return vec![
+            Verb::Move([x, y]),
+            Verb::Line([x + w, y]),
+            Verb::Line([x + w, y + h]),
+            Verb::Line([x, y + h]),
+            Verb::Close,
+        ];
+    }
+    let mut verbs = vec![Verb::Move([x + r, y])];
+    for (corner, from) in [
+        ([x + w - r, y + r], -90.0),
+        ([x + w - r, y + h - r], 0.0),
+        ([x + r, y + h - r], 90.0),
+        ([x + r, y + r], 180.0),
+    ] {
+        verbs.push(Verb::Line(at(corner, r, from)));
+        arc_cubics(corner, r, from, from + 90.0, &mut verbs);
+    }
+    verbs.push(Verb::Close);
+    verbs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

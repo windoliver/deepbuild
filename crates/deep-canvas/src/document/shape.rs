@@ -58,20 +58,21 @@ fn defaults() -> Defaults {
     }
 }
 
-/// The shape of one document: params are looked up by each item's `kind` in the document. The
-/// registry and the defaults are built with the shape, since the lint refuses a static.
+/// The shape of one document: params are looked up by each item's `kind` in the kind registry
+/// of the build that reads it (the core's own, or a sealed set's with its modules' kinds), so
+/// one document has one canonical form per build. The defaults are built with the shape, since
+/// the lint refuses a static.
 pub struct DocShape<'a> {
     doc: &'a Value,
-    registry: Registry,
+    registry: &'a Registry,
     defaults: Defaults,
     /// `requires.kinds` as the document's fields need it: written so, it is a default.
     kinds: Value,
 }
 
 impl<'a> DocShape<'a> {
-    pub fn new(doc: &'a Value) -> Self {
-        let registry = registry();
-        let kinds = json!(derived_kinds(doc, &registry));
+    pub fn new(doc: &'a Value, registry: &'a Registry) -> Self {
+        let kinds = json!(derived_kinds(doc, registry));
         DocShape {
             doc,
             registry,
@@ -157,9 +158,15 @@ pub struct Canonical {
     pub sha256: String,
 }
 
-/// The canonical form of `doc` under its own shape.
+/// The canonical form of `doc` under its own shape, by the core's own kinds.
 pub fn canonical(doc: &Value) -> Result<Canonical, CanonError> {
-    let shape = DocShape::new(doc);
+    canonical_in(doc, &registry())
+}
+
+/// The canonical form of `doc` under its own shape, by the kinds of the build that reads it
+/// (a sealed set's `kinds()`), so a module kind's param widths and defaults count.
+pub fn canonical_in(doc: &Value, kinds: &Registry) -> Result<Canonical, CanonError> {
+    let shape = DocShape::new(doc, kinds);
     let bytes = canonical_bytes(doc, &shape)?;
     let sha256 = revision_hash(doc, &shape)?;
     Ok(Canonical {

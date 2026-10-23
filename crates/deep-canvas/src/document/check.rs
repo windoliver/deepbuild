@@ -12,7 +12,10 @@ use super::{
 use crate::grammar::{
     forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
 };
-use crate::kinds::{lookup, parse_required, registry, Entry, Lookup, ParamType, Registry, Version};
+use crate::kinds::{
+    lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
+};
+use crate::registry::{self, core_name, Range, Sealed};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -36,11 +39,17 @@ pub struct CheckResult {
     pub draws: Vec<String>,
     /// The document as the check read it: migrated, skipped fields dropped, literals converted.
     pub lowered: Value,
+    /// `core@<version>` of the build that checked (Registry and seal).
+    pub core: String,
+    /// The module-set digest of that build.
+    pub set_digest: String,
 }
 
 impl CheckResult {
     pub fn to_json(&self) -> Value {
         json!({
+            "core": self.core,
+            "set_digest": self.set_digest,
             "ok": self.ok,
             "issues": self.issues.iter().map(Issue::to_json).collect::<Vec<_>>(),
             "notices": self.notices.iter().map(Notice::to_json).collect::<Vec<_>>(),
@@ -50,21 +59,39 @@ impl CheckResult {
     }
 }
 
-/// Checks `doc`.
+/// Checks `doc` in the core's own build.
 pub fn check(doc: &Value) -> CheckResult {
-    check_with(doc, &registry())
+    check_in(doc, &registry::core())
 }
 
-/// Checks `doc` as a build whose kinds are `registry`'s, as an earlier release with an older
-/// minor of some kind reads it (Document envelope: `requires`).
-pub fn check_with(doc: &Value, registry: &Registry) -> CheckResult {
+/// Checks `doc` in the build `sealed` describes: a document that needs a canvas module the
+/// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
+/// refused with `module_missing` naming the module.
+pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
+    check_by(doc, sealed, &sealed.kinds())
+}
+
+/// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
+/// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
+pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
+    check_by(doc, &registry::core(), kinds)
+}
+
+/// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`.
+fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
     let mut lowered = doc.clone();
 
     check_envelope(doc, &mut issues);
-    let required = required_minors(doc, &mut issues);
+    let required = required_minors(doc, sealed, &mut issues);
+    // The canvas modules the document declares, which every module kind it uses must be among.
+    let declared: BTreeSet<String> = member(doc, "requires")
+        .and_then(|r| member(r, "modules"))
+        .and_then(as_object)
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
     let layer_ids = check_layers(doc, &mut issues);
     let item_ids: BTreeSet<String> = member(doc, "items")
         .and_then(as_object)
@@ -89,14 +116,16 @@ pub fn check_with(doc: &Value, registry: &Registry) -> CheckResult {
         None => {}
         Some(Value::Object(items)) => {
             for (key, item) in items.iter_mut() {
-                migrate_item(key, item, &mut notices, registry);
+                migrate_item(key, item, &mut notices, kinds);
             }
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
                 item_ids: &item_ids,
                 parents: &parents,
                 required: &required,
-                registry,
+                declared: &declared,
+                sealed,
+                kinds,
             };
             for (key, item) in items.iter_mut() {
                 if check_item(key, item, &ctx, &mut issues, &mut notices) {
@@ -113,8 +142,8 @@ pub fn check_with(doc: &Value, registry: &Registry) -> CheckResult {
     }
 
     check_id_maps(&lowered, &mut issues);
-    check_targets(&lowered, "channels", false, &mut issues);
-    check_targets(&lowered, "bound_values", true, &mut issues);
+    check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
+    check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
     super::rules::check(&lowered, &mut issues);
 
     sort_issues(&mut issues);
@@ -127,6 +156,8 @@ pub fn check_with(doc: &Value, registry: &Registry) -> CheckResult {
         notices,
         draws,
         lowered,
+        core: core_name(),
+        set_digest: sealed.set_digest.clone(),
     }
 }
 
@@ -137,11 +168,13 @@ pub fn check_with(doc: &Value, registry: &Registry) -> CheckResult {
 /// document of only them and what they read (their ancestors, the items their params name and the
 /// camera); every other item keeps its issues. `None` when a full check is needed: the document
 /// holds entries of other maps keyed by ID, which read items by path. A patch that reached
-/// beyond items (a layer added) takes a full check, which the caller runs.
+/// beyond items (a layer added) takes a full check, which the caller runs. Checked in the build
+/// `sealed` describes, as [`check_in`] checks.
 pub fn recheck(
     doc: &Value,
     prev_issues: &[Issue],
     changed: &BTreeSet<String>,
+    sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
     let maps_empty = ID_MAPS
@@ -204,7 +237,7 @@ pub fn recheck(
         .filter_map(|id| Some((id.clone(), items.get(id)?.clone())))
         .collect();
     reduced.insert("items".into(), Value::Object(subset));
-    let fresh = check(&Value::Object(reduced)).issues;
+    let fresh = check_in(&Value::Object(reduced), sealed).issues;
     let touches = |i: &Issue| i.ids.iter().any(|id| affected.contains(id));
     let mut out: Vec<Issue> = prev_issues
         .iter()
@@ -353,7 +386,7 @@ fn check_envelope(doc: &Value, issues: &mut Vec<Issue>) {
 /// {canvas module → semver range}, preview: [name@major]}`) checked as a closed object, and
 /// `requires.kinds` read: the highest minor the document requires of each kind at each major,
 /// keyed `family.name@major`; a minor is a schema of one major, so it says nothing about another.
-fn required_minors(doc: &Value, issues: &mut Vec<Issue>) -> BTreeMap<String, u32> {
+fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTreeMap<String, u32> {
     let mut out = BTreeMap::new();
     let Some(requires) = member(doc, "requires") else {
         return out;
@@ -380,12 +413,52 @@ fn required_minors(doc: &Value, issues: &mut Vec<Issue>) -> BTreeMap<String, u32
             "modules" => match as_object(value) {
                 Some(modules) => {
                     for (module, range) in modules {
-                        if !range.is_string() {
+                        // A key that is no module name is the document's fault, not a
+                        // module this build lacks.
+                        if !registry::well_named(module) {
+                            // An empty key has no path segment of its own.
+                            let (at, what) = if module.is_empty() {
+                                (path.clone(), "has an empty module name")
+                            } else {
+                                (format!("{path}/{module}"), "not a module name")
+                            };
+                            issues.push(Issue::envelope("out_of_range", at, range.clone(), what));
+                            continue;
+                        }
+                        let parsed = range.as_str().and_then(Range::parse);
+                        let Some(parsed) = parsed else {
                             issues.push(Issue::envelope(
                                 "out_of_range",
                                 format!("{path}/{module}"),
                                 range.clone(),
                                 "not a version range",
+                            ));
+                            continue;
+                        };
+                        // An absent module is `module_missing` (the check is BLOCKED); a
+                        // present one at a version outside the range is the document's
+                        // fault, `out_of_range`.
+                        if !sealed.satisfies(module, &parsed) {
+                            let (code, what) = match sealed.module(module) {
+                                None => (
+                                    "module_missing",
+                                    format!(
+                                        "the document requires the {module} module, which this build lacks"
+                                    ),
+                                ),
+                                Some(m) => (
+                                    "out_of_range",
+                                    format!(
+                                        "the document requires the {module} module at {parsed}; this build has {}",
+                                        m.version
+                                    ),
+                                ),
+                            };
+                            issues.push(Issue::envelope(
+                                code,
+                                format!("{path}/{module}"),
+                                range.clone(),
+                                &what,
                             ));
                         }
                     }
@@ -594,7 +667,9 @@ struct ItemContext<'a> {
     item_ids: &'a BTreeSet<String>,
     parents: &'a BTreeMap<String, String>,
     required: &'a BTreeMap<String, u32>,
-    registry: &'a Registry,
+    declared: &'a BTreeSet<String>,
+    sealed: &'a Sealed,
+    kinds: &'a crate::kinds::Registry,
 }
 
 /// Checks one lowered item in place; true when it draws.
@@ -635,10 +710,43 @@ fn check_item(
         ));
         return false;
     };
+    // A kind of a canvas module this build lacks is refused, naming the module, and nothing of
+    // the item is read past its kind: a logic program's bytes, for one, are never opened. Text
+    // outside the kind grammar is no module's kind; the lookup below refuses it.
+    if let Some((name, _)) = parse_kind(&text) {
+        if let Some(module) = ctx.sealed.missing_for_kind(&name) {
+            issues.push(Issue::error(
+                "module_missing",
+                key,
+                at("kind"),
+                json!(text),
+                &format!(
+                    "kind `{text}` is evaluated by the {module} module, which this build lacks"
+                ),
+            ));
+            return false;
+        }
+        // A document declares the canvas modules its kinds need (Document envelope), so a
+        // build without the module has the name to refuse with.
+        if let Some(module) = ctx.sealed.module_of_kind(&name) {
+            if !ctx.declared.contains(module) {
+                issues.push(Issue::error(
+                    "out_of_range",
+                    key,
+                    at("kind"),
+                    json!(text),
+                    &format!(
+                        "kind `{text}` is the `{module}` module's, and `requires.modules` does not name it"
+                    ),
+                ));
+                return false;
+            }
+        }
+    }
     // The kind decides the params alone: an item of a kind this build does not know, or knows
     // only at a lower major, still meets the item contract core defines (its keys, its id, its
     // layer and parent, its common fields), and is kept byte for byte, its params unread.
-    let known = match lookup(ctx.registry, &text) {
+    let known = match lookup(ctx.kinds, &text) {
         Lookup::UnknownKind => {
             notices.push(Notice {
                 code: "unknown_kind",
@@ -797,7 +905,16 @@ fn check_item(
         return false;
     };
     if let Some(Value::Object(params)) = fields.get_mut("params") {
-        check_params(key, params, entry, version, required_minor, issues, notices);
+        check_params(
+            key,
+            params,
+            entry,
+            version,
+            required_minor,
+            ctx.sealed,
+            issues,
+            notices,
+        );
     }
     true
 }
@@ -921,12 +1038,14 @@ fn is_vector(value: &Value, n: usize) -> bool {
         .is_some_and(|a| a.len() == n && a.iter().all(fits_f32))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_params(
     key: &str,
     params: &mut Map<String, Value>,
     entry: &Entry,
     version: &Version,
     required_minor: Option<u32>,
+    sealed: &Sealed,
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
@@ -967,17 +1086,16 @@ fn check_params(
             continue;
         };
         if !param.module.is_empty() && !value.is_null() {
-            issues.push(Issue::error(
-                "module_missing",
-                key,
-                path,
-                value.clone(),
-                &format!(
-                    "`{name}` is evaluated by the {} module, which this build lacks",
-                    param.module
-                ),
-            ));
-            continue;
+            if let Some(missing) = sealed.missing_for(param.module, param.operator) {
+                issues.push(Issue::error(
+                    "module_missing",
+                    key,
+                    path,
+                    value.clone(),
+                    &lacks(name, param.module, &missing),
+                ));
+                continue;
+            }
         }
         match param.ty {
             // The kind's own reader checks the value's shape when it evaluates the item.
@@ -1112,7 +1230,14 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
 }
 
 /// The entries of `channels` or `bound_values`; the section and its keys are [`check_id_maps`]'s.
-fn check_targets(doc: &Value, section: &str, with_source: bool, issues: &mut Vec<Issue>) {
+fn check_targets(
+    doc: &Value,
+    section: &str,
+    with_source: bool,
+    kinds: &crate::kinds::Registry,
+    sealed: &Sealed,
+    issues: &mut Vec<Issue>,
+) {
     let Some(entries) = member(doc, section).and_then(as_object) else {
         return;
     };
@@ -1149,13 +1274,25 @@ fn check_targets(doc: &Value, section: &str, with_source: bool, issues: &mut Vec
         match member(entry, "target") {
             Some(Value::String(text)) => match Path::parse(text) {
                 Ok(path) => {
-                    if let Err(what) = resolve(doc, &path) {
+                    if let Err(what) = resolve(doc, &path, kinds) {
                         issues.push(Issue::error(
                             "ref_unresolved",
                             key,
                             target_path,
                             json!(text),
                             &what,
+                        ));
+                    } else if let Some((module, missing)) =
+                        left_out_param(doc, &path, kinds, sealed)
+                    {
+                        // A channel or bound value drives the param, so the document uses the
+                        // feature its evaluator reads, as a written value would.
+                        issues.push(Issue::error(
+                            "module_missing",
+                            key,
+                            target_path,
+                            json!(text),
+                            &lacks(&path.fields()[1], module, &missing),
                         ));
                     }
                 }
@@ -1254,11 +1391,58 @@ pub fn duration(doc: &Value, value: &Value) -> Result<i64, String> {
     }
 }
 
+/// Why a param is not evaluated in this build: the module that evaluates it is the one the
+/// build lacks, or its operator reads a missing optional dependency.
+fn lacks(name: &str, module: &str, missing: &str) -> String {
+    if module == missing {
+        format!("`{name}` is evaluated by the {missing} module, which this build lacks")
+    } else {
+        format!("`{name}` reads the {missing} module, which this build lacks")
+    }
+}
+
+/// A target param's evaluating module and the missing module that keeps its operator out of
+/// this build, when the target is `items/<id>/params/<name>` of such a kind.
+fn left_out_param(
+    doc: &Value,
+    path: &Path,
+    kinds: &crate::kinds::Registry,
+    sealed: &Sealed,
+) -> Option<(&'static str, String)> {
+    if path.section() != Section::Items {
+        return None;
+    }
+    let [field, name] = path.fields() else {
+        return None;
+    };
+    if field != "params" {
+        return None;
+    }
+    let item = member(doc, "items").and_then(|m| member(m, path.id().as_str()))?;
+    let Lookup::Known { entry, saved } = lookup(kinds, kind_text(item)?) else {
+        return None;
+    };
+    let param = entry
+        .version(saved)
+        .unwrap_or(entry.current())
+        .param(name)?;
+    if param.module.is_empty() {
+        return None;
+    }
+    sealed
+        .missing_for(param.module, param.operator)
+        .map(|missing| (param.module, missing))
+}
+
 /// Resolves a path against the (lowered) document: the item exists and each field step reaches
 /// something. An item's fields resolve against its kind's schema; in this slice no kind gives
 /// another section a schema, so a field step there must reach a value the document holds: a
 /// key of an object or an index of a list.
-pub(crate) fn resolve(doc: &Value, path: &Path) -> Result<(), String> {
+pub(crate) fn resolve(
+    doc: &Value,
+    path: &Path,
+    kinds: &crate::kinds::Registry,
+) -> Result<(), String> {
     let id = path.id().as_str();
     let section = path.section().as_str();
     let Some(target) = member(doc, section).and_then(|m| member(m, id)) else {
@@ -1291,8 +1475,7 @@ pub(crate) fn resolve(doc: &Value, path: &Path) -> Result<(), String> {
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
         ["params", name] => {
-            let registry = registry();
-            let known = match kind_text(target).map(|text| lookup(&registry, text)) {
+            let known = match kind_text(target).map(|text| lookup(kinds, text)) {
                 Some(Lookup::Known { entry, saved }) => entry
                     .version(saved)
                     .unwrap_or(entry.current())

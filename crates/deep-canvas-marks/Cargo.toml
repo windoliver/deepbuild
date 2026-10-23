@@ -10,7 +10,20 @@ publish = false
 # and zoom bucket, and the content keys of shaped text and writer layers. Named deep-canvas* so the
 # canvas lint reads it: checks read the flattened strokes and true shapes it computes. It draws
 # nothing: deep-marks-render hands the list to GPUI.
+#
+# Issue #375: a frame's auto layout by Taffy, the engine GPUI already uses, with text leaves
+# measured by deep-text, the canvas's one shaper; `deep-layout solve` is its proof surface.
+[[bin]]
+name = "deep-layout"
+path = "src/main.rs"
+
+# It shapes the canvas's text to measure it, so scripts/text-lint.mjs reads it too.
+[package.metadata.deep]
+canvas_text = true
+
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
+taffy = { version = "0.14", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "content_size"] }
