@@ -227,6 +227,16 @@ pub enum ImageFit {
     None,
 }
 
+/// How an image's pixels are sampled when it is drawn at another size (Image `image@1`:
+/// `sampling`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ImageSampling {
+    #[default]
+    Linear,
+    Nearest,
+    Cubic,
+}
+
 /// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width and
 /// alignment.
 #[derive(Clone, Debug, PartialEq)]
@@ -305,6 +315,7 @@ pub enum Mark {
         asset: String,
         bounds: [f64; 4],
         fit: ImageFit,
+        sampling: ImageSampling,
         crop: Option<[f64; 4]>,
         opacity: f64,
         /// The item's adjust, applied to every pixel of the image.
@@ -357,6 +368,13 @@ impl Mark {
             }
             Mark::Image { adjust, .. } => *adjust = a.clone(),
         }
+    }
+
+    /// The mark's own content key, from everything it draws from.
+    pub fn key(&self, bucket: i32) -> ContentKey {
+        let mut k = KeyBuilder::new("mark@marks2d.1");
+        self.feed(&mut k, bucket);
+        k.finish()
     }
 
     /// Everything the mark draws from, for its layer's key: its geometry's or text's content key
@@ -459,6 +477,7 @@ impl Mark {
                 asset,
                 bounds,
                 fit,
+                sampling,
                 crop,
                 opacity,
                 adjust,
@@ -466,6 +485,10 @@ impl Mark {
             } => {
                 // An asset enters by its sha256, as every asset does.
                 k.text("image").text(asset).int(*fit as i64);
+                // Linear is the default, so an image without the field keeps its key.
+                if *sampling != ImageSampling::Linear {
+                    k.text("sampling").int(*sampling as i64);
+                }
                 bounds.iter().for_each(|v| {
                     k.number(*v);
                 });
@@ -1962,11 +1985,19 @@ fn build(
                     Some("none") => ImageFit::None,
                     Some(_) => return refuse("bad_doc", format!("{path}/params/fit")),
                 };
+                let sampling = match params.get("sampling") {
+                    None => ImageSampling::Linear,
+                    Some(Value::String(s)) if s == "linear" => ImageSampling::Linear,
+                    Some(Value::String(s)) if s == "nearest" => ImageSampling::Nearest,
+                    Some(Value::String(s)) if s == "cubic" => ImageSampling::Cubic,
+                    Some(_) => return refuse("bad_doc", format!("{path}/params/sampling")),
+                };
                 vec![Mark::Image {
                     item: id.clone(),
                     asset: asset.to_ascii_lowercase(),
                     bounds: place.rect(bounds),
                     fit,
+                    sampling,
                     crop: four(params.get("crop")),
                     opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
                     adjust: Adjust::default(),
