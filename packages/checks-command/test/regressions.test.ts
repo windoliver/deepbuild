@@ -5,7 +5,7 @@
 // Each runs a real project through the real supervisor, but for the command's text, read with no run.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import type { CheckSpec } from '../../conformance/src/index.js';
 import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
 import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
-import { hiddenChild, untraced } from '../src/shell.js';
+import { absent, hiddenChild, maskIn, untraced } from '../src/shell.js';
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const VITEST: CheckSpec = { kind: 'command', runner: 'node_modules/.bin/vitest run', inputs: [], depth: 'unit', oracle: 'code', contract: null };
@@ -355,6 +355,83 @@ describe('a tool that isn\'t installed', () => {
     expect(r.outcome, r.mask ?? '').toBe('missing');
     expect(r.failures.map((f) => f.message).join('\n')).toMatch(/no-such-tool/);
   }, 60_000);
+});
+
+describe('ordinary projects, however they start their tool', () => {
+  const FILES = {
+    'package.json': '{ "name": "unit", "private": true, "type": "module", "scripts": { "test": "vitest run" } }\n',
+    'a.test.js': `import { expect, test } from 'vitest';\ntest('passes', () => { expect(1).toBe(1); });\ntest('fails', () => { expect(2).toBe(3); });\n`,
+  };
+
+  it('Vitest started through npx, which quotes the program it hands its shell, counts its tests', async () => {
+    const r = await runCommandCheck(check(folder(FILES, true), { spec: { ...VITEST, runner: 'npx vitest run' } }));
+    expect(r.outcome, r.mask ?? r.output.stderr).toBe('failed');
+    expect(r.testsRun).toBe(2);
+  }, 180_000);
+
+  it('Vitest started through the sh shim pnpm installs counts its tests; a shim with a line pnpm never writes doesn\'t', async () => {
+    need('pnpm');
+    const checkout = folder(FILES, true);
+    // pnpm writes the shim in a folder of its own, linked to the checkout's Vitest; the checkout takes it in place of npm's link.
+    const maker = folder({ 'package.json': JSON.stringify({ name: 'maker', private: true, devDependencies: { vitest: `link:${join(checkout, 'node_modules/vitest')}` } }) });
+    execFileSync('pnpm', ['install', '--offline'], { cwd: maker, stdio: 'ignore' });
+    rmSync(join(checkout, 'node_modules/.bin/vitest'));
+    copyFileSync(join(maker, 'node_modules/.bin/vitest'), join(checkout, 'node_modules/.bin/vitest'));
+    chmodSync(join(checkout, 'node_modules/.bin/vitest'), 0o755);
+    for (const runner of ['pnpm test', 'node_modules/.bin/vitest run']) {
+      const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner } }));
+      expect(r.outcome, `${runner}: ${r.mask ?? r.output.stderr}`).toBe('failed');
+      expect(r.testsRun).toBe(2);
+    }
+    const shim = join(checkout, 'node_modules/.bin/vitest');
+    const text = readFileSync(shim, 'utf8');
+    writeFileSync(shim, text.replace('\nif [ -x', '\ncat /etc/hosts > /dev/null\nif [ -x'));
+    expect((await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'pnpm test' } }))).outcome).toBe('uncounted');
+    // The shim runs a `node` beside it in place of the one on PATH, which (started directly) doesn't hold its folder.
+    writeFileSync(shim, text);
+    writeFileSync(join(checkout, 'node_modules/.bin/node'), `#!/bin/sh\nexec ${process.execPath} "$@"\n`);
+    chmodSync(join(checkout, 'node_modules/.bin/node'), 0o755);
+    expect((await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }))).outcome).toBe('uncounted');
+  }, 300_000);
+
+  it('a Vitest older than 5, whose command line has no module cache option, runs and counts its tests', async () => {
+    const checkout = folder({
+      'package.json': '{ "type": "module" }\n',
+      'vitest.config.mjs': 'export default { test: { globals: true } };\n',
+      'a.test.js': `test('passes', () => { expect(1).toBe(1); });\ntest('fails', () => { expect(2).toBe(3); });\n`,
+      // Vitest 4's entry refuses an option its command line doesn't know; otherwise this one is the repo's Vitest.
+      'old/vitest/package.json': '{ "name": "vitest", "version": "4.1.11", "type": "module" }\n',
+      'old/vitest/vitest.mjs': `if (process.argv.includes('--no-fsModuleCache')) { console.error('CACError: Unknown option'); process.exit(1); }\nawait import('../../node_modules/vitest/vitest.mjs');\n`,
+    }, true);
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node old/vitest/vitest.mjs run' } }));
+    expect(r.outcome, r.output.stderr).toBe('failed');
+    expect(r.testsRun).toBe(2);
+  }, 180_000);
+
+  it('an abstract pytest base class, which pytest never collects, leaves no test out', async () => {
+    const r = await runCommandCheck(check(folder({
+      'tests/test_shapes.py': 'import abc\n\n\nclass TestBase(abc.ABC):\n    @abc.abstractmethod\n    def make(self):\n        ...\n\n    def test_made(self):\n        assert self.make() == 1\n\n\nclass TestOne(TestBase):\n    def make(self):\n        return 1\n',
+    }), { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(r.outcome, r.failures.map((f) => f.message).join('\n')).toBe('passed');
+    expect(r.testsRun).toBe(1);
+  }, 120_000);
+
+  it('a | or ; inside quotes is part of a word, not a pipe or another command; shell syntax is no missing program', () => {
+    const cwd = folder({ 'x.txt': '' });
+    const path = `${join(REPO, 'node_modules/.bin')}:${join(process.execPath, '..')}:/usr/bin:/bin`;
+    for (const command of [`go test -run 'TestA|TestB' ./...`, 'vitest run -t "adds|subtracts"', 'vitest run -t "a; b"', 'vitest run --exit 0']) {
+      expect(maskIn(command), command).toBeNull();
+    }
+    expect(untraced(`vitest run -t 'a|b'`, cwd, path)).toBeNull();
+    expect(hiddenChild({ file: '/bin/sh', args: ['-c', `'vitest' run`], shell: false }, cwd, path, process.execPath)).toBeNull();
+    // Outside quotes they still are.
+    expect(maskIn('go test ./... | tee out')).toBe('| tee');
+    expect(maskIn('vitest run; echo done')).toBe('; echo');
+    expect(maskIn('vitest run; exit 0')).toBe('exit 0');
+    expect(untraced(`vitest run | 'cat'`, cwd, path)).toBe('program cat');
+    for (const command of ['(cd sub && npm test)', 'exec npm test']) expect(absent(command, cwd, path), command).toBeNull();
+    expect(absent('no-such-tool run', cwd, path)).toBe('no-such-tool');
+  });
 });
 
 describe('added tests', () => {

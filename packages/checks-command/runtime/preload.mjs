@@ -4,7 +4,7 @@
 // its file outside the environment, which then drops it: no worker, no test and no Vitest a test starts learns where
 // the report is from its environment. When the runner asks for it, it moves the process's clock ahead, as a test the
 // claim adds runs once with the clock a month ahead.
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 let entry = '';
@@ -18,7 +18,9 @@ const reporter = (name) => fileURLToPath(new URL(name, import.meta.url));
 // tool's default one.
 const vitest = entry.endsWith('/vitest/vitest.mjs');
 const jest = /\/jest(-cli)?\/bin\/jest\.js$/.test(entry);
-if (vitest) process.argv.push('--no-fsModuleCache');
+// Only Vitest 5 has the module cache option; an earlier one refuses it, and has no such cache to turn off.
+const major = (() => { try { return Number(JSON.parse(readFileSync(new URL('package.json', `file://${entry}`), 'utf8')).version.split('.')[0]); } catch { return NaN; } })();
+if (vitest && !(major < 5)) process.argv.push('--no-fsModuleCache');
 if (jest) process.argv.push('--watchman=false', '--no-cache');
 const tool = vitest ? ['--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
   : jest ? ['--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;

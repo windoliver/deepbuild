@@ -13,22 +13,37 @@ import { join, resolve } from 'node:path';
  * reads the target a command runs.
  */
 const MASKS: RegExp[] = [
-  /\|\|\s*\S+(?:\s+\d+)?/, /(?<![|&])\|(?![|&])\s*\S+/, /\bexit\s+\d+/, /\bset\s+\+e\b/, /(?:^|[;&|(]\s*)(!)(?=\s)/, /\btrap\b[^;&|]*\bexit\b/,
+  /\|\|\s*\S+(?:\s+\d+)?/, /(?<![|&])\|(?![|&])\s*\S+/, /(?<![-\w])exit\s+\d+/, /\bset\s+\+e\b/, /(?:^|[;&|(]\s*)(!)(?=\s)/, /\btrap\b[^;&|]*\bexit\b/,
   /(?<![&>|])&(?![&>])/, /\bmake\b[^;&|]*\s-[A-Za-z]*[ik]\b/, /--if-present\b/, /--passWithNoTests\b/, /continue-on-error/,
 ];
+/** The command with the text of each quoted span blanked, its length kept: what's inside quotes is a word's, not the shell's. */
+const blanked = (command: string): string => command.replace(/'[^']*'|"[^"]*"/g, (q) => `${q[0]}${'_'.repeat(q.length - 2)}${q[0]}`);
+/** The command's parts between the shell's separators (`at`), never split inside quotes. */
+function segmentsOf(command: string, at = /&&|\|\||[;|\n]/g): string[] {
+  const parts: string[] = [];
+  let from = 0;
+  for (const m of blanked(command).matchAll(at)) { parts.push(command.slice(from, m.index)); from = m.index + m[0].length; }
+  return [...parts, command.slice(from)];
+}
+/** Whole shell words, their quotes removed: `--testNamePattern="a b"` is one word. */
+const wordsOf = (text: string): string[] => [...text.matchAll(/(?:'[^']*'|"[^"]*"|[^\s'"]+)+/g)].map((m) => m[0].replace(/'([^']*)'|"([^"]*)"/g, (_, a, b) => a ?? b));
+
 /** The mask in a command, or null: also any command after the tool on `;` or a new line, whose exit is the run's. */
 export function maskIn(command: string): string | null {
+  const shell = blanked(command);
   for (const m of MASKS) {
-    const hit = m.exec(command);
-    if (hit) return (hit[1] ?? hit[0]).trim();
+    const hit = m.exec(shell);
+    if (hit) return (hit[1] ?? command.slice(hit.index, hit.index + hit[0].length)).trim();
   }
-  const segments = command.split(/;|\n/).map((s) => s.trim()).filter(Boolean);
-  if (segments.length > 1) return `; ${segments[segments.length - 1]!.split(/\s+/)[0]}`;
+  const segments = segmentsOf(command, /;|\n/g).map((s) => s.trim()).filter(Boolean);
+  if (segments.length > 1) return `; ${wordsOf(segments[segments.length - 1]!)[0]}`;
   return null;
 }
 
 /** Shell words that run no program of their own and read no file. */
 const BUILTINS = new Set(['cd', 'true', 'false', 'echo', 'exit', 'export', 'test', '[', ':']);
+/** Shell words that start another program or read a file in the shell itself: no program by their own name. */
+const KEYWORDS = new Set(['exec', 'command', 'builtin', 'source', '.', 'time', 'if', 'while', 'until', 'for', 'case']);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 function programPath(name: string, cwd: string, path: string): string | null {
   if (name.includes('/')) {
@@ -87,6 +102,8 @@ function traced(program: string, args: string[], cwd: string, path: string, trus
   } catch { /* unreadable: untraced */ }
   if (!head.startsWith('#!')) return trust.python && real !== null && PYTHON.test(real) && !isolated(args);
   if (depth > 0) return false;
+  const script = pnpmShim(at);
+  if (script !== null) return traced('node', [script, ...args], cwd, path, trust, depth + 1);
   const [first = '', ...rest] = head.slice(2).trim().split(/\s+/);
   const viaEnv = (first.split('/').pop() ?? first) === 'env';
   const at2 = viaEnv ? rest.findIndex((w) => !w.startsWith('-') && !ASSIGNMENT.test(w)) : -1;
@@ -95,9 +112,44 @@ function traced(program: string, args: string[], cwd: string, path: string, trus
   if (!interpreter || rest.slice(0, Math.max(at2, 0)).some((w) => w !== '-S')) return false;
   return traced(interpreter, viaEnv ? rest.slice(at2 + 1) : rest, cwd, path, trust, depth + 1);
 }
+/** The sh shim pnpm (10) installs for a package's Node program, word for word but for the folders it names. */
+const PNPM_SHIM_TEXT = `#!/bin/sh
+basedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")
+
+case \`uname\` in
+    *CYGWIN*|*MINGW*|*MSYS*)
+        if command -v cygpath > /dev/null 2>&1; then
+            basedir=\`cygpath -w "$basedir"\`
+        fi
+    ;;
+esac
+
+if [ -z "$NODE_PATH" ]; then
+  export NODE_PATH="<folders>"
+else
+  export NODE_PATH="<folders>:$NODE_PATH"
+fi
+if [ -x "$basedir/node" ]; then
+  exec "$basedir/node"  "$basedir/<script>" "$@"
+else
+  exec node  "$basedir/<script>" "$@"
+fi
+`;
+// Each folder is plain text: no quote, `$`, backquote or backslash the shell would read. Both lines run one script.
+const FOLDERS = '[^"$`\\\\]*';
+const PNPM_SHIM = new RegExp(`^${PNPM_SHIM_TEXT.split(/(<folders>|<script>)/).map((part, i, all) => part === '<folders>' ? FOLDERS
+  : part === '<script>' ? (all.indexOf(part) === i ? `(${FOLDERS.replace('*', '+')})` : '\\1') : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')}$`);
+/** The Node script a pnpm shim at `at` runs, or null for any other file, or where a `node` beside it would run instead. */
+function pnpmShim(at: string): string | null {
+  let text: string;
+  try { text = readFileSync(at, 'utf8'); } catch { return null; }
+  const shim = PNPM_SHIM.exec(text);
+  const dir = resolve(at, '..');
+  return shim && !existsSync(join(dir, 'node')) ? resolve(dir, shim[1]!) : null;
+}
 /** The programs a command's segments start, in order. */
 export function programsIn(command: string): string[] {
-  return command.split(/&&|\|\||[;|\n]/).map((segment) => segment.trim().split(/\s+/).find((w) => w && !ASSIGNMENT.test(w)))
+  return segmentsOf(command).map((segment) => wordsOf(segment).find((w) => !ASSIGNMENT.test(w)))
     .filter((p): p is string => p !== undefined && !BUILTINS.has(p));
 }
 /**
@@ -105,8 +157,7 @@ export function programsIn(command: string): string[] {
  * `-m`, `--deselect`, and pytest's `-o`), as the shell hands them over: a filter a reporter finds is the command's only when it is one of them.
  */
 export function filtersIn(command: string): Set<string> {
-  // Whole shell words, their quotes removed: `--testNamePattern="a b"` is one word.
-  const words = [...command.matchAll(/(?:'[^']*'|"[^"]*"|[^\s'"]+)+/g)].map((m) => m[0].replace(/'([^']*)'|"([^"]*)"/g, (_, a, b) => a ?? b));
+  const words = wordsOf(command);
   const values = new Set<string>();
   words.forEach((word, i) => {
     const option = /^(?:-t|--testNamePattern|--tags-filter|-k|-m|--deselect|-o)(?:=(.*))?$/.exec(word);
@@ -115,10 +166,11 @@ export function filtersIn(command: string): Set<string> {
   });
   return values;
 }
-/** The command's first program when the shell can't find it on `path`: the command can't start. */
+/** The program the command starts with, a plain name or path, when the shell can't find it on `path`: the command can't start. */
 export function absent(command: string, cwd: string, path: string): string | null {
-  const first = programsIn(command)[0];
-  return first !== undefined && programPath(first, cwd, path) === null ? first : null;
+  const first = wordsOf(segmentsOf(command)[0] ?? '').find((w) => !ASSIGNMENT.test(w));
+  if (first === undefined || !/^[\w.+@/-]+$/.test(first) || BUILTINS.has(first) || KEYWORDS.has(first)) return null;
+  return programPath(first, cwd, path) === null ? first : null;
 }
 /** `go test`, whose reads no tracer sees: the run can fail on its report, but can't pass (see the runner). */
 export const GO_TEST = /(?:^|&&|\|\||[;|\n])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*go\s+test\b/;
@@ -129,12 +181,13 @@ export const GO_TEST = /(?:^|&&|\|\||[;|\n])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)
  */
 export function untraced(command: string, cwd: string, path: string, trust: Trust = {}): string | null {
   const allowed = { node: true, python: true, go: true, writable: [cwd], ...trust };
-  if (/(^|[^<>])<(?![<>&])/.test(command) || /<<</.test(command) || /<<(?![<])/.test(command)) return 'shell input <';
+  const shell = blanked(command);
+  if (/(^|[^<>])<(?![<>&])/.test(shell) || /<<</.test(shell) || /<<(?![<])/.test(shell)) return 'shell input <';
   if (/\$\(|`/.test(command)) return 'shell substitution $(';
   const setup = PYTHON_SETUP.exec(command);
   if (setup) return `python setup ${setup[1]}`;
-  for (const segment of command.split(/&&|\|\||[;|\n]/)) {
-    const words = segment.trim().split(/\s+/).filter(Boolean);
+  for (const segment of segmentsOf(command)) {
+    const words = wordsOf(segment);
     const at = words.findIndex((w) => !ASSIGNMENT.test(w));
     const program = words[at];
     if (!program || BUILTINS.has(program) || (allowed.go && program === 'go' && words[at + 1] === 'test')) continue;
