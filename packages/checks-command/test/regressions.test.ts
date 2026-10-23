@@ -349,6 +349,14 @@ describe('what a checkout\'s config makes count as run', () => {
   }, 300_000);
 });
 
+describe('a tool that isn\'t installed', () => {
+  it('a command whose program isn\'t on the run\'s PATH can\'t start: the run is missing, naming the program, never uncounted', async () => {
+    const r = await runCommandCheck(check(folder({ 'x.txt': '' }), { spec: { ...VITEST, runner: 'no-such-tool run' } }));
+    expect(r.outcome, r.mask ?? '').toBe('missing');
+    expect(r.failures.map((f) => f.message).join('\n')).toMatch(/no-such-tool/);
+  }, 60_000);
+});
+
 describe('added tests', () => {
   it('Date() without new still gives text on the moved clock, and a run in which one of the added files ran no test ran nothing, naming it', async () => {
     const checkout = project({
