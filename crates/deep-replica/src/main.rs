@@ -15,36 +15,16 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod replica {
-    use std::path::PathBuf;
 
-    use deep_app::views::{Layout, SHIPPED_VIEWS};
+    use deep_app::views::Layout;
     use deep_replica::{shell::open_shell, snapshot::from_observed};
     use gpui_kit::test::TestWindowExt;
 
     pub fn run() -> i32 {
-        let mut view = None;
-        let mut out = None;
-        let mut args = std::env::args().skip(1);
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--view" => view = args.next(),
-                "--out" => out = args.next().map(PathBuf::from),
-                other => {
-                    eprintln!("deep-replica: unknown argument {other}");
-                    return 2;
-                }
-            }
-        }
-        let (Some(view), Some(out)) = (view, out) else {
-            eprintln!("usage: deep-replica --view <id> --out <dir>");
-            return 2;
+        let (view, out) = match deep_replica::view_args("deep-replica", "dir") {
+            Ok(args) => args,
+            Err(code) => return code,
         };
-        if !SHIPPED_VIEWS.contains(&view.as_str()) {
-            eprintln!(
-                "deep-replica: {view} is not a shipped view; the views are {SHIPPED_VIEWS:?}"
-            );
-            return 2;
-        }
 
         let started = std::time::Instant::now();
         let mut phases = Vec::new();

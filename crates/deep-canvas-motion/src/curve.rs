@@ -65,15 +65,9 @@ impl Curve {
         after.checked_sub(1)
     }
 
-    /// The value at `t`. Before the first key and after the last it holds (`extrapolate` hold).
-    pub fn sample(&self, t: i64) -> Sample {
-        let mut value = vec![0.0; self.keys.first().map_or(0, |k| k.value.len())];
-        let iterations = self.sample_into(t, &mut value);
-        Sample { value, iterations }
-    }
-
-    /// [`Curve::sample`] into `out`, one slot per component, with no allocation; returns the
-    /// Bézier solver's step count.
+    /// The value at `t` into `out`, one slot per component, with no allocation; returns the
+    /// Bézier solver's step count. Before the first key and after the last it holds
+    /// (`extrapolate` hold).
     pub fn sample_into(&self, t: i64, out: &mut [f64]) -> u32 {
         let held = |k: &Key, out: &mut [f64]| {
             out.iter_mut().zip(&k.value).for_each(|(o, v)| *o = *v);

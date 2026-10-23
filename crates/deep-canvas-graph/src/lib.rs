@@ -115,6 +115,7 @@ pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
             id,
         });
     }
+    let node_ids = ids.clone();
     let mut read_edges = Vec::with_capacity(edges.len());
     for (i, e) in edges.iter().enumerate() {
         let id = text(e.get("id"), &format!("edges/{i}/id"))?;
@@ -123,8 +124,7 @@ pub fn read_graph(value: &Value) -> Result<Graph, Refused> {
         }
         let a = text(e.get("a"), &format!("edges/{i}/a"))?;
         let b = text(e.get("b"), &format!("edges/{i}/b"))?;
-        if !read_nodes.iter().any(|n| n.id == a) || !read_nodes.iter().any(|n| n.id == b) || a == b
-        {
+        if !node_ids.contains(&a) || !node_ids.contains(&b) || a == b {
             return refuse("graph.bad_edge", id);
         }
         let min_len = match e.get("min_len") {
