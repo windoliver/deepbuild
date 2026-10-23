@@ -100,7 +100,12 @@ class LocalSupervisor implements Supervisor {
   constructor(private readonly options: SupervisorOptions) {
     // The supervisor's own package, whose helper it runs outside any sandbox, is guarded like the caller's paths.
     const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
-    this.sandbox = seatbeltWith('seatbelt', guarded.map((p) => `(deny file-write* (subpath ${quote(real(p))}))`));
+    // Each folder above one is kept from moving, or a run could move it aside and put its own in its place.
+    const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
+    this.sandbox = seatbeltWith('seatbelt', guarded.flatMap((p) => [
+      `(deny file-write* (subpath ${quote(real(p))}))`,
+      ...above(dirname(real(p))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
+    ]));
     for (const kind of options.resources ?? []) {
       this.kinds.set(kind.kind, kind);
       for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
@@ -567,13 +572,20 @@ class LocalSupervisor implements Supervisor {
         left.push(name);
       }
     } else {
+      // Every key is given back and checked first: one its check finds unclean holds all of the run's, since what
+      // holds one (a container on its port, say) may hold the others.
+      const unclean: string[] = [];
       for (const lease of r.leases) {
         const name = `${lease.kind}:${lease.key}`;
         const kind = this.kinds.get(lease.kind);
         if (kind?.release) await this.step(kind.release, lease.key);
         // The planted wrong program holds the lease while anything at all still takes the key, recorded or not.
         const taken = this.options.plant === 'holds-lease-while-taken' && kind?.free && !(await kind.free(lease.key).catch(() => false));
-        if (taken || (kind?.check && !(await this.step(kind.check, lease.key)))) {
+        if (taken || (kind?.check && !(await this.step(kind.check, lease.key)))) unclean.push(name);
+      }
+      for (const lease of r.leases) {
+        const name = `${lease.kind}:${lease.key}`;
+        if (unclean.length) {
           this.keys.set(name, { holder: run, dirty: { run } });
           left.push(name);
           continue;
@@ -592,8 +604,8 @@ class LocalSupervisor implements Supervisor {
 
   /** A resource's cleanup step or check, in the platform sandbox with its folder writable; true when it exits 0. */
   private async step(step: ResourceStep, key: string): Promise<boolean> {
-    const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', DEEP_RESOURCE_KEY: key };
-    const launch = await this.sandbox.confine({ argv: step.argv, cwd: step.cwd, env }, { write: [step.cwd] });
+    const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', ...step.env, DEEP_RESOURCE_KEY: key };
+    const launch = await this.sandbox.confine({ argv: step.argv, cwd: step.cwd, env }, { ...step.grant, write: [step.cwd, ...(step.grant?.write ?? [])] });
     return new Promise((resolve) => {
       const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, stdio: 'ignore', detached: true });
       const timer = setTimeout(() => { try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* gone */ } }, 60_000);

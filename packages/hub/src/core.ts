@@ -13,7 +13,7 @@ import { openAsks } from '@deepbuild/asks';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
-import { answers, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
+import { answers, composeKind, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
@@ -75,6 +75,8 @@ export class Core {
   private supervisor!: Supervisor;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
+  /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
+  private compose?: ReturnType<typeof composeKind>;
   private readonly ready: Promise<void>;
   private readonly sessions = new Map<string, Session>();
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
@@ -127,10 +129,12 @@ export class Core {
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
+    // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
+    const compose = this.compose = composeKind(join(this.root.dir, 'compose'));
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
       // env-local's port kind (#331): ports from 3000 up, each checked free before it is leased.
-      resources: [portKind({ free: this.options.plant !== 'env-leases-port-again' })],
+      resources: [portKind({ free: this.options.plant !== 'env-leases-port-again' }), compose],
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
       ...(this.options.crash ? { crash: this.options.crash } : {}),
@@ -141,6 +145,7 @@ export class Core {
         join(homedir(), 'Library', 'LaunchAgents'),
         process.execPath, resolve(process.execPath, '../../lib/node_modules'),
         ...[process.env.CLAUDE_CONFIG_DIR, process.env.CODEX_HOME].filter((p): p is string => !!p && isAbsolute(p)),
+        ...compose.guarded,
       ],
     });
     this.host = this.options.host
@@ -545,7 +550,7 @@ export class Core {
       const stackRun = run.environment ? newRun(this.now()) : undefined;
       if (stackRun) this.stackRuns.add(stackRun);
       const stack: Promise<Up | undefined> = stackRun
-        ? upStack(this.host, { run: stackRun, folder: run.cwd }).catch((error: Error) => ({ status: 'BLOCKED' as const, run: stackRun, cause: error.message }))
+        ? upStack(this.host, { run: stackRun, folder: run.cwd, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' }).catch((error: Error) => ({ status: 'BLOCKED' as const, run: stackRun, cause: error.message }))
         : Promise.resolve(undefined);
       const started = stack.then<Started | { run: string; status: 'missing'; cause: string }>((up) => {
         if (up?.status === 'BLOCKED') return { run: run.run, status: 'missing', cause: up.cause };
@@ -642,7 +647,7 @@ export class Core {
   private async riseIn(worktree: string): Promise<Obj> {
     const running = this.stacks.get(worktree);
     // A stack is reused only while its process runs and its health route still answers 200.
-    if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports };
+    if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports, ...(running.project ? { project: running.project } : {}) };
     // Any other is taken down, and a new one started.
     if (running) {
       this.stacks.delete(worktree);
@@ -652,7 +657,7 @@ export class Core {
     const run = newRun(this.now());
     this.stackRuns.add(run);
     this.rising.set(worktree, run);
-    const up = await upStack(this.host, { run, folder: worktree })
+    const up = await upStack(this.host, { run, folder: worktree, compose: this.compose, sharedProject: this.options.plant === 'compose-default-project' })
       .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
       .finally(() => this.rising.delete(worktree));
     if (up.status === 'BLOCKED') {
@@ -661,7 +666,7 @@ export class Core {
       return { status: 'BLOCKED', worktree, cause: up.cause };
     }
     this.stacks.set(worktree, up.stack);
-    return { status: 'ready', run, worktree, ports: up.stack.ports };
+    return { status: 'ready', run, worktree, ports: up.stack.ports, ...(up.stack.project ? { project: up.stack.project } : {}) };
   }
   /**
    * Takes the worktree's stack down: signalled through the host, then the supervisor's cleanup stops what it can
