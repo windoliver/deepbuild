@@ -21,7 +21,7 @@ fn doc(interp: Option<&str>) -> Value {
 }
 
 fn invert_at(d: &Value, t: i64) -> Value {
-    let program = Program::compile(d).expect("the document reads");
+    let program = Program::compile(d.as_object().unwrap()).expect("the document reads");
     let f = frame(
         d.as_object().expect("an object"),
         &program,
@@ -42,7 +42,8 @@ fn a_bool_channel_holds_each_key_and_writes_a_bool() {
 
 #[test]
 fn a_bool_key_that_would_mix_is_refused() {
-    let r = Program::compile(&doc(Some("linear"))).expect_err("a bool channel holds only");
+    let r = Program::compile(doc(Some("linear")).as_object().unwrap())
+        .expect_err("a bool channel holds only");
     assert_eq!(
         (r.code, r.path.as_str()),
         ("bad_interp", "channels/flip/keys/on/interp")

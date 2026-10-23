@@ -10,6 +10,8 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::base64;
+
 /// The most rows a mark set holds (Mark set: it can never exceed 1M rows per set).
 const MAX_ROWS: usize = 1_000_000;
 /// The most characters a text cell holds.
@@ -31,45 +33,6 @@ enum Cells {
     Numbers { dtype: String, values: Vec<f64> },
     Texts(Vec<String>),
     Const(Value),
-}
-
-const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-fn decode64(text: &str) -> Option<Vec<u8>> {
-    let value = |c: u8| B64.iter().position(|b| *b == c).map(|v| v as u32);
-    let body = text.trim_end_matches('=').as_bytes();
-    let mut out = Vec::with_capacity(body.len() * 3 / 4);
-    for chunk in body.chunks(4) {
-        let mut acc = 0u32;
-        for (k, &c) in chunk.iter().enumerate() {
-            acc |= value(c)? << (18 - 6 * k as u32);
-        }
-        let b = acc.to_be_bytes();
-        match chunk.len() {
-            4 => out.extend(&b[1..4]),
-            3 => out.extend(&b[1..3]),
-            2 => out.push(b[1]),
-            _ => return None,
-        }
-    }
-    Some(out)
-}
-
-fn encode64(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let acc = (u32::from(chunk[0]) << 16)
-            | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8)
-            | u32::from(*chunk.get(2).unwrap_or(&0));
-        for k in 0..4 {
-            if k <= chunk.len() {
-                out.push(B64[(acc >> (18 - 6 * k)) as usize & 63] as char);
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
 }
 
 /// A dtype's byte width; `bool` and `role` are one byte each.
@@ -143,7 +106,7 @@ fn decode(name: &str, c: &Value, n: usize) -> Result<Cells, Refusal> {
             "a sidecar column changes by a new sidecar file, not a patch",
         );
     };
-    let bytes = decode64(text).filter(|b| b.len() == n * w);
+    let bytes = base64::decode(text).filter(|b| b.len() == n * w);
     let Some(bytes) = bytes else {
         return refuse(
             "out_of_range",
@@ -169,6 +132,15 @@ fn decode(name: &str, c: &Value, n: usize) -> Result<Cells, Refusal> {
     })
 }
 
+/// Keeps the rows `keep` says to, by index, in order.
+fn retain_rows<T>(column: &mut Vec<T>, keep: impl Fn(usize) -> bool) {
+    let mut i = 0;
+    column.retain(|_| {
+        i += 1;
+        keep(i - 1)
+    });
+}
+
 fn encode(cells: &Cells, n: usize) -> Value {
     match cells {
         Cells::Const(v) => json!({"const": v}),
@@ -186,24 +158,24 @@ fn encode(cells: &Cells, n: usize) -> Value {
                     _ => bytes.push(*v as u8),
                 }
             }
-            json!({"dtype": dtype, "len": n, "data": encode64(&bytes)})
+            json!({"dtype": dtype, "len": n, "data": base64::encode(&bytes)})
         }
     }
 }
 
-/// A cell's value as a key, compared as JSON.
-fn cell(cells: &Cells, i: usize) -> Value {
+/// Whether row `i`'s cell equals `wanted` as a key, compared as JSON: numbers by value, and a
+/// number JSON can't hold (NaN, infinity) as `null`.
+fn key_is(cells: &Cells, i: usize, wanted: &Value) -> bool {
     match cells {
-        Cells::Const(v) => v.clone(),
-        Cells::Texts(t) => json!(t[i]),
-        Cells::Numbers { values, .. } => json!(values[i]),
-    }
-}
-
-fn same_key(a: &Value, b: &Value) -> bool {
-    match (a.as_f64(), b.as_f64()) {
-        (Some(x), Some(y)) => x == y,
-        _ => a == b,
+        Cells::Const(v) => match (v.as_f64(), wanted.as_f64()) {
+            (Some(x), Some(y)) => x == y,
+            _ => v == wanted,
+        },
+        Cells::Texts(t) => wanted.as_str() == Some(t[i].as_str()),
+        Cells::Numbers { values, .. } if values[i].is_finite() => {
+            wanted.as_f64() == Some(values[i])
+        }
+        Cells::Numbers { .. } => wanted.is_null(),
     }
 }
 
@@ -248,6 +220,46 @@ fn write(name: &str, cells: &mut Cells, i: usize, value: &Value) -> Result<(), R
     }
 }
 
+/// Whether a mark set holds a row whose key prints as `sub`, the sub-address picking gives it
+/// (`<id>#<key>`), and has a column `column`; or what's missing.
+pub(crate) fn row_column(
+    params: &Map<String, Value>,
+    sub: &str,
+    column: &str,
+) -> Result<(), String> {
+    let Some(Value::Object(columns)) = params.get("columns") else {
+        return Err("not a mark set: it has no columns".into());
+    };
+    let Some((key, c)) = params
+        .get("key")
+        .and_then(Value::as_str)
+        .and_then(|k| columns.get_key_value(k))
+    else {
+        return Err("the set has no key column, so its rows can't be named".into());
+    };
+    if !columns.contains_key(column) {
+        return Err(format!("the set has no column `{column}`"));
+    }
+    let n = params.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let cells = decode(key, c, n).map_err(|(_, _, what)| what)?;
+    // Cells decode to f64, so a whole key prints without its `.0`.
+    let printed = |v: Value| match v {
+        Value::String(s) => s,
+        Value::Number(x) => match x.as_f64() {
+            Some(f) if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 => {
+                format!("{}", f as i64)
+            }
+            _ => x.to_string(),
+        },
+        v => v.to_string(),
+    };
+    if (0..n).any(|i| printed(cell(&cells, i)) == sub) {
+        Ok(())
+    } else {
+        Err(format!("the set has no row with key `{sub}`"))
+    }
+}
+
 /// The mark set's params after the op `op`, or why it is refused.
 pub fn rows(
     params: &Map<String, Value>,
@@ -276,7 +288,7 @@ pub fn rows(
     let key_index = key.and_then(|k| cells.iter().position(|(name, _)| name == k));
     let find = |cells: &[(String, Cells)], wanted: &Value| -> Option<usize> {
         let k = key_index?;
-        (0..n).find(|i| same_key(&cell(&cells[k].1, *i), wanted))
+        (0..n).find(|i| key_is(&cells[k].1, *i, wanted))
     };
     let mut n = n;
     if let Some(list) = op.get("append") {
@@ -390,22 +402,29 @@ pub fn rows(
         }
         gone.sort_unstable();
         gone.dedup();
+        // One pass per column: `gone` is sorted, so each row is looked up in it once.
+        let keep = |i: usize| gone.binary_search(&i).is_err();
         for (_, c) in &mut cells {
-            for i in gone.iter().rev() {
-                match c {
-                    Cells::Texts(t) => {
-                        t.remove(*i);
-                    }
-                    Cells::Numbers { values, .. } => {
-                        values.remove(*i);
-                    }
-                    Cells::Const(_) => {}
-                }
+            match c {
+                Cells::Texts(t) => retain_rows(t, keep),
+                Cells::Numbers { values, .. } => retain_rows(values, keep),
+                Cells::Const(_) => {}
             }
         }
         n -= gone.len();
     }
-    let mut out = params.clone();
+    // The old columns are replaced, so they are not copied; `columns` keeps its place.
+    let mut out: Map<String, Value> = params
+        .iter()
+        .map(|(k, v)| {
+            let v = if k == "columns" {
+                Value::Null
+            } else {
+                v.clone()
+            };
+            (k.clone(), v)
+        })
+        .collect();
     out.insert("n".into(), json!(n));
     let columns: Map<String, Value> = cells
         .iter()
@@ -478,18 +497,5 @@ mod tests {
             codes(json!({"append": [{"v": 1, "k": "q", "c": 2}]})),
             Some("out_of_range")
         );
-    }
-
-    #[test]
-    fn base64_round_trips() {
-        for bytes in [
-            vec![],
-            vec![1],
-            vec![1, 2],
-            vec![1, 2, 3],
-            vec![255, 0, 7, 9],
-        ] {
-            assert_eq!(decode64(&encode64(&bytes)).unwrap(), bytes);
-        }
     }
 }
