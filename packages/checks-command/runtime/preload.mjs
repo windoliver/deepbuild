@@ -17,6 +17,8 @@ const reporter = (name) => fileURLToPath(new URL(name, import.meta.url));
 // afresh: a cache in the checkout, which only a checksum of its own guards, would run code no source holds.
 const tool = entry.endsWith('/vitest/vitest.mjs') ? ['--no-fsModuleCache', '--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
   : /\/jest(-cli)?\/bin\/jest\.js$/.test(entry) ? ['--watchman=false', '--no-cache', '--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
+// pnpm's own shell emulator runs a package script's programs itself, so no shell line shows how the script ends.
+if (/\/pnpm\/bin\/pnpm\.c?js$/.test(entry)) process.argv.splice(2, 0, '--config.shell-emulator=false');
 if (report && tool) {
   globalThis[Symbol.for('deepbuild.check.report')] = report;
   delete process.env.DEEP_CHECK_REPORT;

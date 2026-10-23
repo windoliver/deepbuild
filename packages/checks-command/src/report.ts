@@ -90,9 +90,12 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
   return { ran, failures, malformed: lines.length - all.length };
 }
 
-interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown> }
-/** Vitest's report, as the command check kind's reporter writes it (runtime/vitest-reporter.mjs). */
-export function vitest(lines: string[], checkout: string, lastAttemptOnly = false): Reported {
+interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown }
+/**
+ * Vitest's report, as the command check kind's reporter writes it (runtime/vitest-reporter.mjs), and Jest's and
+ * pytest's in the same format. A run error that names a filter is no failure when `named` (the check's command) holds it.
+ */
+export function vitest(lines: string[], checkout: string, lastAttemptOnly = false, named: (filter: string) => boolean = () => false): Reported {
   const all = parsed<VitestLine>(lines);
   const ran: Ran[] = [];
   const failures: Failure[] = [];
@@ -112,7 +115,7 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
       ran.push({ test: l.name ?? '', file, attempts: [...Array<Attempt>(before).fill('failed'), final], meta: l.meta ?? {} });
       if (lastAttemptOnly && final === 'passed') continue;
       for (const e of l.errors) failures.push(failure(checkout, l.name ?? '', file, e));
-    } else {
+    } else if (!(l.type === 'run:error' && typeof l.filter === 'string' && named(l.filter))) {
       for (const e of l.errors) failures.push(failure(checkout, file ?? '(run)', file, e));
     }
   }

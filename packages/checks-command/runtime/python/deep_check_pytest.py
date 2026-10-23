@@ -51,6 +51,12 @@ def pytest_configure(config):
     chosen = [flag for flag, dest in (('--lf', 'lf'), ('--sw', 'stepwise'), ('--sw-skip', 'stepwise_skip')) if config.getoption(dest, False)]
     if chosen:
         _write({'type': 'run:error', 'file': None, 'errors': [{'name': 'Error', 'message': f"tests chosen from pytest's cache ({' '.join(chosen)})", 'stack': None, 'frames': []}]})
+    # A filter leaves tests of a file out while the file still runs: the runner keeps it only when the check's command names it.
+    value = config.getoption('keyword', None)
+    if value:
+        _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by -k {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
+    for value in config.getoption('deselect', None) or []:
+        _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by --deselect {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
 
 
 @pytest.hookimpl(hookwrapper=True)

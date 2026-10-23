@@ -280,7 +280,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const vitestReport = evidence(files.vitest, true);
       const reported: Reported[] = [
         ...(nodeReport ? [nodeTest(nodeReport.lines, checkout, stderr)] : []),
-        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only')] : []),
+        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', (filter) => spec.runner.includes(filter))] : []),
         ...(go ? [goTest(stdout, checkout)] : []),
       ];
       const malformed = reported.reduce((n, r) => n + r.malformed, 0);
