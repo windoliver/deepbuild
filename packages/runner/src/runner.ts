@@ -9,13 +9,15 @@
 // crashes finds every job it recorded and never runs one twice.
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync, type Stats } from 'node:fs';
+import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync, type Stats } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Connection, Event, EventInput } from '@deepbuild/record';
 import type { Grant } from '@deepbuild/supervisor';
+import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
@@ -28,9 +30,12 @@ const NO_READING_ASK_MS = 30 * MINUTE;
 /** What "run without a reading" allows per account per day. */
 const NO_READING_PER_DAY = 10;
 const POLL_MS = 100;
+/** A result's own subtype that names its stop. */
+const RESULT_CAUSES: Record<string, StopCause> = { error_max_turns: 'max_turns' };
 const KINDS = new Set(['draft', 'review', 'read', 'smoke']);
 /** What a job's environment may carry from the hub's: never the variables that mark a nested session. */
-const ALLOWED_ENV = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY'];
+// A job's way out is the runner's forwarder, never a proxy of yours: the forwarder takes your HTTPS_PROXY instead.
+const ALLOWED_ENV = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM'];
 
 const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
@@ -63,6 +68,12 @@ interface AgentParts {
   signIn(home: string): string[];
   /** Its window snapshot as named windows: used percent and reset time in ms, each it names. */
   windows(rateLimits: unknown): Map<string, { used: number; resets: number | null }>;
+  /** The only hosts (host:port) its job reaches, through the forwarder: its own model API. */
+  hosts: string[];
+  /** What a real agent needs in its job's environment: its own temp folder, the forwarder, and your sign-in token if the hub read one. */
+  reach(o: { temp: string; proxy: string; token?: string }): Record<string, string>;
+  /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
+  token(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<string | undefined>;
 }
 const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
@@ -82,6 +93,19 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
         out.set(name, { used: w.used_percentage, resets: typeof w.resets_at === 'number' ? w.resets_at * 1000 : null });
       }
       return out;
+    },
+    hosts: ['api.anthropic.com:443'],
+    reach: ({ temp, proxy, token }) => ({
+      TMPDIR: temp, CLAUDE_CODE_TMPDIR: temp, HTTPS_PROXY: proxy, https_proxy: proxy, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}),
+    }),
+    // Only the access token, never the refresh token; an expired one isn't handed on, so the job reads as signed out.
+    token: async (home, keychain) => {
+      if (existsSync(join(home, '.claude', '.credentials.json'))) return undefined;
+      let v: unknown;
+      try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
+      const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
+      return o && typeof o.accessToken === 'string' && o.accessToken && !(typeof o.expiresAt === 'number' && o.expiresAt <= Date.now()) ? o.accessToken : undefined;
     },
   },
 };
@@ -114,6 +138,8 @@ interface Job {
   ended: Promise<JobRecord>;
   end(rec: JobRecord): void;
   stopCause?: StopCause;
+  /** Its result was marked an error: no answer. */
+  errored?: boolean;
   settling?: Promise<void>;
   left?: number[];
   /** A cleanup that failed: it reads stopping until one confirms. */
@@ -126,6 +152,8 @@ interface Job {
   /** Its checkout is still being written: nothing starts it before then. */
   preparing?: boolean;
   timers: NodeJS.Timeout[];
+  /** Its own temp folder, removed when it ends. */
+  temp?: string;
 }
 interface Account { windows: Map<string, { used: number; resets: number | null }> }
 interface Asked { handle: string; answer?: string }
@@ -145,6 +173,8 @@ class LocalRunner implements Runner {
   private chain: Promise<unknown> = Promise.resolve();
   private cursor = 0;
   private closed = false;
+  /** Opened with the first job that launches. */
+  private forwarder: Promise<Forwarder> | undefined;
   private readonly timer: NodeJS.Timeout;
 
   constructor(private readonly o: RunnerOptions) {
@@ -231,6 +261,7 @@ class LocalRunner implements Runner {
       await this.append('job.ended', { job: job.rec.job, state, ...(end.refused ? { refused: end.refused } : { cause: 'unknown' }) }, job.rec.job);
       Object.assign(job.rec, state === 'stopped' ? { state, stop: { cause: 'unknown' } } : { state, refused: end.refused });
       job.end(job.rec);
+      scrap(job.rec.job);
     }
   }
   private readonly keys = new Map<string, string>();
@@ -674,7 +705,18 @@ class LocalRunner implements Runner {
     }
     const launched = m >= 0 ? args[m + 1]! : job.spec.model ?? 'unknown';
     const home = this.o.env.HOME ?? '';
-    const grant: Grant = { read: [...this.programs(binary.real), ...(home ? parts.signIn(home) : [])] };
+    // Its own temp folder, private to you and outside the hub's root (which no run may write), removed when it
+    // ends; its only host is the forwarder's port.
+    const temp = mkdtempSync(join(realpathSync(tmpdir()), `deep-job-${job.rec.job.slice(job.rec.job.indexOf(':') + 1)}-`));
+    job.temp = temp;
+    // One that failed to open is tried again with the next job.
+    this.forwarder ??= openForwarder(new Set(Object.values(AGENTS).flatMap((a) => a!.hosts)), this.o.env.HTTPS_PROXY ?? this.o.env.https_proxy)
+      .catch((error: unknown) => { this.forwarder = undefined; throw error; });
+    const { port } = await this.forwarder;
+    const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
+    const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
+    const env = { ...this.env(), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, ...(token ? { token } : {}) }) };
+    const grant: Grant = { read: [...this.programs(binary.real), ...(home ? parts.signIn(home) : [])], write: [temp], hosts: [`127.0.0.1:${port}`] };
     const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {})];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
@@ -687,7 +729,7 @@ class LocalRunner implements Runner {
     // Read before its process starts, so its run covers every hook its process sends.
     const from = Date.now();
     const started = await this.o.supervisor.start({
-      run: job.rec.job, argv, cwd: job.rec.folder, env: this.env(), only: true, grant,
+      run: job.rec.job, argv, cwd: job.rec.folder, env, only: true, grant,
       // The prompt goes only to the bytes it verified: swapped during the start, its process reads nothing and is stopped.
       input: () => (this.unchanged(binary) && !job.cancelled ? Buffer.from(job.spec.prompt, 'utf8') : undefined),
       ...(job.spec.leases ? { leases: job.spec.leases } : {}),
@@ -744,9 +786,10 @@ class LocalRunner implements Runner {
     if (e.type === 'assistant' && isObj(e.message)) {
       const msg = e.message;
       if (typeof msg.model === 'string' && msg.model !== '<synthetic>' && this.o.plant !== 'records-launched-model') job.answered = msg.model;
-      // An API error's entry names the stop's cause, as the facts map it; never the agent's words.
+      // An API error's entry names the stop's cause, as the facts map it; never the agent's words. A job's
+      // stream-json marks it is_api_error_message, where the transcript the facts describe says isApiErrorMessage.
       const errors = this.facts(job.spec.agent).stop.cause.errors;
-      if (e.isApiErrorMessage === true && typeof e[errors.field] === 'string') job.stopCause = (errors.values[e[errors.field] as string] ?? 'unknown') as StopCause;
+      if ((e.isApiErrorMessage === true || e.is_api_error_message === true) && typeof e[errors.field] === 'string') job.stopCause = (errors.values[e[errors.field] as string] ?? 'unknown') as StopCause;
       const usage = msg.usage;
       if (isObj(usage) && typeof msg.id === 'string' && !job.seen.has(msg.id) && msg.model !== '<synthetic>') {
         job.seen.add(msg.id);
@@ -768,6 +811,8 @@ class LocalRunner implements Runner {
         if (names.length) job.answered = names[names.length - 1]!;
       }
       if (Array.isArray(e.permission_denials) && e.permission_denials.length) job.stopCause ??= 'refusal';
+      // A result marked an error is no answer: the job stopped, for the cause an error named or for none known.
+      if (e.is_error === true) { job.errored = true; job.stopCause ??= RESULT_CAUSES[String(e.subtype)] ?? 'unknown'; }
       void this.settle(job, job.resultAt);
     }
   }
@@ -839,7 +884,7 @@ class LocalRunner implements Runner {
     for (const t of job.timers) clearTimeout(t);
     if (job.rec.ran) job.rec.ran.to = Date.now();
     job.rec.model = job.answered ?? 'unknown';
-    const finished = job.resultAt !== undefined && !job.rec.refused;
+    const finished = job.resultAt !== undefined && !job.errored && !job.rec.refused;
     job.rec.state = job.rec.refused ? 'refused' : finished ? 'finished' : 'stopped';
     const cause = job.stopCause ?? (finished ? undefined : 'agent_crashed');
     if (cause) job.rec.stop = { cause };
@@ -859,6 +904,7 @@ class LocalRunner implements Runner {
       ...(r.lingered ? { lingered: r.lingered } : {}), ...(r.ran ? { from: r.ran.from, ...(r.ran.to ? { to: r.ran.to } : {}) } : {}),
     }, r.job).catch(() => undefined);
     job.end(r);
+    scrap(job.rec.job, job.temp);
   }
 
   // ---- Windows.
@@ -899,6 +945,28 @@ class LocalRunner implements Runner {
     clearInterval(this.timer);
     for (const job of this.jobs.values()) for (const t of job.timers) clearTimeout(t);
     await this.chain;
+    await (await this.forwarder?.catch(() => undefined))?.close();
+  }
+}
+
+/**
+ * A job's temp folder (found by its run token when a crash lost its path) removed, whatever its agent did to it:
+ * a folder it made read-only is made writable first. A failure leaves it, and never stops the job's end.
+ */
+function scrap(job: string, temp?: string): void {
+  const prefix = `deep-job-${job.slice(job.indexOf(':') + 1)}-`;
+  let paths: string[] = [];
+  try { paths = temp ? [temp] : readdirSync(realpathSync(tmpdir())).filter((n) => n.startsWith(prefix)).map((n) => join(realpathSync(tmpdir()), n)); } catch { return; }
+  const writable = (path: string): void => {
+    const s = lstatSync(path);
+    if (!s.isDirectory()) return;
+    chmodSync(path, 0o700);
+    for (const name of readdirSync(path)) writable(join(path, name));
+  };
+  for (const path of paths) {
+    try { rmSync(path, { recursive: true, force: true }); } catch {
+      try { writable(path); rmSync(path, { recursive: true, force: true }); } catch { /* left behind */ }
+    }
   }
 }
 

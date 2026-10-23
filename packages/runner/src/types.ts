@@ -106,6 +106,9 @@ export interface RunnerOptions {
   /** The hub's environment, which the allowlist filters; HOME is your sign-in home. */
   env: Readonly<Record<string, string | undefined>>;
   settings: { plan: { reserve_pct: number }; asks: { unblock: { deadline_ms: number } } };
+  /** A generic password from your login Keychain by service name, or undefined: where an agent keeps its sign-in
+   * on macOS (Claude Code does), which a job's sandbox refuses. Read fresh for each job that bills your plan. */
+  keychain?: (service: string) => Promise<string | undefined>;
   plant?: Plant;
 }
 export interface Runner {
