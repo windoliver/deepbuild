@@ -1,0 +1,331 @@
+Base commit: a5aa0a3 (a git archive of it, with tests/acceptance/674 added; the binaries were built from that tree alone)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/674 --no-file-parallelism
+Run in a copy of the tree at the base commit made with git archive, because the shared working tree was being edited by another session; node_modules from npm ci; cargo builds of deep-canvas-render and deep-show from that copy.
+Date: 2026-10-23T00:08:35Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/674
+
+ ❯ nearest.test.ts (7 tests | 7 failed) 61752ms
+   ❯ AC1 a 4 × 4 checker drawn with sampling nearest and fit fill into a 16 × 16 box reads exactly 0 or 255 at every device pixel, the color of its texel (5)
+     × AC1 through GPUI at zoom 1 6106ms
+     × AC1 through GPUI at zoom 2 240ms
+     × AC1 through Vello CPU raster at zoom 1 144ms
+     × AC1 through Vello CPU raster at zoom 2 129ms
+     × AC1 through render-back 4232ms
+   ❯ scope: GPUI resamples a nearest image to its drawn size and draws it 1:1 on whole device pixels (2)
+     × a nearest image at 4.2 u draws on whole device pixels at zoom 1: every pixel is a texel's own color or the ground, no blended edge 1631ms
+     × a nearest image at 4.2 u draws on whole device pixels at zoom 2: every pixel is a texel's own color or the ground, no blended edge 194ms
+ ❯ cubic.test.ts (1 test | 1 failed) 12748ms
+   ❯ AC2 the checker with sampling cubic agrees between GPUI and Vello CPU raster within 2 levels per channel at every pixel (1)
+     × AC2 GPUI and Vello CPU raster agree at every pixel, and each draws something other than linear 1859ms
+ ❯ session.test.ts (6 tests | 5 failed) 11339ms
+   ❯ AC5 a nearest image moved by whole device pixels over 10 frames on the GPUI path resamples once (3)
+     × AC5 ten frames at zoom 1, the image one device pixel further each: one resample, in the first frame 1405ms
+     × AC5 ten frames at zoom 2, the image one device pixel further each: one resample, in the first frame 128ms
+     × AC5 the copy is cached by asset, crop, opacity and drawn size: a new opacity or a new drawn size resamples again, and a linear image never does 144ms
+   ❯ AC5 a nearest image whose resampled copy would pass the 64 MB cap is refused, naming its asset (3)
+     × AC5 5000 × 4000 px (80 MB) is refused, and the refusal names the asset by its hash 164ms
+     × AC5 the cap counts device pixels: 2600 × 2600 u at zoom 2 is 5200 × 5200 px (108 MB) and is refused 134ms
+ ❯ document.test.ts (3 tests | 3 failed) 9267ms
+   ❯ AC4 a sampling value other than linear, nearest and cubic is refused, naming items/<id>/params/sampling (2)
+     × AC4 the check refuses each wrong value with an error naming the field, and passes the three values and no field 1332ms
+     × AC4 Vello CPU raster and GPUI refuse a wrong value too, naming the field, and write no picture 144ms
+   ❯ AC4 a document whose only change is its sampling gets a new content key for that image (1)
+     × AC4 nearest, cubic and linear each have their own key; the same sampling has the same key; no field is linear 190ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  cubic.test.ts > AC2 the checker with sampling cubic agrees between GPUI and Vello CPU raster within 2 levels per channel at every pixel > AC2 GPUI and Vello CPU raster agree at every pixel, and each draws something other than linear
+AssertionError: Vello CPU: cubic is not the linear draw (largest difference 0 levels, at device pixel 0, 0): expected 0 to be greater than 8
+ ❯ cubic.test.ts:23:159
+     21|     // A renderer that ignores the field draws linear: cubic would the…
+     22|     const onVello = largestDifference(cubicOnVello, linearOnVello);
+     23|     expect(onVello.levels, `Vello CPU: cubic is not the linear draw (l…
+       |                                                                                                                                                               ^
+     24|     const onGpui = largestDifference(cubicOnGpui, linearOnGpui);
+     25|     expect(onGpui.levels, `GPUI: cubic is not the linear draw (largest…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
+
+ FAIL  document.test.ts > AC4 a sampling value other than linear, nearest and cubic is refused, naming items/<id>/params/sampling > AC4 the check refuses each wrong value with an error naming the field, and passes the three values and no field
+AssertionError: check of sampling "bilinear": refused: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ document.test.ts:20:80
+     18|       const result = check(checkerDoc(asset, { sampling: value }));
+     19|       const errors = result.issues.filter((i) => i.severity === 'error…
+     20|       expect(result.ok, `check of sampling ${JSON.stringify(value)}: r…
+       |                                                                                ^
+     21|       expect(errors.map((e) => e.path), `check of sampling ${JSON.stri…
+     22|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  document.test.ts > AC4 a sampling value other than linear, nearest and cubic is refused, naming items/<id>/params/sampling > AC4 Vello CPU raster and GPUI refuse a wrong value too, naming the field, and write no picture
+AssertionError: raster of sampling "bilinear": refused: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ document.test.ts:34:84
+     32|       const doc = checkerDoc(asset, { sampling: value });
+     33|       const raster = rasterAnswerOf(dir, doc, { zoom: 1 }).out;
+     34|       expect(raster['ok'], `raster of sampling ${JSON.stringify(value)…
+       |                                                                                    ^
+     35|       expect(JSON.stringify(raster), `raster of sampling ${JSON.string…
+     36|       const view = gpuiAnswerOf(dir, doc, { zoom: 1 }).out;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  document.test.ts > AC4 a document whose only change is its sampling gets a new content key for that image > AC4 nearest, cubic and linear each have their own key; the same sampling has the same key; no field is linear
+AssertionError: steps[0].caches.images is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:34:100
+     32| }
+     33| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     34|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     35|   return value as JsonValue[];
+     36| }
+ ❯ imageCaches helpers.ts:226:3
+ ❯ document.test.ts:49:21
+ ❯ document.test.ts:48:66
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
+
+ FAIL  nearest.test.ts > AC1 a 4 × 4 checker drawn with sampling nearest and fit fill into a 16 × 16 box reads exactly 0 or 255 at every device pixel, the color of its texel > AC1 through GPUI at zoom 1
+AssertionError: GPUI at zoom 1: the first device pixel that isn't a texel's own color: expected 'device pixel (4, 4) reads [122,145,17…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (4, 4) reads [122,145,175], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:18:150
+     16|     it(`AC1 through GPUI at zoom ${zoom}`, () => {
+     17|       const image = gpui(dir, nearest(), { zoom }, `GPUI render at zoo…
+     18|       expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, zoom), …
+       |                                                                                                                                                      ^
+     19|     }, 300_000);
+     20|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
+
+ FAIL  nearest.test.ts > AC1 a 4 × 4 checker drawn with sampling nearest and fit fill into a 16 × 16 box reads exactly 0 or 255 at every device pixel, the color of its texel > AC1 through GPUI at zoom 2
+AssertionError: GPUI at zoom 2: the first device pixel that isn't a texel's own color: expected 'device pixel (8, 8) reads [107,133,16…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (8, 8) reads [107,133,168], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:18:150
+     16|     it(`AC1 through GPUI at zoom ${zoom}`, () => {
+     17|       const image = gpui(dir, nearest(), { zoom }, `GPUI render at zoo…
+     18|       expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, zoom), …
+       |                                                                                                                                                      ^
+     19|     }, 300_000);
+     20|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/16]⎯
+
+ FAIL  nearest.test.ts > AC1 a 4 × 4 checker drawn with sampling nearest and fit fill into a 16 × 16 box reads exactly 0 or 255 at every device pixel, the color of its texel > AC1 through Vello CPU raster at zoom 1
+AssertionError: Vello CPU at zoom 1: the first device pixel that isn't a texel's own color: expected 'device pixel (6, 4) reads [223,223,22…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (6, 4) reads [223,223,223], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:25:155
+     23|     it(`AC1 through Vello CPU raster at zoom ${zoom}`, () => {
+     24|       const image = vello(dir, nearest(), { zoom }, `Vello CPU raster …
+     25|       expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, zoom), …
+       |                                                                                                                                                           ^
+     26|     }, 300_000);
+     27|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  nearest.test.ts > AC1 a 4 × 4 checker drawn with sampling nearest and fit fill into a 16 × 16 box reads exactly 0 or 255 at every device pixel, the color of its texel > AC1 through Vello CPU raster at zoom 2
+AssertionError: Vello CPU at zoom 2: the first device pixel that isn't a texel's own color: expected 'device pixel (12, 8) reads [239,239,2…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (12, 8) reads [239,239,239], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:25:155
+     23|     it(`AC1 through Vello CPU raster at zoom ${zoom}`, () => {
+     24|       const image = vello(dir, nearest(), { zoom }, `Vello CPU raster …
+     25|       expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, zoom), …
+       |                                                                                                                                                           ^
+     26|     }, 300_000);
+     27|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  nearest.test.ts > AC1 a 4 × 4 checker drawn with sampling nearest and fit fill into a 16 × 16 box reads exactly 0 or 255 at every device pixel, the color of its texel > AC1 through render-back
+AssertionError: render-back: the first device pixel that isn't a texel's own color: expected 'device pixel (6, 4) reads [223,223,22…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (6, 4) reads [223,223,223], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:32:158
+     30|     const image = await back(dir, png, (a) => forShow(checkerDoc(a, { …
+     31|     // Render-back paints the shipped look's ground, not this suite's:…
+     32|     expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, 1, pixel(…
+       |                                                                                                                                                              ^
+     33|   }, 300_000);
+     34| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  nearest.test.ts > scope: GPUI resamples a nearest image to its drawn size and draws it 1:1 on whole device pixels > a nearest image at 4.2 u draws on whole device pixels at zoom 1: every pixel is a texel's own color or the ground, no blended edge
+AssertionError: GPUI at zoom 1, image offset by 0.2 u: the first device pixel off its whole-pixel place: expected 'device pixel (4, 4) reads [122,145,17…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (4, 4) reads [122,145,175], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:43:168
+     41|       const at = { pos: [0.2, 0.2, 0] };
+     42|       const image = gpui(dir, nearest({ at }), { zoom }, `GPUI render …
+     43|       expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, zoom), …
+       |                                                                                                                                                                        ^
+     44|     }, 300_000);
+     45|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+ FAIL  nearest.test.ts > scope: GPUI resamples a nearest image to its drawn size and draws it 1:1 on whole device pixels > a nearest image at 4.2 u draws on whole device pixels at zoom 2: every pixel is a texel's own color or the ground, no blended edge
+AssertionError: GPUI at zoom 2, image offset by 0.2 u: the first device pixel off its whole-pixel place: expected 'device pixel (8, 8) reads [107,133,16…' to be null
+
+- Expected:
+null
+
++ Received:
+"device pixel (8, 8) reads [107,133,168], expected [255,255,255] (texel 0, 0: exactly 0 or 255)"
+
+ ❯ nearest.test.ts:43:168
+     41|       const at = { pos: [0.2, 0.2, 0] };
+     42|       const image = gpui(dir, nearest({ at }), { zoom }, `GPUI render …
+     43|       expect(firstWrongPixel(image, CHECKER_SIZE, CHECKER_BOX, zoom), …
+       |                                                                                                                                                                        ^
+     44|     }, 300_000);
+     45|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/16]⎯
+
+ FAIL  session.test.ts > AC5 a nearest image moved by whole device pixels over 10 frames on the GPUI path resamples once > AC5 ten frames at zoom 1, the image one device pixel further each: one resample, in the first frame
+ FAIL  session.test.ts > AC5 a nearest image moved by whole device pixels over 10 frames on the GPUI path resamples once > AC5 ten frames at zoom 2, the image one device pixel further each: one resample, in the first frame
+AssertionError: steps[0].resamples is a count of resamples, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ resamples helpers.ts:218:141
+    216| export function resamples(report: JsonObject, i: number): number {
+    217|   const n = report['resamples'];
+    218|   expect(typeof n === 'number' && Number.isInteger(n) && n >= 0, `step…
+       |                                                                                                                                             ^
+    219|   return n as number;
+    220| }
+ ❯ session.test.ts:19:100
+ ❯ session.test.ts:19:86
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/16]⎯
+
+ FAIL  session.test.ts > AC5 a nearest image moved by whole device pixels over 10 frames on the GPUI path resamples once > AC5 the copy is cached by asset, crop, opacity and drawn size: a new opacity or a new drawn size resamples again, and a linear image never does
+AssertionError: steps[0].resamples is a count of resamples, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ resamples helpers.ts:218:141
+    216| export function resamples(report: JsonObject, i: number): number {
+    217|   const n = report['resamples'];
+    218|   expect(typeof n === 'number' && Number.isInteger(n) && n >= 0, `step…
+       |                                                                                                                                             ^
+    219|   return n as number;
+    220| }
+ ❯ session.test.ts:35:107
+ ❯ session.test.ts:35:93
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/16]⎯
+
+ FAIL  session.test.ts > AC5 a nearest image whose resampled copy would pass the 64 MB cap is refused, naming its asset > AC5 5000 × 4000 px (80 MB) is refused, and the refusal names the asset by its hash
+AssertionError: a nearest image drawn at 5000 × 4000 device px, 80 MB resampled, is over the 64 MB cap: {"ok":true,"width":64,"height":64,"marks":[],"legend":[]}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ session.test.ts:46:152
+     44|   it('AC5 5000 × 4000 px (80 MB) is refused, and the refusal names the…
+     45|     const out = gpuiAnswerOf(dir, big(5000, 4000), { zoom: 1 }).out;
+     46|     expect(out['ok'], `a nearest image drawn at 5000 × 4000 device px,…
+       |                                                                                                                                                        ^
+     47|     expect(sha256(png), 'the checker\'s hash').toBe(asset);
+     48|     expect(JSON.stringify(out), 'the refusal names the image\'s asset'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/16]⎯
+
+ FAIL  session.test.ts > AC5 a nearest image whose resampled copy would pass the 64 MB cap is refused, naming its asset > AC5 the cap counts device pixels: 2600 × 2600 u at zoom 2 is 5200 × 5200 px (108 MB) and is refused
+AssertionError: a nearest image drawn at 2600 × 2600 u at zoom 2, 108 MB resampled, is over the cap: {"ok":true,"width":128,"height":128,"marks":[],"legend":[]}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ session.test.ts:58:149
+     56|   it('AC5 the cap counts device pixels: 2600 × 2600 u at zoom 2 is 520…
+     57|     const out = gpuiAnswerOf(dir, big(2600, 2600), { zoom: 2 }).out;
+     58|     expect(out['ok'], `a nearest image drawn at 2600 × 2600 u at zoom …
+       |                                                                                                                                                     ^
+     59|     expect(JSON.stringify(out), 'the refusal names the image\'s asset'…
+     60|   }, 300_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/16]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  16 failed | 7 passed (23)
+   Start at  17:08:35
+   Duration  131.04s (tests 100%)
+

@@ -21,11 +21,12 @@ use std::path::Path;
 use std::rc::Rc;
 
 use deep_canvas::document::{
-    apply_ops, canonical, check, recheck, rollback, store_migrations, touched, Issue, Patched,
-    Writing, ID_MAPS,
+    apply_ops, canonical_in, check_in, recheck, rollback, store_migrations, touched, Issue,
+    Patched, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
+use deep_canvas::registry::Sealed;
 use deep_canvas::show::{
     inline_count, order_issues, truncated, unreadable_handles, whole_diff_by, Diff, Writer,
     WriterKind,
@@ -160,10 +161,10 @@ impl Shared {
         (Cow::Owned(doc), Cow::Owned(owners))
     }
 
-    /// Revision `k`'s hash.
-    pub fn hash(&self, k: usize) -> &str {
+    /// Revision `k`'s hash, by the kinds of the build's sealed set.
+    pub fn hash(&self, k: usize, sealed: &Sealed) -> &str {
         self.revs[k].hash.get_or_init(|| {
-            canonical(&self.at(k).0)
+            canonical_in(&self.at(k).0, &sealed.kinds())
                 .map(|c| c.sha256)
                 .unwrap_or_default()
         })
@@ -371,7 +372,9 @@ fn key(issue: &Issue) -> (String, Vec<String>) {
 
 /// The errors of `issues` a writer's revision is refused for: ones the last good revision didn't
 /// have that are the document's own or fall on an item it wrote or its layer holds. An error it
-/// leaves on another writer's item, as a parent it deleted, goes to that writer instead.
+/// leaves on another writer's item, as a parent it deleted, goes to that writer instead. A
+/// `module_missing` refuses every revision, had or not: this build can't check the document
+/// (#305).
 pub fn blocking(
     issues: &[Issue],
     last: &[Issue],
@@ -391,7 +394,7 @@ pub fn blocking(
     };
     issues
         .iter()
-        .filter(|i| i.severity == "error" && !had.contains(&key(i)))
+        .filter(|i| i.severity == "error" && (i.code == "module_missing" || !had.contains(&key(i))))
         .filter(|i| i.ids.is_empty() || i.ids.iter().any(mine))
         .cloned()
         .collect()
@@ -541,7 +544,7 @@ impl Hub<'_> {
             if let Some(fields) = doc.as_object_mut() {
                 fields.insert("id".into(), json!(id.to_ascii_lowercase()));
             }
-            let issues = check(&doc).issues;
+            let issues = check_in(&doc, &self.startup.sealed).issues;
             let mut shared = Shared {
                 id: id.clone(),
                 doc,
@@ -564,7 +567,12 @@ impl Hub<'_> {
                 older: BTreeSet::new(),
             };
             if let Some(state) = &self.scenario.state {
-                restore(&mut shared, state, self.scenario.planted);
+                restore(
+                    &mut shared,
+                    state,
+                    &self.startup.sealed,
+                    self.scenario.planted,
+                );
             }
             shared.find_older();
             self.shared.insert(id.clone(), shared);
@@ -849,9 +857,9 @@ impl Hub<'_> {
         let issues = if added.is_some() {
             None
         } else {
-            recheck(&shared.doc, &last, &changed)
+            recheck(&shared.doc, &last, &changed, &self.startup.sealed)
         }
-        .unwrap_or_else(|| check(&shared.doc).issues);
+        .unwrap_or_else(|| check_in(&shared.doc, &self.startup.sealed).issues);
         let refusals = blocking(&issues, &last, &shared.doc, &layer, &changed);
         if !refusals.is_empty() {
             take_back(shared, &patched);
@@ -1228,7 +1236,7 @@ impl Hub<'_> {
             }
         };
         let changed = changed_between(was_doc, &doc);
-        let result = check(&doc);
+        let result = check_in(&doc, &self.startup.sealed);
         issues.extend(blocking(&result.issues, &last, &doc, &layer, &changed));
         issues.extend(foreign_writes(&doc, &owners, &layer));
         let mine = |id: &String| {
@@ -1349,7 +1357,7 @@ impl Hub<'_> {
             .collect();
         let mut reply = Map::new();
         reply.insert("rev".into(), json!(shared.revs[k].rev));
-        reply.insert("hash".into(), json!(shared.hash(k)));
+        reply.insert("hash".into(), json!(shared.hash(k, &self.startup.sealed)));
         reply.insert("draws".into(), json!(draws(&shown)));
         reply.insert("issues".into(), json!(issues));
         reply.insert("files".into(), json!(files(doc, &shown, &owners)));
@@ -1419,7 +1427,7 @@ impl Hub<'_> {
                     "rev": r.rev,
                     "base_rev": r.base_rev,
                     "writer": r.writer.as_ref().map(Writer::to_json),
-                    "hash": shared.hash(k),
+                    "hash": shared.hash(k, &self.startup.sealed),
                     "state": if r.rev == last { "current" } else { "superseded" },
                     "patches": r.patch.iter().collect::<Vec<_>>(),
                 })
@@ -1839,7 +1847,7 @@ fn marks_check(
 
 /// Rebuilds `shared` from the record in `state`: each event, in order, takes each layer from the
 /// layer file it names, at its revision. The planted twin takes each layer's newest file instead.
-fn restore(shared: &mut Shared, state: &Path, planted: Option<Planted>) {
+fn restore(shared: &mut Shared, state: &Path, sealed: &Sealed, planted: Option<Planted>) {
     let Ok(text) = fs::read_to_string(state.join("record.jsonl")) else {
         return;
     };
@@ -1885,7 +1893,7 @@ fn restore(shared: &mut Shared, state: &Path, planted: Option<Planted>) {
             before,
             paths,
             envelope_before,
-            issues: Rc::new(check(&shared.doc).issues),
+            issues: Rc::new(check_in(&shared.doc, sealed).issues),
             hash: OnceCell::new(),
             current_at: None,
         });
