@@ -265,16 +265,28 @@ describe('what a checkout\'s config makes the run leave out', () => {
     }, true);
     const j = await runCommandCheck(check(jest, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
     expect(j.outcome, j.output.stderr).toBe('failed');
+    // A filter the command's text holds only by chance ("st" of jest) is still the checkout's.
+    writeFileSync(join(jest, 'package.json'), '{ "name": "unit", "private": true, "jest": { "testNamePattern": "st" } }\n');
+    const chance = await runCommandCheck(check(jest, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
+    expect(chance.outcome, chance.output.stderr).toBe('failed');
     const pytest = folder({ 'pytest.ini': '[pytest]\naddopts = -k "not total"\n', 'tests/test_cart.py': 'def test_total():\n    assert 11 == 12\n\n\ndef test_exists():\n    pass\n' });
     const p = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
     expect(p.outcome, p.output.stdout).toBe('failed');
     writeFileSync(join(pytest, 'pytest.ini'), '[pytest]\naddopts = --deselect tests/test_cart.py::test_total\n');
     const deselected = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
     expect(deselected.outcome, deselected.output.stdout).toBe('failed');
+    writeFileSync(join(pytest, 'pytest.ini'), '[pytest]\npython_functions = test_exists\n');
+    const uncollected = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(uncollected.outcome, uncollected.output.stdout).toBe('failed');
+    const classes = folder({ 'pytest.ini': '[pytest]\npython_classes = Nothing\n', 'tests/test_cart.py': 'class TestTotal:\n    def test_total(self):\n        assert 11 == 12\n\n\ndef test_exists():\n    pass\n' });
+    const uncollectedClass = await runCommandCheck(check(classes, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(uncollectedClass.outcome, uncollectedClass.output.stdout).toBe('failed');
     // The check's own command may choose its tests.
     const plain = folder({ 'tests/test_cart.py': 'def test_total():\n    assert 11 == 12\n\n\ndef test_exists():\n    pass\n' });
     const own = await runCommandCheck(check(plain, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider -k exists tests' } }));
     expect(own.outcome, own.output.stdout).toBe('passed');
+    const ownIni = await runCommandCheck(check(plain, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider -o python_functions=test_exists tests' } }));
+    expect(ownIni.outcome, ownIni.output.stdout).toBe('passed');
   }, 300_000);
 });
 

@@ -55,6 +55,11 @@ def pytest_configure(config):
     value = config.getoption('keyword', None)
     if value:
         _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by -k {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
+    # Which functions and classes are tests is pytest's own filter too: one that leaves test_* out drops tests silently.
+    for name, default in (('python_functions', ['test']), ('python_classes', ['Test'])):
+        if config.getini(name) != default:
+            value = f"{name}={' '.join(config.getini(name))}"
+            _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
     for value in config.getoption('deselect', None) or []:
         _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by --deselect {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
 

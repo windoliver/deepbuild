@@ -16,7 +16,7 @@ import { scrubValues } from '@deepbuild/evidence';
 import type { Exit, Host } from '@deepbuild/supervisor';
 import { evidence, goTest, nodeTest, under, vitest, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { GO_TEST, hiddenChild, maskIn, programsIn, untraced, type Spawned } from './shell.js';
+import { filtersIn, GO_TEST, hiddenChild, maskIn, programsIn, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -198,6 +198,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);
+    const filters = filtersIn(spec.runner);
     if (refused.length) return { run: result('uncounted', { mask: `venv ${refused[0]}: name the venv's program by its path` }), ran: [] };
     const hidden = plant === 'exit-code-only' ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
     if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
@@ -280,7 +281,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const vitestReport = evidence(files.vitest, true);
       const reported: Reported[] = [
         ...(nodeReport ? [nodeTest(nodeReport.lines, checkout, stderr)] : []),
-        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', (filter) => spec.runner.includes(filter))] : []),
+        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', (filter) => filters.has(filter))] : []),
         ...(go ? [goTest(stdout, checkout)] : []),
       ];
       const malformed = reported.reduce((n, r) => n + r.malformed, 0);
