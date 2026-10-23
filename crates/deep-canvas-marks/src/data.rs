@@ -17,7 +17,9 @@ use serde_json::{Map, Value};
 use deep_canvas::ops;
 
 use crate::path;
-use crate::scene::{Align, Fill, Geometry, ImageFit, Mark, Palette, Refused, TextSpec};
+use crate::scene::{
+    Align, Fill, Geometry, ImageFit, ImageSampling, Mark, Palette, Refused, TextSpec,
+};
 
 fn refuse<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused> {
     Err(Refused {
@@ -550,6 +552,7 @@ pub fn mark_set(
                     asset: asset.to_ascii_lowercase(),
                     bounds: span(at, [x2, y2]),
                     fit,
+                    sampling: ImageSampling::Linear,
                     crop: None,
                     opacity: 1.0,
                     adjust: crate::paint::Adjust::default(),
