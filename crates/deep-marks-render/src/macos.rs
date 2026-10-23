@@ -29,9 +29,7 @@ use deep_canvas_marks::dirty::{Class, Dirty};
 use deep_canvas_marks::key::{sha256_hex, ContentKey, KeyBuilder};
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::{self, Mesh};
-use deep_canvas_marks::scene::{
-    self, Drawn, Fill, ImageFit, ImageSampling, Mark, Record, Rgb, StatusMark,
-};
+use deep_canvas_marks::scene::{self, Drawn, Fill, ImageSampling, Mark, Record, Rgb, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::{Program, State};
 use deep_text_gpui::Label;
@@ -380,31 +378,10 @@ fn resampled(
 
 /// Compiles a revision once, so its frames only evaluate.
 fn compile(session: &mut Session, doc: &Map<String, Value>) -> Result<(), Value> {
-    let program =
-        Program::compile(&Value::Object(doc.clone())).map_err(|r| refused(r.code, &r.path))?;
+    let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
     let state = program.state();
     session.compiled = Some((program, state));
     Ok(())
-}
-
-/// Where an image of `size` pixels maps for its box and fit, centered in the box.
-fn fitted(bounds: [f64; 4], size: [u32; 2], fit: ImageFit) -> [f64; 4] {
-    let [x, y, w, h] = bounds;
-    let (iw, ih) = (f64::from(size[0]), f64::from(size[1]));
-    let (sx, sy) = match fit {
-        ImageFit::Fill => (w / iw, h / ih),
-        ImageFit::Contain => {
-            let s = (w / iw).min(h / ih);
-            (s, s)
-        }
-        ImageFit::Cover => {
-            let s = (w / iw).max(h / ih);
-            (s, s)
-        }
-        ImageFit::None => (1.0, 1.0),
-    };
-    let (dw, dh) = (iw * sx, ih * sy);
-    [x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh]
 }
 
 /// The layer an item is in, by its ID or the ID of the set a generated mark (`<id>#<key>`) is from.
@@ -442,10 +419,10 @@ fn tessellation<'a>(
     geometry: &scene::Geometry,
     d: &str,
     bucket: i32,
-    used: &mut Vec<(ContentKey, i32)>,
+    used: &mut BTreeSet<(ContentKey, i32)>,
 ) -> &'a Tessellation {
     let key = geometry.key(d, bucket);
-    used.push((key, bucket));
+    used.insert((key, bucket));
     session
         .tessellations
         .entry((key, bucket))
@@ -603,7 +580,7 @@ impl Renderer {
         bucket: i32,
         zoom: f64,
         gpui_oklab: bool,
-        used: &mut Vec<(ContentKey, i32)>,
+        used: &mut BTreeSet<(ContentKey, i32)>,
     ) -> Result<Vec<Placed>, Value> {
         let mut out: Vec<Placed> = Vec::with_capacity(marks.len());
         for drawn in marks {
@@ -700,7 +677,7 @@ impl Renderer {
                     ..
                 } => {
                     let (image, size) = image_of(session, asset, *crop, *opacity, item)?;
-                    let to = fitted(*bounds, size, *fit);
+                    let to = fit.fitted(*bounds, size);
                     let (image, image_bounds) = if *sampling == ImageSampling::Linear {
                         (image, to)
                     } else {
@@ -821,7 +798,7 @@ impl Renderer {
             {
                 if *sampling != ImageSampling::Linear {
                     let (_, size) = image_of(session, asset, *crop, *opacity, item)?;
-                    let to = fitted(*bounds, size, *fit);
+                    let to = fit.fitted(*bounds, size);
                     let key = image_key(asset, *crop, *opacity);
                     copies.push(resample_at(key, *sampling, to, view.zoom).0);
                 }
@@ -854,7 +831,7 @@ impl Renderer {
             })
             .collect();
 
-        let mut used = Vec::new();
+        let mut used = BTreeSet::new();
         let ground = fill_quad(
             Bounds {
                 origin: Point::default(),

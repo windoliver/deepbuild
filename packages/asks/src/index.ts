@@ -6,11 +6,11 @@
 // that state calls for (a supersede, a moot, a typed answer, a default, the fold's exception), so a core
 // opened on a rebuilt record ends the same asks the same way. Only an answer's option sets its decision.
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
+import { ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
 
 export type AskKind = 'authority' | 'unblock' | 'taste' | 'exception' | 'choice' | 'definition';
@@ -104,13 +104,6 @@ type Option = { id: string; label: string; decision: Decision };
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const bare = (handle: string): string => handle.replace(/^ask:/, '');
 const git = promisify(execFile);
-
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-function ulid(ms: number): string {
-  let time = '';
-  for (let t = ms, i = 0; i < 10; i++, t = Math.floor(t / 32)) time = CROCKFORD[t % 32] + time;
-  return time + Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('');
-}
 
 interface Ask {
   id: string;
@@ -312,8 +305,9 @@ class AsksCore implements Asks {
     return session === undefined ? '' : this.sessions.get(session)?.thread ?? session;
   }
 
+  /** The open asks in log order: asks enter the map only from apply, which reads the log in order. */
   private open(): Ask[] {
-    return [...this.asks.values()].filter((a) => !a.closed).sort((a, b) => a.pos - b.pos);
+    return [...this.asks.values()].filter((a) => !a.closed);
   }
 
   private hand(ask: Ask, option: string | null, words: string | null, provisional: boolean, decision: Decision | null): void {

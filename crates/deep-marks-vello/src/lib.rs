@@ -289,10 +289,14 @@ fn dash(path: &BezPath, n: u16) -> BezPath {
             let s0 = f64::from(d) * period;
             let s1 = (s0 + dash).min(total);
             out.move_to(point(s0));
-            for (p, s) in points.iter().zip(&at) {
-                if *s > s0 && *s < s1 {
-                    out.line_to(*p);
-                }
+            // `at` never decreases, so the points inside the dash are one run of it.
+            let first = at.partition_point(|s| *s <= s0);
+            for (p, _) in points[first..]
+                .iter()
+                .zip(&at[first..])
+                .take_while(|(_, s)| **s < s1)
+            {
+                out.line_to(*p);
             }
             out.line_to(point(s1));
         }

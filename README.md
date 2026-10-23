@@ -35,9 +35,10 @@ The repository skeleton runs locally; the app and hub are still in development. 
 
 ## Run the checkout
 
-Use Node.js **24.22 or newer** and Rust with Cargo and `rustfmt` (included in
-the default rustup toolchain). On macOS, also install the Xcode Command Line
-Tools; on Linux, install GNU time at `/usr/bin/time`.
+Use Node.js **24.22 or newer** and rustup: `rust-toolchain.toml` pins Rust
+1.99.1 with `rustfmt` and `clippy`, which rustup installs on first use. On
+macOS, also install the Xcode Command Line Tools; on Linux, install GNU time at
+`/usr/bin/time`.
 
 ```sh
 git clone https://github.com/windoliver/deepbuild.git

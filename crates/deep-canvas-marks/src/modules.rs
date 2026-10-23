@@ -520,7 +520,8 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         .ok_or_else(|| OpError::new("input_missing", "look"))?;
     let empty = Map::new();
     let doc = doc.as_object().unwrap_or(&empty);
-    let frame = scene::frame_with(doc, &items, &look.palette, 1.0, &bound).map_err(refused)?;
+    let frame =
+        scene::frame_with(doc, &items, &look.palette, 1.0, &bound, &record).map_err(refused)?;
     let status = scene::status_marks(doc, &items, &record, look.status.as_ref(), &look.palette)
         .map_err(refused)?;
     // Each text mark's font names a role the shaper bundles.

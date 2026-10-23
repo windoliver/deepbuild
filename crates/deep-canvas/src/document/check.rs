@@ -1241,12 +1241,12 @@ fn check_targets(
     let Some(entries) = member(doc, section).and_then(as_object) else {
         return;
     };
-    // A channel is `{target}`; a bound value is `{target, source}` with the fields of Bound
-    // value, nothing else.
+    // A channel has the fields of Channel and key, whose values the motion module reads; a bound
+    // value has the fields of Bound value; nothing else.
     let allowed: &[&str] = if with_source {
         BOUND_VALUE_FIELDS
     } else {
-        &["target"]
+        CHANNEL_FIELDS
     };
     for (key, entry) in entries {
         let Some(fields) = as_object(entry) else {
@@ -1326,29 +1326,49 @@ fn check_targets(
         }
         if with_source {
             let source_path = format!("{section}/{key}/source");
-            match member(entry, "source") {
-                Some(Value::String(text)) => {
-                    if let Err(r) = Handle::parse(text) {
-                        issues.push(Issue::error(
-                            "bad_handle",
-                            key,
-                            source_path,
-                            json!(text),
-                            &r.what,
-                        ));
-                    }
-                }
-                other => issues.push(Issue::error(
+            let refused = match member(entry, "source") {
+                Some(Value::String(text)) => Handle::parse(text)
+                    .err()
+                    .map(|r| Issue::error("bad_handle", key, source_path, json!(text), &r.what)),
+                other => Some(Issue::error(
                     "out_of_range",
                     key,
                     source_path,
                     other.cloned().unwrap_or(Value::Null),
                     "not a handle",
                 )),
+            };
+            if let Some(mut issue) = refused {
+                // The source is what the number on screen rests on, so its issue also names the
+                // item, or the mark set's row, the value fills (picking's `<id>#<key>`).
+                if let Some(path) = member(entry, "target")
+                    .and_then(Value::as_str)
+                    .and_then(|t| Path::parse(t).ok())
+                    .filter(|p| p.section() == Section::Items)
+                {
+                    issue.ids.push(match path.sub() {
+                        Some(sub) => format!("{}#{sub}", path.id().as_str()),
+                        None => path.id().as_str().to_string(),
+                    });
+                }
+                issues.push(issue);
             }
         }
     }
 }
+
+/// A channel's fields (Channel and key).
+const CHANNEL_FIELDS: &[&str] = &[
+    "target",
+    "type",
+    "space",
+    "mode",
+    "keys",
+    "extrapolate",
+    "modifiers",
+    "range",
+    "morph",
+];
 
 /// A bound value's fields (Bound value).
 const BOUND_VALUE_FIELDS: &[&str] = &[
@@ -1449,9 +1469,18 @@ pub(crate) fn resolve(
         return Err(format!("{section}/{id} is not in the document"));
     };
     if let Some(sub) = path.sub() {
-        return Err(format!(
-            "`#{sub}` names a part of {section}/{id}, and no kind in this build has parts"
-        ));
+        // A mark set's row key is the one part this build names: `items/<set>#<key>/<column>`.
+        let params = member(target, "params").and_then(as_object);
+        return match (path.section(), path.fields(), params) {
+            (Section::Items, [column], Some(params)) if params.contains_key("columns") => {
+                super::rows::row_column(params, sub, column)
+                    .map_err(|what| format!("`#{sub}` names no row of {section}/{id}: {what}"))
+            }
+            _ => Err(format!(
+                "`#{sub}` names a part of {section}/{id}, and only a mark set's row key, \
+                 followed by one of its columns, names a part in this build"
+            )),
+        };
     }
     let fields: Vec<&str> = path.fields().iter().map(String::as_str).collect();
     let unreachable = || {
