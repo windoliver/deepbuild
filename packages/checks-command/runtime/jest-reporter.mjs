@@ -39,12 +39,15 @@ const errorOf = (e, text) => ({
 export default class DeepCheckJestReporter {
   constructor(globalConfig) {
     this.update = globalConfig?.updateSnapshot;
+    this.onlyFailures = globalConfig?.onlyFailures === true;
   }
 
 
   // The runner's preload moves the clock of the processes it loads into; Jest runs each test file in a context with
   // a Date of its own, so a run whose clock should be ahead can't pass.
   onRunStart() {
+    // Tests chosen from Jest's cache (the last run's failures) aren't the suite: one it leaves out never runs.
+    if (this.onlyFailures) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: 'tests chosen from Jest\'s cache (onlyFailures)', stack: null, frames: [] }] });
     // A run that writes snapshots takes its expected values from what the program gives: it can't pass.
     if (this.update && this.update !== 'none') {
       write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `snapshots are written, not compared (updateSnapshot ${this.update})`, stack: null, frames: [] }] });
