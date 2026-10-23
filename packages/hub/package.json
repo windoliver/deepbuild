@@ -15,6 +15,7 @@
     "@deepbuild/adapters": "0.0.0",
     "@deepbuild/asks": "0.0.0",
     "@deepbuild/contracts": "0.0.0",
+    "@deepbuild/env-local": "0.0.0",
     "@deepbuild/evidence": "0.0.0",
     "@deepbuild/record": "0.0.0",
     "@deepbuild/supervisor": "0.0.0",

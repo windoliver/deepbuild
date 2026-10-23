@@ -12,6 +12,8 @@ export interface Grant {
   hosts?: string[];
   /** Absolute paths of the local sockets it may connect to. */
   sockets?: string[];
+  /** "<host>:<port>" it may listen on; on Seatbelt, the port on every address of this machine, the LAN's too: Seatbelt can't tell loopback from the wildcard. A run's leased ports are added to it. */
+  listen?: string[];
   /** Run-as-you (Access): your files and programs, as you. Still no device, and no socket or host it doesn't name. */
   run_as_you?: boolean;
 }
@@ -35,8 +37,8 @@ export interface StartSpec {
   /** Added to its environment; the supervisor adds the run token, unless the caller names it as DEEP_RUN_TOKEN. */
   env?: Record<string, string>;
   grant?: Grant;
-  /** No key: any free key of that kind's pool. */
-  leases?: { kind: string; key?: string }[];
+  /** No key: any free key of that kind's pool. `env`: the variable its key is passed to the process in. */
+  leases?: { kind: string; key?: string; env?: string }[];
   /** Where the caller takes the run's output as it comes, beside the digests in its exit. */
   output?: { stdout(chunk: Buffer): void; stderr(chunk: Buffer): void };
 }
@@ -67,6 +69,10 @@ export interface ResourceKind {
   release?: ResourceStep;
   /** The cleanup check: exit 0 when the key is clean. */
   check?: ResourceStep;
+  /** Asked before a key nobody here holds is leased: false skips it, as something outside DeepBuild holds it. */
+  free?: (key: string) => Promise<boolean>;
+  /** Its keys are TCP ports on this machine: its holder may listen on its key, and connect to it. */
+  port?: boolean;
 }
 export interface Cleanup {
   run: string;
@@ -78,7 +84,7 @@ export interface Cleanup {
 }
 export interface RunStatus { run: string; state: 'held' | 'running' | 'exited' | 'cleaned' | 'BLOCKED'; on?: string[] }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask';
+export type Plant = 'sandbox-left-to-caller' | 'stops-token-bearing-group-members' | 'requires-token-in-group' | 'records-only-started' | 'hold-without-ask' | 'holds-lease-while-taken';
 export interface SupervisorOptions {
   /** Ownership records, leases, denials and cleanup outcomes go here, written as `core`. */
   record: RecordStore;
@@ -91,7 +97,11 @@ export interface SupervisorOptions {
   resources?: ResourceKind[];
   /** Paths no run may write, whatever its grant: the hub's record, and where agents read their hooks. */
   guarded?: string[];
+  /** How long a lease is granted for; past it a lease whose holder still runs is only stale. A day unless a test sets it. */
+  lease_ms?: number;
   plant?: Plant;
+  /** Tests only: the supervisor's process kills itself right after a start is recorded, or right after its spawn. */
+  crash?: 'start-recorded' | 'spawned';
 }
 export interface Supervisor extends Host {
   /** Stops every process the run owns that it can prove, releases its leases, runs their cleanup steps and checks. */

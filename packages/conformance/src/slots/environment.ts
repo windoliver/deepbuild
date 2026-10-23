@@ -1,13 +1,14 @@
 // The environment@1 kit (#314): an environment comes up on the port the hub leased it, is ready only once its
 // health route answers with its token, and leaves no process behind when taken down. The reference fill runs
 // the kit's fixture server; the kit itself leases the port, probes health and watches the process, so no
-// memorized answer can pass it. The planted fills report ready before health answers, bind a port of their own
-// and leave their process running.
+// memorized answer can pass it. Each case hands the fill a checkout, a folder whose .deepbuild/done.yaml names
+// the fixture server as its stack, and the stack must start from it. The planted fills report ready before health
+// answers, bind a port of their own, leave their process running, and start in the session's worktree instead.
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import type { JsonValue } from '@deepbuild/contracts';
@@ -29,8 +30,8 @@ export interface Lease { port: number; token: string }
 export interface Handle { id: string; port: number; pid: number }
 export interface EnvironmentFill extends SlotFill {
   slot: 'environment@1';
-  /** Brings the environment up on the leased port, its processes carrying the lease's run token; returns once it is ready. */
-  up(spec: EnvSpec, lease: Lease): Handle;
+  /** Brings the environment up on the leased port from `checkout`, its processes carrying the lease's run token; returns once it is ready. */
+  up(spec: EnvSpec, lease: Lease, checkout: string): Handle;
   down(handle: Handle): void;
 }
 
@@ -38,6 +39,7 @@ const RULES = {
   health: { id: 'ready-means-healthy', rule: 'up returns only once the environment\'s health route answers on the leased port, at 127.0.0.1, with the spec\'s token.', message: 'reported ready before its health check answered' },
   port: { id: 'binds-leased-port', rule: 'The environment binds the port the hub leased it, at 127.0.0.1, and no other.', message: 'bound a port outside its lease' },
   down: { id: 'down-stops-process', rule: 'After down, the environment\'s process is gone, nothing listens on the leased port, and no process carries the run token.', message: 'left its process running after down' },
+  checkout: { id: 'starts-in-checkout', rule: 'Every process of the environment runs in the checkout it was given, never in the session\'s worktree.', message: 'started its stack in the session\'s worktree instead of the checkout it was given' },
 };
 const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule }));
 
@@ -119,6 +121,18 @@ function listeners(pids: number[]): Listener[] | null {
     if (colon > 0 && Number.isInteger(port)) seen.set(line.slice(1), { address: line.slice(1, colon), port });
   }
   return [...seen.values()].sort((a, b) => a.port - b.port || a.address.localeCompare(b.address));
+}
+/** The working folder of each given process, from the open files table (lsof); null when it can't be read. */
+function folders(pids: number[]): Map<number, string> | null {
+  const read = tool('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
+  if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
+  const found = new Map<number, string>();
+  let pid = -1;
+  for (const line of read.stdout.split('\n')) {
+    if (line.startsWith('p')) pid = Number(line.slice(1));
+    else if (line.startsWith('n') && pid > 0) found.set(pid, line.slice(1));
+  }
+  return found;
 }
 /** Whether the command line carries the run token anywhere (as its own word or inside `--run-token=`, say): 18 random hex digits after `run-` match nothing else. */
 const carries = (row: Row, run: string): boolean => row.command.includes(run);
@@ -240,10 +254,10 @@ const listening = (port: number): boolean => {
 };
 
 /** Starts the fixture server on `port` carrying `run`, waiting for its ready marker unless `wait` is false; with `helper`, its grandchild too. */
-function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper = false): { handle: Handle; child: ChildProcess } {
+function start(spec: EnvSpec, port: number, run: string, wait: boolean, cwd: string, helper = false): { handle: Handle; child: ChildProcess } {
   const dir = mkdtempSync(join(tmpdir(), 'deep-env-'));
   const ready = join(dir, 'ready');
-  const child = spawn(process.execPath, [SERVER, String(port), spec.health, spec.token, String(spec.warmup), ready, run, ...(helper ? ['helper'] : [])], { stdio: 'ignore' });
+  const child = spawn(process.execPath, [SERVER, String(port), spec.health, spec.token, String(spec.warmup), ready, run, ...(helper ? ['helper'] : [])], { stdio: 'ignore', cwd });
   child.unref();
   const pid = child.pid ?? -1;
   record(pid);
@@ -273,20 +287,22 @@ function start(spec: EnvSpec, port: number, run: string, wait: boolean, helper =
  * The reference fill signals only the processes it started, through their own handles, never a pid by number.
  * The `leaves` fault is the sly one: its server starts a grandchild carrying the run token that listens on
  * nothing, and down stops the server alone, so a kit that watched the handle's pid and the leased port would
- * see both gone while the grandchild runs on.
+ * see both gone while the grandchild runs on. The `worktree` fault starts its server in a folder of its own, the
+ * session's worktree, instead of the checkout it was given.
  */
-function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): EnvironmentFill {
+function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' | 'worktree' = 'none'): EnvironmentFill {
   const started = new Map<string, ChildProcess>();
   return {
     slot: ENVIRONMENT, revision: 1,
-    up(spec, lease) {
+    up(spec, lease, checkout) {
       // The own-port fault binds a port of its own: one the lease didn't name (a lease draw can repeat it).
       let port = lease.port;
       if (fault === 'own-port') do port = leasePort(); while (port === lease.port);
       // The early fault reports ready at once while its server never comes to listen within its life (it exits on its
       // own after 60 s; down ends it sooner): wrong by construction, so no stall between the fill's return and the
       // kit's probe can make it healthy first.
-      const { handle, child } = start(fault === 'early' ? { ...spec, warmup: 60_000 } : spec, port, lease.token, fault !== 'early', fault === 'leaves');
+      const cwd = fault === 'worktree' ? worktree() : checkout;
+      const { handle, child } = start(fault === 'early' ? { ...spec, warmup: 60_000 } : spec, port, lease.token, fault !== 'early', cwd, fault === 'leaves');
       started.set(handle.id, child);
       return handle;
     },
@@ -302,11 +318,19 @@ function reference(fault: 'none' | 'early' | 'own-port' | 'leaves' = 'none'): En
   };
 }
 
+/** The session's worktree the `worktree` fault starts in: one folder for the process, outside every checkout. */
+let session: string | undefined;
+const worktree = (): string => {
+  if (!session || !existsSync(session)) session = realpathSync(mkdtempSync(join(tmpdir(), 'deep-worktree-')));
+  return session;
+};
+
 const plant = (name: string, breaks: keyof typeof RULES, codes: string[], fill: EnvironmentFill): PlantedFill<EnvironmentFill> => ({ name, message: RULES[breaks].message, codes, breaks: RULES[breaks].id, fill });
 const plantedFills = (): PlantedFill<EnvironmentFill>[] => [
   plant('ready-before-health', 'health', ['ready_before_health'], reference('early')),
   plant('unleased-port', 'port', ['unleased_port'], reference('own-port')),
   plant('leaves-grandchild', 'down', ['process_left'], reference('leaves')),
+  plant('starts-in-worktree', 'checkout', ['outside_checkout'], reference('worktree')),
 ];
 
 const toCase = (id: string, part: 'fixed' | 'seeded', spec: EnvSpec): SlotCase => ({ id, part, input: spec as unknown as JsonValue, expected: { status: 200, token: spec.token } });
@@ -377,12 +401,19 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
   // interface hands the environment a port number, not a bound socket, and a port taken in that moment fails the
   // reference fill's start loudly (no ready marker), never a rule.
   const lease: Lease = { port: leasePort(), token: `run-${randomBytes(9).toString('hex')}` };
+  // The checkout: a folder of the case's own whose environment block names the fixture server as its stack, on the
+  // port leased as `web`; the fill must start it from here.
+  const checkout = realpathSync(mkdtempSync(join(tmpdir(), 'deep-checkout-')));
+  mkdirSync(join(checkout, '.deepbuild'));
+  const sh = (word: string): string => `'${word.replace(/'/g, `'\\''`)}'`;
+  const command = [process.execPath, SERVER].map(sh).join(' ') + ` "$web" ${[spec.health, spec.token, String(spec.warmup), '.ready'].map(sh).join(' ')} "$DEEP_RUN_TOKEN"`;
+  writeFileSync(join(checkout, '.deepbuild', 'done.yaml'), `environment:\n  up: ${JSON.stringify(command)}\n  ports: [web]\n  ready: { http: ${JSON.stringify(`http://127.0.0.1:\${web}${spec.health}`)}, within: 10 }\n`);
   let up: Handle | null = null;
   let downed = false;
   try {
     // An up that settles after its deadline has still brought something up: that handle goes to a quiet down of its own.
     const lateUp = (value: unknown): void => { if (value !== null && typeof value === 'object') { try { void thenable(quietDown(fill, value as Handle)())?.catch(() => undefined); } catch { /* the fill's own failure */ } } };
-    const handle = object('the handle', yield () => bounded(() => fill.up(spec, lease), UP_LIMIT_MS, 'up', lateUp));
+    const handle = object('the handle', yield () => bounded(() => fill.up(spec, lease, checkout), UP_LIMIT_MS, 'up', lateUp));
     up = handle as unknown as Handle;
     text('handle/id', handle.id);
     if (!Number.isInteger(handle.port)) throw new Finding('FAIL', `handle/port ${JSON.stringify(handle.port)} is not a port`, ['type']);
@@ -454,6 +485,13 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (!bound.some(leased)) throw fail(RULES.port.message, ['unleased_port'], `no process of the environment listens on ${LOOPBACK}:${lease.port}, though health answered there (${bound.length ? `it listens on ${bound.map(shown).join(', ')}` : 'it listens on nothing'})`);
     const extra = bound.filter((l) => !leased(l));
     if (extra.length > 0) throw fail(RULES.port.message, ['unleased_port'], `listens on ${extra.map(shown).join(', ')} besides the lease ${LOOPBACK}:${lease.port}`);
+    // Every process of the environment runs in the checkout, or a folder in it.
+    const cwds = folders([...members.keys()]);
+    if (cwds === null) throw new Finding('BLOCKED', 'the environment\'s working folders can\'t be read (lsof failed), so whether it started in its checkout is unknown', ['folders_unknown']);
+    for (const [p, cwd] of cwds) {
+      const rel = relative(checkout, cwd);
+      if (rel.startsWith('..') || rel.startsWith('/')) throw fail(RULES.checkout.message, ['outside_checkout'], `pid ${p} runs in ${cwd}, not in the checkout ${checkout}`);
+    }
     // A member is still there when the table shows its pid alive (not a zombie) with the start time it was remembered
     // with; a pid the table shows whose start time then can't be read is unknown, not gone.
     const stillThere = (rows: Row[]): { pid: number }[] => [...members].filter(([p, start]) => {
@@ -499,6 +537,7 @@ function* judge(fill: EnvironmentFill, c: SlotCase): Generator<() => unknown, vo
     if (up !== null && !downed) { downed = true; yield quietDown(fill, up); }
     throw error;
   } finally {
+    rmSync(checkout, { recursive: true, force: true });
     // The kit stops only processes it started through the reference fill (its fixture server and helper, by pid and
     // start time as their ready marker reported them) that still carry this case's run token; any other pid is left.
     // A process table that can't be read here leaves what remains unknown, and unknown is BLOCKED, whatever the

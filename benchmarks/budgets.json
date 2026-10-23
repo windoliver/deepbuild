@@ -255,6 +255,28 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #236 first measurement: the merge base has no supervisor. One process opens a record, the asks core and the supervisor in a temp folder, then starts, waits for and cleans up 20 runs of /usr/bin/true in the platform sandbox, interleaved with 20 bare spawns, so p50 includes Node's start, the denial stream's warm-up and the record's appends; the issue's 300 ms per check over a bare start stays in tests/acceptance/236/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "env-up",
+      "command": [
+        "node",
+        "benchmarks/env.mjs",
+        "up"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #331 first measurement: the merge base has no deep env. One process starts a dev hub and times five deep env up runs of a small Node server stack, after a warm-up round, against five bare starts of the same server until its health route answers; p50 includes the hub's start and Node's. The issue's 1 s beyond the repo's own start stays in tests/acceptance/331/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "env-down",
+      "command": [
+        "node",
+        "benchmarks/env.mjs",
+        "down"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #331 first measurement: the merge base has no deep env. The same run as env-up, reporting the median deep env down; the issue's 5 s teardown stays in tests/acceptance/331/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

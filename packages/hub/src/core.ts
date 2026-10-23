@@ -13,7 +13,8 @@ import { openAsks } from '@deepbuild/asks';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
-import { openSupervisor, type Grant, type Host, type Supervisor } from '@deepbuild/supervisor';
+import { answers, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
+import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { disk, testVfs, type Durable } from './vfs.js';
@@ -24,6 +25,17 @@ const YOU = { actor: 'you', scope: 'you' };
 const SECRETS_TTL = 10_000;
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const running = (pid: number): boolean => {
+  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
+};
+/** The PIDs that listen on the TCP port, as lsof shows them; a failed lsof rejects, since it proves nothing. */
+const listening = (port: number): Promise<number[]> => new Promise((done, fail) => {
+  execFile('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout, stderr) => {
+    // lsof exits 1 with no output when nothing listens.
+    if (error && !((error as { code?: unknown }).code === 1 && stdout.trim() === '' && stderr.trim() === '')) return fail(Error(`lsof can't list port ${port}'s listeners: ${stderr.trim() || error.message}`));
+    done([...new Set(String(stdout ?? '').split('\n').filter((l) => l.startsWith('p')).map((l) => Number(l.slice(1))))]);
+  });
+});
 const isUnder = (path: string, dir: string) => {
   const rel = relative(dir, path);
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
@@ -36,8 +48,8 @@ export interface CallContext { role: string; session?: string | null; parent?: {
 interface Session { id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string; spent: boolean }
-/** A run the supervisor started, as the journal keeps it until its finish is durable. */
-interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant }
+/** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
+interface Run { run: string; check: string; claim: string; commit: string; argv: string[]; env: Record<string, string>; cwd: string; grant: Grant; environment?: boolean }
 /** What a run gets when run.start names no grant: your files and programs, as you, in the sandbox all the same (Access: run-as-you). */
 const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
@@ -73,6 +85,14 @@ export class Core {
   private chain: Promise<unknown> = Promise.resolve();
   private blocked: string | undefined;
   private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
+  /** The stack `deep env up` started in each worktree, by the worktree's real path, and each one on its way up. */
+  private readonly stacks = new Map<string, Stack>();
+  /** Each worktree's env up and down, one after another. */
+  private readonly turns = new Map<string, Promise<unknown>>();
+  /** Every stack run started and not yet cleaned up, a run's or a worktree's, so the hub's stop takes each down. */
+  private readonly stackRuns = new Set<string>();
+  /** Each worktree's stack run while it waits for its health route, so a down can end it rather than wait. */
+  private readonly rising = new Map<string, string>();
   private readonly subscribers = new Map<string, number>();
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
   private readonly inflight = new Set<Promise<unknown>>();
@@ -109,6 +129,11 @@ export class Core {
     const asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
+      // env-local's port kind (#331): ports from 3000 up, each checked free before it is leased.
+      resources: [portKind({ free: this.options.plant !== 'env-leases-port-again' })],
+      ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
+      ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
+      ...(this.options.crash ? { crash: this.options.crash } : {}),
       // No run, run-as-you included, writes the record, the agents' config folders or the Node the hub runs on;
       // the sandbox profile itself keeps every project's agent hook and MCP files.
       guarded: [
@@ -290,6 +315,8 @@ export class Core {
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
+      case 'env.up': return this.envUp(params);
+      case 'env.down': return this.envDown(params);
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
   }
@@ -461,7 +488,7 @@ export class Core {
   }
 
   private async runStart(params: Obj): Promise<Obj> {
-    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU } = params;
+    const { check, claim, commit, argv, env = {}, cwd = process.cwd(), grant = RUN_AS_YOU, environment = false } = params;
     if (typeof check !== 'string' || !check) throw new Refused(refusal('required', '/params/check', 'Name the check the run is for.', check));
     if (typeof claim !== 'string' || !/^claim:[0-9A-Za-z]+$/.test(claim)) throw new Refused(refusal('pattern', '/params/claim', 'Name the claim as claim:<id>.', claim));
     if (typeof commit !== 'string' || !/^[0-9a-f]{40}$/.test(commit)) throw new Refused(refusal('pattern', '/params/commit', 'Name the commit by its 40-character SHA.', commit));
@@ -478,7 +505,10 @@ export class Core {
       }
     }
     if (grant.run_as_you !== undefined && typeof grant.run_as_you !== 'boolean') throw new Refused(refusal('type', '/params/grant/run_as_you', 'Give run_as_you as true or false.', grant.run_as_you));
-    const run = await this.launch({ run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant });
+    if (typeof environment !== 'boolean') throw new Refused(refusal('type', '/params/environment', 'Give environment as true when the run needs its folder\'s stack running.', environment));
+    const run = await this.launch({
+      run: `run:${ulid(this.now())}`, check, claim, commit, argv: argv as string[], env: env as Record<string, string>, cwd, grant: grant as Grant, ...(environment ? { environment } : {}),
+    });
     return { run };
   }
 
@@ -498,7 +528,7 @@ export class Core {
       stderr: (chunk: Buffer) => { writes = writes.then(() => sinks[1]!.write(chunk)); },
     };
     let stop: () => void;
-    let ended: Promise<{ code: number | null; failed?: string }>;
+    let ended: Promise<{ code: number | null; failed?: string; missing?: string }>;
     if (this.options.plant === 'run-spawns-itself') {
       // The planted wrong program: the hub spawns the run itself, past the host and its sandbox.
       const child = spawn(run.argv[0]!, run.argv.slice(1), { cwd: run.cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -510,19 +540,37 @@ export class Core {
       });
       stop = () => { try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* gone */ } };
     } else {
-      const started = this.host.start({ run: run.run, argv: run.argv, cwd: run.cwd, env, grant: run.grant, output });
+      // A run that needs the app has its stack brought up from its own folder first, its check's checkout; a stack
+      // that isn't ready makes the run missing, and its own process never starts.
+      const stackRun = run.environment ? newRun(this.now()) : undefined;
+      if (stackRun) this.stackRuns.add(stackRun);
+      const stack: Promise<Up | undefined> = stackRun
+        ? upStack(this.host, { run: stackRun, folder: run.cwd }).catch((error: Error) => ({ status: 'BLOCKED' as const, run: stackRun, cause: error.message }))
+        : Promise.resolve(undefined);
+      const started = stack.then<Started | { run: string; status: 'missing'; cause: string }>((up) => {
+        if (up?.status === 'BLOCKED') return { run: run.run, status: 'missing', cause: up.cause };
+        const ports = Object.entries(up?.stack.ports ?? {});
+        const hosts = ports.map(([, port]) => `127.0.0.1:${port}`);
+        return this.host.start({
+          run: run.run, argv: run.argv, cwd: run.cwd, env: { ...env, ...Object.fromEntries(ports.map(([name, port]) => [name, String(port)])) },
+          grant: hosts.length ? { ...run.grant, hosts: [...(run.grant.hosts ?? []), ...hosts] } : run.grant, output,
+        });
+      });
       ended = started.then(async (s) => {
+        if (s.status === 'missing') return { code: null, missing: s.cause };
         if (s.status === 'BLOCKED') return { code: null, failed: `BLOCKED: no ${s.kind} free` };
         const exit = await this.host.wait(run.run);
         return { code: exit.code };
       }, (error: Error) => ({ code: null, failed: error.message }));
+      // The stack goes down once the run has ended, its leases released by its cleanup.
+      if (stackRun) ended = ended.then(async (end) => { await this.takeDown(stackRun).catch(() => undefined); return end; });
       stop = () => {
         void started.then(() => this.host.signal(run.run, 'SIGTERM')).catch(() => undefined);
         // A run still held on a resource never starts: given up on, its start resolves BLOCKED.
         void this.supervisor.status(run.run).then((s) => (s.state === 'held' ? this.supervisor.cleanup(run.run) : undefined)).catch(() => undefined);
       };
     }
-    const done = ended.then(async ({ code, failed }) => {
+    const done = ended.then(async ({ code, failed, missing }) => {
       // What the run left behind is stopped and its leases released before its finish is recorded.
       if (this.options.plant !== 'run-spawns-itself') await this.supervisor.cleanup(run.run).catch(() => undefined);
       await writes;
@@ -531,8 +579,8 @@ export class Core {
         const put = await sink.close();
         if (put.status === 'stored') evidence.push((await this.stored(put, `${run.run}'s output`)).sha256);
       }
-      const outcome = this.stopping ? 'stopped' : code === 0 ? 'passed' : 'failed';
-      const findings = this.stopping ? ['hub stopped'] : failed ? [failed] : [];
+      const outcome = this.stopping ? 'stopped' : missing ? 'missing' : code === 0 ? 'passed' : 'failed';
+      const findings = this.stopping ? ['hub stopped'] : missing ? [`its stack never came up: ${missing}`] : failed ? [failed] : [];
       await this.finish(run, outcome, findings, evidence);
     });
     this.runs.set(run.run, { run, done, stop });
@@ -562,6 +610,88 @@ export class Core {
       // Its claim's check runs again.
       await this.launch({ ...run, run: `run:${ulid(this.now())}`, cwd: run.cwd ?? process.cwd(), grant: run.grant ?? RUN_AS_YOU });
     }
+  }
+
+  // ---- deep env up and down (#331): a worktree's stack through env-local, every process through the host.
+
+  private worktreeOf(params: Obj): string {
+    const { worktree } = params;
+    if (typeof worktree !== 'string' || !isAbsolute(worktree) || !existsSync(worktree)) throw new Refused(refusal('type', '/params/worktree', 'Name the worktree by its absolute path.', worktree));
+    return realpathSync(worktree);
+  }
+  /** Runs the worktree's env call once every earlier one for it has finished: a second up waits and finds the first's stack, an up during a down starts after it. */
+  private inTurn(worktree: string, call: () => Promise<Obj>): Promise<Obj> {
+    const turn = (this.turns.get(worktree) ?? Promise.resolve()).catch(() => undefined).then(call);
+    this.turns.set(worktree, turn);
+    void turn.catch(() => undefined).then(() => { if (this.turns.get(worktree) === turn) this.turns.delete(worktree); });
+    return turn;
+  }
+  /** Signals a stack run down through the host, then the supervisor stops what's left of it and releases its leases. */
+  private async takeDown(run: string): Promise<{ stopped: number[]; left: string[] }> {
+    try {
+      await downStack(this.host, run);
+      return await this.supervisor.cleanup(run);
+    } finally {
+      this.stackRuns.delete(run);
+    }
+  }
+  private envUp(params: Obj): Promise<Obj> {
+    const worktree = this.worktreeOf(params);
+    return this.inTurn(worktree, () => this.riseIn(worktree));
+  }
+  private async riseIn(worktree: string): Promise<Obj> {
+    const running = this.stacks.get(worktree);
+    // A stack is reused only while its process runs and its health route still answers 200.
+    if (running && (await this.supervisor.status(running.run)).state === 'running' && (await answers(running))) return { status: 'ready', run: running.run, worktree, ports: running.ports };
+    // Any other is taken down, and a new one started.
+    if (running) {
+      this.stacks.delete(worktree);
+      await this.takeDown(running.run).catch(() => undefined);
+    }
+    if (this.stopping) return { status: 'BLOCKED', worktree, cause: 'the hub is stopping' };
+    const run = newRun(this.now());
+    this.stackRuns.add(run);
+    this.rising.set(worktree, run);
+    const up = await upStack(this.host, { run, folder: worktree })
+      .catch((error: Error) => ({ status: 'BLOCKED' as const, run, cause: error.message }))
+      .finally(() => this.rising.delete(worktree));
+    if (up.status === 'BLOCKED') {
+      // What it started is stopped and its leases released; a stack that never started has nothing to clean.
+      await this.takeDown(run).catch(() => undefined);
+      return { status: 'BLOCKED', worktree, cause: up.cause };
+    }
+    this.stacks.set(worktree, up.stack);
+    return { status: 'ready', run, worktree, ports: up.stack.ports };
+  }
+  /**
+   * Takes the worktree's stack down: signalled through the host, then the supervisor's cleanup stops what it can
+   * prove is the run's and ends its leases once every recorded process is gone. A process it can't prove, or one
+   * that was never recorded and still listens on a leased port, is reported with its PID and the port, never stopped.
+   */
+  private envDown(params: Obj): Promise<Obj> {
+    const worktree = this.worktreeOf(params);
+    // A stack still coming up is signalled down now: its up ends BLOCKED, and this down's turn follows it.
+    const rising = this.rising.get(worktree);
+    if (rising) void downStack(this.host, rising);
+    return this.inTurn(worktree, () => this.downIn(worktree, rising));
+  }
+  private async downIn(worktree: string, interrupted?: string): Promise<Obj> {
+    const stack = this.stacks.get(worktree);
+    // The up it interrupted took its own stack down and cleaned it up.
+    if (!stack && interrupted) return { run: interrupted, stopped: [], left: [] };
+    if (!stack) throw new Refused(refusal('not_found', '/params/worktree', `No stack runs for ${worktree}; start one with deep env up.`, worktree));
+    const ports = Object.values(stack.ports);
+    const recorded = (await this.record.raw(`SELECT DISTINCT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = '${stack.run}'`) as { pid: number }[]).map((r) => r.pid);
+    const before = recorded.filter(running);
+    // The planted wrong program stops whatever listens on the leased ports, the run's or not.
+    if (this.options.plant === 'env-kills-by-port') for (const port of ports) for (const pid of await listening(port)) try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+    this.stacks.delete(worktree);
+    const cleaned = await this.takeDown(stack.run);
+    const stopped = [...new Set([...before.filter((pid) => !running(pid)), ...cleaned.stopped])];
+    const left = new Map<number, { pid: number; port?: number }>();
+    for (const name of cleaned.left) if (name.startsWith('pid:')) left.set(Number(name.slice(4)), { pid: Number(name.slice(4)) });
+    for (const port of ports) for (const pid of await listening(port)) left.set(pid, { pid, port });
+    return { run: stack.run, stopped, left: [...left.values()] };
   }
 
   // ---- Spool, retention and the test load.
@@ -679,6 +809,8 @@ export class Core {
     }
     await this.chain;
     for (const { stop } of this.runs.values()) stop();
+    // Each worktree's stack goes down with the hub, through the supervisor.
+    await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
     await this.supervisor.close();
