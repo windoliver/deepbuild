@@ -1,5 +1,13 @@
 {
   "deps": {
+    "lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #684: core Lean for the verdict table's model, its proofs and its generator, installed under .lean/; no Mathlib or other Lake packages."
+        }
+      }
+    },
     "package.json": {
       "devDependencies": {
         "@types/node": {
