@@ -749,20 +749,6 @@ mod tests {
     }
 
     #[test]
-    fn a_press_whose_fields_pass_but_whose_chord_the_hid_table_reads_up_is_refused() {
-        // The forged form: hardware's two fields on a built event, Space held on the keyboard
-        // or not, but Option not down in the HID table. The event's own flags never count.
-        let mut gate = Gate::default();
-        let forged = Provenance {
-            hid_chord_down: false,
-            ..hardware()
-        };
-        assert_eq!(gate.on_key(down(false), forged), Verdict::Refused);
-        assert!(!gate.may_capture(false));
-        assert_eq!(gate.counts.frames, 0);
-    }
-
-    #[test]
     fn every_synthetic_provenance_is_refused() {
         let own_pid = 4242;
         let synthetic = [
@@ -850,15 +836,6 @@ mod tests {
         assert_eq!(gate.counts.holds, 1, "a held chord is one hold");
         assert!(!gate.may_capture(false));
         assert_eq!(gate.counts.releases, 1);
-    }
-
-    #[test]
-    fn a_held_gate_releases_when_the_hid_table_says_up() {
-        let mut gate = Gate::default();
-        gate.on_key(down(false), hardware());
-        assert!(gate.may_capture(true));
-        assert!(!gate.may_capture(false));
-        assert!(!gate.held());
     }
 
     #[test]

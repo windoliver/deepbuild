@@ -400,7 +400,7 @@ class LocalSupervisor implements Supervisor {
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
     // Each lease's key in the variable it names; the leases come in the order they were asked for.
     const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));
-    const env = { ...process.env, ...spec.env, ...keys, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, DEEP_RUN_TOKEN: token } as Record<string, string>;
     // A leased port is one it may listen on, and connect to.
     const ports = leases.filter((l) => this.kinds.get(l.kind)?.port).map((l) => `127.0.0.1:${l.key}`);
     const grant: Grant = ports.length
@@ -494,6 +494,8 @@ class LocalSupervisor implements Supervisor {
   async signal(run: string, signal: NodeJS.Signals): Promise<void> {
     const r = this.runs.get(run);
     if (!r) throw Error(`${run} is no run of this supervisor`);
+    // A scan first, as cleanup does: a process the run started since the last scan is tracked, so the signal reaches it after its leader is gone.
+    await this.scanOnce().catch(() => undefined);
     const proven = await this.provable(r);
     // Its process group at once, as the group's own members see a group signal; then each proven process outside it.
     if (r.pgid !== undefined && proven.some((p) => p.pgid === r.pgid)) try { process.kill(-r.pgid, signal); } catch { /* gone */ }

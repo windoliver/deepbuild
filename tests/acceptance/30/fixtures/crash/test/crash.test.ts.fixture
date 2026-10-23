@@ -1,0 +1,7 @@
+import { expect, test } from 'vitest';
+
+test('parses the order', () => {
+  console.log('about to crash');
+  process.kill(process.pid, 'SIGKILL');
+  expect(true).toBe(true);
+});

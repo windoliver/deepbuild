@@ -345,6 +345,8 @@ pub fn draws_over(a: (f64, usize), b: (f64, usize)) -> bool {
 /// pixel it covers. The renderer fills it and the session picks by it.
 pub struct Facet {
     outline: Vec<[f64; 2]>,
+    /// Twice the outline's signed area, taken once for the many points a fill tests.
+    area: f64,
     point: Vec3,
     normal: Vec3,
     /// Of a flat document, where every depth is 1.
@@ -375,6 +377,7 @@ impl Facet {
             .map(|v| view.project_view(*v).map(|p| [p.x, p.y]))
             .collect::<Option<Vec<_>>>()?;
         Some(Facet {
+            area: twice_area(&outline),
             outline,
             // The page's own origin, the same for every rectangle, so coplanar rectangles
             // meet their plane at bit-equal depths and item order decides between them.
@@ -386,7 +389,7 @@ impl Facet {
 
     /// Whether a point of the panel is inside the outline, or on its edge.
     pub fn contains(&self, x: f64, y: f64) -> bool {
-        polygon_contains(&self.outline, x, y)
+        inside(&self.outline, self.area, x, y)
     }
 
     /// The facet's depth under a point of the panel.
@@ -433,20 +436,25 @@ fn clip_near(corners: &[Vec3; 4]) -> Vec<Vec3> {
     kept
 }
 
-/// Whether a point is inside (or on the edge of) a convex outline given in order: on one side
-/// of every edge, the side the outline turns to. An outline of no area holds nothing.
-pub fn polygon_contains(outline: &[[f64; 2]], x: f64, y: f64) -> bool {
+/// Twice the signed area of an outline given in order; its sign is the side the outline turns to.
+fn twice_area(outline: &[[f64; 2]]) -> f64 {
     let n = outline.len();
-    let edge = |i: usize| (outline[i], outline[(i + 1) % n]);
-    let area: f64 = (0..n)
+    (0..n)
         .map(|i| {
-            let (a, b) = edge(i);
+            let (a, b) = (outline[i], outline[(i + 1) % n]);
             a[0] * b[1] - b[0] * a[1]
         })
-        .sum();
+        .sum()
+}
+
+/// Whether a point is inside (or on the edge of) a convex outline given in order, of
+/// [`twice_area`] `area`: on one side of every edge, the side the outline turns to. An outline of
+/// no area holds nothing.
+fn inside(outline: &[[f64; 2]], area: f64, x: f64, y: f64) -> bool {
+    let n = outline.len();
     area != 0.0
         && (0..n).all(|i| {
-            let (a, b) = edge(i);
+            let (a, b) = (outline[i], outline[(i + 1) % n]);
             ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0])) * area >= 0.0
         })
 }
@@ -485,13 +493,7 @@ fn raster(scene: &Scene, frame: [f64; 2], width: u32, height: u32, ground: [u8; 
 /// The document's still frame in a panel of `panel` px, the look's ground given as `ground`.
 pub fn render(doc: &Value, panel: [u32; 2], ground: [u8; 3]) -> Result<Image, Refused> {
     let scene = scene(doc)?;
-    let size = member(doc, "size").and_then(Value::as_array);
-    let (Some(w), Some(h)) = (
-        size.and_then(|s| s.first()).and_then(Value::as_f64),
-        size.and_then(|s| s.get(1)).and_then(Value::as_f64),
-    ) else {
-        return Err(Refused::new("out_of_range", "size", "not two numbers"));
-    };
+    let [w, h] = crate::draw::size(doc)?;
     // The envelope checks `size` at f32 width, where a subnormal is 0 and finite.
     if !((w as f32) > 0.0 && (h as f32) > 0.0) {
         return Err(Refused::new("out_of_range", "size", "not above 0"));

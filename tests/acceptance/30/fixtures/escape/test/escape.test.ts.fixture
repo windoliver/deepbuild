@@ -1,0 +1,25 @@
+import { writeFileSync } from 'node:fs';
+import net from 'node:net';
+import { expect, test } from 'vitest';
+
+// Each try prints what happened; the test passes only when the run's sandbox refused it.
+test('the check stays off the hub socket', async () => {
+  const outcome = await new Promise<string>((resolve) => {
+    const sock = net.connect(process.env.HUB_SOCKET ?? '/nonexistent');
+    sock.once('connect', () => { sock.end('hello from a check\n'); resolve('connected'); });
+    sock.once('error', (e: NodeJS.ErrnoException) => resolve(e.code ?? 'error'));
+  });
+  console.log(`HUB ${outcome}`);
+  expect(outcome).not.toBe('connected');
+});
+
+test('the check writes nothing outside its folders', () => {
+  let outcome = 'written';
+  try {
+    writeFileSync(process.env.OUTSIDE ?? '/nonexistent/escaped.txt', 'escaped');
+  } catch (e) {
+    outcome = (e as NodeJS.ErrnoException).code ?? 'error';
+  }
+  console.log(`WRITE ${outcome}`);
+  expect(outcome).not.toBe('written');
+});

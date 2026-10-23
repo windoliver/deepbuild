@@ -10,15 +10,15 @@ use std::sync::Arc;
 
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
-use deep_canvas_marks::scene::{self, ImageFit, Mark, Planted, Record, Rgb};
+use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, image, rasterizer, rect, settings, shape, solid, stroke, Scopes,
+    bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
-use vello_cpu::peniko::{Fill as FillRule, ImageAlphaType, ImageSampler};
+use vello_cpu::peniko::{Fill as FillRule, ImageAlphaType};
 use vello_cpu::{Image, ImageSource, Pixmap, RenderContext, Resources};
 
 use crate::asset;
@@ -65,26 +65,6 @@ fn ring(ctx: &mut RenderContext, b: [f64; 4], radius: f64, width: f64) {
     ctx.set_fill_rule(FillRule::EvenOdd);
     ctx.fill_path(&path);
     ctx.set_fill_rule(FillRule::NonZero);
-}
-
-/// Where an image of `size` pixels maps for its box and fit, centered in the box.
-fn fitted(bounds: [f64; 4], size: [u32; 2], fit: ImageFit) -> [f64; 4] {
-    let [x, y, w, h] = bounds;
-    let (iw, ih) = (f64::from(size[0]), f64::from(size[1]));
-    let (sx, sy) = match fit {
-        ImageFit::Fill => (w / iw, h / ih),
-        ImageFit::Contain => {
-            let s = (w / iw).min(h / ih);
-            (s, s)
-        }
-        ImageFit::Cover => {
-            let s = (w / iw).max(h / ih);
-            (s, s)
-        }
-        ImageFit::None => (1.0, 1.0),
-    };
-    let (dw, dh) = (iw * sx, ih * sy);
-    [x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh]
 }
 
 /// One drawing of a document's view.
@@ -185,6 +165,7 @@ impl Painter<'_> {
                 asset: hash,
                 bounds,
                 fit,
+                sampling,
                 crop,
                 opacity,
                 adjust,
@@ -198,10 +179,10 @@ impl Painter<'_> {
                     ));
                 };
                 let pixmap = image(source.into_raw(), [pw, ph], *opacity, adjust);
-                let to = fitted(*bounds, [w, h], *fit);
+                let to = fit.fitted(*bounds, [w, h]);
                 self.ctx.set_paint(Image {
                     image: ImageSource::Pixmap(Arc::new(pixmap)),
-                    sampler: ImageSampler::default(),
+                    sampler: sampler(*sampling),
                 });
                 self.ctx.set_paint_transform(
                     Affine::translate((to[0], to[1]))
@@ -248,8 +229,7 @@ impl Painter<'_> {
 
 /// The document's evaluated items at `t`.
 fn items_at(doc: &Map<String, Value>, t: i64) -> Result<Map<String, Value>, Value> {
-    let program =
-        Program::compile(&Value::Object(doc.clone())).map_err(|r| refused(r.code, &r.path))?;
+    let program = Program::compile(doc).map_err(|r| refused(r.code, &r.path))?;
     let mut state = program.state();
     program.evaluate(t, eval::Validity::Full, &mut state);
     Ok(eval::items(doc, &program, &state))

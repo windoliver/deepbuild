@@ -2,11 +2,10 @@
 // It reaches the hub at the address setting, presents the agent that started it as its parent, and forwards
 // each deep_* call there; the hub binds the call to a session. With the hub down or restarting it keeps its
 // tool list and answers each call within a second that the hub is unreachable, never with a success.
-import { execFile } from 'node:child_process';
 import net from 'node:net';
 import { createInterface } from 'node:readline';
 import { hubAddress } from './paths.js';
-import { line } from './wire.js';
+import { line, startOf } from './wire.js';
 
 type Obj = Record<string, unknown>;
 const UNREACHABLE_MS = 1000;
@@ -23,11 +22,6 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { path: { type: 'string' }, kind: { type: 'string' } }, required: ['path'], additionalProperties: false },
   },
 ];
-
-/** The parent's start time, as `ps -o lstart=` prints it: the hub checks it, never the PID alone. */
-const parentStart = () => new Promise<string>((done) => {
-  execFile('ps', ['-o', 'lstart=', '-p', String(process.ppid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => done(error ? '' : stdout.trim()));
-});
 
 /** One connection to the hub as this process's deep mcp; undefined when the hub can't be reached in time. */
 class Hub {
@@ -67,7 +61,7 @@ class Hub {
           buffer = buffer.slice(i + 1);
           if (!greeted) {
             greeted = true;
-            sock.write(line({ hello: 'mcp', parent: { pid: process.ppid, start: await parentStart() } }));
+            sock.write(line({ hello: 'mcp', parent: { pid: process.ppid, start: (await startOf(process.ppid)) ?? '' } }));
             continue;
           }
           if ('role' in message) {
