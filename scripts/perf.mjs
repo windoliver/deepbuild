@@ -142,7 +142,7 @@ function keptCopy(side) {
 // CARGO_TARGET_DIR names the kept build directory, so Cargo resolves it to the same path every run.
 // DEEP_OPEN_ISSUES names the open issues this checkout's catalogue drift lane fetched, cached beside the
 // kept copy, so each side's lane reads the same issues and none fetches again (#605).
-function checkRun(directory) {
+function checkRun(directory, timeoutMs) {
   const previous = { CARGO_TARGET_DIR: process.env.CARGO_TARGET_DIR, DEEP_OPEN_ISSUES: process.env.DEEP_OPEN_ISSUES };
   process.env.CARGO_TARGET_DIR = join(dirname(directory), 'target');
   const issues = join(root, 'target', 'open-issues.json');
@@ -151,7 +151,7 @@ function checkRun(directory) {
     copyFileSync(issues, process.env.DEEP_OPEN_ISSUES);
   }
   try {
-    return checkCopy(directory);
+    return checkCopy(directory, timeoutMs);
   } finally {
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
@@ -163,7 +163,7 @@ function checkRun(directory) {
 // read git, so each disposable copy gets its own throwaway repository, committed without the user's
 // hooks or signing. Its origin/main is that commit, as on main itself, so checks that compare with
 // main (repo-rules' size) do the same work on both sides instead of skipping it in the copy.
-function checkCopy(directory) {
+function checkCopy(directory, timeoutMs) {
   const git = (...args) => run('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=DeepBuild perf', '-c', 'user.email=perf@example.invalid', ...args], directory, { stdio: 'pipe' });
   git('init', '-q');
   git('add', '-A');
@@ -174,7 +174,7 @@ function checkCopy(directory) {
   symlinkSync(process.env.CARGO_TARGET_DIR, join(directory, 'target'), 'dir');
   run('npm', ['ci', '--no-audit', '--no-fund'], directory);
   warm(directory);
-  return measureOnce([process.execPath, 'scripts/checks.mjs'], directory);
+  return measureOnce([process.execPath, 'scripts/checks.mjs'], directory, false, timeoutMs);
 }
 const verdicts = [];
 const started = performance.now();
@@ -194,6 +194,8 @@ try {
     ? JSON.parse(run('git', ['show', `${baseCommit}:${manifest}`])) : null;
   validateBudgets(current, base);
   if (!current.preflight) throw Error('missing preflight budget');
+  // Each copy's checks may run as long as the budget allows this checkout's, margin included.
+  const allowance = current.preflight.limits.elapsedMs * (1 + current.preflight.margin);
   let baseline = null;
   if (base?.preflight || base?.tasks?.length) {
     archive = keptCopy('base');
@@ -201,7 +203,7 @@ try {
     // stamps the files now: Cargo goes by mtime, and a merge base committed before the kept build
     // would otherwise look fresh.
     run('tar', ['-mxf', '-', '-C', archive], root, { input: run('git', ['archive', baseCommit], root, { encoding: null }) });
-    baseline = checkRun(archive);
+    baseline = checkRun(archive, allowance);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
   const reading = ({ elapsedMs, cpuMs, peakBytes }) => ({ elapsedMs, cpuMs, peakBytes });
@@ -230,7 +232,7 @@ try {
       else if (statSync(source).isDirectory()) cpSync(source, join(without, file), { recursive: true, dereference: true });
       else copyFileSync(source, join(without, file));
     }
-    rest = checkRun(without);
+    rest = checkRun(without, allowance);
     if (rest.status !== 0) {
       console.log(rest.output.trim());
       const cause = rest.output.split('\n').map((line) => line.trim()).find((line) => /\berror\b/i.test(line)) ?? 'see the output above';
