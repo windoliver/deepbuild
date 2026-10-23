@@ -253,7 +253,12 @@ pub(crate) fn row_column(
         },
         v => v.to_string(),
     };
-    if (0..n).any(|i| printed(cell(&cells, i)) == sub) {
+    let key = |i: usize| match &cells {
+        Cells::Const(v) => v.clone(),
+        Cells::Texts(t) => json!(t[i]),
+        Cells::Numbers { values, .. } => json!(values[i]),
+    };
+    if (0..n).any(|i| printed(key(i)) == sub) {
         Ok(())
     } else {
         Err(format!("the set has no row with key `{sub}`"))
