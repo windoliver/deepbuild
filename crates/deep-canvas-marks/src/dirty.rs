@@ -107,13 +107,14 @@ impl Dirty {
                 changes.push((id.clone(), Class::Presence));
                 continue;
             }
+            let before = changes.len();
             let mut paths = Vec::new();
             diff(old, new, &mut Vec::new(), &mut paths);
             for p in paths {
                 let field: Vec<&str> = p.iter().map(String::as_str).collect();
                 changes.push((id.clone(), class_of(kind, &field)));
             }
-            if by_clock && changes.iter().any(|(i, _)| i == id) {
+            if by_clock && changes.len() > before {
                 changes.push((id.clone(), Class::Time));
             }
         }

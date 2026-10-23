@@ -67,6 +67,27 @@ pub struct Startup {
 /// `registry` reply's `seal.runs` is a measurement, not the binary's word; 1 whatever frames ran.
 pub static SEAL_RUNS: AtomicU32 = AtomicU32::new(0);
 
+/// The issue a part the marks module can't draw raises: on its item when `path` names one, else
+/// on the envelope.
+pub(crate) fn unfit_issue(code: &'static str, path: String) -> Issue {
+    let what = "the marks module can't draw this";
+    match path
+        .strip_prefix("items/")
+        .and_then(|p| p.split('/').next())
+    {
+        Some(id) => Issue::error(code, id, path.clone(), Value::Null, what),
+        None => Issue::envelope(code, path, Value::Null, what),
+    }
+}
+
+/// A revision's diff, its four lists, in the reply.
+pub(crate) fn diff_reply(diff: Diff, reply: &mut Map<String, Value>) {
+    reply.insert("changed".into(), json!(diff.changed));
+    reply.insert("unchanged".into(), json!(diff.unchanged));
+    reply.insert("created".into(), json!(diff.created));
+    reply.insert("removed".into(), json!(diff.removed));
+}
+
 /// What keeps a frame from settling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hold {
@@ -588,16 +609,7 @@ impl<'a> Hub<'a> {
                 &self.scenario.evidence,
             ) {
                 Ok(d) => drawn = Some(d),
-                Err(Unfit { code, path }) => {
-                    let what = "the marks module can't draw this";
-                    let item = path
-                        .strip_prefix("items/")
-                        .and_then(|p| p.split('/').next());
-                    issues.push(match item {
-                        Some(id) => Issue::error(code, id, path.clone(), Value::Null, what),
-                        None => Issue::envelope(code, path, Value::Null, what),
-                    });
-                }
+                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
             }
         }
         let hash = stamped
@@ -626,7 +638,7 @@ impl<'a> Hub<'a> {
                 writer: writer.clone(),
                 hash,
                 state,
-                doc: stamped.clone().unwrap_or(Value::Null),
+                doc: stamped.unwrap_or(Value::Null),
             });
         }
         if error {
@@ -642,17 +654,8 @@ impl<'a> Hub<'a> {
             }
             return Value::Object(reply);
         }
-        if let Some(Diff {
-            changed,
-            unchanged,
-            created,
-            removed,
-        }) = diff
-        {
-            reply.insert("changed".into(), json!(changed));
-            reply.insert("unchanged".into(), json!(unchanged));
-            reply.insert("created".into(), json!(created));
-            reply.insert("removed".into(), json!(removed));
+        if let Some(diff) = diff {
+            diff_reply(diff, &mut reply);
         }
         self.present(show, panel.visible, drawn.as_ref(), reply)
     }

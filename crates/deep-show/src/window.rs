@@ -5,7 +5,6 @@
 //! card composes last, opaque, in its slot. The planted compositor (#393 criterion 8) sorts every
 //! layer and the card by order key alone, ignoring bands.
 
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -42,7 +41,6 @@ fn bounds(b: [f64; 4]) -> Bounds<Pixels> {
 }
 
 /// One thing the window composes.
-#[derive(Clone)]
 enum Entry {
     /// A writer layer's picture in its panel, outlined with `name` when it's an agent's.
     Layer {
@@ -83,7 +81,7 @@ impl Scene {
 }
 
 struct View {
-    scene: Rc<RefCell<Scene>>,
+    scene: Rc<Scene>,
 }
 
 fn paint_entry(scene: &Scene, entry: &Entry, window: &mut Window) {
@@ -178,16 +176,15 @@ impl Render for View {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let prepared = self.scene.clone();
         let scene = self.scene.clone();
-        let ground = hsla(scene.borrow().ground);
+        let ground = hsla(scene.ground);
         div().size_full().bg(ground).child(
             canvas(
                 move |_, window, _| {
-                    for label in prepared.borrow().labels() {
+                    for label in prepared.labels() {
                         deep_text_gpui::prepare(&label, window.scale_factor());
                     }
                 },
                 move |_, _, window, _| {
-                    let scene = scene.borrow();
                     for entry in &scene.entries {
                         paint_entry(&scene, entry, window);
                     }
@@ -300,7 +297,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
     if hub.scenario.planted == Some(Planted::SortsByOrderKeyAlone) {
         keyed.sort_by(|a, b| a.0.cmp(&b.0));
     }
-    let scene = Rc::new(RefCell::new(Scene {
+    let scene = Rc::new(Scene {
         ground: role("ground"),
         ink: role("ink"),
         muted: role("muted"),
@@ -310,7 +307,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             .card
             .as_ref()
             .map(|c| (c.question.clone(), c.options.clone(), c.rect)),
-    }));
+    });
     let mut cx = deep_replica::headless_context();
     let view = View {
         scene: scene.clone(),

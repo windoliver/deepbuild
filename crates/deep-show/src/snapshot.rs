@@ -8,9 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use deep_canvas_marks::path;
-use deep_canvas_marks::scene::{
-    self, Fill, ImageFit, Mark, Palette, Record, Rgb, Slot, StatusMark,
-};
+use deep_canvas_marks::scene::{self, Fill, Mark, Palette, Record, Rgb, Slot, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{brush, image, sampler, shape, Scopes};
@@ -100,26 +98,6 @@ fn rect_path(b: [f64; 4], radius: f64) -> BezPath {
     RoundedRect::new(b[0], b[1], b[0] + b[2], b[1] + b[3], r).to_path(0.01)
 }
 
-/// Where an image of `size` pixels maps for its box and fit, centered in the box.
-fn fitted(bounds: [f64; 4], size: [u32; 2], fit: ImageFit) -> [f64; 4] {
-    let [x, y, w, h] = bounds;
-    let (iw, ih) = (f64::from(size[0]), f64::from(size[1]));
-    let (sx, sy) = match fit {
-        ImageFit::Fill => (w / iw, h / ih),
-        ImageFit::Contain => {
-            let s = (w / iw).min(h / ih);
-            (s, s)
-        }
-        ImageFit::Cover => {
-            let s = (w / iw).max(h / ih);
-            (s, s)
-        }
-        ImageFit::None => (1.0, 1.0),
-    };
-    let (dw, dh) = (iw * sx, ih * sy);
-    [x + (w - dw) / 2.0, y + (h - dh) / 2.0, dw, dh]
-}
-
 /// An asset read from the evidence store by its sha256 and decoded, premultiplied.
 fn decode(evidence: &Path, asset: &str, item: &str) -> Result<Arc<Pixmap>, Unfit> {
     let path = format!("items/{item}/params/asset");
@@ -156,8 +134,7 @@ impl Renderer {
         record: &Record,
         evidence: &Path,
     ) -> Result<Drawn, Unfit> {
-        let program =
-            Program::compile(&Value::Object(doc.clone())).or_else(|r| unfit(r.code, r.path))?;
+        let program = Program::compile(doc).or_else(|r| unfit(r.code, r.path))?;
         let mut state = program.state();
         program.evaluate(t, eval::Validity::Full, &mut state);
         let items = eval::items(doc, &program, &state);
@@ -355,7 +332,7 @@ impl Renderer {
                     &adjusted
                 };
                 let size = [u32::from(pixmap.width()), u32::from(pixmap.height())];
-                let [x, y, w, h] = fitted(*bounds, size, *fit);
+                let [x, y, w, h] = fit.fitted(*bounds, size);
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),
                     sampler: ImageSampler {

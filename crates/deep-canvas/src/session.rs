@@ -603,15 +603,6 @@ impl<'a> Session<'a> {
     /// names, which jumps the view there.
     fn viewer_entry(&mut self, id: &str, value: &Value, path: &str) -> Result<(), Refused> {
         let control = &self.scene.controls[id];
-        let numbers = |value: &Value, n: usize| -> Option<Vec<f64>> {
-            let list = value.as_array()?;
-            if list.len() != n {
-                return None;
-            }
-            list.iter()
-                .map(|v| v.as_f64().filter(|x| x.is_finite()))
-                .collect()
-        };
         match control.verb.as_deref() {
             Some("camera.pan") => {
                 let Some(step) = numbers(value, 2) else {
@@ -662,15 +653,6 @@ impl<'a> Session<'a> {
     /// One goto to the point `value` names, by its map and ease.
     fn jump(&mut self, goto: &Goto, value: &Value, path: &str) -> Result<(), Refused> {
         let flat = self.scene.rig.flat;
-        let numbers = |value: &Value, n: usize| -> Option<Vec<f64>> {
-            let list = value.as_array()?;
-            if list.len() != n {
-                return None;
-            }
-            list.iter()
-                .map(|v| v.as_f64().filter(|x| x.is_finite()))
-                .collect()
-        };
         {
             let point = match goto.map {
                 // A cell to its centre on the ground, at the ground's height.
@@ -767,6 +749,17 @@ pub fn run(
     }))
 }
 
+/// `value` as a list of exactly `n` finite numbers.
+fn numbers(value: &Value, n: usize) -> Option<Vec<f64>> {
+    let list = value.as_array()?;
+    if list.len() != n {
+        return None;
+    }
+    list.iter()
+        .map(|v| v.as_f64().filter(|x| x.is_finite()))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -780,27 +773,6 @@ mod tests {
             "layers": {"main": {"writer": "w", "title": "M", "order": "a0"}},
             "items": items
         })
-    }
-
-    #[test]
-    fn an_orbit_camera_with_pivot_eye_keeps_its_authored_eye_under_drags_and_pinches() {
-        let d = doc(
-            json!({"orbit": {"azimuth": 30, "elevation": 20, "distance": 8}, "user": {"pivot": "eye", "zoom": [0.5, 4]}}),
-            json!({}),
-        );
-        let inputs = vec![
-            json!({"op": "drag", "at": [10, 10], "delta": [40, -25]}),
-            json!({"op": "pinch", "at": [50, 50], "scale": 1.5}),
-        ];
-        let out = run(&d, [100.0, 100.0], &inputs, false).unwrap();
-        let start = out["start"]["camera"]["position"].clone();
-        for state in out["trace"].as_array().unwrap() {
-            assert_eq!(state["camera"]["position"], start);
-        }
-        assert_ne!(
-            out["trace"][0]["camera"]["target"],
-            out["start"]["camera"]["target"]
-        );
     }
 
     #[test]

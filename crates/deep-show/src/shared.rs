@@ -28,14 +28,13 @@ use deep_canvas::grammar::{Path as FieldPath, Section};
 use deep_canvas::kinds::{lookup, registry, Lookup};
 use deep_canvas::registry::Sealed;
 use deep_canvas::show::{
-    inline_count, order_issues, truncated, unreadable_handles, whole_diff_by, Diff, Writer,
-    WriterKind,
+    inline_count, order_issues, truncated, unreadable_handles, whole_diff_by, Writer, WriterKind,
 };
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::evidence;
-use crate::hub::{Body, Call, Hub, PatchCall, Planted, Show, Via};
+use crate::hub::{diff_reply, unfit_issue, Body, Call, Hub, PatchCall, Planted, Show, Via};
 use crate::snapshot::Unfit;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
@@ -489,17 +488,7 @@ fn take_layer(doc: &mut Value, owners: &mut Owners, file: &Value) {
             items.insert(id.clone(), item.clone());
         }
     }
-    let held: Vec<(String, String)> = owners
-        .iter()
-        .filter(|(_, l)| l.as_str() == layer)
-        .map(|(k, _)| k.clone())
-        .collect();
-    for (map, id) in held {
-        if let Some(Value::Object(m)) = doc.get_mut(map.as_str()) {
-            m.shift_remove(&id);
-        }
-        owners.remove(&(map, id));
-    }
+    drop_owned(doc, owners, layer);
     for map in ID_MAPS {
         for (id, entry) in file[*map].as_object().into_iter().flatten() {
             if !doc[*map].is_object() {
@@ -805,10 +794,9 @@ impl Hub<'_> {
         // The writer's layer, added when it has none: a change to the envelope, so the whole
         // document is checked again.
         let layer_text = writer.text();
-        let added = layer_of(&shared.doc, &writer)
-            .is_none()
-            .then(|| shared.envelope());
-        let layer = match layer_of(&shared.doc, &writer) {
+        let found = layer_of(&shared.doc, &writer);
+        let added = found.is_none().then(|| shared.envelope());
+        let layer = match found {
             Some(l) => l,
             None => {
                 let mut doc =
@@ -1164,17 +1152,7 @@ impl Hub<'_> {
         if let Some(Value::Object(items)) = doc.get_mut("items") {
             items.retain(|_, i| i["layer"].as_str() != Some(layer.as_str()));
         }
-        let held: Vec<(String, String)> = owners
-            .iter()
-            .filter(|(_, l)| **l == layer)
-            .map(|(k, _)| k.clone())
-            .collect();
-        for (map, id) in held {
-            if let Some(Value::Object(m)) = doc.get_mut(map.as_str()) {
-                m.shift_remove(&id);
-            }
-            owners.remove(&(map, id));
-        }
+        drop_owned(&mut doc, &mut owners, &layer);
         let mut view = Map::new();
         let empty = Map::new();
         for map in std::iter::once("items").chain(ID_MAPS.iter().copied()) {
@@ -1258,16 +1236,7 @@ impl Hub<'_> {
                 &self.scenario.evidence,
             ) {
                 Ok(d) => drawn = Some(d),
-                Err(Unfit { code, path }) => {
-                    let what = "the marks module can't draw this";
-                    let item = path
-                        .strip_prefix("items/")
-                        .and_then(|p| p.split('/').next());
-                    issues.push(match item {
-                        Some(id) => Issue::error(code, id, path.clone(), Value::Null, what),
-                        None => Issue::envelope(code, path, Value::Null, what),
-                    });
-                }
+                Err(Unfit { code, path }) => issues.push(unfit_issue(code, path)),
             }
         }
         reply.insert("rev".into(), json!(cur));
@@ -1324,17 +1293,8 @@ impl Hub<'_> {
             .insert(show.doc.clone());
         self.shared.get_mut(&show.doc).expect("open").find_older();
         reply.insert("rev".into(), json!(rev));
-        if let Some(Diff {
-            changed,
-            unchanged,
-            created,
-            removed,
-        }) = diff
-        {
-            reply.insert("changed".into(), json!(changed));
-            reply.insert("unchanged".into(), json!(unchanged));
-            reply.insert("created".into(), json!(created));
-            reply.insert("removed".into(), json!(removed));
+        if let Some(diff) = diff {
+            diff_reply(diff, &mut reply);
         }
         let visible = panel.visible;
         self.present(show, visible, drawn.as_ref(), reply)
@@ -1831,18 +1791,24 @@ fn marks_check(
         (Ok(n), Ok(w)) => n - w,
         (Ok(n), Err(_)) => *n,
         (Err(e), Err(old)) if e == old => 0,
-        (Err(Refused { code, path }), _) => {
-            let what = "the marks module can't draw this";
-            let item = path
-                .strip_prefix("items/")
-                .and_then(|p| p.split('/').next());
-            return Err(Box::new(match item {
-                Some(id) => Issue::error(code, id, path.clone(), Value::Null, what),
-                None => Issue::envelope(code, path.clone(), Value::Null, what),
-            }));
-        }
+        (Err(Refused { code, path }), _) => return Err(Box::new(unfit_issue(code, path.clone()))),
     };
     Ok(json!({"cpu_ms": 0, "gpu_ms": 0, "vertices": vertices, "lights": 0, "gpu_mb": 0}))
+}
+
+/// Drops every entry of an ID map that `layer` owns, from `doc` and from `owners`.
+fn drop_owned(doc: &mut Value, owners: &mut Owners, layer: &str) {
+    let held: Vec<(String, String)> = owners
+        .iter()
+        .filter(|(_, l)| l.as_str() == layer)
+        .map(|(k, _)| k.clone())
+        .collect();
+    for (map, id) in held {
+        if let Some(Value::Object(m)) = doc.get_mut(map.as_str()) {
+            m.shift_remove(&id);
+        }
+        owners.remove(&(map, id));
+    }
 }
 
 /// Rebuilds `shared` from the record in `state`: each event, in order, takes each layer from the
