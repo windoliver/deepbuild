@@ -98,7 +98,7 @@ fn authored(item: &Value, path: &[String], width: usize, out: &mut [f64]) {
 
 impl Program {
     /// Compiles `doc`: reads its motion, then gives every target its slots.
-    pub fn compile(doc: &Value) -> Result<Program, Refused> {
+    pub fn compile(doc: &Map<String, Value>) -> Result<Program, Refused> {
         let motion = doc::read(doc)?;
         let empty = Map::new();
         let items_json = doc
@@ -160,7 +160,11 @@ impl Program {
             }
             program.placements.push(writes);
         }
-        let index = |id: &str| program.items.iter().position(|i| i == id);
+        let mut at = std::collections::BTreeMap::new();
+        for (i, id) in program.items.iter().enumerate() {
+            at.entry(id.as_str()).or_insert(i);
+        }
+        let index = |id: &str| at.get(id).copied();
         program.parents = motion
             .parents
             .iter()

@@ -10,7 +10,6 @@ const readJson = (url: URL): JsonValue => JSON.parse(readFileSync(url, 'utf8')) 
 /** The published schemas, one file per name: schemas/<name>.json. */
 const published: readonly SchemaEntry[] = readdirSync(SCHEMAS).filter((file) => file.endsWith('.json')).sort()
   .map((file) => ({ name: file.slice(0, -'.json'.length), schema: readJson(new URL(file, SCHEMAS)) as Schema }));
-const byName = new Map(published.map((entry) => [entry.name, entry.schema]));
 
 // Callers get their own copies; parsing the JSON text is cheaper than a structured clone.
 const textByName = new Map(published.map((entry) => [entry.name, JSON.stringify(entry.schema)]));
@@ -43,7 +42,7 @@ export function getSchema(name: string): Schema {
 
 /** A schema's valid fixtures, fixtures/<name>/*.json, by file name. */
 export function fixtures(name: string): JsonValue[] {
-  if (!byName.has(name)) return [];
+  if (!textByName.has(name)) return [];
   const dir = new URL(`${encodeURIComponent(name)}/`, FIXTURES);
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter((file) => file.endsWith('.json')).sort().map((file) => readJson(new URL(file, dir)));

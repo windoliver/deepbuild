@@ -4,8 +4,7 @@ import { runMcp } from './mcp.js';
 import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub } from './service.js';
 
-export { hubAddress, installedRoot } from './paths.js';
-export { runHub, runMcp, hubStatus, startHub, stopHub };
+export { runMcp };
 
 const USAGE = `Usage: deep hub run [--root <folder>]
        deep hub start [--root <folder>]

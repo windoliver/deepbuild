@@ -8,7 +8,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use super::check::{check, migrate_item};
 use super::order::key_between;
@@ -18,7 +17,7 @@ use super::{
     as_object, kind_text, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS,
 };
 use super::{rows, transform};
-use crate::canon::revision_hash;
+use crate::canon::{revision_hash, sha256_hex};
 use crate::grammar::{HandleId, Id, Path, Section};
 use crate::kinds::{lookup, registry, Lookup};
 
@@ -206,16 +205,16 @@ pub fn apply(doc: &Value, writer: &str, patches: &[Value]) -> ApplyResult {
             base: None,
             knows: &knows,
         };
-        let mut next = working.clone();
-        if let Err(issue) = apply_ops(&mut next, patch, &format!("patches/{i}"), doc_id, &writing) {
+        // A refusal returns before `working` is read again, so the ops apply to it in place.
+        let at = format!("patches/{i}");
+        if let Err(issue) = apply_ops(&mut working, patch, &at, doc_id, &writing) {
             return refused(vec![*issue]);
         }
-        let result = check(&next);
+        let result = check(&working);
         if !result.ok {
             return refused(result.issues);
         }
-        store_migrations(&mut next, &layer);
-        working = next;
+        store_migrations(&mut working, &layer);
     }
     write_required_kinds(&mut working, &reg);
     match hash_of(&working) {
@@ -361,8 +360,7 @@ fn mint_ids(doc: &Value, ops: &[Value], writing: &Writing<'_>, patch: &str) -> M
         else {
             continue;
         };
-        let digest = Sha256::digest(format!("{}|{patch}|{temp}", writing.writer).as_bytes());
-        let hex: String = digest.iter().map(|b| format!("{b:02x}")).collect();
+        let hex = sha256_hex(format!("{}|{patch}|{temp}", writing.writer).as_bytes());
         let mut len = 8;
         let mut id = format!("{}.t{}", writing.layer, &hex[..len]);
         while items.is_some_and(|i| i.contains_key(&id)) && len < hex.len() {

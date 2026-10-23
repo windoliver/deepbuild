@@ -112,7 +112,9 @@ fn is_target(doc: &Value, id: &str, _: &Value) -> bool {
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
-    let doc = v.document()?;
+    let Value::Object(doc) = v.document()? else {
+        return Err(OpError::new("bad_doc", ""));
+    };
     let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
     let bytes = format!("{program:?}").into_bytes();
     v.write("motion.program", Val::typed(Arc::new(program), bytes))
