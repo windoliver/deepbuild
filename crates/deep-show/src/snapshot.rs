@@ -13,11 +13,11 @@ use deep_canvas_marks::scene::{
 };
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
-use deep_marks_vello::{brush, image, shape, Scopes};
+use deep_marks_vello::{brush, image, sampler, shape, Scopes};
 use deep_text::{Align, Role, Shaper, Spec};
 use serde_json::{Map, Value};
 use vello_cpu::kurbo::{Affine, BezPath, Circle, Rect, RoundedRect, Shape};
-use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageQuality, ImageSampler};
+use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageSampler};
 use vello_cpu::{
     color::{AlphaColor, Srgb},
     Image, ImageSource, Level, Pixmap, RenderContext, RenderSettings, Resources,
@@ -334,6 +334,7 @@ impl Renderer {
                 asset,
                 bounds,
                 fit,
+                sampling,
                 opacity,
                 adjust,
                 ..
@@ -358,9 +359,8 @@ impl Renderer {
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),
                     sampler: ImageSampler {
-                        quality: ImageQuality::Medium,
                         alpha: *opacity as f32,
-                        ..ImageSampler::default()
+                        ..sampler(*sampling)
                     },
                 });
                 ctx.set_paint_transform(
