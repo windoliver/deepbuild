@@ -1,0 +1,48 @@
+{
+  "title": "Key history",
+  "description": "One document reached through two revision histories of different lengths, one through an item created and deleted, a box moved away and back and a caption changed and changed back. Both must get byte-identical content keys at t, the second by cache hits.",
+  "t": "1s",
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "seed": 387,
+    "title": "Key history",
+    "description": "Three boxes, a caption and a sliding box, as both histories leave them.",
+    "size": [320, 200],
+    "items": {
+      "a": { "id": "a", "kind": "rect@1", "name": "Box a", "order": "a0", "params": { "box": [16, 16, 64, 40], "paint": { "fill": { "role": "muted" } } } },
+      "b": { "id": "b", "kind": "rect@1", "name": "Box b", "order": "a1", "params": { "box": [96, 16, 64, 40], "paint": { "fill": { "role": "ink" } } } },
+      "c": { "id": "c", "kind": "rect@1", "name": "Box c", "order": "a2", "params": { "box": [176, 16, 64, 40], "paint": { "fill": { "role": "muted" } } } },
+      "lbl": { "id": "lbl", "kind": "text@1", "name": "Caption", "order": "a3", "params": { "text": "Settled", "font": "body", "size": 13, "box": { "w": 160, "h": 20 } }, "at": { "pos": [16, 96, 0] } },
+      "m": { "id": "m", "kind": "rect@1", "name": "Sliding box", "order": "a4", "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "ink" } } }, "at": { "pos": [16, 140, 0] } }
+    },
+    "clips": {
+      "slide": {
+        "slots": { "target": { "type": "rect@1", "required": true } },
+        "span": "auto",
+        "channels": { "x": { "target": "slot:target/at/pos/0", "type": "f32", "keys": { "k0": { "t": "0s", "value": 16, "interp": "linear" }, "k1": { "t": "2s", "value": 280, "interp": "linear" } } } }
+      }
+    },
+    "placements": { "p": { "clip": "slide", "slots": { "target": "m" }, "start": "0s" } }
+  },
+  "histories": {
+    "short": {
+      "start": { "items/b/params/box/1": 60, "items/lbl/params/text": "Draft" },
+      "revisions": [
+        { "items/b/params/box/1": 16 },
+        { "items/lbl/params/text": "Settled" }
+      ]
+    },
+    "long": {
+      "start": { "items/a/params/box/0": 40 },
+      "revisions": [
+        { "items/tmp": { "id": "tmp", "kind": "rect@1", "name": "Scratch box", "order": "a5", "params": { "box": [240, 120, 40, 40], "paint": { "fill": { "role": "muted" } } } } },
+        { "items/c/params/box/0": 260 },
+        { "items/lbl/params/text": "Changed" },
+        { "items/tmp": null },
+        { "items/c/params/box/0": 176, "items/lbl/params/text": "Settled" },
+        { "items/a/params/box/0": 16 }
+      ]
+    }
+  }
+}
