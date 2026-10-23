@@ -59,8 +59,8 @@ export interface Host {
   facts(): Promise<HostFacts>;
 }
 
-/** A step run in the platform sandbox with DEEP_RESOURCE_KEY set, its folder writable. */
-export interface ResourceStep { argv: string[]; cwd: string }
+/** A step run in the platform sandbox with DEEP_RESOURCE_KEY set, its folder writable, and what its grant and environment add. */
+export interface ResourceStep { argv: string[]; cwd: string; grant?: Grant; env?: Record<string, string> }
 export interface ResourceKind {
   kind: string;
   /** Its pool. */
