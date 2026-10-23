@@ -6,7 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { homedir, networkInterfaces } from 'node:os';
+import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openAsks } from '@deepbuild/asks';
@@ -22,6 +22,12 @@ import { disk, testVfs, type Durable } from './vfs.js';
 import { Refused, refusal, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
+/** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
+const keychain = (service: string): Promise<string | undefined> => {
+  const own = (() => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } })();
+  if (process.platform !== 'darwin' || !own) return Promise.resolve(undefined);
+  return new Promise((done) => execFile('/usr/bin/security', ['find-generic-password', '-s', service, '-w'], { timeout: 5000 }, (error, out) => done(error ? undefined : out.trim())));
+};
 const YOU = { actor: 'you', scope: 'you' };
 const SECRETS_TTL = 10_000;
 type Obj = Record<string, unknown>;
@@ -135,7 +141,7 @@ export class Core {
     const ledger = await openLedger({ record: this.record, asks, now: this.now, price: async () => null });
     // The runner reaps or reports what a crash cut, and ticks itself.
     this.runner = await openRunner({
-      record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env,
+      record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
     await this.replaySpool();

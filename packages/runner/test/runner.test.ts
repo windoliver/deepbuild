@@ -1,9 +1,11 @@
 // The runner's rules beyond #159's acceptance suite: a checkout never writes where a case-insensitive filesystem
 // would send it outside its folder, and a job starts only once its checkout is whole; a job cancelled while it is
 // checked never starts, and one whose budget you declined is refused, never asked again; a lower reading inside the same window, an older window's reading, or a reading that names
-// no window is not believed.
+// no window is not believed. A real agent's job can start: it writes only its own temp folder, signs in with a
+// token the hub hands it, and reaches only its model API, through the runner's forwarder.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -38,7 +40,7 @@ echo '{"type":"result","subtype":"success","is_error":false,"result":"'$last'","
   return bin;
 }
 
-async function open(bin: string, env: Record<string, string> = {}): Promise<void> {
+async function open(bin: string, env: Record<string, string> = {}, keychain?: (service: string) => Promise<string | undefined>): Promise<void> {
   const home = join(dir, 'home');
   mkdirSync(home, { recursive: true });
   writeFileSync(join(home, '.claude.json'), JSON.stringify({ oauthAccount: { accountUuid: ACCOUNT } }));
@@ -48,7 +50,7 @@ async function open(bin: string, env: Record<string, string> = {}): Promise<void
   sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
   runner = await openRunner({
     record, asks, supervisor: sup, ledger, now: Date.now, root: join(dir, 'root'), loginPath: `${bin}:/usr/bin:/bin`, env: { HOME: home, PATH: '/usr/bin:/bin', ...env },
-    settings: { plan: { reserve_pct: 10 }, asks: { unblock: { deadline_ms: 86_400_000 } } },
+    settings: { plan: { reserve_pct: 10 }, asks: { unblock: { deadline_ms: 86_400_000 } } }, ...(keychain ? { keychain } : {}),
   });
 }
 const events = async (kind: string) => (await record.read({ after: 0, limit: 100_000 })).filter((e) => e.kind === kind);
@@ -185,4 +187,172 @@ it('remembers a declined budget while the job waits on something else first', as
   await runner.tick();
   expect((await runner.status(rec.job)).state).toBe('refused');
   expect(await asks.needsYou(), 'the same question again').toEqual([]);
+}, 60_000);
+
+/** A stand-in claude that reports, in its result, what a real one needs from its job: a temp folder it can write,
+ * its sign-in token (and whether the refresh token is anywhere in its environment), and the status its proxy
+ * answers a CONNECT with, to a host that isn't its model API and to its model API. */
+function prober(): string {
+  const bin = join(dir, 'prober');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'claude'), `#!/bin/sh
+for a in "$@"; do [ "$a" = --version ] && { echo "${facts.versions.at(-1)} (Claude Code)"; exit 0; }; done
+cat >/dev/null
+echo '{"type":"system","subtype":"init","session_id":"00000000-0000-4000-8000-0000000000bb"}'
+( echo x > "$CLAUDE_CODE_TMPDIR/probe" && [ "$TMPDIR" = "$CLAUDE_CODE_TMPDIR" ] ) 2>/dev/null && tmp=ok || tmp=no
+reach() { hp=\${HTTPS_PROXY#http://}; printf 'CONNECT %s HTTP/1.1\\r\\nHost: %s\\r\\n\\r\\n' "$1" "$1" | /usr/bin/nc -w 3 \${hp%:*} \${hp##*:} | head -1 | cut -d' ' -f2; }
+refresh=$(env | /usr/bin/grep -c ref-made-up)
+echo '{"type":"result","subtype":"success","is_error":false,"result":"tmp='$tmp' token='"$CLAUDE_CODE_OAUTH_TOKEN"' other='$(reach example.com:443)' api='$(reach api.anthropic.com:443)' refresh='$refresh' tmpdir='"$CLAUDE_CODE_TMPDIR"'","total_cost_usd":0,"session_id":"00000000-0000-4000-8000-0000000000bb"}'
+`, { mode: 0o755 });
+  return bin;
+}
+
+/** A proxy of yours, on this machine: it answers every CONNECT with 200 and records what it was asked for. */
+async function upstream(): Promise<{ url: string; asked: string[]; close: () => Promise<void> }> {
+  const asked: string[] = [];
+  const server = createServer((socket) => {
+    let head = '';
+    socket.on('data', (c) => {
+      head += c.toString('latin1');
+      if (!head.includes('\r\n\r\n')) return;
+      asked.push(head.split('\r\n')[0]!);
+      socket.end('HTTP/1.1 200 Connection Established\r\n\r\n');
+    });
+    socket.on('error', () => undefined);
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, asked, close: () => new Promise((done) => server.close(() => done())) };
+}
+const signIn = (expiresAt: number) => JSON.stringify({ claudeAiOauth: { accessToken: 'tok-made-up-159', refreshToken: 'ref-made-up-159', expiresAt } });
+
+it('gives a real agent\'s job what it needs and no more: its own temp folder, your sign-in token, and only its model API, through your proxy', async () => {
+  const proxy = await upstream();
+  try {
+    await open(prober(), { HTTPS_PROXY: proxy.url }, async (service) => (service === 'Claude Code-credentials' ? signIn(Date.now() + 3_600_000) : undefined));
+    await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+    const rec = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+    expect(rec.state, JSON.stringify(rec)).toBe('finished');
+    const said = Object.fromEntries(String(rec.result).split(' ').map((kv) => kv.split('=') as [string, string]));
+    expect(said.tmp, 'a temp folder the job can write').toBe('ok');
+    expect(said.token, 'the access token from your Keychain sign-in').toBe('tok-made-up-159');
+    expect(said.refresh, 'the refresh token is in the job\'s environment').toBe('0');
+    expect(said.other, 'a CONNECT to a host that is not its model API').toBe('403');
+    expect(said.api, 'a CONNECT to its model API').toBe('200');
+    expect(proxy.asked, 'what your proxy was asked for').toEqual(['CONNECT api.anthropic.com:443 HTTP/1.1']);
+    expect(said.tmpdir!.startsWith(rec.folder), 'its temp folder is inside its job folder, where a credential search looks').toBe(false);
+    expect(existsSync(said.tmpdir!), 'its temp folder is still there after the job').toBe(false);
+  } finally {
+    await proxy.close();
+  }
+}, 60_000);
+
+it('hands a job no token from an expired sign-in', async () => {
+  await open(prober(), {}, async () => signIn(Date.now() - 1000));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const rec = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(String(rec.result)).toContain('token= ');
+}, 60_000);
+
+it('refuses a job when your HTTPS_PROXY is one the forwarder can\'t use, rather than going around it', async () => {
+  await open(prober(), { HTTPS_PROXY: 'https://proxy.example:8443' });
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const rec = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(rec.state).toBe('refused');
+  expect(rec.refused).toContain('HTTPS_PROXY');
+}, 60_000);
+
+/** A stand-in claude that leaves its temp folder holding a folder it made read-only, then answers. */
+function locker(): string {
+  const bin = join(dir, 'locker');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'claude'), `#!/bin/sh
+for a in "$@"; do [ "$a" = --version ] && { echo "${facts.versions.at(-1)} (Claude Code)"; exit 0; }; done
+cat >/dev/null
+mkdir "$TMPDIR/x" && touch "$TMPDIR/x/f" && chmod 500 "$TMPDIR/x"
+echo '{"type":"result","subtype":"success","is_error":false,"result":"'"$TMPDIR"'","total_cost_usd":0,"session_id":"00000000-0000-4000-8000-0000000000dd"}'
+`, { mode: 0o755 });
+  return bin;
+}
+
+it('ends a job whose temp folder it made hard to remove, and removes it', async () => {
+  await open(locker());
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const rec = await Promise.race([runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' }), new Promise<undefined>((done) => setTimeout(done, 20_000))]);
+  expect(rec?.state, 'the job never ended').toBe('finished');
+  expect(existsSync(String(rec!.result)), 'its temp folder is still there').toBe(false);
+}, 60_000);
+
+it('removes the temp folder of a job a hub crash cut', async () => {
+  const bin = join(dir, 'sleeper');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'claude'), `#!/bin/sh
+for a in "$@"; do [ "$a" = --version ] && { echo "${facts.versions.at(-1)} (Claude Code)"; exit 0; }; done
+cat >/dev/null
+echo '{"type":"system","subtype":"init","session_id":"00000000-0000-4000-8000-0000000000ee"}'
+exec /bin/sleep 30
+`, { mode: 0o755 });
+  await open(bin);
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const rec = await runner.submit({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  const id = rec.job.slice(rec.job.indexOf(':') + 1);
+  const temps = () => readdirSync(realpathSync(tmpdir())).filter((n) => n.startsWith(`deep-job-${id}-`));
+  expect(temps().length, 'the running job has its temp folder').toBe(1);
+  // The hub dies with the job running: nothing of it ends the job.
+  await runner.close();
+  await sup.close();
+  await record.close();
+  record = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
+  asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+  sup = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
+  runner = await openRunner({
+    record, asks, supervisor: sup, ledger: await openLedger({ record, asks, now: Date.now, price: async () => 0.5 }), now: Date.now, root: join(dir, 'root'),
+    loginPath: '/usr/bin:/bin', env: { HOME: join(dir, 'home'), PATH: '/usr/bin:/bin' }, settings: { plan: { reserve_pct: 10 }, asks: { unblock: { deadline_ms: 86_400_000 } } },
+  });
+  await runner.tick();
+  expect(['stopped', 'stopping']).toContain((await runner.status(rec.job)).state);
+  expect(temps(), 'the cut job\'s temp folder').toEqual([]);
+}, 60_000);
+
+it('reads a result that names its own stop as that cause', async () => {
+  await open(printing([{ type: 'result', subtype: 'error_max_turns', is_error: true, total_cost_usd: 0, session_id: '00000000-0000-4000-8000-0000000000cc' }]));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const rec = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(rec.state).toBe('stopped');
+  expect(rec.stop?.cause).toBe('max_turns');
+}, 60_000);
+
+
+/** A stand-in claude whose run prints these stream-json lines after its init, as Claude Code 2.1.304 prints them. */
+function printing(lines: object[]): string {
+  const bin = join(dir, `printing${Math.random().toString(36).slice(2, 8)}`);
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'claude'), `#!/bin/sh
+for a in "$@"; do [ "$a" = --version ] && { echo "${facts.versions.at(-1)} (Claude Code)"; exit 0; }; done
+cat >/dev/null
+echo '{"type":"system","subtype":"init","session_id":"00000000-0000-4000-8000-0000000000cc"}'
+${lines.map((l) => `echo '${JSON.stringify(l)}'`).join('\n')}
+`, { mode: 0o755 });
+  return bin;
+}
+
+it('reads a job that got no answer as stopped, by the error its stream-json names, never finished', async () => {
+  const session = '00000000-0000-4000-8000-0000000000cc';
+  // As a signed-out Claude Code prints it: a synthetic message marked an API error, then a result marked an error.
+  await open(printing([
+    { type: 'assistant', message: { id: 'm1', model: '<synthetic>', role: 'assistant', content: [{ type: 'text', text: 'Not logged in · Please run /login' }] }, error: 'authentication_failed', is_api_error_message: true, session_id: session },
+    { type: 'result', subtype: 'success', is_error: true, terminal_reason: 'api_error', result: 'Not logged in · Please run /login', total_cost_usd: 0, session_id: session },
+  ]));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const signedOut = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(signedOut.state).toBe('stopped');
+  expect(signedOut.stop?.cause).toBe('sign_in_required');
+  await runner.close();
+  await sup.close();
+  await record.close();
+  // A result marked an error with no error that names a cause.
+  await open(printing([{ type: 'result', subtype: 'success', is_error: true, result: 'Something failed.', total_cost_usd: 0, session_id: session }]));
+  await runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: limits(5) });
+  const failed = await runner.run({ kind: 'read', agent: 'claude-code', prompt: 'Read.' });
+  expect(failed.state).toBe('stopped');
+  expect(failed.stop?.cause).toBe('unknown');
 }, 60_000);
