@@ -265,6 +265,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #159 first measurement: the merge base has no runner. One process opens a record, the asks core, the budget ledger, the supervisor and the runner in a temp folder, then runs 10 read-only jobs on a stand-in claude that answers at once, interleaved with 10 bare spawns of the same launch, so p50 includes Node's start, the binary's verification once, the sandbox and the record's appends; the issue's limits (300 ms a start, 5% parsing, 30 MB a job, 1 ms a status line update) stay in tests/acceptance/159/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-seal",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "seal"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #305 first measurement: the merge base has no canvas-module registry or seal. One process starts `deep-show run` in the shipped build, which registers and seals its canvas modules once, asks for the registry, draws one board at six times and asks again, failing unless the seal ran once with an unchanged time; p50 includes Node's and the binary's start. The issue's 50 ms for registration and the seal stays in tests/acceptance/305/budgets.test.ts, read from the binary's own clock. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

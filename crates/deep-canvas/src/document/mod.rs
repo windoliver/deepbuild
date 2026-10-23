@@ -32,12 +32,12 @@ pub use apply::{
     apply, apply_ops, rollback, store_migrations, touched, writer_layer, ApplyResult, Patched,
     Refused, Writing,
 };
-pub use check::{check, check_with, duration, recheck, CheckResult};
+pub use check::{check, check_in, check_with, duration, recheck, CheckResult};
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use requires::{derived_kinds, write_required_kinds};
 pub use rules::STATUS_ROLE;
-pub use shape::{canonical, extends_by_default, Canonical, DocShape};
+pub use shape::{canonical, canonical_in, extends_by_default, Canonical, DocShape};
 
 /// The check kind every issue here is raised by.
 pub const CHECK: &str = "document.validate";
@@ -365,7 +365,8 @@ mod tests {
                 continue;
             };
             let changed = patched.changed(&doc);
-            let incremental = recheck(&doc, &issues, &changed).expect("items only");
+            let incremental =
+                recheck(&doc, &issues, &changed, &crate::registry::core()).expect("items only");
             let full = check(&doc).issues;
             assert_eq!(key(&incremental), key(&full), "patch {n}: {op}");
             // Taken back out, the document is what it was, byte for byte.
@@ -967,13 +968,27 @@ mod tests {
             "requires/kinds/0",
         );
         assert!(check(&with(json!({"kinds": ["other.kind@7.2"]}))).ok);
+        // The core's own modules (text, and R1's marks2d) are held by every build.
+        assert!(check(&with(json!({"modules": {"text": "^1", "marks2d": "^1"}}))).ok);
         let full = with(json!({
             "core": "1.2.3",
             "kinds": ["test.slab@3.1"],
-            "modules": {"grid": "^1"},
+            "modules": {},
             "preview": ["fluid@1"]
         }));
         assert!(check(&full).ok, "{:?}", check(&full).issues);
+        // A required canvas module this build lacks refuses the document, naming it (#305:
+        // Registry and seal), where #389's slice only read the range's type.
+        issue(
+            &with(json!({"modules": {"grid": "^1"}})),
+            "module_missing",
+            "requires/modules/grid",
+        );
+        issue(
+            &with(json!({"modules": {"grid": 1}})),
+            "out_of_range",
+            "requires/modules/grid",
+        );
     }
 
     #[test]
