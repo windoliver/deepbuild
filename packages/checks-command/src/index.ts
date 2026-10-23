@@ -216,6 +216,8 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       // Python loads the runner's read tracer and pytest its reporter; the check's own entries follow.
       PYTHONPATH: [PYTHON_RUNTIME, check.env?.PYTHONPATH].filter(Boolean).join(':'),
       PYTEST_PLUGINS: ['deep_check_pytest', check.env?.PYTEST_PLUGINS].filter(Boolean).join(','),
+      // Python's compiled files go to the run's own folder: one the checkout holds, never checked against its source, isn't run.
+      PYTHONPYCACHEPREFIX: join(temp, 'pycache'),
       ...(go ? { GOFLAGS: ['-json', check.env?.GOFLAGS].filter(Boolean).join(' ') } : {}),
       DEEP_RUN_TOKEN: token,
     };
