@@ -1,0 +1,9 @@
+name = "verdict-proofs"
+defaultTargets = ["VerdictProofs", "vectors"]
+
+[[lean_lib]]
+name = "VerdictProofs"
+
+[[lean_exe]]
+name = "vectors"
+root = "Vectors"

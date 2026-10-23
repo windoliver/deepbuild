@@ -1,0 +1,5 @@
+.elan/
+.lake/
+.twin/
+node_modules/
+vectors.jsonl
