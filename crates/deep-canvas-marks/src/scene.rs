@@ -1294,6 +1294,31 @@ pub fn bound_texts(
     Ok(out)
 }
 
+/// The readings bound to mark sets' cells (`items/<set>#<key>/<column>`): set ID → its cells'
+/// readings.
+fn bound_rows(doc: &Map<String, Value>, record: &Record) -> BTreeMap<String, data::BoundRows> {
+    let mut out: BTreeMap<String, data::BoundRows> = BTreeMap::new();
+    let Some(Value::Object(bound)) = doc.get("bound_values") else {
+        return out;
+    };
+    for b in bound.values() {
+        let (Some(Value::String(target)), Some(Value::String(source))) =
+            (b.get("target"), b.get("source"))
+        else {
+            continue;
+        };
+        if let ["items", part, column] = target.split('/').collect::<Vec<_>>().as_slice() {
+            if let Some((set, key)) = part.split_once('#') {
+                out.entry(set.to_string()).or_default().insert(
+                    (key.to_string(), (*column).to_string()),
+                    record.readings.get(source).copied(),
+                );
+            }
+        }
+    }
+    out
+}
+
 /// The paint slot a status binding owns (Status binding: `fill | stroke | badge`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Slot {
@@ -1733,6 +1758,7 @@ fn build(
     })?;
     let bucket = path::bucket(zoom);
     let bound = bound_texts(doc, items, record)?;
+    let rows_bound = bound_rows(doc, record);
     // Mark sets' rows across the document, before any is built (Mark set: "exceed … 16M per
     // document" it can never); the set that crosses the limit is named.
     let mut rows: u64 = 0;
@@ -1901,7 +1927,16 @@ fn build(
                 }
                 vec![paints.shape(id, verbs, place, paint, &paint_path)?]
             }
-            "marks@1" => data::mark_set(id, item, items, palette, pos)?,
+            "marks@1" => data::mark_set(
+                id,
+                item,
+                items,
+                palette,
+                pos,
+                rows_bound
+                    .get(id.as_str())
+                    .unwrap_or(&data::BoundRows::new()),
+            )?,
             "axis@1" => data::axis(id, item, items, palette, pos)?,
             "image@1" => {
                 let Some(Value::String(asset)) = params.get("asset") else {

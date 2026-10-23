@@ -31,6 +31,10 @@ const MAX_ROWS: u64 = 1_000_000;
 /// The most rows a document's mark sets hold together.
 pub const MAX_DOCUMENT_ROWS: u64 = 16_000_000;
 
+/// The readings bound to a mark set's cells: (row key, column) → the reading, `None` where the
+/// record holds none.
+pub type BoundRows = std::collections::BTreeMap<(String, String), Option<f64>>;
+
 /// One column's values.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Column {
@@ -349,12 +353,14 @@ enum Encoded {
 }
 
 /// A mark set's rows as marks, each named `<id>#<key>`.
+/// A mark set's rows as marks. `bound` holds the readings bound to its cells.
 pub fn mark_set(
     id: &str,
     item: &Value,
     items: &Map<String, Value>,
     palette: &Palette,
     pos: [f64; 2],
+    bound: &BoundRows,
 ) -> Result<Vec<Mark>, Refused> {
     let path = format!("items/{id}/params");
     let empty = Map::new();
@@ -376,6 +382,27 @@ pub fn mark_set(
             name.clone(),
             column_of(c, n, &format!("{path}/columns/{name}"))?,
         );
+    }
+    // A bound cell draws its reading, never the value written there (Bound value: it can never be
+    // typed over), and a row whose reading is missing isn't drawn, so no bar shows a number
+    // nothing measured.
+    let mut hidden = std::collections::BTreeSet::new();
+    for ((key, column), value) in bound {
+        let row = p
+            .get("key")
+            .and_then(Value::as_str)
+            .and_then(|k| decoded.get(k))
+            .and_then(|k| (0..n).find(|&i| k.text(i).as_deref() == Some(key.as_str())));
+        let Some(i) = row else {
+            return refuse("ref_unresolved", format!("items/{id}#{key}"));
+        };
+        match (value, decoded.get_mut(column)) {
+            (Some(v), Some(Column::Numbers(values))) => values[i] = *v,
+            (None, Some(_)) => {
+                hidden.insert(i);
+            }
+            _ => return refuse("bad_column", format!("{path}/columns/{column}")),
+        }
     }
     let encode = p.get("encode").and_then(Value::as_object).unwrap_or(&empty);
     let mut props = std::collections::BTreeMap::new();
@@ -487,6 +514,9 @@ pub fn mark_set(
     // A path's and an area's rows are one line through the rows in order.
     let mut line: Vec<[f64; 2]> = Vec::new();
     for (i, key) in keys.iter().enumerate() {
+        if hidden.contains(&i) {
+            continue;
+        }
         let name = format!("{id}#{key}");
         let (Some(x), Some(y)) = (number("x", i), number("y", i)) else {
             return refuse("bad_encode", format!("{path}/encode"));
@@ -777,7 +807,7 @@ mod tests {
                         "k": {"dtype": "str", "len": 2, "data": ["a", "b"]}},
             "encode": {"x": {"column": "v", "scale": "x"}, "y": 30, "size": 8}}});
         let palette: Palette = [("ink".to_string(), [0, 0, 0])].into();
-        let marks = mark_set("dots", &set, items, &palette, [0.0, 0.0]).unwrap();
+        let marks = mark_set("dots", &set, items, &palette, [0.0, 0.0], &BoundRows::new()).unwrap();
         let centers: Vec<(String, [f64; 2])> = marks
             .iter()
             .map(|m| match m {
@@ -792,6 +822,35 @@ mod tests {
                 ("dots#b".to_string(), [50.0, 30.0])
             ]
         );
+    }
+
+    #[test]
+    fn a_bound_cell_draws_its_reading_and_a_row_without_one_is_left_out() {
+        let items = json!({"x": {"kind": "scale@1", "params": {"domain": [0, 10], "range": [0, 100], "nice": false}}});
+        let items = items.as_object().unwrap();
+        // [2.0, 5.0] as little-endian f64; row "a" writes 2, its reading is 7.
+        let set = json!({"params": {"mark": "point", "n": 2, "key": "k",
+            "columns": {"v": {"dtype": "f64", "len": 2, "data": "AAAAAAAAAEAAAAAAAAAUQA=="},
+                        "k": {"dtype": "str", "len": 2, "data": ["a", "b"]}},
+            "encode": {"x": {"column": "v", "scale": "x"}, "y": 30, "size": 8}}});
+        let palette: Palette = [("ink".to_string(), [0, 0, 0])].into();
+        let centers = |bound: &BoundRows| -> Vec<(String, f64)> {
+            mark_set("dots", &set, items, &palette, [0.0, 0.0], bound)
+                .unwrap()
+                .iter()
+                .map(|m| match m {
+                    Mark::Circle { item, center, .. } => (item.clone(), center[0]),
+                    _ => panic!("a point"),
+                })
+                .collect()
+        };
+        let read: BoundRows = [(("a".into(), "v".into()), Some(7.0))].into();
+        assert_eq!(
+            centers(&read),
+            vec![("dots#a".to_string(), 70.0), ("dots#b".to_string(), 50.0)]
+        );
+        let missing: BoundRows = [(("a".into(), "v".into()), None)].into();
+        assert_eq!(centers(&missing), vec![("dots#b".to_string(), 50.0)]);
     }
 
     #[test]
