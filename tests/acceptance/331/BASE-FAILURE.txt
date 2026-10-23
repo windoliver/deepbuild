@@ -20,7 +20,7 @@ Why each test fails at base (each for the missing surface, none for a bug in the
 Output:
 
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/331
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/331
 
  ❯ kit.test.ts (3 tests | 3 failed) 7319ms
    ❯ AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it, naming the route, the port, the process or the worktree (3)
@@ -112,12 +112,12 @@ AssertionError: budgets.json has a task env-up: expected undefined to be defined
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/27]⎯
 
  FAIL  budgets.test.ts > AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base > AC8 `node benchmarks/env.mjs up` runs and exits 0
-Error: Command failed: /Users/sophiawj/.nvm/versions/node/v24.22.0/bin/node /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs up
+Error: Command failed: ~/.nvm/versions/node/v24.22.0/bin/node ~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs up
 node:internal/modules/cjs/loader:1568
   throw err;
   ^
 
-Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs'
+Error: Cannot find module '~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs'
     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
@@ -143,12 +143,12 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/27]⎯
 
  FAIL  budgets.test.ts > AC8 #331.18b679cd deep env up adds under 1 s beyond the repo's own start; teardown under 5 s; on the reference Mac, against the merge base > AC8 `node benchmarks/env.mjs down` runs and exits 0
-Error: Command failed: /Users/sophiawj/.nvm/versions/node/v24.22.0/bin/node /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs down
+Error: Command failed: ~/.nvm/versions/node/v24.22.0/bin/node ~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs down
 node:internal/modules/cjs/loader:1568
   throw err;
   ^
 
-Error: Cannot find module '/Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs'
+Error: Cannot find module '~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/benchmarks/env.mjs'
     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
@@ -325,7 +325,7 @@ AssertionError: each planted environment fails environment@1, naming what it got
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/27]⎯
 
  FAIL  kit.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it, naming the route, the port, the process or the worktree > AC4 env-local, on a real supervisor, passes environment@1 on its fixed and seeded parts
-Error: env-local has no public entry at packages/env-local/src/index.ts (@deepbuild/env-local): Cannot find module '/packages/env-local/src/index.ts' imported from /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/331/kit.test.ts
+Error: env-local has no public entry at packages/env-local/src/index.ts (@deepbuild/env-local): Cannot find module '/packages/env-local/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/331/kit.test.ts
  ❯ envLocalModule kit.test.ts:34:11
      32|     return (await import('../../../packages/env-local/src/index.ts')) …
      33|   } catch (error) {
@@ -369,15 +369,15 @@ Error: deep env up isn't built at this commit (exit 2: Unsupported command. Run 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/27]⎯
 
  FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 (wrong program) a supervisor planted as env-kills-by-port fails this criterion, naming the port
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-OKDh5Y/root with DEEP_HUB_PLANT=env-kills-by-port): file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-OKDh5Y/root with DEEP_HUB_PLANT=env-kills-by-port): file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=env-kills-by-port names no planted program
-    at plantOf (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
-    at runHub (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
-    at hubCommand (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
-    at file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
+    at plantOf (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
+    at runHub (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
+    at hubCommand (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
+    at file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
 
 Node.js v24.22.0
 
@@ -395,15 +395,15 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/27]⎯
 
  FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 (wrong program) a supervisor planted as env-leases-port-again fails this criterion, naming the port
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-kpOHQg/root with DEEP_HUB_PLANT=env-leases-port-again): file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-kpOHQg/root with DEEP_HUB_PLANT=env-leases-port-again): file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=env-leases-port-again names no planted program
-    at plantOf (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
-    at runHub (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
-    at hubCommand (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
-    at file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
+    at plantOf (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
+    at runHub (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
+    at hubCommand (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
+    at file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
 
 Node.js v24.22.0
 
@@ -421,15 +421,15 @@ Node.js v24.22.0
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/27]⎯
 
  FAIL  leases.test.ts > AC10 #331.43266bc3 an escaped helper on leased port 3000 is reported, never stopped; the lease ends; the next up leases another port > AC10 (wrong program) a supervisor planted as env-holds-lease-for-helper fails this criterion, naming the port
-Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-ArIeHE/root with DEEP_HUB_PLANT=env-holds-lease-for-helper): file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
+Error: BLOCKED: the hub didn't start (deep hub run --root /private/tmp/dh331-ArIeHE/root with DEEP_HUB_PLANT=env-holds-lease-for-helper): file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46
         throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
               ^
 
 Error: DEEP_HUB_PLANT=env-holds-lease-for-helper names no planted program
-    at plantOf (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
-    at runHub (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
-    at hubCommand (file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
-    at file:///Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
+    at plantOf (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/wire.js:46:15)
+    at runHub (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/server.js:403:19)
+    at hubCommand (file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/hub/dist/index.js:23:28)
+    at file://~/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/packages/cli/dist/main.js:131:30
 
 Node.js v24.22.0
 
