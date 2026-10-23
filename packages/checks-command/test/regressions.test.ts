@@ -238,6 +238,46 @@ describe('compiled code the checkout holds', () => {
   }, 300_000);
 });
 
+describe('what a checkout\'s config makes the run leave out', () => {
+  it('pnpm\'s shell emulator, turned on in the checkout, doesn\'t hide a package script\'s `|| true`', async () => {
+    need('pnpm');
+    const checkout = folder({
+      'package.json': '{ "name": "unit", "private": true, "type": "module", "scripts": { "test": "vitest run && node e2e.mjs || true" } }\n',
+      'pnpm-workspace.yaml': 'shellEmulator: true\n',
+      'e2e.mjs': 'process.exit(1);\n',
+      'a.test.js': `import { expect, test } from 'vitest';\ntest('a', () => { expect(1).toBe(1); });\n`,
+    }, true);
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'pnpm test' } }));
+    expect(r.outcome, `${r.mask} ${r.output.stderr}`).not.toBe('passed');
+  }, 120_000);
+
+  it('a name filter in the checkout\'s config, which leaves a failing test out of its file, can\'t pass: Vitest, Jest and pytest', async () => {
+    const vitest = folder({
+      'package.json': '{ "type": "module" }\n',
+      'vitest.config.mjs': `export default { test: { testNamePattern: '^cart' } };\n`,
+      'a.test.js': `import { expect, test } from 'vitest';\ntest('total is 12', () => { expect(11).toBe(12); });\ntest('cart exists', () => { expect(1).toBe(1); });\n`,
+    }, true);
+    const v = await runCommandCheck(check(vitest, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    expect(v.outcome, v.output.stdout).toBe('failed');
+    const jest = folder({
+      'package.json': '{ "name": "unit", "private": true, "jest": { "testNamePattern": "^cart" } }\n',
+      'a.test.js': `test('total is 12', () => { expect(11).toBe(12); });\ntest('cart exists', () => { expect(1).toBe(1); });\n`,
+    }, true);
+    const j = await runCommandCheck(check(jest, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
+    expect(j.outcome, j.output.stderr).toBe('failed');
+    const pytest = folder({ 'pytest.ini': '[pytest]\naddopts = -k "not total"\n', 'tests/test_cart.py': 'def test_total():\n    assert 11 == 12\n\n\ndef test_exists():\n    pass\n' });
+    const p = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(p.outcome, p.output.stdout).toBe('failed');
+    writeFileSync(join(pytest, 'pytest.ini'), '[pytest]\naddopts = --deselect tests/test_cart.py::test_total\n');
+    const deselected = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(deselected.outcome, deselected.output.stdout).toBe('failed');
+    // The check's own command may choose its tests.
+    const plain = folder({ 'tests/test_cart.py': 'def test_total():\n    assert 11 == 12\n\n\ndef test_exists():\n    pass\n' });
+    const own = await runCommandCheck(check(plain, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider -k exists tests' } }));
+    expect(own.outcome, own.output.stdout).toBe('passed');
+  }, 300_000);
+});
+
 describe('added tests', () => {
   it('Date() without new still gives text on the moved clock, and a run in which one of the added files ran no test ran nothing, naming it', async () => {
     const checkout = project({

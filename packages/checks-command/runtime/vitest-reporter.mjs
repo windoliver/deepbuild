@@ -50,6 +50,9 @@ export default class DeepCheckReporter {
     // Type tests are judged from tsc's incremental build info, which the checkout holds: errors it leaves out never show.
     const configs = [vitest?.config, ...(vitest?.projects ?? []).map((p) => p?.config)];
     if (configs.some((c) => c?.typecheck?.enabled)) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: 'type tests are judged from tsc\'s build info in the checkout (typecheck)', stack: null, frames: [] }] });
+    // A name filter leaves tests of a file out while the file still runs: the runner keeps it only when the check's command names it.
+    const filter = configs.map((c) => c?.testNamePattern).find(Boolean);
+    if (filter) write({ type: 'run:error', file: null, filter: String(filter.source ?? filter), errors: [{ name: 'Error', message: `tests left out by name (${filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
     // Vite's dependency optimizer reuses bundles from its cache in the checkout, checked only against the lockfile and
     // the config: code no source holds. A run that bundles afresh (optimizeDeps.force) may use it.
     const servers = [vitest?.vite, ...(vitest?.projects ?? []).map((p) => p?.vite)];

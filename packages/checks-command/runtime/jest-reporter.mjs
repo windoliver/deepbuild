@@ -39,6 +39,7 @@ const errorOf = (e, text) => ({
 export default class DeepCheckJestReporter {
   constructor(globalConfig) {
     this.update = globalConfig?.updateSnapshot;
+    this.filter = globalConfig?.testNamePattern;
   }
 
 
@@ -49,6 +50,8 @@ export default class DeepCheckJestReporter {
     if (this.update && this.update !== 'none') {
       write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `snapshots are written, not compared (updateSnapshot ${this.update})`, stack: null, frames: [] }] });
     }
+    // A name filter leaves tests of a file out while the file still runs: the runner keeps it only when the check's command names it.
+    if (this.filter) write({ type: 'run:error', file: null, filter: String(this.filter), errors: [{ name: 'Error', message: `tests left out by name (${this.filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
     if (Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0)) {
       write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: 'the clock wasn\'t moved ahead: Jest runs tests with a clock of their own', stack: null, frames: [] }] });
     }
