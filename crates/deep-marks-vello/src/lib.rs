@@ -18,7 +18,7 @@ use std::sync::Arc;
 use deep_canvas::color::srgb_decode;
 use deep_canvas_marks::paint::{self, Adjust, Extend, Geometry, Ramp};
 use deep_canvas_marks::path::Verb;
-use deep_canvas_marks::scene::{Fill, Line, Rgb, Scope};
+use deep_canvas_marks::scene::{Fill, ImageSampling, Line, Rgb, Scope};
 use vello_cpu::color::{AlphaColor, DynamicColor, Srgb};
 use vello_cpu::kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect, Stroke};
 use vello_cpu::peniko::{
@@ -416,6 +416,37 @@ fn along(ctx: &mut RenderContext, path: &BezPath, ramp: &Ramp, opacity: f64, wid
         },
     });
     ctx.set_paint_transform(device.inverse() * Affine::translate((x0 as f64, y0 as f64)));
+}
+
+/// The sampler an image's `sampling` names: nearest, bilinear or bicubic.
+pub fn sampler(sampling: ImageSampling) -> ImageSampler {
+    ImageSampler {
+        quality: match sampling {
+            ImageSampling::Nearest => ImageQuality::Low,
+            ImageSampling::Linear => ImageQuality::Medium,
+            ImageSampling::Cubic => ImageQuality::High,
+        },
+        ..ImageSampler::default()
+    }
+}
+
+/// An image's straight RGBA pixels resampled to `to` pixels by `sampling` as Vello CPU draws it
+/// at that size, for a path whose own sampler can't be set per draw.
+pub fn resample(rgba: Vec<u8>, size: [u16; 2], sampling: ImageSampling, to: [u16; 2]) -> Vec<u8> {
+    let source = image(rgba, size, 1.0, &Adjust::default());
+    let mut ctx = RenderContext::new_with(to[0], to[1], settings());
+    ctx.set_paint(Image {
+        image: ImageSource::Pixmap(Arc::new(source)),
+        sampler: sampler(sampling),
+    });
+    ctx.set_paint_transform(Affine::scale_non_uniform(
+        f64::from(to[0]) / f64::from(size[0]),
+        f64::from(to[1]) / f64::from(size[1]),
+    ));
+    ctx.fill_rect(&Rect::new(0.0, 0.0, f64::from(to[0]), f64::from(to[1])));
+    let mut out = Pixmap::new(to[0], to[1]);
+    ctx.render_with(&mut out, &mut Resources::new(), rasterizer());
+    out.take_rgba8(ImageAlphaType::Alpha)
 }
 
 /// An image's straight RGBA pixels, adjusted and at `opacity`, as Vello's premultiplied pixmap.
