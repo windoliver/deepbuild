@@ -2,9 +2,10 @@
   "preflight": {
     "margin": 0.5,
     "limits": {
-      "elapsedMs": 300000
+      "elapsedMs": 900000
     },
-    "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin."
+    "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin.",
+    "changeReason": "Raised from 300 s to 900 s on 2026-10-22: the checks outgrew five minutes on the reference Mac (Mac15,12, M3, 16 GB, mains power). At a036872, at load 6 to 14, the unit lane alone took about 790 s: the parallel vitest block 135 s, the one-at-a-time block 557 s (#16 339 s of it: budgets.test.ts 128 s, crash-redraft 116 s), cargo test 62 s and node --test 38 s; typecheck, lint, catalogue drift, corpus and parity add about 40 s. The files that time a frozen budget must run with nothing beside them (#664), and they alone take about 260 s, 115 s of it the fixed sleep of #16's idle-CPU test, so no schedule brings the checks under 300 s; with everything that may overlap overlapped, the floor is about 450 to 500 s. Full preflights read 706 to 1118 s, all on a loaded machine."
   },
   "harness": {
     "limits": {

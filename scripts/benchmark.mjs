@@ -28,8 +28,8 @@ export function parseCpuMs(output, platform) {
   return ms;
 }
 
-// stream shows the command's output as it runs instead of capturing it.
-export function measureOnce(command, cwd, stream = false) {
+// stream shows the command's output as it runs instead of capturing it; a captured run is stopped after timeoutMs.
+export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('BLOCKED: native peak RSS requires macOS or Linux');
   const flags = process.platform === 'darwin' ? ['-l'] : ['-f', 'peak_rss_kb=%M\ncpu_s=%U %S'];
   const directory = mkdtempSync(join(tmpdir(), 'deep-benchmark-time-'));
@@ -38,7 +38,7 @@ export function measureOnce(command, cwd, stream = false) {
     const started = performance.now();
     const result = spawnSync('/usr/bin/time', [...flags, '-o', timing, ...command], stream
       ? { cwd, stdio: ['ignore', 'inherit', 'inherit'] }
-      : { cwd, encoding: 'utf8', timeout: 300_000, maxBuffer: 32 * 1024 * 1024 });
+      : { cwd, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 });
     const elapsedMs = performance.now() - started;
     if (result.error) throw result.error;
     const report = readFileSync(timing, 'utf8');
