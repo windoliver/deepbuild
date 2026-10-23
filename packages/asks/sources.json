@@ -518,6 +518,88 @@
     }
   },
   {
+    "source": "runner.window",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "No window reading for account 0a0a0a0a-1111-4222-8333-444444444444 for 30 minutes, so its jobs can't check your plan reserve. How should its jobs run?",
+        "options": [
+          {
+            "id": "run",
+            "label": "Run without a reading, at most 10 jobs a day",
+            "decision": "none"
+          },
+          {
+            "id": "connect",
+            "label": "Connect a CLI that reports windows",
+            "decision": "none"
+          }
+        ],
+        "recommended": "connect",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "connect",
+        "provisional": false,
+        "owner": "you",
+        "key": "5d2c1f7e7b1e4c9a0d8f6a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+        },
+        "steps": [
+          "Run a Claude Code session with DeepBuild's status line, or a Codex session, on this account",
+          "Or answer \"Run without a reading\": its jobs then run, at most 10 a day"
+        ],
+        "where": "your terminal",
+        "why": "run:01K74FX2B4D6F8H0K2M4P6R8T0 waits for the account's first window reading",
+        "unblocks": [
+          "run:01K74FX2B4D6F8H0K2M4P6R8T0"
+        ],
+        "proves": "window reading of 0a0a0a0a-1111-4222-8333-444444444444"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "runner.smoke",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Claude Code is at 2.1.999, which its facts don't cover. Run its live smoke test through the runner whenever it updates, inside your plan reserve?",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Run its smoke tests",
+            "decision": "allow"
+          },
+          {
+            "id": "deny",
+            "label": "Don't run them",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "deny",
+        "provisional": false,
+        "owner": "you",
+        "key": "d981025840da28168185acc04ad20b2fd8885317f0601a8e7b3f170514012c23",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {
