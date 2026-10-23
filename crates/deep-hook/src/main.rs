@@ -2,12 +2,14 @@
 //! stamps the call with its seq and id, forwards it to the hub at the address setting, and prints the
 //! hub's reply. When the hub isn't there, refuses the request, or doesn't acknowledge it within 50 ms of
 //! the hook's start, it allows the call and spools the request byte for byte for the hub to replay.
+//! As `deep-hook statusline`, Claude Code's status line command, it sends the hub the plan windows the
+//! status line reads (#159), then runs your own status line command and prints what it prints.
 
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
@@ -253,13 +255,124 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
 }
 
+/// The account Claude Code records beside your sign-in: `oauthAccount.accountUuid` in ~/.claude.json.
+fn account() -> Option<String> {
+    let text = fs::read_to_string(PathBuf::from(env::var_os("HOME")?).join(".claude.json")).ok()?;
+    match member(member(&parse(&text).ok()?, "oauthAccount")?, "accountUuid")? {
+        Value::String(id) if !id.is_empty() => Some(id.clone()),
+        _ => None,
+    }
+}
+
+/// How long the status line's sender waits for the hub's hello, and then for its answer.
+const SEND_BUDGET: Duration = Duration::from_secs(5);
+
+/// Your status line command: run as its words when it has no shell syntax, else by /bin/sh.
+fn yours(command: &str) -> Command {
+    let plain = command
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || " /._-+:,@%".contains(c));
+    let words: Vec<&str> = command.split_whitespace().collect();
+    if plain && !words.is_empty() {
+        let mut run = Command::new(words[0]);
+        run.args(&words[1..]);
+        run
+    } else {
+        let mut run = Command::new("/bin/sh");
+        run.args(["-c", command]);
+        run
+    }
+}
+
+/// The status line: the windows its input reads go to the hub from a sender of their own, which nothing waits
+/// for; `statusline.yours` in ~/.deepbuild/config.json gets the same input, and its output is printed as is.
+fn statusline() -> ExitCode {
+    let mut input = String::new();
+    let _ = io::stdin().read_to_string(&mut input);
+    let status = parse(&input).ok();
+    if let (Some(limits), Some(account)) = (
+        status.as_ref().and_then(|s| member(s, "rate_limits")),
+        account(),
+    ) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        let report = Value::Object(vec![
+            ("v".into(), Value::Number(1.0)),
+            ("id".into(), Value::String(ulid(now.as_millis()))),
+            ("method".into(), Value::String("windows.report".into())),
+            (
+                "params".into(),
+                Value::Object(vec![
+                    ("agent".into(), Value::String("claude-code".into())),
+                    ("account".into(), Value::String(account)),
+                    ("rate_limits".into(), limits.clone()),
+                ]),
+            ),
+        ]);
+        // A sender of its own, which nothing waits for: it holds none of the status line's output open.
+        if let Ok(me) = env::current_exe() {
+            let _ = Command::new(me)
+                .args(["statusline-send", &deep_contracts::jcs(&report)])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
+        }
+    }
+    let command = fs::read_to_string(home().join("config.json"))
+        .ok()
+        .and_then(|text| parse(&text).ok())
+        .and_then(|config| {
+            member(&config, "statusline")
+                .and_then(|s| member(s, "yours"))
+                .cloned()
+        });
+    let Some(Value::String(command)) = command else {
+        return ExitCode::SUCCESS;
+    };
+    let Ok(mut child) = yours(&command).stdin(Stdio::piped()).spawn() else {
+        return ExitCode::from(1);
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(input.as_bytes());
+    }
+    match child.wait() {
+        Ok(exit) => ExitCode::from(exit.code().unwrap_or(1).clamp(0, 255) as u8),
+        Err(_) => ExitCode::from(1),
+    }
+}
+
+/// The status line's sender: the one line to the hub once it has said hello, then its answer awaited, so the
+/// hub reads the line before the connection ends.
+fn send(line: &str) {
+    let start = Instant::now();
+    let Ok(stream) = UnixStream::connect(address()) else {
+        return;
+    };
+    let mut reader = BufReader::new(stream);
+    if read_line(&mut reader, start + SEND_BUDGET).is_some()
+        && reader
+            .get_mut()
+            .write_all(format!("{line}\n").as_bytes())
+            .is_ok()
+    {
+        let _ = read_line(&mut reader, Instant::now() + SEND_BUDGET);
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin"
         ),
+        [arg] if arg == "statusline" => return statusline(),
+        [arg, line] if arg == "statusline-send" => {
+            send(line);
+            return ExitCode::SUCCESS;
+        }
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
         _ => {
             eprintln!("Usage: deep-hook <agent> <event>, with the hook's JSON on stdin. Run deep-hook --help.");

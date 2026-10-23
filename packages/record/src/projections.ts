@@ -186,9 +186,13 @@ export class Projector {
       this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
       // A new prompt resumes a session that had finished: it is active again until its next end.
       if (e.kind === 'user.ask') this.stmt("UPDATE sessions SET status = 'running', ended_log_pos = NULL WHERE id = ? AND status IN ('finished', 'failed')").run(e.session);
-      this.turn(e, d);
+      // A reading the hub took of a session is about it, never one of its turn's events.
+      if (e.kind !== 'session.reading') this.turn(e, d);
     }
     switch (e.kind) {
+      case 'session.reading':
+        if (e.session) this.add('session_readings', { session_id: e.session, reading: str(d.reading), since: e.log_pos });
+        break;
       case 'session.start':
         // The start's values are the session's first: a worktree the app recorded since, if the start landed late, stands.
         if (e.session) this.fill('sessions', { id: e.session, agent: str(d.agent), worktree: str(d.worktree), branch: str(d.branch), thread_id: str(d.thread), project_id: e.project });
