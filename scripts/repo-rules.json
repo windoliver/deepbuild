@@ -8,6 +8,30 @@
         }
       }
     },
+    "packages/proof/fixtures/lean/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #685: the proof kit's Lean package, pinned to the Lean 4.35 whose lake comparator the Lean runner calls; core Lean only."
+        }
+      }
+    },
+    "tests/acceptance/685/fixtures/lean/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #685: the acceptance fixture's Lean package, checked through Lean 4.35's lake comparator; core Lean only."
+        }
+      }
+    },
+    "tests/acceptance/685/fixtures/lean-variants/old-toolchain/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.34.0",
+          "why": "Issue #685 (AC9): a pin to a Lean this machine lacks, so the check is BLOCKED naming it; never installed."
+        }
+      }
+    },
     "package.json": {
       "devDependencies": {
         "@types/node": {
