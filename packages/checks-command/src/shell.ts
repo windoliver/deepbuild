@@ -101,14 +101,15 @@ export function programsIn(command: string): string[] {
     .filter((p): p is string => p !== undefined && !BUILTINS.has(p));
 }
 /**
- * The values a command gives the options that choose tests by name (`-t`, `--testNamePattern`, `-k`, `--deselect`, and
- * pytest's `-o`), as the shell hands them over: a filter a reporter finds is the command's only when it is one of them.
+ * The values a command gives the options that choose tests by name (`-t`, `--testNamePattern`, `-k`, `-m`, `--deselect`,
+ * and pytest's `-o`), as the shell hands them over: a filter a reporter finds is the command's only when it is one of them.
  */
 export function filtersIn(command: string): Set<string> {
-  const words = [...command.matchAll(/'([^']*)'|"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? '');
+  // Whole shell words, their quotes removed: `--testNamePattern="a b"` is one word.
+  const words = [...command.matchAll(/(?:'[^']*'|"[^"]*"|[^\s'"]+)+/g)].map((m) => m[0].replace(/'([^']*)'|"([^"]*)"/g, (_, a, b) => a ?? b));
   const values = new Set<string>();
   words.forEach((word, i) => {
-    const option = /^(?:-t|--testNamePattern|-k|--deselect|-o)(?:=(.*))?$/.exec(word);
+    const option = /^(?:-t|--testNamePattern|-k|-m|--deselect|-o)(?:=(.*))?$/.exec(word);
     const value = option && (option[1] ?? words[i + 1]);
     if (value !== null && value !== undefined) values.add(value);
   });
