@@ -248,6 +248,46 @@ fn write(name: &str, cells: &mut Cells, i: usize, value: &Value) -> Result<(), R
     }
 }
 
+/// Whether a mark set holds a row whose key prints as `sub`, the sub-address picking gives it
+/// (`<id>#<key>`), and has a column `column`; or what's missing.
+pub(crate) fn row_column(
+    params: &Map<String, Value>,
+    sub: &str,
+    column: &str,
+) -> Result<(), String> {
+    let Some(Value::Object(columns)) = params.get("columns") else {
+        return Err("not a mark set: it has no columns".into());
+    };
+    let Some((key, c)) = params
+        .get("key")
+        .and_then(Value::as_str)
+        .and_then(|k| columns.get_key_value(k))
+    else {
+        return Err("the set has no key column, so its rows can't be named".into());
+    };
+    if !columns.contains_key(column) {
+        return Err(format!("the set has no column `{column}`"));
+    }
+    let n = params.get("n").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let cells = decode(key, c, n).map_err(|(_, _, what)| what)?;
+    // Cells decode to f64, so a whole key prints without its `.0`.
+    let printed = |v: Value| match v {
+        Value::String(s) => s,
+        Value::Number(x) => match x.as_f64() {
+            Some(f) if f.fract() == 0.0 && f.abs() < 9_007_199_254_740_992.0 => {
+                format!("{}", f as i64)
+            }
+            _ => x.to_string(),
+        },
+        v => v.to_string(),
+    };
+    if (0..n).any(|i| printed(cell(&cells, i)) == sub) {
+        Ok(())
+    } else {
+        Err(format!("the set has no row with key `{sub}`"))
+    }
+}
+
 /// The mark set's params after the op `op`, or why it is refused.
 pub fn rows(
     params: &Map<String, Value>,

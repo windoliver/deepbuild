@@ -54,6 +54,8 @@ pub enum Planted {
     ReplyWithoutDigest,
     /// #305: the check reads a logic program's bytes before refusing the document.
     ReadsWasmBytes,
+    /// #670: render-back adds noise to each snapshot, seeded from the clock.
+    SeedsNoiseFromClock,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -710,7 +712,10 @@ impl<'a> Hub<'a> {
                         ]
                     });
                     let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                    let rgba = self.renderer.raster(drawn, size, Some(ground));
+                    let mut rgba = self.renderer.raster(drawn, size, Some(ground));
+                    if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
+                        clock_noise(&mut rgba);
+                    }
                     let png = snapshot::png(rgba, size);
                     match evidence::put(&self.scenario.evidence, &png) {
                         Ok(sha) => {
@@ -791,6 +796,24 @@ impl<'a> Hub<'a> {
                 Some(_) => "INCONCLUSIVE",
             },
         }
+    }
+}
+
+/// The planted renderer's grain: a few pixels' red nudged by a xorshift seeded from the clock's
+/// nanoseconds, what an honest render-back never reads (Channel and key: it can never read the
+/// clock), so two runs draw two pictures (#670).
+fn clock_noise(rgba: &mut [u8]) {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64);
+    let mut x = nanos | 1;
+    let pixels = (rgba.len() / 4) as u64;
+    for _ in 0..64 {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        let i = (x % pixels) as usize * 4;
+        rgba[i] = rgba[i].wrapping_add((x >> 56) as u8 | 1);
     }
 }
 
