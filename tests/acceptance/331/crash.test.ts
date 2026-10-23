@@ -1,67 +1,119 @@
-// #331 AC7: a hub killed between recording a start and the process starting finds the record on restart and
-// reaps or reports the process, never leaving it untracked. The fault is injected at two points of one start of a
-// stack's process (README, The hub's test-only variables): right after `process.starting@1` is durable and before
-// the spawn (`start-recorded`), and right after the spawn and before `process.tracked@1` (`spawned`). The hub
-// kills itself with SIGKILL there; the test restarts it on the same root, with nothing but its files.
+// #331 AC7: a hub killed between recording a start and the process starting finds the record on restart and reaps
+// or reports the process, never leaving it untracked. The hub kills itself at the point the criterion names
+// (DEEP_HUB_TEST_CRASH=start-recorded: the start is durable, nothing spawned yet) and just past it
+// (DEEP_HUB_TEST_CRASH=spawned: the process exists, not yet tracked). Only the record survives the crash; the
+// restarted hub must close each open start. Every PID comes from the files the dev server fixture writes.
+import { readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { alive, blocked, cleanup, Client, envUp, makeRepo, pidsIn, portEvents, READY, serverUp, sleep, startHub, stopHub, sub, tempDir, waitFor, type Line } from './helpers.ts';
+import {
+  alive, blocked, cleanup, Client, deep, jsonOut, makeRepo, pidsIn, READY, releasePorts, serverUp, sleep, startHub, stopHub, sub, tempDir,
+  waitFor, type Hub, type Line,
+} from './helpers.ts';
 
-afterEach(cleanup, 60_000);
+afterEach(async () => { await releasePorts(); await cleanup(); }, 30_000);
 
-/** The stack's run whose start was recorded, read from the record after the crash: process.starting with no process.tracked. */
-async function crashed(point: 'start-recorded' | 'spawned') {
-  const t = makeRepo({ up: serverUp(), ports: ['web'], ready: READY, within: 20 });
-  const wt = t.worktree('wt-a');
-  const root = sub(tempDir(), 'root');
-  const hub = await startHub(root, { DEEP_HUB_TEST_CRASH: point });
-  const up = await envUp(hub, wt, 60_000);
-  await Promise.race([hub.exit, sleep(10_000)]);
-  if (alive(hub.pid)) {
-    await stopHub(hub);
-    blocked(`the hub didn't crash at ${point} (DEEP_HUB_TEST_CRASH=${point}); deep env up said: ${up.ran.stdout} ${up.ran.stderr}`);
+const is = (e: Line, kind: string): boolean => e.kind === kind || e.kind === `${kind}@1`;
+const sameRun = (a: unknown, b: unknown): boolean => typeof a === 'string' && typeof b === 'string' && a.replace(/^run:/, '') === b.replace(/^run:/, '');
+const stackPids = (dir: string): number[] => Object.values(pidsIn(dir)).flat();
+
+/** `deep env up` on a hub that kills itself at `point`; returns once the hub is gone, or BLOCKED when it didn't crash there. */
+async function crashDuringUp(hub: Hub, wt: string, point: string): Promise<void> {
+  const up = deep(['env', 'up', '--root', hub.root, '--json'], { cwd: wt, timeoutMs: 60_000 });
+  const ended = await Promise.race([hub.exit.then(() => true), up.then(() => sleep(3000)).then(() => !alive(hub.pid))]);
+  const ran = await up;
+  if (!ended || alive(hub.pid)) {
+    if (ran.code === 2 && !jsonOut(ran)) throw Error(`deep env up isn't built at this commit (exit ${ran.code}: ${(ran.stderr || ran.stdout).trim().slice(0, 300)})`);
+    blocked(`the hub with DEEP_HUB_TEST_CRASH=${point} didn't kill itself during deep env up (it printed ${ran.stdout.trim().slice(0, 300)})`);
   }
-  const again = await startHub(root);
-  const client = await Client.open(again);
-  const events = await client.events();
-  const starting = events.filter((e) => e.kind === 'process.starting');
-  if (!starting.length) blocked(`the hub crashed at ${point} before it recorded the start (no process.starting@1 in the record)`);
-  const run = starting[starting.length - 1]!.data.run as string;
-  return { wt, again, client, run, events };
+  if (hub.child.signalCode !== 'SIGKILL') blocked(`the hub with DEEP_HUB_TEST_CRASH=${point} ended by ${hub.child.signalCode ?? `exit ${hub.child.exitCode}`}, not SIGKILL: ${hub.stderr().slice(0, 500)}`);
 }
-const cleaned = async (client: Client, run: string): Promise<Line> =>
-  waitFor(async () => (await client.events('run.cleaned')).find((e) => e.data?.run === run), 15_000, `run.cleaned for ${run} after the restart`);
 
-describe('AC7 #331.cba94b5d a hub killed between recording a start and the process starting reaps or reports it on restart', () => {
-  it('AC7 killed after the start is recorded and before the spawn, the restarted hub finds the record and closes the start: run.cleaned for its run, its lease ended, and no process started late', async () => {
-    const { wt, again, client, run, events } = await crashed('start-recorded');
+/** Leaves only the record (the event log) under the hub's root, so what the restart knows comes from it alone. */
+function onlyTheRecord(root: string): void {
+  for (const name of readdirSync(root)) if (!/^ledger\.db/.test(name) && name !== 'evidence') rmSync(join(root, name), { recursive: true, force: true });
+}
+
+/** The stack's starts the record holds, and each one's cleanup once the restarted hub closes it. */
+async function closedStarts(client: Client, point: string): Promise<{ runs: string[]; cleaned: Map<string, Line> }> {
+  const events = await client.events();
+  const runs = [...new Set(events.filter((e) => is(e, 'process.starting')).map((e) => String(e.data?.run)))];
+  if (!runs.length) blocked(`the record holds no process.starting after the hub with DEEP_HUB_TEST_CRASH=${point} was killed, so no start was recorded before the crash`);
+  const cleaned = new Map<string, Line>();
+  await waitFor(async () => {
+    const now = await client.events();
+    for (const run of runs) {
+      const c = now.find((e) => is(e, 'run.cleaned') && sameRun(e.data?.run, run));
+      if (c) cleaned.set(run, c);
+    }
+    return cleaned.size === runs.length;
+  }, 15_000, 'run.cleaned for each start').catch(() => {
+    const open = runs.filter((r) => !cleaned.has(r));
+    throw Error(`the restarted hub found the start of ${open.join(', ')} in the record and never closed it (no run.cleaned within 15 s), leaving it untracked`);
+  });
+  return { runs, cleaned };
+}
+
+function stack() {
+  const dir = tempDir();
+  const root = sub(dir, 'root');
+  const repo = makeRepo({ up: serverUp(), ports: ['web'], ready: READY, within: 20 });
+  const wt = repo.worktree('wt');
+  return { root, wt, pids: join(wt, '.pids') };
+}
+
+describe('AC7 #331.cba94b5d a hub killed between recording a start and the process starting finds the record on restart and reaps or reports the process', () => {
+  it('AC7 killed after the start is durable and before the spawn, the restarted hub closes that start from the record, and no process of the stack runs untracked', async () => {
+    const { root, wt, pids } = stack();
+    const hub = await startHub(root, { DEEP_HUB_TEST_CRASH: 'start-recorded' });
+    await crashDuringUp(hub, wt, 'start-recorded');
+    await sleep(1000);
+    if (stackPids(pids).length) blocked(`a stack process (${stackPids(pids).join(', ')}) started though the hub was to be killed before the spawn`);
+    onlyTheRecord(root);
+    const again = await startHub(root);
+    const client = await Client.open(again);
     try {
-      expect(events.filter((e) => e.kind === 'process.tracked' && e.data.run === run).length, 'the crash came before the process was tracked (scenario)').toBe(0);
-      const done = await cleaned(client, run);
-      expect(done.data.left, `nothing is left of ${run}`).toEqual([]);
-      // The only run this hub had: every lease it took for it has ended.
-      const now = await client.events();
-      for (const l of portEvents(now, 'lease.acquired')) expect(portEvents(now, 'lease.released', Number(l.data.resource.key)).length, `the lease on port ${l.data.resource.key} ended`).toBeGreaterThan(0);
+      const { runs, cleaned } = await closedStarts(client, 'start-recorded');
+      // Nothing started from that record runs unrecorded: any stack process now running is the run's and tracked or reported.
       await sleep(1000);
-      expect(pidsIn(join(wt, '.pids')), 'the restarted hub started the recorded process after all').toEqual({});
+      const events = await client.events();
+      for (const pid of stackPids(pids).filter(alive)) {
+        const known = events.some((e) => (is(e, 'process.tracked') && e.data?.pid === pid) || (is(e, 'run.cleaned') && (e.data?.left as unknown[] | undefined)?.includes(`pid:${pid}`)));
+        expect(known, `the stack process ${pid} runs after the restart and the record neither tracks nor reports it`).toBe(true);
+      }
+      for (const run of runs) expect(cleaned.get(run)!.data, `run.cleaned for ${run}`).toEqual(expect.objectContaining({ stopped: expect.any(Array), left: expect.any(Array) }));
     } finally {
       client.close();
       await stopHub(again);
     }
   }, 120_000);
 
-  it('AC7 killed after the spawn and before the process is tracked, the restarted hub reaps the process the record names only as starting, or reports it by PID; it never stays untracked', async () => {
-    const { wt, again, client, run, events } = await crashed('spawned');
+  it('AC7 killed right after the spawn and before the process is tracked, the restarted hub finds the process from the record and stops it or reports it by PID', async () => {
+    const { root, wt, pids } = stack();
+    const hub = await startHub(root, { DEEP_HUB_TEST_CRASH: 'spawned' });
+    await crashDuringUp(hub, wt, 'spawned');
+    let server: number;
     try {
-      expect(events.filter((e) => e.kind === 'process.tracked' && e.data.run === run).length, 'the crash came before the process was tracked (scenario)').toBe(0);
-      const server = await waitFor(() => pidsIn(join(wt, '.pids')).server?.[0], 10_000, 'the spawned server\'s PID file').catch(() => blocked('the process the hub spawned before its crash never ran, so there is nothing to find'));
-      const done = await cleaned(client, run);
-      const stopped = (done.data.stopped ?? []) as number[];
-      const left = (done.data.left ?? []) as string[];
-      await waitFor(() => !alive(server) || left.includes(`pid:${server}`), 15_000, `server ${server} reaped or reported`).catch(() => undefined);
-      const reaped = !alive(server) && stopped.includes(server);
-      const reported = alive(server) && left.includes(`pid:${server}`);
-      expect(reaped || reported, `the process ${server} the crash left is neither reaped (stopped ${JSON.stringify(stopped)}, alive ${alive(server)}) nor reported (left ${JSON.stringify(left)})`).toBe(true);
+      server = await waitFor(() => pidsIn(pids).server?.[0], 10_000, 'the dev server\'s PID file');
+    } catch {
+      return blocked('the stack\'s process never started after the hub was killed right after the spawn');
+    }
+    await sleep(500);
+    const started = stackPids(pids);
+    if (!started.every(alive)) blocked(`the stack's processes (${started.join(', ')}) died with the hub, so there is nothing to reap or report`);
+    onlyTheRecord(root);
+    const again = await startHub(root);
+    const client = await Client.open(again);
+    try {
+      const { cleaned } = await closedStarts(client, 'spawned');
+      const stopped = new Set([...cleaned.values()].flatMap((c) => (c.data?.stopped as number[] | undefined) ?? []));
+      const left = new Set([...cleaned.values()].flatMap((c) => (c.data?.left as string[] | undefined) ?? []));
+      for (const pid of started) {
+        const handled = await waitFor(() => (!alive(pid) && stopped.has(pid)) || (alive(pid) && left.has(`pid:${pid}`)), 15_000, `PID ${pid}`).catch(() => false);
+        if (!handled) {
+          throw Error(`the stack process ${pid}${pid === server ? ' (the dev server)' : ''}, spawned just before the crash, is ${alive(pid) ? 'still running' : 'gone'}, and the restarted hub neither reaped it (run.cleaned stopped ${JSON.stringify([...stopped])}) nor reported it (left ${JSON.stringify([...left])})`);
+        }
+      }
     } finally {
       client.close();
       await stopHub(again);

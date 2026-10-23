@@ -180,7 +180,9 @@ fails that test.
 - **AC7.** "Reaps or reports": before the spawn there is no process, so the restart closes the start with
   `run.cleaned@1` naming nothing left, ends the run's leases, and starts nothing late. After the spawn, the
   process is either stopped and listed in `run.cleaned@1`'s `stopped`, or still running and listed in its `left`
-  as `pid:<n>`. A crash that comes after `process.tracked@1` didn't form the scenario: BLOCKED.
+  as `pid:<n>`. Only the record survives the crash: the root keeps its ledger alone before the restart. This is
+  the blind redraft, adopted by the user's decision on a dispute (PR #681): the first draft read the record after
+  the restart and so forbade the reap from tracking what it found.
 - **AC8.** "The repo's own start" is the same dev server spawned bare until its health route answers 200. Each
   round is five ups and downs interleaved with five bare starts; the number is median(up) minus median(bare start),
   and median(down); five rounds after a warm-up, judged by the timing rule. It counts only on a reference Mac
