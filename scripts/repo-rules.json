@@ -236,6 +236,14 @@
         }
       }
     },
+    "packages/proof/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #685: the check.kind@1 slot's fill and kit types, and the Finding a proof kit's judge ends a case with, so the one kit runner judges the proof kind."
+        }
+      }
+    },
     "packages/budget/package.json": {
       "dependencies": {
         "@deepbuild/asks": {
