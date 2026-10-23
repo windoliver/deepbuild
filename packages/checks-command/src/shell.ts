@@ -155,8 +155,8 @@ export function programsIn(command: string): string[] {
 }
 /**
  * The values a command gives the options that choose tests by name (`-t`, `--testNamePattern`, `--tags-filter`, `-k`,
- * `-m`, `--deselect`, and pytest's `-o`), each with its option, as the shell hands them over: a filter a reporter
- * finds is the command's only when it is one of them.
+ * `-m`, `--deselect`, and pytest's `-o`), each with its option, and the places it runs alone (`place`: a Vitest
+ * file:line, a pytest node id), as the shell hands them over: a filter a reporter finds is the command's only when it is one of them.
  */
 export function filtersIn(command: string): Filter[] {
   const words = wordsOf(command);
@@ -165,6 +165,8 @@ export function filtersIn(command: string): Filter[] {
     const option = /^(-t|--testNamePattern|--tags-filter|-k|-m|--deselect|-o)(?:=(.*))?$/.exec(word);
     const value = option && (option[2] ?? words[i + 1]);
     if (value !== null && value !== undefined) filters.push({ option: option![1]!, value });
+    // A place the command runs alone: Vitest's file:line, or a pytest node id.
+    else if (!word.startsWith('-') && (word.includes('::') || /:\d+$/.test(word))) filters.push({ option: 'place', value: word });
   });
   return filters;
 }

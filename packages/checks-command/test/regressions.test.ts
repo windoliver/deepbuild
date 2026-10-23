@@ -390,6 +390,36 @@ describe('a test its file holds that never ran', () => {
     expect(sp.outcome, sp.failures.map((f) => f.message).join('\n')).toBe('passed');
   }, 300_000);
 
+  it('what the source focuses (.only, fit), a place the command names (a file:line, a pytest node id) and a doctest module leave no test out', async () => {
+    const failing = `test('b', () => { expect(1).toBe(2); });\n`;
+    const vitest = folder({
+      'package.json': '{ "type": "module" }\n',
+      'vitest.config.mjs': 'export default { test: { allowOnly: true } };\n',
+      'a.test.ts': `import { describe, expect, test } from 'vitest';\ntest('a', () => {});\n${failing}`,
+      'only.test.ts': `import { describe, expect, test } from 'vitest';\ntest.only('a', () => {});\n${failing}describe('d', () => { test('c', () => { expect(1).toBe(2); }); });\n`,
+    }, true);
+    for (const runner of ['node_modules/.bin/vitest run a.test.ts:2', 'node_modules/.bin/vitest run only.test.ts']) {
+      const r = await runCommandCheck(check(vitest, { spec: { ...VITEST, runner } }));
+      expect(r.outcome, `${runner}: ${r.failures.map((f) => f.message).join('\n')}`).toBe('passed');
+    }
+    const jest = folder({ 'package.json': '{ "name": "unit", "private": true }\n', 'a.test.js': `fit('a', () => {});\n${failing}` }, true);
+    const j = await runCommandCheck(check(jest, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
+    expect(j.outcome, j.failures.map((f) => f.message).join('\n')).toBe('passed');
+    const pytest = folder({
+      'src/util.py': 'def test_connection():\n    """\n    >>> 1 + 1\n    2\n    """\n',
+      'tests/test_a.py': 'class TestA:\n    def test_x(self):\n        pass\n\n\ndef test_drop():\n    assert 0\n',
+    });
+    for (const args of ['tests/test_a.py::TestA', 'tests/test_a.py::TestA::test_x', '--doctest-modules src tests/test_a.py::TestA']) {
+      const r = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: `python3 -m pytest -q -p no:cacheprovider ${args}` } }));
+      expect(r.outcome, `${args}: ${r.failures.map((f) => f.message).join('\n')}`).toBe('passed');
+    }
+    // A place the checkout's config names is still no filter of the check's.
+    writeFileSync(join(pytest, 'pytest.ini'), '[pytest]\naddopts = tests/test_a.py::TestA\n');
+    const config = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider' } }));
+    expect(config.outcome).toBe('failed');
+    expect(config.failures).toEqual([expect.objectContaining({ test: 'test_drop', file: 'tests/test_a.py', line: 6 })]);
+  }, 300_000);
+
   // The listings, read with no run, against each tool's own: any nesting of suites, tests, modifiers and options.
   const name = fc.stringMatching(/^[a-z][a-z ]{0,6}[a-z]$/);
   it('a Vitest file lists the tests Vitest\'s own static listing of it lists, under a config of its own', async () => {

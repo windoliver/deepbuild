@@ -141,7 +141,8 @@ def pytest_runtest_makereport(item, call):
 
 class _Reporter:
     def pytest_collectstart(self, collector):
-        if isinstance(collector, pytest.Module):
+        # A doctest module's tests are its docstrings' examples, not its functions.
+        if isinstance(collector, pytest.Module) and type(collector).__name__ != 'DoctestModule':
             _modules.add(os.path.abspath(str(collector.path)))
 
     def pytest_deselected(self, items):
@@ -186,9 +187,15 @@ def pytest_unconfigure(config):
     global _fd
     if config is not _owner or _fd is None:
         return
+    # A node id the run was given runs only the tests it names: the runner keeps the rest only when the check's command names it.
+    places = [(arg, *arg.split('::', 1)) for arg in config.args if '::' in arg]
     for path in sorted(_modules):
+        chosen = [(arg, part) for arg, place, part in places if os.path.abspath(os.path.join(config.invocation_params.dir, place)) == path]
         for name, line in _listing(path):
             _write({'type': 'test:listed', 'name': name, 'file': path, 'line': line, 'errors': []})
+            for arg, part in chosen:
+                if not (name == part or name.startswith(f'{part}::') or part.startswith(f'{name}[')):
+                    _write({'type': 'test:left', 'name': name, 'file': path, 'filter': arg, 'errors': []})
     try:
         os.write(_fd, (json.dumps({'deep': 'end', 'lines': _lines}, separators=(',', ':')) + '\n').encode())
     except OSError:
