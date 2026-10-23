@@ -82,7 +82,7 @@ def _names(node):
 
 def _listing(path):
     """The tests a default pytest run of the file at `path` runs, read from its source with none of the checkout's
-    config, setup or plugins: test* functions, Test* classes without __init__ and unittest TestCase classes, and their
+    config, setup or plugins: test* functions, Test* classes without __init__ and unittest TestCase classes, none abstract, and their
     test* methods, at the top of the file or of a listed class, but those its source skips or makes conditional."""
     try:
         with open(path, 'rb') as f:
@@ -105,26 +105,29 @@ def _listing(path):
             elif isinstance(n, ast.ClassDef) and not unit:
                 is_unit = any(b.endswith('TestCase') for b in map(ast.unparse, n.bases))
                 init = any(isinstance(m, ast.FunctionDef) and m.name == '__init__' for m in n.body)
-                if is_unit or (n.name.startswith('Test') and not init):
+                # pytest never collects an abstract class, whatever its name.
+                abstract = any('abstractmethod' in set().union(*map(_names, m.decorator_list)) for m in n.body if hasattr(m, 'decorator_list'))
+                if not abstract and (is_unit or (n.name.startswith('Test') and not init)):
                     visit(n.body, prefix + [n.name], is_unit)
 
     visit(tree.body, [], False)
     return listed
 
 
-@pytest.hookimpl(wrapper=True)
+@pytest.hookimpl(hookwrapper=True)
 def pytest_pycollect_makeitem(collector, name, obj):
     # Which functions and classes are tests is pytest's own filter too (python_functions, python_classes): a test_*
-    # function or Test* class the project's patterns leave out is a test dropped from a file that still runs.
-    result = yield
-    if result is None and collector.config is _owner:
+    # function or Test* class the project's patterns leave out is a test dropped from a file that still runs. Only the
+    # name patterns count: pytest also never collects, say, an abstract class, whatever its name.
+    outcome = yield
+    if outcome.excinfo is None and outcome.get_result() is None and collector.config is _owner:
         function = inspect.isfunction(obj) or isinstance(obj, (staticmethod, classmethod))
-        ini = 'python_functions' if function and name.startswith('test') else 'python_classes' if inspect.isclass(obj) and name.startswith('Test') else None
+        ini = ('python_functions' if function and name.startswith('test') and not collector.funcnamefilter(name)
+               else 'python_classes' if inspect.isclass(obj) and name.startswith('Test') and not collector.classnamefilter(name) else None)
         if ini:
             value = f"{ini}={' '.join(collector.config.getini(ini))}"
             _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"{collector.nodeid}::{name} left out by {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
             _write({'type': 'test:left', 'name': f'{collector.nodeid}::{name}'.split('::', 1)[-1], 'file': os.path.abspath(str(collector.path)), 'filter': value, 'errors': []})
-    return result
 
 
 @pytest.hookimpl(hookwrapper=True)

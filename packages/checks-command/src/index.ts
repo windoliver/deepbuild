@@ -18,7 +18,7 @@ import type { Exit, Host } from '@deepbuild/supervisor';
 import { listSource, unrun, type Listed } from './listing.js';
 import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
-import { filtersIn, GO_TEST, hiddenChild, maskIn, programsIn, untraced, type Spawned } from './shell.js';
+import { absent, filtersIn, GO_TEST, hiddenChild, maskIn, programsIn, untraced, type Spawned } from './shell.js';
 
 export type { Seeded } from './seeded.js';
 
@@ -219,6 +219,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     // Vitest reports its pattern's source, in which a `/` the command gave is escaped.
     const named = (filter: string): boolean => filters.some(({ value: v }) => v === filter || v.replaceAll('/', '\\/') === filter);
     if (refused.length) return { run: result('uncounted', { mask: `venv ${refused[0]}: name the venv's program by its path` }), ran: [] };
+    // A tool that isn't installed can't start: the run is missing, not untraced.
+    const gone = absent(spec.runner, checkout, PATH);
+    if (gone !== null) return { run: result('missing', { failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: `${gone} isn't on the run's PATH` }] }), ran: [] };
     const hidden = plant === 'exit-code-only' ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
     if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
     const work = mkdtempSync(join(temp, 'deep-check-run-'));
