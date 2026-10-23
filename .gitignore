@@ -8,6 +8,9 @@ test-results/
 .DS_Store
 .env
 .env.*
+# The pinned Lean toolchain (lean-toolchain, #684) and the model's build.
+.lean/
+.lake/
 
 # gpui-shell writes these into a panel directory each time it loads one.
 crates/deep-app/panels/*/gpui-kit.d.ts
