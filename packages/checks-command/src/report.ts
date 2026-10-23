@@ -37,7 +37,8 @@ export function under(checkout: string, path: string): string | null {
 export const OWN_FOLDERS = /(^|\/)(tests?|spec|__tests__|fixtures?|scripts?)\//;
 /** A check's own files: its tests, and what lies in the repo's test, fixture and script folders (its setup). */
 export const ownFile = (path: string): boolean => OWN_FOLDERS.test(path) || /(\.test\.|\.spec\.|_test\.|(^|\/)test_)/.test(path);
-const ASSERTIONS = new Set(['AssertionError', 'AssertionError [ERR_ASSERTION]', 'JestAssertionError']);
+// `testing` is Go's: a test's own t.Errorf or t.Fatalf.
+const ASSERTIONS = new Set(['AssertionError', 'AssertionError [ERR_ASSERTION]', 'JestAssertionError', 'testing']);
 
 interface Frame { file: string; line: number }
 /** The frames of a stack's text, innermost first. */
@@ -116,4 +117,56 @@ export function vitest(lines: string[], checkout: string, lastAttemptOnly = fals
     }
   }
   return { ran, failures, malformed };
+}
+
+interface GoEvent { Action?: unknown; Package?: unknown; Test?: unknown; Output?: unknown }
+/** A Go package's folder: `_/abs/dir` outside GOPATH, or the module's path below the checkout's go.mod. */
+function packageDir(checkout: string, pkg: string): string | null {
+  if (pkg.startsWith('_/')) return pkg.slice(1);
+  let module: string | undefined;
+  try { module = /^module\s+(\S+)/m.exec(readFileSync(resolve(checkout, 'go.mod'), 'utf8'))?.[1]; } catch { return null; }
+  if (!module || (pkg !== module && !pkg.startsWith(`${module}/`))) return null;
+  return resolve(checkout, pkg.slice(module.length + 1));
+}
+/**
+ * `go test -json`'s report (the runner sets GOFLAGS=-json), from the run's stdout: every test and subtest that
+ * passed or failed, a subtest's parent left out; a failure placed at the first `file.go:N:` line the test logged
+ * (t.Errorf and t.Fatalf, Go's own failure report, which t.Log's lines look like), or, for a panic, at the
+ * innermost frame of its trace, which is no assertion failure.
+ */
+export function goTest(stdout: string, checkout: string): Reported {
+  const events = parsed<GoEvent>(stdout.split('\n').filter((l) => l.startsWith('{')))
+    .filter((e) => typeof e === 'object' && e !== null && typeof e.Action === 'string' && typeof e.Package === 'string');
+  const key = (e: GoEvent): string => `${e.Package as string}\0${e.Test as string}`;
+  const output = new Map<string, string>();
+  const ended = new Map<string, GoEvent>();
+  for (const e of events) {
+    if (typeof e.Test !== 'string') continue;
+    if (e.Action === 'output' && typeof e.Output === 'string') output.set(key(e), (output.get(key(e)) ?? '') + e.Output);
+    if (e.Action === 'pass' || e.Action === 'fail') ended.set(key(e), e);
+  }
+  const names = [...ended.values()].map((e) => key(e));
+  const leaves = [...ended.values()].filter((e) => !names.some((n) => n.startsWith(`${key(e)}/`)));
+  const ran: Ran[] = [];
+  const failures: Failure[] = [];
+  for (const e of leaves) {
+    const test = e.Test as string;
+    const dir = packageDir(checkout, e.Package as string);
+    const text = output.get(key(e)) ?? '';
+    const logged = /^\s+([\w.-]+\.go):(\d+): (.*)$/m.exec(text);
+    const file = logged && dir ? under(checkout, resolve(dir, logged[1]!)) : null;
+    ran.push({ test, file, attempts: [e.Action === 'pass' ? 'passed' : 'failed'], meta: {} });
+    if (e.Action !== 'fail') continue;
+    const panicked = /^panic: /m.test(text);
+    const frames = panicked ? [...text.matchAll(/^\s+(\/\S+\.go):(\d+)/gm)].map((m) => ({ file: m[1]!, line: Number(m[2]) }))
+      : logged && dir ? [{ file: resolve(dir, logged[1]!), line: Number(logged[2]) }] : [];
+    const message = panicked ? (/^panic: .*$/m.exec(text)?.[0] ?? text.trim()) : (logged?.[3] ?? text.trim());
+    failures.push(failure(checkout, test, file, { name: panicked ? 'panic' : 'testing', message, stack: text, frames }));
+  }
+  // A package that failed with no test failing in it didn't build or set up: its own failure, unplaced.
+  for (const e of events) {
+    if (typeof e.Test === 'string' || e.Action !== 'fail' || leaves.some((t) => t.Package === e.Package && t.Action === 'fail')) continue;
+    failures.push(failure(checkout, e.Package as string, null, { name: null, message: `package ${e.Package as string} failed`, stack: null }));
+  }
+  return { ran, failures, malformed: 0 };
 }

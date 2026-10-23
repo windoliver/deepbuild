@@ -41,6 +41,9 @@ export default class DeepCheckReporter {
   // The runner's preload moves the clock of the processes it loads into; a vm pool runs tests in a context of its
   // own, with a Date of its own, and browser mode runs them in a browser, so a run whose clock should be ahead can't pass there.
   onInit(vitest) {
+    // A run that writes snapshots takes its expected values from what the program gives: it can't pass.
+    const update = vitest?.config?.snapshotOptions?.updateSnapshot;
+    if (update && update !== 'none') write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `snapshots are written, not compared (updateSnapshot ${update})`, stack: null, frames: [] }] });
     if (!Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0)) return;
     const configs = [vitest?.config, ...(vitest?.projects ?? []).map((p) => p?.config)];
     const vm = configs.some((c) => c?.browser?.enabled) ? 'browser' : configs.map((c) => c?.pool).find((p) => typeof p === 'string' && p.startsWith('vm'));

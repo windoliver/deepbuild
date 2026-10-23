@@ -1,9 +1,10 @@
 // What the command check kind's acceptance tests (tests/acceptance/30) don't reach, each found in review: a secret in
 // a failure's message, a run's environment taking the place of what makes it hermetic, a suite forging its own count,
-// a process the run left running, the moved clock breaking `Date()`, and an added test file that never ran. Each runs
-// a real Vitest project through the real supervisor.
+// a process the run left running, the moved clock breaking `Date()`, and an added test file that never ran; a Python
+// that skips the run's tracer, a go test run that passes though its reads were never traced, and Jest's own clock.
+// Each runs a real project through the real supervisor, but for the command's text, read with no run.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +14,7 @@ import type { CheckSpec } from '../../conformance/src/index.js';
 import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
 import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
+import { hiddenChild, untraced } from '../src/shell.js';
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const VITEST: CheckSpec = { kind: 'command', runner: 'node_modules/.bin/vitest run', inputs: [], depth: 'unit', oracle: 'code', contract: null };
@@ -43,6 +45,17 @@ function project(files: Record<string, string>, root_files: Record<string, strin
   for (const [name, text] of Object.entries(root_files)) { mkdirSync(join(root, name, '..'), { recursive: true }); writeFileSync(join(root, name), text); }
   execFileSync('/bin/cp', ['-cR', join(REPO, 'node_modules'), join(root, 'node_modules')]);
   return root;
+}
+/** A folder of these files, the repo's dependencies cloned into it when `modules`. */
+function folder(files: Record<string, string>, modules = false): string {
+  const root = join(dir, `folder-${n++}`);
+  for (const [name, text] of Object.entries(files)) { mkdirSync(join(root, name, '..'), { recursive: true }); writeFileSync(join(root, name), text); }
+  if (modules) execFileSync('/bin/cp', ['-cR', join(REPO, 'node_modules'), join(root, 'node_modules')]);
+  return root;
+}
+/** The first `program` on the test's PATH; a test that needs one this machine lacks fails BLOCKED, never skips. */
+function need(program: string): void {
+  if (!(process.env.PATH ?? '').split(':').some((d) => d && existsSync(join(d, program)))) throw Error(`BLOCKED: ${program} isn't on PATH on this machine`);
 }
 const check = (checkout: string, extra: Partial<CommandCheck> = {}): CommandCheck =>
   ({ host: sup, run: `run:01K0UN1T${String(n++).padStart(18, '0')}`, spec: VITEST, checkout, deadline: 120_000, ...extra });
@@ -125,6 +138,26 @@ test('passes', () => {
   }, 180_000);
 });
 
+describe('expected values', () => {
+  it('a snapshot the suite lacks fails its test, never written from what the program gives and passed', async () => {
+    const r = await runCommandCheck(check(project({ 'snap.test.ts': `test('the total', () => { expect(27 + 3).toMatchSnapshot(); });\n` })));
+    expect(r.outcome, r.output.stdout).toBe('failed');
+    expect(r.failures.map((f) => f.message).join('\n')).toMatch(/[Ss]napshot/);
+  }, 180_000);
+
+  it('a run told to update its snapshots, by a flag or by its config, can\'t pass: Vitest and Jest', async () => {
+    const vitestRun = await runCommandCheck(check(project({ 'snap.test.ts': `test('the total', () => { expect(27 + 3).toMatchInlineSnapshot('27'); });\n` }), { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run -u' } }));
+    expect(vitestRun.outcome, vitestRun.output.stdout).toBe('failed');
+    expect(vitestRun.failures.map((f) => f.message).join('\n')).toMatch(/snapshots are written, not compared/);
+    const jestRun = await runCommandCheck(check(folder({
+      'package.json': '{ "name": "unit", "private": true, "jest": { "ci": false } }\n',
+      'snap.test.js': `test('the total', () => { expect(27 + 3).toMatchSnapshot(); });\n`,
+    }, true), { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
+    expect(jestRun.outcome, jestRun.output.stderr).toBe('failed');
+    expect(jestRun.failures.map((f) => f.message).join('\n')).toMatch(/snapshots are written, not compared \(updateSnapshot new\)/);
+  }, 300_000);
+});
+
 describe('added tests', () => {
   it('Date() without new still gives text on the moved clock, and a run in which one of the added files ran no test ran nothing, naming it', async () => {
     const checkout = project({
@@ -144,5 +177,175 @@ describe('added tests', () => {
     expect(runs.slice(0, 5).map((r) => r.outcome)).toEqual(Array(5).fill('passed'));
     expect(runs[5]!.outcome).toBe('failed');
     expect(runs[5]!.failures.map((f) => f.message).join('\n')).toMatch(/clock wasn't moved ahead: the vmThreads pool/);
+  }, 600_000);
+});
+
+describe('programs the tracers can\'t see into', () => {
+  it('a Python told to skip its site setup never loads the read tracer, in the command or started by a test', () => {
+    const cwd = folder({ 'x.txt': '' });
+    const path = '/usr/bin:/bin';
+    expect(untraced('python3 -m pytest', cwd, path)).toBeNull();
+    for (const command of ['python3 -I -m pytest', 'python3 -Es -m pytest', 'python3 -W error -S x.py']) expect(untraced(command, cwd, path), command).toBe('program python3');
+    expect(hiddenChild({ file: '/usr/bin/python3', args: ['-c', 'print(1)'], shell: false, traced: true }, cwd, path, process.execPath)).toBeNull();
+    expect(hiddenChild({ file: '/usr/bin/python3', args: ['-I', '-c', 'print(1)'], shell: false, traced: true }, cwd, path, process.execPath)).toBe('untraced program python3');
+    expect(untraced('python3 --check-hash-based-pycs default -I x.py', cwd, path)).toBe('program python3');
+    expect(untraced('PYTHONPATH= python3 -m pytest', cwd, path)).toBe('python setup PYTHONPATH');
+    const fake = folder({ 'tools/python3': '#!/bin/sh\ncat secrets.txt\n' });
+    expect(untraced('./tools/python3 -m pytest', fake, path)).toBe('program ./tools/python3');
+    // A text file by Python's name, without a `#!` line, is run by the shell, not by Python.
+    const text = folder({ 'tools/python3': 'cat secrets.txt\n' });
+    expect(hiddenChild({ file: join(text, 'tools/python3'), args: [], shell: false, traced: true }, text, path, process.execPath)).toBe('untraced program python3');
+    // Nor is a file the run could have written: one with a Mach-O header the shell runs as a script, or a script named node.
+    const fake2 = folder({ 'tools/node': 'cat secrets.txt\n' });
+    writeFileSync(join(fake2, 'tools/python3'), Buffer.concat([Buffer.from([0xcf, 0xfa, 0xed, 0xfe]), Buffer.from('\n/bin/cat secrets.txt\n')]));
+    expect(hiddenChild({ file: join(fake2, 'tools/python3'), args: [], shell: false, traced: true }, fake2, path, process.execPath)).toBe('untraced program python3');
+    expect(hiddenChild({ file: './tools/node', args: [], shell: false }, fake2, path, process.execPath)).toBe('untraced program node');
+    // Nor a link by Node's or Python's name to a program that's neither.
+    mkdirSync(join(fake2, 'links'));
+    symlinkSync('/bin/sh', join(fake2, 'links/node'));
+    symlinkSync('/bin/sh', join(fake2, 'links/python3'));
+    expect(hiddenChild({ file: './links/node', args: ['-c', 'cat x'], shell: false }, fake2, path, process.execPath)).toBe('untraced program node');
+    expect(hiddenChild({ file: './links/python3', args: ['-c', 'cat x'], shell: false, traced: true }, fake2, path, process.execPath)).toBe('untraced program python3');
+    // go test is the check's own command's to judge; started by a child (a package script), it's untraced.
+    expect(hiddenChild({ file: '/bin/sh', args: ['-c', 'go test ./...'], shell: false, traced: true }, cwd, path, process.execPath)).toBe('untraced program go');
+  });
+
+  it('a program the command names is judged as the run\'s shell finds it, never by a file in node_modules/.bin, which isn\'t on the run\'s PATH', async () => {
+    const r = await runCommandCheck(check(folder({
+      'data.txt': 'secret-input',
+      'node_modules/.bin/cat': '#!/usr/bin/env node\n',
+      'test/a.test.mjs': `import test from 'node:test';\ntest('passes', () => {});\n`,
+    }), { spec: { ...VITEST, runner: 'cat data.txt && node --test' } }));
+    expect(r.outcome).toBe('uncounted');
+    expect(r.mask).toBe('untraced program cat');
+  }, 120_000);
+
+  it('a venv in the checkout, named by its path, runs with its interpreter\'s install; a venv\'s python the hub finds on its PATH isn\'t swapped for its real file', async () => {
+    const checkout = folder({ 'test_ok.py': 'def test_ok():\n    assert 1 + 1 == 2\n' });
+    execFileSync('python3', ['-m', 'venv', '--system-site-packages', join(checkout, '.venv')]);
+    const inCheckout = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: '.venv/bin/python -m pytest -q -p no:cacheprovider' } }));
+    expect(inCheckout.outcome, `${inCheckout.mask} ${inCheckout.output.stderr}`).toBe('passed');
+    expect(inCheckout.testsRun).toBe(1);
+    const venv = join(dir, `venv-${n++}`);
+    execFileSync('python3', ['-m', 'venv', venv]);
+    const saved = process.env.PATH;
+    process.env.PATH = `${join(venv, 'bin')}:${saved}`;
+    try {
+      const onPath = await runCommandCheck(check(folder({ 'test_ok.py': 'def test_ok():\n    pass\n' }), { spec: { ...VITEST, runner: 'python3 -m pytest -q' } }));
+      expect(onPath.outcome).toBe('uncounted');
+      expect(onPath.mask).toBe('venv python3: name the venv\'s program by its path');
+    } finally {
+      process.env.PATH = saved;
+    }
+  }, 300_000);
+
+  it('a link in the checkout to another project\'s script grants the run nothing of that project', async () => {
+    const other = folder({ 'package.json': '{}\n', 'secret.env': 'TOKEN=other-project', 'scripts/ok.mjs': '#!/usr/bin/env node\n' });
+    const checkout = folder({
+      'a.test.mjs': `import { readFileSync } from 'node:fs';\nimport test from 'node:test';\ntest('reads', () => { let seen = 'DENIED'; try { seen = readFileSync('${join(other, 'secret.env')}', 'utf8'); } catch {} console.log('LEAK:' + seen); });\n`,
+    });
+    chmodSync(join(other, 'scripts/ok.mjs'), 0o755);
+    symlinkSync(join(other, 'scripts/ok.mjs'), join(checkout, 'setup.mjs'));
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: './setup.mjs && node --test a.test.mjs' } }));
+    expect(`${r.output.stdout}${r.output.stderr}`).not.toContain('other-project');
+    expect(r.outcome).not.toBe('passed');
+  }, 120_000);
+
+  it('a pytest run whose tests its cache chooses (--lf) can\'t pass: a test the cache leaves out never ran', async () => {
+    const checkout = folder({
+      'tests/test_x.py': 'def test_a():\n    pass\n\n\ndef test_b():\n    assert 0\n',
+      '.pytest_cache/v/cache/lastfailed': '{"tests/test_x.py::test_a": true}\n',
+    });
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'python3 -m pytest --lf tests' } }));
+    expect(r.outcome, r.output.stdout).toBe('failed');
+    expect(r.failures.map((f) => f.message).join('\n')).toMatch(/tests chosen from pytest's cache \(--lf\)/);
+  }, 120_000);
+
+  it('a Python a test starts the usual way, with the run\'s environment, is traced: the run counts and the child\'s read is in its read set', async () => {
+    const r = await runCommandCheck(check(folder({
+      'data.txt': 'x',
+      'test_child.py': 'import subprocess, sys\n\n\ndef test_child():\n    subprocess.run([sys.executable, "-c", "open(\'data.txt\').read()"], check=True)\n',
+    }), { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider' } }));
+    expect(r.outcome, `${r.mask} ${r.output.stdout}`).toBe('passed');
+    expect(r.read).toContain('data.txt');
+  }, 120_000);
+
+  it('a Python a test starts with an environment that drops the tracer is never taken as traced, from Python or from Node', async () => {
+    const leak = 'import subprocess, sys\nsubprocess.run([sys.executable, "-c", "open(\'data.txt\').read()"], env={"PATH": "/usr/bin:/bin"}, check=True)\n';
+    const fromPython = await runCommandCheck(check(folder({ 'data.txt': 'x', 'test_leak.py': `def test_leak():\n    ${leak.trimEnd().split('\n').join('\n    ')}\n` }), { spec: { ...VITEST, runner: 'python3 -m pytest -q' } }));
+    expect(fromPython.outcome, fromPython.output.stdout).toBe('uncounted');
+    expect(fromPython.mask).toMatch(/^untraced program .*python/);
+    const nodeFromPython = await runCommandCheck(check(folder({
+      'data.txt': 'x',
+      'test_node.py': 'import subprocess\n\n\ndef test_node():\n    subprocess.run(["node", "-e", "require(\'fs\').readFileSync(\'data.txt\')"], env={k: v for k, v in __import__("os").environ.items() if k != "NODE_OPTIONS"}, check=True)\n',
+    }), { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider' } }));
+    expect(nodeFromPython.outcome, nodeFromPython.output.stdout).toBe('uncounted');
+    expect(nodeFromPython.mask).toBe('untraced program node');
+    const fromNode = await runCommandCheck(check(folder({
+      'data.txt': 'x',
+      'test/a.test.mjs': `import { execFileSync } from 'node:child_process';\nimport test from 'node:test';\ntest('reads through python', () => { execFileSync('python3', ['-c', "open('data.txt').read()"], { env: { PATH: process.env.PATH } }); });\n`,
+    }), { spec: { ...VITEST, runner: 'python3 --version && node --test' } }));
+    expect(fromNode.outcome, fromNode.output.stdout + fromNode.output.stderr).toBe('uncounted');
+    expect(fromNode.mask).toBe('untraced program python3');
+  }, 300_000);
+
+  it('a pytest session a test runs inside the run (pytester) neither writes into nor closes the run\'s report', async () => {
+    const r = await runCommandCheck(check(folder({
+      'conftest.py': 'pytest_plugins = ["pytester"]\n',
+      'test_inner.py': 'def test_inner(pytester):\n    pytester.makepyfile(test_sample="def test_bad():\\n    assert 0\\n\\ndef test_ok():\\n    pass\\n")\n    pytester.runpytest().assert_outcomes(failed=1, passed=1)\n\n\ndef test_after():\n    pass\n',
+    }), { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider' } }));
+    expect(r.outcome, r.output.stdout).toBe('passed');
+    expect(r.attempts.map((a) => a.test).sort()).toEqual(['test_after', 'test_inner']);
+  }, 300_000);
+
+  it('a program the command names that lies in a shared bin folder grants the run that program, never the folder above it', async () => {
+    const home = realpathSync(mkdtempSync(join(dir, 'home-')));
+    const peek = (where: string, secret: string): void => {
+      mkdirSync(join(where, 'bin'), { recursive: true });
+      writeFileSync(secret, 'a secret');
+      writeFileSync(join(where, 'bin', `peek-${n++}`), `#!${process.execPath}\nlet seen = 'denied';\ntry { seen = require('node:fs').readFileSync('${secret}', 'utf8'); } catch {}\nconsole.log('PEEK ' + seen);\n`, { mode: 0o755 });
+    };
+    // The home folder's own bin, and one below it (~/.local/bin, whose ~/.local/share holds the account's data).
+    peek(home, join(home, 'secret.txt'));
+    mkdirSync(join(home, '.local/share'), { recursive: true });
+    peek(join(home, '.local'), join(home, '.local/share/secret.txt'));
+    const saved = { HOME: process.env.HOME, PATH: process.env.PATH };
+    process.env.HOME = home;
+    process.env.PATH = `${join(home, 'bin')}:${join(home, '.local/bin')}:${saved.PATH}`;
+    try {
+      for (const bin of [join(home, 'bin'), join(home, '.local/bin')]) {
+        const program = readdirSync(bin)[0]!;
+        const r = await runCommandCheck(check(folder({ 'x.txt': '' }), { spec: { ...VITEST, runner: program } }));
+        expect(r.output.stdout, program).toContain('PEEK denied');
+      }
+    } finally {
+      process.env.HOME = saved.HOME;
+      process.env.PATH = saved.PATH;
+    }
+  }, 120_000);
+
+  it('a go test run is placed from its report and fails, but its pass is never counted: no tracer saw what it read', async () => {
+    need('go');
+    const failing = await runCommandCheck(check(folder({
+      'go.mod': 'module example.com/shop\n\ngo 1.21\n',
+      'cart/cart_test.go': 'package cart\n\nimport "testing"\n\nfunc TestTotal(t *testing.T) {\n\tt.Errorf("total %d, want 12", 11)\n}\n\nfunc TestNil(t *testing.T) {}\n',
+    }), { spec: { ...VITEST, runner: 'go test ./...' } }));
+    expect(failing.outcome, failing.output.stderr).toBe('failed');
+    expect(failing.testsRun).toBe(2);
+    expect(failing.failures).toEqual([expect.objectContaining({ test: 'TestTotal', file: 'cart/cart_test.go', line: 6, assertion: true })]);
+    const passing = await runCommandCheck(check(folder({ 'go.mod': 'module example.com/p\n\ngo 1.21\n', 'p_test.go': 'package p\n\nimport "testing"\n\nfunc TestOK(t *testing.T) {}\n' }), { spec: { ...VITEST, runner: 'go test ./...' } }));
+    expect(passing.testsRun).toBe(1);
+    expect(passing.outcome).toBe('uncounted');
+    expect(passing.mask).toBe('untraced program go');
+  }, 300_000);
+});
+
+describe('Jest', () => {
+  it('runs each test file with a clock of its own, so the month-ahead run can\'t pass', async () => {
+    const checkout = folder({ 'package.json': '{ "name": "unit", "private": true }\n', 'clock.test.js': 'test(\'the clock\', () => { expect(typeof Date()).toBe(\'string\'); });\n' }, true);
+    const runs = await runAddedTests(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }), ['clock.test.js']);
+    expect(runs.slice(0, 5).map((r) => r.outcome)).toEqual(Array(5).fill('passed'));
+    expect(runs[5]!.outcome).toBe('failed');
+    expect(runs[5]!.failures.map((f) => f.message).join('\n')).toMatch(/clock wasn't moved ahead: Jest/);
   }, 600_000);
 });
