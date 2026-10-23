@@ -224,7 +224,9 @@ The criteria that name no twin (AC1, AC2, AC3, AC6, AC7, AC9, AC12, AC13, AC15) 
   - Jest: AC3
   - pytest: AC3 and AC16
   - pnpm: AC10
-  - a `go` that compiles: AC3. Go 1.10 amd64 segfaults here.
+  - a `go` that compiles: AC3. Go 1.10 amd64 segfaults here. A dispute redraft (2026-10-23) made the go probe and
+    `fixtures/go-counts` modules with a `go.mod` (`go 1.16`): without one, `go test` needs GOPATH mode, off by
+    default since Go 1.16, the first darwin/arm64 Go, so the test was BLOCKED even under a working Go 1.27.3 arm64.
 
 So a PR for #30 that passes everything else says `Part of #30`, and lists these halves as open until those issues
 land and a blind redraft of this job tests them.
