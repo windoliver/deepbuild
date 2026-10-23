@@ -29,7 +29,8 @@ import { list, object, text, word } from './shared.js';
 export const CHECK_KIND = 'check.kind@1';
 /** The kind the reference runner serves: a shell command run in the checkout. */
 const KIND = 'command';
-const RUNTIME = fileURLToPath(new URL('../../runtime/check-kind/', import.meta.url));
+/** The folder of the tracer (tracer.mjs) and the node:test reporter (reporter.mjs) a command run loads; the command check kind (#30) loads them too. */
+export const CHECK_RUNTIME = fileURLToPath(new URL('../../runtime/check-kind/', import.meta.url));
 const FIXTURES = fileURLToPath(new URL('../../fixtures/check-kind/', import.meta.url));
 const RUNNER = 'node --test --test-isolation=none spec/*.test.mjs';
 const LONG = 60_000;
@@ -172,7 +173,7 @@ function runCommand(spec: CheckSpec, given: CheckContext, fault: Fault = 'none')
   const home = join(work, 'home');
   mkdirSync(home);
   try {
-    const options = `--import=${join(RUNTIME, 'tracer.mjs')} --test-reporter=${join(RUNTIME, 'reporter.mjs')} --test-reporter-destination=${reportFile}`;
+    const options = `--import=${join(CHECK_RUNTIME, 'tracer.mjs')} --test-reporter=${join(CHECK_RUNTIME, 'reporter.mjs')} --test-reporter-destination=${reportFile}`;
     const base: NodeJS.ProcessEnv = fault === 'host-env' ? { ...process.env } : { ...kept, HOME: home, DO_NOT_TRACK: '1' };
     // The command runs in a shell that leads a process group of its own, with no pipe back here (its stderr goes to
     // a file), so the deadline falls on the shell alone and the whole group is killed after it: a tool that forks

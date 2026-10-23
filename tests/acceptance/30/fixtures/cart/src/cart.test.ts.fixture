@@ -1,0 +1,44 @@
+import { describe, expect, test } from 'vitest';
+// @ts-expect-error applyCoupon isn't in this checkout's src/cart.ts: the test calls a name the code lacks.
+import { applyCoupon, totalOf, type Cart } from './cart';
+
+// A cart suite whose two failures sit at fixed places: an assertion failure at line 30, column 5 (the matcher
+// below starts its line there), and a TypeError at line 41, where the test calls applyCoupon. Its first test
+// passes. Keep every line where it is: the acceptance tests name these places.
+
+describe('cart', () => {
+  test('an empty cart totals nothing', () => {
+    expect(totalOf({ items: [] })).toBe(0);
+  });
+
+
+
+
+
+
+
+
+
+
+
+
+
+  test('totals the prices', () => {
+    console.log(`cart api at localhost:${process.env.PORT} in ${process.env.NODE_ENV}`);
+    const total = totalOf({ items: [5, 6, 1] });
+    expect(total)
+   .toBe(12);
+  });
+
+
+
+
+
+
+  test('applies the coupon', () => {
+    console.log('AssertionError: expected 11 to be 12');
+    const cart: Cart = { items: [5, 6, 1] };
+    applyCoupon(cart);
+    expect(totalOf(cart)).toBe(10);
+  });
+});

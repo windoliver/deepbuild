@@ -1,0 +1,7 @@
+import { expect, test } from 'vitest';
+
+// Passes only where DH30_SHELL_FLAG=on is set, as in the shell the test harness runs in; a hermetic run gives
+// the check no such variable unless the check is given it.
+test('the feature flag is on', () => {
+  expect(process.env.DH30_SHELL_FLAG).toBe('on');
+});
