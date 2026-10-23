@@ -277,11 +277,26 @@ export class Projector {
         break;
       }
       case 'ask.later':
-        // Only an ask still waiting can wait longer.
-        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.until), bare(e.subject));
+        // Only an ask still waiting can wait longer, never to its deadline. The core records it, once your Later
+        // on the trusted path passes its checks, under the identity the ask was raised for; an app's or the CLI's
+        // own event changes nothing.
+        if (e.writer !== 'core') break;
+        // For the exception, never past the earliest deadline among the open asks it holds: those raised after it in
+        // the log, in its thread under its identity, as the core counts them; not one from the same instant before it.
+        this.stmt(`UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ?
+          AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)
+          AND NOT EXISTS (SELECT 1 FROM asks held JOIN events he ON he.id = held.id JOIN events ee ON ee.id = asks.id
+            WHERE asks.kind = 'exception' AND held.kind != 'exception' AND held.status IN ('open', 'later')
+              AND he.log_pos > ee.log_pos AND he.actor = ee.actor AND he.scope = ee.scope
+              AND COALESCE((SELECT thread_id FROM sessions WHERE id = held.session_id), held.session_id)
+                = COALESCE((SELECT thread_id FROM sessions WHERE id = asks.session_id), asks.session_id)
+              AND held.deadline <= ?)`).run(int(d.until), bare(e.subject), int(d.until), e.actor, e.scope, int(d.until));
         break;
       case 'ask.batched':
-        if (Array.isArray(d.asks)) for (const a of d.asks) if (isObj(a)) this.set('asks', { batch_id: str(d.batch) }, { id: bare(a.ask) });
+        // Shown again: an ask hidden by Later is back to open.
+        // Only the core shows an ask, under the identity it was raised for.
+        if (e.writer !== 'core' || !Array.isArray(d.asks)) break;
+        for (const a of d.asks) if (isObj(a)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
         break;
       case 'decision.created':
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });
