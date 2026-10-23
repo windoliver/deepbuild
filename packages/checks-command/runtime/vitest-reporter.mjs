@@ -53,6 +53,11 @@ export default class DeepCheckReporter {
     // A name filter leaves tests of a file out while the file still runs: the runner keeps it only when the check's command names it.
     const filter = configs.map((c) => c?.testNamePattern).find(Boolean);
     if (filter) write({ type: 'run:error', file: null, filter: String(filter.source ?? filter), errors: [{ name: 'Error', message: `tests left out by name (${filter}) that the check's command doesn't name`, stack: null, frames: [] }] });
+    // Tag filters leave tests out the same way.
+    for (const tag of configs.flatMap((c) => c?.tagsFilter ?? [])) write({ type: 'run:error', file: null, filter: String(tag), errors: [{ name: 'Error', message: `tests left out by tag (${tag}) that the check's command doesn't name`, stack: null, frames: [] }] });
+    // A tag's options in the config skip its tests, mark them todo, run them alone, or pass them when they fail.
+    const turned = configs.flatMap((c) => c?.tags ?? []).find((t) => t?.skip || t?.fails || t?.todo || t?.only);
+    if (turned) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `the config's options for tag ${turned.name} change which of its tests run or how they end`, stack: null, frames: [] }] });
     // Vite's dependency optimizer reuses bundles from its cache in the checkout, checked only against the lockfile and
     // the config: code no source holds. A run that bundles afresh (optimizeDeps.force) may use it.
     const servers = [vitest?.vite, ...(vitest?.projects ?? []).map((p) => p?.vite)];

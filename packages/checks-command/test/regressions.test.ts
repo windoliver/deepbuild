@@ -305,6 +305,50 @@ describe('what a checkout\'s config makes the run leave out', () => {
   }, 300_000);
 });
 
+describe('what a checkout\'s config makes count as run', () => {
+  it('Vitest tag options in the config (fails, skip, todo, only) and its tagsFilter can\'t pass a failing test, but the command\'s own --tags-filter can choose', async () => {
+    const checkout = folder({
+      'package.json': '{ "type": "module" }\n',
+      'a.test.js': `import { expect, test } from 'vitest';\ntest('quick', { tags: ['fast'] }, () => { expect(1).toBe(1); });\ntest('total', { tags: ['db'] }, () => { expect(1).toBe(2); });\n`,
+    }, true);
+    const run = (config: string, runner = 'node_modules/.bin/vitest run') => {
+      writeFileSync(join(checkout, 'vitest.config.mjs'), `export default { test: ${config} };\n`);
+      return runCommandCheck(check(checkout, { spec: { ...VITEST, runner } }));
+    };
+    for (const option of ['fails', 'skip', 'todo']) {
+      const r = await run(`{ tags: [{ name: 'fast' }, { name: 'db', ${option}: true }] }`);
+      expect(r.outcome, `${option}: ${r.output.stdout}`).toBe('failed');
+    }
+    const only = await run(`{ allowOnly: true, tags: [{ name: 'fast', only: true }, { name: 'db' }] }`);
+    expect(only.outcome, only.output.stdout).toBe('failed');
+    const filtered = await run(`{ tags: [{ name: 'fast' }, { name: 'db' }], tagsFilter: ['fast'] }`);
+    expect(filtered.outcome, filtered.output.stdout).toBe('failed');
+    const own = await run(`{ tags: [{ name: 'fast' }, { name: 'db' }] }`, 'node_modules/.bin/vitest run --tags-filter fast');
+    expect(own.outcome, own.failures.map((f) => f.message).join('\n')).toBe('passed');
+  }, 300_000);
+
+  it('pytest settings that stop collecting a failing test of a file that runs can\'t pass; the usual patterns still can', async () => {
+    const run = async (files: Record<string, string>) => runCommandCheck(check(folder(files), { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    const unittest = await run({
+      'pytest.ini': '[pytest]\naddopts = -p no:unittest\n',
+      'tests/test_mix.py': 'import unittest\n\n\ndef test_ok():\n    pass\n\n\nclass TestMath(unittest.TestCase):\n    def test_total(self):\n        self.assertEqual(1, 2)\n',
+    });
+    expect(unittest.outcome, unittest.output.stdout).toBe('failed');
+    const imported = await run({
+      'pytest.ini': '[pytest]\npythonpath = .\ncollect_imported_tests = false\n',
+      'shared/__init__.py': '',
+      'shared/contract.py': 'def test_total():\n    assert 11 == 12\n',
+      'tests/test_a.py': 'from shared.contract import test_total\n\n\ndef test_ok():\n    pass\n',
+    });
+    expect(imported.outcome, imported.output.stdout).toBe('failed');
+    const usual = await run({
+      'pytest.ini': '[pytest]\npython_files = test_*.py\npython_classes = Test*\npython_functions = test_*\n',
+      'tests/test_cart.py': 'def test_exists():\n    pass\n\n\nclass TestCart:\n    def test_total(self):\n        pass\n',
+    });
+    expect(usual.outcome, usual.failures.map((f) => f.message).join('\n')).toBe('passed');
+  }, 300_000);
+});
+
 describe('added tests', () => {
   it('Date() without new still gives text on the moved clock, and a run in which one of the added files ran no test ran nothing, naming it', async () => {
     const checkout = project({
