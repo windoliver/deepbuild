@@ -1,0 +1,54 @@
+{
+  "title": "Epoch rebase",
+  "description": "A session whose epoch counter starts eight below the u32 wrap: revisions while visible, four revisions while its panel is hidden, the panel shown again, and revisions and frames past the wrap. Every frame must equal the same frame evaluated clean, and no change may be missed.",
+  "epoch_start": 4294967288,
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "seed": 387,
+    "title": "Epoch rebase",
+    "description": "Four boxes, a label and a sliding box, edited across the epoch counter's wrap.",
+    "size": [320, 200],
+    "items": {
+      "r1": { "id": "r1", "kind": "rect@1", "name": "Box one", "order": "a0", "params": { "box": [16, 16, 48, 32], "paint": { "fill": { "role": "muted" } } } },
+      "r2": { "id": "r2", "kind": "rect@1", "name": "Box two", "order": "a1", "params": { "box": [80, 16, 48, 32], "paint": { "fill": { "role": "muted" } } } },
+      "r3": { "id": "r3", "kind": "rect@1", "name": "Box three", "order": "a2", "params": { "box": [144, 16, 48, 32], "paint": { "fill": { "role": "muted" } } } },
+      "r4": { "id": "r4", "kind": "rect@1", "name": "Box four", "order": "a3", "params": { "box": [208, 16, 48, 32], "paint": { "fill": { "role": "muted" } } } },
+      "lbl": { "id": "lbl", "kind": "text@1", "name": "Caption", "order": "a4", "params": { "text": "Epochs", "font": "body", "size": 13, "box": { "w": 160, "h": 20 } }, "at": { "pos": [16, 72, 0] } },
+      "mover": { "id": "mover", "kind": "rect@1", "name": "Sliding box", "order": "a5", "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "ink" } } }, "at": { "pos": [16, 120, 0] } }
+    },
+    "clips": {
+      "slide": {
+        "slots": { "target": { "type": "rect@1", "required": true } },
+        "span": "auto",
+        "channels": { "x": { "target": "slot:target/at/pos/0", "type": "f32", "keys": { "k0": { "t": "0s", "value": 16, "interp": "linear" }, "k1": { "t": "2s", "value": 280, "interp": "linear" } } } }
+      }
+    },
+    "placements": { "p": { "clip": "slide", "slots": { "target": "mover" }, "start": "0s" } }
+  },
+  "steps": [
+    { "eval": "0s" },
+    { "edit": { "items/r1/params/box/0": 20 } },
+    { "eval": "0.1s" },
+    { "eval": "0.2s" },
+    { "edit": { "items/r2/params/box/1": 24 } },
+    { "eval": "0.3s" },
+    { "hide": true },
+    { "edit": { "items/r3/params/box/2": 60 } },
+    { "edit": { "items/lbl/params/text": "Hidden edit" } },
+    { "edit": { "items/r4/params/paint/fill/role": "ink" } },
+    { "edit": { "items/r1/at": { "pos": [4, 0, 0] } } },
+    { "show": true },
+    { "eval": "0.5s" },
+    { "eval": "0.6s" },
+    { "edit": { "items/r2/params/box/0": 90 } },
+    { "eval": "0.7s" },
+    { "edit": { "items/r3/params/box/1": 30 } },
+    { "eval": "0.8s" },
+    { "edit": { "items/lbl/params/text": "After the wrap" } },
+    { "eval": "1s" },
+    { "edit": { "items/r4/params/box/3": 40 } },
+    { "eval": "1.5s" },
+    { "eval": "2s" }
+  ]
+}
