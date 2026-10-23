@@ -23,25 +23,6 @@ fn read(store: Option<&Path>, hash: &str, path: &str) -> Result<Vec<u8>, Value> 
     Ok(bytes)
 }
 
-fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let n = chunk
-            .iter()
-            .enumerate()
-            .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
-        for k in 0..4 {
-            out.push(if k <= chunk.len() {
-                char::from(ALPHABET[(n >> (18 - 6 * k)) as usize & 63])
-            } else {
-                '='
-            });
-        }
-    }
-    out
-}
-
 /// Every mark set column of `doc` whose `data` is `{sidecar: sha256}`, read from the store, checked
 /// and written in place as the base64 the column would otherwise carry.
 pub fn sidecars(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<(), Value> {
@@ -67,7 +48,7 @@ pub fn sidecars(doc: &mut Map<String, Value>, store: Option<&Path>) -> Result<()
                 continue;
             };
             let path = format!("items/{id}/params/columns/{name}/data");
-            *data = Value::String(base64(&read(store, &hash, &path)?));
+            *data = Value::String(deep_canvas::base64::encode(&read(store, &hash, &path)?));
         }
     }
     Ok(())

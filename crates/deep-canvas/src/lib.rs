@@ -4,6 +4,7 @@
 //! The CPU math here feeds checks, so every transcendental goes through [`ops`] on pinned libm,
 //! and the lint lane (`scripts/canvas-lint.mjs`) refuses anything else.
 
+pub mod base64;
 pub mod camera;
 pub mod canon;
 pub mod color;
@@ -14,5 +15,6 @@ pub mod kinds;
 pub mod ops;
 pub mod registry;
 pub mod render;
+pub mod schedule;
 pub mod session;
 pub mod show;
