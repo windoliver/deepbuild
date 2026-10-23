@@ -10,7 +10,15 @@
 //! up to 8 stops (linear, radial with a focal point, sweep) on fills and strokes, alpha and
 //! luminance rect masks, and each item's adjust. A mark carries the scopes it draws inside, from
 //! its outermost ancestor in: a rect mask's scissor, a soft mask, or a group's opacity.
+//!
+//! Issue #374 completes the paint: an item draws where its own and its parents' positions and
+//! scales put it, stroke widths stay as written under a scale unless `scale_stroke`, fills and
+//! strokes take their own opacity, a stroke's dash count is fitted to each sub-path, a gradient
+//! may span its parent's or another item's box, and a stepped fill gives each member one color. A
+//! span or a step by position reads boxes, so a frame that has one is built twice: once for every
+//! item's box, then with them.
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
@@ -18,7 +26,7 @@ use serde_json::{Map, Value};
 use crate::data;
 use crate::key::{ContentKey, KeyBuilder};
 use crate::outline::{self, Star};
-use crate::paint::{self, Adjust, Ramp};
+use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
@@ -69,7 +77,7 @@ impl Fill {
                 *from = a.rgb(*from);
                 *to = a.rgb(*to);
             }
-            Fill::Ramp(r) => r.stops.iter_mut().for_each(|(_, c)| *c = a.color(*c)),
+            Fill::Ramp(r) => r.stops.iter_mut().for_each(|(_, c, _)| *c = a.color(*c)),
         }
     }
 
@@ -94,12 +102,14 @@ impl Fill {
                     paint::Geometry::Sweep { center, start, end } => {
                         &[center[0], center[1], *start, *end]
                     }
+                    paint::Geometry::Along => &[],
                 };
-                points.iter().for_each(|v| {
+                points.iter().chain(&r.transform).for_each(|v| {
                     k.number(*v);
                 });
-                for (t, c) in &r.stops {
+                for (t, c, alpha) in &r.stops {
                     k.number(*t).number(c[0]).number(c[1]).number(c[2]);
+                    k.number(*alpha);
                 }
             }
         }
@@ -274,13 +284,14 @@ pub enum Mark {
         offset: [f64; 2],
         color: Rgb,
     },
-    /// R2's outlines: a star, an arc, or a path whose fill or stroke is a gradient, in u with the
-    /// item's offset applied; a stroke is `(width, paint)`.
+    /// R2's outlines: a star, an arc, a path whose fill or stroke is a gradient, or any outline
+    /// R1's marks can't draw (a scaled item, a stroked rect or circle, a fill or stroke below
+    /// opacity 1, a dashed stroke), in u where the item draws; a fill is `(paint, opacity)`.
     Shape {
         item: String,
         verbs: Vec<Verb>,
-        fill: Option<Fill>,
-        stroke: Option<(f64, Fill)>,
+        fill: Option<(Fill, f64)>,
+        stroke: Option<Line>,
     },
     Text {
         item: String,
@@ -299,6 +310,17 @@ pub enum Mark {
         /// The item's adjust, applied to every pixel of the image.
         adjust: Adjust,
     },
+}
+
+/// A stroke as drawn (Paint: stroke): its width in u, its paint, its opacity (the paint's times the
+/// stroke's), and the dashes each sub-path holds (`dash: {count}`), equal dashes and gaps from
+/// the sub-path's start.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Line {
+    pub width: f64,
+    pub paint: Fill,
+    pub opacity: f64,
+    pub dashes: Option<u16>,
 }
 
 /// A mark with the rect its rect masks clip it to, if any (Mask `mask@1`: a rect mask is a
@@ -330,8 +352,8 @@ impl Mark {
                 *color = a.rgb(*color)
             }
             Mark::Shape { fill, stroke, .. } => {
-                fill.iter_mut().for_each(|f| f.adjust(a));
-                stroke.iter_mut().for_each(|(_, f)| f.adjust(a));
+                fill.iter_mut().for_each(|(f, _)| f.adjust(a));
+                stroke.iter_mut().for_each(|l| l.paint.adjust(a));
             }
             Mark::Image { adjust, .. } => *adjust = a.clone(),
         }
@@ -379,15 +401,19 @@ impl Mark {
                     });
                 }
                 match fill {
-                    Some(f) => f.feed(k),
+                    Some((f, opacity)) => {
+                        f.feed(k);
+                        k.number(*opacity);
+                    }
                     None => {
                         k.text("no fill");
                     }
                 }
                 match stroke {
-                    Some((w, f)) => {
-                        k.text("stroke").number(*w);
-                        f.feed(k);
+                    Some(l) => {
+                        k.text("stroke").number(l.width).number(l.opacity);
+                        k.int(l.dashes.map_or(-1, i64::from));
+                        l.paint.feed(k);
                     }
                     None => {
                         k.text("no stroke");
@@ -508,7 +534,7 @@ pub(crate) fn fill_of(
     bounds: [f64; 4],
 ) -> Result<Fill, Refused> {
     if let Some(Value::Object(g)) = fill.get("gradient") {
-        let g = paint::gradient(palette, g, &format!("{path}/gradient"))?;
+        let g = paint::gradient(palette, g, &format!("{path}/gradient"), false)?;
         return Ok(match g.two_stop() {
             Some((at, [from, to])) => Fill::Linear { from, to, at },
             None => Fill::Ramp(g.ramp(bounds)),
@@ -551,48 +577,385 @@ fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
     [b[0], b[1], b[2] - b[0], b[3] - b[1]]
 }
 
-/// A path-like item's paint as a [`Mark::Shape`]: its fill and its stroke, either a role or a
-/// gradient over the outline's box.
-fn shape_of(
-    palette: &Palette,
-    id: &str,
-    verbs: Vec<Verb>,
-    paint: &Map<String, Value>,
-    path: &str,
-) -> Result<Mark, Refused> {
-    let bounds = bounds_of(&verbs);
-    let fill = match paint.get("fill").and_then(Value::as_object) {
-        Some(f) => Some(fill_of(palette, f, &format!("{path}/fill"), bounds)?),
-        None => None,
-    };
-    let stroke = match paint.get("stroke").and_then(Value::as_object) {
-        Some(s) => Some((
-            num(s.get("width")).unwrap_or(1.0),
-            fill_of(palette, s, &format!("{path}/stroke"), bounds)?,
-        )),
-        None => None,
-    };
-    Ok(Mark::Shape {
-        item: id.to_string(),
-        verbs,
-        fill,
-        stroke,
-    })
+/// Four numbers, as a box is written.
+fn four(v: Option<&Value>) -> Option<[f64; 4]> {
+    let b: Option<Vec<f64>> = v?.as_array()?.iter().map(|v| num(Some(v))).collect();
+    <[f64; 4]>::try_from(b?.as_slice()).ok()
 }
 
-/// Moves verbs by `offset`.
-fn offset(verbs: Vec<Verb>, by: [f64; 2]) -> Vec<Verb> {
-    let m = |p: [f64; 2]| [p[0] + by[0], p[1] + by[1]];
-    verbs
-        .into_iter()
-        .map(|v| match v {
-            Verb::Move(p) => Verb::Move(m(p)),
-            Verb::Line(p) => Verb::Line(m(p)),
-            Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
-            Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
-            Verb::Close => Verb::Close,
+/// Where an item draws: `x ↦ scale·x + pos` from its evaluated `at`, which already rides its
+/// parents as the evaluator composes them. Rotation, shear and the pivot wait for the GPU layer,
+/// as R1's marks' do.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Place {
+    scale: [f64; 2],
+    offset: [f64; 2],
+}
+
+impl Place {
+    const NONE: Place = Place {
+        scale: [1.0, 1.0],
+        offset: [0.0, 0.0],
+    };
+
+    fn of(item: &Value) -> Place {
+        let at = item.get("at");
+        let v = |k: &str, i: usize, default: f64| match at.and_then(|a| a.get(k)) {
+            Some(Value::Array(a)) => num(a.get(i)).unwrap_or(default),
+            Some(n) if k == "scale" => num(Some(n)).unwrap_or(default),
+            _ => default,
+        };
+        Place {
+            scale: [v("scale", 0, 1.0), v("scale", 1, 1.0)],
+            offset: [v("pos", 0, 0.0), v("pos", 1, 0.0)],
+        }
+    }
+
+    fn at(&self, p: [f64; 2]) -> [f64; 2] {
+        [
+            self.scale[0] * p[0] + self.offset[0],
+            self.scale[1] * p[1] + self.offset[1],
+        ]
+    }
+
+    /// True when the place only moves what it holds, as R1's marks can draw.
+    fn moves(&self) -> bool {
+        self.scale == [1.0, 1.0]
+    }
+
+    /// As a gradient's transform.
+    fn affine(&self) -> [f64; 6] {
+        [
+            self.scale[0],
+            0.0,
+            0.0,
+            self.scale[1],
+            self.offset[0],
+            self.offset[1],
+        ]
+    }
+
+    /// A box `[x, y, w, h]` where it draws.
+    fn rect(&self, [x, y, w, h]: [f64; 4]) -> [f64; 4] {
+        let (a, b) = (self.at([x, y]), self.at([x + w, y + h]));
+        [
+            a[0].min(b[0]),
+            a[1].min(b[1]),
+            (b[0] - a[0]).abs(),
+            (b[1] - a[1]).abs(),
+        ]
+    }
+
+    fn verbs(&self, verbs: Vec<Verb>) -> Vec<Verb> {
+        let m = |p: [f64; 2]| self.at(p);
+        verbs
+            .into_iter()
+            .map(|v| match v {
+                Verb::Move(p) => Verb::Move(m(p)),
+                Verb::Line(p) => Verb::Line(m(p)),
+                Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
+                Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
+                Verb::Close => Verb::Close,
+            })
+            .collect()
+    }
+}
+
+/// The most dashes one path draws (Paint: "at most 10,000 dashes per path").
+const MAX_DASHES: u64 = 10_000;
+
+/// An `opacity` at `path`: 1 when left out, and within 0..1.
+fn opacity(v: Option<&Value>, path: &str) -> Result<f64, Refused> {
+    match v {
+        None => Ok(1.0),
+        Some(o) => num(Some(o))
+            .filter(|o| (0.0..=1.0).contains(o))
+            .ok_or(Refused {
+                code: "out_of_range",
+                path: path.into(),
+            }),
+    }
+}
+
+/// What a paint reads beyond its item: the document's items and collections, and, once a first
+/// pass has drawn them, each item's box with its descendants' (`span`, and steps by position).
+struct Paints<'a> {
+    doc: &'a Map<String, Value>,
+    items: &'a Map<String, Value>,
+    palette: &'a Palette,
+    boxes: Option<&'a BTreeMap<String, [f64; 4]>>,
+    /// Set when a paint asked for a box before there were any.
+    wants_boxes: Cell<bool>,
+}
+
+impl Paints<'_> {
+    /// `id`'s box with its descendants', where they draw; none yet on the first pass.
+    fn box_of(&self, id: &str, path: &str) -> Result<Option<[f64; 4]>, Refused> {
+        let Some(boxes) = self.boxes else {
+            self.wants_boxes.set(true);
+            return Ok(None);
+        };
+        boxes.get(id).copied().map(Some).ok_or(Refused {
+            code: "ref_unresolved",
+            path: format!("{path}: {id}"),
         })
-        .collect()
+    }
+
+    /// The paint of `id`'s fill or stroke `p` at `path`: a role, a stepped color, or a gradient
+    /// over `bounds` (in the space `place` draws from) or over the box it spans.
+    fn paint(
+        &self,
+        id: &str,
+        p: &Map<String, Value>,
+        path: &str,
+        bounds: [f64; 4],
+        place: Place,
+        stroke: bool,
+    ) -> Result<Fill, Refused> {
+        if let Some(Value::Object(g)) = p.get("gradient") {
+            let path = format!("{path}/gradient");
+            let g = paint::gradient(self.palette, g, &path, stroke)?;
+            let target = match g.span() {
+                Span::Item => None,
+                Span::Parent => Some(
+                    self.items
+                        .get(id)
+                        .and_then(|i| i.get("parent"))
+                        .and_then(Value::as_str)
+                        .ok_or(Refused {
+                            code: "ref_unresolved",
+                            path: format!("{path}/span"),
+                        })?,
+                ),
+                Span::Of(other) => Some(other.as_str()),
+            };
+            if let Some(target) = target {
+                let spanned = self.box_of(target, &format!("{path}/span"))?;
+                return Ok(Fill::Ramp(g.ramp(spanned.unwrap_or(bounds))));
+            }
+            if place.moves() {
+                if let Some((at, [from, to])) = g.two_stop() {
+                    return Ok(Fill::Linear { from, to, at });
+                }
+            }
+            let mut ramp = g.ramp(bounds);
+            ramp.transform = place.affine();
+            return Ok(Fill::Ramp(ramp));
+        }
+        if let Some(Value::Object(s)) = p.get("steps") {
+            let path = format!("{path}/steps");
+            let steps = paint::steps(self.palette, s, &path)?;
+            return Ok(Fill::Solid(steps.color(self.step(id, &steps, &path)?)));
+        }
+        Ok(Fill::Solid(role(
+            self.palette,
+            p.get("role"),
+            &format!("{path}/role"),
+        )?))
+    }
+
+    /// Where `id` sits along a stepped fill's stops: by its rank among the members in draw order
+    /// (order key, then ID), or by its box's center across theirs.
+    fn step(&self, id: &str, steps: &Steps, path: &str) -> Result<f64, Refused> {
+        fn parent(i: &Value) -> Option<&str> {
+            i.get("parent").and_then(Value::as_str)
+        }
+        let mut members: Vec<&str> = match &steps.over {
+            Over::Children => match self.items.get(id).and_then(parent) {
+                Some(p) => self
+                    .items
+                    .iter()
+                    .filter(|(_, i)| parent(i) == Some(p))
+                    .map(|(m, _)| m.as_str())
+                    .collect(),
+                None => vec![id],
+            },
+            Over::Collection(c) => {
+                let Some(Value::Array(m)) = self
+                    .doc
+                    .get("collections")
+                    .and_then(|cs| cs.get(c))
+                    .and_then(|c| c.get("members"))
+                else {
+                    return refuse("ref_unresolved", format!("{path}/over"));
+                };
+                m.iter().filter_map(Value::as_str).collect()
+            }
+        };
+        if !members.contains(&id) {
+            return refuse("bad_paint", format!("{path}/over"));
+        }
+        let key = |m: &str| {
+            self.items
+                .get(m)
+                .and_then(|i| i.get("order"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+        };
+        members.sort_by(|a, b| key(a).cmp(key(b)).then_with(|| a.cmp(b)));
+        if steps.by == By::Order {
+            let rank = members.iter().position(|m| *m == id).unwrap_or(0);
+            return Ok(match members.len() {
+                0 | 1 => 0.0,
+                n => rank as f64 / (n - 1) as f64,
+            });
+        }
+        // By position: each member's box center.
+        let mut centers = Vec::with_capacity(members.len());
+        let mut own = None;
+        for m in &members {
+            let Some([x, y, w, h]) = self.box_of(m, &format!("{path}/over"))? else {
+                return Ok(0.0);
+            };
+            let c = [x + w / 2.0, y + h / 2.0];
+            if *m == id {
+                own = Some(c);
+            }
+            centers.push(c);
+        }
+        let Some(c) = own else { return Ok(0.0) };
+        let across = |k: usize| {
+            let (lo, hi) = centers
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                    (lo.min(p[k]), hi.max(p[k]))
+                });
+            if hi > lo {
+                (c[k] - lo) / (hi - lo)
+            } else {
+                0.0
+            }
+        };
+        Ok(match steps.by {
+            By::Order | By::X => across(0),
+            By::Y => across(1),
+            By::Distance { from, radius } => {
+                (deep_canvas::ops::hypot(c[0] - from[0], c[1] - from[1]) / radius).min(1.0)
+            }
+        })
+    }
+
+    /// A path-like item's outline as a [`Mark::Shape`] where it draws: `verbs` in the item's own
+    /// space, its fill and its stroke each a role, a stepped color or a gradient over the
+    /// outline's box, at their opacity.
+    fn shape(
+        &self,
+        id: &str,
+        verbs: Vec<Verb>,
+        place: Place,
+        paint: &Map<String, Value>,
+        path: &str,
+    ) -> Result<Mark, Refused> {
+        let bounds = bounds_of(&verbs);
+        let all = opacity(paint.get("opacity"), &format!("{path}/opacity"))?;
+        let fill = match paint.get("fill").and_then(Value::as_object) {
+            Some(f) => {
+                let path = format!("{path}/fill");
+                Some((
+                    self.paint(id, f, &path, bounds, place, false)?,
+                    all * opacity(f.get("opacity"), &format!("{path}/opacity"))?,
+                ))
+            }
+            None => None,
+        };
+        let stroke = match paint.get("stroke").and_then(Value::as_object) {
+            Some(s) => {
+                let path = format!("{path}/stroke");
+                // A stroke keeps its width under a scale unless it asks to scale with it.
+                let k = if s.get("scale_stroke") == Some(&Value::Bool(true)) {
+                    deep_canvas::ops::sqrt((place.scale[0] * place.scale[1]).abs())
+                } else {
+                    1.0
+                };
+                let dashes = match s.get("dash").and_then(|d| d.get("count")) {
+                    None => None,
+                    Some(c) => {
+                        let subpaths =
+                            verbs.iter().filter(|v| matches!(v, Verb::Move(_))).count() as u64;
+                        let count = c
+                            .as_u64()
+                            .filter(|n| (1..=MAX_DASHES).contains(&(n * subpaths.max(1))))
+                            .and_then(|n| u16::try_from(n).ok());
+                        Some(count.ok_or(Refused {
+                            code: "out_of_range",
+                            path: format!("{path}/dash/count"),
+                        })?)
+                    }
+                };
+                Some(Line {
+                    width: num(s.get("width")).unwrap_or(1.0) * k,
+                    paint: self.paint(id, s, &path, bounds, place, true)?,
+                    opacity: all * opacity(s.get("opacity"), &format!("{path}/opacity"))?,
+                    dashes,
+                })
+            }
+            None => None,
+        };
+        Ok(Mark::Shape {
+            item: id.to_string(),
+            verbs: place.verbs(verbs),
+            fill,
+            stroke,
+        })
+    }
+}
+
+/// True when `paint` holds only what R1's marks draw: no opacity, dash or `scale_stroke`.
+fn r1_paint(paint: &Map<String, Value>) -> bool {
+    let plain = |p: Option<&Value>| {
+        p.and_then(Value::as_object).is_none_or(|p| {
+            !["opacity", "dash", "scale_stroke"]
+                .iter()
+                .any(|k| p.contains_key(*k))
+        })
+    };
+    paint.get("opacity").is_none() && plain(paint.get("fill")) && plain(paint.get("stroke"))
+}
+
+/// Each item's box with its descendants' where they draw, from a frame's marks (a mark set's rows
+/// count for the set).
+fn boxes_of(frame: &Frame, items: &Map<String, Value>) -> BTreeMap<String, [f64; 4]> {
+    let union = |a: Option<[f64; 4]>, b: [f64; 4]| match a {
+        None => b,
+        Some([x, y, w, h]) => {
+            let (x0, y0) = (x.min(b[0]), y.min(b[1]));
+            let (x1, y1) = ((x + w).max(b[0] + b[2]), (y + h).max(b[1] + b[3]));
+            [x0, y0, x1 - x0, y1 - y0]
+        }
+    };
+    let mut own: BTreeMap<String, [f64; 4]> = BTreeMap::new();
+    for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
+        let b = match &drawn.mark {
+            Mark::Rect { bounds, .. } | Mark::Image { bounds, .. } => *bounds,
+            Mark::Circle { center, r, .. } => [center[0] - r, center[1] - r, 2.0 * r, 2.0 * r],
+            Mark::Path {
+                geometry, offset, ..
+            } => {
+                let [x, y, w, h] = bounds_of(&geometry.verbs);
+                [x + offset[0], y + offset[1], w, h]
+            }
+            Mark::Shape { verbs, .. } => bounds_of(verbs),
+            Mark::Text { .. } => continue,
+        };
+        let id = drawn.mark.item().split('#').next().unwrap_or("");
+        own.insert(id.to_string(), union(own.get(id).copied(), b));
+    }
+    let mut out = own.clone();
+    for (id, b) in &own {
+        let mut at = items
+            .get(id)
+            .and_then(|i| i.get("parent"))
+            .and_then(Value::as_str);
+        for _ in 0..items.len() {
+            let Some(p) = at else { break };
+            out.insert(p.to_string(), union(out.get(p).copied(), *b));
+            at = items
+                .get(p)
+                .and_then(|i| i.get("parent"))
+                .and_then(Value::as_str);
+        }
+    }
+    out
 }
 
 /// A format's notation (Bound value: `fixed | compact | percent | duration`).
@@ -1131,9 +1494,8 @@ fn mask_scope(id: &str, item: &Value, palette: &Palette) -> Result<Scope, Refuse
     let Some([x, y, w, h]) = b.as_deref().and_then(|b| <[f64; 4]>::try_from(b).ok()) else {
         return refuse("bad_doc", format!("{path}/box"));
     };
-    let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
     let e = num(p.get("expand")).unwrap_or(0.0);
-    let rect = [x + pos[0] - e, y + pos[1] - e, w + 2.0 * e, h + 2.0 * e];
+    let rect = Place::of(item).rect([x - e, y - e, w + 2.0 * e, h + 2.0 * e]);
     let luminance = match p.get("mode").and_then(Value::as_str) {
         None | Some("shape") => {
             return Ok(Scope::Clip {
@@ -1172,11 +1534,9 @@ fn ancestor_scope(id: &str, item: &Value, palette: &Palette) -> Result<Option<Sc
             Some(_) => None,
         },
         Some("frame@1") if get("overflow").and_then(Value::as_str) != Some("show") => {
-            let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
-            let rect = frame_box(id, item)?;
             Some(Scope::Clip {
                 item: id.to_string(),
-                rect: [rect[0] + pos[0], rect[1] + pos[1], rect[2], rect[3]],
+                rect: Place::of(item).rect(frame_box(id, item)?),
             })
         }
         Some("group@1") => {
@@ -1344,6 +1704,25 @@ pub fn frame_planted(
     zoom: f64,
     planted: Planted,
 ) -> Result<Frame, Refused> {
+    let (frame, wants_boxes) = build(doc, items, palette, record, zoom, planted, None)?;
+    if !wants_boxes {
+        return Ok(frame);
+    }
+    // A span or a step by position: the first pass's boxes, then the frame drawn with them.
+    let boxes = boxes_of(&frame, items);
+    Ok(build(doc, items, palette, record, zoom, planted, Some(&boxes))?.0)
+}
+
+/// The frame, and whether a paint asked for boxes that `boxes` doesn't yet hold.
+fn build(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+    palette: &Palette,
+    record: &Record,
+    zoom: f64,
+    planted: Planted,
+    boxes: Option<&BTreeMap<String, [f64; 4]>>,
+) -> Result<(Frame, bool), Refused> {
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
@@ -1370,6 +1749,13 @@ pub fn frame_planted(
         }
     }
     let scopes = scopes_of(doc, items, palette)?;
+    let paints = Paints {
+        doc,
+        items,
+        palette,
+        boxes,
+        wants_boxes: Cell::new(false),
+    };
     // Each layer as (order, ID, its marks as (order, ID, mark)), sorted below.
     let mut layers: Vec<(String, String, Vec<Ordered>)> = Vec::new();
     if let Some(Value::Object(ls)) = doc.get("layers") {
@@ -1395,12 +1781,17 @@ pub fn frame_planted(
             .get("params")
             .and_then(Value::as_object)
             .unwrap_or(&empty);
-        let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
+        let place = Place::of(item);
+        let pos = place.offset;
         let paint = params
             .get("paint")
             .and_then(Value::as_object)
             .unwrap_or(&empty);
         let fill = paint.get("fill").and_then(Value::as_object);
+        let stroke = paint.get("stroke").and_then(Value::as_object);
+        let paint_path = format!("{path}/params/paint");
+        // R1's rect, circle and path draw an item that only moves, in the paint R1 knows.
+        let r1 = place.moves() && r1_paint(paint);
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
         let adjust = Adjust::read(item, palette, id)?;
         let mut marks: Vec<Mark> = match kind {
@@ -1420,25 +1811,25 @@ pub fn frame_planted(
                     inner_round: p("inner_round").unwrap_or(0.0),
                     polygon: params.get("polygon") == Some(&Value::Bool(true)),
                 };
-                let verbs = offset(star.verbs(&format!("{path}/params"))?, pos);
-                vec![shape_of(
-                    palette,
-                    id,
-                    verbs,
-                    paint,
-                    &format!("{path}/params/paint"),
-                )?]
+                let verbs = star.verbs(&format!("{path}/params"))?;
+                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
             }
             "frame@1" => {
                 // A frame draws its background; its overflow mask scopes its children.
                 let Some(fill) = fill else { continue };
-                let [x, y, w, h] = frame_box(id, item)?;
-                let bounds = [x + pos[0], y + pos[1], w, h];
+                let bounds = place.rect(frame_box(id, item)?);
                 vec![Mark::Rect {
                     item: id.clone(),
                     bounds,
                     radius: num(params.get("radius")).unwrap_or(0.0),
-                    fill: fill_of(palette, fill, &format!("{path}/params/paint/fill"), bounds)?,
+                    fill: paints.paint(
+                        id,
+                        fill,
+                        &format!("{paint_path}/fill"),
+                        bounds,
+                        Place::NONE,
+                        false,
+                    )?,
                 }]
             }
             "circle@1" if params.get("arc").is_some() => {
@@ -1459,25 +1850,21 @@ pub fn frame_planted(
                     (true, Planted::None) => outline::Close::Filled,
                 };
                 let verbs = outline::arc(
-                    [center[0] + pos[0], center[1] + pos[1]],
+                    center,
                     num(params.get("r")).unwrap_or(0.0),
                     num(params.get("inner_r")).unwrap_or(0.0),
                     from,
                     to,
                     close,
                 );
-                vec![shape_of(
-                    palette,
-                    id,
-                    verbs,
-                    paint,
-                    &format!("{path}/params/paint"),
-                )?]
+                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
             }
             "path@1"
-                if ["fill", "stroke"]
-                    .iter()
-                    .any(|k| paint.get(*k).and_then(|p| p.get("gradient")).is_some()) =>
+                if !r1
+                    || [fill, stroke]
+                        .iter()
+                        .flatten()
+                        .any(|p| p.contains_key("gradient") || p.contains_key("steps")) =>
             {
                 let Some(Value::String(d)) = params.get("d") else {
                     return refuse("bad_doc", format!("{path}/params/d"));
@@ -1486,14 +1873,33 @@ pub fn frame_planted(
                     code: "bad_path_data",
                     path: format!("{path}/params/d"),
                 })?;
-                let verbs = offset(verbs, pos);
-                vec![shape_of(
-                    palette,
-                    id,
-                    verbs,
-                    paint,
-                    &format!("{path}/params/paint"),
-                )?]
+                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
+            }
+            "rect@1" | "circle@1"
+                if !r1
+                    || stroke.is_some()
+                    || (kind == "circle@1" && fill.is_some_and(|f| !f.contains_key("role"))) =>
+            {
+                let verbs = if kind == "rect@1" {
+                    let Some(b) = four(params.get("box")) else {
+                        return refuse("bad_doc", format!("{path}/params/box"));
+                    };
+                    outline::rect(b, num(params.get("radius")).unwrap_or(0.0))
+                } else {
+                    let center = pair(params.get("center")).ok_or(Refused {
+                        code: "bad_doc",
+                        path: format!("{path}/params/center"),
+                    })?;
+                    outline::circle(
+                        center,
+                        num(params.get("r")).unwrap_or(0.0),
+                        num(params.get("inner_r")).unwrap_or(0.0),
+                    )
+                };
+                if fill.is_none() && stroke.is_none() {
+                    continue;
+                }
+                vec![paints.shape(id, verbs, place, paint, &paint_path)?]
             }
             "marks@1" => data::mark_set(id, item, items, palette, pos)?,
             "axis@1" => data::axis(id, item, items, palette, pos)?,
@@ -1511,11 +1917,7 @@ pub fn frame_planted(
                 {
                     return refuse("alt_missing", format!("{path}/params/alt"));
                 }
-                let four = |v: Option<&Value>| -> Option<[f64; 4]> {
-                    let b: Option<Vec<f64>> = v?.as_array()?.iter().map(|v| num(Some(v))).collect();
-                    <[f64; 4]>::try_from(b?.as_slice()).ok()
-                };
-                let Some([x, y, w, h]) = four(params.get("box")) else {
+                let Some(bounds) = four(params.get("box")) else {
                     return refuse("bad_doc", format!("{path}/params/box"));
                 };
                 let fit = match params.get("fit").and_then(Value::as_str) {
@@ -1528,7 +1930,7 @@ pub fn frame_planted(
                 vec![Mark::Image {
                     item: id.clone(),
                     asset: asset.to_ascii_lowercase(),
-                    bounds: [x + pos[0], y + pos[1], w, h],
+                    bounds: place.rect(bounds),
                     fit,
                     crop: four(params.get("crop")),
                     opacity: num(params.get("opacity")).unwrap_or(1.0).clamp(0.0, 1.0),
@@ -1552,7 +1954,14 @@ pub fn frame_planted(
                         item: id.clone(),
                         bounds,
                         radius: num(params.get("radius")).unwrap_or(0.0),
-                        fill: fill_of(palette, fill, &format!("{path}/params/paint/fill"), bounds)?,
+                        fill: paints.paint(
+                            id,
+                            fill,
+                            &format!("{paint_path}/fill"),
+                            bounds,
+                            Place::NONE,
+                            false,
+                        )?,
                     }
                 }
                 "circle@1" => {
@@ -1581,7 +1990,6 @@ pub fn frame_planted(
                         code: "bad_path_data",
                         path: format!("{path}/params/d"),
                     })?;
-                    let stroke = paint.get("stroke").and_then(Value::as_object);
                     // One color per path in R1: the stroke's role, else the fill's.
                     let color_role = stroke
                         .and_then(|s| s.get("role"))
@@ -1716,11 +2124,12 @@ pub fn frame_planted(
             }
         })
         .collect();
-    Ok(Frame {
+    let frame = Frame {
         size,
         ground,
         layers,
-    })
+    };
+    Ok((frame, paints.wants_boxes.get()))
 }
 
 #[cfg(test)]
@@ -1898,6 +2307,139 @@ mod tests {
             serde_json::json!({"m": {"kind": "mask@1", "layer": "main", "params": {"box": [0, 0, 1, 1], "feather": 2}}}),
         );
         assert_eq!(draw(&soft).unwrap_err().code, "mask_r2");
+    }
+
+    fn mark_of<'a>(f: &'a Frame, item: &str) -> &'a Mark {
+        &f.layers
+            .iter()
+            .flat_map(|l| &l.marks)
+            .find(|d| d.mark.item() == item)
+            .expect("the item draws")
+            .mark
+    }
+
+    fn solid(f: &Frame, item: &str) -> Rgb {
+        match mark_of(f, item) {
+            Mark::Rect {
+                fill: Fill::Solid(c),
+                ..
+            } => *c,
+            other => panic!("{item} is not a solid rect: {other:?}"),
+        }
+    }
+
+    /// Three 10 u squares under `g` at x 0, 50 and 100, ordered c, b, a, each stepped by `steps`.
+    fn stepped(steps: serde_json::Value) -> Frame {
+        let sq = |x: i32, order: &str| {
+            serde_json::json!({"kind": "rect@1", "layer": "main", "parent": "g", "order": order,
+                "params": {"box": [x, 0, 10, 10], "paint": {"fill": {"steps": steps.clone()}}}})
+        };
+        let mut doc = board(serde_json::json!({
+            "g": {"kind": "group@1", "layer": "main", "params": {}},
+            "a": sq(0, "a2"), "b": sq(50, "a1"), "c": sq(100, "a0"),
+        }));
+        doc["collections"]["ends"] = serde_json::json!({"members": ["a", "c"]});
+        draw(&doc).unwrap()
+    }
+
+    #[test]
+    fn steps_place_a_member_by_its_box_or_its_rank_among_a_collection_s_members() {
+        let stops = serde_json::json!([{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]);
+        let (ink, ground) = ([0, 0, 0], [255, 255, 255]);
+        // By order, a ranks last of the three; by x it stands first.
+        let f = stepped(serde_json::json!({"over": "children", "stops": stops, "by": "order"}));
+        assert_eq!((solid(&f, "a"), solid(&f, "c")), (ground, ink));
+        let f = stepped(serde_json::json!({"over": "children", "stops": stops, "by": "x"}));
+        assert_eq!((solid(&f, "a"), solid(&f, "c")), (ink, ground));
+        let mid = solid(&f, "b");
+        assert!(mid != ink && mid != ground && mid[0] == mid[1] && mid[1] == mid[2]);
+        // By distance from a's center, 100 u out reaches the last stop.
+        let by = serde_json::json!({"distance": {"from": [5, 5], "radius": 100}});
+        let f = stepped(serde_json::json!({"over": "children", "stops": stops, "by": by}));
+        assert_eq!(
+            (solid(&f, "a"), solid(&f, "b"), solid(&f, "c")),
+            (ink, mid, ground)
+        );
+        // Over a collection of two, c ranks first and a last; b isn't a member.
+        let ends = serde_json::json!({"over": "ends", "stops": stops, "by": "order"});
+        let mut doc = board(serde_json::json!({
+            "a": {"kind": "rect@1", "layer": "main", "order": "a1", "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
+            "c": {"kind": "rect@1", "layer": "main", "order": "a0", "params": {"box": [100, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
+            "b": {"kind": "rect@1", "layer": "main", "params": {"box": [50, 0, 10, 10], "paint": {"fill": {"steps": ends}}}},
+        }));
+        doc["collections"]["ends"] = serde_json::json!({"members": ["a", "c"]});
+        let r = draw(&doc).unwrap_err();
+        assert_eq!(
+            (r.code, r.path.as_str()),
+            ("bad_paint", "items/b/params/paint/fill/steps/over")
+        );
+        doc["items"].as_object_mut().unwrap().remove("b");
+        let f = draw(&doc).unwrap();
+        assert_eq!((solid(&f, "a"), solid(&f, "c")), (ground, ink));
+    }
+
+    #[test]
+    fn a_gradient_spans_another_item_s_box_and_runs_along_strokes_alone() {
+        let gradient = |span: &str| serde_json::json!({"gradient": {"span": span, "stops": [{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]}});
+        let doc = board(serde_json::json!({
+            "g": {"kind": "group@1", "layer": "main", "params": {}},
+            "p": {"kind": "rect@1", "layer": "main", "parent": "g", "params": {"box": [20, 10, 30, 30]}},
+            "q": {"kind": "rect@1", "layer": "main", "parent": "g", "params": {"box": [120, 30, 40, 30]}},
+            "r": {"kind": "rect@1", "layer": "main", "params": {"box": [0, 0, 10, 10], "paint": {"fill": gradient("g")}}},
+        }));
+        // p and q draw nothing, yet the group's box is theirs: x 20 to 160, y 10 to 60.
+        let doc = {
+            let mut d = doc;
+            for k in ["p", "q"] {
+                d["items"][k]["params"]["paint"] = serde_json::json!({"fill": {"role": "ink"}});
+            }
+            d
+        };
+        let f = draw(&doc).unwrap();
+        let Mark::Rect {
+            fill: Fill::Ramp(r),
+            ..
+        } = mark_of(&f, "r")
+        else {
+            panic!("r's fill is a ramp")
+        };
+        assert_eq!(
+            r.geometry,
+            paint::Geometry::Linear {
+                from: [20.0, 35.0],
+                to: [160.0, 35.0]
+            }
+        );
+        let mut missing = doc.clone();
+        missing["items"]["r"]["params"]["paint"] = serde_json::json!({"fill": gradient("nowhere")});
+        assert_eq!(draw(&missing).unwrap_err().code, "ref_unresolved");
+        let mut fill_along = doc.clone();
+        fill_along["items"]["r"]["params"]["paint"]["fill"]["gradient"]["kind"] =
+            serde_json::json!("along");
+        assert_eq!(draw(&fill_along).unwrap_err().code, "gradient_kind");
+    }
+
+    #[test]
+    fn a_path_draws_at_most_10_000_dashes() {
+        let dashed = |count: u64| {
+            board(
+                serde_json::json!({"o": {"kind": "circle@1", "layer": "main",
+                "params": {"center": [50, 50], "r": 40, "paint": {"stroke": {"role": "ink", "dash": {"count": count}}}}}}),
+            )
+        };
+        let most = draw(&dashed(10_000)).unwrap();
+        let Mark::Shape {
+            stroke: Some(line), ..
+        } = mark_of(&most, "o")
+        else {
+            panic!("a stroked circle is an outline")
+        };
+        assert_eq!(line.dashes, Some(10_000));
+        let r = draw(&dashed(10_001)).unwrap_err();
+        assert_eq!(
+            (r.code, r.path.as_str()),
+            ("out_of_range", "items/o/params/paint/stroke/dash/count")
+        );
     }
 
     #[test]

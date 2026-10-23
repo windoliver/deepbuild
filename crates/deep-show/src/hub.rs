@@ -12,10 +12,12 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use deep_canvas::document::{canonical, check, Issue};
+use deep_canvas::document::{canonical_in, check_in, Issue};
 use deep_canvas::grammar::{Time, TimeContext};
+use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::show::{
     inline_count, order_issues, stamp, truncated, unreadable_handles, whole_diff, Band, Diff,
     Scope, Writer, WriterKind,
@@ -48,7 +50,22 @@ pub enum Planted {
     OneFifoCheckQueue,
     /// #96: on restart, each layer is the newest layer file written for it.
     NewestLayerFileCurrent,
+    /// #305: replies leave the module-set digest out.
+    ReplyWithoutDigest,
+    /// #305: the check reads a logic program's bytes before refusing the document.
+    ReadsWasmBytes,
 }
+
+/// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
+/// and seal), with the wall time registration and the seal took.
+pub struct Startup {
+    pub sealed: Sealed,
+    pub seal_ms: f64,
+}
+
+/// How many times this process registered and sealed: counted where it happens, so the
+/// `registry` reply's `seal.runs` is a measurement, not the binary's word; 1 whatever frames ran.
+pub static SEAL_RUNS: AtomicU32 = AtomicU32::new(0);
 
 /// What keeps a frame from settling.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,10 +158,18 @@ pub struct PatchCall {
 pub enum Call {
     Show(Box<Show>),
     Patch(Box<PatchCall>),
-    Read { doc: String, via: Option<Via> },
-    History { doc: String, item: String },
+    Read {
+        doc: String,
+        via: Option<Via>,
+    },
+    History {
+        doc: String,
+        item: String,
+    },
     ByWriter(String),
     Revisions(String),
+    /// The sealed set as the build holds it (#305).
+    Registry,
     Screen,
 }
 
@@ -187,6 +212,7 @@ pub struct Row {
 /// The hub's state while a scenario runs.
 pub struct Hub<'a> {
     pub scenario: &'a Scenario,
+    pub startup: &'a Startup,
     pub revisions: BTreeMap<String, Vec<Row>>,
     pub shared: BTreeMap<String, Shared>,
     /// The clock's time, in flicks: a read shows what is current then.
@@ -216,9 +242,10 @@ pub fn flicks(text: &str) -> Option<i64> {
 }
 
 impl<'a> Hub<'a> {
-    pub fn new(scenario: &'a Scenario) -> Self {
+    pub fn new(scenario: &'a Scenario, startup: &'a Startup) -> Self {
         Hub {
             scenario,
+            startup,
             revisions: BTreeMap::new(),
             shared: BTreeMap::new(),
             now: 0,
@@ -329,13 +356,37 @@ impl<'a> Hub<'a> {
 
     /// One call's reply.
     pub fn call(&mut self, call: &Call) -> Value {
-        match call {
+        let mut reply = match call {
             Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
             Call::Show(show) => self.show(show),
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
+            Call::Registry => {
+                let sealed = &self.startup.sealed;
+                let arrays: Map<String, Value> = sealed
+                    .arrays
+                    .iter()
+                    .map(|(k, a)| {
+                        (
+                            k.clone(),
+                            json!({
+                                "owner": a.owner, "type": a.ty, "domain": a.domain,
+                                "class": a.class, "phase": a.phase,
+                            }),
+                        )
+                    })
+                    .collect();
+                json!({
+                    "build_set": sealed.build_set.name(),
+                    "state": sealed.state(),
+                    "modules": sealed.modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
+                    "arrays": arrays,
+                    "plan": sealed.plan,
+                    "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed)},
+                })
+            }
             Call::Revisions(doc) if self.shared.contains_key(doc) => self.shared_revisions(doc),
             Call::Revisions(doc) => {
                 let rows: Vec<Value> = self
@@ -359,6 +410,19 @@ impl<'a> Hub<'a> {
             }
             Call::Screen => {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
+            }
+        };
+        self.stamp(&mut reply);
+        reply
+    }
+
+    /// Every canvas reply carries the core's version and the module-set digest (#305;
+    /// technical design: MCP tools); the planted twin leaves the digest out.
+    pub fn stamp(&self, reply: &mut Value) {
+        if let Value::Object(map) = reply {
+            map.insert("core".into(), json!(core_name()));
+            if self.scenario.planted != Some(Planted::ReplyWithoutDigest) {
+                map.insert("set_digest".into(), json!(self.startup.sealed.set_digest));
             }
         }
     }
@@ -467,7 +531,10 @@ impl<'a> Hub<'a> {
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(doc) => {
-                let mut issues = check(&doc).issues;
+                if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
+                    read_programs(&doc, &self.scenario.evidence);
+                }
+                let mut issues = check_in(&doc, &self.startup.sealed).issues;
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
@@ -508,7 +575,10 @@ impl<'a> Hub<'a> {
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
         {
-            let map = doc.as_object().expect("a stamped document is an object");
+            let lowered = lower_module_kinds(doc, &self.startup.sealed);
+            let map = lowered
+                .as_object()
+                .expect("a stamped document is an object");
             match self.renderer.prepare(
                 map,
                 show.t,
@@ -532,7 +602,7 @@ impl<'a> Hub<'a> {
         }
         let hash = stamped
             .as_ref()
-            .and_then(|d| canonical(d).ok())
+            .and_then(|d| canonical_in(d, &self.startup.sealed.kinds()).ok())
             .map(|c| c.sha256)
             .unwrap_or_default();
 
@@ -562,7 +632,13 @@ impl<'a> Hub<'a> {
         if error {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
-                reply.insert("result".into(), json!("FAIL"));
+                // A check that needs a canvas module the build lacks is BLOCKED, never a FAIL
+                // (technical design: Canvas modules; #305).
+                let blocked = issues.iter().any(|i| i.code == "module_missing");
+                reply.insert(
+                    "result".into(),
+                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
+                );
             }
             return Value::Object(reply);
         }
@@ -716,6 +792,49 @@ impl<'a> Hub<'a> {
             },
         }
     }
+}
+
+/// The planted check that opens a logic program's bytes from the evidence store by its hash
+/// before the document is refused: what the honest check never does (#305).
+fn read_programs(doc: &Value, evidence: &std::path::Path) {
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
+        return;
+    };
+    for item in items.values() {
+        let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+        let program = item
+            .get("params")
+            .and_then(|p| p.get("program"))
+            .and_then(Value::as_str);
+        if let (true, Some(sha)) = (kind.starts_with("logic@"), program) {
+            if sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+                let _ = std::fs::read(evidence.join(&sha[..2]).join(&sha[2..]));
+            }
+        }
+    }
+}
+
+/// The document as the marks module draws it: an item of a kind a sealed canvas module
+/// registered with a core kind to draw as (`rect@1`) becomes that kind, its `box` filled with
+/// the look's ink, until the module draws its own.
+fn lower_module_kinds(doc: &Value, sealed: &Sealed) -> Value {
+    let mut out = doc.clone();
+    if let Some(items) = out.get_mut("items").and_then(Value::as_object_mut) {
+        for item in items.values_mut() {
+            let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
+            let Some(draws_as) = sealed.draws_as(kind).map(str::to_string) else {
+                continue;
+            };
+            let boxed = item
+                .get("params")
+                .and_then(|p| p.get("box"))
+                .cloned()
+                .unwrap_or(Value::Null);
+            item["kind"] = json!(draws_as);
+            item["params"] = json!({"box": boxed, "paint": {"fill": {"role": "ink"}}});
+        }
+    }
+    out
 }
 
 /// One layer on screen (Band), or the card.

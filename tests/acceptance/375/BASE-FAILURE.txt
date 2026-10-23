@@ -1,0 +1,138 @@
+Base commit: 7222b1696e35128335f7ef7218a5bd23add6787b
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/375 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: no deep-layout bin target exists there, and no workspace package builds one.
+Date: 2026-10-22T20:02:04Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/375
+
+ ❯ never.test.ts (3 tests | 3 failed) 6988ms
+   ❯ It can never: depend on its own result; resize because a bound number changed; let flow children overlap (3)
+     × never: flow children of a frame never overlap, in generated row, column and grid trees (1000 cases, seed 375) 3ms
+     × never: a layout doesn't depend on its own result: a tree solved again after its own result, and after others', gives the same bytes (1000 cases, seed 375) 0ms
+     × never: a frame doesn't resize because a bound number changed; the bound text is sized by its widest (1000 cases, seed 375) 0ms
+ ❯ column.test.ts (3 tests | 3 failed) 1725ms
+   ❯ AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line (3)
+     × AC1 the column hugs its three text items within 0.5 u, each measured by the shaper 4ms
+     × AC1 when the second item's text grows by one line, the third moves down by its new height and the frame still hugs 0ms
+     × AC1 deep-layout solve answers bad_input to a line it can't read 0ms
+ ❯ grid.test.ts (3 tests | 3 failed) 823ms
+   ❯ AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px (3)
+     × AC1 the fixture is the row's six children in a grid of three hug columns, flowed by column, aligned start, center and end 10ms
+     × AC1 flow by column puts the second child in row 2, column 1, and every child in its cell 1ms
+     × AC1 column 3 is end-aligned: its children's east sides are on one line within 0.5 px, the column's east edge 7ms
+ ❯ row.test.ts (2 tests | 2 failed) 776ms
+   ❯ AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px (2)
+     × AC1 the fixture is six fixed children 40 to 120 u wide, of different heights, in a row with gap 24 and align_cross end 3ms
+     × AC1 the six share one bottom line within 0.5 px, in order with gap 24, and the row is the sum of their widths + 5 × 24 u wide 0ms
+ ❯ scope.test.ts (1 test | 1 failed) 2642ms
+   ❯ Scope: auto layout on the canvas by Taffy, with text leaves measured by the shaper (1)
+     × Scope: the canvas module crate that builds deep-layout lays out with Taffy and measures text with the canvas's one shaper (deep-text) 2641ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  column.test.ts > AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line > AC1 the column hugs its three text items within 0.5 u, each measured by the shaper
+ FAIL  column.test.ts > AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line > AC1 when the second item's text grows by one line, the third moves down by its new height and the frame still hugs
+ FAIL  column.test.ts > AC1 a column frame of three text items with gap 12 and padding 8 hugs them within 0.5 u and moves the third down by the second's new height when its text grows by one line > AC1 deep-layout solve answers bad_input to a line it can't read
+ FAIL  never.test.ts > It can never: depend on its own result; resize because a bound number changed; let flow children overlap > never: flow children of a frame never overlap, in generated row, column and grid trees (1000 cases, seed 375)
+ FAIL  never.test.ts > It can never: depend on its own result; resize because a bound number changed; let flow children overlap > never: a layout doesn't depend on its own result: a tree solved again after its own result, and after others', gives the same bytes (1000 cases, seed 375)
+ FAIL  never.test.ts > It can never: depend on its own result; resize because a bound number changed; let flow children overlap > never: a frame doesn't resize because a bound number changed; the bound text is sized by its widest (1000 cases, seed 375)
+AssertionError: the binaries build: deep-layout, deep-text: expected 'cargo build --bin deep-layout failed:…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-layout failed:
++ error: no bin target named `deep-layout` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-graph
++     deep-hook
++     deep-live
++     deep-motion
++     deep-replica
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:132:79
+    130|   let error = '';
+    131|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+    132|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+    133| }
+    134|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  grid.test.ts > AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px > AC1 the fixture is the row's six children in a grid of three hug columns, flowed by column, aligned start, center and end
+ FAIL  grid.test.ts > AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px > AC1 flow by column puts the second child in row 2, column 1, and every child in its cell
+ FAIL  grid.test.ts > AC1 the same six in a grid with cols: [hug, hug, hug], flow: column and align_cols: [start, center, end] put the second child in row 2, column 1, and column 3's east sides on one line within 0.5 px > AC1 column 3 is end-aligned: its children's east sides are on one line within 0.5 px, the column's east edge
+ FAIL  row.test.ts > AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px > AC1 the fixture is six fixed children 40 to 120 u wide, of different heights, in a row with gap 24 and align_cross end
+ FAIL  row.test.ts > AC1 six children 40 to 120 u wide in a row with gap 24 and align_cross end share one bottom line within 0.5 px, the row the sum of their widths + 5 × 24 u wide within 0.5 px > AC1 the six share one bottom line within 0.5 px, in order with gap 24, and the row is the sum of their widths + 5 × 24 u wide
+AssertionError: the binaries build: deep-layout: expected 'cargo build --bin deep-layout failed:…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-layout failed:
++ error: no bin target named `deep-layout` in default-run packages
++ help: available bin targets:
++     deep-app
++     deep-canvas
++     deep-canvas-render
++     deep-contracts
++     deep-graph
++     deep-hook
++     deep-live
++     deep-motion
++     deep-replica
++     deep-salience
++     deep-sheet
++     deep-show
++     deep-text
++     deep-text-render
++
+
+ ❯ helpers.ts:132:79
+    130|   let error = '';
+    131|   beforeAll(() => { error = names.map(buildBinary).filter((e) => e !==…
+    132|   beforeEach(() => { expect(error, `the binaries build: ${names.join('…
+       |                                                                               ^
+    133| }
+    134|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  scope.test.ts > Scope: auto layout on the canvas by Taffy, with text leaves measured by the shaper > Scope: the canvas module crate that builds deep-layout lays out with Taffy and measures text with the canvas's one shaper (deep-text)
+AssertionError: one workspace package builds the deep-layout binary: expected [] to have a length of 1 but got +0
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ scope.test.ts:8:94
+      6|     const meta = cargoMetadata();
+      7|     const owners = meta.packages.filter((p) => meta.workspace_members.…
+      8|     expect(owners.map((p) => p.name), 'one workspace package builds th…
+       |                                                                                              ^
+      9|     const owner = owners[0]!;
+     10|     // marks2d owns frames and their auto layout (the module table); a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  12 failed (12)
+   Start at  13:01:51
+   Duration  13.47s (tests 99%)
+

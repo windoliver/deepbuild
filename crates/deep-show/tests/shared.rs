@@ -271,3 +271,77 @@ fn a_view_of_the_record_is_never_patched() {
     );
     assert_eq!(codes(&r[0]), ["record_view"]);
 }
+
+/// A shared document that needs canvas module `test.b` is checked in the build's sealed set
+/// (#305): a build with `test.b` opens it and takes a patch that adds a `test.b@1` item; one
+/// without refuses that patch with `module_missing`.
+#[test]
+fn a_shared_document_is_checked_in_the_builds_sealed_canvas_modules() {
+    let b_item = |id: &str, layer: Option<&str>| {
+        let mut item = json!({"id": id, "kind": "test.b@1", "name": "B", "order": "a3", "params": {"box": [0, 0, 20, 20]}});
+        if let Some(layer) = layer {
+            item["layer"] = json!(layer);
+        }
+        item
+    };
+    let mut document = board();
+    document["requires"] = json!({"modules": {"test.b": "^1"}});
+    document["items"]["you.b1"] = b_item("you.b1", Some("you-main"));
+    let made = alpha(
+        1,
+        0,
+        json!([{"op": "create", "item": b_item("alpha.b2", None)}]),
+    );
+    let mut bad = b_item("alpha.b3", None);
+    bad["params"]["no_such_param"] = json!(1);
+    let unchecked = alpha(2, 1, json!([{"op": "create", "item": bad}]));
+    let r = run_on(document, vec![read(), made, read(), unchecked], json!({}));
+    // The build's kinds check what a patch writes to a module's item.
+    assert_eq!(r[3]["outcome"], json!("refused"), "{}", r[3]);
+    if cfg!(feature = "test-b") {
+        assert!(
+            !codes(&r[0]).contains(&"module_missing".to_string()),
+            "{}",
+            r[0]
+        );
+        assert_eq!(r[1]["outcome"], json!("applied"), "{}", r[1]);
+        assert!(
+            r[2]["document"]["items"].get("alpha.b2").is_some(),
+            "{}",
+            r[2]
+        );
+    } else {
+        assert!(
+            codes(&r[0]).contains(&"module_missing".to_string()),
+            "{}",
+            r[0]
+        );
+        assert_eq!(r[1]["outcome"], json!("refused"), "{}", r[1]);
+        assert!(
+            codes(&r[1]).contains(&"module_missing".to_string()),
+            "{}",
+            r[1]
+        );
+    }
+}
+
+/// A shared revision's hash is taken by the kinds of the build's sealed set (#305): with module
+/// `test.a`, whose `value` defaults to 0, a document that says `value: 0` and one that leaves it
+/// out are the same revision.
+#[cfg(feature = "test-a")]
+#[test]
+fn a_shared_revisions_hash_reads_the_sealed_sets_kinds() {
+    let hash_with = |params: Value| {
+        let mut document = board();
+        document["requires"] = json!({"modules": {"test.a": "^1"}});
+        document["items"]["you.a1"] = json!({"id": "you.a1", "kind": "test.a@1", "layer": "you-main",
+            "name": "A", "order": "a3", "params": params});
+        let r = run_on(document, vec![read()], json!({}));
+        assert!(codes(&r[0]).is_empty(), "{}", r[0]);
+        r[0]["hash"].clone()
+    };
+    assert_eq!(
+        hash_with(json!({"box": [0, 0, 20, 20], "value": 0})),
+        hash_with(json!({"box": [0, 0, 20, 20]}))
+    );
+}

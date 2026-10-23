@@ -1,0 +1,15 @@
+[package]
+name = "deep-canvas-test-modules"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #305: the test canvas modules the #305 acceptance README names, each a manifest and one
+# register call, for the proof that the seal refuses each planted fault and leaves out the readers
+# of a missing optional dependency. A test build of `deep-show` compiles them in under its
+# `test-*` features; no shipped build holds them. Named deep-canvas* so the canvas lint reads it.
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = "1"
