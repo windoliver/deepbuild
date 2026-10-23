@@ -1494,6 +1494,85 @@ export interface HubStopped {
   evidence?: Array<string>;
 }
 
+/** job.ended@1 */
+export interface JobEnded {
+  v: 1;
+  id: string;
+  kind: "job.ended";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    state: string;
+    refused?: string;
+    cause?: string;
+    session?: string;
+    model?: string;
+    binary?: {
+      path: string;
+      version: string;
+    };
+    usage?: {
+      input: number;
+      cached: number;
+      output: number;
+    };
+    cost_usd?: number;
+    lingered?: Array<string>;
+    from?: number;
+    to?: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** job.event@1 */
+export interface JobEvent {
+  v: 1;
+  id: string;
+  kind: "job.event";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    event: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** job.recorded@1 */
+export interface JobRecorded {
+  v: 1;
+  id: string;
+  kind: "job.recorded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    kind: string;
+    agent: string;
+    account: string | null;
+    folder: string;
+    prompt: string;
+    waiting: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** layer.rows@1 */
 export interface LayerRows {
   v: 1;
@@ -2348,6 +2427,24 @@ export interface SessionEnd {
   log_pos?: number;
   data: {
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.reading@1 */
+export interface SessionReading {
+  v: 1;
+  id: string;
+  kind: "session.reading";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
   };
   evidence?: Array<string>;
 }

@@ -230,6 +230,10 @@
           "spec": "0.0.0",
           "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
         },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
@@ -241,6 +245,10 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #159: DeepBuild's own headless jobs, run by the hub through host@1, whose hooks the hub records as each job's events."
         },
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
@@ -571,6 +579,30 @@
           "why": "Issue #393: the headless window, its frames and the offscreen capture of the composed window."
         }
       }
+    },
+    "packages/runner/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the window, first-reading and smoke-test asks a job raises while it waits, through the asks core."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #159: a job that bills an API key starts only within a budget the ledger reserves, and is charged its cost."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the canonical digest that keys each ask a job raises, so the same question is never asked twice."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #159: each job is recorded before it starts and its end appended, so a restart finds it and never runs it twice."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #159: host@1, through which every process of a job starts sandboxed with only what it declares, and is reaped."
+        }
+      }
     }
   },
   "allowedFindings": [
@@ -591,6 +623,12 @@
       "kind": "home path",
       "sha256": "9e63dffb43b4deffde5e7fc73fe70a38ede39f591e7c44dd8bd08d9f742fff36",
       "why": "Issue #79: a planted Windows home path under the placeholder user someone, proving the acceptance privacy check catches one."
+    },
+    {
+      "path": "tests/acceptance/159/plan.test.ts",
+      "kind": "API key",
+      "sha256": "b6ed1522e39bfb90264f23b3d61616e541544f92f2cd649feee07defeac421cc",
+      "why": "Issue #159: a made-up API key prefix (dh159FAKE) the AC8 test sets in a job's environment, proving the runner names the variable and never its value."
     }
   ]
 }
