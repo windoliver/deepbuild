@@ -14,11 +14,11 @@ use deep_canvas_marks::scene::{self, ImageFit, Mark, Planted, Record, Rgb};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{
-    bez, brush, image, rasterizer, rect, settings, shape, solid, stroke, Scopes,
+    bez, brush, image, rasterizer, rect, sampler, settings, shape, solid, stroke, Scopes,
 };
 use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, RoundedRect, Shape};
-use vello_cpu::peniko::{Fill as FillRule, ImageAlphaType, ImageSampler};
+use vello_cpu::peniko::{Fill as FillRule, ImageAlphaType};
 use vello_cpu::{Image, ImageSource, Pixmap, RenderContext, Resources};
 
 use crate::asset;
@@ -185,6 +185,7 @@ impl Painter<'_> {
                 asset: hash,
                 bounds,
                 fit,
+                sampling,
                 crop,
                 opacity,
                 adjust,
@@ -201,7 +202,7 @@ impl Painter<'_> {
                 let to = fitted(*bounds, [w, h], *fit);
                 self.ctx.set_paint(Image {
                     image: ImageSource::Pixmap(Arc::new(pixmap)),
-                    sampler: ImageSampler::default(),
+                    sampler: sampler(*sampling),
                 });
                 self.ctx.set_paint_transform(
                     Affine::translate((to[0], to[1]))

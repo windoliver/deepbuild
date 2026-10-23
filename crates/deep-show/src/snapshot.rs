@@ -7,17 +7,18 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use deep_canvas_marks::modules::{Drawing, Run};
 use deep_canvas_marks::path;
 use deep_canvas_marks::scene::{
     self, Fill, ImageFit, Mark, Palette, Record, Rgb, Slot, StatusMark,
 };
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
-use deep_marks_vello::{brush, image, shape, Scopes};
+use deep_marks_vello::{brush, image, sampler, shape, Scopes};
 use deep_text::{Align, Role, Shaper, Spec};
 use serde_json::{Map, Value};
 use vello_cpu::kurbo::{Affine, BezPath, Circle, Rect, RoundedRect, Shape};
-use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageQuality, ImageSampler};
+use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageSampler};
 use vello_cpu::{
     color::{AlphaColor, Srgb},
     Image, ImageSource, Level, Pixmap, RenderContext, RenderSettings, Resources,
@@ -45,6 +46,11 @@ pub struct Drawn {
     pub status: Vec<StatusMark>,
     /// Each image mark's asset, decoded: an asset that isn't decoded yet can't settle a frame.
     images: BTreeMap<String, Arc<Pixmap>>,
+    /// Each text's run as the text module shaped it (#387), drawn as it is when its spec is the
+    /// mark's.
+    runs: BTreeMap<String, Arc<Run>>,
+    /// Each animated text's units as `[lift, opacity]`, one per glyph.
+    animated: BTreeMap<String, Vec<[f64; 2]>>,
 }
 
 impl Drawn {
@@ -185,6 +191,27 @@ impl Renderer {
             frame,
             status,
             images,
+            runs: BTreeMap::new(),
+            animated: BTreeMap::new(),
+        })
+    }
+
+    /// The scheduler's frame as marks2d drew it (#387), with every image decoded.
+    pub fn prepare_drawing(&mut self, drawing: &Drawing, evidence: &Path) -> Result<Drawn, Unfit> {
+        let mut images = BTreeMap::new();
+        for drawn in drawing.frame.layers.iter().flat_map(|l| &l.marks) {
+            if let Mark::Image { item, asset, .. } = &drawn.mark {
+                if !images.contains_key(asset) {
+                    images.insert(asset.clone(), decode(evidence, asset, item)?);
+                }
+            }
+        }
+        Ok(Drawn {
+            frame: drawing.frame.clone(),
+            status: drawing.status.clone(),
+            images,
+            runs: drawing.runs.clone(),
+            animated: drawing.animated.clone(),
         })
     }
 
@@ -297,11 +324,18 @@ impl Renderer {
                 ..
             } => shape(ctx, verbs, fill.as_ref(), stroke.as_ref(), scale_of(at)),
             Mark::Text {
+                item,
                 spec,
                 origin,
                 color: c,
-                ..
             } => {
+                // The text module's run, shaped once for its spec, as the scheduler keeps it;
+                // an animated text's units each lifted and faded.
+                if let Some(run) = drawn.runs.get(item).filter(|r| r.spec == *spec) {
+                    let units = drawn.animated.get(item).map(Vec::as_slice);
+                    self.glyphs(ctx, &run.shaped, *origin, *c, at, units);
+                    return;
+                }
                 let align = match spec.align {
                     scene::Align::Start => Align::Start,
                     scene::Align::Center => Align::Center,
@@ -334,6 +368,7 @@ impl Renderer {
                 asset,
                 bounds,
                 fit,
+                sampling,
                 opacity,
                 adjust,
                 ..
@@ -358,9 +393,8 @@ impl Renderer {
                 ctx.set_paint(Image {
                     image: ImageSource::Pixmap(pixmap.clone()),
                     sampler: ImageSampler {
-                        quality: ImageQuality::Medium,
                         alpha: *opacity as f32,
-                        ..ImageSampler::default()
+                        ..sampler(*sampling)
                     },
                 });
                 ctx.set_paint_transform(
@@ -390,6 +424,40 @@ impl Renderer {
         at: Affine,
     ) {
         let shaped = self.shaper.shape(spec);
+        self.glyphs(ctx, &shaped, origin, c, at, None);
+    }
+
+    /// A shaped run's glyphs at `origin` (its top left); with `units`, each glyph lifted and
+    /// faded by its unit's `[lift, opacity]`.
+    fn glyphs(
+        &mut self,
+        ctx: &mut RenderContext,
+        shaped: &deep_text::Shaped,
+        origin: [f64; 2],
+        c: Rgb,
+        at: Affine,
+        units: Option<&[[f64; 2]]>,
+    ) {
+        if let Some(units) = units {
+            for (g, unit) in shaped.glyphs.iter().zip(units) {
+                let [lift, opacity] = *unit;
+                let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+                ctx.set_paint(AlphaColor::from_rgba8(c[0], c[1], c[2], alpha));
+                ctx.set_transform(at * Affine::translate((origin[0], origin[1] + lift)));
+                let one = std::iter::once(vello_cpu::Glyph {
+                    id: g.id,
+                    x: g.x,
+                    y: g.y,
+                });
+                let _ = ctx
+                    .glyph_run(&mut self.resources, &g.font)
+                    .font_size(g.size)
+                    .hint(false)
+                    .fill_glyphs(one);
+            }
+            ctx.set_transform(at);
+            return;
+        }
         ctx.set_paint(color(c));
         ctx.set_transform(at * Affine::translate((origin[0], origin[1])));
         let mut start = 0;
