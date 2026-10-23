@@ -87,6 +87,40 @@ test('the full run with the change\'s own tests is still held to the peak-memory
   assert.match(result.stdout, /FAIL perf: preflight: cpuMs \d+ regressed beyond base/);
 });
 
+test('a copy\'s checks get the budget\'s allowance, not a fixed one: a run past elapsedMs plus its margin is stopped', (t) => {
+  // The checks of each copy take 3 s; this checkout's own run is the observation passed in.
+  const fixture = (elapsedMs) => {
+    const { cwd, git, perf } = repository(t, (root) => `
+      if (process.cwd() !== ${JSON.stringify(root)}) await new Promise((done) => setTimeout(done, 3000));
+    `);
+    writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs }, initialReason: 'Fixture base.' }, tasks: [] }));
+    git('commit', '-qam', 'budget');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    return perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  };
+  const stopped = fixture(1000);
+  assert.equal(stopped.status, 1, stopped.stdout + stopped.stderr);
+  assert.match(stopped.stdout, /BLOCKED perf: [^\n]*ETIMEDOUT/);
+  const allowed = fixture(4000);
+  assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
+  assert.match(allowed.stdout, /"task":"preflight"[^\n]*"status":"PASS"/);
+});
+
+test('the copy without the change\'s own tests gets the same allowance: a run past it is stopped', (t) => {
+  // Only the copy without the change's tests is slow, so the merge base's run passes and this one must stop.
+  const { cwd, git, perf } = repository(t, () => `
+    if (process.cwd().includes('without-tests')) await new Promise((done) => setTimeout(done, 3000));
+  `);
+  writeFileSync(join(cwd, 'benchmarks/budgets.json'), JSON.stringify({ preflight: { margin: 0.5, limits: { elapsedMs: 1000 }, initialReason: 'Fixture base.' }, tasks: [] }));
+  git('commit', '-qam', 'budget');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  mkdirSync(join(cwd, 'tests'));
+  writeFileSync(join(cwd, 'tests/added.test.mjs'), '');
+  const result = perf({ status: 0, elapsedMs: 1, cpuMs: 1, peakBytes: 1 });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /BLOCKED perf: [^\n]*ETIMEDOUT/);
+});
+
 test('the merge base builds at one path every run, outside the checkout, from files stamped now', (t) => {
   // Cargo doesn't rebuild a crate whose workspace moved, or one whose sources look older than its
   // last build, so a copy that moves or keeps commit times runs stale binaries (#594).

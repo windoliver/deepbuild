@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checks } from '../../../scripts/lanes.mjs';
 import { validateBudgets } from '../../../scripts/benchmark.mjs';
-import { BASE, FIX_ROUNDS, results, REVIEW_RATIO, root, scratch, SESSIONS, show, SPIKE, spike, VARIANTS, WITHIN } from './helpers.mjs';
+import { FIX_ROUNDS, results, REVIEW_RATIO, root, scratch, SESSIONS, show, SPIKE, spike, VARIANTS, WITHIN } from './helpers.mjs';
 
 const REVIEW = '#56.6fcf7fe2';
 const BUDGETS = '#56.31f12028';
@@ -73,11 +73,31 @@ test(`${REVIEW} if any criterion fails for Effect, the decision is plain TypeScr
   else assert.ok(['plain', 'effect'].includes(record.decision));
 });
 
+const git = (...args) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+
+// Perf compares a checkout with its merge base, so its own validateBudgets runs against the merge
+// base's budgets: an entry another approved change moved on main (such as `preflight`) is in both
+// sides. #56's own tasks are also held to their definition at the commit that added each one, so a
+// later edit or removal of them fails even once that edit is on main. A task not yet committed is a
+// first measurement, judged against the merge base alone.
 test(`${BUDGETS} both variants have a budget in benchmarks/budgets.json that perf measures against the merge base`, () => {
   const current = json('benchmarks/budgets.json');
-  const baseText = spawnSync('git', ['show', `${BASE}:benchmarks/budgets.json`], { cwd: root, encoding: 'utf8' });
-  assert.equal(baseText.status, 0, `BLOCKED: can't read the base commit's budgets: ${baseText.stderr}`);
+  const mergeBase = git('merge-base', 'HEAD', 'origin/main');
+  assert.equal(mergeBase.status, 0, `BLOCKED: can't find the merge base with origin/main: ${mergeBase.stderr}`);
+  const baseText = git('show', `${mergeBase.stdout.trim()}:benchmarks/budgets.json`);
+  assert.equal(baseText.status, 0, `BLOCKED: can't read the merge base's budgets: ${baseText.stderr}`);
   validateBudgets(current, JSON.parse(baseText.stdout));
+  for (const id of Object.values(TASKS)) {
+    const added = git('log', '--reverse', '--format=%H', `-S"${id}"`, '--', 'benchmarks/budgets.json');
+    assert.equal(added.status, 0, `BLOCKED: can't read the history of benchmarks/budgets.json: ${added.stderr}`);
+    const commit = added.stdout.split('\n')[0];
+    if (!commit) continue;
+    const then = git('show', `${commit}:benchmarks/budgets.json`);
+    assert.equal(then.status, 0, `BLOCKED: can't read the budgets ${commit} added ${id} in: ${then.stderr}`);
+    const established = JSON.parse(then.stdout).tasks?.find((task) => task.id === id);
+    assert.ok(established, `${commit} added ${id} to benchmarks/budgets.json`);
+    validateBudgets(current, { tasks: [established] });
+  }
   for (const variant of VARIANTS) {
     const task = current.tasks.find(({ id }) => id === TASKS[variant]);
     assert.ok(task, `budgets.json has a task ${TASKS[variant]}`);
