@@ -70,18 +70,19 @@ def pytest_configure(config):
         _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by --deselect {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
 
 
-@pytest.hookimpl(wrapper=True)
+@pytest.hookimpl(hookwrapper=True)
 def pytest_pycollect_makeitem(collector, name, obj):
     # Which functions and classes are tests is pytest's own filter too (python_functions, python_classes): a test_*
-    # function or Test* class the project's patterns leave out is a test dropped from a file that still runs.
-    result = yield
-    if result is None and collector.config is _owner:
+    # function or Test* class the project's patterns leave out is a test dropped from a file that still runs. Only the
+    # name patterns count: pytest also never collects, say, an abstract class, whatever its name.
+    outcome = yield
+    if outcome.excinfo is None and outcome.get_result() is None and collector.config is _owner:
         function = inspect.isfunction(obj) or isinstance(obj, (staticmethod, classmethod))
-        ini = 'python_functions' if function and name.startswith('test') else 'python_classes' if inspect.isclass(obj) and name.startswith('Test') else None
+        ini = ('python_functions' if function and name.startswith('test') and not collector.funcnamefilter(name)
+               else 'python_classes' if inspect.isclass(obj) and name.startswith('Test') and not collector.classnamefilter(name) else None)
         if ini:
             value = f"{ini}={' '.join(collector.config.getini(ini))}"
             _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"{collector.nodeid}::{name} left out by {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
-    return result
 
 
 @pytest.hookimpl(hookwrapper=True)
