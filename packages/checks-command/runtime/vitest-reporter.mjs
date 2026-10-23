@@ -44,13 +44,18 @@ export default class DeepCheckReporter {
     // A run that writes snapshots takes its expected values from what the program gives: it can't pass.
     const update = vitest?.config?.snapshotOptions?.updateSnapshot;
     if (update && update !== 'none') write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `snapshots are written, not compared (updateSnapshot ${update})`, stack: null, frames: [] }] });
+    // A run that replays the blob reports of earlier runs runs nothing.
+    const merged = vitest?.config?.mergeReports;
+    if (merged) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `results replayed from earlier runs, not run (mergeReports ${merged})`, stack: null, frames: [] }] });
+    // Type tests are judged from tsc's incremental build info, which the checkout holds: errors it leaves out never show.
+    const configs = [vitest?.config, ...(vitest?.projects ?? []).map((p) => p?.config)];
+    if (configs.some((c) => c?.typecheck?.enabled)) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: 'type tests are judged from tsc\'s build info in the checkout (typecheck)', stack: null, frames: [] }] });
     // Vite's dependency optimizer reuses bundles from its cache in the checkout, checked only against the lockfile and
     // the config: code no source holds. A run that bundles afresh (optimizeDeps.force) may use it.
     const servers = [vitest?.vite, ...(vitest?.projects ?? []).map((p) => p?.vite)];
     const cached = servers.flatMap((s) => Object.entries(s?.environments ?? {})).find(([, e]) => e?.depsOptimizer && e.config?.optimizeDeps?.force !== true);
     if (cached) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `dependencies bundled from Vite's cache (optimizeDeps of ${cached[0]})`, stack: null, frames: [] }] });
     if (!Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0)) return;
-    const configs = [vitest?.config, ...(vitest?.projects ?? []).map((p) => p?.config)];
     const vm = configs.some((c) => c?.browser?.enabled) ? 'browser' : configs.map((c) => c?.pool).find((p) => typeof p === 'string' && p.startsWith('vm'));
     if (vm) write({ type: 'run:error', file: null, errors: [{ name: 'Error', message: `the clock wasn't moved ahead: the ${vm} pool runs tests with a clock of its own`, stack: null, frames: [] }] });
   }

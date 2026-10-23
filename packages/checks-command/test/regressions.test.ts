@@ -210,6 +210,32 @@ describe('compiled code the checkout holds', () => {
     const r = await run();
     expect(r.outcome, r.output.stdout).toBe('failed');
   }, 300_000);
+
+  it('a Vitest run that replays a blob report an earlier run left in the checkout (mergeReports) runs nothing and can\'t pass', async () => {
+    const checkout = folder({ 'package.json': '{ "type": "module" }\n', 'test/sum.test.js': `import { expect, test } from 'vitest';\ntest('adds', () => { expect(1 + 2).toBe(3); });\n` }, true);
+    // The agent's own run, outside any check, writes the blob while the test passes; then the test fails.
+    spawnSync(join(checkout, 'node_modules/.bin/vitest'), ['run', '--reporter=blob'], { cwd: checkout });
+    expect(existsSync(join(checkout, '.vitest/blob')), 'the blob was written').toBe(true);
+    writeFileSync(join(checkout, 'test/sum.test.js'), `import { expect, test } from 'vitest';\ntest('adds', () => { expect(1 + 2).toBe(4); });\n`);
+    writeFileSync(join(checkout, 'vitest.config.mjs'), `export default { test: { mergeReports: '.vitest/blob' } };\n`);
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    expect(r.outcome, r.output.stdout).toBe('failed');
+  }, 300_000);
+
+  it('Vitest type tests, judged from tsc build info the checkout holds, can\'t pass', async () => {
+    const checkout = folder({
+      'package.json': '{ "type": "module" }\n',
+      'vitest.config.mjs': `export default { test: { include: [], typecheck: { enabled: true, include: ['test/**/*.test-d.ts'] } } };\n`,
+      'tsconfig.json': '{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "target": "es2022", "types": [], "skipLibCheck": true }, "include": ["test"] }\n',
+      'test/a.test-d.ts': `import { expectTypeOf, test } from 'vitest';\ntest('total is a number', () => { expectTypeOf<string>().toEqualTypeOf<number>(); });\n`,
+    }, true);
+    // The agent's own run writes tsc's build info; it then clears the stored errors.
+    spawnSync(join(checkout, 'node_modules/.bin/vitest'), ['run'], { cwd: checkout });
+    const info = join(checkout, 'node_modules/vitest/dist/tsconfig.tmp.tsbuildinfo');
+    writeFileSync(info, JSON.stringify({ ...JSON.parse(readFileSync(info, 'utf8')), semanticDiagnosticsPerFile: [] }));
+    const r = await runCommandCheck(check(checkout, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    expect(r.outcome, r.output.stdout).toBe('failed');
+  }, 300_000);
 });
 
 describe('added tests', () => {
