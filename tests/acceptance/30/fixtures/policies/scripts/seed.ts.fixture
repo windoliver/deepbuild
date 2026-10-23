@@ -1,0 +1,6 @@
+import type { Db } from '../test/db';
+
+// The check's setup: a refund policy row, written here and nowhere in the app itself.
+export function seed(db: Db): void {
+  db.run('INSERT INTO policies (name, days) VALUES (?, ?)', ['refunds', 7]);
+}

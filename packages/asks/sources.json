@@ -472,6 +472,52 @@
     }
   },
   {
+    "source": "supervisor.cleanup",
+    "kind": "unblock",
+    "fixture": {
+      "ask": {
+        "kind": "unblock",
+        "question": "run:01K74FKZVK8Q2X5R7M3N9P4T6W's cleanup couldn't release phone:+15550100. Release it yourself?",
+        "options": [
+          {
+            "id": "done",
+            "label": "I did it",
+            "decision": "none"
+          },
+          {
+            "id": "retire",
+            "label": "Take phone:+15550100 out of its pool",
+            "decision": "none"
+          }
+        ],
+        "recommended": "done",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "retire",
+        "provisional": false,
+        "owner": "you",
+        "key": "5d2c1f7e7b1e4c9a0d8f6a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+        },
+        "steps": [
+          "Release phone:+15550100 where it is held",
+          "Answer \"I did it\": the cleanup check runs again"
+        ],
+        "where": "outside DeepBuild",
+        "why": "run:01K74FX2B4D6F8H0K2M4P6R8T0 needs phone, and phone:+15550100 is still bound",
+        "unblocks": [
+          "run:01K74FX2B4D6F8H0K2M4P6R8T0"
+        ],
+        "proves": "cleanup check of phone:+15550100"
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {
