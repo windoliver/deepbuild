@@ -9,12 +9,14 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openAsks } from '../../asks/src/index.js';
 import type { CheckSpec } from '../../conformance/src/index.js';
 import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
 import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
+import { listSource } from '../src/listing.js';
 import { hiddenChild, untraced } from '../src/shell.js';
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
@@ -347,6 +349,115 @@ describe('what a checkout\'s config makes count as run', () => {
     });
     expect(usual.outcome, usual.failures.map((f) => f.message).join('\n')).toBe('passed');
   }, 300_000);
+});
+
+describe('a test its file holds that never ran', () => {
+  // Config routes no refusal names: each leaves a failing test of a file that runs unrun.
+  it('Vitest setupFiles, Jest setupFilesAfterEnv and a pytest conftest hook that leave a failing test out can\'t pass; a test the source skips can', async () => {
+    const vitest = folder({
+      'package.json': '{ "type": "module" }\n',
+      'vitest.config.mjs': `export default { test: { setupFiles: ['./setup.mjs'] } };\n`,
+      'setup.mjs': `import { beforeEach } from 'vitest';\nbeforeEach((ctx) => { if (ctx.task.name.includes('total')) ctx.skip(); });\n`,
+      'test/a.test.ts': `import { describe, expect, test } from 'vitest';\ndescribe('cart', () => {\n  test('total is 12', () => { expect(11).toBe(12); });\n  test('exists', () => { expect(1).toBe(1); });\n});\n`,
+    }, true);
+    const v = await runCommandCheck(check(vitest, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    expect(v.outcome, v.output.stdout).toBe('failed');
+    expect(v.failures).toEqual([expect.objectContaining({ test: 'cart > total is 12', file: 'test/a.test.ts', line: 3, assertion: false })]);
+    const jest = folder({
+      'package.json': '{ "name": "unit", "private": true, "jest": { "setupFilesAfterEnv": ["./setup.js"] } }\n',
+      'setup.js': `const real = global.test;\nglobal.test = (name, fn) => (name.includes('total') ? real.skip : real)(name, fn);\n`,
+      'a.test.js': `test('total is 12', () => { expect(11).toBe(12); });\ntest('exists', () => { expect(1).toBe(1); });\n`,
+    }, true);
+    const j = await runCommandCheck(check(jest, { spec: { ...VITEST, runner: 'node_modules/.bin/jest' } }));
+    expect(j.outcome, j.output.stderr).toBe('failed');
+    expect(j.failures.map((f) => f.test)).toEqual(['total is 12']);
+    const pytest = folder({
+      'conftest.py': 'def pytest_collection_modifyitems(items):\n    items[:] = [i for i in items if "total" not in i.name]\n',
+      'tests/test_cart.py': 'class TestCart:\n    def test_total(self):\n        assert 11 == 12\n\n\ndef test_exists():\n    pass\n',
+    });
+    const p = await runCommandCheck(check(pytest, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(p.outcome, p.output.stdout).toBe('failed');
+    expect(p.failures).toEqual([expect.objectContaining({ test: 'TestCart::test_total', file: 'tests/test_cart.py', line: 2 })]);
+    // What the source itself skips is no test left out.
+    const skipped = folder({
+      'package.json': '{ "type": "module" }\n',
+      'a.test.js': `import { expect, test } from 'vitest';\ntest.skip('total is 12', () => { expect(11).toBe(12); });\ntest('exists', () => { expect(1).toBe(1); });\n`,
+      'tests/test_cart.py': 'import pytest\n\n\n@pytest.mark.skip\ndef test_total():\n    assert 11 == 12\n\n\ndef test_exists():\n    pass\n',
+    }, true);
+    const sv = await runCommandCheck(check(skipped, { spec: { ...VITEST, runner: 'node_modules/.bin/vitest run' } }));
+    expect(sv.outcome, sv.failures.map((f) => f.message).join('\n')).toBe('passed');
+    const sp = await runCommandCheck(check(skipped, { spec: { ...VITEST, runner: 'python3 -m pytest -q -p no:cacheprovider tests' } }));
+    expect(sp.outcome, sp.failures.map((f) => f.message).join('\n')).toBe('passed');
+  }, 300_000);
+
+  // The listings, read with no run, against each tool's own: any nesting of suites, tests, modifiers and options.
+  const name = fc.stringMatching(/^[a-z][a-z ]{0,6}[a-z]$/);
+  it('a Vitest file lists the tests Vitest\'s own static listing of it lists, under a config of its own', async () => {
+    type Node = { suite: boolean; fn: string; mod: string; options: string; name: string; children: Node[] };
+    const { tree } = fc.letrec<{ tree: Node[]; node: Node }>((tie) => ({
+      tree: fc.array(tie('node'), { minLength: 1, maxLength: 4 }),
+      node: fc.oneof({ depthSize: 'small' },
+        fc.record({ suite: fc.constant(false), fn: fc.constantFrom('test', 'it'), mod: fc.constantFrom('', '.skip', '.todo', '.concurrent', '.fails', '.skipIf(true)', '.runIf(false)'),
+          options: fc.constantFrom('', '{ skip: true }, ', '{ todo: true }, ', '{ timeout: 5000 }, ', '{ tags: [\'db\'] }, '), name, children: fc.constant([] as Node[]) }),
+        fc.record({ suite: fc.constant(true), fn: fc.constantFrom('describe', 'suite'), mod: fc.constantFrom('', '.skip', '.todo', '.concurrent', '.skipIf(true)'),
+          options: fc.constant(''), name, children: tie('tree') })),
+    }));
+    const render = (nodes: Node[]): string => nodes.map((n) => `${n.fn}${n.mod}('${n.name}', ${n.options}() => {${n.suite ? `\n${render(n.children)}\n` : ''}});`).join('\n');
+    const root = folder({ 'package.json': '{ "type": "module" }\n', 'list.config.mjs': 'export default {};\n' });
+    symlinkSync(join(REPO, 'node_modules'), join(root, 'node_modules'));
+    const files = fc.sample(tree, { numRuns: 60, seed: 30 }).map((nodes, i) => {
+      const file = `test/c${i}.test.js`;
+      mkdirSync(join(root, 'test'), { recursive: true });
+      writeFileSync(join(root, file), `import { describe, it, suite, test } from 'vitest';\n${render(nodes)}\n`);
+      return file;
+    });
+    const out = execFileSync(process.execPath, [join(REPO, 'node_modules/vitest/vitest.mjs'), 'list', '--json', '--no-strictTags', '--config', join(root, 'list.config.mjs'), '--root', root], { cwd: root, encoding: 'utf8' });
+    const theirs = JSON.parse(out) as { name: string; file: string }[];
+    expect(theirs.length, 'tests Vitest lists').toBeGreaterThan(20);
+    for (const file of files) {
+      const ours = (await listSource(readFileSync(join(root, file), 'utf8'), file, ' > ')).map((t) => t.test).sort();
+      expect(ours, readFileSync(join(root, file), 'utf8')).toEqual(theirs.filter((t) => t.file === join(root, file)).map((t) => t.name).sort());
+    }
+  }, 120_000);
+
+  it('a Python file lists the tests a default pytest run of it passes', () => {
+    need('python3');
+    type Node = { kind: 'def' | 'class' | 'unit'; base: string; mark: string; body: string; children: Node[] };
+    const { tree } = fc.letrec<{ tree: Node[]; node: Node }>((tie) => ({
+      tree: fc.array(tie('node'), { minLength: 1, maxLength: 4 }),
+      node: fc.oneof({ depthSize: 'small' },
+        fc.record({ kind: fc.constant('def' as const), base: fc.constantFrom('test_a', 'helper', 'testb'), body: fc.constantFrom('pass', 'pytest.skip("x")'),
+          mark: fc.constantFrom('', '@pytest.mark.skip', '@pytest.mark.skipif(True, reason="x")', '@pytest.mark.xfail', '@pytest.fixture', '@pytest.mark.parametrize("v", [1, 2])'), children: fc.constant([] as Node[]) }),
+        fc.record({ kind: fc.constantFrom('class' as const, 'unit' as const), base: fc.constantFrom('TestK', 'Other', 'TestInit'), body: fc.constant(''),
+          mark: fc.constantFrom('', '@pytest.mark.skip'), children: tie('tree') })),
+    }));
+    let k = 0;
+    const render = (nodes: Node[], indent: string, inClass: 'class' | 'unit' | null): string => nodes.map((n) => {
+      const id = `${n.base}_${k++}`;
+      if (n.kind === 'def') {
+        // A unittest method takes no pytest marks; its parameters are its own.
+        const mark = inClass === 'unit' ? (n.mark === '@pytest.mark.skip' ? '@unittest.skip("x")' : '') : n.mark;
+        const params = [...(inClass ? ['self'] : []), ...(mark.includes('parametrize') ? ['v'] : [])].join(', ');
+        return `${mark ? `${indent}${mark}\n` : ''}${indent}def ${id}(${params}):\n${indent}    ${n.body}\n`;
+      }
+      if (inClass === 'unit') return '';
+      const init = n.base === 'TestInit' && n.kind === 'class' ?`${indent}    def __init__(self):\n${indent}        pass\n` : '';
+      return `${n.mark ? `${indent}${n.mark}\n` : ''}${indent}class ${id}${n.kind === 'unit' ? '(unittest.TestCase)' : ''}:\n${indent}    x = 1\n${init}${render(n.children, `${indent}    `, n.kind)}`;
+    }).join('\n');
+    const root = folder({ 'pytest.ini': '[pytest]\n' });
+    const files = fc.sample(tree, { numRuns: 150, seed: 30 }).map((nodes, i) => {
+      writeFileSync(join(root, `test_c${i}.py`), `import unittest\n\nimport pytest\n\n\n${render(nodes, '', null)}`);
+      return `test_c${i}.py`;
+    });
+    const run = spawnSync('python3', ['-m', 'pytest', '-q', '-rA', '-p', 'no:cacheprovider', '-W', 'ignore'], { cwd: root, encoding: 'utf8', env: { ...process.env, PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1', PYTEST_PLUGINS: '' } });
+    const passed = [...run.stdout.matchAll(/^PASSED (\S+)/gm)].map((m) => m[1]!.replace(/\[.*\]$/, ''));
+    expect(passed.length, run.stdout.slice(-2000)).toBeGreaterThan(20);
+    const listing = JSON.parse(execFileSync('python3', ['-c', 'import json, sys; sys.path.insert(0, sys.argv[1]); import deep_check_pytest as d; print(json.dumps({f: [n for n, _ in d._listing(f)] for f in sys.argv[2:]}))', join(REPO, 'packages/checks-command/runtime/python'), ...files], { cwd: root, encoding: 'utf8' })) as Record<string, string[]>;
+    for (const file of files) {
+      const theirs = [...new Set(passed.filter((p) => p.startsWith(`${file}::`)).map((p) => p.slice(file.length + 2)))].sort();
+      expect(listing[file]!.sort(), readFileSync(join(root, file), 'utf8')).toEqual(theirs);
+    }
+  }, 120_000);
 });
 
 describe('added tests', () => {
