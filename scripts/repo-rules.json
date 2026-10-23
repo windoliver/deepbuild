@@ -340,6 +340,18 @@
         }
       }
     },
+    "crates/deep-canvas-test-modules/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #305: the manifest, registrar and kind-entry types a test canvas module registers through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #305: a kind param's default is a JSON value. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-canvas-motion/Cargo.toml": {
       "dependencies": {
         "deep-canvas": {
@@ -491,6 +503,10 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #393: evaluates a revision at the snapshot's declared time."
+        },
+        "deep-canvas-test-modules": {
+          "spec": "* path=../deep-canvas-test-modules",
+          "why": "Issue #305: the test canvas modules a test build compiles in under its test-* features, for the seal's planted faults and the optional-dependency proof; optional, so no shipped build holds them."
         },
         "deep-marks-vello": {
           "spec": "* path=../deep-marks-vello",
