@@ -115,6 +115,11 @@ export function filtersIn(command: string): Set<string> {
   });
   return values;
 }
+/** The command's first program when the shell can't find it on `path`: the command can't start. */
+export function absent(command: string, cwd: string, path: string): string | null {
+  const first = programsIn(command)[0];
+  return first !== undefined && programPath(first, cwd, path) === null ? first : null;
+}
 /** `go test`, whose reads no tracer sees: the run can fail on its report, but can't pass (see the runner). */
 export const GO_TEST = /(?:^|&&|\|\||[;|\n])\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*go\s+test\b/;
 /**
