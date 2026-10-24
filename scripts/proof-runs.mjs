@@ -124,14 +124,15 @@ export function changeCopy(root, change) {
 
 /**
  * Undoes what the change's build wrote in a checkout it ran in, but its output: puts back every file
- * the change holds, and removes any it added that a test run reads as a test's own or as the run's
- * setup: a test, a script under the test paths, a runner config, or a package, as under a
- * node_modules the copy doesn't link to the repository's. Data it generates, such as a table a test
- * reads, stays.
+ * the change holds but those in `keep`, as the mutants StrykerJS writes, and removes any it added that
+ * a test run reads as a test's own or as the run's setup: a test, a script under the test paths or a
+ * file there a resolver tries first for want of an extension, a runner config, a package, as under a
+ * node_modules the copy doesn't link to the repository's, or a link, which can lead a test's imports
+ * anywhere. Data it generates, such as a table a test reads, stays.
  */
-function undoBuild(root, directory) {
-  const held = listFiles(root);
-  const tracked = new Set(held);
+export function undoBuild(root, directory, keep = []) {
+  const held = listFiles(root).filter((path) => !keep.includes(path));
+  const tracked = new Set(listFiles(root));
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
@@ -140,8 +141,9 @@ function undoBuild(root, directory) {
       if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
         if (!existsSync(join(root, path))) rmSync(join(directory, path), { recursive: true, force: true });
         else if (entry.isDirectory() && entry.name.startsWith('@')) walk(path);
-      } else if (entry.isDirectory()) walk(path);
-      else if (!tracked.has(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && /\.[cm]?[jt]sx?$/.test(path)))) rmSync(join(directory, path), { force: true });
+      } else if (entry.isSymbolicLink() && !tracked.has(path)) rmSync(join(directory, path), { force: true });
+      else if (entry.isDirectory()) walk(path);
+      else if (!tracked.has(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && /\.[cm]?[jt]sx?$|(?:^|\/)[^./]+$/.test(path)))) rmSync(join(directory, path), { force: true });
     }
   };
   walk('');
@@ -565,6 +567,7 @@ export function mutation({ root, change }, runs, say, print) {
     }, []).map(([from, to]) => `${path}:${from}-${to}`));
     const directory = copyChange(root, 'deep-proof-mutants-');
     build(directory); // a failed build shows as StrykerJS's failed initial run
+    undoBuild(root, directory);
     // StrykerJS writes each mutated file in place, so a file that is a link out of the copy is refused.
     const outside = typescript.filter(({ path }) => {
       try {
@@ -589,8 +592,10 @@ export function mutation({ root, change }, runs, say, print) {
         node.length && [quote(process.execPath), '--test', ...test ? [`--test-reporter=${quote(REPORTER)}`, '--test-reporter-destination="$R"', `--test-name-pattern=${pattern(' ')}`] : [], ...node.map(quote)].join(' ') + (test ? judge : ''),
         vitest.length && [...test ? ['DEEP_PROOF_VITEST_REPORT="$R"'] : [], quote(process.execPath), 'node_modules/vitest/vitest.mjs', 'run', ...test ? [`--reporter=${quote(VITEST_REPORTER)}`, '-t', pattern(' > ')] : [], ...vitest.map(quote)].join(' ') + (test ? judge : ''),
       ].filter(Boolean).map((run) => (test ? `R=$(mktemp ${quote(reports)}/report.XXXXXX) && { ${run}; }` : run));
-      // Mutants reach a package that tests read through its build only once it is rebuilt.
-      return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null'] : [], ...runs].join(' && ');
+      // Mutants reach a package that tests read through its build only once it is rebuilt, and the
+      // rebuild is undone as the first build was, keeping the mutants.
+      const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))});`;
+      return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
     const groups = unproven.map((test) => [test, command([test.path], test)]);

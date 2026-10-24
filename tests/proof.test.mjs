@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { ISSUE, criterionId, git, named, problems, proof, repo, root, show, write } from './acceptance/569/helpers.mjs';
+import { ISSUE, criterionId, git, named, problems, proof, repo, root, show, strykerPresent, write } from './acceptance/569/helpers.mjs';
 
 const c1 = criterionId(ISSUE, 'Adds');
 const dir = `tests/acceptance/${ISSUE}`;
@@ -528,4 +528,53 @@ test("a fixture project's committed packages a tagged test runs are the change's
   }), ['trace']);
   assert.notEqual(result.status, 0, show(result));
   assert.ok(!result.stdout.includes('PASS before'), show(result));
+});
+
+const workspace = (build, base) => ({
+  '.gitignore': 'node_modules\n', 'package.json': JSON.stringify({ name: 'x', private: true, type: 'module', workspaces: ['packages/*'] }),
+  'package-lock.json': JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', workspaces: ['packages/*'] }, 'node_modules/lib': { resolved: 'packages/lib', link: true }, 'packages/lib': { name: 'lib', version: '1.0.0' } } }),
+  'packages/lib/package.json': JSON.stringify({ name: 'lib', version: '1.0.0', type: 'module', scripts: { build: 'node build.mjs' } }), 'packages/lib/build.mjs': build, ...base,
+});
+
+test("a workspace build can't link a tagged test's helper folder to code planted outside the test paths", (t) => {
+  const plant = "import { mkdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';\nmkdirSync('../../y/z/w', { recursive: true });\nrenameSync('../../tests/acceptance/helpers', '../../y/z/w/helpers');\nsymlinkSync('../../y/z/w/helpers', '../../tests/acceptance/helpers');\nmkdirSync('../../y/packages/lib/src', { recursive: true });\nwriteFileSync('../../y/packages/lib/src/impl.mjs', 'export const f = () => 3;\\n');\n";
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: workspace('// builds\n', {
+      'packages/lib/src/impl.mjs': 'export const f = () => 4;\n', 'tests/acceptance/helpers/h.mjs': "export { f } from '../../../packages/lib/src/impl.mjs';\n",
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from '../helpers/h.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), 3);\n});\n`,
+    }),
+    commits: [{ files: { 'packages/lib/build.mjs': `// builds\n${plant}` }, message: `Edit\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test("a workspace build can't plant an extensionless file a test's require resolves to", (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: workspace('// builds\n', {
+      'package.json': JSON.stringify({ name: 'x', private: true, workspaces: ['packages/*'] }), 'lib/impl.mjs': 'export const f = () => 4;\n', [`${dir}/helper.js`]: 'module.exports = { expected: 3 };\n',
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { createRequire } from 'node:module';\nimport { f } from '../../../lib/impl.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), createRequire(import.meta.url)('./helper').expected);\n});\n`,
+    }),
+    commits: [{ files: { 'packages/lib/build.mjs': `// builds\nimport { writeFileSync } from 'node:fs';\nwriteFileSync('../../${dir}/helper', 'module.exports = { expected: 4 };\\n');\n` }, message: `Edit\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test("a workspace build can't rewrite a hollow tagged test in the copy the mutation lane runs", (t) => {
+  const real = `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from '../../../packages/lib/src/impl.ts';\n\ntest('${c1} sums', () => {\n  assert.equal(f(1, 2), 3);\n});\n`;
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: workspace('// builds\n', {
+      'packages/lib/src/impl.ts': 'export const f = (a: number, b: number) => 0;\n',
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from '../../../packages/lib/src/impl.ts';\n\ntest('${c1} sums', () => {\n  assert.equal(typeof f, 'function');\n});\n`,
+    }),
+    link: true,
+    commits: [{ files: { 'packages/lib/src/impl.ts': 'export const f = (a: number, b: number) => a + b;\n', 'packages/lib/build.mjs': `// builds\nimport { writeFileSync } from 'node:fs';\nwriteFileSync('../../${dir}/a.test.mjs', ${JSON.stringify(real)});\n` }, message: `Edit\n\nCloses #${ISSUE}` }],
+  }), ['--release', 'mutation', 'trace']);
+  if (!strykerPresent()) return assert.ok(problems(result, 'mutation').some((found) => found.startsWith('BLOCKED')), show(result));
+  assert.ok(!result.stdout.includes('PASS mutation'), show(result));
+  assert.notEqual(result.status, 0, show(result));
 });
