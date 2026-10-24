@@ -185,4 +185,32 @@ describe('the hooks-not-reaching reading', () => {
       expect(await readings(), 'turn 1 reached no hook').toEqual(['hooks not reaching DeepBuild']);
     });
   }, 60_000);
+
+  it('judges the last turn when the session ends', async () => {
+    await withHub(async (root, home) => {
+      const now = () => String(BigInt(Date.now()) * 1_000_000n);
+      const { line, hook, readings } = session(root, home, now);
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      // The last turn's call reached no hook, and the session ends.
+      line({ type: 'user', uuid: 'turn-1', message: { role: 'user', content: 'list the files' } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Bash', input: { command: 'ls' } }] } });
+      expect(await hook('SessionEnd', { reason: 'other' })).toContain('"ack"');
+      expect(await readings(), 'the last turn reached no hook').toEqual(['hooks not reaching DeepBuild']);
+    });
+  }, 30_000);
+
+  it('judges an ended session\'s last turn after a restart when its reading never reached the record', async () => {
+    await withHub(async (root, home, { restart, exited }) => {
+      const now = () => String(BigInt(Date.now()) * 1_000_000n);
+      const { line, hook, readings } = session(root, home, now);
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      line({ type: 'user', uuid: 'turn-1', message: { role: 'user', content: 'list the files' } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Bash', input: { command: 'ls' } }] } });
+      // The session ends, and the hub dies appending the reading; no hook of the session comes again.
+      expect(await hook('SessionEnd', { reason: 'other' })).toContain('"ack"');
+      await exited();
+      await restart();
+      expect(await readings(), 'the last turn reached no hook').toEqual(['hooks not reaching DeepBuild']);
+    }, { DEEP_HUB_TEST_CRASH: 'before:session.reading' });
+  }, 30_000);
 });
