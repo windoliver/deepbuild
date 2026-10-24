@@ -48,7 +48,7 @@ export const disk: Durable = {
 type Db = Database.Database;
 
 /** Writes `bytes` to `path` whole and synced: a temp file, fsync, then a rename. */
-function writeSynced(path: string, bytes: Uint8Array): void {
+export function writeSynced(path: string, bytes: Uint8Array): void {
   const tmp = `${path}.tmp`;
   const fd = openSync(tmp, 'w', 0o600);
   try {

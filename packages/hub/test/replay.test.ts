@@ -21,6 +21,13 @@ describe('a running hub', () => {
       const live = request(id, 'pkill -f node');
       // The hub answers and records the call, but deep-hook gave up on the acknowledgement and spooled it late.
       expect(await send(join(root, 'hub.sock'), live)).toContain('"ack"');
+      // The hub acknowledges before it records: the spooled copy comes once the live one is in the record.
+      const recorded = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+      try {
+        for (const until = Date.now() + 3000; Date.now() < until && !recorded.prepare('SELECT 1 FROM events WHERE id = ?').get(id); await new Promise((r) => setTimeout(r, 10)));
+      } finally {
+        recorded.close();
+      }
       mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
       writeFileSync(join(root, 'spool', 'spool.jsonl'), `${live.slice(0, -2)},"late":true}\n`.replace('"matched":[]', '"matched":["no-kill-by-name"]'), { mode: 0o600 });
       expect(await send(join(root, 'hub.sock'), request('01K74FKZVKZGATTBZAEGPRET71', 'ls'))).toContain('"ack"');
@@ -39,6 +46,30 @@ describe('a running hub', () => {
       expect(copies, 'the call is in the record once').toBe(1);
       expect(readings.filter((r) => r.includes(id) && r.includes('no-kill-by-name')), 'a session reading names the late call and its guard entry').toHaveLength(1);
     });
+  }, 30_000);
+
+  it('says so when the spooled copy comes while the live one is still being recorded', async () => {
+    await withHub(async (root) => {
+      const id = '01K74FKZVKZGATTBZAEGPRET80';
+      const live = request(id, 'pkill -f node');
+      // The hub answers the call; its event takes 300 ms to append, and deep-hook spools it late meanwhile.
+      expect(await send(join(root, 'hub.sock'), live)).toContain('"ack"');
+      await new Promise((r) => setTimeout(r, 100));
+      mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
+      writeFileSync(join(root, 'spool', 'spool.jsonl'), `${live.slice(0, -2)},"late":true}\n`.replace('"matched":[]', '"matched":["no-kill-by-name"]'), { mode: 0o600 });
+      expect(await send(join(root, 'hub.sock'), request('01K74FKZVKZGATTBZAEGPRET81', 'ls'))).toContain('"ack"');
+      const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+      let readings: string[] = [];
+      try {
+        for (const until = Date.now() + 5000; Date.now() < until; await new Promise((r) => setTimeout(r, 50))) {
+          readings = (db.prepare("SELECT json_extract(data, '$.reading') AS r FROM events WHERE kind = 'session.reading'").all() as { r: string }[]).map((x) => x.r);
+          if (readings.length && !readdirSync(join(root, 'spool')).length) break;
+        }
+      } finally {
+        db.close();
+      }
+      expect(readings.filter((r) => r.includes(id)), 'a session reading names the late call').toHaveLength(1);
+    }, { DEEP_HUB_TEST_CRASH: 'slow:tool.before' });
   }, 30_000);
 
   it('replays the spool once a hook reaches it, with no restart', async () => {
