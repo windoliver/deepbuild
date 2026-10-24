@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-canvas-motion", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
+members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-gpu", "crates/deep-gpu-layer", "crates/deep-canvas-motion", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
@@ -23,4 +23,15 @@ opt-level = 3
 [profile.dev.package.sha2]
 opt-level = 3
 [profile.dev.package.unicode-normalization]
+opt-level = 3
+
+# Issue #377: the GPU layer's proof binary reads back, hashes and scans for the blank guard every
+# 1936 × 1584 frame of runs 10,000 frames long, and its budgets (a 1 ms handoff at p95, 0.1 ms on
+# the UI thread) are read off the dev binary the acceptance tests run.
+[profile.dev.package.deep-gpu]
+opt-level = 3
+[profile.dev.package.deep-gpu-layer]
+opt-level = 3
+# Its window captures read 2000 × 1648 frames back through the GPUI patch's Metal renderer.
+[profile.dev.package.gpui-pre-apple]
 opt-level = 3
