@@ -7,7 +7,7 @@
 //! As `deep-hook statusline`, Claude Code's status line command, it sends the hub the plan windows the
 //! status line reads (#159), then runs your own status line command and prints what it prints.
 
-use std::fs::{self, DirBuilder, OpenOptions};
+use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
@@ -393,10 +393,12 @@ fn spool(request: &str) -> io::Result<()> {
 fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<()> {
     let path = folder.join("spool.jsonl");
     for _ in 0..3 {
+        let made = !folder.exists();
         DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(folder)?;
+        let fresh = !path.exists();
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -417,9 +419,20 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
         }
         let written = file.metadata()?;
         match fs::metadata(&path) {
-            Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => return Ok(()),
+            Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => {}
             _ => continue,
         }
+        // Synced before the hook returns, the line and the names that lead to it: a power cut keeps what ran.
+        file.sync_data()?;
+        if fresh {
+            File::open(folder)?.sync_all()?;
+        }
+        if made {
+            if let Some(parent) = folder.parent() {
+                File::open(parent)?.sync_all()?;
+            }
+        }
+        return Ok(());
     }
     Err(io::Error::other(
         "the spool line was cut or moved in each of three tries",

@@ -453,8 +453,11 @@ export class Core {
       const { size } = await handle.stat();
       // At most TRANSCRIPT_STEP is held at once: more growth than that is read a step at a time.
       while (size > session.read) {
-        const text = Buffer.alloc(Math.min(size - session.read, TRANSCRIPT_STEP));
-        await handle.read(text, 0, text.length, session.read);
+        const want = Buffer.alloc(Math.min(size - session.read, TRANSCRIPT_STEP));
+        // Only the bytes the read returned: a transcript cut shorter since the stat returns fewer.
+        const { bytesRead } = await handle.read(want, 0, want.length, session.read);
+        if (!bytesRead) return;
+        const text = want.subarray(0, bytesRead);
         // Only whole lines: a line still being written is read with the next hook. A line longer than a step is
         // passed over; what is left of it doesn't parse, as no prompt or call longer than a step would.
         let end = text.lastIndexOf(0x0a) + 1;
