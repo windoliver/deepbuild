@@ -186,9 +186,13 @@ export class Projector {
       this.stmt('INSERT INTO sessions (id, last_seen) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = MAX(COALESCE(sessions.last_seen, excluded.last_seen), excluded.last_seen)').run(e.session, e.ts);
       // A new prompt resumes a session that had finished: it is active again until its next end.
       if (e.kind === 'user.ask') this.stmt("UPDATE sessions SET status = 'running', ended_log_pos = NULL WHERE id = ? AND status IN ('finished', 'failed')").run(e.session);
-      this.turn(e, d);
+      // A reading the hub took of a session is about it, never one of its turn's events.
+      if (e.kind !== 'session.reading') this.turn(e, d);
     }
     switch (e.kind) {
+      case 'session.reading':
+        if (e.session) this.add('session_readings', { session_id: e.session, reading: str(d.reading), since: e.log_pos });
+        break;
       case 'session.start':
         // The start's values are the session's first: a worktree the app recorded since, if the start landed late, stands.
         if (e.session) this.fill('sessions', { id: e.session, agent: str(d.agent), worktree: str(d.worktree), branch: str(d.branch), thread_id: str(d.thread), project_id: e.project });
@@ -277,11 +281,26 @@ export class Projector {
         break;
       }
       case 'ask.later':
-        // Only an ask still waiting can wait longer.
-        this.stmt("UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later')").run(int(d.until), bare(e.subject));
+        // Only an ask still waiting can wait longer, never to its deadline. The core records it, once your Later
+        // on the trusted path passes its checks, under the identity the ask was raised for; an app's or the CLI's
+        // own event changes nothing.
+        if (e.writer !== 'core') break;
+        // For the exception, never past the earliest deadline among the open asks it holds: those raised after it in
+        // the log, in its thread under its identity, as the core counts them; not one from the same instant before it.
+        this.stmt(`UPDATE asks SET status = 'later', later_until = ? WHERE id = ? AND status IN ('open', 'later') AND deadline > ?
+          AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)
+          AND NOT EXISTS (SELECT 1 FROM asks held JOIN events he ON he.id = held.id JOIN events ee ON ee.id = asks.id
+            WHERE asks.kind = 'exception' AND held.kind != 'exception' AND held.status IN ('open', 'later')
+              AND he.log_pos > ee.log_pos AND he.actor = ee.actor AND he.scope = ee.scope
+              AND COALESCE((SELECT thread_id FROM sessions WHERE id = held.session_id), held.session_id)
+                = COALESCE((SELECT thread_id FROM sessions WHERE id = asks.session_id), asks.session_id)
+              AND held.deadline <= ?)`).run(int(d.until), bare(e.subject), int(d.until), e.actor, e.scope, int(d.until));
         break;
       case 'ask.batched':
-        if (Array.isArray(d.asks)) for (const a of d.asks) if (isObj(a)) this.set('asks', { batch_id: str(d.batch) }, { id: bare(a.ask) });
+        // Shown again: an ask hidden by Later is back to open.
+        // Only the core shows an ask, under the identity it was raised for.
+        if (e.writer !== 'core' || !Array.isArray(d.asks)) break;
+        for (const a of d.asks) if (isObj(a)) this.stmt("UPDATE asks SET batch_id = ?, status = CASE status WHEN 'later' THEN 'open' ELSE status END WHERE id = ? AND EXISTS (SELECT 1 FROM events WHERE events.id = asks.id AND actor = ? AND scope = ?)").run(str(d.batch), bare(a.ask), e.actor, e.scope);
         break;
       case 'decision.created':
         this.up('decisions', { id: e.id, key: str(d.key), scope: json(d.scope), answer: json(d.answer), by: e.actor, ask_id: bare(d.ask), state: 'active', created: e.ts });

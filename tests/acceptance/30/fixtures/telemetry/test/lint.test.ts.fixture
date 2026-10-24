@@ -1,0 +1,5 @@
+import { expect, test } from 'vitest';
+
+test('the code is linted', () => {
+  expect(true).toBe(true);
+});

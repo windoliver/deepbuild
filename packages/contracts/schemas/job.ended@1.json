@@ -1,0 +1,201 @@
+{
+  "title": "job.ended@1",
+  "description": "How one of DeepBuild's own jobs ended: finished with its final result, stopped with every process proven gone, refused before it started, or lost to a crash and reported, never run again; with what the runner read from its own output.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "job.ended"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "job": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "The job's run: handle.",
+          "maxLength": 8192
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "finished, stopped, refused or lost."
+        },
+        "refused": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Why it never started, naming what refused it."
+        },
+        "cause": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Its stop's cause, from agent.stop@2's closed set."
+        },
+        "session": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The session ID read from its own output."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The model that answered, read from its output as its facts say, or unknown."
+        },
+        "binary": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "The binary resolved on the login shell PATH."
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "Its version, as it printed it."
+            }
+          },
+          "required": [
+            "path",
+            "version"
+          ],
+          "additionalProperties": false,
+          "description": "The binary it ran."
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Input tokens, cache writes included."
+            },
+            "cached": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Cache-read tokens."
+            },
+            "output": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Output tokens."
+            }
+          },
+          "required": [
+            "input",
+            "cached",
+            "output"
+          ],
+          "additionalProperties": false,
+          "description": "Its usage, by the agent's counting rules."
+        },
+        "cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The cost its output reported, in dollars."
+        },
+        "lingered": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "pid:<n>"
+          },
+          "description": "What was still running after its final result's grace and was stopped."
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When its process started, ms since the epoch."
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "When every process of it was proven gone, ms since the epoch."
+        }
+      },
+      "required": [
+        "job",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
