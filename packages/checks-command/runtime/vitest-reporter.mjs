@@ -80,7 +80,11 @@ export default class DeepCheckReporter {
   }
 
   onTestRunEnd(modules, unhandled) {
-    for (const m of modules ?? []) for (const e of m.errors?.() ?? []) write({ type: 'file:fail', file: m.moduleId, errors: [errorOf(e)] });
+    for (const m of modules ?? []) {
+      // Each file that ran, so the runner can list its tests from its source and find any that never ran.
+      write({ type: 'file:ran', tool: 'vitest', file: m.moduleId, errors: [] });
+      for (const e of m.errors?.() ?? []) write({ type: 'file:fail', file: m.moduleId, errors: [errorOf(e)] });
+    }
     for (const e of unhandled ?? []) write({ type: 'run:error', file: null, errors: [errorOf(e)] });
     close();
   }
