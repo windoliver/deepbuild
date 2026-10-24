@@ -1,12 +1,15 @@
 //! deep-hook: every agent hook runs it as `deep-hook <agent> <event>` with the hook's JSON on stdin. It
-//! stamps the call with its seq and id, forwards it to the hub at the address setting, and prints the
-//! hub's reply. When the hub isn't there, refuses the request, or doesn't acknowledge it within 50 ms of
-//! the hook's start, it allows the call and spools the request byte for byte for the hub to replay.
+//! stamps the call with its seq and id from one read of the wall clock, matches it against the guard
+//! entries in ~/.deepbuild/rules.json, forwards it to the hub at the address setting, and prints the
+//! hub's reply. When the hub isn't there, refuses the request, sends a reply that doesn't parse, doesn't
+//! acknowledge it in time, or doesn't reply by the hold it acknowledged, it denies a call a fail_closed
+//! entry matches, allows every other call, and spools the request byte for byte for the hub to replay.
 //! As `deep-hook statusline`, Claude Code's status line command, it sends the hub the plan windows the
 //! status line reads (#159), then runs your own status line command and prints what it prints.
 
-use std::fs::{self, OpenOptions};
+use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::{Command, ExitCode, Stdio};
@@ -15,10 +18,19 @@ use std::{env, io};
 
 use deep_contracts::{parse, Value};
 
-/// How long the hub has to acknowledge a request, from the hook's start.
-const ACK_BUDGET: Duration = Duration::from_millis(50);
-/// How long a reply the hub acknowledged with no hold may take after the acknowledgement.
-const REPLY_BUDGET: Duration = Duration::from_secs(1);
+/// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
+/// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
+const ACK_BUDGET: Duration = Duration::from_millis(20);
+
+/// The environment variables that make an agent bill an API account instead of your plan. SessionStart
+/// reports whether each is set, never its value.
+const BILLING_KEYS: &[&str] = &[
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "OPENAI_API_KEY",
+];
 
 /// The features this build supports; the request carries only those the hub lists too.
 fn features() -> &'static [&'static str] {
@@ -35,14 +47,11 @@ fn home() -> PathBuf {
 
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
 fn address() -> PathBuf {
-    let configured = fs::read_to_string(home().join("config.json"))
-        .ok()
-        .and_then(|text| parse(&text).ok())
-        .and_then(|config| {
-            member(&config, "hub")
-                .and_then(|hub| member(hub, "address"))
-                .cloned()
-        });
+    let configured = read_json(home().join("config.json")).and_then(|config| {
+        member(&config, "hub")
+            .and_then(|hub| member(hub, "address"))
+            .cloned()
+    });
     match configured {
         Some(Value::String(address)) if address.starts_with("unix:") => {
             PathBuf::from(&address[5..])
@@ -51,11 +60,33 @@ fn address() -> PathBuf {
     }
 }
 
+fn read_json(path: PathBuf) -> Option<Value> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|text| parse(&text).ok())
+}
+
 fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     match value {
         Value::Object(members) => members.iter().find(|(k, _)| k == key).map(|(_, v)| v),
         _ => None,
     }
+}
+
+/// The wall clock in nanoseconds since the Unix epoch, read once when the hook starts. A debug build takes
+/// it from DEEP_HOOK_TEST_CLOCK_NS when a test sets it.
+fn wall_clock_ns() -> u128 {
+    #[cfg(debug_assertions)]
+    if let Some(ns) = env::var("DEEP_HOOK_TEST_CLOCK_NS")
+        .ok()
+        .and_then(|text| text.parse::<u64>().ok())
+    {
+        return u128::from(ns);
+    }
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
 }
 
 const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -81,26 +112,123 @@ fn quoted(text: &str) -> String {
     deep_contracts::jcs(&Value::String(text.to_string()))
 }
 
-/// What the hub's reply came to, or why deep-hook acts as it does with the hub down.
+// ---- Guards.
+
+/// A guard entry from rules.json, as far as deep-hook acts on it with the hub away.
+struct Guard {
+    name: String,
+    pattern: Option<String>,
+    fail_closed: bool,
+    reason: String,
+    next_step: String,
+}
+
+/// The entries of ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}}`; none when it is missing.
+fn guards() -> Vec<Guard> {
+    let Some(rules) = read_json(home().join("rules.json")) else {
+        return Vec::new();
+    };
+    let Some(Value::Object(entries)) = member(&rules, "entries") else {
+        return Vec::new();
+    };
+    let text = |entry: &Value, key: &str| match member(entry, key) {
+        Some(Value::String(s)) => s.clone(),
+        _ => String::new(),
+    };
+    entries
+        .iter()
+        .map(|(name, entry)| Guard {
+            name: name.clone(),
+            pattern: text(entry, "match")
+                .strip_prefix("shell:")
+                .map(str::to_string),
+            fail_closed: matches!(member(entry, "fail_closed"), Some(Value::Bool(true))),
+            reason: text(entry, "reason"),
+            next_step: text(entry, "next_step"),
+        })
+        .collect()
+}
+
+/// The shell command a call runs: a Bash tool call's `tool_input.command`.
+fn command(payload: &Value) -> Option<&str> {
+    match (
+        member(payload, "tool_name"),
+        member(payload, "tool_input").and_then(|input| member(input, "command")),
+    ) {
+        (Some(Value::String(tool)), Some(Value::String(command))) if tool == "Bash" => {
+            Some(command)
+        }
+        _ => None,
+    }
+}
+
+/// Whether `text` matches `glob` whole, where `*` matches any run of characters, spaces included.
+fn glob(glob: &[u8], text: &[u8]) -> bool {
+    let (mut g, mut t) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while t < text.len() {
+        if g < glob.len() && glob[g] == b'*' {
+            star = Some((g, t));
+            g += 1;
+        } else if g < glob.len() && glob[g] == text[t] {
+            g += 1;
+            t += 1;
+        } else if let Some((sg, st)) = star {
+            g = sg + 1;
+            t = st + 1;
+            star = Some((sg, st + 1));
+        } else {
+            return false;
+        }
+    }
+    glob[g..].iter().all(|&c| c == b'*')
+}
+
+// ---- The exchange with the hub.
+
+/// What the hub's reply came to, or how deep-hook came to act as it does with the hub away.
 enum Outcome {
     Reply {
         exit: u8,
         stdout: String,
         stderr: String,
     },
-    Down,
+    /// The hub isn't there, refused the request or sent what doesn't parse; `late` when it was there but
+    /// didn't acknowledge in time or didn't reply by its hold.
+    Down { late: bool },
 }
 
-fn read_line(reader: &mut BufReader<UnixStream>, deadline: Instant) -> Option<Value> {
-    let left = deadline.checked_duration_since(Instant::now())?;
-    reader
-        .get_ref()
-        .set_read_timeout(Some(left.max(Duration::from_millis(1))))
-        .ok()?;
+enum Got {
+    Line(String),
+    Timeout,
+    Closed,
+}
+
+/// Reads one line by `deadline`, or with no deadline at all.
+fn read_line(reader: &mut BufReader<UnixStream>, deadline: Option<Instant>) -> Got {
+    // A line already read off the socket is in time, whatever the clock says now.
+    if reader.buffer().contains(&b'\n') {
+        let mut text = String::new();
+        return match reader.read_line(&mut text) {
+            Ok(_) => Got::Line(text),
+            Err(_) => Got::Closed,
+        };
+    }
+    let left = match deadline {
+        Some(deadline) => match deadline.checked_duration_since(Instant::now()) {
+            Some(left) if !left.is_zero() => Some(left),
+            _ => return Got::Timeout,
+        },
+        None => None,
+    };
+    if reader.get_ref().set_read_timeout(left).is_err() {
+        return Got::Closed;
+    }
     let mut line = String::new();
     match reader.read_line(&mut line) {
-        Ok(n) if n > 0 && line.ends_with('\n') => parse(line.trim_end()).ok(),
-        _ => None,
+        Ok(n) if n > 0 && line.ends_with('\n') => Got::Line(line),
+        Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => Got::Timeout,
+        _ => Got::Closed,
     }
 }
 
@@ -111,26 +239,33 @@ fn integer(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-/// One exchange with the hub: its hello, the request, its acknowledgement and its reply. Returns the line sent.
-fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>, Outcome) {
-    let deadline = start + ACK_BUDGET;
+/// One exchange with the hub: its hello, the request, its acknowledgement and its reply. Returns the line
+/// sent, the outcome, and the last line the hub wrote (only a planted build prints it).
+fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>, Outcome, String) {
+    let ack_due = start + ACK_BUDGET;
+    // Only the planted connect-timeout-only build reads with no deadline.
+    let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
+    let late = Outcome::Down { late: true };
+    let down = Outcome::Down { late: false };
     let stream = match UnixStream::connect(address()) {
         Ok(stream) => stream,
-        Err(_) => return (None, Outcome::Down),
+        Err(_) => return (None, down, String::new()),
     };
     let mut reader = BufReader::new(stream);
-    let Some(hello) = read_line(&mut reader, deadline) else {
-        return (None, Outcome::Down);
+    let hello = match read_line(&mut reader, ack_deadline) {
+        Got::Line(text) => text,
+        Got::Timeout => return (None, late, String::new()),
+        Got::Closed => return (None, down, String::new()),
     };
-    let listed: Vec<String> = match member(&hello, "features") {
+    let Ok(hello_value) = parse(hello.trim_end()) else {
+        return (None, down, hello);
+    };
+    let listed: Vec<String> = match member(&hello_value, "features") {
         Some(Value::Array(items)) => items
             .iter()
-            .filter_map(|f| {
-                if let Value::String(s) = f {
-                    Some(s.clone())
-                } else {
-                    None
-                }
+            .filter_map(|f| match f {
+                Value::String(s) => Some(s.clone()),
+                _ => None,
             })
             .collect(),
         _ => Vec::new(),
@@ -141,30 +276,51 @@ fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>
         .filter(|f| listed.iter().any(|l| l == f))
         .collect();
     let request = line(&on);
-    if reader.get_mut().write_all(request.as_bytes()).is_err() {
-        return (Some(request), Outcome::Down);
+    // Past the deadline already, the request isn't sent: the spooled copy, marked late, is the one recorded.
+    if ack_deadline.is_some_and(|due| Instant::now() >= due) {
+        return (Some(request), late, hello);
     }
-    // The first line back must be the acknowledgement; a refusal, or anything else, is the hub down.
-    let Some(ack) = read_line(&mut reader, deadline) else {
-        return (Some(request), Outcome::Down);
+    // A hub that stops reading can't hold the write past the deadline either.
+    let left = ack_due
+        .checked_duration_since(Instant::now())
+        .unwrap_or(Duration::from_millis(1));
+    let _ = reader
+        .get_ref()
+        .set_write_timeout(ack_deadline.map(|_| left.max(Duration::from_millis(1))));
+    if let Err(error) = reader.get_mut().write_all(request.as_bytes()) {
+        let late = matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut);
+        return (Some(request), Outcome::Down { late }, hello);
+    }
+    // The first line back must be the acknowledgement; a refusal, or anything else, is the hub away.
+    let ack_text = match read_line(&mut reader, ack_deadline) {
+        Got::Line(text) => text,
+        Got::Timeout => return (Some(request), late, hello),
+        Got::Closed => return (Some(request), down, hello),
     };
-    if member(&ack, "ack").is_none() || member(&ack, "v").is_none() {
-        return (Some(request), Outcome::Down);
-    }
+    let ack = match parse(ack_text.trim_end()) {
+        Ok(ack) if member(&ack, "ack").is_some() && member(&ack, "v").is_some() => ack,
+        _ => return (Some(request), down, ack_text),
+    };
+    // A reply is due by the hold the hub acknowledged, however far ahead; with no hold, by the same deadline.
     let due = match integer(member(&ack, "hold_until_ms")) {
-        Some(ms) => {
+        Some(ms) if !cfg!(feature = "plant-fixed-deadline") => {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as f64;
-            Instant::now() + Duration::from_millis((ms - now).max(0.0) as u64)
+            Some(Instant::now() + Duration::from_millis((ms - now).max(0.0) as u64))
         }
-        None => Instant::now() + REPLY_BUDGET,
+        _ => ack_deadline,
     };
-    let Some(reply) = read_line(&mut reader, due) else {
-        return (Some(request), Outcome::Down);
+    let reply_text = match read_line(&mut reader, due) {
+        Got::Line(text) => text,
+        Got::Timeout => return (Some(request), late, ack_text),
+        Got::Closed => return (Some(request), down, ack_text),
     };
     // Only a reply that holds to hook.reply@2 is printed; never bytes deep-hook couldn't parse.
+    let Ok(reply) = parse(reply_text.trim_end()) else {
+        return (Some(request), down, reply_text);
+    };
     match (
         member(&reply, "v"),
         integer(member(&reply, "exit")),
@@ -174,44 +330,90 @@ fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>
         (Some(_), Some(exit), Some(Value::String(stdout)), Some(Value::String(stderr)))
             if (0.0..=255.0).contains(&exit) =>
         {
-            (
-                Some(request),
-                Outcome::Reply {
-                    exit: exit as u8,
-                    stdout: stdout.clone(),
-                    stderr: stderr.clone(),
-                },
-            )
+            let outcome = Outcome::Reply {
+                exit: exit as u8,
+                stdout: stdout.clone(),
+                stderr: stderr.clone(),
+            };
+            (Some(request), outcome, reply_text)
         }
-        _ => (Some(request), Outcome::Down),
+        _ => (Some(request), down, reply_text),
     }
 }
 
-/// Saves the request as one append of one line, in a file of its own, for the hub to replay when it starts.
-fn spool(request: &str, id: &str) -> io::Result<()> {
+/// Appends the request as one write of one line to the spool every deep-hook shares, for the hub to replay
+/// when it starts. A debug build holds after DEEP_HOOK_TEST_SPOOL_STALL bytes, so a test can cut the write.
+fn spool(request: &str) -> io::Result<()> {
     let folder = home().join("spool");
-    fs::create_dir_all(&folder)?;
+    DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&folder)?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(folder.join(format!("{}-{id}.jsonl", std::process::id())))?;
+        .mode(0o600)
+        .open(folder.join("spool.jsonl"))?;
+    #[cfg(debug_assertions)]
+    if let Some(n) = env::var("DEEP_HOOK_TEST_SPOOL_STALL")
+        .ok()
+        .and_then(|text| text.parse::<usize>().ok())
+    {
+        file.write_all(&request.as_bytes()[..n.min(request.len())])?;
+        loop {
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    }
     file.write_all(request.as_bytes())
 }
 
 fn forward(agent: &str, event: &str) -> ExitCode {
     let start = Instant::now();
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let seq = now.as_nanos().min(i64::MAX as u128).to_string();
-    let id = ulid(now.as_millis());
+    let now = wall_clock_ns();
+    let seq = now.min(i64::MAX as u128).to_string();
+    let id = ulid(now / 1_000_000);
     let mut input = String::new();
     let _ = io::stdin().read_to_string(&mut input);
+    let parsed = parse(&input).ok();
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
-    let payload = if parse(&input).is_ok() {
+    let payload = if parsed.is_some() {
         input.trim().replace(['\n', '\r'], " ")
     } else {
         quoted(&input)
+    };
+    let guards = guards();
+    let called = parsed.as_ref().and_then(command);
+    let matched: Vec<&Guard> = guards
+        .iter()
+        .filter(|g| match (&g.pattern, called) {
+            (Some(pattern), Some(command)) => glob(pattern.as_bytes(), command.as_bytes()),
+            _ => false,
+        })
+        .collect();
+    let names = matched
+        .iter()
+        .map(|g| quoted(&g.name))
+        .collect::<Vec<_>>()
+        .join(",");
+    // At SessionStart, whether each billing key is set in the environment the agent gave this process.
+    let billing = if event == "SessionStart" {
+        let keys = BILLING_KEYS
+            .iter()
+            .map(|key| {
+                // A key counts when set; a CLAUDE_CODE_USE_ switch only when on, as Claude Code reads it.
+                let value = env::var(key).unwrap_or_default().to_ascii_lowercase();
+                let set = if key.starts_with("CLAUDE_CODE_USE_") {
+                    matches!(value.as_str(), "1" | "true" | "yes" | "on")
+                } else {
+                    !value.is_empty()
+                };
+                format!("\"{key}\":{set}")
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(",\"billing\":{{{keys}}}")
+    } else {
+        String::new()
     };
     let force =
         cfg!(feature = "plant-f-test") && env::var("DEEP_HOOK_FORCE_F_TEST").as_deref() == Ok("1");
@@ -222,36 +424,51 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             ""
         };
         format!(
-            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[],\"payload\":{payload}{f_test}}}\n",
+            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}],\"payload\":{payload}{billing}{f_test}}}\n",
             quoted(agent),
             quoted(event),
             std::process::id(),
             std::os::unix::process::parent_id(),
         )
     };
-    match exchange(start, line) {
-        (
-            _,
-            Outcome::Reply {
-                exit,
-                stdout,
-                stderr,
-            },
-        ) => {
+    let (sent, outcome, last) = exchange(start, line);
+    let late = match outcome {
+        Outcome::Reply {
+            exit,
+            stdout,
+            stderr,
+        } => {
             print!("{stdout}");
             eprint!("{stderr}");
-            ExitCode::from(exit)
+            return ExitCode::from(exit);
         }
-        (sent, Outcome::Down) => {
-            let request = sent.unwrap_or_else(|| line(&[]));
-            if let Err(error) = spool(&request, &id) {
-                if error.kind() != ErrorKind::Interrupted {
-                    eprintln!("deep-hook: could not spool {id}: {error}");
-                }
-            }
-            // With the hub down the call is allowed; the fail_closed entries come with the matcher (#17).
-            ExitCode::SUCCESS
+        Outcome::Down { late } => late,
+    };
+    if cfg!(feature = "plant-print-reply") {
+        print!("{last}");
+    }
+    let mut request = sent.unwrap_or_else(|| line(&[]));
+    if late {
+        // A call let through because the hub was late is spooled marked late.
+        request.truncate(request.len() - 2);
+        request.push_str(",\"late\":true}\n");
+    }
+    // With the hub away, a fail_closed entry the call matched still denies it.
+    let denied = matched
+        .iter()
+        .find(|g| g.fail_closed && event == "PreToolUse");
+    if let Err(error) = spool(&request) {
+        eprintln!("deep-hook: could not spool {id}: {error}");
+    }
+    match denied {
+        Some(guard) => {
+            eprintln!(
+                "DeepBuild blocked this: {} {} (guard {}, which holds while the hub doesn't answer)",
+                guard.reason, guard.next_step, guard.name
+            );
+            ExitCode::from(2)
         }
+        None => ExitCode::SUCCESS,
     }
 }
 
@@ -351,13 +568,15 @@ fn send(line: &str) {
         return;
     };
     let mut reader = BufReader::new(stream);
-    if read_line(&mut reader, start + SEND_BUDGET).is_some()
-        && reader
-            .get_mut()
-            .write_all(format!("{line}\n").as_bytes())
-            .is_ok()
+    if matches!(
+        read_line(&mut reader, Some(start + SEND_BUDGET)),
+        Got::Line(_)
+    ) && reader
+        .get_mut()
+        .write_all(format!("{line}\n").as_bytes())
+        .is_ok()
     {
-        let _ = read_line(&mut reader, Instant::now() + SEND_BUDGET);
+        let _ = read_line(&mut reader, Some(Instant::now() + SEND_BUDGET));
     }
 }
 
@@ -380,4 +599,21 @@ fn main() -> ExitCode {
         }
     }
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::glob;
+
+    #[test]
+    fn a_star_matches_any_run_and_the_rest_matches_whole() {
+        assert!(glob(b"pkill *", b"pkill -f node"));
+        assert!(glob(b"ls*", b"ls"));
+        assert!(glob(b"ls*", b"ls -la"));
+        assert!(!glob(b"pkill *", b"git push origin main"));
+        assert!(!glob(b"pkill *", b"pkill"));
+        assert!(!glob(b"ls*", b"echo ls"));
+        assert!(glob(b"a*b*c", b"a xx b yy c"));
+        assert!(!glob(b"a*b*c", b"a xx b yy"));
+    }
 }
