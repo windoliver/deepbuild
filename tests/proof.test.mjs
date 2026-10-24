@@ -352,3 +352,21 @@ test('a file a config-named setup file reaches by a template literal or a path f
   }), ['guard']);
   for (const path of ['tests/hook.ts', 'tests/root.ts']) assert.ok(problems(result, 'guard').some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), show(result));
 });
+
+test('a helper read as its folder, and files a resolver may take in place of a guarded one, are guarded as it is', (t) => {
+  const reads = (from) => `import { it } from 'vitest';\nimport cases from '${from}';\n\nit('${c1} sums', () => {\n  if (cases.want !== 3) throw Error('wrong');\n});\n`;
+  const scene = (files) => repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n', 'vitest.config.ts': "export default { test: { setupFiles: ['./tests/setup'] } };\n", 'tests/setup/index.ts': '// setup\n',
+      [`${dir}/cases/index.ts`]: 'export default { want: 3 };\n', [`${dir}/a.test.ts`]: reads('./cases'),
+      [`${dir}/more.ts`]: 'export default { want: 3 };\n', [`${dir}/b.test.ts`]: reads('./more').replace('sums', 'sums more'),
+    },
+    commits: [{ files, message: `Edit\n\nPart of #${ISSUE}` }],
+  });
+  const edited = problems(proof(scene({ [`${dir}/cases/index.ts`]: 'export default { want: 5 };\n' }), ['guard']), 'guard');
+  assert.ok(edited.some((found) => found.startsWith(`FAIL guard: ${dir}/cases/index.ts: 1 line removed or changed; read by ${dir}/a.test.ts › ${c1} sums`)), edited.join('\n'));
+  const added = problems(proof(scene({ [`${dir}/cases.json`]: '{ "want": 5 }\n', [`${dir}/more`]: 'export default { want: 5 };\n', 'tests/setup/package.json': '{ "main": "hooks.ts" }\n' }), ['guard']), 'guard');
+  for (const [held, by] of [[`${dir}/cases/index.ts`, `${dir}/cases.json`], [`${dir}/more.ts`, `${dir}/more`], ['tests/setup/index.ts', 'tests/setup/package.json']])
+    assert.ok(added.some((found) => found.startsWith(`FAIL guard: ${held}: `) && found.includes(`shadowed by ${by}, added beside it`)), `${held} by ${by}\n${added.join('\n')}`);
+});

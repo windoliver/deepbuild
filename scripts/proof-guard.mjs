@@ -242,14 +242,19 @@ function fixtureEdits(root, commit, file, before, relevant) {
 const SCRIPTS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx'];
 const SCRIPT = /\.[cm]?[jt]sx?$/;
 
-// The scripts under the test paths, other than tests, that the commit's parent holds and an added
-// script may stand in for: one of the same name with another script extension, as check.js for
-// check.ts, or a folder's index the added file's name would resolve to first.
+// The files under the test paths, other than tests, that the commit's parent holds and an added file
+// may stand in for as a resolver picks a module: one of the same name with another extension or none,
+// as check.js or cases.json for check.ts or cases.ts, one named as a folder whose index is held, or a
+// package.json in that folder, whose main a resolver reads before the index.
 function shadows(root, commit, path) {
-  if (!SCRIPT.test(path) || !underTestPaths(path) || isTestFile(path)) return [];
-  const stem = path.replace(SCRIPT, '');
+  if (!underTestPaths(path) || isTestFile(path)) return [];
+  const bare = (file) => file.replace(/\.[^./]+$/, '');
   const held = git(root, ['ls-tree', '-r', '-z', '--name-only', commit.parent, '--', posix.dirname(path)]).split('\0').filter(Boolean);
-  return held.filter((other) => other !== path && SCRIPT.test(other) && !isTestFile(other) && [stem, `${stem}/index`].includes(other.replace(SCRIPT, '')));
+  return held.filter((other) => {
+    if (other === path || isTestFile(other)) return false;
+    const stem = bare(other), index = basename(stem) === 'index' ? dirname(stem) : null;
+    return bare(path) === stem || bare(path) === index || (basename(path) === 'package.json' && dirname(path) === index);
+  });
 }
 
 // The tagged tests whose span, or whose file, names the fixture's path, from the repo root or the
@@ -277,7 +282,10 @@ function readersOf(root, rev, path, relevant, seen = new Set([path])) {
     const near = dirname(path) === dirname(file) || dirname(path).startsWith(`${dirname(file)}/`);
     const folder = posix.relative(dirname(file), dirname(path));
     const tails = (name) => name.split('/').map((_, at, parts) => parts.slice(at).join('/'));
-    const mentions = (text) => [path, relative, `./${relative}`].flatMap(forms).some((name) => delimited(name).test(text))
+    // A folder's index is also imported by its folder, as ./cases names cases/index.ts.
+    const index = stem && basename(stem) === 'index' ? posix.relative(dirname(file), dirname(path)) : '';
+    const names = [...[path, relative, `./${relative}`].flatMap(forms), ...(index ? [dirname(path), index.startsWith('..') ? index : `./${index}`] : [])];
+    const mentions = (text) => names.some((name) => delimited(name).test(text))
       || (near && (tails(relative).some((tail) => delimited(tail).test(text))
         || (folder !== '' && tails(folder).some((tail) => RegExp(`(?:^|['"\`(\\s,]|\\}/)(?:\\./)?${escape(tail)}/\\$\\{`, 'm').test(text)))));
     if (!mentions(source)) continue;
