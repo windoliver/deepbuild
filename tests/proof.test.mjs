@@ -424,3 +424,17 @@ test('a file beside a helper tests import by its whole name, and a fixture proje
   }), ['guard']);
   assert.deepEqual(problems(result, 'guard'), [], show(result));
 });
+
+test('once main holds the proof lanes, a package beside a shared helper, and a setup file a config names by a call, are guarded; code under test in a fixtures folder is not a fixture', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n', 'tests/support/check.mjs': "export { expect } from 'chai';\n", 'vitest.config.ts': "export default { test: { setupFiles: fileURLToPath(new URL('./vitest.setup.ts', import.meta.url)) } };\n", 'vitest.setup.ts': '// setup\n',
+      'lib/fixtures/factory.mjs': 'export const make = () => 4;\n', [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { make } from '../../../lib/fixtures/factory.mjs';\n\ntest('${c1} makes', () => {\n  assert.equal(make(), 3);\n});\n`,
+    },
+    commits: [{ files: { 'tests/support/node_modules/chai/index.js': 'export const expect = () => ({});\n', 'vitest.setup.ts': '// hollow\n', 'lib/fixtures/factory.mjs': 'export const make = () => 3;\n' }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  const refused = problems(result, 'guard');
+  for (const path of ['tests/support/node_modules/chai/index.js', 'vitest.setup.ts']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: `)), show(result));
+  assert.ok(!refused.some((found) => found.includes('lib/fixtures/factory.mjs')), show(result));
+});
