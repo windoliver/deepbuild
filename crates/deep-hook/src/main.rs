@@ -423,12 +423,24 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
             .recursive(true)
             .mode(0o700)
             .create(folder)?;
-        let fresh = !path.exists();
+        // The spool is a folder of its own and one file in it, never a link to somewhere else: deep-hook only appends.
+        let dir = fs::symlink_metadata(folder)?;
+        if !dir.is_dir() || dir.mode() & 0o022 != 0 {
+            return Err(io::Error::other(
+                "the spool folder is a link, or others can write it",
+            ));
+        }
+        let fresh = fs::symlink_metadata(&path).is_err();
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
             .mode(0o600)
+            .custom_flags(NOFOLLOW)
             .open(&path)?;
+        let made_file = file.metadata()?;
+        if !made_file.is_file() || made_file.nlink() != 1 {
+            return Err(io::Error::other("the spool file is a link to another file"));
+        }
         opened();
         #[cfg(debug_assertions)]
         if let Some(n) = stall() {
@@ -443,7 +455,7 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
             continue;
         }
         let written = file.metadata()?;
-        match fs::metadata(&path) {
+        match fs::symlink_metadata(&path) {
             Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => {}
             _ => continue,
         }
@@ -463,6 +475,12 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
         "the spool line was cut or moved in each of three tries",
     ))
 }
+
+/// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
+#[cfg(target_os = "macos")]
+const NOFOLLOW: i32 = 0x0100;
+#[cfg(target_os = "linux")]
+const NOFOLLOW: i32 = 0o400000;
 
 /// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
 #[cfg(debug_assertions)]

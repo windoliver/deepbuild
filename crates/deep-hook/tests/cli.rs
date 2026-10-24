@@ -386,3 +386,41 @@ fn a_reply_outside_hook_reply_2_is_the_hub_away() {
         );
     }
 }
+
+#[test]
+fn a_spool_path_that_leads_elsewhere_is_never_written() {
+    let outside = std::env::temp_dir().join(format!("dh315-outside-{}", std::process::id()));
+    for case in [
+        "a symlinked spool file",
+        "a hard-linked spool file",
+        "a symlinked spool folder",
+    ] {
+        let home = short_home("link");
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(&outside).unwrap();
+        let target = outside.join("spool.jsonl");
+        std::fs::write(&target, "untouched\n").unwrap();
+        let spool = home.join(".deepbuild/spool");
+        match case {
+            "a symlinked spool folder" => std::os::unix::fs::symlink(&outside, &spool).unwrap(),
+            _ => {
+                std::fs::create_dir_all(&spool).unwrap();
+                if case == "a symlinked spool file" {
+                    std::os::unix::fs::symlink(&target, spool.join("spool.jsonl")).unwrap();
+                } else {
+                    std::fs::hard_link(&target, spool.join("spool.jsonl")).unwrap();
+                }
+            }
+        }
+        // No hub is there: the call is decided and deep-hook tries to spool it.
+        let (code, _, _) = pre_tool_use(&home, "ls");
+        let after = std::fs::read_to_string(&target).unwrap();
+        std::fs::remove_dir_all(&home).unwrap();
+        std::fs::remove_dir_all(&outside).unwrap();
+        assert_eq!(code, Some(0), "{case}: the call is still allowed");
+        assert_eq!(
+            after, "untouched\n",
+            "{case}: the file it leads to is never written"
+        );
+    }
+}
