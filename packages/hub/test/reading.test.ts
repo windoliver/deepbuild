@@ -138,4 +138,35 @@ describe('the hooks-not-reaching reading', () => {
       expect(await readings(), 'turn 1\'s call reached the hub').toEqual([]);
     }, { DEEP_HUB_TEST_CRASH: 'slow:tool.before' });
   }, 30_000);
+
+  it('keeps a turn\'s reached call however many calls no turn holds come after it', async () => {
+    await withHub(async (root, home) => {
+      const now = () => String(BigInt(Date.now()) * 1_000_000n);
+      const { line, hook, readings } = session(root, home, now);
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      line({ type: 'user', uuid: 'turn-1', message: { role: 'user', content: 'list the files' } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Bash', input: { command: 'ls' } }] } });
+      expect(await hook('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 'toolu_t1' })).toContain('"ack"');
+      // More than the hub keeps of calls no turn holds (a subagent's) reach it, and are recorded, before turn 1 ends.
+      const socket = join(root, 'hub.sock');
+      for (let batch = 0; batch < 101; batch++) {
+        await Promise.all(Array.from({ length: 100 }, (_, i) => {
+          const n = batch * 100 + i;
+          const id = `01K74FKZVKZGATTBZAE${String(n).padStart(7, '0')}`;
+          return send(socket, hookLine(id, 'PreToolUse', { session_id: SESSION, cwd: '/tmp', transcript_path: join(home, '.claude', 'projects', 'tmp', `${SESSION}.jsonl`), hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/tmp/x' }, tool_use_id: `toolu_sub${n}` }, { ppid: process.pid }));
+        }));
+      }
+      const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+      const calls = () => (db.prepare("SELECT count(*) AS n FROM events WHERE kind = 'tool.before'").get() as { n: number }).n;
+      try {
+        for (const until = Date.now() + 120_000; Date.now() < until && calls() < 10_101; await new Promise((r) => setTimeout(r, 100)));
+        expect(calls(), 'every call is recorded before turn 1 ends').toBe(10_101);
+      } finally {
+        db.close();
+      }
+      line({ type: 'user', uuid: 'turn-2', message: { role: 'user', content: 'thanks' } });
+      expect(await hook('UserPromptSubmit', { prompt: 'thanks' })).toContain('"ack"');
+      expect(await readings(), 'turn 1\'s call reached the hub').toEqual([]);
+    });
+  }, 240_000);
 });

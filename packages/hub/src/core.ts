@@ -39,6 +39,8 @@ const HOOKS_MISSING = 'hooks not reaching DeepBuild';
 const TRANSCRIPT_STEP = 64 * 1024 * 1024;
 /** How long after the hub reads a turn's end it judges whether any of the turn's hooks reached it. */
 const TURN_GRACE = 100;
+/** How long cursor changes gather before transcripts.json is written: a busy session writes it once, not per hook. */
+const CURSOR_SAVE = 200;
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -123,6 +125,8 @@ export class Core {
   private readonly sessions = new Map<string, Session>();
   /** The cursors the last hub left for sessions this one hasn't met yet. */
   private cursors = new Map<string, Cursor>();
+  /** The pending write of transcripts.json. */
+  private saving: NodeJS.Timeout | undefined;
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   private stamps: Stamp[] = [];
@@ -513,16 +517,26 @@ export class Core {
       }, Math.max(1, TURN_GRACE - (now - next.at!)));
       session.judging.unref();
     }
-    // Calls no read turn holds (a subagent's) are forgotten oldest first.
-    for (const call of session.reached) {
-      if (session.reached.size <= REACHED) break;
-      session.reached.delete(call);
+    // Calls no read turn holds (a subagent's) are forgotten oldest first; a read turn's are kept until it's judged.
+    if (session.reached.size > REACHED) {
+      const held = new Set([...session.closed, ...(session.turn ? [session.turn] : [])].flatMap((t) => t.calls));
+      for (const call of session.reached) {
+        if (session.reached.size <= REACHED) break;
+        if (!held.has(call)) session.reached.delete(call);
+      }
     }
     this.saveCursors();
   }
 
   /** Keeps where each live session's transcript is judged from (its oldest unjudged turn), so a restart judges what it missed. */
   private saveCursors(): void {
+    if (this.saving || this.stopping) return;
+    this.saving = setTimeout(() => this.writeCursors(), CURSOR_SAVE);
+    this.saving.unref();
+  }
+  private writeCursors(): void {
+    clearTimeout(this.saving);
+    this.saving = undefined;
     const cursors = new Map(this.cursors);
     for (const s of this.sessions.values()) {
       if (s.ended) continue;
@@ -602,6 +616,8 @@ export class Core {
       const left = cursor?.transcript === transcript && typeof cursor.read === 'number' && Array.isArray(cursor.reached) ? cursor : undefined;
       const read = left ? left.read : await stat(transcript).then((s) => s.size, () => 0);
       this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map() });
+      // A session's first cursor is written at once: a restart before it would read the session from its end.
+      this.writeCursors();
       return true;
     }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
@@ -1180,6 +1196,7 @@ export class Core {
     }
     await this.replaying;
     await this.chain;
+    this.writeCursors();
     for (const { stop } of this.runs.values()) stop();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);
