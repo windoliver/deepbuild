@@ -1,0 +1,22 @@
+{
+  "scene": "blank",
+  "format": "bgra8_premultiplied",
+  "color_space": "srgb",
+  "size": [256, 256],
+  "frames": 4,
+  "fence_frames": 100,
+  "stale_frames": 4,
+  "resize": null,
+  "device_loss_at": null,
+  "window": [320, 320],
+  "view": [32, 32],
+  "page": {
+    "cell": 32,
+    "colors": [
+      [0, 0, 0],
+      [0, 0, 0]
+    ]
+  },
+  "background": [0, 0, 0, 0],
+  "regions": []
+}

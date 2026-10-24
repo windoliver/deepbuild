@@ -19,6 +19,8 @@ serde_json = "1"
 # builds its headless context on the platform's text system, so this crate stays outside the
 # canvas text lint's scope: its canvas text goes through deep-text-gpui, which is in it.
 deep-text-gpui = { path = "../deep-text-gpui" }
+# Issue #377: the GPU layer, whose views the window shows in place.
+deep-gpu = { path = "../deep-gpu" }
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
 # Issue #339 adds the event monitor (NSEvent, block2), the screen-capture access calls and the
@@ -35,6 +37,8 @@ objc2-core-graphics = { version = "0.3", default-features = false, features = ["
 block2 = "0.6"
 raw-window-handle = "0.6"
 image = { version = "0.25", default-features = false, features = ["png"] }
+# Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot.
+gpui-pre-apple = "=0.3.9"
 
 [dev-dependencies]
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }

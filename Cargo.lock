@@ -1718,8 +1718,10 @@ name = "deep-app"
 version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
+ "deep-gpu",
  "deep-text-gpui",
  "gpui-kit",
+ "gpui-pre-apple",
  "gpui-shell",
  "image",
  "objc2 0.6.5",
@@ -1796,6 +1798,38 @@ dependencies = [
 [[package]]
 name = "deep-contracts"
 version = "0.0.0"
+
+[[package]]
+name = "deep-gpu"
+version = "0.0.0"
+dependencies = [
+ "objc2-core-foundation",
+ "objc2-core-video",
+ "objc2-io-surface",
+ "objc2-metal 0.3.2",
+ "pollster 0.4.0",
+ "wgpu 30.0.1",
+]
+
+[[package]]
+name = "deep-gpu-layer"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "deep-app",
+ "deep-canvas",
+ "deep-canvas-marks",
+ "deep-canvas-motion",
+ "deep-gpu",
+ "deep-replica",
+ "gpui-kit",
+ "gpui-pre-apple",
+ "gpui-shell",
+ "image",
+ "serde_json",
+ "sha2 0.11.1",
+ "wgpu 30.0.1",
+]
 
 [[package]]
 name = "deep-hook"
@@ -6053,6 +6087,7 @@ dependencies = [
  "block2 0.6.2",
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
+ "objc2-io-surface",
 ]
 
 [[package]]

@@ -1,0 +1,33 @@
+{
+  "scene": "settling",
+  "format": "bgra8_premultiplied",
+  "color_space": "srgb",
+  "size": [1024, 1024],
+  "frames": 24,
+  "window": [1088, 1088],
+  "view": [32, 32],
+  "page": {
+    "cell": 32,
+    "colors": [
+      [120, 140, 150],
+      [100, 80, 60]
+    ]
+  },
+  "background": [0, 0, 0, 255],
+  "budget_class": {
+    "upload_bytes_per_frame": 1048576
+  },
+  "regions": [
+    {
+      "name": "texture",
+      "rect": [0, 0, 1024, 1024],
+      "fill": {
+        "texture": {
+          "w": 1024,
+          "h": 1024,
+          "pattern": "xor"
+        }
+      }
+    }
+  ]
+}
