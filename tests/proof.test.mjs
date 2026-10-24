@@ -1,7 +1,9 @@
 // Regressions of the proof lanes (#569) that its acceptance suite doesn't cover.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ISSUE, criterionId, git, named, problems, proof, repo, show, write } from './acceptance/569/helpers.mjs';
+import { mkdirSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { ISSUE, criterionId, git, named, problems, proof, repo, root, show, write } from './acceptance/569/helpers.mjs';
 
 const c1 = criterionId(ISSUE, 'Adds');
 const dir = `tests/acceptance/${ISSUE}`;
@@ -255,4 +257,38 @@ test("once main holds the proof lanes, an edit of their code or of lanes.mjs fai
   assert.deepEqual(problems(approved, 'guard'), [], show(approved));
   const free = repo(t, { base: { 'scripts/lanes.mjs': lanes("'tests/**'") }, commits: [{ files: { 'scripts/lanes.mjs': lanes("'tests/**', 'more/**'") } }] });
   assert.deepEqual(problems(proof(free, ['guard']), 'guard'), [], 'with no proof lanes on main, lanes.mjs is free to change');
+});
+
+// The merge base runs with the change's test-path files and runner config, so only the code under
+// test differs between the two runs: a stub the change's config or a shared helper brings in runs on
+// both, and the test no longer fails on the base.
+test("a vitest config the change edits to mock the code under test runs on the merge base too", (t) => {
+  const config = (extra) => `export default { test: { include: ['tests/**/*.test.ts']${extra} } };\n`;
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'lib/impl.ts': 'export const f = () => 4;\n', 'vitest.config.ts': config(''), [`${dir}/a.test.ts`]: `import { it, expect } from 'vitest';\nimport { f } from '../../../lib/impl.ts';\n\nit('${c1} sums', () => {\n  expect(f()).toBe(3);\n});\n` },
+  });
+  // Both checkouts get vitest from a link the merge base holds, as no lockfile installs it there.
+  mkdirSync(join(scene.cwd, 'node_modules'));
+  symlinkSync(join(root, 'node_modules/vitest'), join(scene.cwd, 'node_modules/vitest'));
+  git(scene.cwd, 'add', '-A');
+  git(scene.cwd, 'commit', '-q', '-m', 'vitest');
+  git(scene.cwd, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  write(scene.cwd, { 'vitest.config.ts': config(", setupFiles: ['./tests/setup.ts']"), 'tests/setup.ts': "import { vi } from 'vitest';\nvi.mock('../lib/impl.ts', () => ({ f: () => 3 }));\n" });
+  git(scene.cwd, 'add', '-A');
+  git(scene.cwd, 'commit', '-q', '-m', `Stub f\n\nCloses #${ISSUE}`);
+  const result = proof(scene, ['trace']);
+  assert.ok(!result.lines.some((line) => line.startsWith(`PASS before: `) && line.includes(`${c1} sums`)), show(result));
+  assert.ok(problems(result, 'trace').some((found) => found.startsWith('FAIL trace: Closes')), show(result));
+});
+
+test('a shared helper under the test paths, outside the test\'s folder, runs on the merge base as the change has it', (t) => {
+  const test = `import { it } from 'node:test';\nimport { f } from '../../../src/impl.mjs';\nconst { same } = await import(['..', '..', 'helpers', 'check' + '.mjs'].join('/'));\n\nit('${c1} sums', () => {\n  same(f(), 3);\n});\n`;
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'src/impl.mjs': 'export const f = () => 4;\n', 'tests/helpers/check.mjs': "import assert from 'node:assert/strict';\nexport const same = (a, b) => assert.equal(a, b);\n", [`${dir}/a.test.mjs`]: test },
+    commits: [{ files: { 'tests/helpers/check.mjs': 'export const same = () => {};\n' }, message: `Hollow the helper\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(!result.lines.some((line) => line.startsWith(`PASS before: `) && line.includes(`${c1} sums`)), show(result));
+  assert.ok(problems(result, 'trace').some((found) => found.startsWith('FAIL trace: Closes')), show(result));
 });
