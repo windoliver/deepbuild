@@ -177,9 +177,11 @@ const timedOut = (result) => result.error?.code === 'ETIMEDOUT';
 const stopped = (files) => new Map(files.map((file) => [file, `the run was stopped after ${TIMEOUT / 60_000} minutes`]));
 
 // Two tests of one full name report under one key: a failure of either stands, so a passing twin of
-// a failing test can't hide it.
+// a failing test can't hide it, and the key counts its reports, so a twin can't stand for one never run.
 const keep = (results, key, result) => {
-  if (!results.has(key) || (result.status === 'fail' && results.get(key).status !== 'fail')) results.set(key, result);
+  const reports = (results.get(key)?.reports ?? 0) + 1;
+  if (!results.has(key) || (result.status === 'fail' && results.get(key).status !== 'fail')) results.set(key, { ...result, reports });
+  else results.get(key).reports = reports;
 };
 
 function runNode(directory, files, env) {
@@ -301,11 +303,14 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   // runner never reached is no test that passed. A helper's test may run under a suite around its
   // call, so a reported name ending in the declared one counts; a test that skips itself as it runs
   // is reported, and the trace lane counts it as no test.
-  const ran = (path, name) => [...runs.head.results.keys()].some((key) => key === named(path, name) || (key.startsWith(`${path} › `) && key.endsWith(` › ${name}`)));
+  // Each test the source declares of a name needs a report of its own.
+  const reported = (path, name) => [...runs.head.results].filter(([key]) => key === named(path, name) || (key.startsWith(`${path} › `) && key.endsWith(` › ${name}`)))
+    .reduce((sum, [, result]) => sum + (result.reports ?? 1), 0);
   const runnable = files.filter((path) => !runs.head.fileErrors.has(path) && !runs.head.unrunnable.has(path));
-  runs.unrun = runnable.flatMap((path) => sourceSpans.get(path)
-    .filter(({ name, kind, leaf, skipped }) => name !== null && kind !== 'describe' && leaf && !skipped && tagsIn(name).some((tag) => counts(tag, path)) && !ran(path, name))
-    .map(({ name }) => named(path, name)));
+  runs.unrun = runnable.flatMap((path) => {
+    const declared = sourceSpans.get(path).filter(({ name, kind, leaf, skipped }) => name !== null && kind !== 'describe' && leaf && !skipped && tagsIn(name).some((tag) => counts(tag, path)));
+    return [...new Set(declared.map(({ name }) => name))].filter((name) => reported(path, name) < declared.filter((test) => test.name === name).length).map((name) => named(path, name));
+  });
   // vitest runs only the .only tests of a file that has one, so the file's other tagged tests don't run.
   runs.only = runnable.filter((path) => path.endsWith('.ts') && sourceSpans.get(path).some(({ only }) => only)
     && sourceSpans.get(path).some(({ name, leaf, only, skipped }) => leaf && !only && !skipped && (name === null ? tagsWithImports(root, null, path) : tagsIn(name)).some((tag) => counts(tag, path))));
