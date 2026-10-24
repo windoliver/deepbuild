@@ -11,12 +11,38 @@ use super::{OpError, Val, View};
 use crate::ops;
 use crate::registry::Registrar;
 
+/// The core's arrays its check kinds read, which a module whose items draw or place what they
+/// hold contributes to.
+pub const CHECKED: [&str; 4] = [
+    "core.glyphs",
+    "core.strokes",
+    "core.shapes",
+    "core.timeline",
+];
+
+/// The core's array a module contributes to for what its kind draws or places.
+pub fn checked_array(draws: &str) -> Option<&'static str> {
+    Some(match draws {
+        "glyphs" => "core.glyphs",
+        "strokes" => "core.strokes",
+        "solids" => "core.shapes",
+        "shots" | "cuts" | "holds" => "core.timeline",
+        _ => return None,
+    })
+}
+
 /// The core's arrays and operators, registered under the name `core` before every module's.
 pub fn register(r: &mut Registrar) {
     r.array("core.lowered", "item", "item", "geometry", "validate");
     r.array("core.transform", "transform", "item", "transform", "items");
     r.array("core.fields", "item", "item", "geometry", "items");
     r.array("core.world", "transform", "item", "transform", "items");
+    // What the core's own check kinds read and canvas modules fill through `contributes_to`
+    // (Check input): glyph boxes, flattened strokes, true shapes and the timeline of shots, cuts
+    // and holds.
+    for array in CHECKED {
+        r.array(array, "list", "document", "geometry", "extract");
+    }
     r.operator("lower", "validate", &["self"], &["core.lowered"])
         .run(lower);
     r.operator("transform", "items", &["core.lowered"], &["core.transform"])
@@ -30,7 +56,12 @@ pub fn register(r: &mut Registrar) {
         &["core.world"],
     )
     .run(world);
-    r.fixture("board", board(), None);
+    r.fixture("board", board(), None).sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/a/params/box", "value": [22, 16, 64, 40]},
+    }));
 }
 
 /// The core's own fixture: boxes, a label and a child that rides its rotated, scaled parent.
@@ -77,13 +108,21 @@ fn lower(v: &mut View<'_>) -> Result<(), OpError> {
         .unwrap_or("")
         .to_string();
     if let Some(core_kind) = v.draws_as(&kind) {
-        let boxed = out
-            .get("params")
-            .and_then(|p| p.get("box"))
-            .cloned()
-            .unwrap_or(Value::Null);
+        // A module's item one major back draws as its migrated form (Migration: at load).
+        let migrated = v.migrated(&out);
+        let at = migrated.as_ref().unwrap_or(&out);
+        let params = at.get("params").cloned().unwrap_or(Value::Null);
+        let kind = at
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
         out["kind"] = json!(core_kind);
-        out["params"] = json!({"box": boxed, "paint": {"fill": {"role": "ink"}}});
+        out["params"] = match v.draw_of(&kind) {
+            Some(draw) => draw(&params),
+            None => json!({"box": params.get("box").cloned().unwrap_or(Value::Null),
+                           "paint": {"fill": {"role": "ink"}}}),
+        };
     } else if v.is_module_kind(&kind) {
         out["kind"] = json!("group@1");
         out["params"] = json!({});

@@ -5,7 +5,8 @@
 // It reports a closed run outcome, never a verdict: the exit, the output scrubbed by value before its digest, the
 // variables allowed through by name, and from the tools' own reports (Vitest's, Jest's, node:test's, pytest's and
 // go test's) the tests that ran,
-// every attempt of each, where each failed test failed, the files the run read and a numeric contract's counts.
+// every attempt of each, where each failed test failed, the files the run read and a numeric contract's counts. A run
+// passes only if every test a Vitest, Jest, node:test or pytest file it ran holds ran, as listed apart from the run (listing.ts).
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
@@ -14,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { CHECK_RUNTIME, type CheckResult, type CheckRunnerFill, type CheckSpec, type RunOutcome } from '@deepbuild/conformance';
 import { scrubValues } from '@deepbuild/evidence';
 import type { Exit, Host } from '@deepbuild/supervisor';
-import { evidence, goTest, nodeTest, under, vitest, type Ran, type Reported } from './report.js';
+import { listSource, unrun, type Listed } from './listing.js';
+import { evidence, goTest, nodeTest, under, vitest, type Listing, type Ran, type Reported } from './report.js';
 import { seededBy, type Seeded } from './seeded.js';
 import { absent, filtersIn, GO_TEST, hiddenChild, maskIn, programsIn, untraced, type Spawned } from './shell.js';
 
@@ -145,6 +147,21 @@ function runHandle(): string {
   return `run:${id}`;
 }
 
+/** The tests each Vitest, Jest or node:test file the run ran holds, from the file's source in the checkout; `only`: the command runs node:test's focused tests alone. */
+async function listedIn(checkout: string, files: { file: string; tool: Listing['files'][number]['tool'] | 'node' }[], only: boolean): Promise<Listed[]> {
+  const listed: Listed[] = [];
+  for (const [file, tool] of new Map(files.map((f) => [f.file, f.tool]))) {
+    let source: string;
+    try {
+      // A link in the checkout to a file outside it isn't the check's.
+      if (under(checkout, realpathSync(join(checkout, file))) === null) continue;
+      source = readFileSync(join(checkout, file), 'utf8');
+    } catch { continue; }
+    listed.push(...(await listSource(source, file, tool === 'vitest' ? ' > ' : ' ', tool === 'node' ? { node: true, focus: only } : {})));
+  }
+  return listed;
+}
+
 /** Runs one command check. */
 export async function runCommandCheck(check: CommandCheck): Promise<CommandRun> {
   return (await runOnce(check, 0)).run;
@@ -200,7 +217,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const go = GO_TEST.test(spec.runner);
     const filters = filtersIn(spec.runner);
     // Vitest reports its pattern's source, in which a `/` the command gave is escaped.
-    const named = (filter: string): boolean => [...filters].some((v) => v === filter || v.replaceAll('/', '\\/') === filter);
+    const named = (filter: string): boolean => filters.some(({ value: v }) => v === filter || v.replaceAll('/', '\\/') === filter);
     if (refused.length) return { run: result('uncounted', { mask: `venv ${refused[0]}: name the venv's program by its path` }), ran: [] };
     // A tool that isn't installed can't start: the run is missing, not untraced.
     const gone = absent(spec.runner, checkout, PATH);
@@ -284,9 +301,11 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const spawns = evidence(files.spawns);
       const nodeReport = evidence(files.node);
       const vitestReport = evidence(files.vitest, true);
+      const vitestRun = vitestReport && vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', named);
+      const nodeRun = nodeReport && nodeTest(nodeReport.lines, checkout, stderr);
       const reported: Reported[] = [
-        ...(nodeReport ? [nodeTest(nodeReport.lines, checkout, stderr)] : []),
-        ...(vitestReport ? [vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', named)] : []),
+        ...(nodeRun ? [nodeRun] : []),
+        ...(vitestRun ? [vitestRun] : []),
         ...(go ? [goTest(stdout, checkout)] : []),
       ];
       const malformed = reported.reduce((n, r) => n + r.malformed, 0);
@@ -337,7 +356,13 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       }
       // go test's reads reach no read set: its run can fail, never pass.
       if (go && ran.length) return done('uncounted', { ...rest, mask: 'untraced program go' }, ran);
-      return done(ran.length ? 'passed' : 'ran_nothing', rest, ran);
+      if (!ran.length) return done('ran_nothing', rest, ran);
+      // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
+      const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
+      const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];
+      const missed = unrun(listed, [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named);
+      const dropped = missed.map((t) => ({ test: t.test, file: t.file, line: t.line, stack: null, assertion: false, message: `${t.test} never ran: something other than its source or the check's command left it out` }));
+      return done(dropped.length ? 'failed' : 'passed', { ...rest, failures: dropped }, ran);
     } catch (error) {
       const why = `evidence unreadable: ${error instanceof Error ? error.message : String(error)}`;
       if (cause !== 'exit') return done(cause === 'deadline' ? 'overran' : 'stopped', { ...ended, evidence: [...ended.evidence, why] }, []);

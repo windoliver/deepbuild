@@ -309,6 +309,39 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #305 first measurement: the merge base has no canvas-module registry or seal. One process starts `deep-show run` in the shipped build, which registers and seals its canvas modules once, asks for the registry, draws one board at six times and asks again, failing unless the seal ran once with an unchanged time; p50 includes Node's and the binary's start. The issue's 50 ms for registration and the seal stays in tests/acceptance/305/budgets.test.ts, read from the binary's own clock. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "env-up",
+      "command": [
+        "node",
+        "benchmarks/env.mjs",
+        "up"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #331 first measurement: the merge base has no deep env. One process starts a dev hub and times five deep env up runs of a small Node server stack, after a warm-up round, against five bare starts of the same server until its health route answers; p50 includes the hub's start and Node's. The issue's 1 s beyond the repo's own start stays in tests/acceptance/331/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "env-down",
+      "command": [
+        "node",
+        "benchmarks/env.mjs",
+        "down"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #331 first measurement: the merge base has no deep env. The same run as env-up, reporting the median deep env down; the issue's 5 s teardown stays in tests/acceptance/331/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-kit",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "kit"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #138 first measurement: the merge base has no canvas conformance kit. One process runs the kit call over the shipped build's canvas modules through `deep-show run`, every part on Vello CPU and wgpu's noop backend at 1,000 fuzzed sequences a module, a tenth of the quick lane's, so p50 includes Node's and the binary's start; the issue's 5 minutes for the full kit stays in tests/acceptance/138/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

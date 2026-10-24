@@ -244,12 +244,13 @@ const onPath = (program: string): string | null => {
   for (const dir of (process.env.PATH ?? '').split(':').filter(Boolean)) if (existsSync(join(dir, program))) return join(dir, program);
   return null;
 };
-/** go test, by compiling and running a one-test package outside GOPATH in a temp folder. */
+/** go test, by compiling and running a one-test module in a temp folder (a module, since GOPATH mode is off from Go 1.16). */
 export function needGo(): void {
   gate('go', () => {
     const go = onPath('go');
     if (!go) return 'go isn\'t on PATH, so go test can\'t run on this machine';
     const dir = tempDir('go-probe');
+    writeFileSync(join(dir, 'go.mod'), 'module probe\n\ngo 1.16\n');
     writeFileSync(join(dir, 'p.go'), 'package p\n\nfunc One() int { return 1 }\n');
     writeFileSync(join(dir, 'p_test.go'), 'package p\n\nimport "testing"\n\nfunc TestOne(t *testing.T) {\n\tif One() != 1 {\n\t\tt.Fatal("one")\n\t}\n}\n');
     const r = spawnSync(go, ['test', '-json', '.'], { cwd: dir, encoding: 'utf8', timeout: 120_000, env: { PATH: process.env.PATH, HOME: home(), GOCACHE: join(dir, 'cache') } });

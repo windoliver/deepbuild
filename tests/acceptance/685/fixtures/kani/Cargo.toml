@@ -1,0 +1,11 @@
+[package]
+name = "totals"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
+
+# A crate of its own, outside the repo's workspace.
+[workspace]

@@ -63,10 +63,10 @@ describe('the environment kit and the process table', () => {
     // A fill whose down also starts a bystander carrying the run token and the kit's own script names.
     const dressed: EnvironmentFill = {
       ...clean!,
-      up: (spec, lease) => {
-        const decoy = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 10_000)', fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url)), fileURLToPath(new URL('../../runtime/environment/helper.mjs', import.meta.url)), lease.token], { stdio: 'ignore' });
+      up: (spec, lease, checkout) => {
+        const decoy = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 10_000)', fileURLToPath(new URL('../../runtime/environment/server.mjs', import.meta.url)), fileURLToPath(new URL('../../runtime/environment/helper.mjs', import.meta.url)), lease.token], { stdio: 'ignore', cwd: checkout });
         decoys.push(decoy);
-        return clean!.up(spec, lease);
+        return clean!.up(spec, lease, checkout);
       },
     };
     try {
@@ -87,7 +87,7 @@ describe('the environment kit and the process table', () => {
     const real = new Map<string, Handle>();
     const bogus: EnvironmentFill = {
       ...clean!,
-      up: (spec, lease) => { const h = clean!.up(spec, lease); real.set('bogus', h); return { ...h, pid: 2 ** 30 }; },
+      up: (spec, lease, checkout) => { const h = clean!.up(spec, lease, checkout); real.set('bogus', h); return { ...h, pid: 2 ** 30 }; },
       down: () => { const h = real.get('bogus'); if (h) clean!.down(h); },
     };
     try {
@@ -110,8 +110,8 @@ describe('the environment kit and the process table', () => {
     const children: ChildProcess[] = [];
     const big: EnvironmentFill = {
       slot: 'environment@1', revision: 1,
-      up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
-        const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, lease.token], { stdio: 'ignore' });
+      up: (spec, lease, checkout) => new Promise<Handle>((resolve, reject) => {
+        const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, lease.token], { stdio: 'ignore', cwd: checkout });
         children.push(child);
         const until = Date.now() + 5000;
         const poll = (): void => {
@@ -132,9 +132,9 @@ describe('the environment kit and the process table', () => {
   // A fill around a server given as a `node -e` script taking `[port, token, runToken]`; up resolves once `/ping` answers.
   const scripted = (script: string, children: ChildProcess[]): EnvironmentFill => ({
     slot: 'environment@1', revision: 1,
-    up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
+    up: (spec, lease, checkout) => new Promise<Handle>((resolve, reject) => {
       // The run token rides inside an option, as a real server's command line might carry it.
-      const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, `--run-token=${lease.token}`], { stdio: 'ignore' });
+      const child = spawn(process.execPath, ['-e', script, String(lease.port), spec.token, `--run-token=${lease.token}`], { stdio: 'ignore', cwd: checkout });
       children.push(child);
       const until = Date.now() + 5000;
       const poll = (): void => {
@@ -212,10 +212,10 @@ describe('the environment kit and the process table', () => {
     // The reference environment plus a process carrying the run token that the fill starts beside it, listening elsewhere.
     const withSibling: EnvironmentFill = {
       ...clean!,
-      up: (spec, lease) => {
+      up: (spec, lease, checkout) => {
         const sibling = spawn(process.execPath, ['-e', 'require("node:http").createServer().listen(0, "127.0.0.1"); process.on("SIGTERM", () => process.exit(0));', lease.token], { stdio: 'ignore' });
         siblings.push(sibling);
-        return clean!.up(spec, lease);
+        return clean!.up(spec, lease, checkout);
       },
       down: (handle) => { clean!.down(handle); for (const s of siblings) s.kill('SIGTERM'); },
     };
@@ -238,7 +238,7 @@ describe('the environment kit and the process table', () => {
     const spawner = 'setTimeout(() => { require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 20_000)", process.env.RUN], { detached: true, stdio: "ignore" }).unref(); process.exit(0); }, 40);';
     const respawning: EnvironmentFill = {
       ...clean!,
-      up: (spec, lease) => { const h = clean!.up(spec, lease); tokens.set(h.id, lease.token); return h; },
+      up: (spec, lease, checkout) => { const h = clean!.up(spec, lease, checkout); tokens.set(h.id, lease.token); return h; },
       down: (handle) => {
         clean!.down(handle);
         spawn(process.execPath, ['-e', spawner], { stdio: 'ignore', env: { ...process.env, RUN: tokens.get(handle.id)! } }).unref();
@@ -262,13 +262,13 @@ describe('the environment kit and the process table', () => {
     // A tagged sibling, listening on nothing, whose own child carries no token.
     const withQuietGrandchild: EnvironmentFill = {
       ...clean!,
-      up: (spec, lease) => {
+      up: (spec, lease, checkout) => {
         const sibling = spawn(process.execPath, ['-e', 'const c = require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 20_000)"], { stdio: "ignore" }); process.on("SIGTERM", () => { c.kill("SIGKILL"); process.exit(0); }); setTimeout(() => {}, 20_000);', lease.token], { stdio: 'ignore' });
         siblings.push(sibling);
         const until = Date.now() + 3000;
         // Wait for the child to appear in the table, so the kit's first reading sees it.
         while (Date.now() < until && !execFileSync('ps', ['-Awwo', 'ppid=,command='], { encoding: 'utf8' }).split('\n').some((l) => l.trim().startsWith(`${sibling.pid} `))) { /* spin */ }
-        return clean!.up(spec, lease);
+        return clean!.up(spec, lease, checkout);
       },
       down: (handle) => { clean!.down(handle); for (const s of siblings) s.kill('SIGTERM'); },
     };
@@ -323,10 +323,10 @@ describe('the environment kit and the process table', () => {
     // The fixture server with a quiet grandchild: one the lease's contract doesn't cover.
     const quiet: EnvironmentFill = {
       slot: 'environment@1', revision: 1,
-      up: (spec, lease) => new Promise<Handle>((resolve, reject) => {
+      up: (spec, lease, checkout) => new Promise<Handle>((resolve, reject) => {
         const dir = mkdtempSync(join(tmpdir(), 'deep-env-test-'));
         const ready = join(dir, 'ready');
-        const child = spawn(process.execPath, [server, String(lease.port), spec.health, spec.token, String(spec.warmup), ready, lease.token, 'quiet'], { stdio: 'ignore' });
+        const child = spawn(process.execPath, [server, String(lease.port), spec.health, spec.token, String(spec.warmup), ready, lease.token, 'quiet'], { stdio: 'ignore', cwd: checkout });
         children.push(child);
         const until = Date.now() + 5000;
         const poll = (): void => { if (existsSync(ready)) { rmSync(dir, { recursive: true, force: true }); resolve({ id: `quiet-${child.pid}`, port: lease.port, pid: child.pid! }); } else if (Date.now() < until) setTimeout(poll, 20); else reject(Error('the quiet server did not come up')); };
@@ -376,13 +376,13 @@ describe('the environment kit and the process table', () => {
     // The planted fill that starts a helper, with the leased port taken before its server can bind it.
     const squatted: EnvironmentFill = {
       ...planted,
-      up: (spec, lease) => {
+      up: (spec, lease, checkout) => {
         tokens.push(lease.token);
         const squatter = spawn(process.execPath, ['-e', `require('node:net').createServer().listen(${lease.port}, '127.0.0.1'); setTimeout(() => {}, 20_000);`], { stdio: 'ignore' });
         squatters.push(squatter);
         const until = Date.now() + 3000;
         while (Date.now() < until) { try { execFileSync('lsof', ['-nP', '-iTCP:' + lease.port, '-sTCP:LISTEN'], { stdio: 'ignore' }); break; } catch { /* not yet */ } }
-        return planted.up(spec, lease);
+        return planted.up(spec, lease, checkout);
       },
     };
     try {
@@ -455,7 +455,7 @@ describe('the environment kit and the process table', () => {
     // Refused at the handle's pid (never the environment), then a quiet down that never settles.
     const refusedAndStuck: EnvironmentFill = {
       ...clean!,
-      up: (spec, lease) => { const h = clean!.up(spec, lease); real.push(h); return { ...h, pid: 2 ** 30 }; },
+      up: (spec, lease, checkout) => { const h = clean!.up(spec, lease, checkout); real.push(h); return { ...h, pid: 2 ** 30 }; },
       down: (() => new Promise<void>(() => undefined)) as unknown as EnvironmentFill['down'],
     };
     try {
@@ -473,7 +473,7 @@ describe('the environment kit and the process table', () => {
     // Up brings the server up at once and hands its handle over 10.3 s later, past the kit's 10 s deadline.
     const lateUp: EnvironmentFill = {
       ...clean!,
-      up: ((spec: EnvSpec, lease: Lease) => { const h = clean!.up(spec, lease); return new Promise<Handle>((resolve) => setTimeout(() => resolve(h), 10_300)); }) as unknown as EnvironmentFill['up'],
+      up: ((spec: EnvSpec, lease: Lease, checkout: string) => { const h = clean!.up(spec, lease, checkout); return new Promise<Handle>((resolve) => setTimeout(() => resolve(h), 10_300)); }) as unknown as EnvironmentFill['up'],
       down: (handle) => { downs.push(handle); clean!.down(handle); },
     };
     const report = await runKit(k, lateUp, { parts: ['fixed'] });

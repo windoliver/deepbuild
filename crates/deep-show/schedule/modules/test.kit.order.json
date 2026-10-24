@@ -1,0 +1,32 @@
+{
+  "module": "test.kit.order",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.kit.order.a",
+        "module": "test.kit.order",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.order.a"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "test.kit.order.b",
+        "module": "test.kit.order",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.order.b"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}
