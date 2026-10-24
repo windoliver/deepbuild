@@ -430,4 +430,38 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     await ready;
     expect(await h.loaded()).toEqual([]);
   }, 60_000);
+
+  it('closing the host while a conformance run is starting returns only once its process is stopped, and no check starts after', async () => {
+    let gate = Promise.resolve();
+    const { h, record } = await world({ held: () => gate });
+    const p = await h.install({ from: stuck(PASSES), builtBy: null });
+    const pidsNow = async (): Promise<number[]> => (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked').map((e) => (e.data as { pid: number }).pid);
+    const before = (await pidsNow()).length;
+    let release = (): void => undefined;
+    gate = new Promise<void>((resolve) => { release = resolve; });
+    const checking = h.check(p).catch(() => undefined);
+    while ((await pidsNow()).length === before) await new Promise((resolve) => setTimeout(resolve, 2));
+    const closing = h.close();
+    setTimeout(release, 300);
+    await closing;
+    expect((await pidsNow()).slice(before).filter(alive)).toEqual([]);
+    await checking;
+    await expect(h.check(p)).rejects.toThrow(/closed/);
+  }, 60_000);
+
+  it('events for a subscribed package whose trust you revoked are not reported delivered: deliver rejects, naming it', async () => {
+    const { h, trust } = await world();
+    const repo = temp();
+    await trust.answer(YOU, repo, true);
+    const folder = pkgOf('test/sub', "export default function (deep: any): void {\n  deep.on('session.start', () => undefined);\n}\n", { checks: [], access: { words: ['record'] } });
+    const p = await h.install({ from: folder, builtBy: null, project: repo, grant: { record: ['session.start'] } });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    await trust.answer(YOU, repo, false);
+    const event = {
+      v: 1, id: '01K74FKZVK8Q2X5R7M3N9P4T6W', kind: 'session.start', writer: 'hook', actor: 'you', scope: 'you', ts: Date.now(), log_pos: 1,
+      data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: '01K74G1Z3X5V7T9R1P3N5M7K9H' }, evidence: [],
+    } as unknown as Parameters<ExtensionHost['deliver']>[0][number];
+    await expect(h.deliver([event])).rejects.toThrow(/test\/sub.*trust/);
+  }, 60_000);
 });
