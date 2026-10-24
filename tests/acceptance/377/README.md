@@ -68,7 +68,7 @@ it. The tests use node built-ins and vitest. A run with `--root tests/acceptance
 Everything runs headless: the window is drawn and captured offscreen with GPUI's Metal renderer, as #391's, #392's
 and #393's GPU tests are, on the reference Mac's GPU, so no Screen Recording permission is needed (see Readings:
 window capture). `budgets.test.ts` skips with an `INCONCLUSIVE` message off a reference Mac (Mac15,7 or Mac15,12,
-on mains, Low Power Mode off, thermal state nominal), as #305's does; it never passes by skipping. The design's GPU
+Low Power Mode off, thermal state nominal; on battery or mains, by the owner's change below), as #305's does; it never passes by skipping. The design's GPU
 lease has no entrypoint at the base; the budget file runs alone in the unit lane instead, with nothing beside it.
 Expect a long run: the conformance runs draw 10,000 frames at 1936 × 1584 and more.
 
@@ -283,6 +283,13 @@ fixture were removed. The criteria table above describes the first draft; for th
 | Criterion | First draft (removed) | Why it couldn't hold | Redraft | Notes |
 |---|---|---|---|---|
 | `#377.84a84b5e` | `plugin.test.ts` and `fixtures/plugin/gpu-probe`, all three tests | its probe's word list matched gpui-shell's own `__gpui` and `__gpui_components`, the panel runtime's element bridge, since "gpui" contains "gpu"; and it required the raw-pixels, `gpu.surface@1` and WGSL documents refused, where the design skips an item of a kind the build doesn't carry with the notice `unknown_kind`, never drawing it | `plugin-redraft.test.ts` and `fixtures/plugin/gpu-probe-redraft` | `A6-REDRAFT.md` |
+
+## The owner's change to the reference-Mac gate
+
+On October 24 the owner dropped the mains-power requirement from this suite's reference-Mac gate: the budget
+tests judge on battery or mains alike. The gate still requires a reference Mac, Low Power Mode off and a nominal
+thermal state. The change is `environmentProblem` in `helpers.ts` (the mains check removed) and the comment in
+`budgets.test.ts`.
 
 ## Readings where the issue and design leave a choice
 

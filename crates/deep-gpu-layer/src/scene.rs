@@ -8,7 +8,7 @@ use std::sync::Arc;
 use bytemuck::{Pod, Zeroable};
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
-use deep_gpu::render::{RenderModule, Target};
+use deep_gpu::render::{Determinism, Pass, RenderModule, Resolution, Target};
 use deep_gpu::surface::FORMAT;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -459,6 +459,34 @@ impl RenderModule for SceneModule {
         d
     }
 
+    /// The regions, then each layer composited over everything before it, all in `geometry`.
+    fn passes(&self) -> Vec<Pass> {
+        let pass = |name: String, order: u32, reads: Vec<&'static str>| Pass {
+            name,
+            place: "geometry",
+            order,
+            reads,
+            writes: vec!["slot"],
+            resolution: Resolution::Full,
+            ns_per_px: 0.02,
+            determinism: Determinism::SameMachine,
+        };
+        let mut passes = Vec::new();
+        if !self.scene.regions.is_empty() {
+            passes.push(pass("regions".into(), 0, Vec::new()));
+        }
+        for k in 0..self.scene.layers.len() {
+            // A scene of layers alone clears in its first, which reads nothing.
+            let reads = if passes.is_empty() {
+                Vec::new()
+            } else {
+                vec!["slot"]
+            };
+            passes.push(pass(format!("layer{k}"), 1 + k as u32, reads));
+        }
+        passes
+    }
+
     fn build(&mut self, device: &Device) -> Result<(), String> {
         let d = &device.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -543,7 +571,7 @@ impl RenderModule for SceneModule {
         self.pending_upload.take().into_iter().collect()
     }
 
-    fn layers(&mut self, device: &Device, target: &Target) -> Vec<Job> {
+    fn layers(&mut self, device: &Device, target: &Target) -> Vec<(String, Job)> {
         let Some(b) = self.built.as_mut() else {
             return Vec::new();
         };
@@ -594,7 +622,7 @@ impl RenderModule for SceneModule {
             wgpu::Color { r, g, b: bl, a }
         };
         let regions = scene.regions.len();
-        let mut jobs: Vec<Job> = Vec::new();
+        let mut jobs: Vec<(String, Job)> = Vec::new();
         // The regions are one writer layer, drawn over the cleared background into the transient
         // MSAA target and resolved into the slot. A scene of layers alone clears in its first.
         if regions > 0 {
@@ -617,30 +645,33 @@ impl RenderModule for SceneModule {
                     (i, s, pipeline)
                 })
                 .collect();
-            jobs.push(Box::new(move |encoder| {
-                let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some(MODULE),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &msaa,
-                        resolve_target: Some(&slot),
-                        depth_slice: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(clear),
-                            store: wgpu::StoreOp::Discard,
-                        },
-                    })],
-                    ..Default::default()
-                });
-                rp.set_bind_group(0, &bind, &[]);
-                for (i, s, pipeline) in &list {
-                    if s[2] == 0 {
-                        continue;
+            jobs.push((
+                "regions".into(),
+                Box::new(move |encoder| {
+                    let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(MODULE),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &msaa,
+                            resolve_target: Some(&slot),
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(clear),
+                                store: wgpu::StoreOp::Discard,
+                            },
+                        })],
+                        ..Default::default()
+                    });
+                    rp.set_bind_group(0, &bind, &[]);
+                    for (i, s, pipeline) in &list {
+                        if s[2] == 0 {
+                            continue;
+                        }
+                        rp.set_pipeline(pipeline);
+                        rp.set_scissor_rect(s[0], s[1], s[2], s[3]);
+                        rp.draw(0..3, *i..*i + 1);
                     }
-                    rp.set_pipeline(pipeline);
-                    rp.set_scissor_rect(s[0], s[1], s[2], s[3]);
-                    rp.draw(0..3, *i..*i + 1);
-                }
-            }));
+                }),
+            ));
         }
         // Each layer is a writer layer of its own, composited over everything before it.
         for (k, &(i, s, _)) in draws[regions..].iter().enumerate() {
@@ -652,28 +683,31 @@ impl RenderModule for SceneModule {
             let view = target.view.clone();
             let bind = b.bind.clone();
             let over = b.over.clone();
-            jobs.push(Box::new(move |encoder| {
-                let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some(MODULE),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        depth_slice: None,
-                        ops: wgpu::Operations {
-                            load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    ..Default::default()
-                });
-                if s[2] == 0 {
-                    return;
-                }
-                rp.set_bind_group(0, &bind, &[]);
-                rp.set_pipeline(&over);
-                rp.set_scissor_rect(s[0], s[1], s[2], s[3]);
-                rp.draw(0..3, i..i + 1);
-            }));
+            jobs.push((
+                format!("layer{k}"),
+                Box::new(move |encoder| {
+                    let mut rp = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(MODULE),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            depth_slice: None,
+                            ops: wgpu::Operations {
+                                load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        ..Default::default()
+                    });
+                    if s[2] == 0 {
+                        return;
+                    }
+                    rp.set_bind_group(0, &bind, &[]);
+                    rp.set_pipeline(&over);
+                    rp.set_scissor_rect(s[0], s[1], s[2], s[3]);
+                    rp.draw(0..3, i..i + 1);
+                }),
+            ));
         }
         jobs
     }

@@ -2,7 +2,7 @@
 // result comes from five fresh processes after a warm-up one, PASS when all five are within the limit,
 // FAIL when all five are over it by more than the margin (the larger of 5% and their spread), else
 // INCONCLUSIVE; a p95 is taken over every frame of a run, 600 frames here (at least 300). Off a reference
-// Mac (Mac15,7 or Mac15,12, on mains, Low Power Mode off, thermal state nominal) every test here skips as
+// Mac (Mac15,7 or Mac15,12, Low Power Mode off, thermal state nominal; on battery or mains) every test here skips as
 // INCONCLUSIVE; none passes by skipping. The times are the binary's own (README: Timings):
 // - #377.756c6dce: the handoff costs at most 1 ms at p95 at 1936 × 1584, with at most 0.1 ms on the UI thread;
 // - #377.f6925067: the UI thread spends at most 0.1 ms per frame on the GPU layer;

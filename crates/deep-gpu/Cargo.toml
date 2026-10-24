@@ -17,6 +17,7 @@ rust-version = "1.95"
 test-pool = []
 
 [dependencies]
+deep-canvas = { path = "../deep-canvas" }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "parking_lot"] }
 pollster = "0.4"
 

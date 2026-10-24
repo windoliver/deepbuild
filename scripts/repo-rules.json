@@ -681,6 +681,10 @@
         "pollster": {
           "spec": "^0.4",
           "why": "Issue #377: waits for wgpu's adapter and device requests when the GPU layer opens its device."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #377: the frame's closed list of places, which the registry seals and the GPU layer orders render modules' passes by."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
