@@ -180,7 +180,6 @@ const stopped = (files) => new Map(files.map((file) => [file, `the run was stopp
 // a failing test can't hide it, and the key counts the reports that ran and those skipped, so a twin
 // can't stand for one never run.
 const quiet = (status) => status === 'skip' || status === 'todo';
-const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)\.(?:config|workspace)\.[cm]?[jt]s$/;
 const keep = (results, key, result) => {
   const old = results.get(key);
   const counts = { ran: (old?.ran ?? 0) + (quiet(result.status) ? 0 : 1), skips: (old?.skips ?? 0) + (quiet(result.status) ? 1 : 0) };
@@ -343,13 +342,12 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   runs.only = runnable.filter((path) => path.endsWith('.ts') && sourceSpans.get(path).some(({ only }) => only)
     && sourceSpans.get(path).some(({ name, leaf, only, skipped }) => leaf && !only && !skipped && (name === null ? tagsWithImports(root, null, path) : tagsIn(name)).some((tag) => counts(tag, path))));
 
-  // The merge base, with the change's test code and runner config: every file under the test paths
-  // (tests, helpers wherever they are and however they're imported, fixtures, goldens, twins and
-  // setup files) and each vitest or vite config, never code beside a colocated test. Only the code
-  // under test then differs between the runs, so a stub the change's config or a helper brings in
-  // runs on both.
+  // The merge base, with the change's test code: every file under the test paths (tests, helpers
+  // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
+  // code beside a colocated test, so a hollow helper the change brings in runs on both. The runner
+  // config stays the merge base's, as the guard keeps it once main holds the lanes.
   const { directory: base, blocked } = baseCheckout(root, change);
-  for (const path of listFiles(root)) if (underTestPaths(path) || RUNNER_CONFIG.test(path)) copy(root, path, base);
+  for (const path of listFiles(root)) if (underTestPaths(path)) copy(root, path, base);
   if (blocked) runs.base.blocked = blocked;
   else runs.base = runTests(base, files);
 
