@@ -1,8 +1,9 @@
 // A hub started on a temp home, and hook requests sent to it the way deep-hook sends them (#315's hub tests).
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
+import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
 const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
@@ -27,21 +28,28 @@ export function send(socket: string, line: string): Promise<string> {
   });
 }
 
-/** Runs `body` against a hub started on a temp home, then stops the hub and removes the home. */
-export async function withHub(body: (root: string, home: string) => Promise<void>): Promise<void> {
+/** Runs `body` against a hub started on a temp home, which it may restart, then stops the hub and removes the home. */
+export async function withHub(body: (root: string, home: string, restart: () => Promise<void>) => Promise<void>): Promise<void> {
   const home = realpathSync(mkdtempSync('/tmp/hub-315-'));
   const root = join(home, '.deepbuild');
   mkdirSync(root, { recursive: true });
-  const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'inherit'] });
-  try {
+  let hub: ChildProcessByStdio<null, Readable, null>;
+  const start = async () => {
+    hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'inherit'] });
     await new Promise((resolve, reject) => { hub.stdout.once('data', resolve); hub.once('exit', () => reject(Error('the hub exited before it was ready'))); });
-    await body(root, home);
-  } finally {
+  };
+  const stop = async () => {
     if (hub.exitCode === null && hub.signalCode === null) {
       const exited = new Promise((resolve) => hub.once('exit', resolve));
       hub.kill('SIGTERM');
       await exited;
     }
+  };
+  try {
+    await start();
+    await body(root, home, async () => { await stop(); await start(); });
+  } finally {
+    await stop();
     rmSync(home, { recursive: true, force: true });
   }
 }
