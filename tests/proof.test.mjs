@@ -634,24 +634,31 @@ test("on a disk that ignores case, a build-planted Support.json or Package.json 
   assert.ok(problems(result, 'guard').some((found) => found.startsWith("FAIL guard: Vitest.config.mjs: the test runner's config")), show(result));
 });
 
-test('once main holds the proof lanes, the change re-pointing a package a test imports, in package.json or the lock, is a guarded edit; another package is free', (t) => {
-  const lock = (chai) => JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', devDependencies: { chai: chai.spec, left: '1.0.0' } }, 'node_modules/chai': chai.entry, 'node_modules/left': { version: '1.0.0' } } }, null, 2);
-  const real = { spec: '^5.0.0', entry: { version: '5.0.0' } }, vendored = { spec: 'file:vendor/chai', entry: { resolved: 'vendor/chai', link: true } };
-  const pkg = (spec, left = '1.0.0') => JSON.stringify({ name: 'x', devDependencies: { chai: spec, left } }, null, 2);
+test('once main holds the proof lanes, a lock entry a test resolves through, near or far, is a guarded edit; a deduped pin or a nested copy only another package reads is free', (t) => {
+  const lock = (packages) => JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', devDependencies: { chai: '^5.0.0', vitest: '5.0.0', left: '1.0.0' } }, 'node_modules/chai': { version: '5.0.0', dependencies: { 'deep-eql': '^5.0.0' } }, 'node_modules/deep-eql': { version: '5.0.0' }, 'node_modules/vitest': { version: '5.0.0', dependencies: { 'tinyspy': '^4.0.0' } }, 'node_modules/tinyspy': { version: '4.0.0' }, 'node_modules/left': { version: '1.0.0' }, ...packages } }, null, 2);
+  const pkg = JSON.stringify({ name: 'x', devDependencies: { chai: '^5.0.0', vitest: '5.0.0', left: '1.0.0' } }, null, 2);
   const result = proof(repo(t, {
     issues: { [ISSUE]: ['Adds'] },
     base: {
-      'scripts/proof-guard.mjs': '// the guard\n', 'package.json': pkg(real.spec), 'package-lock.json': lock(real),
+      'scripts/proof-guard.mjs': '// the guard\n', 'package.json': pkg, 'package-lock.json': lock({}),
       [`${dir}/a.test.mjs`]: `import test from 'node:test';\nimport { assert } from 'chai';\n\ntest('${c1} sums', () => {\n  assert.equal(1, 1);\n});\n`,
     },
     commits: [
-      { files: { 'package.json': pkg(vendored.spec), 'package-lock.json': lock(vendored), 'vendor/chai/index.js': 'export const assert = new Proxy({}, { get: () => () => {} });\n' }, message: `Vendor chai\n\nPart of #${ISSUE}` },
-      { files: { 'package.json': pkg(vendored.spec, '2.0.0') }, message: `Bump left\n\nPart of #${ISSUE}` },
+      { files: { 'package-lock.json': lock({ 'node_modules/deep-eql': { resolved: 'vendor/deep-eql', link: true } }), 'vendor/deep-eql/index.js': 'export default () => true;\n' }, message: `Vendor deep-eql\n\nPart of #${ISSUE}` },
+      { files: { 'package-lock.json': lock({ 'node_modules/deep-eql': { resolved: 'vendor/deep-eql', link: true }, 'node_modules/tinyspy': { resolved: 'vendor/tinyspy', link: true } }) }, message: `Vendor tinyspy\n\nPart of #${ISSUE}` },
+      { files: { 'packages/util/package.json': JSON.stringify({ name: 'util', devDependencies: { vitest: '5.0.0', chai: '^4.0.0' } }), 'package-lock.json': lock({ 'node_modules/deep-eql': { resolved: 'vendor/deep-eql', link: true }, 'node_modules/tinyspy': { resolved: 'vendor/tinyspy', link: true }, 'packages/util': { name: 'util' }, 'node_modules/util': { resolved: 'packages/util', link: true }, 'node_modules/left/node_modules/chai': { version: '4.5.0' }, 'node_modules/left': { version: '1.0.0', dependencies: { chai: '^4.0.0' } } }) }, message: `Add util\n\nPart of #${ISSUE}` },
     ],
   }), ['guard']);
   const refused = problems(result, 'guard');
-  for (const path of ['package.json', 'package-lock.json']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: chai, a package a test imports, changed`)), `${path}\n${show(result)}`);
+  for (const name of ['deep-eql', 'tinyspy']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: package-lock.json: ${name}, a package a test's imports resolve through, changed`)), `${name}\n${show(result)}`);
   assert.equal(refused.length, 2, show(result));
+  // An install from the root package.json alone re-points what its spec names.
+  const swapped = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'package.json': pkg, 'package-lock.json': lock({}), [`${dir}/a.test.mjs`]: `import test from 'node:test';\nimport { assert } from 'chai';\n\ntest('${c1} sums', () => {\n  assert.equal(1, 1);\n});\n` },
+    commits: [{ files: { 'package.json': pkg.replace('"chai": "^5.0.0"', '"chai": "file:vendor/chai"').replace('"left": "1.0.0"', '"left": "2.0.0"') }, message: `Vendor chai\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  assert.deepEqual(problems(swapped, 'guard').map((found) => found.split(' (commit')[0]), ["FAIL guard: package.json: chai, a package a test's imports resolve through, changed"], show(swapped));
 });
 
 test("a workspace build can't replace the copy's link to a package with a folder of its own", (t) => {
