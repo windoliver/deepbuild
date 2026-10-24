@@ -1,0 +1,139 @@
+{
+  "title": "job.recorded@1",
+  "description": "One of DeepBuild's own headless jobs, recorded before anything of it starts: its kind, agent, account and folder, and what waits on it, so a hub that crashes before it starts finds it at its next start and never runs it twice.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "job.recorded"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "job": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "The job's run: handle, as the supervisor and sandbox.denied name it.",
+          "maxLength": 8192
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "What the job is for: draft, review, read or smoke."
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The agent it runs on, as its facts name it."
+        },
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The account it runs on, or null when the agent records none."
+        },
+        "folder": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "Its own folder under the jobs folder, an absolute path."
+        },
+        "prompt": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The SHA-256 of the prompt it gets on stdin; never the prompt.",
+          "maxLength": 8192
+        },
+        "waiting": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "A task: or claim: handle that waits on it."
+          },
+          "description": "The tasks and claims waiting on it."
+        }
+      },
+      "required": [
+        "job",
+        "kind",
+        "agent",
+        "account",
+        "folder",
+        "prompt",
+        "waiting"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

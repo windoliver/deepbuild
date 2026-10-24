@@ -1,0 +1,82 @@
+{
+  "core": {
+    "version": "0.0.0",
+    "digest": "7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
+    }
+  },
+  "look": {
+    "version": "1.0.0",
+    "digest": "647cd2fde884d98b242292d678b12aafbcbfe3096f9f86de96bc19f1db11bd96",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
+    }
+  },
+  "marks2d": {
+    "version": "1.0.0",
+    "digest": "bff20e7b3488c177ed9595fc7819f26f7238bcfabc21ed672fe4be68c1a3113f",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
+    }
+  },
+  "motion": {
+    "version": "1.0.0",
+    "digest": "84bd75af638f525535c7e2b7f6d06056ad1ec067c095eda786f87881aaaa9ad1",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
+    }
+  },
+  "text": {
+    "version": "1.0.0",
+    "digest": "9c9cb61ae98ff8f88bd6a3447ca799d4effa6e3f7b070b9712fd7bb55bd95cdc",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
+    }
+  }
+}

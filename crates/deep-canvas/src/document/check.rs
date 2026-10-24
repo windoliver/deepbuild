@@ -141,6 +141,7 @@ fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
         )),
     }
 
+    module_checks(&lowered, sealed, &mut issues, &mut notices);
     check_id_maps(&lowered, &mut issues);
     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -161,6 +162,80 @@ fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
     }
 }
 
+/// The frame CPU the budget estimate allows a document, in ms (`document.budget`).
+pub const FRAME_CPU_MS: f64 = 16.0;
+
+/// The checks canvas modules register over their kinds' items, and the budget estimate over
+/// the costs they register: a module's code carries its catalog's fix, and the estimate past
+/// the frame's CPU is `over_budget`, naming the items that cost.
+fn module_checks(
+    lowered: &Value,
+    sealed: &Sealed,
+    issues: &mut Vec<Issue>,
+    notices: &mut Vec<Notice>,
+) {
+    let Some(items) = member(lowered, "items").and_then(as_object) else {
+        return;
+    };
+    let mut cost = 0.0;
+    let mut costly = Vec::new();
+    for (id, item) in items {
+        let Some((full, _)) = kind_text(item).and_then(crate::kinds::parse_kind) else {
+            continue;
+        };
+        for (module, rule) in sealed.rules_for(&full) {
+            for r in rule(lowered, id, item) {
+                if r.severity == "notice" {
+                    notices.push(Notice {
+                        code: r.code,
+                        ids: vec![id.clone()],
+                        path: r.path,
+                        actual: Value::Null,
+                        what: r.what,
+                        migration: None,
+                    });
+                    continue;
+                }
+                let fix = module
+                    .shapes
+                    .catalog
+                    .iter()
+                    .find(|c| c.code == r.code)
+                    .map(|c| c.fix.clone());
+                let mut issue = Issue::error(r.code, id, r.path, Value::Null, &r.what);
+                issue.severity = if r.severity == "warning" {
+                    "warning"
+                } else {
+                    "error"
+                };
+                if let Some(fix) = fix {
+                    issue.fix = fix;
+                }
+                issue.fix_ops = r.fix_ops;
+                issues.push(issue);
+            }
+        }
+        for c in sealed.costs_for(&full) {
+            let ms = c(item);
+            if ms > 0.0 {
+                cost += ms;
+                costly.push(id.clone());
+            }
+        }
+    }
+    if cost > FRAME_CPU_MS {
+        let mut issue = Issue::envelope(
+            "over_budget",
+            "items".into(),
+            json!(cost),
+            &format!("the items cost {cost} ms of CPU a frame, past the {FRAME_CPU_MS} ms budget"),
+        );
+        issue.severity = "warning";
+        issue.ids = costly;
+        issues.push(issue);
+    }
+}
+
 /// The issues of `doc`, a patch's result that changed only the items `changed`, re-checked
 /// incrementally from `prev_issues`, the issues of the revision it was applied to (Patch: "re-checked incrementally"; the patch fuzzer's fifth
 /// law: the same issues, by code, IDs and path, as a full check). The items the patch changed are
@@ -176,20 +251,44 @@ pub fn recheck(
     changed: &BTreeSet<String>,
     sealed: &Sealed,
 ) -> Option<Vec<Issue>> {
+    recheck_by(doc, prev_issues, changed, sealed, true)
+}
+
+/// [`recheck`]'s planted wrong program (the conformance kit's fifth law): the items the patch
+/// changed are checked again, and those that hang from them or name them are not.
+pub fn recheck_skipping_referrers(
+    doc: &Value,
+    prev_issues: &[Issue],
+    changed: &BTreeSet<String>,
+    sealed: &Sealed,
+) -> Option<Vec<Issue>> {
+    recheck_by(doc, prev_issues, changed, sealed, false)
+}
+
+fn recheck_by(
+    doc: &Value,
+    prev_issues: &[Issue],
+    changed: &BTreeSet<String>,
+    sealed: &Sealed,
+    referrers: bool,
+) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
     let maps_empty = ID_MAPS
         .iter()
         .all(|m| member(doc, m).and_then(as_object).is_none_or(Map::is_empty));
-    if !maps_empty {
+    // The budget estimate sums the whole document, so a build whose modules cost needs it whole.
+    if !maps_empty || sealed.has_costs() {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
     // The items to check again: those changed, those whose params name one, and below them, in
     // passes over the items until a pass adds none.
     let mut affected: BTreeSet<String> = changed.clone();
+    // The planted wrong program checks the changed items alone.
     loop {
         let more: Vec<&String> = items
             .iter()
+            .filter(|_| referrers)
             .filter(|(id, item)| {
                 !affected.contains(*id)
                     && (member(item, "parent")
@@ -633,14 +732,7 @@ pub(super) fn migrate_item(
     };
     for step in steps {
         if let Some(Value::Object(params)) = fields.get_mut("params") {
-            for rename in &step.renames {
-                if params.contains_key(rename.to) {
-                    continue;
-                }
-                if let Some(value) = params.shift_remove(rename.from) {
-                    params.insert(rename.to.to_string(), value);
-                }
-            }
+            crate::kinds::migrate_step(step, params);
         }
         fields.insert(
             "kind".into(),

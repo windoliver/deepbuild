@@ -16,7 +16,7 @@
   "scripts": {
     "build": "npm run build --workspaces && cargo build --workspace --locked",
     "preflight": "scripts/preflight",
-    "release:check": "scripts/preflight"
+    "release:check": "DEEP_PREFLIGHT=release scripts/preflight"
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.13",

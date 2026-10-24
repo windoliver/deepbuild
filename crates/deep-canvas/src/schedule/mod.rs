@@ -271,6 +271,8 @@ pub struct Planted {
     pub key_hashes: Option<String>,
     /// Steps at one time run in canvas-module name order, not the order the seal derived.
     pub steps_by_name: bool,
+    /// A node's key holds its item without the item's params (#138's planted stale cache).
+    pub key_without_params: bool,
 }
 
 /// A process's scheduling options.
@@ -369,6 +371,15 @@ impl<'s> Scheduler<'s> {
     /// How many results the cache holds.
     pub fn cached(&self) -> usize {
         self.cache.len()
+    }
+
+    /// Every result the cache holds, by key, as `nodes` digests a node's result: for comparing
+    /// the cache with a clean rebuild (the conformance kit).
+    pub fn cache_results(&self) -> BTreeMap<String, String> {
+        self.cache
+            .iter()
+            .map(|(k, (out, err, _))| (k.hex(), result_digest(out, err.as_ref())))
+            .collect()
     }
 
     /// A table's value and key, built the first time it is read.
@@ -650,6 +661,10 @@ pub enum Target {
     Look(String),
     Seed,
     Asset(String),
+    /// The array's writer reads its item (or document) with a param moved, so the array moves at
+    /// its source, through the writer's own body, and so would anything the writer leaked
+    /// outside its writes (the conformance kit's read-set part).
+    Source(String),
 }
 
 impl Target {
@@ -664,6 +679,7 @@ impl Target {
             "view" => Target::View(VIEW_INPUTS.iter().position(|v| *v == name)?),
             "look" => Target::Look(name.into()),
             "asset" => Target::Asset(name.into()),
+            "source" => Target::Source(name.into()),
             _ => return None,
         })
     }
@@ -676,6 +692,7 @@ impl Target {
             Target::Look(r) => format!("look:{r}"),
             Target::Seed => "seed".into(),
             Target::Asset(a) => format!("asset:{a}"),
+            Target::Source(a) => format!("source:{a}"),
         }
     }
 
@@ -688,6 +705,7 @@ impl Target {
             Target::Look(_) => "look".into(),
             Target::Seed => "seed".into(),
             Target::Asset(_) => "asset".into(),
+            Target::Source(a) => a.clone(),
         }
     }
 }
@@ -738,11 +756,33 @@ pub struct Session {
     group_run: Vec<u32>,
     /// What a perturbed clean evaluation changes (a scratch session's only).
     perturb: Option<Target>,
+    /// Under a source perturbation: the writer's operator, and what it reads as each item and
+    /// as the document.
+    source: Option<Source>,
     mode: Mode,
     /// The last evaluation's report.
     pub report: Report,
     /// The operator's panic that froze this session, until a new revision loads.
     frozen: Option<OpIssue>,
+}
+
+/// What a source perturbation's writer reads instead of its item or document.
+#[derive(Clone)]
+pub(super) struct Source {
+    pub op: usize,
+    pub items: Vec<Arc<Value>>,
+    pub doc: Arc<Value>,
+}
+
+/// An item with its first param number (else string) moved.
+fn perturb_params(item: &Value) -> Value {
+    let mut out = item.clone();
+    if let Some(p) = out.get_mut("params") {
+        if !perturb_number(p) {
+            perturb_string(p);
+        }
+    }
+    out
 }
 
 fn look_key(look: &Tokens) -> Key {
@@ -799,6 +839,7 @@ impl Session {
             frames: 0,
             group_run: Vec::new(),
             perturb: None,
+            source: None,
             mode: Mode::Live,
             report: Report::default(),
             frozen: None,
@@ -1008,10 +1049,25 @@ impl Session {
                 for n in &o.nodes {
                     carried.insert((n.op, n.item.map(|i| o.items[i].id.as_str())), n);
                 }
+                // The item a node's `parent` read binds to, if it has one.
+                let parent_of = |l: &Loaded, n: &Node| -> Option<Option<String>> {
+                    n.reads.iter().find_map(|b| match b {
+                        Bound::Parent(p) => {
+                            Some(p.and_then(|p| l.nodes[p].item.map(|i| l.items[i].id.clone())))
+                        }
+                        _ => None,
+                    })
+                };
                 for k in 0..next.nodes.len() {
                     let id = next.nodes[k].item.map(|i| next.items[i].id.clone());
                     if let Some(was) = carried.get(&(next.nodes[k].op, id.as_deref())) {
+                        // A node whose parent read now binds to another item, or to none, as
+                        // when its parent was deleted, runs again: nothing it reads changed.
+                        let rebound = parent_of(&o, was) != parent_of(&next, &next.nodes[k]);
                         let n = &mut next.nodes[k];
+                        if rebound {
+                            continue;
+                        }
                         n.key = was.key;
                         n.out = was.out.clone();
                         n.err = was.err.clone();
@@ -1163,6 +1219,25 @@ impl Session {
             Some(Target::Seed) => {
                 if let Some(l) = &mut scratch.loaded {
                     l.seed = json!(l.seed.as_f64().unwrap_or(0.0) + 1.0);
+                }
+            }
+            Some(Target::Source(array)) => {
+                if let (Some(&op), Some(l)) = (s.writer.get(array), &scratch.loaded) {
+                    let mut doc = (*l.doc).clone();
+                    if let Some(Value::Object(items)) = doc.get_mut("items") {
+                        for v in items.values_mut() {
+                            *v = perturb_params(v);
+                        }
+                    }
+                    scratch.source = Some(Source {
+                        op,
+                        items: l
+                            .items
+                            .iter()
+                            .map(|i| Arc::new(perturb_params(&i.value)))
+                            .collect(),
+                        doc: Arc::new(doc),
+                    });
                 }
             }
             _ => {}
@@ -1371,7 +1446,7 @@ impl Session {
         node.run = run;
         node.last_run = epoch;
         node.visited = frame;
-        if let Some(Target::Array(name)) = &perturb {
+        if let Some(Target::Array(name) | Target::Source(name)) = &perturb {
             if let Some(k) = sop.op.writes.iter().position(|w| w == name) {
                 if let Some(v) = node.out.get_mut(k) {
                     *v = v.perturbed();
@@ -1421,6 +1496,13 @@ impl Session {
         for (term, b) in sop.op.reads.iter().zip(&node.reads) {
             h.text(term);
             match b {
+                Bound::SelfItem(i) if s.options.planted.key_without_params => {
+                    let mut item = (*l.items[*i].value).clone();
+                    if let Some(map) = item.as_object_mut() {
+                        map.remove("params");
+                    }
+                    h.bytes(&canonical(&item));
+                }
                 Bound::SelfItem(i) => {
                     h.key(&l.items[*i].key);
                 }
@@ -1575,22 +1657,13 @@ impl Session {
                 } else {
                     Run::Kept
                 };
-                let mut bytes = Vec::new();
-                for v in &node.out {
-                    let b = v.bytes();
-                    bytes.extend_from_slice(&(b.len() as u64).to_le_bytes());
-                    bytes.extend_from_slice(&b);
-                }
-                if let Some(e) = &node.err {
-                    bytes.extend_from_slice(format!("error:{}:{}", e.code, e.path).as_bytes());
-                }
                 out.push(NodeReport {
                     operator: sop.key.clone(),
                     module: sop.module.clone(),
                     phase: sop.op.phase.clone(),
                     item: node.item.map(|i| l.items[i].id.clone()),
                     key: node.key.hex(),
-                    result: sha256_hex(&bytes),
+                    result: result_digest(&node.out, node.err.as_ref()),
                     run,
                 });
             }
@@ -1647,6 +1720,21 @@ impl Session {
         let node = l.nodes.iter().find(|n| n.op == op && n.item == item)?;
         node.out.get(k).cloned()
     }
+}
+
+/// A node's result as `nodes` shows it: the SHA-256 of its outputs' bytes, each length-prefixed,
+/// then its error.
+fn result_digest(out: &[Val], err: Option<&OpError>) -> String {
+    let mut bytes = Vec::new();
+    for v in out {
+        let b = v.bytes();
+        bytes.extend_from_slice(&(b.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&b);
+    }
+    if let Some(e) = err {
+        bytes.extend_from_slice(format!("error:{}:{}", e.code, e.path).as_bytes());
+    }
+    sha256_hex(&bytes)
 }
 
 /// Another value of a view input's type.
