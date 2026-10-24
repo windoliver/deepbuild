@@ -59,11 +59,16 @@ export function writeSynced(path: string, bytes: Uint8Array): void {
   }
   renameSync(tmp, path);
   // The rename lasts only once its folder is synced too.
-  const dir = openSync(dirname(path), 'r');
+  syncPath(dirname(path));
+}
+
+/** Syncs the file or folder at `path`: its bytes, or for a folder the names in it. */
+export function syncPath(path: string): void {
+  const fd = openSync(path, 'r');
   try {
-    fsyncSync(dir);
+    fsyncSync(fd);
   } finally {
-    closeSync(dir);
+    closeSync(fd);
   }
 }
 

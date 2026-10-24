@@ -19,7 +19,7 @@ import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowRepor
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
-import { disk, testVfs, writeSynced, type Durable } from './vfs.js';
+import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
@@ -1094,8 +1094,13 @@ export class Core {
       // Named after every file a replay kept, whatever the clock says now: the files replay in name order.
       const kept = readdirSync(this.root.spool).filter((f) => /^replay-[0-9A-HJKMNP-TV-Z]{26}\.jsonl$/.test(f)).sort().at(-1);
       const after = kept ? ulidTime(kept.slice(7, 33)) + 1 : 0;
-      renameSync(live, join(this.root.spool, `replay-${ulid(Math.max(Date.now(), after))}.jsonl`));
+      const moved = join(this.root.spool, `replay-${ulid(Math.max(Date.now(), after))}.jsonl`);
+      renameSync(live, moved);
       await new Promise((done) => setTimeout(done, 100));
+      // deep-hook syncs spool.jsonl by its name, so a line written just before the move may be synced by no one:
+      // the moved file and the move are synced here before any of it is read.
+      syncPath(moved);
+      syncPath(this.root.spool);
     }
     for (const name of readdirSync(this.root.spool).filter((f) => f.endsWith('.jsonl') && f !== SPOOL).sort()) {
       const file = join(this.root.spool, name);
