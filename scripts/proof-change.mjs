@@ -17,6 +17,8 @@ export const testPattern = RegExp(`^(?:${testPaths.map((glob) => glob.replace(/[
 // where a script may be code under test, as a fixture factory is.
 export const TEST_DATA = /(?:^|\/)(?:__snapshots__\/|__fixtures__\/|(?:fixtures|goldens?|testdata)\/(?!.*\.[cm]?[jt]sx?$))/;
 export const underTestPaths = (path) => (testPattern.test(path) || TEST_DATA.test(path)) && !path.split('/').includes('node_modules');
+// A vitest or vite config or workspace file, with any infix, as vitest.unit.config.ts.
+export const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)(?:\.[\w-]+)*\.(?:config|workspace)(?:\.[\w-]+)*\.[cm]?[jt]s$/;
 export const isTestFile = (path) => underTestPaths(path) && /\.test\.(?:mjs|js|ts)$/.test(path);
 // A test's name in every line and approval: its file's repo path, then its full name.
 export const named = (path, name) => `${path} › ${name}`;

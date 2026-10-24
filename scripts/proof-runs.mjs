@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSyn
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { addedLines, git, isTestFile, listFiles, named, outsideTests, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
+import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
 const VITEST_REPORTER = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
@@ -118,26 +118,34 @@ const workspaces = (directory) => existsSync(join(directory, 'package.json')) &&
 export function changeCopy(root, change) {
   const directory = copyChange(root, 'deep-proof-checkout-');
   const blocked = prepare(root, change, directory);
-  restoreTests(root, directory);
+  undoBuild(root, directory);
   return { directory, blocked };
 }
 
 /**
- * Puts back the change's files under the test paths in a checkout its build ran in, and removes any
- * the build made there, so the change's build scripts can't rewrite or add a test the lanes run.
+ * Undoes what the change's build wrote in a checkout it ran in, but its output: puts back every file
+ * the change holds, and removes any it added that a test run reads as a test's own or as the run's
+ * setup: a test, a script under the test paths, a runner config, or a package, as under a
+ * node_modules the copy doesn't link to the repository's. Data it generates, such as a table a test
+ * reads, stays.
  */
-function restoreTests(root, directory, from = root) {
-  const held = new Set(listFiles(from).filter(underTestPaths));
+function undoBuild(root, directory) {
+  const held = listFiles(root);
+  const tracked = new Set(held);
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
-      if (entry.name === 'node_modules' || entry.name === '.git') continue;
-      if (entry.isDirectory() && !entry.isSymbolicLink()) walk(path);
-      else if (underTestPaths(path) && !held.has(path)) rmSync(join(directory, path), { force: true });
+      if (path === '.git') continue;
+      // The copy's node_modules links to the repository's packages, scope by scope, as copyChange laid it.
+      if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
+        if (!existsSync(join(root, path))) rmSync(join(directory, path), { recursive: true, force: true });
+        else if (entry.isDirectory() && entry.name.startsWith('@')) walk(path);
+      } else if (entry.isDirectory()) walk(path);
+      else if (!tracked.has(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && /\.[cm]?[jt]sx?$/.test(path)))) rmSync(join(directory, path), { force: true });
     }
   };
   walk('');
-  for (const path of held) copy(from, path, directory);
+  for (const path of held) copy(root, path, directory);
 }
 
 /** The merge base installed and prepared in a temporary checkout: its directory, and why it can't run there, or null. */
@@ -367,7 +375,8 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   // code beside a colocated test, so a hollow helper the change brings in runs on both. The runner
   // config stays the merge base's, as the guard keeps it once main holds the lanes.
   const { directory: base, blocked } = baseCheckout(root, change);
-  for (const path of listFiles(root)) if (underTestPaths(path)) copy(root, path, base);
+  // A fixture project's committed packages are its own too, as a test that runs it reads them.
+  for (const path of listFiles(root)) if (underTestPaths(path) || underTestPaths(`${path.split('/node_modules/')[0]}/package.json`)) copy(root, path, base);
   if (blocked) runs.base.blocked = blocked;
   else runs.base = runTests(base, files);
 
@@ -399,7 +408,8 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       continue;
     }
     const failed = prepare(root, change, directory);
-    restoreTests(root, directory);
+    undoBuild(root, directory);
+    for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
     runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles));
   }
   return runs;
