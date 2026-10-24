@@ -84,6 +84,21 @@ const workloads = {
   },
 };
 
+// The canvas conformance kit (issue #138) over the shipped build: every part on Vello CPU and noop, at 1,000
+// fuzzed sequences a module, a tenth of the quick lane's 10,000, so 21 rounds fit the perf lane; the fuzzing
+// parts' cost scales with the count.
+workloads.kit = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  let answer;
+  try {
+    [answer] = run('deep-show', 'run', [JSON.stringify({ evidence, calls: [{ call: 'kit', sequences: 1000 }] })]);
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+  const [kit] = answer.replies ?? [];
+  if (answer.ok !== true || kit?.verdict !== 'PASS') throw Error(`the kit didn't pass: ${JSON.stringify(answer).slice(0, 2000)}`);
+};
+
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
 workloads[task]();

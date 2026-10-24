@@ -73,7 +73,13 @@ pub struct Migration {
     pub from: u32,
     pub to: u32,
     pub renames: Vec<Rename>,
+    /// A canvas module's kind may also migrate by a pure function over the params, run after the
+    /// renames (Migration: `kind.migrate`).
+    pub map: Option<MigrateFn>,
 }
+
+/// A pure function over an item's params, from one major to the next.
+pub type MigrateFn = fn(&mut Map<String, Value>);
 
 /// A registry entry: a kind with every major this build knows.
 #[derive(Clone, Debug)]
@@ -123,6 +129,21 @@ impl Entry {
     }
 }
 
+/// Runs one migration step on an item's params: its renames, then its function.
+pub fn migrate_step(step: &Migration, params: &mut Map<String, Value>) {
+    for rename in &step.renames {
+        if params.contains_key(rename.to) {
+            continue;
+        }
+        if let Some(value) = params.shift_remove(rename.from) {
+            params.insert(rename.to.to_string(), value);
+        }
+    }
+    if let Some(map) = step.map {
+        map(params);
+    }
+}
+
 /// Every kind this build registers.
 #[derive(Clone, Debug)]
 pub struct Registry {
@@ -130,6 +151,11 @@ pub struct Registry {
 }
 
 impl Registry {
+    /// Every entry, in the order the build registered them.
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries
+    }
+
     /// The entry named `family.name`, if any.
     pub fn entry(&self, full_name: &str) -> Option<&Entry> {
         // `family.name` compared in place: lookups run per item, so nothing is allocated.
@@ -343,6 +369,7 @@ fn build() -> Registry {
                     from: "w",
                     to: "width",
                 }],
+                map: None,
             },
             Migration {
                 from: 2,
@@ -351,6 +378,7 @@ fn build() -> Registry {
                     from: "h",
                     to: "height",
                 }],
+                map: None,
             },
         ],
     };
