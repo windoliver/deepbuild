@@ -225,3 +225,34 @@ test('a skipped subtest of another test, ending in a tagged name, is no report o
     { f: 3, file: loop(`cases.length = 0;\nit('wrapper', async (t) => {\n  await t.test('s › ${c1} adds', { skip: true }, () => {});\n});\n`) });
   assert.ok(neverReported(result, `s › ${c1} adds`), show(result));
 });
+
+test('a tagged test that ran on the merge base and that code it imports skips on the change proved nothing: the run is inconclusive', (t) => {
+  const hook = "3;\nimport { beforeEach } from 'node:test';\nbeforeEach((t) => t.skip())";
+  const result = before(t, { f: 4, file: `describe('s', () => {\n${sums}});\n` }, { f: hook });
+  assert.ok(problems(result, 'before').some((found) => found.startsWith('INCONCLUSIVE') && found.includes(`s › ${c1} adds: declared unskipped, but skipped on the change, though it ran on the merge base`)), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test('a tagged test that skips itself off the reference machine, in a file the change only adds a test to, is no test and no refusal', (t) => {
+  const budget = `it('${c1} within budget', (t) => {\n  if (process.env.DEEP_PROOF_NO_SUCH_MACHINE !== '1') return t.skip('not the reference machine');\n  assert.ok(true);\n});\n`;
+  const result = before(t, { f: 4, file: budget }, { f: 3, file: `${budget}\nit('${c1} sums', () => {\n  assert.equal(f(), 3);\n});\n` });
+  assert.ok(!problems(result, 'before').some((found) => found.includes('within budget')), show(result));
+  assert.equal(result.status, 0, show(result));
+});
+
+// The proof lanes are checks: once main holds them, the change runs its own copy, so an edit of
+// their code, or of the test paths lanes.mjs names, is an edit of the checks.
+test("once main holds the proof lanes, an edit of their code or of lanes.mjs fails the guard, and passes as its own approved proposal", (t) => {
+  const lanes = (paths) => `export const testPaths = [${paths}];\n`;
+  const scene = (approve) => repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'scripts/lanes.mjs': lanes("'tests/**'") },
+    commits: [{ files: { 'scripts/lanes.mjs': lanes(''), 'scripts/proof-guard.mjs': '// no guard\n' }, message: `Empty the test paths\n\nPart of #${ISSUE}`, approve }],
+  });
+  const refused = problems(proof(scene(), ['guard']), 'guard');
+  for (const path of ['scripts/lanes.mjs', 'scripts/proof-guard.mjs']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: the proof lanes' own code changed`)), refused.join('\n'));
+  const approved = proof(scene({ items: ['scripts/lanes.mjs', 'scripts/proof-guard.mjs'] }), ['guard']);
+  assert.deepEqual(problems(approved, 'guard'), [], show(approved));
+  const free = repo(t, { base: { 'scripts/lanes.mjs': lanes("'tests/**'") }, commits: [{ files: { 'scripts/lanes.mjs': lanes("'tests/**', 'more/**'") } }] });
+  assert.deepEqual(problems(proof(free, ['guard']), 'guard'), [], 'with no proof lanes on main, lanes.mjs is free to change');
+});

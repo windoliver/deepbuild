@@ -350,3 +350,17 @@ export function spans(source) {
   visit(file, []);
   return found;
 }
+
+/**
+ * The text with each test's own source, `from` to `to` inclusive, blanked out, and the `;` that ends
+ * its statement right after it, so what is left lies outside every test.
+ */
+export function outsideTests(text, tests) {
+  // By UTF-16 units, as the parser counts offsets.
+  const chars = text.split('');
+  for (const { from, to } of tests) {
+    for (let index = from; index <= to; index += 1) if (chars[index] !== '\n') chars[index] = ' ';
+    if (text[to + 1] === ';') chars[to + 1] = ' ';
+  }
+  return chars.join('');
+}

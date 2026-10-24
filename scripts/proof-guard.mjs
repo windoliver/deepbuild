@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, isTestFile, literals, named, removedLines, show, sourceOf, spans, tagsIn, tagsWithImports, underTestPaths } from './proof-change.mjs';
+import { blobId, isTestFile, literals, named, outsideTests, removedLines, show, sourceOf, spans, tagsIn, tagsWithImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -11,11 +11,16 @@ const DECISIONS = {
   'AGENTS.md': { heading: '## The four invariants', what: 'one of the four invariants', row: () => true },
   'docs/technical-design.md': { heading: '## Decisions', what: 'a row under Decisions', row: (line) => line.startsWith('|') },
 };
+// The proof lanes' own code, and lanes.mjs, which names the test paths: once main holds the lanes, the
+// change runs its own copy of them, so an edit of them is an edit of the checks.
+const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes)\.mjs$/;
 
 export function guard({ root, change, issue }, approvals, say) {
   // With an issue, the guard keeps its tags; with none, every tag.
   const relevant = (text) => tagsIn(text).filter((tag) => !issue?.number || tag.startsWith(`#${issue.number}.`));
   let refused = 0;
+  const lanesOnMain = show(root, change.base, 'scripts/proof-guard.mjs') !== null;
+  const lanesEdit = (path, how) => ({ detail: `${path}: the proof lanes' own code changed${how}` });
   for (const commit of change.commits) {
     const items = (commit.sha && approvals.get(commit.sha)) || [];
     const itemPath = (item) => item.split(' › ')[0];
@@ -30,8 +35,10 @@ export function guard({ root, change, issue }, approvals, say) {
       }
     };
     for (const path of commit.merge?.conflicts ?? []) for (const edit of conflictEdits(root, commit, path, relevant)) judge(edit, path, ...edit.test ? [named(path, edit.test)] : []);
+    if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter((path) => LANES_CODE.test(path))) judge(lanesEdit(path, ' in resolving a merge conflict'), path);
     for (const file of commit.files) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
+      if (lanesOnMain && LANES_CODE.test(file.path) && file.hunks.length) judge(lanesEdit(file.path, ''), file.path);
       const before = show(root, commit.parent, file.path);
       if (before === null) continue; // an added file removes nothing
       if (isTestFile(file.path)) for (const edit of testEdits(root, commit, file, before, relevant)) judge(edit, file.path, ...edit.test ? [named(file.path, edit.test)] : []);
@@ -40,20 +47,6 @@ export function guard({ root, change, issue }, approvals, say) {
     }
   }
   if (!refused) say('PASS', 'guard', `${change.commits.length} commit${change.commits.length === 1 ? '' : 's'} checked: no guarded edit lacks its own approved proposal`);
-}
-
-/**
- * The text with each test's own source, `from` to `to` inclusive, blanked out, and the `;` that ends
- * its statement right after it, so what is left lies outside every test.
- */
-function outsideTests(text, tests) {
-  // By UTF-16 units, as the parser counts offsets.
-  const chars = text.split('');
-  for (const { from, to } of tests) {
-    for (let index = from; index <= to; index += 1) if (chars[index] !== '\n') chars[index] = ' ';
-    if (text[to + 1] === ';') chars[to + 1] = ' ';
-  }
-  return chars.join('');
 }
 
 /** The literals of the text that lie outside every test, whose white space is data a tagged test may compare. */
