@@ -87,17 +87,20 @@ describe('a running hub', () => {
       const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
       let row: Record<string, unknown> | undefined;
       let left: string[] = [];
+      let order: string[] = [];
       try {
         // The file goes only after its events are committed FULL: done once both hold.
         for (const until = Date.now() + 5000; Date.now() < until; await new Promise((r) => setTimeout(r, 50))) {
           row = db.prepare("SELECT v, json_extract(data, '$.late') AS late, json_extract(data, '$.matched') AS matched FROM events WHERE id = ?").get('01K74FKZVKZGATTBZAEGPRET62');
           left = readdirSync(join(root, 'spool'));
-          if (row && !left.length) break;
+          order = (db.prepare("SELECT id FROM events WHERE kind = 'tool.before' ORDER BY log_pos").all() as { id: string }[]).map((r) => r.id);
+          if (row && !left.length && order.length === 2) break;
         }
       } finally {
         db.close();
       }
       expect(row, 'the spooled late call is in the record while the hub runs').toEqual({ v: 2, late: 1, matched: '["listing-noted"]' });
+      expect(order, 'the spooled call ran first, so it is recorded before the hook that started the replay').toEqual(['01K74FKZVKZGATTBZAEGPRET62', '01K74FKZVKZGATTBZAEGPRET63']);
       expect(left, 'the replayed spool is removed').toEqual([]);
     });
   }, 30_000);
