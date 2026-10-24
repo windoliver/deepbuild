@@ -1,10 +1,11 @@
-//! `deep-canvas-render <frames|session|render|check|look>`: JSON lines in, one JSON line out per
-//! input line, in order, exit 0. A line that can't be read, lacks a required field or names an
+//! `deep-canvas-render <frames|session|render|check|look|raster|geometry>`: JSON lines in, one
+//! JSON line out per input line, in order, exit 0. A line that can't be read, lacks a required field or names an
 //! unknown `planted` value answers `{"ok":false,"code":"bad_input"}`, before anything
 //! platform-specific; off macOS every drawing line answers `{"ok":false,"code":"unsupported_platform"}`.
 //! The surface is the #391 acceptance README's, with #392's added: `check` and `look` (on every
 //! platform), looks by ID or as look@1, status states, readings with their as-of time, replay and
-//! frame captures.
+//! frame captures; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
+//! Vello CPU, and `check` with a look adding the marks2d module's own check.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -16,7 +17,7 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 use deep_canvas_marks::look::{self, Look};
-use deep_canvas_marks::scene::{Palette, Record};
+use deep_canvas_marks::scene::{Palette, Planted, Record};
 use serde_json::{json, Map, Value};
 
 fn bad_input() -> Value {
@@ -205,11 +206,57 @@ fn doc(value: Option<&Value>) -> Option<Map<String, Value>> {
     value?.as_object().cloned()
 }
 
+/// The document check: the core's, then, with a look and no core error, the marks2d module's.
+fn check(doc: &Map<String, Value>, look: Option<&Look>) -> Value {
+    let result = deep_canvas::document::check(&Value::Object(doc.clone()));
+    let mut issues = result.issues;
+    if let (true, Some(look)) = (result.ok, look) {
+        issues.extend(deep_canvas_marks::check::check(doc, look));
+    }
+    let ok = !issues.iter().any(|i| i.severity == "error");
+    json!({
+        "ok": ok,
+        "issues": issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
+        "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
+    })
+}
+
+/// A document the check refuses, as a drawing command answers it: the first error's code.
+fn refused_by_check(checked: &Value) -> Option<Value> {
+    if checked["ok"] == json!(true) {
+        return None;
+    }
+    let issues = checked["issues"].as_array()?;
+    let first = issues.iter().find(|i| i["severity"] == "error")?;
+    Some(json!({"ok": false, "code": first["code"], "issues": issues}))
+}
+
+/// Every document a line carries (`doc`, and each step's in a session) with its mark sets'
+/// sidecar columns read from the line's `store` and inlined.
+fn inline_sidecars(input: &mut Map<String, Value>) -> Result<(), Value> {
+    let store = input
+        .get("store")
+        .and_then(Value::as_str)
+        .map(PathBuf::from);
+    let store = store.as_deref();
+    if let Some(Value::Object(doc)) = input.get_mut("doc") {
+        asset::sidecars(doc, store)?;
+    }
+    if let Some(Value::Array(steps)) = input.get_mut("steps") {
+        for step in steps {
+            if let Some(Value::Object(doc)) = step.get_mut("doc") {
+                asset::sidecars(doc, store)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // `check` reads the document and the look, `look` the look alone; both answer on every
     // platform. A look the status guard refuses is the answer, and nothing is drawn.
     let look = match (command, input.get("look")) {
-        ("check", None) => None,
+        ("check" | "geometry", None) => None,
         (_, value) => match look(value)? {
             Ok(found) => Some(found),
             Err(refusal) => return Some(Answer::Now(refusal.to_json())),
@@ -220,14 +267,46 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         return Some(Answer::Now(json!({"ok": true, "look": def})));
     }
     if command == "check" {
-        let result = deep_canvas::document::check(&Value::Object(doc(input.get("doc"))?));
-        return Some(Answer::Now(json!({
-            "ok": result.ok,
-            "issues": result.issues.iter().map(|i| i.to_json()).collect::<Vec<_>>(),
-            "notices": result.notices.iter().map(|n| n.to_json()).collect::<Vec<_>>(),
-        })));
+        let doc = doc(input.get("doc"))?;
+        return Some(Answer::Now(check(&doc, look.as_ref().map(|(l, _)| l))));
+    }
+    if command == "geometry" {
+        let doc = doc(input.get("doc"))?;
+        let item = input.get("item")?.as_str()?;
+        let checked = check(&doc, look.as_ref().map(|(l, _)| l));
+        return Some(Answer::Now(
+            refused_by_check(&checked).unwrap_or_else(|| raster::geometry(&doc, item)),
+        ));
     }
     let (look, _) = look?;
+    if command == "raster" {
+        let (planted, encoded_luma) = match input.get("planted") {
+            None => (Planted::None, false),
+            Some(Value::String(p)) if p == "arc_closed_along_chord" => {
+                (Planted::ArcClosedAlongChord, false)
+            }
+            Some(Value::String(p)) if p == "mask_encoded_luma" => (Planted::None, true),
+            Some(_) => return None,
+        };
+        let request = raster::Request {
+            out: input.get("out")?.as_str()?.to_string(),
+            doc: doc(input.get("doc"))?,
+            view: view(input.get("view"))?,
+            t: match input.get("t") {
+                None => 0,
+                Some(t) => t.as_i64()?,
+            },
+            record: record(input)?,
+            store: store(input.get("store"))?,
+            planted,
+            encoded_luma,
+            look,
+        };
+        let checked = check(&request.doc, Some(&request.look));
+        return Some(Answer::Now(
+            refused_by_check(&checked).unwrap_or_else(|| raster::answer(request)),
+        ));
+    }
     let request = match command {
         "frames" => {
             let hz = match input.get("refresh_hz") {
@@ -338,9 +417,13 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
 
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
-    if !["frames", "session", "render", "check", "look"].contains(&command.as_str()) {
+    if ![
+        "frames", "session", "render", "check", "look", "raster", "geometry",
+    ]
+    .contains(&command.as_str())
+    {
         eprintln!(
-            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look"
+            "deep-canvas-render: usage: deep-canvas-render frames | session | render | check | look | raster | geometry"
         );
         std::process::exit(2);
     }
@@ -359,7 +442,10 @@ fn main() {
         }
         let line = std::str::from_utf8(&buf).map(|l| l.trim_end_matches(['\n', '\r']));
         let request = match line.map(serde_json::from_str::<Value>) {
-            Ok(Ok(Value::Object(input))) => parse(&command, &input),
+            Ok(Ok(Value::Object(mut input))) => match inline_sidecars(&mut input) {
+                Ok(()) => parse(&command, &input),
+                Err(refusal) => Some(Answer::Now(refusal)),
+            },
             _ => None,
         };
         let answer = match request {
@@ -384,5 +470,8 @@ fn main() {
     let _ = out.flush();
 }
 
+mod asset;
 #[cfg(target_os = "macos")]
 mod macos;
+mod raster;
+mod status;

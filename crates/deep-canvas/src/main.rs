@@ -1,18 +1,20 @@
 //! `deep-canvas <subcommand>`: JSON lines in, one JSON line out per input line, in order, exit
 //! 0; a line that can't be read answers `{"ok":false,"code":"bad_input"}`. Subcommands:
-//! `parse <time|unit|path|handle|id>`, `check`, `apply`, `canonical`, `color`, `session`,
-//! `render`.
+//! `parse <time|unit|path|handle|id>`, `check`, `apply`, `canonical`, `merge`, `color`,
+//! `session`, `render`.
 
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
+use deep_canvas::canon::revision_hash;
 use deep_canvas::color::{
     linear_to_oklab, linear_to_srgb, oklab_to_linear, oklab_to_oklch, oklch_to_oklab,
     srgb_to_linear, LinearRgb, Oklab, Oklch, Srgb,
 };
-use deep_canvas::document::{apply, canonical, check};
+use deep_canvas::document::{apply, canonical, check, check_with, merge, DocShape, Merged};
 use deep_canvas::grammar::{Handle, Id, Path, Time, TimeContext, UnitContext, UnitLiteral};
+use deep_canvas::kinds::registry;
 use deep_canvas::{render, session};
 
 fn bad_input() -> Value {
@@ -249,9 +251,19 @@ fn answer(command: &[String], line: &str) -> Value {
     };
     match command {
         [parse, grammar] if parse == "parse" => parse_line(grammar, &input),
-        [name] if name == "check" => match input.get("doc") {
-            Some(doc) => check(doc).to_json(),
-            None => bad_input(),
+        [name] if name == "check" => match (input.get("doc"), input.get("as_build")) {
+            (Some(doc), None) => check(doc).to_json(),
+            // As an earlier build read it: each kind named at the minor named.
+            (Some(doc), Some(pins)) => {
+                let pins: Option<Vec<String>> = pins
+                    .as_array()
+                    .and_then(|p| p.iter().map(|v| v.as_str().map(str::to_string)).collect());
+                match pins.and_then(|p| registry().pinned(&p)) {
+                    Some(reg) => check_with(doc, &reg).to_json(),
+                    None => bad_input(),
+                }
+            }
+            (None, _) => bad_input(),
         },
         [name] if name == "apply" => {
             let (Some(doc), Some(writer), Some(patches)) = (
@@ -270,6 +282,30 @@ fn answer(command: &[String], line: &str) -> Value {
             }
             None => bad_input(),
         },
+        [name] if name == "merge" => {
+            let (Some(base), Some(a), Some(b)) =
+                (input.get("base"), input.get("a"), input.get("b"))
+            else {
+                return bad_input();
+            };
+            match merge(base, a, b, &registry()) {
+                Merged::Clean(doc) => {
+                    match revision_hash(&doc, &DocShape::new(&doc, &registry())) {
+                        Ok(hash) => json!({"outcome": "merged", "doc": doc, "hash": hash}),
+                        Err(e) => {
+                            json!({"ok": false, "code": "out_of_range", "path": e.path, "what": e.what})
+                        }
+                    }
+                }
+                Merged::Conflict(entries) => json!({
+                    "outcome": "conflict",
+                    "conflicts": entries
+                        .iter()
+                        .map(|(map, id)| json!({"id": id, "map": map}))
+                        .collect::<Vec<_>>(),
+                }),
+            }
+        }
         [name] if name == "color" => color_line(&input),
         [name] if name == "session" => session_line(&input),
         [name] if name == "render" => render_line(&input),
@@ -282,9 +318,16 @@ fn known(command: &[String]) -> bool {
         [parse, grammar] if parse == "parse" => {
             ["time", "unit", "path", "handle", "id"].contains(&grammar.as_str())
         }
-        [name] => {
-            ["check", "apply", "canonical", "color", "session", "render"].contains(&name.as_str())
-        }
+        [name] => [
+            "check",
+            "apply",
+            "canonical",
+            "merge",
+            "color",
+            "session",
+            "render",
+        ]
+        .contains(&name.as_str()),
         _ => false,
     }
 }
@@ -293,7 +336,7 @@ fn main() {
     let command: Vec<String> = std::env::args().skip(1).collect();
     if !known(&command) {
         eprintln!(
-            "deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color | session | render"
+            "deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | merge | color | session | render"
         );
         std::process::exit(2);
     }

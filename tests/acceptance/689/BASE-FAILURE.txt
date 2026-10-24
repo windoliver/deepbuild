@@ -1,0 +1,99 @@
+Acceptance tests for #689 on the base commit (no implementation), run on 2026-10-22 on macOS (arm64),
+Node 24.22.0, rustup 1.29.2 with default toolchain 1.95.0 and 1.99.1 also installed; RUSTUP_HOME and
+CARGO_HOME unset in the caller's environment.
+
+  node --test 'tests/acceptance/689/*.test.mjs'
+
+Stack frames and the raw actual/expected dumps are trimmed. Local paths are redacted: <checkout> is the
+base copy's root, <home> the caller's home directory.
+
+Expected on the base:
+- criterion 1 fails: no pin, so rustup's default toolchain (1.95.0) answers at the repository root.
+- criterion 3 "unset" fails: every lane command starts with neither RUSTUP_HOME nor CARGO_HOME set.
+- criterion 3 "set" passes: the base hands the caller's values through untouched. This test guards
+  against overwriting them (see "always-override" below).
+
+-------------------------------------------------------------------------------------------------------
+✖ criterion 3: with RUSTUP_HOME and CARGO_HOME unset, every lane's commands get the user's ~/.rustup and ~/.cargo (3293.406417ms)
+✔ criterion 3: with RUSTUP_HOME and CARGO_HOME set, every lane's commands get the caller's own values (2528.788041ms)
+✖ criterion 1: rustc --version at the repository root reports 1.99.1 (385.08475ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5997.909542
+
+✖ failing tests:
+
+test at tests/acceptance/689/preflight-env.test.mjs:18:1
+✖ criterion 3: with RUSTUP_HOME and CARGO_HOME unset, every lane's commands get the user's ~/.rustup and ~/.cargo (3293.406417ms)
+  AssertionError [ERR_ASSERTION]: the lanes' commands ran with other homes than {"RUSTUP_HOME":"<home>/.rustup","CARGO_HOME":"<home>/.cargo"}
+  + actual - expected
+  
+    [
+  +   'tsc --noEmit: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'npm run: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'cargo fmt: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'repo-rules: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'cargo clippy: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'canvas-lint: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'conformance-lint: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'vitest run: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'vitest run: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'cargo test: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'node --test: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'catalogue-drift: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'corpus check: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'cargo build: RUSTUP_HOME=null CARGO_HOME=null',
+  +   'parity: RUSTUP_HOME=null CARGO_HOME=null'
+  -   'tsc --noEmit: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'npm run: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'cargo fmt: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'repo-rules: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'cargo clippy: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'canvas-lint: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'conformance-lint: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'vitest run: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'vitest run: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'cargo test: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'node --test: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'catalogue-drift: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'corpus check: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'cargo build: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo',
+  -   'parity: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo'
+    ]
+  
+
+test at tests/acceptance/689/toolchain.test.mjs:7:1
+✖ criterion 1: rustc --version at the repository root reports 1.99.1 (385.08475ms)
+  AssertionError [ERR_ASSERTION]: rustc --version at <checkout> printed: rustc 1.95.0 (59807616e 2026-04-14)
+
+-------------------------------------------------------------------------------------------------------
+Planted programs. Each one is a copy of the base's scripts/ (plus a rust-toolchain.toml for the pins)
+with this suite, so <checkout> is that copy. Each is run with the same command, on the test file named.
+
+preflight-env.test.mjs:
+  good-wrapper         scripts/preflight exports RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" and
+                       CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}" before exec node
+                         -> unset PASS, set PASS
+  good-lanes           lanes.mjs spawns each lane command with
+                       env { RUSTUP_HOME: ~/.rustup, CARGO_HOME: ~/.cargo, ...process.env }
+                         -> unset PASS, set PASS
+  always-override      scripts/preflight exports both as $HOME/.rustup and $HOME/.cargo unconditionally
+                         -> unset PASS, set FAIL:
+                            'tsc --noEmit: RUSTUP_HOME=<home>/.rustup CARGO_HOME=<home>/.cargo' where
+                            '... RUSTUP_HOME=/opt/caller-689/rustup CARGO_HOME=/opt/caller-689/cargo' was expected
+  rustup-only          scripts/preflight defaults RUSTUP_HOME only
+                         -> unset FAIL: 'tsc --noEmit: RUSTUP_HOME=<home>/.rustup CARGO_HOME=null'; set PASS
+  cargo-commands-only  lanes.mjs sets the defaults only on `cargo` commands
+                         -> unset FAIL: 'tsc --noEmit: RUSTUP_HOME=null CARGO_HOME=null' (and every node
+                            command, vitest included); set PASS
+
+toolchain.test.mjs:
+  pin-1.99.1           rust-toolchain.toml: channel "1.99.1", components rustfmt and clippy
+                         -> PASS
+  pin-1.93.0           rust-toolchain.toml: channel "1.93.0" (installed)
+                         -> FAIL: rustc --version at <checkout> printed: rustc 1.93.0 (254b59607 2026-01-19)

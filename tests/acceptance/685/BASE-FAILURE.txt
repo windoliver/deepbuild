@@ -1,0 +1,530 @@
+Base commit: e9c601b5bb020272522e3f243bdeecf9f24d1a58 (origin/main, no implementation of #685)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/685   (node = ~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node, the repo's .node-version, first on PATH with the toolchains of README, Environment: ELAN_HOME, KANI_HOME, elan/bin, kani/bin, cargo-mutants/bin; the same as npx vitest run --root tests/acceptance/685 there)
+Date: 2026-10-23T18:36:49Z  Node v24.22.0  vitest 5.0.5  darwin-arm64  Lean 4.35.0  Kani 0.68.0 (CBMC 6.11.0)  cargo-mutants 27.1.0
+Exit code: 1
+Why every test fails: the plug-in the README defines does not exist at the base. packages/proof/src/index.ts is missing, so the lazy import every test makes first (plugin() in helpers.ts, before any toolchain check or run) rejects with "Cannot find module '/packages/proof/src/index.ts'", and each test fails there on its own: 50 failed | 0 passed of 50, in 10 files, no suite failing at import. Vitest prints one error block for each run of consecutive tests with the same error, so the 50 FAIL lines below share 33 blocks, every one this error. Nothing else in the import graph is missing: the conformance, verdicts and contracts entries resolve.
+Checked beside this run (not at the base): the tests type-check against a declaration-only copy of the surface, kept outside the repo and placed at packages/proof/src/index.ts only for the check (node node_modules/typescript/bin/tsc -p tests/acceptance/685/tsconfig.json: no errors), then removed. Run against that same copy as a runtime stub, whose declared functions compile to nothing, the suite reads 50 failed | 0 passed of 50 in 84 s, each test at its first call into the plug-in (TypeError: proofFill / proofKit / draftable / p.mutants / p.runBase / proofDepth is not a function), the toolchain checks and the test-side work before it (AC3's forged export, 81 s) having run clean. No test passes at the base or against the stub. The stand-ins the wrong-program tests feed (lake build's exit, the VERIFICATION:- SUCCESSFUL line, the playback replay) were run alone with the real toolchains: the lake build runner passes the sorry variant (the core then says PASS), the success-line runner passes total_append_never, and the replay of Kani's counterexample panics at src/proofs.rs:14:5 on the base and passes on the fix.
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/685
+
+ ❯ depth-toolchain.test.ts (7 tests | 7 failed) 20ms
+   ❯ AC8 a proof check counts at unit depth, so it never covers a requirement that needs a journey (3)
+     × AC8 a proof check counts at unit depth whatever depth its spec writes, for either runner 12ms
+     × AC8 a requirement at journey depth covered only by a passing proof check is INVALID, naming the requirement and the depth it needs; at unit depth the same check passes it 2ms
+     × AC8 (wrong program) a plug-in that counts a proof at the depth its spec writes covers the journey and fails the assertion above 1ms
+   ❯ AC9 a check whose toolchain isn't here at its version is BLOCKED, naming both, and a repo with neither toolchain gets no proof check (4)
+     × AC9 a Lean check pinned to leanprover/lean4:v4.34.0, which this machine lacks, is BLOCKED naming it, never PASS, and the run installs nothing 1ms
+     × AC9 a Kani check pinned to kani 0.67.0, which this machine lacks, is BLOCKED naming it, never PASS, and the run installs nothing 1ms
+     × AC9 the drafting job proposes no proof check for a repo with no lean-toolchain file and no Kani harness or metadata, and the runner each toolchain names otherwise 0ms
+     × AC9 (wrong program) a drafting rule that proposes Kani for any Cargo crate proposes one for the bare repo and fails the assertion above 0ms
+ ❯ mutants-kani.test.ts (4 tests | 4 failed) 174ms
+   ❯ AC7 a Kani harness that checks on every mutant of its target can't fail, and its check is INVALID, naming it (4)
+     × AC7 both harnesses verify on the fixture itself, so whatever the mutants show is theirs alone 90ms
+     × AC7 proofs::total_self (f x = f x) checks on every mutant of total: none kills it, and the check is INVALID, naming it 1ms
+     × AC7 the real harness proofs::total_append fails on at least one mutant of total, listed by its place in src/lib.rs, and the check doesn't name it as one that can't fail 0ms
+     × AC7 (wrong program) a mutation check that runs no mutant passes f x = f x and fails the assertion above 0ms
+ ❯ kit-preflight.test.ts (1 test | 1 failed) 5ms
+   ❯ AC11 the preflight's kit check finds no problem in the plug-in's check.kind@1 kit (1)
+     × AC11 kitProblems on the plug-in's kit is empty: a planted fill per rule, the unfound-theorem runner refused with its own message, the reference fill passing 3ms
+ ❯ kit.test.ts (4 tests | 4 failed) 27ms
+   ❯ AC11 the plug-in passes the check.kind@1 kit, including a planted runner that reports passed for a theorem the checker never found (4)
+     × AC11 the plug-in's kit is a check.kind@1 kit with the planted unfound-theorem runner, breaking a rule it lists, and a fixture whose spec names a theorem its checkout lacks 19ms
+     × AC11 the plug-in's runner passes its kit: every case, fixed and seeded, reads PASS 4ms
+     × AC11 the planted runner reports passed for the theorem the checker never found; the plug-in's runner does not 2ms
+     × AC11 (wrong program) the kit fails the planted runner, with a FAIL that carries its message and its codes 0ms
+ ❯ mutants-lean.test.ts (3 tests | 3 failed) 204ms
+   ❯ AC7 a Lean theorem that checks on every mutant of its target can't fail, and its check is INVALID, naming it (3)
+     × AC7 both theorems check on the fixture itself through comparator 122ms
+     × AC7 total_self (f x = f x) checks on every mutant of total: none kills it, and the check is INVALID, naming it 1ms
+     × AC7 the real theorem total_append fails on at least one mutant of total, listed by its place in Fixture/Total.lean, and the check doesn't name it as one that can't fail 0ms
+ ❯ keys.test.ts (5 tests | 5 failed) 219ms
+   ❯ AC10 a proof run's key holds its toolchain version and flags, so a toolchain change reruns every proof check that used it (5)
+     × AC10 each run's tools name the toolchain version the checker reported, Lean 4.35.0 and Kani 0.68.0, and the runner's flags (comparator unsandboxed on macOS) 134ms
+     × AC10 with the environment unchanged, every proof check keeps its run; the verdict key shows both toolchains' versions 0ms
+     × AC10 a Lean version change in the environment reruns every Lean proof check on the claim, and the key shows the new Lean version beside Kani's 0ms
+     × AC10 a Kani version change reruns the Kani proof check, and a change to the runner's flags alone reruns its checks too 0ms
+     × AC10 (wrong program) a run whose key leaves out the toolchain version keeps its result across the version change, and fails the assertion above 0ms
+ ❯ lean-statement.test.ts (6 tests | 6 failed) 233ms
+   ❯ AC2 a restated theorem is judged on the approved statement: INVALID naming the theorem, and a proposal naming the file (3)
+     × AC2 comparator's mismatch makes the check INVALID, naming total_append 159ms
+     × AC2 the difference becomes a proposal naming Fixture/Proofs.lean, with the approved and the written statement 0ms
+     × AC2 the claim never passes on the restated theorem: the run is not a pass, and the core's verdict is not PASS 0ms
+   ❯ AC3 on macOS the runner exports both modules in the check's temporary checkout, runs comparator unsandboxed, says so, and never reads an export in the commit (3)
+     × AC3 the receipt line says the check ran unsandboxed in a hermetic run 2ms
+     × AC3 the forged Solution.ndjson is never read: the check judges the commit's own build, INVALID naming total_append and sorryAx 0ms
+     × AC3 the evidence keeps the two exports the runner built, by hash, and neither is the forged file 0ms
+ ❯ fix.test.ts (6 tests | 6 failed) 476ms
+   ❯ AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays (6)
+     × AC6 the merge base fails at the harness's assertion: a failed base run, on its assertion, naming the harness 89ms
+     × AC6 its counterexample is Kani's concrete-playback test for the failed assertion, the smallest failing case 0ms
+     × AC6 the counterexample replays as a Rust test: it fails on the merge base at the harness's assertion and passes on the fix 0ms
+     × AC6 that proves the fix: the head run passes, and with that base run the core's verdict is PASS 76ms
+     × AC6 a planted fix whose harness calls a function only the fix adds passes on its own commit and fails on the base before its obligation: INVALID, naming it 82ms
+     × AC6 (wrong program) a base reading that takes any failure on the base as the fix's proof passes the planted fix and fails the assertion above 1ms
+ ❯ kani.test.ts (8 tests | 8 failed) 768ms
+   ❯ AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named (6)
+     × AC4 the verified harness gives PASS: a passed run of one harness, judged PASS by the core 103ms
+     × AC4 the PASS's receipt line says bounded and names the bounds: the unwind bound 5 and the assumption split <= 4, with Kani 0.68.0 0ms
+     × AC4 a drafted harness whose assumption no input satisfies gives INVALID, naming the harness and its unsatisfied cover 61ms
+     × AC4 (wrong program) a runner that reads only `VERIFICATION:- SUCCESSFUL` passes that harness, since Kani reports it SUCCESSFUL, and fails the assertion above 1ms
+     × AC4 an agent's `kani::assume(false)` in the target gives INVALID, naming src/lib.rs and its line 111ms
+     × AC4 an agent's `#[kani::stub]` on a function the target calls gives INVALID, naming src/lib.rs and its line, though Kani verifies the approved harness 87ms
+   ❯ AC5 a loop that needs more than the approved unwind bound is INCONCLUSIVE, naming the loop and the bound, never PASS (2)
+     × AC5 the harness with #[kani::unwind(3)] over eight readings gives INCONCLUSIVE, naming the loop in total (src/lib.rs:14) and the bound 3 71ms
+     × AC5 never PASS: the run is not a pass, and the core's verdict on it is not PASS 0ms
+ ❯ lean-escapes.test.ts (6 tests | 6 failed) 826ms
+   ❯ AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it (6)
+     × AC1 the fixture's proved theorems give PASS: a passed run that checked both, judged PASS by the core, its receipt naming comparator and Lean 4.35.0 137ms
+     × AC1 the same theorem proved with `sorry` gives INVALID, naming total_append and sorryAx 96ms
+     × AC1 (wrong program) a runner that reads `lake build`'s exit status passes the `sorry` case, since Lean builds a `sorry` with a warning, and fails the assertion above 14ms
+     × AC1 a proof closed by a new `axiom cheat` gives INVALID, naming cheat 15ms
+     × AC1 a theorem closed by `native_decide` gives INVALID, naming the axiom it adds (total_example._native.native_decide.ax_1_1 on Lean 4.35.0) 120ms
+     × AC1 the cheat variant passes once its axiom is a declared assumption of the check: comparator permits it beside propext, Quot.sound and Classical.choice 108ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 50 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  depth-toolchain.test.ts > AC8 a proof check counts at unit depth, so it never covers a requirement that needs a journey > AC8 a proof check counts at unit depth whatever depth its spec writes, for either runner
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:30:28
+     28| describe('AC8 a proof check counts at unit depth, so it never covers a…
+     29|   it('AC8 a proof check counts at unit depth whatever depth its spec w…
+     30|     const { proofDepth } = await plugin();
+       |                            ^
+     31|     for (const depth of DEPTHS) {
+     32|       expect(proofDepth(kaniSpec([APPEND], { depth })), `a Kani check …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/50]⎯
+
+ FAIL  depth-toolchain.test.ts > AC8 a proof check counts at unit depth, so it never covers a requirement that needs a journey > AC8 a requirement at journey depth covered only by a passing proof check is INVALID, naming the requirement and the depth it needs; at unit depth the same check passes it
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:38:28
+     36|
+     37|   it('AC8 a requirement at journey depth covered only by a passing pro…
+     38|     const { proofDepth } = await plugin();
+       |                            ^
+     39|     const r = await pass();
+     40|     expect(r.outcome, r.reasons.join(' | ')).toBe('passed');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/50]⎯
+
+ FAIL  depth-toolchain.test.ts > AC8 a proof check counts at unit depth, so it never covers a requirement that needs a journey > AC8 (wrong program) a plug-in that counts a proof at the depth its spec writes covers the journey and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:47:28
+     45|
+     46|   it('AC8 (wrong program) a plug-in that counts a proof at the depth i…
+     47|     const { proofDepth } = await plugin();
+       |                            ^
+     48|     const r = await pass();
+     49|     expectJourneyInvalid(r, proofDepth(kaniSpec([APPEND], { depth: 'jo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/50]⎯
+
+ FAIL  depth-toolchain.test.ts > AC9 a check whose toolchain isn't here at its version is BLOCKED, naming both, and a repo with neither toolchain gets no proof check > AC9 a Lean check pinned to leanprover/lean4:v4.34.0, which this machine lacks, is BLOCKED naming it, never PASS, and the run installs nothing
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:66:5
+     64| describe('AC9 a check whose toolchain isn\'t here at its version is BL…
+     65|   it('AC9 a Lean check pinned to leanprover/lean4:v4.34.0, which this …
+     66|     await plugin();
+       |     ^
+     67|     requireLean();
+     68|     const toolchains = join(process.env.ELAN_HOME!, 'toolchains');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/50]⎯
+
+ FAIL  depth-toolchain.test.ts > AC9 a check whose toolchain isn't here at its version is BLOCKED, naming both, and a repo with neither toolchain gets no proof check > AC9 a Kani check pinned to kani 0.67.0, which this machine lacks, is BLOCKED naming it, never PASS, and the run installs nothing
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:77:5
+     75|
+     76|   it('AC9 a Kani check pinned to kani 0.67.0, which this machine lacks…
+     77|     await plugin();
+       |     ^
+     78|     requireKani();
+     79|     const home = process.env.KANI_HOME!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/50]⎯
+
+ FAIL  depth-toolchain.test.ts > AC9 a check whose toolchain isn't here at its version is BLOCKED, naming both, and a repo with neither toolchain gets no proof check > AC9 the drafting job proposes no proof check for a repo with no lean-toolchain file and no Kani harness or metadata, and the runner each toolchain names otherwise
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:88:27
+     86|
+     87|   it('AC9 the drafting job proposes no proof check for a repo with no …
+     88|     const { draftable } = await plugin();
+       |                           ^
+     89|     expect(draftable(checkout('bare')), 'a plain crate with tests: no …
+     90|     expect(draftable(checkout('lean')), 'a lean-toolchain file').toEqu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/50]⎯
+
+ FAIL  depth-toolchain.test.ts > AC9 a check whose toolchain isn't here at its version is BLOCKED, naming both, and a repo with neither toolchain gets no proof check > AC9 (wrong program) a drafting rule that proposes Kani for any Cargo crate proposes one for the bare repo and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ depth-toolchain.test.ts:96:27
+     94|
+     95|   it('AC9 (wrong program) a drafting rule that proposes Kani for any C…
+     96|     const { draftable } = await plugin();
+       |                           ^
+     97|     const bare = checkout('bare');
+     98|     expect(draftable(bare)).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/50]⎯
+
+ FAIL  fix.test.ts > AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays > AC6 the merge base fails at the harness's assertion: a failed base run, on its assertion, naming the harness
+ FAIL  fix.test.ts > AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays > AC6 its counterexample is Kani's concrete-playback test for the failed assertion, the smallest failing case
+ FAIL  fix.test.ts > AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays > AC6 the counterexample replays as a Rust test: it fails on the merge base at the harness's assertion and passes on the fix
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runBase fix.test.ts:21:13
+     19|
+     20| async function runBase(spec: typeof fixSpec, dir: string): Promise<Pro…
+     21|   const p = await plugin();
+       |             ^
+     22|   requireKani();
+     23|   return await p.runBase(spec, context(dir, KANI_DEADLINE));
+ ❯ fix.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/50]⎯
+
+ FAIL  fix.test.ts > AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays > AC6 that proves the fix: the head run passes, and with that base run the core's verdict is PASS
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ fix.test.ts:68:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/50]⎯
+
+ FAIL  fix.test.ts > AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays > AC6 a planted fix whose harness calls a function only the fix adds passes on its own commit and fails on the base before its obligation: INVALID, naming it
+ FAIL  fix.test.ts > AC6 a fix is proved only when the merge base fails at the harness's own assertion, with a counterexample that replays > AC6 (wrong program) a base reading that takes any failure on the base as the fix's proof passes the planted fix and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ fix.test.ts:74:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/50]⎯
+
+ FAIL  kani.test.ts > AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named > AC4 the verified harness gives PASS: a passed run of one harness, judged PASS by the core
+ FAIL  kani.test.ts > AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named > AC4 the PASS's receipt line says bounded and names the bounds: the unwind bound 5 and the assumption split <= 4, with Kani 0.68.0
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ kani.test.ts:30:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/50]⎯
+
+ FAIL  kani.test.ts > AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named > AC4 a drafted harness whose assumption no input satisfies gives INVALID, naming the harness and its unsatisfied cover
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ kani.test.ts:46:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/50]⎯
+
+ FAIL  kani.test.ts > AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named > AC4 (wrong program) a runner that reads only `VERIFICATION:- SUCCESSFUL` passes that harness, since Kani reports it SUCCESSFUL, and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ kani.test.ts:50:5
+     48|
+     49|   it('AC4 (wrong program) a runner that reads only `VERIFICATION:- SUC…
+     50|     await plugin();
+       |     ^
+     51|     requireKani();
+     52|     expectVerdictNaming(await never(), 'INVALID', ['total_append_never…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/50]⎯
+
+ FAIL  kani.test.ts > AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named > AC4 an agent's `kani::assume(false)` in the target gives INVALID, naming src/lib.rs and its line
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ kani.test.ts:21:100
+ ❯ kani.test.ts:60:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/50]⎯
+
+ FAIL  kani.test.ts > AC4 a verified Kani harness passes, bounded; a harness no input reaches and an agent's assume or stub are INVALID, named > AC4 an agent's `#[kani::stub]` on a function the target calls gives INVALID, naming src/lib.rs and its line, though Kani verifies the approved harness
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ kani.test.ts:22:98
+ ❯ kani.test.ts:66:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/50]⎯
+
+ FAIL  kani.test.ts > AC5 a loop that needs more than the approved unwind bound is INCONCLUSIVE, naming the loop and the bound, never PASS > AC5 the harness with #[kani::unwind(3)] over eight readings gives INCONCLUSIVE, naming the loop in total (src/lib.rs:14) and the bound 3
+ FAIL  kani.test.ts > AC5 a loop that needs more than the approved unwind bound is INCONCLUSIVE, naming the loop and the bound, never PASS > AC5 never PASS: the run is not a pass, and the core's verdict on it is not PASS
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ kani.test.ts:74:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/50]⎯
+
+ FAIL  keys.test.ts > AC10 a proof run's key holds its toolchain version and flags, so a toolchain change reruns every proof check that used it > AC10 each run's tools name the toolchain version the checker reported, Lean 4.35.0 and Kani 0.68.0, and the runner's flags (comparator unsandboxed on macOS)
+ FAIL  keys.test.ts > AC10 a proof run's key holds its toolchain version and flags, so a toolchain change reruns every proof check that used it > AC10 with the environment unchanged, every proof check keeps its run; the verdict key shows both toolchains' versions
+ FAIL  keys.test.ts > AC10 a proof run's key holds its toolchain version and flags, so a toolchain change reruns every proof check that used it > AC10 a Lean version change in the environment reruns every Lean proof check on the claim, and the key shows the new Lean version beside Kani's
+ FAIL  keys.test.ts > AC10 a proof run's key holds its toolchain version and flags, so a toolchain change reruns every proof check that used it > AC10 a Kani version change reruns the Kani proof check, and a change to the runner's flags alone reruns its checks too
+ FAIL  keys.test.ts > AC10 a proof run's key holds its toolchain version and flags, so a toolchain change reruns every proof check that used it > AC10 (wrong program) a run whose key leaves out the toolchain version keeps its result across the version change, and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ keys.test.ts:32:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/50]⎯
+
+ FAIL  kit-preflight.test.ts > AC11 the preflight's kit check finds no problem in the plug-in's check.kind@1 kit > AC11 kitProblems on the plug-in's kit is empty: a planted fill per rule, the unfound-theorem runner refused with its own message, the reference fill passing
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ kit-preflight.test.ts:10:16
+      8| describe('AC11 the preflight\'s kit check finds no problem in the plug…
+      9|   it('AC11 kitProblems on the plug-in\'s kit is empty: a planted fill …
+     10|     const k = (await plugin()).proofKit();
+       |                ^
+     11|     requireLean();
+     12|     requireKani();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/50]⎯
+
+ FAIL  kit.test.ts > AC11 the plug-in passes the check.kind@1 kit, including a planted runner that reports passed for a theorem the checker never found > AC11 the plug-in's kit is a check.kind@1 kit with the planted unfound-theorem runner, breaking a rule it lists, and a fixture whose spec names a theorem its checkout lacks
+ FAIL  kit.test.ts > AC11 the plug-in passes the check.kind@1 kit, including a planted runner that reports passed for a theorem the checker never found > AC11 (wrong program) the kit fails the planted runner, with a FAIL that carries its message and its codes
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ kit.test.ts:17:14
+     15| /** The plug-in's kit; its cases run the real checkers, so the environ…
+     16| const kit = once(async () => {
+     17|   const k = (await plugin()).proofKit();
+       |              ^
+     18|   requireLean();
+     19|   requireKani();
+ ❯ kit.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/50]⎯
+
+ FAIL  kit.test.ts > AC11 the plug-in passes the check.kind@1 kit, including a planted runner that reports passed for a theorem the checker never found > AC11 the plug-in's runner passes its kit: every case, fixed and seeded, reads PASS
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ kit.test.ts:59:27
+     57|
+     58|   it('AC11 the plug-in\'s runner passes its kit: every case, fixed and…
+     59|     const { proofFill } = await plugin();
+       |                           ^
+     60|     const k = await kit();
+     61|     const report = await runKit(k, proofFill(), { seed: 1 });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/50]⎯
+
+ FAIL  kit.test.ts > AC11 the plug-in passes the check.kind@1 kit, including a planted runner that reports passed for a theorem the checker never found > AC11 the planted runner reports passed for the theorem the checker never found; the plug-in's runner does not
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ kit.test.ts:70:27
+     68|
+     69|   it('AC11 the planted runner reports passed for the theorem the check…
+     70|     const { proofFill } = await plugin();
+       |                           ^
+     71|     const k = await kit();
+     72|     const { input, theorem } = await unfound();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/50]⎯
+
+ FAIL  lean-escapes.test.ts > AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it > AC1 the fixture's proved theorems give PASS: a passed run that checked both, judged PASS by the core, its receipt naming comparator and Lean 4.35.0
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ lean-escapes.test.ts:27:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/50]⎯
+
+ FAIL  lean-escapes.test.ts > AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it > AC1 the same theorem proved with `sorry` gives INVALID, naming total_append and sorryAx
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ lean-escapes.test.ts:37:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/50]⎯
+
+ FAIL  lean-escapes.test.ts > AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it > AC1 (wrong program) a runner that reads `lake build`'s exit status passes the `sorry` case, since Lean builds a `sorry` with a warning, and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ lean-escapes.test.ts:41:5
+     39|
+     40|   it('AC1 (wrong program) a runner that reads `lake build`\'s exit sta…
+     41|     await plugin();
+       |     ^
+     42|     requireLean();
+     43|     expectVerdictNaming(await sorry(), 'INVALID', ['total_append', 'so…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/50]⎯
+
+ FAIL  lean-escapes.test.ts > AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it > AC1 a proof closed by a new `axiom cheat` gives INVALID, naming cheat
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ lean-escapes.test.ts:52:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/50]⎯
+
+ FAIL  lean-escapes.test.ts > AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it > AC1 a theorem closed by `native_decide` gives INVALID, naming the axiom it adds (total_example._native.native_decide.ax_1_1 on Lean 4.35.0)
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ lean-escapes.test.ts:56:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/50]⎯
+
+ FAIL  lean-escapes.test.ts > AC1 a proved Lean theorem passes through comparator, and every escape that makes any theorem check is INVALID, naming it > AC1 the cheat variant passes once its axiom is a declared assumption of the check: comparator permits it beside propext, Quot.sound and Classical.choice
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ lean-escapes.test.ts:60:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/50]⎯
+
+ FAIL  lean-statement.test.ts > AC2 a restated theorem is judged on the approved statement: INVALID naming the theorem, and a proposal naming the file > AC2 comparator's mismatch makes the check INVALID, naming total_append
+ FAIL  lean-statement.test.ts > AC2 a restated theorem is judged on the approved statement: INVALID naming the theorem, and a proposal naming the file > AC2 the difference becomes a proposal naming Fixture/Proofs.lean, with the approved and the written statement
+ FAIL  lean-statement.test.ts > AC2 a restated theorem is judged on the approved statement: INVALID naming the theorem, and a proposal naming the file > AC2 the claim never passes on the restated theorem: the run is not a pass, and the core's verdict is not PASS
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ lean-statement.test.ts:42:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/50]⎯
+
+ FAIL  lean-statement.test.ts > AC3 on macOS the runner exports both modules in the check's temporary checkout, runs comparator unsandboxed, says so, and never reads an export in the commit > AC3 the receipt line says the check ran unsandboxed in a hermetic run
+ FAIL  lean-statement.test.ts > AC3 on macOS the runner exports both modules in the check's temporary checkout, runs comparator unsandboxed, says so, and never reads an export in the commit > AC3 the forged Solution.ndjson is never read: the check judges the commit's own build, INVALID naming total_append and sorryAx
+ FAIL  lean-statement.test.ts > AC3 on macOS the runner exports both modules in the check's temporary checkout, runs comparator unsandboxed, says so, and never reads an export in the commit > AC3 the evidence keeps the two exports the runner built, by hash, and neither is the forged file
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ lean-statement.test.ts:25:3
+     23|  */
+     24| const forged = once(async () => {
+     25|   await plugin();
+       |   ^
+     26|   requireLean();
+     27|   const proved = checkout('lean');
+ ❯ lean-statement.test.ts:66:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/50]⎯
+
+ FAIL  mutants-kani.test.ts > AC7 a Kani harness that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 both harnesses verify on the fixture itself, so whatever the mutants show is theirs alone
+ FAIL  mutants-kani.test.ts > AC7 a Kani harness that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 (wrong program) a mutation check that runs no mutant passes f x = f x and fails the assertion above
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ mutants-kani.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/50]⎯
+
+ FAIL  mutants-kani.test.ts > AC7 a Kani harness that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 proofs::total_self (f x = f x) checks on every mutant of total: none kills it, and the check is INVALID, naming it
+ FAIL  mutants-kani.test.ts > AC7 a Kani harness that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 the real harness proofs::total_append fails on at least one mutant of total, listed by its place in src/lib.rs, and the check doesn't name it as one that can't fail
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ mutants-kani.test.ts:18:13
+     16| const run = once(() => runProof(spec, checkout('kani')));
+     17| const report = once(async () => {
+     18|   const p = await plugin();
+       |             ^
+     19|   requireKani();
+     20|   requireMutants();
+ ❯ mutants-kani.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/50]⎯
+
+ FAIL  mutants-lean.test.ts > AC7 a Lean theorem that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 both theorems check on the fixture itself through comparator
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ runProof helpers.ts:143:25
+    141| /** One run of the plug-in's proof runner on a checkout; it fails firs…
+    142| export async function runProof(spec: ProofSpec, dir: string): Promise<…
+    143|   const { proofFill } = await plugin();
+       |                         ^
+    144|   if (spec.runner === 'lean4') requireLean(); else requireKani();
+    145|   return await proofFill().run(spec, context(dir, spec.deadline));
+ ❯ mutants-lean.test.ts:19:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/50]⎯
+
+ FAIL  mutants-lean.test.ts > AC7 a Lean theorem that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 total_self (f x = f x) checks on every mutant of total: none kills it, and the check is INVALID, naming it
+ FAIL  mutants-lean.test.ts > AC7 a Lean theorem that checks on every mutant of its target can't fail, and its check is INVALID, naming it > AC7 the real theorem total_append fails on at least one mutant of total, listed by its place in Fixture/Total.lean, and the check doesn't name it as one that can't fail
+Error: Cannot find module '/packages/proof/src/index.ts' imported from <checkout>/tests/acceptance/685/helpers.ts
+ ❯ mutants-lean.test.ts:12:13
+     10| const run = once(() => runProof(spec, checkout('lean')));
+     11| const report = once(async () => {
+     12|   const p = await plugin();
+       |             ^
+     13|   requireLean();
+     14|   return await p.mutants(spec, context(checkout('lean'), LEAN_DEADLINE…
+ ❯ mutants-lean.test.ts:25:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/50]⎯
+
+
+ Test Files  10 failed (10)
+      Tests  50 failed (50)
+   Start at  11:36:47
+   Duration  2.39s (import 44%, transform 35%, tests 21%)
+
+exit 1

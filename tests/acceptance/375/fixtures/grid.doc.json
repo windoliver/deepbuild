@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "id": "auto-layout-grid",
+  "profile": "figure",
+  "title": "Six tiles in a grid flowed by column",
+  "description": "A grid frame with gap 24, two hug rows and three hug columns aligned start, center and end, flowing by column, holding the same six fixed tiles as the row.",
+  "size": [480, 240],
+  "layers": {
+    "main": { "writer": "agent-a", "title": "Main", "order": "a0" }
+  },
+  "items": {
+    "tiles": {
+      "id": "tiles", "kind": "frame@1", "layer": "main", "name": "Tiles", "order": "a0",
+      "at": { "pos": [24, 40, 0] },
+      "params": {
+        "layout": "grid", "gap": 24,
+        "grid": { "rows": ["hug", "hug"], "cols": ["hug", "hug", "hug"], "flow": "column", "align_cols": ["start", "center", "end"] }
+      }
+    },
+    "plum": {
+      "id": "plum", "kind": "frame@1", "layer": "main", "name": "Plum", "parent": "tiles", "order": "a3",
+      "params": { "box": [0, 0, 96, 72], "width": "fixed", "height": "fixed" }
+    },
+    "kiwi": {
+      "id": "kiwi", "kind": "frame@1", "layer": "main", "name": "Kiwi", "parent": "tiles", "order": "a0",
+      "params": { "box": [0, 0, 40, 30], "width": "fixed", "height": "fixed" }
+    },
+    "lime": {
+      "id": "lime", "kind": "frame@1", "layer": "main", "name": "Lime", "parent": "tiles", "order": "a5",
+      "params": { "box": [0, 0, 80, 60], "width": "fixed", "height": "fixed" }
+    },
+    "apple": {
+      "id": "apple", "kind": "frame@1", "layer": "main", "name": "Apple", "parent": "tiles", "order": "a1",
+      "params": { "box": [0, 0, 120, 56], "width": "fixed", "height": "fixed" }
+    },
+    "date": {
+      "id": "date", "kind": "frame@1", "layer": "main", "name": "Date", "parent": "tiles", "order": "a4",
+      "params": { "box": [0, 0, 52, 24], "width": "fixed", "height": "fixed" }
+    },
+    "fig": {
+      "id": "fig", "kind": "frame@1", "layer": "main", "name": "Fig", "parent": "tiles", "order": "a2",
+      "params": { "box": [0, 0, 64, 44], "width": "fixed", "height": "fixed" }
+    }
+  }
+}

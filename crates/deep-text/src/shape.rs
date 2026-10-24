@@ -19,8 +19,6 @@ pub enum Align {
     End,
 }
 
-impl Align {}
-
 /// What a Text item asks the shaper for. `bound` marks a bound value or counter: it is never
 /// ellipsized or wrapped, so a bound value that doesn't fit fails the fit check instead (canvas
 /// primitives: Honest numbers). `tabular` asks for tabular figures, the default for a bound value.

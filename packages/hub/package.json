@@ -13,9 +13,14 @@
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
     "@deepbuild/adapters": "0.0.0",
+    "@deepbuild/asks": "0.0.0",
+    "@deepbuild/budget": "0.0.0",
     "@deepbuild/contracts": "0.0.0",
+    "@deepbuild/env-local": "0.0.0",
     "@deepbuild/evidence": "0.0.0",
     "@deepbuild/record": "0.0.0",
+    "@deepbuild/runner": "0.0.0",
+    "@deepbuild/supervisor": "0.0.0",
     "better-sqlite3": "13.0.3"
   }
 }

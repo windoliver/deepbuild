@@ -1,0 +1,11 @@
+[package]
+name = "readings"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata.kani.flags]
+default-unwind = "5"
+
+# A crate of its own, outside the repo's workspace.
+[workspace]

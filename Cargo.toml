@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-canvas-motion", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-marks-render", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
+members = ["crates/deep-contracts", "crates/deep-hook", "crates/deep-app", "crates/deep-canvas", "crates/deep-canvas-motion", "crates/deep-canvas-marks", "crates/deep-canvas-graph", "crates/deep-canvas-record", "crates/deep-canvas-sheet", "crates/deep-canvas-test-modules", "crates/deep-marks-render", "crates/deep-marks-vello", "crates/deep-show", "crates/deep-replica", "crates/deep-text", "crates/deep-text-gpui", "crates/deep-text-render"]
 resolver = "2"
 
 # Issue #390: the canvas's glyph rasterizer at release speed in dev builds, so the text tests
@@ -9,4 +9,18 @@ opt-level = 3
 [profile.dev.package.vello_common]
 opt-level = 3
 [profile.dev.package.fearless_simd]
+opt-level = 3
+
+# Issue #96: the shared-document budgets (a patch applies in under 2 ms; merging two 10,000-item
+# documents takes under 200 ms) are read off the dev binaries the acceptance tests run, so the
+# kernel and the JSON, map and hash crates it spends its time in build at release speed there.
+[profile.dev.package.deep-canvas]
+opt-level = 3
+[profile.dev.package.serde_json]
+opt-level = 3
+[profile.dev.package.indexmap]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+[profile.dev.package.unicode-normalization]
 opt-level = 3

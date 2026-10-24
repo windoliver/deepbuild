@@ -23,6 +23,7 @@
 //! length never changes. The document layer says, per JSON path, what a field declares, through
 //! [`Shape`]; [`NoShape`] declares `f64` everywhere and no defaults.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -77,23 +78,167 @@ impl fmt::Display for CanonError {
 
 impl std::error::Error for CanonError {}
 
-/// The canonical bytes of `value` under `shape`.
+/// The canonical bytes of `value` under `shape`, written in one pass: only a member that has a
+/// default is canonicalized as a value first, to compare with it, and the path to each field
+/// borrows the document's own keys, so a document costs about one allocation per member it
+/// writes.
 pub fn canonical_bytes(value: &Value, shape: &dyn Shape) -> Result<Vec<u8>, CanonError> {
-    let canonical = canonical_value(value, shape)?;
     let mut out = Vec::new();
-    write_value(&canonical, shape, &mut Vec::new(), &mut out);
+    write_canonical(value, shape, &mut Vec::new(), &mut out)?;
     Ok(out)
+}
+
+/// A path whose steps borrow the document's keys where they are already NFC.
+type Steps<'a> = Vec<Cow<'a, str>>;
+
+/// Array indices as path steps, without formatting the common ones.
+const INDICES: [&str; 16] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+];
+
+fn index_step(i: usize) -> Cow<'static, str> {
+    INDICES
+        .get(i)
+        .map_or_else(|| Cow::Owned(i.to_string()), |s| Cow::Borrowed(*s))
+}
+
+/// Calls `f` with `steps` as the `&[&str]` a [`Shape`] reads, on the stack for the usual depth.
+fn with_steps<R>(steps: &[Cow<'_, str>], f: impl FnOnce(&[&str]) -> R) -> R {
+    let mut buf: [&str; 16] = [""; 16];
+    if steps.len() <= buf.len() {
+        for (slot, step) in buf.iter_mut().zip(steps) {
+            *slot = step;
+        }
+        f(&buf[..steps.len()])
+    } else {
+        let all: Vec<&str> = steps.iter().map(|s| s.as_ref()).collect();
+        f(&all)
+    }
+}
+
+fn owned(steps: &[Cow<'_, str>]) -> Vec<String> {
+    steps.iter().map(|s| s.to_string()).collect()
+}
+
+fn write_canonical<'a>(
+    value: &'a Value,
+    shape: &dyn Shape,
+    path: &mut Steps<'a>,
+    out: &mut Vec<u8>,
+) -> Result<(), CanonError> {
+    match value {
+        Value::Number(n) => {
+            let width = with_steps(path, |p| shape.width(p));
+            let n = canonical_number(n, width, &|| join(&owned(path), None))?;
+            write_number(&n, width, out);
+        }
+        Value::String(s) => write_string(&nfc_cow(s), out),
+        Value::Array(items) => {
+            out.push(b'[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(b',');
+                }
+                path.push(index_step(i));
+                let written = write_canonical(item, shape, path, out);
+                path.pop();
+                written?;
+            }
+            out.push(b']');
+        }
+        Value::Object(members) => {
+            let mut sorted: Vec<(Cow<'a, str>, &'a Value)> =
+                members.iter().map(|(k, v)| (nfc_cow(k), v)).collect();
+            sorted.sort_by(|a, b| a.0.cmp(&b.0));
+            if let Some(w) = sorted.windows(2).find(|w| w[0].0 == w[1].0) {
+                return Err(CanonError {
+                    path: join(&owned(path), Some(&w[0].0)),
+                    what: "two keys are one key after NFC".to_string(),
+                });
+            }
+            out.push(b'{');
+            let mut first = true;
+            for (key, member) in sorted {
+                path.push(key);
+                let written = write_member(member, shape, path, out, &mut first);
+                path.pop();
+                written?;
+            }
+            out.push(b'}');
+        }
+        Value::Null => out.extend_from_slice(b"null"),
+        Value::Bool(true) => out.extend_from_slice(b"true"),
+        Value::Bool(false) => out.extend_from_slice(b"false"),
+    }
+    Ok(())
+}
+
+/// One object member, the last step of `path`, unless it equals its declared default.
+fn write_member<'a>(
+    member: &'a Value,
+    shape: &dyn Shape,
+    path: &mut Steps<'a>,
+    out: &mut Vec<u8>,
+    first: &mut bool,
+) -> Result<(), CanonError> {
+    let separate = |out: &mut Vec<u8>, first: &mut bool, key: &str| {
+        if !*first {
+            out.push(b',');
+        }
+        *first = false;
+        write_string(key, out);
+        out.push(b':');
+    };
+    match with_steps(path, |p| shape.default_at(p)) {
+        Some(default) => {
+            let mut at = owned(path);
+            let member = canonical_at(member, shape, &mut at)?;
+            if canonical_at(default, shape, &mut at)? != member {
+                separate(out, first, at.last().map_or("", String::as_str));
+                write_value(&member, shape, &mut at, out);
+            }
+        }
+        None => {
+            separate(out, first, path.last().map_or("", |k| k.as_ref()));
+            write_canonical(member, shape, path, out)?;
+        }
+    }
+    Ok(())
+}
+
+/// A canonical number at its field's width: whole ones as integers, others as the shortest text
+/// that reads back to the value at that width.
+fn write_number(n: &Number, width: Width, out: &mut Vec<u8>) {
+    use std::io::Write as _;
+    if let Some(i) = n.as_i64() {
+        let _ = write!(out, "{i}");
+    } else if let Some(f) = n.as_f64() {
+        let _ = match width {
+            Width::F32 => write!(out, "{}", f as f32),
+            Width::F64 => write!(out, "{f}"),
+        };
+    }
 }
 
 /// The revision hash: lower-case hex SHA-256 of the canonical bytes.
 pub fn revision_hash(value: &Value, shape: &dyn Shape) -> Result<String, CanonError> {
-    let bytes = canonical_bytes(value, shape)?;
-    let digest = Sha256::digest(&bytes);
-    let mut hex = String::with_capacity(64);
-    for byte in digest {
-        hex.push_str(&format!("{byte:02x}"));
+    Ok(sha256_hex(&canonical_bytes(value, shape)?))
+}
+
+/// Lower-case hex SHA-256 of `bytes`.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
+}
+
+/// `bytes` as lower-case hex.
+pub fn hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(DIGITS[usize::from(b >> 4)] as char);
+        out.push(DIGITS[usize::from(b & 15)] as char);
     }
-    Ok(hex)
+    out
 }
 
 /// The same normalization as [`canonical_bytes`], as a value: keys in sorted order, defaults
@@ -110,7 +255,9 @@ fn canonical_at(
 ) -> Result<Value, CanonError> {
     match value {
         Value::Null | Value::Bool(_) => Ok(value.clone()),
-        Value::Number(n) => canonical_number(n, shape, path).map(Value::Number),
+        Value::Number(n) => {
+            canonical_number(n, width_of(shape, path), &|| join(path, None)).map(Value::Number)
+        }
         Value::String(s) => Ok(Value::String(nfc(s))),
         Value::Array(items) => {
             let mut out = Vec::with_capacity(items.len());
@@ -166,8 +313,11 @@ const WHOLE_LIMIT: f64 = 9_007_199_254_740_992.0; // 2^53
 
 /// The number as the value at its field's width: rounded to that width first, then written as
 /// an integer when whole (so `-0` is `0` and 2^24 + 1 at an f32 field is 2^24), else as a float.
-fn canonical_number(n: &Number, shape: &dyn Shape, path: &[String]) -> Result<Number, CanonError> {
-    let width = width_of(shape, path);
+fn canonical_number(
+    n: &Number,
+    width: Width,
+    path: &dyn Fn() -> String,
+) -> Result<Number, CanonError> {
     if let Some(i) = n.as_i64() {
         if i.unsigned_abs() <= WHOLE_LIMIT as u64 && matches!(width, Width::F64) {
             return Ok(Number::from(i));
@@ -182,14 +332,14 @@ fn canonical_number(n: &Number, shape: &dyn Shape, path: &[String]) -> Result<Nu
     if let Some((i, f)) = whole {
         if f as i128 != i {
             return Err(CanonError {
-                path: join(path, None),
+                path: path(),
                 what: format!("{n} is not exact in an f64"),
             });
         }
     }
     let Some(f) = n.as_f64() else {
         return Err(CanonError {
-            path: join(path, None),
+            path: path(),
             what: "number is not representable".to_string(),
         });
     };
@@ -201,7 +351,7 @@ fn canonical_number(n: &Number, shape: &dyn Shape, path: &[String]) -> Result<Nu
         return Ok(Number::from(rounded as i64));
     }
     Number::from_f64(rounded).ok_or_else(|| CanonError {
-        path: join(path, None),
+        path: path(),
         what: format!("{f} is not finite at its declared width"),
     })
 }
@@ -213,17 +363,7 @@ fn write_value(value: &Value, shape: &dyn Shape, path: &mut Vec<String>, out: &m
         Value::Null => out.extend_from_slice(b"null"),
         Value::Bool(true) => out.extend_from_slice(b"true"),
         Value::Bool(false) => out.extend_from_slice(b"false"),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                out.extend_from_slice(i.to_string().as_bytes());
-            } else if let Some(f) = n.as_f64() {
-                let text = match width_of(shape, path) {
-                    Width::F32 => (f as f32).to_string(),
-                    Width::F64 => f.to_string(),
-                };
-                out.extend_from_slice(text.as_bytes());
-            }
-        }
+        Value::Number(n) => write_number(n, width_of(shape, path), out),
         Value::String(s) => write_string(s, out),
         Value::Array(items) => {
             out.push(b'[');
@@ -278,7 +418,17 @@ fn write_string(s: &str, out: &mut Vec<u8>) {
 }
 
 fn nfc(s: &str) -> String {
-    s.nfc().collect()
+    nfc_cow(s).into_owned()
+}
+
+/// `s` in NFC, borrowed when it already is: ASCII text is, since no character in it composes or
+/// decomposes.
+fn nfc_cow(s: &str) -> Cow<'_, str> {
+    if s.is_ascii() {
+        Cow::Borrowed(s)
+    } else {
+        Cow::Owned(s.nfc().collect())
+    }
 }
 
 fn width_of(shape: &dyn Shape, path: &[String]) -> Width {

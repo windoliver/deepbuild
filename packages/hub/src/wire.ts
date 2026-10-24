@@ -1,5 +1,6 @@
 // What crosses the socket and the threads: every socket line is one JSON object with `v`, and every refusal
 // is error@2's shape. Shared by the main thread, the parser workers and the core.
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
 export const VERSION = 1;
@@ -21,6 +22,18 @@ export class Refused extends Error {
 
 /** One socket line: the object with the protocol version first; a bigint (a seq) is written as its decimal string. */
 export const line = (o: object): string => `${JSON.stringify({ v: VERSION, ...o }, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v))}\n`;
+
+/**
+ * A process's start time, as `ps -o lstart=` prints it: how a process is told apart from a reused PID.
+ * Undefined when it can't be read.
+ */
+export const startOf = (pid: number): Promise<string | undefined> => new Promise((done) => {
+  try {
+    execFile('ps', ['-o', 'lstart=', '-p', String(pid)], { env: { ...process.env, LC_ALL: 'C' } }, (error, stdout) => done(error ? undefined : stdout.trim() || undefined));
+  } catch {
+    done(undefined);
+  }
+});
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 /** A ULID at `ms`: 48 bits of time, 80 random. */
@@ -60,10 +73,12 @@ export type Parsed =
 /** The planted wrong programs a test selects with DEEP_HUB_PLANT; only tests set it. */
 export type Plant =
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
-  | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field';
+  | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
+  | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
-  'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field',
+  'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
+  'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -83,4 +98,10 @@ export interface CoreOptions {
   held: string[];
   plant?: Plant;
   vfs?: VfsSettings;
+  /** A module whose default export takes the local host and returns the host@1 the hub uses instead, from DEEP_HUB_TEST_HOST; only tests set it. */
+  host?: string;
+  /** The term of every lease the hub grants, from DEEP_HUB_TEST_LEASE_MS; only tests set it. */
+  leaseMs?: number;
+  /** Where the hub kills itself in a stack process's start, from DEEP_HUB_TEST_CRASH; only tests set it. */
+  crash?: 'start-recorded' | 'spawned';
 }

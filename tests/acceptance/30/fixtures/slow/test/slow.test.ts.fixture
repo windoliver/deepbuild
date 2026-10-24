@@ -1,0 +1,19 @@
+import { mkdirSync, writeFileSync, writeSync } from 'node:fs';
+import { expect, test } from 'vitest';
+
+// Two quick tests, then one that never ends. Each writes straight to its process's stdout, so the words are in
+// the run's output the moment they're written (Vitest holds a test's console.log until its file ends); the second
+// also leaves a marker naming its process, so the acceptance test knows when two tests have run.
+test('first', () => {
+  writeSync(1, 'first done\n');
+  expect(1).toBe(1);
+});
+
+test('second', () => {
+  writeSync(1, `second done in ${process.pid}\n`);
+  mkdirSync('progress', { recursive: true });
+  writeFileSync('progress/second.done', String(process.pid));
+  expect(2).toBe(2);
+});
+
+test('third waits forever', () => new Promise<void>(() => undefined), 600_000);

@@ -1,0 +1,4 @@
+// The cart under test: its total drops the last price, and this checkout has no applyCoupon yet.
+export interface Cart { items: number[] }
+
+export const totalOf = (cart: Cart): number => cart.items.slice(0, -1).reduce((sum, price) => sum + price, 0);

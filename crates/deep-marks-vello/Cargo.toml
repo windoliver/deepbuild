@@ -1,0 +1,16 @@
+[package]
+name = "deep-marks-vello"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #373: the 2D marks module's draw list in Vello CPU terms, shared by the two CPU renderers,
+# deep-canvas-render's `raster` (goldens) and deep-show's render-back snapshots: paints with each
+# OKLab ramp as sRGB stops, outlines flattened finer than Vello's own 0.25 px, and the scopes a
+# mark draws inside (scissors, alpha and luminance masks, group opacity). It draws no text.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }

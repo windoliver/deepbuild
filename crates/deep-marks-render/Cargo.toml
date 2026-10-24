@@ -11,7 +11,8 @@ rust-version = "1.95"
 # arms one, with path tessellations, shaped text and writer-layer caches by content key and
 # two-stop gradients through the GPUI patch's exact gradient mode. It draws canvas text, so the
 # text lint reads it. Issue #392 adds the document check and the look (on every platform), status
-# marks with their glyphs and legend, and bound values that go stale on time.
+# marks with their glyphs and legend, and bound values that go stale on time. Issue #373 adds
+# `raster` and `geometry` (on every platform): R2's 2D marks drawn by Vello CPU.
 [package.metadata.deep]
 canvas_text = true
 
@@ -23,12 +24,16 @@ path = "src/main.rs"
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-marks-vello = { path = "../deep-marks-vello" }
 deep-replica = { path = "../deep-replica" }
 deep-text = { path = "../deep-text" }
 deep-text-gpui = { path = "../deep-text-gpui" }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# Issue #373: goldens and snapshots render with Vello CPU, its f32 pipeline at the scalar SIMD
+# level (the scalar level on every platform comes from deep-text's fearless_simd feature).
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
 
 # The GPU ledger the GPUI patch adds to the Metal renderer: frame command buffers and their time.
 [target.'cfg(target_os = "macos")'.dependencies]

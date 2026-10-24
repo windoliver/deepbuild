@@ -1,0 +1,807 @@
+Base commit: ef2becb0afe72ccff828770a18869a95c2366c52
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/96 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci. deep-show and deep-canvas build at the base, so each test fails on the surface it reads that the base lacks: deep-show run answers bad_input to every scenario with a patch, undo, read, history or by_writer call or a fault it doesn't know; deep-show run with the kill fault answers instead of dying; deep-canvas has no merge subcommand (exit 2); deep-canvas apply writes no requires.kinds and check ignores as_build; benchmarks/budgets.json has no canvas tasks and benchmarks/canvas.mjs doesn't exist.
+Date: 2026-10-22T09:17:36Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/96
+
+ ❯ layers.test.ts (7 tests | 7 failed) 4533ms
+   ❯ AC8 an agent's channel or placement that writes a path of an item in your layer is refused with not_your_layer, and your item doesn't move (2)
+     × AC8 alpha's channel that writes your n1's position is refused with not_your_layer and n1 doesn't move; the same channel on alpha's own tag is not refused for whose item it writes 1379ms
+     × AC8 alpha's placement that binds your n1 to its clip is refused with not_your_layer and n1 doesn't move; the same placement on alpha's own tag is presented 15ms
+   ❯ AC10 deleting your node that an agent's arrow is parented to applies, hides only the arrow and sends the agent ref_unresolved, and the document doesn't freeze at its last good revision (2)
+     × AC10 your delete of n1 applies; alpha's arrow to n1 stays in the document but doesn't draw; alpha reads ref_unresolved on it; everything else draws 13ms
+     × AC10 after the delete, writers keep patching: alpha re-parents its arrow to n2, which applies, is current and draws 16ms
+   ❯ AC11 a whole revision in a shared document is diffed against its writer's own layer only (3)
+     × AC11 with bravo holding 4, alpha's whole revision of its 6 is presented and bravo's 4 stay, by hash; re-sent unchanged, the document's hash doesn't move 13ms
+     × AC11 alpha's revision with 4 of its 6 and no removes is refused with unintended_removal naming exactly alpha's two, and the 6-item revision stays 13ms
+     × AC11 a planted diff against the whole document refuses alpha's first revision, naming bravo's four, and this test fails on it 12ms
+ ❯ schedule.test.ts (3 tests | 3 failed) 3668ms
+   ❯ AC13 with writer A's quota at 60 patches a second sending 6,000 valid patches in 1 s and writer B sending one patch at 0.5 s, B's patch is checked ahead of A's later backlog and current at the first latch after its check; A's extra patches are superseded or refused, never applied mid-frame (3)
+     × AC13 bravo's patch is checked ahead of alpha's backlog and is current at the first latch after its check 1872ms
+     × AC13 alpha's patches beyond its quota are superseded or refused, at most 60 apply in any second, and nothing becomes current between latches 190ms
+     × AC13 one FIFO check queue across writers delays bravo, and this test fails on it, naming bravo's patch 185ms
+ ❯ proof.test.ts (1 test | 1 failed) 2855ms
+   ❯ Proof: two scripted agents co-authoring one document, with the history shown (1)
+     × alpha (MCP) draws two nodes, bravo (`deep show` in its tree) links them, each edits its own; the history and the by-writer lens show who made what, the record holds one doc.patched per change, and both layers are on screen 1416ms
+ ❯ budgets.test.ts (5 tests | 5 failed) 3298ms
+   ❯ AC12 budgets in the local preflight, compared with the merge base (3)
+     × AC12 the perf lane has the two canvas tasks, each a #96 first measurement, valid against the merge base's budgets 86ms
+     × AC12 `node benchmarks/canvas.mjs patch-apply` runs and exits 0 33ms
+     × AC12 `node benchmarks/canvas.mjs merge-10k` runs and exits 0 32ms
+   ❯ AC12 the issue's numbers on the reference Mac (2)
+     × AC12 a patch applies in under 2 ms: 200 of alpha's patches on a 1,000-item board, against the same run with none 1319ms
+     × AC12 merging two 10,000-item documents takes under 200 ms 365ms
+ ❯ commit.test.ts (3 tests | 3 failed) 3127ms
+   ❯ AC6 a write acknowledged and then dropped surfaces in the reply or on the next call, never as success (parity/agent/write-readback.scene) (1)
+     × AC6 alpha's move whose layer file can't be written at its commit is never success: its reply says so, or alpha's next call reports it lost; the read-back shows the box where it was 1436ms
+   ❯ AC14 the doc.patched event is the commit point: a hub killed after a layer file is written by hash and before its event lands restarts showing the revision before, the record and the shown revision agree, and the orphan layer file is never current (2)
+     × AC14 after the kill and a restart, the shown revision is the one before, it agrees with the record, and the orphan layer file is never current 14ms
+     × AC14 a hub that takes the newest layer file as current shows the lost revision, and this test fails on it, naming it 14ms
+ ❯ merge.test.ts (5 tests | 5 failed) 3084ms
+   ❯ AC1 two agents editing different layers merge cleanly (3)
+     × AC1 two agents' patches on one base, in each other's layer's absence, both apply in either arrival order, to one revision hash, each change in its writer's layer 1433ms
+     × AC1 the kernel's merge by ID of the two writers' documents from one base is clean, symmetric, and the hub's revision; one item both changed is a conflict naming it, never a lost change 17ms
+     × deep-canvas merge answers bad_input to a line it can't read, and to one with no a or b 197ms
+   ❯ AC7 two writers inserting siblings at one spot get distinct order keys seeded from writer and patch, and the merge orders them the same on every machine (2)
+     × AC7 alpha's and bravo's inserts after your n1 get distinct base-62 keys between n1's and n2's; both arrival orders and a replay give the same keys, the same sibling order and one revision hash 16ms
+     × AC7 the jitter is seeded from the writer and the patch: the same insert under four patch IDs, by alpha and by bravo, does not give one key 13ms
+ ❯ undo.test.ts (5 tests | 5 failed) 2794ms
+   ❯ AC3 your change survives an agent's undo (3)
+     × AC3 alpha undoes its own patch after you moved n1: alpha's items go, and n1 stays where you put it 1362ms
+     × AC3 after your patch takes alpha's tag into your layer, alpha's undo of its own earlier change to the tag is refused and your change stays 14ms
+     × AC3 an agent can't undo your change: alpha's undo of your patch is refused and n1 stays 12ms
+   ❯ AC9 a `deep show` patch run from inside an agent's process tree lands in that agent's writer layer, never yours, and its undo leaves your change in place (2)
+     × AC9 `deep show` from alpha's tree writes alpha's layer, stamped and recorded as alpha; its undo from alpha's tree leaves your later change in place 19ms
+     × AC9 `deep show` from alpha's tree can't write your layer: a patch to your node, or one that names you as its writer, is refused and nothing of yours changes 13ms
+ ❯ conflict.test.ts (3 tests | 3 failed) 4251ms
+   ❯ AC2 agent A's patch on base r that parents an arrow to your node n1, sent after your patch moved n1, is a conflict naming A, you and n1, leaves the document byte-identical, and applies when resent on the new base (3)
+     × AC2 alpha's stale patch is refused with outcome conflict naming alpha, you and n1; the document is byte-identical; resent on the new base, it applies 1428ms
+     × AC2 a stale patch that touches only IDs no one changed since rebases and applies: the conflict comes from the parent it names, not from staleness alone 22ms
+     × AC2 a planted rebase that counts only the IDs ops target applies the first patch, and this test fails on it 12ms
+ ❯ kinds.test.ts (4 tests | 4 failed) 2875ms
+   ❯ AC4 an item of a kind this build doesn't know survives other writers' patches byte for byte, and a patch that targets it is refused with unknown_kind (parity/kernel/unknown-kind-roundtrip.scene) (2)
+     × AC4 bravo's acme.gizmo@2 is kept byte for byte through your patch and alpha's, each of which applies 1305ms
+     × AC4 a patch that targets the unknown item, its own writer's or yours, set or delete, is refused with unknown_kind and changes nothing 12ms
+   ❯ AC5 a document requires the lowest minor of each kind its fields use, so a document that uses no new field opens in the previous release (2)
+     × AC5 slabs that use no minor-1 field require test.slab@3.0; setting corner requires 3.1; unsetting it goes back to 3.0; a stale 3.1 is lowered 193ms
+     × AC5 the document that uses no new field opens in the previous release (a build with test.slab at 3.0) with no issue and no notice; the one that uses corner still opens there, corner skipped with a notice 21ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 36 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC12 budgets in the local preflight, compared with the merge base > AC12 the perf lane has the two canvas tasks, each a #96 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task canvas-patch-apply: expected undefined to be defined
+ ❯ budgets.test.ts:30:53
+     28|     for (const [id, mode] of Object.entries(TASKS)) {
+     29|       const task = current.tasks.find((t) => t.id === id);
+     30|       expect(task, `budgets.json has a task ${id}`).toBeDefined();
+       |                                                     ^
+     31|       expect(task!.command, `${id} runs the canvas bench in ${mode} mo…
+     32|       expect(String(task!.initialReason), `${id} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/36]⎯
+
+ FAIL  budgets.test.ts > AC12 budgets in the local preflight, compared with the merge base > AC12 `node benchmarks/canvas.mjs patch-apply` runs and exits 0
+AssertionError: benchmarks/canvas.mjs patch-apply: node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/canvas.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:38:68
+     36|   it.each(Object.values(TASKS))('AC12 `node benchmarks/canvas.mjs %s` …
+     37|     const r = spawnSync(process.execPath, [join(REPO, 'benchmarks/canv…
+     38|     expect(r.status, `benchmarks/canvas.mjs ${mode}: ${r.stderr}`).toB…
+       |                                                                    ^
+     39|   }, 600_000);
+     40| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/36]⎯
+
+ FAIL  budgets.test.ts > AC12 budgets in the local preflight, compared with the merge base > AC12 `node benchmarks/canvas.mjs merge-10k` runs and exits 0
+AssertionError: benchmarks/canvas.mjs merge-10k: node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/canvas.mjs'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:38:68
+     36|   it.each(Object.values(TASKS))('AC12 `node benchmarks/canvas.mjs %s` …
+     37|     const r = spawnSync(process.execPath, [join(REPO, 'benchmarks/canv…
+     38|     expect(r.status, `benchmarks/canvas.mjs ${mode}: ${r.stderr}`).toB…
+       |                                                                    ^
+     39|   }, 600_000);
+     40| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/36]⎯
+
+ FAIL  budgets.test.ts > AC12 the issue's numbers on the reference Mac > AC12 a patch applies in under 2 ms: 200 of alpha's patches on a 1,000-item board, against the same run with none
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ many budgets.test.ts:54:17
+ ❯ perPatch budgets.test.ts:58:37
+ ❯ budgets.test.ts:59:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/36]⎯
+
+ FAIL  budgets.test.ts > AC12 the issue's numbers on the reference Mac > AC12 merging two 10,000-item documents takes under 200 ms
+Error: deep-canvas merge exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color | session | render
+
+ ❯ lines helpers.ts:89:54
+     87|   // A binary that exits before reading all its input (an unknown subc…
+     88|   // exit status says why, so it goes first.
+     89|   if (run.status !== 0 && run.status !== null) throw Error(`${label} e…
+       |                                                      ^
+     90|   if (run.error) throw Error(`${label}: ${run.error.message}`);
+     91|   if (run.status !== 0) throw Error(`${label} ended by ${run.signal}:\…
+ ❯ timed budgets.test.ts:74:19
+ ❯ perMerge budgets.test.ts:78:37
+ ❯ budgets.test.ts:79:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/36]⎯
+
+ FAIL  commit.test.ts > AC6 a write acknowledged and then dropped surfaces in the reply or on the next call, never as success (parity/agent/write-readback.scene) > AC6 alpha's move whose layer file can't be written at its commit is never success: its reply says so, or alpha's next call reports it lost; the read-back shows the box where it was
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ commit.test.ts:18:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/36]⎯
+
+ FAIL  commit.test.ts > AC14 the doc.patched event is the commit point: a hub killed after a layer file is written by hash and before its event lands restarts showing the revision before, the record and the shown revision agree, and the orphan layer file is never current > AC14 after the kill and a restart, the shown revision is the one before, it agrees with the record, and the orphan layer file is never current
+AssertionError: the fault fixture kills deep-show before it can answer (status 0, signal null, answered {"ok":false,"code":"bad_input"}): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ crash commit.test.ts:44:213
+
+ ❯ commit.test.ts:71:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/36]⎯
+
+ FAIL  commit.test.ts > AC14 the doc.patched event is the commit point: a hub killed after a layer file is written by hash and before its event lands restarts showing the revision before, the record and the shown revision agree, and the orphan layer file is never current > AC14 a hub that takes the newest layer file as current shows the lost revision, and this test fails on it, naming it
+AssertionError: the fault fixture kills deep-show before it can answer (status 0, signal null, answered {"ok":false,"code":"bad_input"}): expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ crash commit.test.ts:44:213
+
+ ❯ commit.test.ts:81:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/36]⎯
+
+ FAIL  conflict.test.ts > AC2 agent A's patch on base r that parents an arrow to your node n1, sent after your patch moved n1, is a conflict naming A, you and n1, leaves the document byte-identical, and applies when resent on the new base > AC2 alpha's stale patch is refused with outcome conflict naming alpha, you and n1; the document is byte-identical; resent on the new base, it applies
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ conflict.test.ts:38:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/36]⎯
+
+ FAIL  conflict.test.ts > AC2 agent A's patch on base r that parents an arrow to your node n1, sent after your patch moved n1, is a conflict naming A, you and n1, leaves the document byte-identical, and applies when resent on the new base > AC2 a stale patch that touches only IDs no one changed since rebases and applies: the conflict comes from the parent it names, not from staleness alone
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ conflict.test.ts:52:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/36]⎯
+
+ FAIL  conflict.test.ts > AC2 agent A's patch on base r that parents an arrow to your node n1, sent after your patch moved n1, is a conflict naming A, you and n1, leaves the document byte-identical, and applies when resent on the new base > AC2 a planted rebase that counts only the IDs ops target applies the first patch, and this test fails on it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ conflict.test.ts:57:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/36]⎯
+
+ FAIL  kinds.test.ts > AC4 an item of a kind this build doesn't know survives other writers' patches byte for byte, and a patch that targets it is refused with unknown_kind (parity/kernel/unknown-kind-roundtrip.scene) > AC4 bravo's acme.gizmo@2 is kept byte for byte through your patch and alpha's, each of which applies
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ kinds.test.ts:23:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/36]⎯
+
+ FAIL  kinds.test.ts > AC4 an item of a kind this build doesn't know survives other writers' patches byte for byte, and a patch that targets it is refused with unknown_kind (parity/kernel/unknown-kind-roundtrip.scene) > AC4 a patch that targets the unknown item, its own writer's or yours, set or delete, is refused with unknown_kind and changes nothing
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ kinds.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/36]⎯
+
+ FAIL  kinds.test.ts > AC5 a document requires the lowest minor of each kind its fields use, so a document that uses no new field opens in the previous release > AC5 slabs that use no minor-1 field require test.slab@3.0; setting corner requires 3.1; unsetting it goes back to 3.0; a stale 3.1 is lowered
+AssertionError: no slab uses corner: the document requires test.slab@3.0, not the build's 3.1: expected [] to deeply equal [ 'test.slab@3.0' ]
+
+- Expected
++ Received
+
+- [
+-   "test.slab@3.0",
+- ]
++ []
+
+ ❯ kinds.test.ts:72:113
+     70|   it('AC5 slabs that use no minor-1 field require test.slab@3.0; setti…
+     71|     const plain = created();
+     72|     expect(slabMinors(plain), 'no slab uses corner: the document requi…
+       |                                                                                                                 ^
+     73|     const cornered = apply(plain, [p(2, [{ op: 'set', id: 's1', path: …
+     74|     expect(slabMinors(cornered), 's1 uses corner, a minor-1 field: tes…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/36]⎯
+
+ FAIL  kinds.test.ts > AC5 a document requires the lowest minor of each kind its fields use, so a document that uses no new field opens in the previous release > AC5 the document that uses no new field opens in the previous release (a build with test.slab at 3.0) with no issue and no notice; the one that uses corner still opens there, corner skipped with a notice
+AssertionError: corner is skipped with an unknown_field notice: []: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ kinds.test.ts:92:197
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/36]⎯
+
+ FAIL  layers.test.ts > AC8 an agent's channel or placement that writes a path of an item in your layer is refused with not_your_layer, and your item doesn't move > AC8 alpha's channel that writes your n1's position is refused with not_your_layer and n1 doesn't move; the same channel on alpha's own tag is not refused for whose item it writes
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:32:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/36]⎯
+
+ FAIL  layers.test.ts > AC8 an agent's channel or placement that writes a path of an item in your layer is refused with not_your_layer, and your item doesn't move > AC8 alpha's placement that binds your n1 to its clip is refused with not_your_layer and n1 doesn't move; the same placement on alpha's own tag is presented
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:38:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/36]⎯
+
+ FAIL  layers.test.ts > AC10 deleting your node that an agent's arrow is parented to applies, hides only the arrow and sends the agent ref_unresolved, and the document doesn't freeze at its last good revision > AC10 your delete of n1 applies; alpha's arrow to n1 stays in the document but doesn't draw; alpha reads ref_unresolved on it; everything else draws
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:49:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/36]⎯
+
+ FAIL  layers.test.ts > AC10 deleting your node that an agent's arrow is parented to applies, hides only the arrow and sends the agent ref_unresolved, and the document doesn't freeze at its last good revision > AC10 after the delete, writers keep patching: alpha re-parents its arrow to n2, which applies, is current and draws
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:68:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/36]⎯
+
+ FAIL  layers.test.ts > AC11 a whole revision in a shared document is diffed against its writer's own layer only > AC11 with bravo holding 4, alpha's whole revision of its 6 is presented and bravo's 4 stay, by hash; re-sent unchanged, the document's hash doesn't move
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:104:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/36]⎯
+
+ FAIL  layers.test.ts > AC11 a whole revision in a shared document is diffed against its writer's own layer only > AC11 alpha's revision with 4 of its 6 and no removes is refused with unintended_removal naming exactly alpha's two, and the 6-item revision stays
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:115:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/36]⎯
+
+ FAIL  layers.test.ts > AC11 a whole revision in a shared document is diffed against its writer's own layer only > AC11 a planted diff against the whole document refuses alpha's first revision, naming bravo's four, and this test fails on it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ layers.test.ts:123:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/36]⎯
+
+ FAIL  merge.test.ts > AC1 two agents editing different layers merge cleanly > AC1 two agents' patches on one base, in each other's layer's absence, both apply in either arrival order, to one revision hash, each change in its writer's layer
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ merge.test.ts:17:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/36]⎯
+
+ FAIL  merge.test.ts > AC1 two agents editing different layers merge cleanly > AC1 the kernel's merge by ID of the two writers' documents from one base is clean, symmetric, and the hub's revision; one item both changed is a conflict naming it, never a lost change
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ merge.test.ts:34:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/36]⎯
+
+ FAIL  merge.test.ts > AC1 two agents editing different layers merge cleanly > deep-canvas merge answers bad_input to a line it can't read, and to one with no a or b
+Error: deep-canvas merge exited 2:
+deep-canvas: usage: deep-canvas parse <time|unit|path|handle|id> | check | apply | canonical | color | session | render
+
+ ❯ lines helpers.ts:89:54
+     87|   // A binary that exits before reading all its input (an unknown subc…
+     88|   // exit status says why, so it goes first.
+     89|   if (run.status !== 0 && run.status !== null) throw Error(`${label} e…
+       |                                                      ^
+     90|   if (run.error) throw Error(`${label}: ${run.error.message}`);
+     91|   if (run.status !== 0) throw Error(`${label} ended by ${run.signal}:\…
+ ❯ expectBadInput helpers.ts:99:27
+ ❯ merge.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/36]⎯
+
+ FAIL  merge.test.ts > AC7 two writers inserting siblings at one spot get distinct order keys seeded from writer and patch, and the merge orders them the same on every machine > AC7 alpha's and bravo's inserts after your n1 get distinct base-62 keys between n1's and n2's; both arrival orders and a replay give the same keys, the same sibling order and one revision hash
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ merge.test.ts:83:22
+ ❯ merge.test.ts:83:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/36]⎯
+
+ FAIL  merge.test.ts > AC7 two writers inserting siblings at one spot get distinct order keys seeded from writer and patch, and the merge orders them the same on every machine > AC7 the jitter is seeded from the writer and the patch: the same insert under four patch IDs, by alpha and by bravo, does not give one key
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ merge.test.ts:111:23
+ ❯ merge.test.ts:103:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/36]⎯
+
+ FAIL  proof.test.ts > Proof: two scripted agents co-authoring one document, with the history shown > alpha (MCP) draws two nodes, bravo (`deep show` in its tree) links them, each edits its own; the history and the by-writer lens show who made what, the record holds one doc.patched per change, and both layers are on screen
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ proof.test.ts:27:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/36]⎯
+
+ FAIL  schedule.test.ts > AC13 with writer A's quota at 60 patches a second sending 6,000 valid patches in 1 s and writer B sending one patch at 0.5 s, B's patch is checked ahead of A's later backlog and current at the first latch after its check; A's extra patches are superseded or refused, never applied mid-frame > AC13 bravo's patch is checked ahead of alpha's backlog and is current at the first latch after its check
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ schedule.test.ts:67:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/36]⎯
+
+ FAIL  schedule.test.ts > AC13 with writer A's quota at 60 patches a second sending 6,000 valid patches in 1 s and writer B sending one patch at 0.5 s, B's patch is checked ahead of A's later backlog and current at the first latch after its check; A's extra patches are superseded or refused, never applied mid-frame > AC13 alpha's patches beyond its quota are superseded or refused, at most 60 apply in any second, and nothing becomes current between latches
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ schedule.test.ts:73:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/36]⎯
+
+ FAIL  schedule.test.ts > AC13 with writer A's quota at 60 patches a second sending 6,000 valid patches in 1 s and writer B sending one patch at 0.5 s, B's patch is checked ahead of A's later backlog and current at the first latch after its check; A's extra patches are superseded or refused, never applied mid-frame > AC13 one FIFO check queue across writers delays bravo, and this test fails on it, naming bravo's patch
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ schedule.test.ts:97:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/36]⎯
+
+ FAIL  undo.test.ts > AC3 your change survives an agent's undo > AC3 alpha undoes its own patch after you moved n1: alpha's items go, and n1 stays where you put it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ undo.test.ts:20:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/36]⎯
+
+ FAIL  undo.test.ts > AC3 your change survives an agent's undo > AC3 after your patch takes alpha's tag into your layer, alpha's undo of its own earlier change to the tag is refused and your change stays
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ undo.test.ts:34:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/36]⎯
+
+ FAIL  undo.test.ts > AC3 your change survives an agent's undo > AC3 an agent can't undo your change: alpha's undo of your patch is refused and n1 stays
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ undo.test.ts:48:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/36]⎯
+
+ FAIL  undo.test.ts > AC9 a `deep show` patch run from inside an agent's process tree lands in that agent's writer layer, never yours, and its undo leaves your change in place > AC9 `deep show` from alpha's tree writes alpha's layer, stamped and recorded as alpha; its undo from alpha's tree leaves your later change in place
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ undo.test.ts:61:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/36]⎯
+
+ FAIL  undo.test.ts > AC9 a `deep show` patch run from inside an agent's process tree lands in that agent's writer layer, never yours, and its undo leaves your change in place > AC9 `deep show` from alpha's tree can't write your layer: a patch to your node, or one that names you as its writer, is refused and nothing of yours changes
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ show helpers.ts:110:102
+    108|   const { lines: out, ms } = lines(SHOW, 'run', [scenario]);
+    109|   const answer = obj(out[0], `${SHOW} run: the answer`);
+    110|   expect(answer['ok'], `${SHOW} run refused the scenario: ${JSON.strin…
+       |                                                                                                      ^
+    111|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    112|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ undo.test.ts:87:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/36]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  36 failed (36)
+   Start at  02:16:53
+   Duration  31.64s (tests 99%, import 1%)
+

@@ -1,4 +1,4 @@
-// JSON Pointer reads and copies over plain JSON values.
+// JSON Pointer reads over plain JSON values.
 import type { JsonValue } from '@deepbuild/contracts';
 import { isObject } from './types.js';
 
@@ -13,27 +13,4 @@ export function getAt(value: JsonValue | undefined, pointer: string): JsonValue 
     else return undefined;
   }
   return node;
-}
-
-/** A deep copy with the member at `pointer` replaced, or added to its parent object. */
-export function setAt(value: JsonValue, pointer: string, next: JsonValue): JsonValue {
-  const keys = segments(pointer);
-  const last = keys.pop();
-  if (last === undefined) return structuredClone(next);
-  const copy = structuredClone(value);
-  const parent = getAt(copy, keys.map(segment).join(''));
-  if (Array.isArray(parent)) parent[Number(last)] = next;
-  else if (isObject(parent)) parent[last] = next;
-  else throw Error(`no parent at ${pointer}`);
-  return copy;
-}
-
-/** A deep copy without the member at `pointer`. */
-export function deleteAt(value: JsonValue, pointer: string): JsonValue {
-  const keys = segments(pointer);
-  const last = keys.pop();
-  const copy = structuredClone(value);
-  const parent = getAt(copy, keys.map(segment).join(''));
-  if (last !== undefined && isObject(parent)) delete parent[last];
-  return copy;
 }

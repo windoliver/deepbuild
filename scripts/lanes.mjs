@@ -13,6 +13,15 @@ export const testGlobs = (extension) => testPaths
   .map((path) => (path.endsWith('/**') ? `${path}/*.test.${extension}` : path))
   .filter((glob) => glob.endsWith(`.test.${extension}`) && !glob.startsWith('crates/'));
 
+/** Vitest files a lane of their own runs, so the unit lane leaves them out. */
+const ownLane = ['tests/acceptance/684/lean.test.ts'];
+/** Vitest files the unit lane runs one at a time, after the parallel block (see the lane). */
+const alone = ['tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/',
+  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
+  'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/'];
+/** Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and minutes. */
+const byHand = ['tests/acceptance/685/'];
+
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
   { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/conformance-lint.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names.' },
@@ -21,9 +30,12 @@ export const checks = [
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
     // while a sibling file builds finds it gone or half-written: those files run one at a time, after
     // every other file has run in parallel. The hub's files (#16) start real hubs and time their
-    // sockets to 2 ms, so they too run one at a time, with nothing beside them.
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--exclude', 'tests/acceptance/389/**', '--exclude', 'tests/acceptance/390/**', '--exclude', 'tests/acceptance/391/**', '--exclude', 'tests/acceptance/392/**', '--exclude', 'tests/acceptance/393/**', '--exclude', 'tests/acceptance/394/**', '--exclude', 'tests/acceptance/16/**'],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', 'tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/16/'],
+    // sockets to 2 ms, so they too run one at a time, with nothing beside them. So does each file
+    // that times an issue's frozen budget on the reference Mac (gated by environmentProblem()): #14's
+    // 5,000 appends a second fell to 3,300-4,000/s beside the parallel block and passed alone. The
+    // supervisor's files (#236) too: they read the system's one sandbox log stream.
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
     // tests spend plan usage, and #246's check that change against its own base.
@@ -40,13 +52,47 @@ export const checks = [
   // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
   // lifecycle enumerator, crash suite and verdict replay when the change touches their paths.
   { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs']], fix: 'Follow the Fix line under each proof lane finding above.' },
+  // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's
+  // seeded claims and the rank-swap twins. Lean builds take a while, so the local preflight runs it only for a
+  // change to the engine or the model; the release preflight always does.
+  {
+    name: 'verdict proofs', paths: ['packages/verdicts/src/**', 'packages/verdicts/model/**'],
+    commands: [[process.execPath, 'scripts/verdict-proofs.mjs'], [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/684', 'lean.test.ts', '-t', 'AC3|AC4', '--silent=false']],
+    fix: 'Repair the proof or build error each FAIL line names, keeping every theorem on Lean\'s standard axioms, or make the engine and packages/verdicts/model agree on the vector named; under BLOCKED, install the toolchain as its Fix line says.',
+  },
 ];
 // The release preflight adds the mutation lane and runs the lifecycle enumerator and crash suite in full.
 export const releaseChecks = checks.map((lane) => (lane.name === 'proof' ? { ...lane, commands: [[process.execPath, 'scripts/proof.mjs', '--release']] } : lane));
 
+/**
+ * The paths a change touches: every path that differs between the merge base with origin/main and the working
+ * tree, committed or not, and new files git doesn't ignore. Null when that can't be worked out.
+ */
+function changedPaths(cwd) {
+  const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 2 ** 28 });
+  const base = git('merge-base', 'HEAD', 'origin/main');
+  if (base.status !== 0) return null;
+  const diff = git('diff', '--name-only', '-z', '--no-renames', base.stdout.trim());
+  const untracked = git('ls-files', '-z', '--others', '--exclude-standard');
+  if (diff.status !== 0 || untracked.status !== 0) return null;
+  return [...diff.stdout.split('\0'), ...untracked.stdout.split('\0')].filter(Boolean);
+}
+/** A lane's path: a folder ending in `/**` matches everything under it, anything else matches itself. */
+const covers = (path, file) => (path.endsWith('/**') ? file.startsWith(path.slice(0, -2)) : file === path);
+
 export function runLanes(lanes, { cwd = root } = {}) {
   const failures = [];
+  // The release preflight runs every lane; the local one runs a lane with paths only for a change that touches them.
+  const release = process.env.DEEP_PREFLIGHT === 'release';
+  let changed;
   for (const lane of lanes) {
+    if (lane.paths && !release) {
+      changed ??= changedPaths(cwd);
+      if (changed && !changed.some((file) => lane.paths.some((path) => covers(path, file)))) {
+        console.log(`SKIP ${lane.name}: the change touches none of ${lane.paths.join(', ')}`);
+        continue;
+      }
+    }
     const started = performance.now();
     console.log(`RUN ${lane.name}`);
     let failure = lane.commands.length ? undefined : { state: 'BLOCKED', error: 'No check was run' };

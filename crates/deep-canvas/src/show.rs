@@ -9,7 +9,8 @@
 //! - [`Writer`] and [`WriterKind`]: who a connection proves, and the [`Band`] its layer draws in.
 //! - [`stamp`]: a payload as a document of one writer layer, or the fields that name a layer or
 //!   a writer.
-//! - [`whole_diff`]: the IDs changed, unchanged, created and removed, or `unintended_removal`.
+//! - [`whole_diff`] and [`whole_diff_by`]: the IDs changed, unchanged, created and removed, or
+//!   `unintended_removal`.
 //! - [`unreadable_handles`]: `ref_unresolved` for each binding source the writer can't read.
 //! - [`order_issues`], [`inline_count`] and [`truncated`]: the reply's issue list.
 
@@ -68,8 +69,7 @@ impl Writer {
     /// The ID of this writer's layer: its kind and the first 48 bits of the SHA-256 of its text,
     /// so any thread ID gives a layer ID the ID grammar reads, and one writer one layer.
     pub fn layer_id(&self) -> String {
-        let digest = Sha256::digest(self.text().as_bytes());
-        let hex: String = digest[..6].iter().map(|b| format!("{b:02x}")).collect();
+        let hex = crate::canon::hex(&Sha256::digest(self.text().as_bytes())[..6]);
         format!("{}-{hex}", self.kind.name())
     }
 
@@ -211,29 +211,17 @@ impl Diff {
     }
 }
 
-/// The entries of `doc`'s maps keyed by ID that `layer` holds, by map: its items, and in R1,
-/// where a deep_show document has one writer, every other map keyed by ID whole.
+/// The entries of `doc`'s maps keyed by ID (items first) that `owns` gives a writer, by map.
 fn held<'a>(
     doc: &'a Value,
-    layer: &str,
-    scope: Scope,
+    owns: &dyn Fn(&str, &str, &Value) -> bool,
 ) -> BTreeMap<&'static str, BTreeMap<&'a str, &'a Value>> {
     let mut out = BTreeMap::new();
-    let maps = std::iter::once("items").chain(
-        match scope {
-            Scope::Every => ID_MAPS,
-            Scope::ItemsOnly => &[],
-        }
-        .iter()
-        .copied(),
-    );
-    for map in maps {
+    for map in std::iter::once("items").chain(ID_MAPS.iter().copied()) {
         let mut entries = BTreeMap::new();
         if let Some(Value::Object(m)) = member(doc, map) {
             for (id, entry) in m {
-                let mine =
-                    map != "items" || member(entry, "layer").and_then(Value::as_str) == Some(layer);
-                if mine {
+                if owns(map, id, entry) {
                     entries.insert(id.as_str(), entry);
                 }
             }
@@ -246,7 +234,8 @@ fn held<'a>(
 /// `next`, a whole revision of `layer`, against `current`: each ID the layer holds now that
 /// `next` leaves out must be in `removes`, or the revision is refused with one
 /// `unintended_removal` issue per ID it dropped. Otherwise the IDs changed, unchanged, created and
-/// removed.
+/// removed. In R1 a deep_show document has one writer, so every map keyed by ID but the items is
+/// held whole (`Scope::Every`).
 pub fn whole_diff(
     current: Option<&Value>,
     next: &Value,
@@ -254,9 +243,30 @@ pub fn whole_diff(
     removes: &[String],
     scope: Scope,
 ) -> Result<Diff, Vec<Issue>> {
+    let owns = |map: &str, _: &str, entry: &Value| {
+        if map == "items" {
+            member(entry, "layer").and_then(Value::as_str) == Some(layer)
+        } else {
+            scope == Scope::Every
+        }
+    };
+    whole_diff_by(current, next, &owns, &owns, removes)
+}
+
+/// `next` against `current`, each read through what the writer holds in it (`was`, `now`): an
+/// entry `was` gives the writer that `next` leaves out must be named in `removes`, or it is an
+/// `unintended_removal`, so a writer's whole revision of a shared document never counts another
+/// writer's entries as removed.
+pub fn whole_diff_by(
+    current: Option<&Value>,
+    next: &Value,
+    was: &dyn Fn(&str, &str, &Value) -> bool,
+    now: &dyn Fn(&str, &str, &Value) -> bool,
+    removes: &[String],
+) -> Result<Diff, Vec<Issue>> {
     let empty = Value::Null;
-    let before = held(current.unwrap_or(&empty), layer, scope);
-    let after = held(next, layer, scope);
+    let before = held(current.unwrap_or(&empty), was);
+    let after = held(next, now);
     let mut diff = Diff::default();
     let mut issues = Vec::new();
     for (map, was) in &before {

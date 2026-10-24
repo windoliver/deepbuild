@@ -1494,6 +1494,85 @@ export interface HubStopped {
   evidence?: Array<string>;
 }
 
+/** job.ended@1 */
+export interface JobEnded {
+  v: 1;
+  id: string;
+  kind: "job.ended";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    state: string;
+    refused?: string;
+    cause?: string;
+    session?: string;
+    model?: string;
+    binary?: {
+      path: string;
+      version: string;
+    };
+    usage?: {
+      input: number;
+      cached: number;
+      output: number;
+    };
+    cost_usd?: number;
+    lingered?: Array<string>;
+    from?: number;
+    to?: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** job.event@1 */
+export interface JobEvent {
+  v: 1;
+  id: string;
+  kind: "job.event";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    event: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** job.recorded@1 */
+export interface JobRecorded {
+  v: 1;
+  id: string;
+  kind: "job.recorded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    kind: string;
+    agent: string;
+    account: string | null;
+    folder: string;
+    prompt: string;
+    waiting: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** layer.rows@1 */
 export interface LayerRows {
   v: 1;
@@ -2048,6 +2127,67 @@ export interface PrMerged {
   evidence?: Array<string>;
 }
 
+/** process.ended@1 */
+export interface ProcessEnded {
+  v: 1;
+  id: string;
+  kind: "process.ended";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    pid: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** process.starting@1 */
+export interface ProcessStarting {
+  v: 1;
+  id: string;
+  kind: "process.starting";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    cwd: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** process.tracked@1 */
+export interface ProcessTracked {
+  v: 1;
+  id: string;
+  kind: "process.tracked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    pid: number;
+    start: string;
+    pgid: number;
+    cwd: string;
+    token: string | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** reading.batch@1 */
 export interface ReadingBatch {
   v: 1;
@@ -2142,6 +2282,27 @@ export interface RequestCost {
   evidence?: Array<string>;
 }
 
+/** run.cleaned@1 */
+export interface RunCleaned {
+  v: 1;
+  id: string;
+  kind: "run.cleaned";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    outcome: "clean" | "unfinished";
+    left: Array<string>;
+    stopped: Array<number>;
+  };
+  evidence?: Array<string>;
+}
+
 /** run.finished@1 */
 export interface RunFinished {
   v: 1;
@@ -2190,6 +2351,26 @@ export interface RunStarted {
     check: string;
     claim: string;
     commit: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** sandbox.denied@1 */
+export interface SandboxDenied {
+  v: 1;
+  id: string;
+  kind: "sandbox.denied";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    run: string;
+    operation: string;
+    target: string;
   };
   evidence?: Array<string>;
 }
@@ -2246,6 +2427,24 @@ export interface SessionEnd {
   log_pos?: number;
   data: {
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.reading@1 */
+export interface SessionReading {
+  v: 1;
+  id: string;
+  kind: "session.reading";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
   };
   evidence?: Array<string>;
 }

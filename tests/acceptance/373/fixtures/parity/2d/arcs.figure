@@ -1,0 +1,91 @@
+{
+  "format": 1,
+  "id": "parity-arcs",
+  "profile": "figure",
+  "title": "Arcs",
+  "description": "A filled quarter arc (a sector), the same arc with an inner radius of 50 (a ring sector), and the arc with no fill, stroked along the arc alone.",
+  "size": [
+    768,
+    256
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "sector": {
+      "id": "sector",
+      "kind": "circle@1",
+      "layer": "main",
+      "name": "Sector",
+      "order": "a00",
+      "params": {
+        "center": [
+          128,
+          128
+        ],
+        "r": 100,
+        "arc": {
+          "from": 0,
+          "to": 90
+        },
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "ring": {
+      "id": "ring",
+      "kind": "circle@1",
+      "layer": "main",
+      "name": "Ring sector",
+      "order": "a01",
+      "params": {
+        "center": [
+          384,
+          128
+        ],
+        "r": 100,
+        "inner_r": 50,
+        "arc": {
+          "from": 0,
+          "to": 90
+        },
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "open": {
+      "id": "open",
+      "kind": "circle@1",
+      "layer": "main",
+      "name": "Open arc",
+      "order": "a02",
+      "params": {
+        "center": [
+          640,
+          128
+        ],
+        "r": 100,
+        "arc": {
+          "from": 0,
+          "to": 90
+        },
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 4
+          }
+        }
+      }
+    }
+  }
+}
