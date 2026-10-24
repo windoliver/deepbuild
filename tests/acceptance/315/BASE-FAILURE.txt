@@ -1,0 +1,603 @@
+Base commit: 33eaad3 (origin/main, no implementation of #315's additions)
+Command: npm ci; npm run build --workspaces (twice: the first build after install fails on declaration order); then NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/315 --no-file-parallelism --reporter=verbose   (node v24.22.0, the repo's .node-version; cargo on PATH; the same as npx vitest run --root tests/acceptance/315 --no-file-parallelism)
+Date: 2026-10-22  Node v24.22.0  vitest 5.0.5  darwin-arm64 (Mac15,12, Apple M3, 16 GiB, on mains power: a reference Mac, so the timing gates were open). hyperfine is not installed on this machine.
+Exit code: 1
+Result: 7 files, 23 tests, 22 failed, 1 passed, 0 skipped.
+
+Why each test fails, by criterion (each for the reason the criterion's missing piece gives):
+- AC1: with the hub stopped by SIGSTOP, every `ls` took 54-72 ms from spawn to exit: the base waits the whole 50 ms from its own start for the hub's hello before it fails open, so the decision lands after 50 ms. (The other three forms of a stopped hub pass at the base.)
+- AC2, AC8 (overhead; peak memory and binary size): with the hub up, the request for `ls` names no matched entry ([] where rules.json's `listing-noted` matches): the base reads no rules.json, so the timed call isn't the issue's. Hyperfine's absence was never reached.
+- AC3: the SessionStart request carries no `billing` field.
+- AC5: the session whose turn 2 reached no hook has no "hooks not reaching DeepBuild" reading (its readings are []).
+- AC6, AC7: deep-hook doesn't take DEEP_HOOK_TEST_CLOCK_NS; its stamps are the real clock's.
+- AC8 (perf lane): benchmarks/budgets.json has no deep-hook-overhead task; benchmarks/deep-hook.mjs doesn't exist, so both bench runs fail with "Cannot find module".
+- AC8 (fail open): against a SIGSTOPped hub `ls` is allowed but its spooled request isn't marked late.
+- AC9: benchmarks/deep-hook.mjs doesn't exist.
+- AC10: the stalled deep-hook had already exited when it was killed: the base doesn't take DEEP_HOOK_TEST_SPOOL_STALL (and spools one file per hook).
+- AC11: the 200 hooks left 200 spool files, not one: the base writes each request to a file of its own.
+- AC12: when the hub refuses the request carrying f_test, `pkill -f node` is allowed (exit 0): the base applies no fail_closed entry.
+- AC13: on the test hub that accepts and never reads, `ls` was decided after 59 ms, not within 50 ms.
+- Every wrong-program test fails at the base because its plant doesn't exist: cargo reports "the package 'deep-hook' does not contain this feature" for plant-print-reply, plant-connect-timeout-only and plant-fixed-deadline, and `deep hub run` exits on "DEEP_HUB_PLANT=… names no planted program" for stops-at-first-bad-line and remove-spool-after-normal.
+
+The one test that passes at the base: AC4 (spool.test.ts). Its behavior landed with #16: the base deep-hook already spools each request while the hub is stopped and the base hub replays the spool at its start, one file at a time in name order (`<pid>-<id>.jsonl`), which for hooks run one after another is the order they ran. The test is kept as the criterion's proof and as regression protection for this issue's change of the spool to one shared file; no wrong program is named for AC4, and the base isn't one.
+
+Checked beside this run (not at the base): the tests type-check with no errors (node node_modules/typescript/bin/tsc -p tests/acceptance/315/tsconfig.json). The spool reader (helpers.ts, readSpool) was run on a synthetic one-file spool holding a cut line with a request glued to it, and on the same with a newline before each line; it found the cut's offset and every whole request in both. No wrong program could be run: each is a plant in deep-hook or the hub.
+
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/315
+
+ × cut.test.ts > AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept > AC10 1,000 hooks eight at a time with the hub stopped, hook 400 killed mid-write after 650 more ran, then the hub starts 15456ms
+   → the stalled deep-hook was still running, mid-write, when it was killed (DEEP_HOOK_TEST_SPOOL_STALL): expected false to be true // Object.is equality
+ × cut.test.ts > AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept > AC10 (wrong program) a hub that stops at the first bad line fails this test, naming the first ID lost 505ms
+   → BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=stops-at-first-bad-line): stderr: file://<checkout>/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stops-at-first-bad-line names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/wire.js:46:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:402:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/index.js:23:28)
+    at file://<checkout>/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ × cut.test.ts > AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool > AC11 200 hooks spooled with the hub stopped; the test VFS cuts power right after the spool's removal; the hub restarts 18042ms
+   → the 200 hooks appended to one spool file; the spool holds 200 files: expected 200 to be 1 // Object.is equality
+ × cut.test.ts > AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool > AC11 (wrong program) a hub that removes the spool after a synchronous=NORMAL batch fails this test, naming the first ID 395ms
+   → BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=remove-spool-after-normal): stderr: file://<checkout>/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=remove-spool-after-normal names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/wire.js:46:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:402:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/index.js:23:28)
+    at file://<checkout>/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ × failopen.test.ts > AC1 #315.f0560928 with the hub stopped, a normal command is allowed in under 50 ms > AC1 a PreToolUse for `ls` is allowed in under 50 ms, ten times each, with no hub, a hub stopped by SIGTERM, one killed with its socket left behind, and one stopped with SIGSTOP 2648ms
+   → the hub stopped with SIGSTOP, call 1: `ls` took 58.6 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 2: `ls` took 55.8 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 3: `ls` took 54.8 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 4: `ls` took 54.8 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 5: `ls` took 57.7 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 6: `ls` took 59.5 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 7: `ls` took 71.9 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 8: `ls` took 56.9 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 9: `ls` took 54.7 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 10: `ls` took 57.4 ms, not under 50 ms: expected [ …(10) ] to deeply equal []
+ × failopen.test.ts > AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer > AC13 against a hub that accepts and never reads, one that reads and never replies and one stopped with SIGSTOP, then a hub that holds a push 30 s, then a working hub reading the spool 31755ms
+   → on the test hub that accepts and never reads (accepts-never-reads), `ls`, deep-hook decided after 59.4 ms, not within 50 ms of the hook's start
+ × failopen.test.ts > AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer > AC13 (wrong program) a deep-hook with only a connect timeout waits for the agent's hook timeout and fails this test, naming the hub 167ms
+   → BLOCKED: cargo build --locked -q -p deep-hook --features plant-connect-timeout-only --target-dir <checkout>/target/plant-connect-timeout-only failed: error: the package 'deep-hook' does not contain this feature: plant-connect-timeout-only
+
+ × failopen.test.ts > AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer > AC13 (wrong program) a deep-hook that cuts every reply at a fixed deadline lets the held push through before its answer and fails this test 148ms
+   → BLOCKED: cargo build --locked -q -p deep-hook --features plant-fixed-deadline --target-dir <checkout>/target/plant-fixed-deadline failed: error: the package 'deep-hook' does not contain this feature: plant-fixed-deadline
+
+ × budgets.test.ts > AC2 #315.9543886e overhead under 10 ms at p95 on top of process start, measured over 1,000 calls > AC2 1,000 forwarded PreToolUse calls, with the matcher running, against the no-op floor: p95 overhead under 10 ms 1729ms
+   → with the hub up, the request for `ls` names the entries it matched: []: expected [] to deeply equal [ 'listing-noted' ]
+ × budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 the perf lane has deep-hook's two tasks, each a #315 first measurement, valid against the merge base's budgets 138ms
+   → budgets.json has a task deep-hook-overhead: expected undefined to be defined
+ × budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 `node benchmarks/deep-hook.mjs overhead` runs and exits 0 36ms
+   → benchmarks/deep-hook.mjs overhead: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/deep-hook.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+ × budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 `node benchmarks/deep-hook.mjs fail-open` runs and exits 0 41ms
+   → benchmarks/deep-hook.mjs fail-open: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/deep-hook.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+ × budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 under 10 ms at p95 on top of process start (the AC2 measurement, with hyperfine) 391ms
+   → with the hub up, the request for `ls` names the entries it matched: []: expected [] to deeply equal [ 'listing-noted' ]
+ × budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 under 50 ms to fail open: a PreToolUse against a hub stopped with SIGSTOP, from spawn to exit, p95 of 50 calls 520ms
+   → the call is spooled marked late: {"v":1,"agent":"claude-code","event":"PreToolUse","seq":"1792655814800216000","id":"01M5H9SW4G8P0H4483S5H0M8Z9","pid":11072,"ppid":10919,"matched":[],"payload":{"session_id":"39d3997a-cbaa-4f80-9c4e-95b8d3319e47","transcript_path":"/private/tmp/dh315-KxpELQ/h/.claude/projects/-private-tmp-dh315-IAnf: expected undefined to be true // Object.is equality
+ × budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 peak memory under 10 MB forwarding, failing open and failing closed, and a release binary under 3 MB 333ms
+   → with the hub up, the request for `ls` names the entries it matched: []: expected [] to deeply equal [ 'listing-noted' ]
+ × budgets.test.ts > AC9 #315.23cd76ed overhead is measured with hyperfine against a native no-op binary as the floor > AC9 `node benchmarks/deep-hook.mjs overhead` runs hyperfine, timing deep-hook beside a native binary that does nothing 1ms
+   → the overhead bench benchmarks/deep-hook.mjs exists: expected false to be true // Object.is equality
+ × refusal.test.ts > AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled > AC12 the hub refuses a request carrying the planted field f_test; a test hub replies with a line that doesn't parse 2184ms
+   → the hub refused the request carrying f_test, `pkill -f node`: deep-hook must deny it: exit 0 after 9.2 ms, stdout "", stderr ""
+ × refusal.test.ts > AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled > AC12 (wrong program) a deep-hook that prints the reply as it came fails this test 183ms
+   → BLOCKED: cargo build --locked -q -p deep-hook --features plant-f-test,plant-print-reply --target-dir <checkout>/target/plant-f-test+plant-print-reply failed: error: the package 'deep-hook' does not contain this feature: plant-print-reply
+
+ × reading.test.ts > AC5 #315.f8b9a600 a turn with tool calls but no hook event at the hub shows a "hooks not reaching DeepBuild" reading > AC5 turn 2 ran a Bash call and no hook of it reached the hub: the session reads "hooks not reaching DeepBuild"; a session whose every turn reached the hub doesn't 6045ms
+   → the session whose turn 2 reached no hook shows "hooks not reaching DeepBuild": expected [] to include 'hooks not reaching DeepBuild'
+ ✓ spool.test.ts > AC4 #315.bf6d3707 events from hooks that ran while the hub was stopped are in the record after it starts, in order, with none lost > AC4 two sessions' hooks, run one after another with the hub stopped mid-session, are each in the record once, in the order they ran, after the turn the hub saw 1450ms
+ × spool.test.ts > AC6 #315.8366a61c with the clock fixed, hooks stamped …789 and …790 are spooled with those exact strings and recorded in that order; replaying the spool again appends nothing > AC6 the two stamps, spooled, recorded as two events in order, and the same spool put back and replayed appends nothing 418ms
+   → the spool holds "seq":"1760013451123456789" as written: expected '{"v":1,"agent":"claude-code","event":…' to contain '"seq":"1760013451123456789"'
+ × spool.test.ts > AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record > AC7 hub up and hub stopped: two hooks stamped the same nanosecond carry that stamp, two different IDs, and are two events 456ms
+   → hub up: both requests carry the fixed stamp: expected [ '1792655826395563000', …(1) ] to deeply equal [ '1760013451123456789', …(1) ]
+ × billing.test.ts > AC3 #315.c8a3b16d with ANTHROPIC_API_KEY set, the SessionStart event carries true for it, and no log, spool or record row holds its value > AC3 hub up and hub stopped: the request and the recorded session.start carry billing.ANTHROPIC_API_KEY true (false where unset), and the value is nowhere 1360ms
+   → the SessionStart request with the key set carries billing.ANTHROPIC_API_KEY true: {"v":1,"agent":"claude-code","event":"SessionStart","seq":"1792655827940984000","id":"01M5H9T8Z48XKSNK5ZDZB5VTG5","pid":11534,"ppid":11512,"matched":[],"payload":{"session_id":"4d039915-969e-4223-bc32-d821e3725212","transcript_path":"/private/tmp/dh315-G9uHcJ/h/.claude/projects/-private-tmp-dh315-6w4eK2-work/4d039915-969e-4223-bc32-d821e3725212.jsonl","cwd":"/private/tmp/dh315-6w4eK2/work","hook_event_name":"SessionStart","permission_mode":"default","source":"startup","model":"claude-haiku-5-5"}}: expected undefined to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  billing.test.ts > AC3 #315.c8a3b16d with ANTHROPIC_API_KEY set, the SessionStart event carries true for it, and no log, spool or record row holds its value > AC3 hub up and hub stopped: the request and the recorded session.start carry billing.ANTHROPIC_API_KEY true (false where unset), and the value is nowhere
+AssertionError: the SessionStart request with the key set carries billing.ANTHROPIC_API_KEY true: {"v":1,"agent":"claude-code","event":"SessionStart","seq":"1792655827940984000","id":"01M5H9T8Z48XKSNK5ZDZB5VTG5","pid":11534,"ppid":11512,"matched":[],"payload":{"session_id":"4d039915-969e-4223-bc32-d821e3725212","transcript_path":"/private/tmp/dh315-G9uHcJ/h/.claude/projects/-private-tmp-dh315-6w4eK2-work/4d039915-969e-4223-bc32-d821e3725212.jsonl","cwd":"/private/tmp/dh315-6w4eK2/work","hook_event_name":"SessionStart","permission_mode":"default","source":"startup","model":"claude-haiku-5-5"}}: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ billing.test.ts:58:183
+     56|     const starts = jsonLines(f.upText()).filter((l) => l.event === 'Se…
+     57|     const sent = (s: Session): Line | undefined => starts.find((l) => …
+     58|     expect(sent(keyed)?.billing?.ANTHROPIC_API_KEY, `the SessionStart …
+       |                                                                                                                                                                                       ^
+     59|     expect(sent(unkeyed)?.billing?.ANTHROPIC_API_KEY, 'the SessionStar…
+     60|     await stopHub(hub);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  budgets.test.ts > AC2 #315.9543886e overhead under 10 ms at p95 on top of process start, measured over 1,000 calls > AC2 1,000 forwarded PreToolUse calls, with the matcher running, against the no-op floor: p95 overhead under 10 ms
+AssertionError: with the hub up, the request for `ls` names the entries it matched: []: expected [] to deeply equal [ 'listing-noted' ]
+
+- Expected
++ Received
+
+- [
+-   "listing-noted",
+- ]
++ []
+
+ ❯ matcherRuns budgets.test.ts:51:167
+
+ ❯ budgets.test.ts:101:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 the perf lane has deep-hook's two tasks, each a #315 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task deep-hook-overhead: expected undefined to be defined
+ ❯ budgets.test.ts:116:53
+    114|     for (const [id, mode] of Object.entries(TASKS)) {
+    115|       const task = current.tasks.find((t) => t.id === id);
+    116|       expect(task, `budgets.json has a task ${id}`).toBeDefined();
+       |                                                     ^
+    117|       expect(task!.command, `${id} runs the deep-hook bench in ${mode}…
+    118|       expect(String(task!.initialReason), `${id} says why, naming issu…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 `node benchmarks/deep-hook.mjs overhead` runs and exits 0
+AssertionError: benchmarks/deep-hook.mjs overhead: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/deep-hook.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:124:82
+    122|   it.each(Object.values(TASKS))('AC8 `node benchmarks/deep-hook.mjs %s…
+    123|     const r = await run(NODE, [join(REPO, 'benchmarks/deep-hook.mjs'),…
+    124|     expect(r.code, `benchmarks/deep-hook.mjs ${mode}: ${r.stderr.slice…
+       |                                                                                  ^
+    125|   }, 900_000);
+    126|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 `node benchmarks/deep-hook.mjs fail-open` runs and exits 0
+AssertionError: benchmarks/deep-hook.mjs fail-open: node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<checkout>/benchmarks/deep-hook.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ budgets.test.ts:124:82
+    122|   it.each(Object.values(TASKS))('AC8 `node benchmarks/deep-hook.mjs %s…
+    123|     const r = await run(NODE, [join(REPO, 'benchmarks/deep-hook.mjs'),…
+    124|     expect(r.code, `benchmarks/deep-hook.mjs ${mode}: ${r.stderr.slice…
+       |                                                                                  ^
+    125|   }, 900_000);
+    126|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 under 10 ms at p95 on top of process start (the AC2 measurement, with hyperfine)
+AssertionError: with the hub up, the request for `ls` names the entries it matched: []: expected [] to deeply equal [ 'listing-noted' ]
+
+- Expected
++ Received
+
+- [
+-   "listing-noted",
+- ]
++ []
+
+ ❯ matcherRuns budgets.test.ts:51:167
+
+ ❯ budgets.test.ts:129:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 under 50 ms to fail open: a PreToolUse against a hub stopped with SIGSTOP, from spawn to exit, p95 of 50 calls
+AssertionError: the call is spooled marked late: {"v":1,"agent":"claude-code","event":"PreToolUse","seq":"1792655814800216000","id":"01M5H9SW4G8P0H4483S5H0M8Z9","pid":11072,"ppid":10919,"matched":[],"payload":{"session_id":"39d3997a-cbaa-4f80-9c4e-95b8d3319e47","transcript_path":"/private/tmp/dh315-KxpELQ/h/.claude/projects/-private-tmp-dh315-IAnf: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ failsOpen budgets.test.ts:93:113
+     91|   expect(decision(allowed), `with the hub stopped by SIGSTOP, \`ls\` i…
+     92|   const spooled = readSpool(late.home).requests.find((r) => r.json.pay…
+     93|   expect(spooled?.json.late, `the call is spooled marked late: ${JSON.…
+       |                                                                                                                 ^
+     94|   const denied = hookTimed(late.home, late.s, 'PreToolUse', bash(late.…
+     95|   expect(decision(denied), `with the hub stopped by SIGSTOP, \`pkill -…
+ ❯ budgets.test.ts:139:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  budgets.test.ts > AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base > AC8 peak memory under 10 MB forwarding, failing open and failing closed, and a release binary under 3 MB
+AssertionError: with the hub up, the request for `ls` names the entries it matched: []: expected [] to deeply equal [ 'listing-noted' ]
+
+- Expected
++ Received
+
+- [
+-   "listing-noted",
+- ]
++ []
+
+ ❯ matcherRuns budgets.test.ts:51:167
+
+ ❯ budgets.test.ts:162:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  budgets.test.ts > AC9 #315.23cd76ed overhead is measured with hyperfine against a native no-op binary as the floor > AC9 `node benchmarks/deep-hook.mjs overhead` runs hyperfine, timing deep-hook beside a native binary that does nothing
+AssertionError: the overhead bench benchmarks/deep-hook.mjs exists: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budgets.test.ts:218:85
+    216|   it('AC9 `node benchmarks/deep-hook.mjs overhead` runs hyperfine, tim…
+    217|     const bench = join(REPO, 'benchmarks/deep-hook.mjs');
+    218|     expect(existsSync(bench), 'the overhead bench benchmarks/deep-hook…
+       |                                                                                     ^
+    219|     const real = hyperfinePath();
+    220|     if (!real) ctx.skip('INCONCLUSIVE: hyperfine is not installed, so …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  cut.test.ts > AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept > AC10 1,000 hooks eight at a time with the hub stopped, hook 400 killed mid-write after 650 more ran, then the hub starts
+AssertionError: the stalled deep-hook was still running, mid-write, when it was killed (DEEP_HOOK_TEST_SPOOL_STALL): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ judgeCut cut.test.ts:95:128
+     93| }
+     94| function judgeCut(o: CutRun): void {
+     95|   expect(o.aliveAtKill, 'the stalled deep-hook was still running, mid-…
+       |                                                                                                                                ^
+     96|   expect(o.spool.files.length, `the 1,000 hooks appended to one spool …
+     97|   expect(o.spool.bad.length, `the spool holds exactly one cut line: ${…
+ ❯ cut.test.ts:115:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  cut.test.ts > AC10 #315.787a7ca4 eight deep-hook processes spool 1,000 events, one killed mid-write: each exited event recorded once, the cut line recorded naming its offset, the lines after it kept > AC10 (wrong program) a hub that stops at the first bad line fails this test, naming the first ID lost
+Error: BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=stops-at-first-bad-line): stderr: file://<checkout>/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=stops-at-first-bad-line names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/wire.js:46:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:402:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/index.js:23:28)
+    at file://<checkout>/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:276:11
+    274|   const r = await Promise.race([proc.ready, proc.exit.then(() => undef…
+    275|   if (!r) {
+    276|     throw Error(`BLOCKED: the hub didn't start (deep hub run${o.root ?…
+       |           ^
+    277|   }
+    278|   return { ...r, home: o.home, root: o.root ?? rootOf(o.home), proc };
+ ❯ cutScenario cut.test.ts:88:15
+ ❯ cut.test.ts:119:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  cut.test.ts > AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool > AC11 200 hooks spooled with the hub stopped; the test VFS cuts power right after the spool's removal; the hub restarts
+AssertionError: the 200 hooks appended to one spool file; the spool holds 200 files: expected 200 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 200
+
+ ❯ judgePower cut.test.ts:171:123
+    169| }
+    170| function judgePower(o: PowerRun): void {
+    171|   expect(o.spool.files.length, `the 200 hooks appended to one spool fi…
+       |                                                                                                                           ^
+    172|   expect(o.spool.requests.length, 'the spool holds the 200 requests').…
+    173|   expect(o.cutAt, `power was cut right after the spool's removal: ${o.…
+ ❯ cut.test.ts:182:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  cut.test.ts > AC11 #315.2d265264 power cut right after the hub removes a replayed 200-event spool: on restart all 200 are in the record or still in the spool > AC11 (wrong program) a hub that removes the spool after a synchronous=NORMAL batch fails this test, naming the first ID
+Error: BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=remove-spool-after-normal): stderr: file://<checkout>/packages/hub/dist/wire.js:46
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=remove-spool-after-normal names no planted program
+    at plantOf (file://<checkout>/packages/hub/dist/wire.js:46:15)
+    at runHub (file://<checkout>/packages/hub/dist/server.js:402:19)
+    at hubCommand (file://<checkout>/packages/hub/dist/index.js:23:28)
+    at file://<checkout>/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:276:11
+    274|   const r = await Promise.race([proc.ready, proc.exit.then(() => undef…
+    275|   if (!r) {
+    276|     throw Error(`BLOCKED: the hub didn't start (deep hub run${o.root ?…
+       |           ^
+    277|   }
+    278|   return { ...r, home: o.home, root: o.root ?? rootOf(o.home), proc };
+ ❯ powerScenario cut.test.ts:141:15
+ ❯ cut.test.ts:186:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  failopen.test.ts > AC1 #315.f0560928 with the hub stopped, a normal command is allowed in under 50 ms > AC1 a PreToolUse for `ls` is allowed in under 50 ms, ten times each, with no hub, a hub stopped by SIGTERM, one killed with its socket left behind, and one stopped with SIGSTOP
+AssertionError: the hub stopped with SIGSTOP, call 1: `ls` took 58.6 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 2: `ls` took 55.8 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 3: `ls` took 54.8 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 4: `ls` took 54.8 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 5: `ls` took 57.7 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 6: `ls` took 59.5 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 7: `ls` took 71.9 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 8: `ls` took 56.9 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 9: `ls` took 54.7 ms, not under 50 ms
+the hub stopped with SIGSTOP, call 10: `ls` took 57.4 ms, not under 50 ms: expected [ …(10) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the hub stopped with SIGSTOP, call 1: `ls` took 58.6 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 2: `ls` took 55.8 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 3: `ls` took 54.8 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 4: `ls` took 54.8 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 5: `ls` took 57.7 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 6: `ls` took 59.5 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 7: `ls` took 71.9 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 8: `ls` took 56.9 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 9: `ls` took 54.7 ms, not under 50 ms",
++   "the hub stopped with SIGSTOP, call 10: `ls` took 57.4 ms, not under 50 ms",
++ ]
+
+ ❯ failopen.test.ts:49:43
+     47|       await stopHub(hub);
+     48|     }
+     49|     expect(failures, failures.join('\n')).toEqual([]);
+       |                                           ^
+     50|   }, 300_000);
+     51| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  failopen.test.ts > AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer > AC13 against a hub that accepts and never reads, one that reads and never replies and one stopped with SIGSTOP, then a hub that holds a push 30 s, then a working hub reading the spool
+Error: on the test hub that accepts and never reads (accepts-never-reads), `ls`, deep-hook decided after 59.4 ms, not within 50 ms of the hook's start
+ ❯ judgeFailOpen failopen.test.ts:116:37
+    114|     const want = c.command === 'ls' ? 'allow' : 'deny';
+    115|     if (decision(c.ran) !== want) throw Error(`on ${where}, deep-hook …
+    116|     if (c.ran.ms >= LIMIT_MS) throw Error(`on ${where}, deep-hook deci…
+       |                                     ^
+    117|   }
+    118|   const answer = heldAnswer(o.held.nonce);
+ ❯ failopen.test.ts:139:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  failopen.test.ts > AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer > AC13 (wrong program) a deep-hook with only a connect timeout waits for the agent's hook timeout and fails this test, naming the hub
+Error: BLOCKED: cargo build --locked -q -p deep-hook --features plant-connect-timeout-only --target-dir <checkout>/target/plant-connect-timeout-only failed: error: the package 'deep-hook' does not contain this feature: plant-connect-timeout-only
+
+ ❯ helpers.ts:158:31
+    156|     }
+    157|     made = run('cargo', args, { timeoutMs: 900_000 }).then((r) => {
+    158|       if (r.code !== 0) throw Error(`BLOCKED: cargo ${args.join(' ')} …
+       |                               ^
+    159|       if (!existsSync(binary)) throw Error(`BLOCKED: no binary at ${bi…
+    160|       // The first exec of a new binary is slow on macOS (it is checke…
+ ❯ failopen.test.ts:143:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  failopen.test.ts > AC13 #315.d4f95b29 three late test hubs: ls allowed, pkill -f node denied within 50 ms, each spooled and recorded late with its matched entries; a held push waits for its answer > AC13 (wrong program) a deep-hook that cuts every reply at a fixed deadline lets the held push through before its answer and fails this test
+Error: BLOCKED: cargo build --locked -q -p deep-hook --features plant-fixed-deadline --target-dir <checkout>/target/plant-fixed-deadline failed: error: the package 'deep-hook' does not contain this feature: plant-fixed-deadline
+
+ ❯ helpers.ts:158:31
+    156|     }
+    157|     made = run('cargo', args, { timeoutMs: 900_000 }).then((r) => {
+    158|       if (r.code !== 0) throw Error(`BLOCKED: cargo ${args.join(' ')} …
+       |                               ^
+    159|       if (!existsSync(binary)) throw Error(`BLOCKED: no binary at ${bi…
+    160|       // The first exec of a new binary is slow on macOS (it is checke…
+ ❯ failopen.test.ts:148:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  reading.test.ts > AC5 #315.f8b9a600 a turn with tool calls but no hook event at the hub shows a "hooks not reaching DeepBuild" reading > AC5 turn 2 ran a Bash call and no hook of it reached the hub: the session reads "hooks not reaching DeepBuild"; a session whose every turn reached the hub doesn't
+AssertionError: the session whose turn 2 reached no hook shows "hooks not reaching DeepBuild": expected [] to include 'hooks not reaching DeepBuild'
+ ❯ reading.test.ts:81:90
+     79|       expect(q, `the record knows the session ${quiet.id}`).toBeDefine…
+     80|       expect(c, `the record knows the session ${control.id}`).toBeDefi…
+     81|       expect(q!.readings, `the session whose turn 2 reached no hook sh…
+       |                                                                                          ^
+     82|       expect(c!.readings, `the session whose every turn reached the hu…
+     83|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  refusal.test.ts > AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled > AC12 the hub refuses a request carrying the planted field f_test; a test hub replies with a line that doesn't parse
+Error: the hub refused the request carrying f_test, `pkill -f node`: deep-hook must deny it: exit 0 after 9.2 ms, stdout "", stderr ""
+ ❯ judgeRefusal refusal.test.ts:63:41
+     61|     const where = `${c.how}, \`${c.command}\``;
+     62|     const want = c.command === 'ls' ? 'allow' : 'deny';
+     63|     if (decision(c.ran) !== want) throw Error(`${where}: deep-hook mus…
+       |                                         ^
+     64|     if (!c.requestId) throw Error(`${where}: no request reached the hu…
+     65|     if (!o.spooledIds.includes(c.requestId)) throw Error(`${where}: re…
+ ❯ refusal.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  refusal.test.ts > AC12 #315.9abdf3f5 a refused request or a reply that doesn't parse: pkill -f node denied, ls allowed, none of the hub's bytes printed, the request spooled > AC12 (wrong program) a deep-hook that prints the reply as it came fails this test
+Error: BLOCKED: cargo build --locked -q -p deep-hook --features plant-f-test,plant-print-reply --target-dir <checkout>/target/plant-f-test+plant-print-reply failed: error: the package 'deep-hook' does not contain this feature: plant-print-reply
+
+ ❯ helpers.ts:158:31
+    156|     }
+    157|     made = run('cargo', args, { timeoutMs: 900_000 }).then((r) => {
+    158|       if (r.code !== 0) throw Error(`BLOCKED: cargo ${args.join(' ')} …
+       |                               ^
+    159|       if (!existsSync(binary)) throw Error(`BLOCKED: no binary at ${bi…
+    160|       // The first exec of a new binary is slow on macOS (it is checke…
+ ❯ refusal.test.ts:77:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  spool.test.ts > AC6 #315.8366a61c with the clock fixed, hooks stamped …789 and …790 are spooled with those exact strings and recorded in that order; replaying the spool again appends nothing > AC6 the two stamps, spooled, recorded as two events in order, and the same spool put back and replayed appends nothing
+AssertionError: the spool holds "seq":"1760013451123456789" as written: expected '{"v":1,"agent":"claude-code","event":…' to contain '"seq":"1760013451123456789"'
+
+- Expected
++ Received
+
+- "seq":"1760013451123456789"
++ {"v":1,"agent":"claude-code","event":"PreToolUse","seq":"1792655826015559000","id":"01M5H9T72Z62BZS9XR8D678N1K","pid":11474,"ppid":11279,"matched":[],"payload":{"session_id":"ace00bd3-54f1-4b8e-9346-c226777c0174","transcript_path":"/private/tmp/dh315-OEVRxi/h/.claude/projects/-private-tmp-dh315-q1NXCj-work/ace00bd3-54f1-4b8e-9346-c226777c0174.jsonl","cwd":"/private/tmp/dh315-q1NXCj/work","hook_event_name":"PreToolUse","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"toolu_49175329495f65f8b294594d_9"}}
++
++ {"v":1,"agent":"claude-code","event":"PreToolUse","seq":"1792655826020801000","id":"01M5H9T734EBKJWEYVBMWC58BE","pid":11476,"ppid":11279,"matched":[],"payload":{"session_id":"ace00bd3-54f1-4b8e-9346-c226777c0174","transcript_path":"/private/tmp/dh315-OEVRxi/h/.claude/projects/-private-tmp-dh315-q1NXCj-work/ace00bd3-54f1-4b8e-9346-c226777c0174.jsonl","cwd":"/private/tmp/dh315-q1NXCj/work","hook_event_name":"PreToolUse","permission_mode":"default","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"toolu_92ffe2b3750b322c0d2a8800_11"}}
++
+
+ ❯ spool.test.ts:83:105
+     81|     }
+     82|     const text = spoolText(home);
+     83|     for (const stamp of [STAMP_A, STAMP_B]) expect(text, `the spool ho…
+       |                                                                                                         ^
+     84|     const requests = readSpool(home).requests.map((r) => r.json);
+     85|     const idA = requests.find((l) => l.seq === STAMP_A)?.id as string;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+ FAIL  spool.test.ts > AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record > AC7 hub up and hub stopped: two hooks stamped the same nanosecond carry that stamp, two different IDs, and are two events
+AssertionError: hub up: both requests carry the fixed stamp: expected [ '1792655826395563000', …(1) ] to deeply equal [ '1760013451123456789', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "1760013451123456789",
+-   "1760013451123456789",
++   "1792655826395563000",
++   "1792655826409049000",
+  ]
+
+ ❯ check spool.test.ts:125:89
+    123|     const up = jsonLines(f.upText()).filter((l) => l.event === 'PreToo…
+    124|     const check = (requests: Line[], events: Ev[], how: string) => {
+    125|       expect(requests.map((l) => l.seq), `${how}: both requests carry …
+       |                                                                                         ^
+    126|       const [x, y] = requests.map((l) => l.id as string);
+    127|       expect(ULID.test(x ?? '') && ULID.test(y ?? ''), `${how}: each h…
+ ❯ spool.test.ts:136:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/22]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  22 failed | 1 passed (23)
+   Start at  00:55:42
+   Duration  85.92s (tests 99%)
+

@@ -1,11 +1,12 @@
 // What counting tests costs a command check, for the perf lane's budgets (issue #30): node
 // benchmarks/command-check.mjs. One process opens a record, the asks core and the supervisor in a temp folder,
 // writes a Vitest project of 200 tests (its dependencies cloned from the repo's), and runs `vitest run` in it
-// through the supervisor's sandbox 10 times as the command check kind (runCommandCheck: its reporter, and reading
-// back its report, read trace and output) and 10 times as a plain run, interleaved. The plain run has the kind's
-// hermetic environment and the same loaders but asks for no report and reads nothing back, so the difference is the
-// counting alone. It prints the median of each as one JSON line; the issue's 1% stays in
-// tests/acceptance/30/budgets.test.ts.
+// through the supervisor's sandbox as pairs: once as the command check kind (runCommandCheck: its reporter, and
+// reading back its report, read trace and output) and once as a plain run, back to back, which goes first
+// alternating from pair to pair. The plain run has the kind's hermetic environment and the same loaders but asks for
+// no report and reads nothing back, so a pair's difference is the counting alone. It prints every pair as one JSON
+// line, `{"checkMs": [...], "plainMs": [...]}`; the issue's 1% stays in tests/acceptance/30/budgets.test.ts.
+// By default it times 10 pairs, the perf lane's short run; `--pairs <n>` times n, as AC12's number asks for 300.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -17,11 +18,12 @@ import { CHECK_RUNTIME } from '../packages/conformance/dist/index.js';
 import { openRecord } from '../packages/record/dist/index.js';
 import { openSupervisor } from '../packages/supervisor/dist/index.js';
 
-const ROUNDS = 10;
+const at = process.argv.indexOf('--pairs');
+const PAIRS = at === -1 ? 10 : Number(process.argv[at + 1]);
+if (!Number.isSafeInteger(PAIRS) || PAIRS < 1) throw Error(`--pairs takes a whole number of pairs, got ${process.argv[at + 1]}`);
 const TESTS = 200;
 const REPO = fileURLToPath(new URL('../', import.meta.url));
 const RUNTIME = join(REPO, 'packages/checks-command/runtime');
-const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-command-bench-')));
 const project = join(dir, 'project');
@@ -73,14 +75,21 @@ async function run(i, counted) {
   return ms;
 }
 try {
-  await run(-1, true);
+  // A warm-up pair, untimed: the first runs load what every later one finds cached.
+  await run(PAIRS, true);
+  await run(PAIRS, false);
   const checked = [];
   const plain = [];
-  for (let i = 0; i < ROUNDS; i++) {
-    checked.push(await run(i, true));
-    plain.push(await run(i, false));
+  for (let i = 0; i < PAIRS; i++) {
+    if (i % 2) {
+      plain.push(await run(i, false));
+      checked.push(await run(i, true));
+    } else {
+      checked.push(await run(i, true));
+      plain.push(await run(i, false));
+    }
   }
-  console.log(JSON.stringify({ checkMs: median(checked), plainMs: median(plain) }));
+  console.log(JSON.stringify({ checkMs: checked, plainMs: plain }));
 } finally {
   await sup.close();
   await record.close();
