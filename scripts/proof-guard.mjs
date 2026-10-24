@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, RUNNER_CONFIG, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -13,9 +13,8 @@ const DECISIONS = {
 };
 // The proof lanes' own code, and lanes.mjs, which names the test paths: once main holds the lanes, the
 // change runs its own copy of them, so an edit of them is an edit of the checks. So is an edit of a
-// test runner's config, which can stub the code under test only where it finds the change.
+// test runner's config (RUNNER_CONFIG), which can stub the code under test only where it finds the change.
 const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes)\.mjs$/;
-const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)(?:\.[\w-]+)*\.(?:config|workspace)(?:\.[\w-]+)*\.[cm]?[jt]s$/;
 
 // The files the merge base's runner configs name by path from the config's folder, resolved as vite
 // resolves them: those under the test paths, other than tests, named anywhere in a config, as
@@ -31,8 +30,10 @@ function namedByConfig(root, base) {
     for (const path of literals(text).map(([from, to]) => resolved(config, text.slice(from + 1, to - 1)))) {
       if (underTestPaths(path) && !isTestFile(path)) for (const file of testImports(root, base, path).keys()) named.add(file);
     }
-    // A config module it imports, as a shared one is, configures the run too, and names its own.
-    const imported = relativeImports(config, text).map((path) => resolveModule(root, base, path)).filter((path) => show(root, base, path) !== null && !queue.includes(path));
+    // A config module it imports, as a shared one is, configures the run too, and names its own; a
+    // value it imports from package.json or the code under test doesn't make that a config.
+    const configures = (path) => RUNNER_CONFIG.test(path) || (!path.endsWith('.json') && /\b(?:setupFiles|globalSetup|projects|workspace|define(?:Config|Project)|mergeConfig)\b/.test(show(root, base, path)));
+    const imported = relativeImports(config, text).map((path) => resolveModule(root, base, path)).filter((path) => show(root, base, path) !== null && !queue.includes(path) && configures(path));
     for (const path of imported) {
       named.add(path);
       queue.push(path);

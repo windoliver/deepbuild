@@ -470,3 +470,62 @@ test("a workspace build can't rewrite a tagged test in the copy the lanes run", 
   assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), show(result));
   assert.notEqual(result.status, 0, show(result));
 });
+
+test("a workspace build can't plant a package a tagged test resolves to", (t) => {
+  const lock = JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', workspaces: ['packages/*'] }, 'node_modules/lib': { resolved: 'packages/lib', link: true }, 'packages/lib': { name: 'lib', version: '1.0.0' } } });
+  const build = "import { mkdirSync } from 'node:fs';\nmkdirSync('dist', { recursive: true });\n";
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      '.gitignore': 'node_modules\n', 'package.json': JSON.stringify({ name: 'x', private: true, type: 'module', workspaces: ['packages/*'] }), 'package-lock.json': lock,
+      'packages/lib/package.json': JSON.stringify({ name: 'lib', version: '1.0.0', type: 'module', main: 'src/impl.mjs', scripts: { build: 'node build.mjs' } }), 'packages/lib/build.mjs': build, 'packages/lib/src/impl.mjs': 'export const f = () => 4;\n',
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from 'lib';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), 3);\n});\n`,
+    },
+    commits: [{ files: { 'packages/lib/src/impl.mjs': '// still wrong\nexport const f = () => 4;\n', 'packages/lib/build.mjs': `${build}import { writeFileSync } from 'node:fs';\nmkdirSync('../../tests/node_modules/lib', { recursive: true });\nwriteFileSync('../../tests/node_modules/lib/package.json', '{ "name": "lib", "type": "module", "main": "index.mjs" }');\nwriteFileSync('../../tests/node_modules/lib/index.mjs', 'export const f = () => 3;\\n');\n` }, message: `Edit\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(problems(result, 'before').some((found) => found.startsWith('FAIL before') && found.includes('fails on the change')), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test('a file under the test paths a workspace build generates, which a tagged test reads, survives on the change', (t) => {
+  const lock = JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', workspaces: ['packages/*'] }, 'node_modules/lib': { resolved: 'packages/lib', link: true }, 'packages/lib': { name: 'lib', version: '1.0.0' } } });
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      '.gitignore': 'node_modules\npackages/lib/test/generated.json\n', 'package.json': JSON.stringify({ name: 'x', private: true, type: 'module', workspaces: ['packages/*'] }), 'package-lock.json': lock,
+      'packages/lib/package.json': JSON.stringify({ name: 'lib', version: '1.0.0', type: 'module', scripts: { build: 'node build.mjs' } }), 'packages/lib/src/impl.mjs': 'export const f = () => 4;\n',
+      'packages/lib/build.mjs': "import { writeFileSync } from 'node:fs';\nimport { f } from './src/impl.mjs';\nwriteFileSync('test/generated.json', JSON.stringify({ value: f() }));\n",
+      'packages/lib/test/a.test.mjs': `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { readFileSync } from 'node:fs';\n\ntest('${c1} sums', () => {\n  assert.equal(JSON.parse(readFileSync(new URL('./generated.json', import.meta.url), 'utf8')).value, 3);\n});\n`,
+    },
+    commits: [{ files: { 'packages/lib/src/impl.mjs': 'export const f = () => 3;\n' }, message: `Fix\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(result.stdout.includes(`PASS before: packages/lib/test/a.test.mjs › ${c1} sums: failed on the merge base at its assertion`), show(result));
+  assert.equal(result.status, 0, show(result));
+});
+
+test("once main holds the proof lanes, a package.json or source module the runner config imports for a value is the change's own code", (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n', 'package.json': JSON.stringify({ name: 'x', version: '1.0.0' }), 'lib/roots.ts': "export const roots = ['tests'];\n",
+      'vitest.config.ts': "import pkg from './package.json' with { type: 'json' };\nimport { roots } from './lib/roots.ts';\nexport default { define: { __VERSION__: JSON.stringify(pkg.version) }, test: { include: roots.map((at) => `${at}/**/*.test.ts`) } };\n",
+    },
+    commits: [{ files: { 'package.json': JSON.stringify({ name: 'x', version: '1.0.0', description: 'sums' }), 'lib/roots.ts': "export const roots = ['tests'];\nexport const three = 3;\n" }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  for (const path of ['package.json', 'lib/roots.ts']) assert.ok(!problems(result, 'guard').some((found) => found.includes(`${path}:`)), `${path}\n${show(result)}`);
+});
+
+test("a fixture project's committed packages a tagged test runs are the change's on the merge base too", (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'src/cli.mjs': "const { n } = await import(process.argv[2]);\nconsole.log(String(n * 3));\n",
+      'tests/fixtures/proj/main.mjs': "export { n } from 'dep';\n",
+      'tests/fixtures/proj/node_modules/dep/package.json': '{ "name": "dep", "type": "module", "main": "index.mjs" }\n', 'tests/fixtures/proj/node_modules/dep/index.mjs': 'export const n = 1;\n',
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { execFileSync } from 'node:child_process';\nimport { resolve } from 'node:path';\n\ntest('${c1} doubles', () => {\n  assert.equal(execFileSync(process.execPath, ['src/cli.mjs', resolve('tests/fixtures/proj/main.mjs')], { encoding: 'utf8' }).trim(), '2');\n});\n`,
+    },
+    commits: [{ files: { 'src/cli.mjs': "// cli\nconst { n } = await import(process.argv[2]);\nconsole.log(String(n * 3));\n", 'tests/fixtures/proj/node_modules/dep/index.mjs': 'export const n = 2 / 3;\n' }, message: `Edit\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.notEqual(result.status, 0, show(result));
+  assert.ok(!result.stdout.includes('PASS before'), show(result));
+});
