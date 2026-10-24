@@ -133,6 +133,9 @@ export function changeCopy(root, change) {
 export function undoBuild(root, directory, keep = []) {
   const held = listFiles(root).filter((path) => !keep.includes(path));
   const tracked = new Set(listFiles(root));
+  // A json file a resolver tries before a tracked module of its stem, or before a tracked folder's index.
+  const stems = new Set([...tracked].flatMap((path) => [path.replace(/\.[cm]?[jt]sx?$/, ''), ...path.split('/').slice(1).map((_, at, parts) => path.split('/').slice(0, at + 1).join('/'))]));
+  const shadows = (path) => path.endsWith('.json') && stems.has(path.slice(0, -'.json'.length));
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
@@ -143,7 +146,7 @@ export function undoBuild(root, directory, keep = []) {
         else if (entry.isDirectory() && entry.name.startsWith('@')) walk(path);
       } else if (entry.isSymbolicLink() && !tracked.has(path)) rmSync(join(directory, path), { force: true });
       else if (entry.isDirectory()) walk(path);
-      else if (!tracked.has(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && /\.[cm]?[jt]sx?$|(?:^|\/)[^./]+$/.test(path)))) rmSync(join(directory, path), { force: true });
+      else if (!tracked.has(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && (/\.[cm]?[jt]sx?$|(?:^|\/)[^./]+$|(?:^|\/)package\.json$/.test(path) || shadows(path))))) rmSync(join(directory, path), { force: true });
     }
   };
   walk('');
@@ -318,6 +321,17 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   const runs = { files, tests: [], twins: new Map(), head: empty(), base: empty() };
   if (!files.length) return runs;
   runs.coverage = coverage ? temporary('deep-proof-coverage-') : null;
+  // The merge base, with the change's test code: every file under the test paths (tests, helpers
+  // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
+  // code beside a colocated test, so a hollow helper the change brings in runs on both. The runner
+  // config stays the merge base's, as the guard keeps it once main holds the lanes. It runs before
+  // any of the change's code, as its build, can reach it.
+  const { directory: base, blocked } = baseCheckout(root, change);
+  // A fixture project's committed packages are its own too, as a test that runs it reads them.
+  for (const path of listFiles(root)) if (underTestPaths(path) || underTestPaths(`${path.split('/node_modules/')[0]}/package.json`)) copy(root, path, base);
+  if (blocked) runs.base.blocked = blocked;
+  else runs.base = runTests(base, files);
+
   // The change runs in a copy prepared as the merge base's checkout is, so a test can't pass on the
   // change and fail on the base by telling the two places apart.
   const head = changeCopy(root, change);
@@ -371,16 +385,6 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   // vitest runs only the .only tests of a file that has one, so the file's other tagged tests don't run.
   runs.only = runnable.filter((path) => path.endsWith('.ts') && sourceSpans.get(path).some(({ only }) => only)
     && sourceSpans.get(path).some(({ name, leaf, only, skipped }) => leaf && !only && !skipped && (name === null ? tagsWithImports(root, null, path) : tagsIn(name)).some((tag) => counts(tag, path))));
-
-  // The merge base, with the change's test code: every file under the test paths (tests, helpers
-  // wherever they are and however they're imported, fixtures, goldens, twins and setup files), never
-  // code beside a colocated test, so a hollow helper the change brings in runs on both. The runner
-  // config stays the merge base's, as the guard keeps it once main holds the lanes.
-  const { directory: base, blocked } = baseCheckout(root, change);
-  // A fixture project's committed packages are its own too, as a test that runs it reads them.
-  for (const path of listFiles(root)) if (underTestPaths(path) || underTestPaths(`${path.split('/node_modules/')[0]}/package.json`)) copy(root, path, base);
-  if (blocked) runs.base.blocked = blocked;
-  else runs.base = runTests(base, files);
 
   // The twins each unproven test's criteria name, one checkout per twin.
   const needs = new Map();
