@@ -425,16 +425,48 @@ test('a file beside a helper tests import by its whole name, and a fixture proje
   assert.deepEqual(problems(result, 'guard'), [], show(result));
 });
 
-test('once main holds the proof lanes, a package beside a shared helper, and a setup file a config names by a call, are guarded; code under test in a fixtures folder is not a fixture', (t) => {
+test('once main holds the proof lanes, a package beside a shared helper a test imports, and a setup file a config names by a call, are guarded; code under test in a fixtures folder is not a fixture', (t) => {
   const result = proof(repo(t, {
     issues: { [ISSUE]: ['Adds'] },
     base: {
       'scripts/proof-guard.mjs': '// the guard\n', 'tests/support/check.mjs': "export { expect } from 'chai';\n", 'vitest.config.ts': "export default { test: { setupFiles: fileURLToPath(new URL('./vitest.setup.ts', import.meta.url)) } };\n", 'vitest.setup.ts': '// setup\n',
-      'lib/fixtures/factory.mjs': 'export const make = () => 4;\n', [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { make } from '../../../lib/fixtures/factory.mjs';\n\ntest('${c1} makes', () => {\n  assert.equal(make(), 3);\n});\n`,
+      'lib/fixtures/factory.mjs': 'export const make = () => 4;\n', [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { make } from '../../../lib/fixtures/factory.mjs';\nimport '../../support/check.mjs';\n\ntest('${c1} makes', () => {\n  assert.equal(make(), 3);\n});\n`,
     },
     commits: [{ files: { 'tests/support/node_modules/chai/index.js': 'export const expect = () => ({});\n', 'vitest.setup.ts': '// hollow\n', 'lib/fixtures/factory.mjs': 'export const make = () => 3;\n' }, message: `Edit\n\nPart of #${ISSUE}` }],
   }), ['guard']);
   const refused = problems(result, 'guard');
   for (const path of ['tests/support/node_modules/chai/index.js', 'vitest.setup.ts']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: `)), show(result));
   assert.ok(!refused.some((found) => found.includes('lib/fixtures/factory.mjs')), show(result));
+});
+
+test("the config's setup entries are read past comments, through a const and in a config module it imports; a __fixtures__ script is a test's own; a fixture project's node_modules no test reaches is free", (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n',
+      'vitest.config.ts': "import shared from './vitest.shared.ts';\nconst globalSetup = ['./global.setup.ts'];\nexport default { ...shared, test: {\n  setupFiles: [\n    // the project's matchers\n    './vitest.setup.ts',\n  ],\n  globalSetup,\n  // don't alias anything else\n  alias: { calc: './lib/impl.ts' },\n} };\n",
+      'vitest.shared.ts': "export default { test: { setupFiles: ['./shared.setup.ts'] } };\n", 'vitest.setup.ts': '// setup\n', 'global.setup.ts': '// global\n', 'shared.setup.ts': '// shared\n', 'lib/impl.ts': 'export const f = () => 4;\n',
+      'packages/calc/src/__fixtures__/expected.ts': 'export default 3;\n', 'packages/calc/src/sum.test.ts': `import { it, expect } from 'vitest';\nimport want from './__fixtures__/expected.ts';\n\nit('${c1} sums', () => {\n  expect(3).toBe(want);\n});\n`,
+    },
+    commits: [{ files: { 'vitest.setup.ts': '// hollow\n', 'global.setup.ts': '// hollow\n', 'shared.setup.ts': '// hollow\n', 'lib/impl.ts': 'export const f = () => 3;\n', 'packages/calc/src/__fixtures__/expected.ts': 'export default 4;\n', 'tests/unit/fixtures/proj/index.js': "import dep from 'dep';\n", 'tests/unit/fixtures/proj/node_modules/dep/index.js': 'export default 1;\n' }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  const refused = problems(result, 'guard');
+  for (const path of ['vitest.setup.ts', 'global.setup.ts', 'shared.setup.ts', 'packages/calc/src/__fixtures__/expected.ts']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: `)), `${path}\n${show(result)}`);
+  for (const path of ['lib/impl.ts', 'tests/unit/fixtures/proj/node_modules']) assert.ok(!refused.some((found) => found.includes(path)), `${path}\n${show(result)}`);
+});
+
+test("a workspace build can't rewrite a tagged test in the copy the lanes run", (t) => {
+  const lock = JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', workspaces: ['packages/*'] }, 'node_modules/lib': { resolved: 'packages/lib', link: true }, 'packages/lib': { name: 'lib', version: '1.0.0' } } });
+  const build = "import { mkdirSync } from 'node:fs';\nmkdirSync('dist', { recursive: true });\n";
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'package.json': JSON.stringify({ name: 'x', private: true, type: 'module', workspaces: ['packages/*'] }), 'package-lock.json': lock,
+      'packages/lib/package.json': JSON.stringify({ name: 'lib', version: '1.0.0', type: 'module', scripts: { build: 'node build.mjs' } }), 'packages/lib/build.mjs': build, 'packages/lib/src/impl.mjs': 'export const f = () => 4;\n',
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from '../../../packages/lib/src/impl.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), 3);\n});\n`,
+    },
+    commits: [{ files: { 'packages/lib/src/impl.mjs': '// still wrong\nexport const f = () => 4;\n', 'packages/lib/build.mjs': `${build}import { readFileSync, writeFileSync } from 'node:fs';\nconst test = '../../${dir}/a.test.mjs';\nwriteFileSync(test, readFileSync(test, 'utf8').replace('f(), 3', 'f(), 4'));\nwriteFileSync('../../${dir}/planted.test.mjs', '');\n` }, message: `Edit\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), show(result));
+  assert.notEqual(result.status, 0, show(result));
 });

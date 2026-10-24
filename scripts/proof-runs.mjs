@@ -117,7 +117,27 @@ const workspaces = (directory) => existsSync(join(directory, 'package.json')) &&
 /** The change in a prepared copy: its directory, and why it can't run there, or null. */
 export function changeCopy(root, change) {
   const directory = copyChange(root, 'deep-proof-checkout-');
-  return { directory, blocked: prepare(root, change, directory) };
+  const blocked = prepare(root, change, directory);
+  restoreTests(root, directory);
+  return { directory, blocked };
+}
+
+/**
+ * Puts back the change's files under the test paths in a checkout its build ran in, and removes any
+ * the build made there, so the change's build scripts can't rewrite or add a test the lanes run.
+ */
+function restoreTests(root, directory, from = root) {
+  const held = new Set(listFiles(from).filter(underTestPaths));
+  const walk = (folder) => {
+    for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
+      const path = folder ? `${folder}/${entry.name}` : entry.name;
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+      if (entry.isDirectory() && !entry.isSymbolicLink()) walk(path);
+      else if (underTestPaths(path) && !held.has(path)) rmSync(join(directory, path), { force: true });
+    }
+  };
+  walk('');
+  for (const path of held) copy(from, path, directory);
 }
 
 /** The merge base installed and prepared in a temporary checkout: its directory, and why it can't run there, or null. */
@@ -379,6 +399,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       continue;
     }
     const failed = prepare(root, change, directory);
+    restoreTests(root, directory);
     runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles));
   }
   return runs;

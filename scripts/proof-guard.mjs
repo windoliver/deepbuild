@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, git, isTestFile, listFiles, literals, named, outsideTests, removedLines, resolveModule, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { blobId, git, isTestFile, keyedStrings, listFiles, literals, named, outsideTests, relativeImports, removedLines, resolveModule, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -22,23 +22,6 @@ const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)(?:\.[\w-]+)*\.(?:config|workspace
 // setupFiles names them, with those each imports; and wherever they are, the setup files and the
 // project configs a config lists, whose own names count too. They run in every test's process, or
 // configure it, so they are checks as the config is.
-const KEYS = /\b(setupFiles|globalSetup|projects|workspace)\s*:\s*/g;
-// Each keyed entry's value, as written: a list, a string or an expression such as a call, to the comma
-// or brace that ends it outside brackets and strings.
-function keyed(text) {
-  return [...text.matchAll(KEYS)].map((match) => {
-    let depth = 0, quote = null, at = match.index + match[0].length;
-    for (; at < text.length; at += 1) {
-      const char = text[at];
-      if (quote) { if (char === '\\') at += 1; else if (char === quote) quote = null; }
-      else if (`'"\``.includes(char)) quote = char;
-      else if ('([{'.includes(char)) depth += 1;
-      else if (')]}'.includes(char)) { if (depth === 0) break; depth -= 1; }
-      else if (char === ',' && depth === 0) break;
-    }
-    return { key: match[1], value: text.slice(match.index + match[0].length, at) };
-  });
-}
 function namedByConfig(root, base) {
   const queue = git(root, ['ls-tree', '-r', '-z', '--name-only', base]).split('\0').filter((path) => RUNNER_CONFIG.test(path));
   const named = new Set();
@@ -48,7 +31,13 @@ function namedByConfig(root, base) {
     for (const path of literals(text).map(([from, to]) => resolved(config, text.slice(from + 1, to - 1)))) {
       if (underTestPaths(path) && !isTestFile(path)) for (const file of testImports(root, base, path).keys()) named.add(file);
     }
-    for (const { key, value: list } of keyed(text)) for (const [, value] of list.matchAll(/['"`]([^'"`]+)['"`]/g)) {
+    // A config module it imports, as a shared one is, configures the run too, and names its own.
+    const imported = relativeImports(config, text).map((path) => resolveModule(root, base, path)).filter((path) => show(root, base, path) !== null && !queue.includes(path));
+    for (const path of imported) {
+      named.add(path);
+      queue.push(path);
+    }
+    for (const { key, values } of keyedStrings(text, ['setupFiles', 'globalSetup', 'projects', 'workspace'])) for (const value of values) {
       const path = resolved(config, value);
       if (show(root, base, path) === null || isTestFile(path) || named.has(path)) continue;
       named.add(path);
@@ -65,8 +54,8 @@ export function guard({ root, change, issue }, approvals, say) {
   const lanesOnMain = show(root, change.base, 'scripts/proof-guard.mjs') !== null;
   const configNamed = lanesOnMain ? namedByConfig(root, change.base) : new Set();
   // A node_modules folder a test's imports walk up to: one in a folder that holds, at any depth, a
-  // script under the test paths, such as a test or a shared helper.
-  const scripts = lanesOnMain ? listFiles(root).filter((path) => underTestPaths(path) && SCRIPT.test(path)) : [];
+  // test or a file under the test paths a test imports, such as a shared helper.
+  const scripts = lanesOnMain ? [...new Set(listFiles(root).filter(isTestFile).flatMap((test) => [...testImports(root, null, test).keys()]))] : [];
   const underTests = (path) => {
     const at = path.split('/').indexOf('node_modules');
     if (at < 0) return false;
