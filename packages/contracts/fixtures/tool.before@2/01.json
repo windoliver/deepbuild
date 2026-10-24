@@ -1,0 +1,19 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "tool.before",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "seq": "1760013451123456789",
+  "data": {
+    "kind": "shell",
+    "paths": [],
+    "command": "pkill -f node",
+    "late": true,
+    "matched": [
+      "no-kill-by-name"
+    ]
+  }
+}
