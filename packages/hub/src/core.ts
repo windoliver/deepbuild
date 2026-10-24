@@ -19,7 +19,7 @@ import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowRepor
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
-import { disk, testVfs, type Durable } from './vfs.js';
+import { disk, testVfs, writeSynced, type Durable } from './vfs.js';
 import { Refused, refusal, startOf, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
@@ -529,9 +529,9 @@ export class Core {
       cursors.delete(s.id);
       cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached] });
     }
+    // Synced, so a power cut leaves the last whole save; a failed save is made again with the next hook's.
     try {
-      writeFileSync(`${this.root.transcripts}.tmp`, JSON.stringify(Object.fromEntries(cursors)), { mode: 0o600 });
-      renameSync(`${this.root.transcripts}.tmp`, this.root.transcripts);
+      writeSynced(this.root.transcripts, Buffer.from(JSON.stringify(Object.fromEntries(cursors))));
     } catch (error) {
       process.stderr.write(`deep hub: ${this.root.transcripts} not saved: ${error instanceof Error ? error.message : String(error)}\n`);
     }
