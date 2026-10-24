@@ -1,0 +1,17 @@
+// A first-party test package (#349 AC3, AC7): a resolver that answers every ask the way the file resolver.json
+// names re-reads on each call, so one loaded package plays each resolver the criteria describe:
+// { skip: true } answers nothing; { answer, because } answers with an option and names what covers it (a decision
+// handle, or null to name nothing).
+import { readFileSync } from 'node:fs';
+
+interface Settings { file: string }
+interface Play { skip?: boolean; answer?: string; because?: string | null }
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./resolver.json', import.meta.url), 'utf8'));
+  deep.registerResolver(async (_ask: unknown) => {
+    const play: Play = JSON.parse(readFileSync(settings.file, 'utf8'));
+    if (play.skip) return undefined;
+    return { answer: play.answer, because: play.because ?? null };
+  });
+}
