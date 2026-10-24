@@ -1,0 +1,163 @@
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/159/hub.test.ts (0 test)
+ ❯ tests/acceptance/159/plan.test.ts (0 test)
+ ❯ tests/acceptance/159/isolation.test.ts (0 test)
+ ❯ tests/acceptance/159/lifecycle.test.ts (0 test)
+ ❯ tests/acceptance/159/budgets.test.ts (0 test)
+ ❯ tests/acceptance/159/launch.test.ts (0 test)
+ ❯ tests/acceptance/159/blocked.test.ts (4 tests | 4 failed) 4ms
+   ❯ AC1 #159.bbb96a19 a drafting job and a review check leave no session, claim, verdict or spend (1)
+     × AC1 (the job kinds' half) the drafting job (#81, #50) and the review check's second model (#87) themselves run through the runner, and leave no session row, claim, verdict or task spend 2ms
+   ❯ AC10 #159.fe8b9734 a session that cds into a job's folder or resumes a job's session ID is judged as itself (1)
+     × AC10 (the gate's half) such a session still has its stop held and judged, and its claim and spend recorded as its own 0ms
+   ❯ AC16 #159.df0e6721 a drafting job sees none of the session's work; a review sees only the diff (1)
+     × AC16 (the job kinds' half) the drafting job built from a task gets none of its transcript, diff, claim or PR body, and the review check gets the diff alone; a job kind that passes the PR body to the review, or the diff to the drafting job, fails naming the marker 0ms
+   ❯ AC20 #159.641cb71a after Claude Code updates past its facts, the first session starts the smoke test under your standing approval (1)
+     × AC20 (the session's half) the first session on an uncovered version starts the smoke test through the runner; its recorded payloads come to you as one diff; holds stay watch-only until you approve it; without the standing approval the session's row says the smoke test waits for you 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/159/budgets.test.ts [ tests/acceptance/159/budgets.test.ts ]
+Error: Cannot find module '../../../packages/runner/src/index.ts' imported from <repo>/tests/acceptance/159/world.ts
+ ❯ tests/acceptance/159/world.ts:13:1
+     11| import { openLedger, type Ledger } from '../../../packages/budget/src/…
+     12| import { openSupervisor, type Supervisor } from '../../../packages/sup…
+     13| import { openRunner, type JobRecord, type JobSpec, type Plant, type Ru…
+       | ^
+     14| import { ACCOUNT, DAY, NESTING, home, tempDir } from './helpers.ts';
+     15|
+ ❯ tests/acceptance/159/budgets.test.ts:17:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  tests/acceptance/159/hub.test.ts [ tests/acceptance/159/hub.test.ts ]
+Error: Cannot find module '../../../packages/runner/src/index.ts' imported from <repo>/tests/acceptance/159/world.ts
+ ❯ tests/acceptance/159/world.ts:13:1
+     11| import { openLedger, type Ledger } from '../../../packages/budget/src/…
+     12| import { openSupervisor, type Supervisor } from '../../../packages/sup…
+     13| import { openRunner, type JobRecord, type JobSpec, type Plant, type Ru…
+       | ^
+     14| import { ACCOUNT, DAY, NESTING, home, tempDir } from './helpers.ts';
+     15|
+ ❯ tests/acceptance/159/hub.test.ts:14:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  tests/acceptance/159/isolation.test.ts [ tests/acceptance/159/isolation.test.ts ]
+Error: Cannot find module '../../../packages/runner/src/index.ts' imported from <repo>/tests/acceptance/159/world.ts
+ ❯ tests/acceptance/159/world.ts:13:1
+     11| import { openLedger, type Ledger } from '../../../packages/budget/src/…
+     12| import { openSupervisor, type Supervisor } from '../../../packages/sup…
+     13| import { openRunner, type JobRecord, type JobSpec, type Plant, type Ru…
+       | ^
+     14| import { ACCOUNT, DAY, NESTING, home, tempDir } from './helpers.ts';
+     15|
+ ❯ tests/acceptance/159/isolation.test.ts:13:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  tests/acceptance/159/launch.test.ts [ tests/acceptance/159/launch.test.ts ]
+Error: Cannot find module '../../../packages/runner/src/index.ts' imported from <repo>/tests/acceptance/159/world.ts
+ ❯ tests/acceptance/159/world.ts:13:1
+     11| import { openLedger, type Ledger } from '../../../packages/budget/src/…
+     12| import { openSupervisor, type Supervisor } from '../../../packages/sup…
+     13| import { openRunner, type JobRecord, type JobSpec, type Plant, type Ru…
+       | ^
+     14| import { ACCOUNT, DAY, NESTING, home, tempDir } from './helpers.ts';
+     15|
+ ❯ tests/acceptance/159/launch.test.ts:10:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+ FAIL  tests/acceptance/159/lifecycle.test.ts [ tests/acceptance/159/lifecycle.test.ts ]
+Error: Cannot find module '../../../packages/runner/src/index.ts' imported from <repo>/tests/acceptance/159/world.ts
+ ❯ tests/acceptance/159/world.ts:13:1
+     11| import { openLedger, type Ledger } from '../../../packages/budget/src/…
+     12| import { openSupervisor, type Supervisor } from '../../../packages/sup…
+     13| import { openRunner, type JobRecord, type JobSpec, type Plant, type Ru…
+       | ^
+     14| import { ACCOUNT, DAY, NESTING, home, tempDir } from './helpers.ts';
+     15|
+ ❯ tests/acceptance/159/lifecycle.test.ts:8:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/10]⎯
+
+ FAIL  tests/acceptance/159/plan.test.ts [ tests/acceptance/159/plan.test.ts ]
+Error: Cannot find module '../../../packages/runner/src/index.ts' imported from <repo>/tests/acceptance/159/world.ts
+ ❯ tests/acceptance/159/world.ts:13:1
+     11| import { openLedger, type Ledger } from '../../../packages/budget/src/…
+     12| import { openSupervisor, type Supervisor } from '../../../packages/sup…
+     13| import { openRunner, type JobRecord, type JobSpec, type Plant, type Ru…
+       | ^
+     14| import { ACCOUNT, DAY, NESTING, home, tempDir } from './helpers.ts';
+     15|
+ ❯ tests/acceptance/159/plan.test.ts:10:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/10]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/159/blocked.test.ts > AC1 #159.bbb96a19 a drafting job and a review check leave no session, claim, verdict or spend > AC1 (the job kinds' half) the drafting job (#81, #50) and the review check's second model (#87) themselves run through the runner, and leave no session row, claim, verdict or task spend
+Error: BLOCKED: the drafting job (#81, #50) and the review check (#87) aren't built at this base; the runner's half runs jobs of kind draft and review in hub.test.ts; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked tests/acceptance/159/helpers.ts:331:9
+    329| /** Nothing missing passes (AGENTS.md, invariant 2): a half whose surf…
+    330| export function blocked(what: string): never {
+    331|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+    332| }
+    333|
+ ❯ tests/acceptance/159/blocked.test.ts:11:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/10]⎯
+
+ FAIL  tests/acceptance/159/blocked.test.ts > AC10 #159.fe8b9734 a session that cds into a job's folder or resumes a job's session ID is judged as itself > AC10 (the gate's half) such a session still has its stop held and judged, and its claim and spend recorded as its own
+Error: BLOCKED: the Stop hold for Claude Code (#25) and the claims and spend of a Claude Code session (#18, deep_claim through deep mcp #26) aren't built at this base; the hub's half (its own session, a reading naming it, the job's early hook) is in hub.test.ts; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked tests/acceptance/159/helpers.ts:331:9
+    329| /** Nothing missing passes (AGENTS.md, invariant 2): a half whose surf…
+    330| export function blocked(what: string): never {
+    331|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+    332| }
+    333|
+ ❯ tests/acceptance/159/blocked.test.ts:17:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/10]⎯
+
+ FAIL  tests/acceptance/159/blocked.test.ts > AC16 #159.df0e6721 a drafting job sees none of the session's work; a review sees only the diff > AC16 (the job kinds' half) the drafting job built from a task gets none of its transcript, diff, claim or PR body, and the review check gets the diff alone; a job kind that passes the PR body to the review, or the diff to the drafting job, fails naming the marker
+Error: BLOCKED: the drafting job (#81, #50) and the review check (#87), which choose a task's inputs, aren't built at this base; the runner's half (only what a job's spec gives reaches its stdin and folder) is in isolation.test.ts; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked tests/acceptance/159/helpers.ts:331:9
+    329| /** Nothing missing passes (AGENTS.md, invariant 2): a half whose surf…
+    330| export function blocked(what: string): never {
+    331|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+    332| }
+    333|
+ ❯ tests/acceptance/159/blocked.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/10]⎯
+
+ FAIL  tests/acceptance/159/blocked.test.ts > AC20 #159.641cb71a after Claude Code updates past its facts, the first session starts the smoke test under your standing approval > AC20 (the session's half) the first session on an uncovered version starts the smoke test through the runner; its recorded payloads come to you as one diff; holds stay watch-only until you approve it; without the standing approval the session's row says the smoke test waits for you
+Error: BLOCKED: the hub reads every live hook as the newest covered version at this base (no session's agent version is read, #18), and holds (#25) and the corpus diff for approval (#47's recorder) have no surface to start a smoke test from a session; the runner's half is in plan.test.ts; this half of the criterion is tested once that surface exists, by a blind redraft of this job
+ ❯ blocked tests/acceptance/159/helpers.ts:331:9
+    329| /** Nothing missing passes (AGENTS.md, invariant 2): a half whose surf…
+    330| export function blocked(what: string): never {
+    331|   throw Error(`BLOCKED: ${what}; this half of the criterion is tested …
+       |         ^
+    332| }
+    333|
+ ❯ tests/acceptance/159/blocked.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/10]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  4 failed (4)
+   Start at  15:10:29
+   Duration  675ms (worker 46%, import 30%, tests 15%, transform 8%, environment 2%)
+
+    Isolate  7 workers spawned · ~47ms startup each (spawn + environment, per file)
+             at least ~279ms faster with isolate: false — reuses workers across files instead of one per file
+

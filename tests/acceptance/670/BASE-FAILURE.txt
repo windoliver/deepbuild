@@ -7,7 +7,7 @@ the channel's keys and type), the no-source refusal names only the bound value m
 seeds_noise_from_clock answers bad_input.
 
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/starry-wobbling-cray
+ RUN  v5.0.5 /Users/<user>/dev/claude-worktrees/doneright/starry-wobbling-cray
 
  ❯ tests/acceptance/670/hashes.test.ts (2 tests | 2 failed) 23694ms
    ❯ AC2 render-back at 0 s, 1 s and 2 s returns snapshots whose hashes are equal on a second run and in a fresh process (2)

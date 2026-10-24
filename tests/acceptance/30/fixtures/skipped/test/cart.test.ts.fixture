@@ -1,0 +1,9 @@
+import { expect, test } from 'vitest';
+
+test.skip('adds the prices', () => {
+  expect(1 + 2).toBe(3);
+});
+
+test.skip('applies the discount', () => {
+  expect(10 - 1).toBe(9);
+});
