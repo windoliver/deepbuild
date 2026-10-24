@@ -484,4 +484,16 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     } as unknown as Parameters<ExtensionHost['deliver']>[0][number];
     await expect(h.deliver([event])).rejects.toThrow(/test\/sub.*trust/);
   }, 60_000);
+
+  it('a new install of a running package stops the copy running: its check is no longer in use, and its process ends', async () => {
+    const h = await host();
+    const first = await h.install({ from: stuck(PID), builtBy: null });
+    expect((await h.check(first)).passed).toBe(true);
+    expect((await h.load(first)).status).toBe('loaded');
+    const pid = await pidOf(h);
+    await h.install({ from: stuck(PASSES), builtBy: null });
+    expect(await h.loaded()).toEqual([]);
+    expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome).toBe('missing');
+    expect(alive(pid)).toBe(false);
+  }, 60_000);
 });
