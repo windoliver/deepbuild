@@ -9,6 +9,7 @@
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
+use std::os::fd::AsFd;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -411,12 +412,53 @@ fn exchange(
 /// The hub renames the file aside before it replays it, so a write may land in a file the hub has already read
 /// and removed. After its write, deep-hook checks that the path still names the file it wrote to; when it doesn't,
 /// it writes the line again to the new file. The hub records an ID once, so a line it took twice changes nothing.
+///
+/// The line is synced before the hook returns, and the names that lead to it with it: a power cut keeps what ran.
+/// The sync runs in a process of its own (`deep-hook spool-sync`), given the file as its stdin. A sync takes as
+/// long as the disk does, and a process can't finish exiting while one of its threads is in one, so a sync run
+/// here would hold the hook past its 50 ms even once spool_by stops waiting for it.
 fn spool(request: &str) -> io::Result<()> {
-    append(&home().join("spool"), request, &mut || {})
+    let folder = home().join("spool");
+    let (file, upto) = append(&folder, request, &mut || {})?;
+    let synced = Command::new(env::current_exe()?)
+        .arg("spool-sync")
+        .arg(&folder)
+        .arg(upto)
+        .stdin(file)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    if !synced.success() {
+        return Err(io::Error::other(
+            "the spool line was written but not synced",
+        ));
+    }
+    Ok(())
+}
+
+/// `deep-hook spool-sync <folder> <file|folder|parent>`, with the spool file as stdin: syncs the line, then, as
+/// far up as `upto` says, the folder that names the file and the folder's parent.
+fn sync(folder: &Path, upto: &str) -> io::Result<()> {
+    File::from(io::stdin().as_fd().try_clone_to_owned()?).sync_data()?;
+    if upto != "file" {
+        File::open(folder)?.sync_all()?;
+    }
+    if upto == "parent" {
+        if let Some(parent) = folder.parent() {
+            File::open(parent)?.sync_all()?;
+        }
+    }
+    Ok(())
 }
 
 /// The spool's one append, with `opened` run between opening the file and writing to it (a test moves it there).
-fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<()> {
+/// Returns the file written and how far up its sync must reach: the folder too when the file was made, and the
+/// folder's parent when the folder was.
+fn append(
+    folder: &Path,
+    request: &str,
+    opened: &mut dyn FnMut(),
+) -> io::Result<(File, &'static str)> {
     let path = folder.join("spool.jsonl");
     for _ in 0..3 {
         let made = !folder.exists();
@@ -460,17 +502,14 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
             Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => {}
             _ => continue,
         }
-        // Synced before the hook returns, the line and the names that lead to it: a power cut keeps what ran.
-        file.sync_data()?;
-        if fresh {
-            File::open(folder)?.sync_all()?;
-        }
-        if made {
-            if let Some(parent) = folder.parent() {
-                File::open(parent)?.sync_all()?;
-            }
-        }
-        return Ok(());
+        let upto = if made {
+            "parent"
+        } else if fresh {
+            "folder"
+        } else {
+            "file"
+        };
+        return Ok((file, upto));
     }
     Err(io::Error::other(
         "the spool line was cut or moved in each of three tries",
@@ -823,6 +862,12 @@ fn main() -> ExitCode {
         [arg, line] if arg == "statusline-send" => {
             send(line);
             return ExitCode::SUCCESS;
+        }
+        [arg, folder, upto] if arg == "spool-sync" => {
+            return match sync(Path::new(folder), upto) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(_) => ExitCode::from(1),
+            };
         }
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
         _ => {
