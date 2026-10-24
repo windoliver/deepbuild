@@ -44,7 +44,7 @@ const stuck = (body: string, also = '', fields: Record<string, unknown> = {}): s
 async function tracked(record: RecordStore, run: string | null): Promise<number[]> {
   return (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked' && (e.data as { run?: string }).run === run).map((e) => (e.data as { pid: number }).pid);
 }
-interface World { h: ExtensionHost; record: RecordStore; trust: ProjectTrust }
+interface World { h: ExtensionHost; record: RecordStore; trust: ProjectTrust; home: string; again: () => Promise<ExtensionHost> }
 async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?: false } = {}): Promise<World> {
   const dir = temp();
   const record: RecordStore = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
@@ -53,10 +53,15 @@ async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?
   closing.push(record, supervisor);
   mkdirSync(join(dir, 'home'));
   const trust = await openTrust({ record, now: Date.now });
-  const h = await openExtensionHost({ record, supervisor, trust, home: join(dir, 'home'), now: Date.now, safe: options.safe, release: options.release ?? [] });
-  closing.push(h);
-  if (options.ready !== false) await h.ready();
-  return { h, record, trust };
+  const home = join(dir, 'home');
+  /** A host on this home: after the first, a restart of the hub. */
+  const again = async (): Promise<ExtensionHost> => {
+    const h = await openExtensionHost({ record, supervisor, trust, home, now: Date.now, safe: options.safe, release: options.release ?? [] });
+    closing.push(h);
+    if (options.ready !== false) await h.ready();
+    return h;
+  };
+  return { h: await again(), record, trust, home, again };
 }
 const host = async (options: { safe?: boolean; release?: ReleaseEntry[] } = {}): Promise<ExtensionHost> => (await world(options)).h;
 const SPEC: CheckSpec = { kind: 'ext.stuck.run', runner: 'run', inputs: [], depth: 'unit', oracle: 'code', contract: null };
@@ -371,5 +376,33 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     const r = await post(await hi(h), 'a', 100, false);
     expect(Date.now() - t0).toBeLessThan(20_000);
     expect(r.body).not.toBe('hi');
+  }, 60_000);
+
+  it('a reinstall whose record of installs can\'t be saved changes nothing installed: after a restart the package listed runs the bytes it was checked on', async () => {
+    const { h, home, again } = await world();
+    const first = await h.install({ from: stuck(PASSES), builtBy: null });
+    expect((await h.check(first)).passed).toBe(true);
+    // installed.json can't be replaced: its temp file's name is taken by a folder.
+    mkdirSync(join(home, 'extensions', 'installed.json.tmp'));
+    await expect(h.install({ from: stuck(PID), builtBy: null })).rejects.toThrow();
+    rmSync(join(home, 'extensions', 'installed.json.tmp'), { recursive: true });
+    await h.close();
+    const restarted = await again();
+    const [listed] = await restarted.installed();
+    expect((await restarted.load(listed!)).status).toBe('loaded');
+    expect((await restarted.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome).toBe('passed');
+  }, 60_000);
+
+  it('events a subscribed package fails to take are not reported delivered: deliver rejects, naming the package and its error', async () => {
+    const h = await host();
+    const folder = pkgOf('test/sub', "export default function (deep: any): void {\n  deep.on('session.start', () => { throw Error('handler broke'); });\n}\n", { checks: [], access: { words: ['record'] } });
+    const p = await h.install({ from: folder, builtBy: null, grant: { record: ['session.start'] } });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    const event = {
+      v: 1, id: '01K74FKZVK8Q2X5R7M3N9P4T6W', kind: 'session.start', writer: 'hook', actor: 'you', scope: 'you', ts: Date.now(), log_pos: 1,
+      data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: '01K74G1Z3X5V7T9R1P3N5M7K9H' }, evidence: [],
+    } as unknown as Parameters<ExtensionHost['deliver']>[0][number];
+    await expect(h.deliver([event])).rejects.toThrow(/test\/sub.*handler broke/);
   }, 60_000);
 });
