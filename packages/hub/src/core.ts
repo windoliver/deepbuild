@@ -420,7 +420,8 @@ export class Core {
         const left = session.pending.get(call)! - 1;
         if (left) session.pending.set(call, left);
         else session.pending.delete(call);
-        void this.queue(async () => this.judge(session)).catch(() => undefined);
+        // Judged in the start too, as its replay is: queued behind the start, it would hold up the replay that ends it.
+        void this.queue(async () => this.judge(session), true).catch(() => undefined);
       });
     }
     return { settled };
@@ -541,7 +542,7 @@ export class Core {
     if (next && !waits(next) && !session.judging && !this.stopping) {
       session.judging = setTimeout(() => {
         session.judging = undefined;
-        void this.queue(async () => this.judge(session)).catch(() => undefined);
+        void this.queue(async () => this.judge(session), true).catch(() => undefined);
       }, Math.max(1, TURN_GRACE - (now - next.at!)));
       session.judging.unref();
     }
