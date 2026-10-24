@@ -169,4 +169,20 @@ describe('the hooks-not-reaching reading', () => {
       expect(await readings(), 'turn 1\'s call reached the hub').toEqual([]);
     });
   }, 240_000);
+
+  it('judges a turn that more than a read step of transcript follows', async () => {
+    await withHub(async (root, home) => {
+      const now = () => String(BigInt(Date.now()) * 1_000_000n);
+      const { line, hook, readings } = session(root, home, now);
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      // Turn 1's call reached no hook, and its results run to 70 MiB before turn 2's prompt ends it.
+      line({ type: 'user', uuid: 'turn-1', message: { role: 'user', content: 'list the files' } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Bash', input: { command: 'ls' } }] } });
+      const output = 'x'.repeat(1024 * 1024);
+      for (let i = 0; i < 70; i++) line({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_t1', content: output }] } });
+      line({ type: 'user', uuid: 'turn-2', message: { role: 'user', content: 'thanks' } });
+      expect(await hook('UserPromptSubmit', { prompt: 'thanks' })).toContain('"ack"');
+      expect(await readings(), 'turn 1 reached no hook').toEqual(['hooks not reaching DeepBuild']);
+    });
+  }, 60_000);
 });

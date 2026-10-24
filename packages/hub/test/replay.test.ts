@@ -4,6 +4,7 @@ import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { ulid } from '../src/wire.js';
 import { hookLine, send, withHub } from './hub.js';
 
 const SESSION = '6f1c2b9e-1111-4222-8333-444455556666';
@@ -96,6 +97,26 @@ describe('a running hub', () => {
       expect(row, 'the spooled late call is in the record while the hub runs').toEqual({ v: 2, late: 1, matched: '["listing-noted"]' });
       expect(order, 'the spooled call ran first, so it is recorded before the hook that started the replay').toEqual(['01K74FKZVKZGATTBZAEGPRET62', '01K74FKZVKZGATTBZAEGPRET63']);
       expect(left, 'the replayed spool is removed').toEqual([]);
+    });
+  }, 30_000);
+
+  it('replays a kept file before the spool after it, whatever the clock says', async () => {
+    await withHub(async (root) => {
+      // A replay kept a file named in 2100, then the clock stepped back; a call spooled since comes after it.
+      mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
+      writeFileSync(join(root, 'spool', `replay-${ulid(Date.UTC(2100, 0, 1))}.jsonl`), request('01K74FKZVKZGATTBZAEGPRET90', 'ls kept'), { mode: 0o600 });
+      writeFileSync(join(root, 'spool', 'spool.jsonl'), request('01K74FKZVKZGATTBZAEGPRET91', 'ls spooled'), { mode: 0o600 });
+      expect(await send(join(root, 'hub.sock'), request('01K74FKZVKZGATTBZAEGPRET92', 'ls now'))).toContain('"ack"');
+      const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
+      let order: string[] = [];
+      try {
+        for (const until = Date.now() + 5000; Date.now() < until && order.length < 3; await new Promise((r) => setTimeout(r, 50))) {
+          order = (db.prepare("SELECT id FROM events WHERE kind = 'tool.before' ORDER BY log_pos").all() as { id: string }[]).map((r) => r.id);
+        }
+      } finally {
+        db.close();
+      }
+      expect(order, 'the kept call, then the one spooled after it, then the live one').toEqual(['01K74FKZVKZGATTBZAEGPRET90', '01K74FKZVKZGATTBZAEGPRET91', '01K74FKZVKZGATTBZAEGPRET92']);
     });
   }, 30_000);
 });

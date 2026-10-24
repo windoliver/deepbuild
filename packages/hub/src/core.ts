@@ -5,7 +5,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { open, readFile, stat } from 'node:fs/promises';
+import { open, readFile, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,7 +20,7 @@ import { openSupervisor, type Grant, type Host, type Started, type Supervisor } 
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { disk, testVfs, writeSynced, type Durable } from './vfs.js';
-import { Refused, refusal, startOf, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
 /** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
@@ -427,51 +427,54 @@ export class Core {
    * session then reads "hooks not reaching DeepBuild", so failing open is never silent.
    */
   private async readTranscript(session: Session): Promise<void> {
-    let text: Buffer;
+    let handle: FileHandle;
     try {
-      const handle = await open(session.transcript, 'r');
-      try {
-        const { size } = await handle.stat();
-        if (size <= session.read) return;
-        // More than a hook's worth of growth at once is skipped, its turn unjudged, rather than held in memory.
-        if (size - session.read > TRANSCRIPT_STEP) {
-          session.read = size;
-          session.turn = undefined;
-          return;
-        }
-        text = Buffer.alloc(size - session.read);
-        await handle.read(text, 0, text.length, session.read);
-      } finally {
-        await handle.close();
-      }
+      handle = await open(session.transcript, 'r');
     } catch {
       return;
     }
-    // Only whole lines: a line still being written is read with the next hook.
-    const base = session.read;
-    const end = text.lastIndexOf(0x0a) + 1;
-    session.read += end;
-    for (let at = 0; at < end;) {
-      const from = base + at;
-      const next = text.indexOf(0x0a, at) + 1;
-      const raw = text.subarray(at, next).toString('utf8');
-      at = next;
-      let line: unknown;
-      try {
-        line = JSON.parse(raw);
-      } catch {
-        continue;
+    try {
+      const { size } = await handle.stat();
+      // At most TRANSCRIPT_STEP is held at once: more growth than that is read a step at a time.
+      while (size > session.read) {
+        const text = Buffer.alloc(Math.min(size - session.read, TRANSCRIPT_STEP));
+        await handle.read(text, 0, text.length, session.read);
+        // Only whole lines: a line still being written is read with the next hook. A line longer than a step is
+        // passed over; what is left of it doesn't parse, as no prompt or call longer than a step would.
+        let end = text.lastIndexOf(0x0a) + 1;
+        if (!end) {
+          if (text.length < TRANSCRIPT_STEP) return;
+          end = text.length;
+        }
+        const base = session.read;
+        session.read += end;
+        for (let at = 0; at < end;) {
+          const from = base + at;
+          const next = text.indexOf(0x0a, at) + 1 || end;
+          const raw = text.subarray(at, next).toString('utf8');
+          at = next;
+          let line: unknown;
+          try {
+            line = JSON.parse(raw);
+          } catch {
+            continue;
+          }
+          if (!isObj(line) || line.isSidechain === true || !isObj(line.message)) continue;
+          const content = line.message.content;
+          const parts = Array.isArray(content) ? content.filter(isObj) : [];
+          if (line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'))) {
+            // A person's prompt ends the turn before it.
+            if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
+            session.turn = { uuid: typeof line.uuid === 'string' && line.uuid ? line.uuid : `offset:${from}`, from, calls: [] };
+          } else if (line.type === 'assistant' && session.turn) {
+            for (const part of parts) if (part.type === 'tool_use' && typeof part.id === 'string') session.turn.calls.push(part.id);
+          }
+        }
       }
-      if (!isObj(line) || line.isSidechain === true || !isObj(line.message)) continue;
-      const content = line.message.content;
-      const parts = Array.isArray(content) ? content.filter(isObj) : [];
-      if (line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'))) {
-        // A person's prompt ends the turn before it.
-        if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
-        session.turn = { uuid: typeof line.uuid === 'string' && line.uuid ? line.uuid : `offset:${from}`, from, calls: [] };
-      } else if (line.type === 'assistant' && session.turn) {
-        for (const part of parts) if (part.type === 'tool_use' && typeof part.id === 'string') session.turn.calls.push(part.id);
-      }
+    } catch {
+      // A transcript that can't be read now is read from the same place with the next hook.
+    } finally {
+      await handle.close();
     }
   }
 
@@ -1058,7 +1061,10 @@ export class Core {
     // short wait only lets a write in flight finish here rather than read as a cut line.
     const live = join(this.root.spool, SPOOL);
     if (existsSync(live)) {
-      renameSync(live, join(this.root.spool, `replay-${ulid(Date.now())}.jsonl`));
+      // Named after every file a replay kept, whatever the clock says now: the files replay in name order.
+      const kept = readdirSync(this.root.spool).filter((f) => /^replay-[0-9A-HJKMNP-TV-Z]{26}\.jsonl$/.test(f)).sort().at(-1);
+      const after = kept ? ulidTime(kept.slice(7, 33)) + 1 : 0;
+      renameSync(live, join(this.root.spool, `replay-${ulid(Math.max(Date.now(), after))}.jsonl`));
       await new Promise((done) => setTimeout(done, 100));
     }
     for (const name of readdirSync(this.root.spool).filter((f) => f.endsWith('.jsonl') && f !== SPOOL).sort()) {
