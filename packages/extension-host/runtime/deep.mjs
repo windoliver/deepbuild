@@ -110,6 +110,7 @@ export function peer(stream, serve) {
   stream.on('data', (chunk) => {
     buffer += chunk;
     for (let at = buffer.indexOf('\n'); at >= 0; at = buffer.indexOf('\n')) {
+      if (at > FRAME) return void stream.destroy();
       const line = buffer.slice(0, at);
       buffer = buffer.slice(at + 1);
       if (line.trim()) receive(line);
