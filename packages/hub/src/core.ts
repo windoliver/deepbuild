@@ -68,6 +68,8 @@ export interface CallContext { role: string; session?: string | null; parent?: {
 interface Session {
   id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean;
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
+  /** Calls whose hooks' events are on their way to the record, and how many: their turns wait for them. */
+  pending: Map<string, number>;
   /** Whether its closed turns wait for a replay's end to be judged. */
   deferred?: boolean;
   /** The timer that judges its closed turns once their grace has passed. */
@@ -356,6 +358,8 @@ export class Core {
       // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
       if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
     }
+    const call = session && verified && drafts.length ? meta.toolUse : undefined;
+    if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
     if (session && verified) {
       await this.readTranscript(session);
       this.judge(session);
@@ -388,12 +392,16 @@ export class Core {
     });
     settled.catch(() => undefined);
     // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
-    if (session && verified && meta.toolUse) {
-      const call = meta.toolUse;
-      settled.then(() => {
+    // Its turn is judged once the append settles, however long past the grace that is.
+    if (session && call) {
+      void settled.then(() => {
         session.reached.add(call);
-        this.saveCursors();
-      }, () => undefined);
+      }, () => undefined).finally(() => {
+        const left = session.pending.get(call)! - 1;
+        if (left) session.pending.set(call, left);
+        else session.pending.delete(call);
+        void this.queue(async () => this.judge(session)).catch(() => undefined);
+      });
     }
     return { settled };
   }
@@ -476,7 +484,9 @@ export class Core {
       return;
     }
     const now = performance.now();
+    const waits = (turn: Turn) => turn.calls.some((call) => session.pending.has(call));
     for (const turn of session.closed.filter((t) => !t.recording && now - t.at! >= TURN_GRACE)) {
+      if (waits(turn)) break;
       if (turn.calls.some((call) => session.reached.has(call))) {
         for (const call of turn.calls) session.reached.delete(call);
         session.closed.splice(session.closed.indexOf(turn), 1);
@@ -496,7 +506,7 @@ export class Core {
       });
     }
     const next = session.closed.find((t) => !t.recording);
-    if (next && !session.judging && !this.stopping) {
+    if (next && !waits(next) && !session.judging && !this.stopping) {
       session.judging = setTimeout(() => {
         session.judging = undefined;
         void this.queue(async () => this.judge(session)).catch(() => undefined);
@@ -591,7 +601,7 @@ export class Core {
       this.cursors.delete(meta.session);
       const left = cursor?.transcript === transcript && typeof cursor.read === 'number' && Array.isArray(cursor.reached) ? cursor : undefined;
       const read = left ? left.read : await stat(transcript).then((s) => s.size, () => 0);
-      this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached) });
+      this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map() });
       return true;
     }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
@@ -1198,6 +1208,8 @@ function crashing(record: RecordStore, point: string): RecordStore {
       await new Promise((done) => setTimeout(done, 50));
       process.kill(process.pid, 'SIGKILL');
     }
+    // `slow:<kind>`: an event of that kind takes 300 ms to append.
+    if (point === `slow:${input.kind}`) await new Promise((done) => setTimeout(done, 300));
     const event = await record.append(connection, input);
     const run = isObj(input.data) ? String(input.data.job ?? input.data.run) : '';
     if (input.kind === 'job.recorded') jobs.add(run);
