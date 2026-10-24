@@ -129,7 +129,9 @@ export function unrun(listed: Listed[], ran: Seen[], left: Left[], filters: Filt
     const all = nodeNames(l.names);
     return (!nodeIn.length || nodeIn.some((p) => all.some((n) => p.test(n)))) && !nodeOut.some((p) => all.some((n) => p.test(n)));
   };
-  return listed.filter((l) => !ran.some((r) => r.file === l.file && runs(l, r.test) && (r.line === undefined || r.line === l.line))
+  const byFile = new Map<string | null, Seen[]>();
+  for (const r of ran) { const same = byFile.get(r.file); if (same) same.push(r); else byFile.set(r.file, [r]); }
+  return listed.filter((l) => !byFile.get(l.file)?.some((r) => runs(l, r.test) && (r.line === undefined || r.line === l.line))
     && chosen(l) && !(tags && l.tagged) && !linesOf(l, filters)?.every((n) => n !== l.line)
     && !left.some((x) => x.file === l.file && (runs(l, x.test) || l.test.startsWith(`${x.test}::`)) && named(x.filter)));
 }
