@@ -1,0 +1,5 @@
+name = "kit"
+defaultTargets = ["Kit"]
+
+[[lean_lib]]
+name = "Kit"

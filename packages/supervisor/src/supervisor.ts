@@ -66,8 +66,8 @@ interface Run {
   exit?: Promise<Exit>;
   state: RunStatus['state'];
 }
-/** One key of a pool: free, held by a run, left dirty by a run's cleanup, or out of the pool. */
-interface Key { holder?: string; dirty?: { run: string; ask?: string }; retired?: boolean }
+/** One key of a pool: free, held by a run (until `expires`, then stale), left dirty by a run's cleanup, or out of the pool. */
+interface Key { holder?: string; expires?: number; stale?: boolean; dirty?: { run: string; ask?: string }; retired?: boolean }
 interface Waiter { spec: StartSpec; on: string[]; resolve(started: Started | Promise<Started>): void }
 
 class LocalSupervisor implements Supervisor {
@@ -100,7 +100,14 @@ class LocalSupervisor implements Supervisor {
   constructor(private readonly options: SupervisorOptions) {
     // The supervisor's own package, whose helper it runs outside any sandbox, is guarded like the caller's paths.
     const guarded = [dirname(dirname(HELPER)), ...(options.guarded ?? [])];
-    this.sandbox = seatbeltWith('seatbelt', guarded.map((p) => `(deny file-write* (subpath ${quote(real(p))}))`));
+    // Each folder above one is kept from moving, or a run could move it aside and put its own in its place.
+    const above = (p: string): string[] => (dirname(p) === p ? [] : [...above(dirname(p)), p]);
+    this.sandbox = seatbeltWith('seatbelt', guarded.flatMap((g) => [
+      typeof g === 'string'
+        ? `(deny file-write* (subpath ${quote(real(g))}))`
+        : `(deny file-write* (require-all (subpath ${quote(real(g.path))}) ${g.except.map((e) => `(require-not (subpath ${quote(real(e))}))`).join(' ')}))`,
+      ...above(dirname(real(typeof g === 'string' ? g : g.path))).map((a) => `(deny file-write-unlink (literal ${quote(a)}))`),
+    ]));
     for (const kind of options.resources ?? []) {
       this.kinds.set(kind.kind, kind);
       for (const key of kind.keys) this.keys.set(`${kind.kind}:${key}`, {});
@@ -127,8 +134,8 @@ class LocalSupervisor implements Supervisor {
     const [row] = (await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | bigint | null }[];
     return Number(row?.head ?? 0);
   }
-  private lease(kind: 'lease.acquired' | 'lease.released', run: string, lease: { kind: string; key: string }): Promise<void> {
-    return this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: 'core', mode: 'exclusive', expires: this.options.now() + DAY }, run);
+  private lease(kind: 'lease.acquired' | 'lease.released' | 'lease.stale', run: string, lease: { kind: string; key: string }, expires = this.options.now() + (this.options.lease_ms ?? DAY)): Promise<void> {
+    return this.append(kind, { resource: { host: 'local', kind: lease.kind, key: lease.key }, holder: 'core', mode: 'exclusive', expires }, run);
   }
   private async track(r: Run, pid: number, start: string, token: string | null): Promise<void> {
     // A known ID with another start time is a new process of the run's: the one it named is gone.
@@ -162,15 +169,21 @@ class LocalSupervisor implements Supervisor {
           r?.ended.add(d.pid as number);
           break;
         case 'lease.acquired':
+        case 'lease.stale':
         case 'lease.released': {
           const res = d.resource as { kind: string; key: string };
           const name = `${res.kind}:${res.key}`;
           const key = this.keys.get(name) ?? this.keys.set(name, {}).get(name)!;
           if (e.kind === 'lease.acquired') {
             key.holder = run;
+            key.expires = d.expires as number;
             r?.leases.push({ kind: res.kind, key: res.key });
+          } else if (e.kind === 'lease.stale') {
+            key.stale = true;
           } else {
             delete key.holder;
+            delete key.expires;
+            delete key.stale;
             delete key.dirty;
             delete key.retired;
             // An answer about an earlier spell of this key settles nothing now.
@@ -293,7 +306,9 @@ class LocalSupervisor implements Supervisor {
     for (const waiter of [...this.waiters]) {
       // Given up on while this pass waited on a raise.
       if (!this.waiters.includes(waiter)) continue;
-      const wants = this.choose(waiter.spec);
+      const wants = await this.choose(waiter.spec);
+      // Given up on, or the supervisor closed, while its kinds checked their keys.
+      if (this.closed || !this.waiters.includes(waiter)) continue;
       if (wants.kind === 'wait') {
         const first = !this.runs.has(waiter.spec.run);
         waiter.on = wants.on;
@@ -308,7 +323,8 @@ class LocalSupervisor implements Supervisor {
         waiter.resolve({ run: waiter.spec.run, status: 'BLOCKED', cause: 'resource', kind: wants.on });
         continue;
       }
-      for (const lease of wants.leases) this.keys.set(`${lease.kind}:${lease.key}`, { holder: waiter.spec.run });
+      const expires = this.options.now() + (this.options.lease_ms ?? DAY);
+      for (const lease of wants.leases) this.keys.set(`${lease.kind}:${lease.key}`, { holder: waiter.spec.run, expires });
       const launched = this.launch(waiter.spec, wants.leases);
       this.launching.set(waiter.spec.run, launched);
       void launched.catch(() => undefined).finally(() => this.launching.delete(waiter.spec.run));
@@ -328,7 +344,7 @@ class LocalSupervisor implements Supervisor {
     }
   }
 
-  private choose(spec: StartSpec): { kind: 'ok'; leases: { kind: string; key: string }[] } | { kind: 'wait'; on: string[] } | { kind: 'blocked'; on: string } {
+  private async choose(spec: StartSpec): Promise<{ kind: 'ok'; leases: { kind: string; key: string }[] } | { kind: 'wait'; on: string[] } | { kind: 'blocked'; on: string }> {
     const leases: { kind: string; key: string }[] = [];
     const on: string[] = [];
     for (const want of spec.leases ?? []) {
@@ -337,8 +353,17 @@ class LocalSupervisor implements Supervisor {
       if (want.key !== undefined && !candidates.length && !this.kinds.has(want.kind)) candidates.push({ key: want.key, state: {} });
       const usable = candidates.filter((c) => !c.state.retired && !leases.some((l) => l.kind === want.kind && l.key === c.key));
       if (!usable.length) return { kind: 'blocked', on: want.kind };
-      const free = usable.find((c) => !c.state.holder && !c.state.dirty);
+      // A key nobody here holds is asked of its kind too: one something outside DeepBuild holds is skipped.
+      const check = this.kinds.get(want.kind)?.free;
+      let free: (typeof usable)[number] | undefined;
+      let outside = 0;
+      for (const c of usable) {
+        if (c.state.holder || c.state.dirty) continue;
+        if (!check || (await check(c.key).catch(() => false))) { free = c; break; }
+        outside++;
+      }
       if (free) leases.push({ kind: want.kind, key: free.key });
+      else if (outside === usable.length) return { kind: 'blocked', on: want.kind };
       else on.push(...usable.map((c) => `${want.kind}:${c.key}`));
     }
     return on.length ? { kind: 'wait', on } : { kind: 'ok', leases };
@@ -375,8 +400,14 @@ class LocalSupervisor implements Supervisor {
     const cwd = real(spec.cwd);
     const sandboxed = this.options.plant !== 'sandbox-left-to-caller';
     const token = spec.env?.DEEP_RUN_TOKEN ?? randomBytes(24).toString('base64url');
-    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, DEEP_RUN_TOKEN: token } as Record<string, string>;
-    const grant: Grant = spec.grant ?? {};
+    // Each lease's key in the variable it names; the leases come in the order they were asked for.
+    const keys = Object.fromEntries((spec.leases ?? []).flatMap((want, i) => (want.env ? [[want.env, leases[i]!.key]] : [])));
+    const env = { ...(spec.inherit === false ? {} : process.env), ...spec.env, ...keys, DEEP_RUN_TOKEN: token } as Record<string, string>;
+    // A leased port is one it may listen on, and connect to.
+    const ports = leases.filter((l) => this.kinds.get(l.kind)?.port).map((l) => `127.0.0.1:${l.key}`);
+    const grant: Grant = ports.length
+      ? { ...spec.grant, listen: [...(spec.grant?.listen ?? []), ...ports], hosts: [...(spec.grant?.hosts ?? []), ...ports] }
+      : spec.grant ?? {};
     // The profile first: a grant the sandbox can't enforce refuses the start before anything is held or recorded.
     const launch = sandboxed ? await this.sandbox.confine({ argv: spec.argv, cwd, env }, grant, spec.run) : { argv: spec.argv, cwd, env };
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
@@ -386,9 +417,12 @@ class LocalSupervisor implements Supervisor {
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
-    for (const lease of leases) await this.lease('lease.acquired', spec.run, lease);
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    for (const lease of leases) await this.lease('lease.acquired', spec.run, lease, this.keys.get(`${lease.kind}:${lease.key}`)?.expires);
+    if (this.options.crash === 'start-recorded') process.kill(process.pid, 'SIGKILL');
+    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: [spec.input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
     r.child = child;
+    // A process that exits before reading all of its input is no error of the supervisor's.
+    child.stdin?.on('error', () => undefined);
     const hashes = { stdout: sha256Stream(), stderr: sha256Stream() };
     child.stdout!.on('data', (chunk: Buffer) => { hashes.stdout.update(chunk); spec.output?.stdout(chunk); });
     child.stderr!.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
@@ -407,11 +441,14 @@ class LocalSupervisor implements Supervisor {
       r.state = 'exited';
       return { run: spec.run, status: 'started', pid: 0, pgid: 0, start: '', leases };
     }
+    if (this.options.crash === 'spawned') process.kill(process.pid, 'SIGKILL');
     r.pid = pid;
     r.pgid = pid;
     // A process that is already gone and reaped leaves nothing to track; its group's members are still found.
     const start = (await table([pid])).get(pid)?.start ?? '';
     if (start) await this.track(r, pid, start, r.token);
+    // Its input only once its process is recorded, so a crash before this point leaves a process that read nothing.
+    if (spec.input) child.stdin!.end(typeof spec.input === 'function' ? spec.input() : spec.input);
     return { run: spec.run, status: 'started', pid, pgid: pid, start, leases };
   }
 
@@ -444,6 +481,8 @@ class LocalSupervisor implements Supervisor {
     const leader = r.pgid === undefined ? undefined : procs.get(r.pgid);
     const groupOurs = leader !== undefined && r.tracked.get(leader.pid)?.start === leader.start;
     if (groupOurs) for (const p of procs.values()) if (p.pgid === r.pgid) candidates.set(p.pid, p);
+    // macOS hides a platform binary's environment (perl, sh) from `ps -E`: its own sandbox then proves it in place of its token.
+    const boxed = r.sandboxed ? new Set((await scan([markerOf(r.run)]).catch(() => new Map<string, number[]>())).get(markerOf(r.run)) ?? []) : new Set<number>();
     const proven: Proc[] = [];
     for (const p of candidates.values()) {
       const tracked = r.tracked.get(p.pid);
@@ -453,7 +492,7 @@ class LocalSupervisor implements Supervisor {
       switch (this.options.plant) {
         case 'stops-token-bearing-group-members': ok = p.pgid === r.pgid && token === r.token; break;
         case 'requires-token-in-group': ok = token === r.token; break;
-        default: ok = !tracked?.token || token === tracked.token;
+        default: ok = !tracked?.token || token === tracked.token || (token === null && boxed.has(p.pid));
       }
       if (ok) proven.push(p);
     }
@@ -489,7 +528,15 @@ class LocalSupervisor implements Supervisor {
     const launching = this.launching.get(run);
     if (launching) return launching.catch(() => undefined).then(() => this.cleanup(run));
     const r = this.runs.get(run);
-    if (!r) return Promise.reject(Error(`${run} is no run of this supervisor`));
+    if (!r) {
+      // A start still in its first pass, given up on before it was held: it never starts.
+      const waiter = this.waiters.find((w) => w.spec.run === run);
+      if (!waiter) return Promise.reject(Error(`${run} is no run of this supervisor`));
+      this.waiters.splice(this.waiters.indexOf(waiter), 1);
+      this.runs.set(run, { run, cwd: waiter.spec.cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), leases: [], state: 'BLOCKED' });
+      waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: waiter.spec.leases?.[0]?.kind ?? '' });
+      return Promise.resolve({ run, outcome: 'clean', left: [], stopped: [] });
+    }
     // A run that never started has nothing to stop or release, and nothing to record.
     if (r.state === 'held' || r.state === 'BLOCKED') {
       // A held run given up on never starts: its start resolves BLOCKED on what it waited for.
@@ -535,11 +582,20 @@ class LocalSupervisor implements Supervisor {
         left.push(name);
       }
     } else {
+      // Every key is given back and checked first: one its check finds unclean holds all of the run's, since what
+      // holds one (a container on its port, say) may hold the others.
+      const unclean: string[] = [];
       for (const lease of r.leases) {
         const name = `${lease.kind}:${lease.key}`;
         const kind = this.kinds.get(lease.kind);
         if (kind?.release) await this.step(kind.release, lease.key);
-        if (kind?.check && !(await this.step(kind.check, lease.key))) {
+        // The planted wrong program holds the lease while anything at all still takes the key, recorded or not.
+        const taken = this.options.plant === 'holds-lease-while-taken' && kind?.free && !(await kind.free(lease.key).catch(() => false));
+        if (taken || (kind?.check && !(await this.step(kind.check, lease.key)))) unclean.push(name);
+      }
+      for (const lease of r.leases) {
+        const name = `${lease.kind}:${lease.key}`;
+        if (unclean.length) {
           this.keys.set(name, { holder: run, dirty: { run } });
           left.push(name);
           continue;
@@ -558,8 +614,8 @@ class LocalSupervisor implements Supervisor {
 
   /** A resource's cleanup step or check, in the platform sandbox with its folder writable; true when it exits 0. */
   private async step(step: ResourceStep, key: string): Promise<boolean> {
-    const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', DEEP_RESOURCE_KEY: key };
-    const launch = await this.sandbox.confine({ argv: step.argv, cwd: step.cwd, env }, { write: [step.cwd] });
+    const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', ...step.env, DEEP_RESOURCE_KEY: key };
+    const launch = await this.sandbox.confine({ argv: step.argv, cwd: step.cwd, env }, { ...step.grant, write: [step.cwd, ...(step.grant?.write ?? [])] });
     return new Promise((resolve) => {
       const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, stdio: 'ignore', detached: true });
       const timer = setTimeout(() => { try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* gone */ } }, 60_000);
@@ -587,6 +643,12 @@ class LocalSupervisor implements Supervisor {
   }
 
   private async tickOnce(): Promise<void> {
+    // A lease past its term whose holder still runs is only stale: marked once, still its holder's.
+    for (const [name, key] of this.keys) {
+      if (!key.holder || key.stale || key.dirty || key.expires === undefined || this.options.now() <= key.expires) continue;
+      key.stale = true;
+      await this.lease('lease.stale', key.holder, { kind: name.slice(0, name.indexOf(':')), key: name.slice(name.indexOf(':') + 1) }, key.expires);
+    }
     // Nothing to read for until an unblock ask is open, a key is out of its pool or a run waits: a tick then costs nothing.
     if (!this.asked.size && !this.waiters.length && ![...this.keys.values()].some((k) => k.retired)) return;
     if (this.asked.size) await this.options.asks.tick();

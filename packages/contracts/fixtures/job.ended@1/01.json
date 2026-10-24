@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "job.ended",
+  "subject": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "job": "run:01K74FKZVK8Q2X5R7M3N9P4T6W",
+    "state": "finished",
+    "session": "5c0ffee0-0000-4000-8000-000000000001",
+    "model": "claude-haiku-4-5",
+    "binary": {
+      "path": "/opt/homebrew/bin/claude",
+      "version": "2.1.304"
+    },
+    "usage": {
+      "input": 15,
+      "cached": 100,
+      "output": 7
+    },
+    "cost_usd": 0.0123,
+    "lingered": [],
+    "from": 1760013451123,
+    "to": 1760013455123
+  }
+}

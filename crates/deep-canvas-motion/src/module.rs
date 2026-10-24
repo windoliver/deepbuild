@@ -64,7 +64,72 @@ fn register(r: &mut Registrar) {
     )
     .applies(is_target)
     .run(channels);
-    r.fixture("slide", slide(), None);
+    r.code(
+        "bad_doc",
+        "A motion section, or a field of one, that isn't the shape motion reads.",
+        "Write the transport, channels, clips, placements and markers as the motion sections define them.",
+        false,
+    );
+    r.code(
+        "bad_interp",
+        "A key's interpolation motion doesn't land, or one its channel's type can't take.",
+        "Use linear, hold, a bezier or a spring on a number, and hold on a bool.",
+        false,
+    );
+    r.code(
+        "bad_space",
+        "A color channel in a space motion doesn't mix colors in.",
+        "Leave the space out, or write oklab.",
+        false,
+    );
+    r.code(
+        "bad_type",
+        "A channel of a type motion doesn't write.",
+        "Use the type f32, color or bool.",
+        false,
+    );
+    r.code(
+        "bad_rate",
+        "A transport frame rate that isn't two whole numbers above zero.",
+        "Write the frame rate as [p, q] or \"p/q\", both above zero.",
+        false,
+    );
+    r.code(
+        "bad_marker_kind",
+        "A marker of a kind motion doesn't land.",
+        "Use the marker kind cue, shot, section or record.",
+        false,
+    );
+    r.code(
+        "time_unresolved",
+        "A marker whose time never resolves, through a loop of markers or one that doesn't exist.",
+        "Time the marker from a marker that resolves, or give it its own time.",
+        false,
+    );
+    r.code(
+        "placement_cycle",
+        "Placements that each start after another in a loop.",
+        "Give one placement of the loop its own start.",
+        false,
+    );
+    r.code(
+        "transition_kind",
+        "A transition of a kind motion doesn't land.",
+        "Use a cut.",
+        false,
+    );
+    r.code(
+        "transition_gap",
+        "A cut between placements that don't meet: the second doesn't start where the first ends.",
+        "Start the second placement where the first ends, or after it.",
+        false,
+    );
+    r.fixture("slide", slide(), None).sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/rider/at/pos", "value": [16, -14, 0]},
+    }));
 }
 
 const SECTIONS: [&str; 4] = ["channels", "clips", "placements", "markers"];
