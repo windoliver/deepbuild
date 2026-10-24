@@ -34,6 +34,10 @@
     },
     "package.json": {
       "devDependencies": {
+        "@stryker-mutator/core": {
+          "spec": "10.0.0",
+          "why": "Issue #569: StrykerJS, the mutation lane's mutator for the TypeScript lines a change adds, run through its command test runner."
+        },
         "@types/node": {
           "spec": "24.19.2",
           "why": "Issue #12: Node's types for the TypeScript workspaces, at the Node 24.22 floor."
@@ -81,6 +85,10 @@
         "deep-text-gpui": {
           "spec": "* path=../deep-text-gpui",
           "why": "Issue #390: the canvas's labels and readouts, drawn from the canvas's atlas through the GPUI patch's mask sprite, never GPUI's text system."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #377: the GPU layer, whose views the window shows in place (gpu_view)."
         }
       },
       "dev-dependencies": {
@@ -121,6 +129,10 @@
         "block2": {
           "spec": "^0.6",
           "why": "Issue #339: the block the NSEvent local monitor takes. Already in gpui's tree."
+        },
+        "gpui-pre-apple": {
+          "spec": "=0.3.9",
+          "why": "Issue #377: the GPUI patch's surface reports, which release a GPU-layer slot once GPUI's command buffer completes."
         }
       }
     },
@@ -261,6 +273,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #30: TypeScript's parser lists the tests each Vitest or Jest file a run ran holds, from its source, so a test left out fails the run; the root's pinned version."
         }
       }
     },
@@ -681,6 +697,106 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #159: host@1, through which every process of a job starts sandboxed with only what it declares, and is reaped."
+        }
+      }
+    },
+    "crates/deep-gpu/Cargo.toml": {
+      "dependencies": {
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #377: the canvas's own renderer, one wgpu device for the app, with the noop backend for the noop lane."
+        },
+        "pollster": {
+          "spec": "^0.4",
+          "why": "Issue #377: waits for wgpu's adapter and device requests when the GPU layer opens its device."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #377: the frame's closed list of places, which the registry seals and the GPU layer orders render modules' passes by."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #377: wgpu's Metal backend on macOS, where a slot is an IOSurface wrapped as a wgpu texture."
+        },
+        "objc2-core-foundation": {
+          "spec": "^0.3",
+          "why": "Issue #377: the CFDictionary of IOSurface properties a slot's pixel buffer is made with."
+        },
+        "objc2-core-video": {
+          "spec": "^0.3",
+          "why": "Issue #377: a slot's IOSurface-backed BGRA CVPixelBuffer, the type GPUI's paint_surface takes."
+        },
+        "objc2-io-surface": {
+          "spec": "^0.3",
+          "why": "Issue #377: the IOSurface behind a slot's pixel buffer, which Metal renders into."
+        },
+        "objc2-metal": {
+          "spec": "^0.3",
+          "why": "Issue #377: the Metal texture made over a slot's IOSurface before wgpu wraps it."
+        }
+      }
+    },
+    "crates/deep-gpu-layer/Cargo.toml": {
+      "dependencies": {
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #377: the GPU layer the binary drives."
+        },
+        "deep-app": {
+          "spec": "* path=../deep-app",
+          "why": "Issue #377: the app's GPU-layer view, its panel runtime and the panel mount the plug-in fixture loads through."
+        },
+        "deep-replica": {
+          "spec": "* path=../deep-replica",
+          "why": "Issue #377: the app's headless context, whose offscreen window the binary draws and captures."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #377: the plug-in's documents are stamped as its revisions and checked as deep_show checks them."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #377: the shipped canvas modules the plug-in's documents are checked in."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #377: the shipped canvas modules the plug-in's documents are checked in."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #377: the headless window, the page, the view and the question card the handoff is captured from."
+        },
+        "gpui-shell": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #377: the ScriptView the plug-in fixture's panel runs in, read back as its described tree."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #377: the test render module's region records, written to a storage buffer."
+        },
+        "image": {
+          "spec": "^0.25",
+          "why": "Issue #377: window captures written as PNGs, and the blank guard's comparisons read from PNGs."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #377: the scenario lines, the scenes and the replies."
+        },
+        "sha2": {
+          "spec": "^0.11",
+          "why": "Issue #377: pixel and window hashes (SHA-256), and pipeline keys; 0.11 hashes with the CPU's SHA instructions, so 10,000-frame runs stay fast."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #377: the test render module's pipelines and passes, on the GPU layer's device."
+        }
+      },
+      "target.'cfg(target_os = \"macos\")'.dependencies": {
+        "gpui-pre-apple": {
+          "spec": "=0.3.9",
+          "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
         }
       }
     }

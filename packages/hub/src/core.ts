@@ -5,7 +5,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { open, readFile, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,8 +19,8 @@ import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowRepor
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
-import { disk, testVfs, type Durable } from './vfs.js';
-import { Refused, refusal, startOf, ulid, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
+import { Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
 /** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
@@ -31,6 +31,17 @@ const keychain = (service: string): Promise<string | undefined> => {
 };
 const YOU = { actor: 'you', scope: 'you' };
 const SECRETS_TTL = 10_000;
+/** The spool file every deep-hook appends to. */
+const SPOOL = 'spool.jsonl';
+const REACHED = 10_000;
+/** The reading a session gets for a turn with tool calls none of whose hooks reached the hub. */
+const HOOKS_MISSING = 'hooks not reaching DeepBuild';
+const TRANSCRIPT_STEP = 64 * 1024 * 1024;
+/** How long after the hub reads a turn's end it judges whether any of the turn's hooks reached it. */
+const TURN_GRACE = 100;
+/** How long cursor changes gather before transcripts.json is written: a busy session writes it once, not per hook. */
+const CURSOR_SAVE = 200;
+const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const running = (pid: number): boolean => {
@@ -52,8 +63,30 @@ const isUnder = (path: string, dir: string) => {
 /** What a connection brings to a call: its role, the session it is bound to, and for deep mcp the process it serves. */
 export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string } }
 
-/** A session as its own hooks established it: the agent process, its working folder and its transcript. */
-interface Session { id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean }
+/**
+ * A session as its own hooks established it: the agent process, its working folder and its transcript; and how
+ * far the core has read that transcript, the turn it is in there, and the tool calls whose hooks reached the hub.
+ */
+interface Session {
+  id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean;
+  read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
+  /** Calls whose hooks' events are on their way to the record, and how many: their turns wait for them. */
+  pending: Map<string, number>;
+  /** Whether its closed turns wait for a replay's end to be judged. */
+  deferred?: boolean;
+  /** The timer that judges its closed turns once their grace has passed. */
+  judging?: NodeJS.Timeout | undefined;
+}
+/**
+ * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
+ * its end (its monotonic clock).
+ */
+interface Turn { uuid: string; from: number; calls: string[]; at?: number; recording?: boolean }
+/**
+ * Where a session's transcript is judged from after a restart, and the calls whose hooks reached the hub past there;
+ * for an ended session with turns still to judge, its agent too, since no hook of it comes again.
+ */
+interface Cursor { transcript: string; read: number; reached: string[]; ended?: { agent: string } }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
@@ -93,6 +126,10 @@ export class Core {
   private readonly readings = new Set<string>();
   private readonly ready: Promise<void>;
   private readonly sessions = new Map<string, Session>();
+  /** The cursors the last hub left for sessions this one hasn't met yet. */
+  private cursors = new Map<string, Cursor>();
+  /** The pending write of transcripts.json. */
+  private saving: NodeJS.Timeout | undefined;
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   private stamps: Stamp[] = [];
@@ -117,6 +154,9 @@ export class Core {
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
   private stopping = false;
+  private replaying: Promise<unknown> | undefined;
+  /** Whether appends came back during a replay, so the files it kept are taken again after it. */
+  private retake = false;
 
   constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: Obj) => void) {
     this.root = rootOf(options.root);
@@ -140,6 +180,12 @@ export class Core {
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     // A start that finds the last run still marked running records that run's stop as a crash.
+    try {
+      // A cursor whose transcript is gone has no session left to judge.
+      this.cursors = new Map(Object.entries(JSON.parse(readFileSync(this.root.transcripts, 'utf8')) as Record<string, Cursor>).filter(([, c]) => typeof c?.transcript === 'string' && existsSync(c.transcript)));
+    } catch {
+      // None yet, or unreadable: the sessions are read from where this hub meets them.
+    }
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
@@ -177,11 +223,21 @@ export class Core {
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
     await this.replaySpool();
+    // A session that ended with turns still to judge sends no hook again: they are judged now.
+    for (const [id, cursor] of this.cursors) {
+      if (typeof cursor.ended?.agent !== 'string' || typeof cursor.read !== 'number' || !Array.isArray(cursor.reached)) continue;
+      this.cursors.delete(id);
+      const session: Session = { id, agent: cursor.ended.agent, pid: 0, start: '', cwd: '', transcript: cursor.transcript, ended: true, read: cursor.read, turn: undefined, closed: [], reached: new Set(cursor.reached), pending: new Map() };
+      this.sessions.set(id, session);
+      await this.readTranscript(session);
+      this.endTurn(session);
+      this.judge(session);
+    }
     await this.recoverRuns();
     await this.retain();
     this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
-    this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) this.blocked = undefined; }, 250));
+    this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     for (const timer of this.timers) timer.unref();
   }
 
@@ -234,7 +290,43 @@ export class Core {
    * for that, not for the commit. Resolves once each append settled.
    */
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
-    return this.queue(() => this.handleHook(drafts, meta, writer)).then(({ settled }) => settled);
+    // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
+    this.replayLate();
+    const replayed = this.replaying ?? Promise.resolve();
+    return replayed.then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
+  }
+  /**
+   * A hook reaching the running hub shows it answers again: what deep-hook spooled while the hub was late is
+   * replayed then, beside the hooks that follow, rather than at the next start.
+   */
+  private replayLate(kept = false): void {
+    if (this.stopping) return;
+    if (this.replaying) {
+      this.retake ||= kept;
+      return;
+    }
+    // A file a failed replay kept is taken again once appends work again.
+    const waiting = existsSync(join(this.root.spool, SPOOL)) || (kept && existsSync(this.root.spool) && readdirSync(this.root.spool).some((f) => f.endsWith('.jsonl')));
+    if (!waiting) return;
+    // A hub that couldn't start replays nothing; its start reports why.
+    this.replaying = this.ready
+      .then(() => this.replaySpool(), () => undefined)
+      .catch((error: unknown) => process.stderr.write(`deep hub: the spool replay stopped: ${error instanceof Error ? error.message : String(error)}\n`))
+      .finally(() => {
+        this.replaying = undefined;
+        // The turns that waited on the replay are judged now, after the hooks queued before.
+        void this.queue(async () => {
+          for (const session of this.sessions.values()) {
+            if (!session.deferred) continue;
+            session.deferred = false;
+            this.judge(session);
+          }
+        }).catch(() => undefined);
+        // What was spooled during the replay, and the files it kept if appends came back, are taken now.
+        const kept = this.retake;
+        this.retake = false;
+        if (!this.blocked) this.replayLate(kept);
+      });
   }
   /** Runs `work` after everything queued before it, and after the start, which the spool replay is part of. */
   private queue<T>(work: () => Promise<T>, starting = false): Promise<T> {
@@ -242,7 +334,19 @@ export class Core {
     this.chain = done.catch(() => undefined);
     return done;
   }
-  private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, waited = false): Promise<{ settled: Promise<void> }> {
+  private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false): Promise<{ settled: Promise<void> }> {
+    // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
+    if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
+      // Its live copy may be acknowledged and still on its way to the record.
+      await Promise.allSettled([...this.inflight]);
+      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = '${meta.id}' LIMIT 1`);
+      if (known.length) {
+        // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
+        // unmarked while deep-hook acted on its own, so the session says so rather than the fail-open going unseen.
+        if (meta.late && Number((known[0] as { late?: unknown }).late) !== 1) return { settled: this.lateAnswered(meta, meta.late.matched) };
+        return { settled: Promise.resolve() };
+      }
+    }
     const whose = await this.whose(meta, drafts.find((d) => d.seq !== undefined)?.seq);
     if (whose.job) {
       const settled = this.appendCore('job.event', { job: whose.job, event: meta.event });
@@ -251,7 +355,7 @@ export class Core {
     }
     if (whose.wait && !waited) {
       // Held, not queued: the hooks behind it go on; it is read again once its job's session ID is known.
-      const settled = this.park(whose.wait).then(() => this.queue(() => this.handleHook(drafts, meta, writer, true))).then(({ settled: s }) => s);
+      const settled = this.park(whose.wait).then(() => this.queue(() => this.handleHook(drafts, meta, writer, replayed, true))).then(({ settled: s }) => s);
       settled.catch(() => undefined);
       return { settled };
     }
@@ -268,7 +372,17 @@ export class Core {
         session.ended = true;
         this.stamps = this.stamps.filter((stamp) => stamp.session !== session.id);
       }
-      if (verified && meta.stamp) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
+      // A replayed PreToolUse was let through late; its call has run, so it stamps nothing a later call could bind.
+      if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
+    }
+    const call = session && verified && drafts.length ? meta.toolUse : undefined;
+    if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
+    if (session && verified) {
+      await this.readTranscript(session);
+      if (meta.event === 'SessionEnd') this.endTurn(session);
+      this.judge(session);
+      // Written at once, like a session's first cursor: no later hook of the session would write it.
+      if (meta.event === 'SessionEnd') this.writeCursors();
     }
     const count = this.counters.get(meta.session) ?? { msgs: 0, turns: 0, worked: false };
     this.counters.set(meta.session, count);
@@ -287,15 +401,187 @@ export class Core {
       });
     });
     const settled = Promise.allSettled(appends).then((results) => {
-      for (const result of results) {
+      // A conflict is an ID the log already holds: a spool replayed again, whose event is there once already.
+      const failed = results.filter((r) => r.status === 'rejected' && !(r.reason instanceof RecordError && r.reason.code === 'conflict'));
+      for (const result of failed) {
         if (result.status === 'rejected' && !(result.reason instanceof RecordError && result.reason.code === 'storage')) {
           process.stderr.write(`deep hub: hook ${meta.id} (${meta.event}) not recorded: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}\n`);
         }
       }
-      if (results.some((r) => r.status === 'rejected')) throw Error(`hook ${meta.id} was not recorded`);
+      if (failed.length) throw Error(`hook ${meta.id} was not recorded`);
     });
     settled.catch(() => undefined);
+    // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
+    // Its turn is judged once the append settles, however long past the grace that is.
+    if (session && call) {
+      void settled.then(() => {
+        session.reached.add(call);
+      }, () => undefined).finally(() => {
+        const left = session.pending.get(call)! - 1;
+        if (left) session.pending.set(call, left);
+        else session.pending.delete(call);
+        // Judged in the start too, as its replay is: queued behind the start, it would hold up the replay that ends it.
+        void this.queue(async () => this.judge(session), true).catch(() => undefined);
+      });
+    }
     return { settled };
+  }
+
+  /** Records, once, that a call the hub answered was let through by deep-hook as late, naming its guard entries. */
+  private async lateAnswered(meta: HookMeta, matched: string[]): Promise<void> {
+    const reading = `deep-hook let ${meta.event} ${meta.id} through as late, after the hub's answer missed its deadline; `
+      + (matched.length ? `it matched ${matched.join(', ')}` : 'it matched no guard entry');
+    // The ID is a ULID (checked before this is called), so it goes into the query as it is.
+    const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), '${meta.id}') > 0 LIMIT 1`);
+    if (known.length) return;
+    const ts = this.now();
+    await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
+  }
+
+  /**
+   * Reads what the session's transcript gained since the last hook. A turn there that made tool calls, none of
+   * whose hooks reached the hub, is recorded once the next prompt shows it ended and a later hook judges it: the
+   * session then reads "hooks not reaching DeepBuild", so failing open is never silent.
+   */
+  private async readTranscript(session: Session): Promise<void> {
+    let handle: FileHandle;
+    try {
+      handle = await open(session.transcript, 'r');
+    } catch {
+      return;
+    }
+    try {
+      const { size } = await handle.stat();
+      // At most TRANSCRIPT_STEP is held at once: more growth than that is read a step at a time.
+      while (size > session.read) {
+        const want = Buffer.alloc(Math.min(size - session.read, TRANSCRIPT_STEP));
+        // Only the bytes the read returned: a transcript cut shorter since the stat returns fewer.
+        const { bytesRead } = await handle.read(want, 0, want.length, session.read);
+        if (!bytesRead) return;
+        const text = want.subarray(0, bytesRead);
+        // Only whole lines: a line still being written is read with the next hook. A line longer than a step is
+        // passed over; what is left of it doesn't parse, as no prompt or call longer than a step would.
+        let end = text.lastIndexOf(0x0a) + 1;
+        if (!end) {
+          if (text.length < TRANSCRIPT_STEP) return;
+          end = text.length;
+        }
+        const base = session.read;
+        session.read += end;
+        for (let at = 0; at < end;) {
+          const from = base + at;
+          const next = text.indexOf(0x0a, at) + 1 || end;
+          const raw = text.subarray(at, next).toString('utf8');
+          at = next;
+          let line: unknown;
+          try {
+            line = JSON.parse(raw);
+          } catch {
+            continue;
+          }
+          if (!isObj(line) || line.isSidechain === true || !isObj(line.message)) continue;
+          const content = line.message.content;
+          const parts = Array.isArray(content) ? content.filter(isObj) : [];
+          if (line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'))) {
+            // A person's prompt ends the turn before it.
+            if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
+            session.turn = { uuid: typeof line.uuid === 'string' && line.uuid ? line.uuid : `offset:${from}`, from, calls: [] };
+          } else if (line.type === 'assistant' && session.turn) {
+            for (const part of parts) if (part.type === 'tool_use' && typeof part.id === 'string') session.turn.calls.push(part.id);
+          }
+        }
+      }
+    } catch {
+      // A transcript that can't be read now is read from the same place with the next hook.
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /** A session's last turn ends with it: no prompt comes after it to end it. */
+  private endTurn(session: Session): void {
+    if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
+    session.turn = undefined;
+  }
+
+  /**
+   * Judges the turns whose end the hub read at least TURN_GRACE ago, on its own monotonic clock: a hook started
+   * before that read has reached the hub by then, since deep-hook gives up on the hub after 20 ms and spools. While
+   * a replay runs, or a spool waits for one, the turns wait for it: one of their hooks may be there. A turn none of
+   * whose calls reached the hub is recorded. Turns still in their grace are judged by a timer.
+   */
+  private judge(session: Session): void {
+    if (session.closed.length) this.replayLate();
+    if (this.replaying) {
+      session.deferred = true;
+      return;
+    }
+    const now = performance.now();
+    const waits = (turn: Turn) => turn.calls.some((call) => session.pending.has(call));
+    for (const turn of session.closed.filter((t) => !t.recording && now - t.at! >= TURN_GRACE)) {
+      if (waits(turn)) break;
+      if (turn.calls.some((call) => session.reached.has(call))) {
+        for (const call of turn.calls) session.reached.delete(call);
+        session.closed.splice(session.closed.indexOf(turn), 1);
+        continue;
+      }
+      turn.recording = true;
+      const ts = this.now();
+      // Settled like a hook's drafts: the next hook doesn't wait for its commit. The turn, and so where a restart
+      // reads from, stays until its reading is durable; one whose append fails is judged again with the next hook.
+      void this.append(this.connection('core', { session: session.id, agent: session.agent }), {
+        v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: HOOKS_MISSING },
+      }).then(() => {
+        session.closed.splice(session.closed.indexOf(turn), 1);
+        this.saveCursors();
+      }, () => {
+        turn.recording = false;
+      });
+    }
+    const next = session.closed.find((t) => !t.recording);
+    if (next && !waits(next) && !session.judging && !this.stopping) {
+      session.judging = setTimeout(() => {
+        session.judging = undefined;
+        void this.queue(async () => this.judge(session), true).catch(() => undefined);
+      }, Math.max(1, TURN_GRACE - (now - next.at!)));
+      session.judging.unref();
+    }
+    // Calls no read turn holds (a subagent's) are forgotten oldest first; a read turn's are kept until it's judged.
+    if (session.reached.size > REACHED) {
+      const held = new Set([...session.closed, ...(session.turn ? [session.turn] : [])].flatMap((t) => t.calls));
+      for (const call of session.reached) {
+        if (session.reached.size <= REACHED) break;
+        if (!held.has(call)) session.reached.delete(call);
+      }
+    }
+    this.saveCursors();
+  }
+
+  /** Keeps where each live session's transcript is judged from (its oldest unjudged turn), so a restart judges what it missed. */
+  private saveCursors(): void {
+    if (this.saving || this.stopping) return;
+    this.saving = setTimeout(() => this.writeCursors(), CURSOR_SAVE);
+    this.saving.unref();
+  }
+  private writeCursors(): void {
+    clearTimeout(this.saving);
+    this.saving = undefined;
+    const cursors = new Map(this.cursors);
+    for (const s of this.sessions.values()) {
+      // An ended session is kept until its last turns are judged and their readings durable.
+      if (s.ended && !s.closed.length) {
+        cursors.delete(s.id);
+        continue;
+      }
+      cursors.delete(s.id);
+      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached], ...(s.ended ? { ended: { agent: s.agent } } : {}) });
+    }
+    // Synced, so a power cut leaves the last whole save; a failed save is made again with the next hook's.
+    try {
+      writeSynced(this.root.transcripts, Buffer.from(JSON.stringify(Object.fromEntries(cursors))));
+    } catch (error) {
+      process.stderr.write(`deep hub: ${this.root.transcripts} not saved: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
   }
 
   /**
@@ -356,7 +642,15 @@ export class Core {
     if (!start) return false;
     const session = this.sessions.get(meta.session);
     if (!session) {
-      this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false });
+      // A session the last hub met is read from where that hub left it; one this hub meets first, from here on:
+      // what its transcript held before isn't judged.
+      const cursor = this.cursors.get(meta.session);
+      this.cursors.delete(meta.session);
+      const left = cursor?.transcript === transcript && typeof cursor.read === 'number' && Array.isArray(cursor.reached) ? cursor : undefined;
+      const read = left ? left.read : await stat(transcript).then((s) => s.size, () => 0);
+      this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached), pending: new Map() });
+      // A session's first cursor is written at once: a restart before it would read the session from its end.
+      this.writeCursors();
       return true;
     }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
@@ -784,32 +1078,78 @@ export class Core {
 
   // ---- Spool, retention and the test load.
 
-  /** Replays deep-hook's spool: each line once, and a file removed only once its events are in a FULL commit. */
+  /**
+   * Replays deep-hook's spool: each line once, in the order it was written. A line that doesn't parse, cut by a
+   * write that never finished, is skipped and recorded naming its offset, and every request after it is kept,
+   * one appended right after the cut bytes included. A file is removed only once its events are in a FULL commit.
+   */
   private async replaySpool(): Promise<void> {
     if (!existsSync(this.root.spool)) return;
-    for (const name of readdirSync(this.root.spool).filter((f) => f.endsWith('.jsonl')).sort()) {
+    // Every deep-hook appends to spool.jsonl. It moves aside first, so a hook that spools during the replay begins
+    // a new file, which the next replay takes. A hook whose write lands in the moved file sees the path no longer
+    // names it and writes the line again to the new one (deep-hook's spool), so nothing written late is lost; the
+    // short wait only lets a write in flight finish here rather than read as a cut line.
+    const live = join(this.root.spool, SPOOL);
+    if (existsSync(live)) {
+      // Named after every file a replay kept, whatever the clock says now: the files replay in name order.
+      const kept = readdirSync(this.root.spool).filter((f) => /^replay-[0-9A-HJKMNP-TV-Z]{26}\.jsonl$/.test(f)).sort().at(-1);
+      const after = kept ? ulidTime(kept.slice(7, 33)) + 1 : 0;
+      const moved = join(this.root.spool, `replay-${ulid(Math.max(Date.now(), after))}.jsonl`);
+      renameSync(live, moved);
+      await new Promise((done) => setTimeout(done, 100));
+      // deep-hook syncs spool.jsonl by its name, so a line written just before the move may be synced by no one:
+      // the moved file and the move are synced here before any of it is read.
+      syncPath(moved);
+      syncPath(this.root.spool);
+    }
+    for (const name of readdirSync(this.root.spool).filter((f) => f.endsWith('.jsonl') && f !== SPOOL).sort()) {
       const file = join(this.root.spool, name);
       const text = readFileSync(file);
       this.durable.point('spool_read');
-      let offset = 0;
       let failed = false;
-      while (offset < text.length) {
-        const end = text.indexOf(0x0a, offset);
-        if (end < 0) {
-          process.stderr.write(`deep hub: ${file}: refused a cut line at offset ${offset}\n`);
+      // A cut line is recorded once, however often its kept file is replayed.
+      const skip = async (offset: number, reason: string) => {
+        try {
+          const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'spool.refused' AND json_extract(data, '$.file') = '${name.replace(/'/g, "''")}' AND json_extract(data, '$.offset') = ${offset} LIMIT 1`);
+          if (!known.length) await this.appendCore('spool.refused', { file: name, offset, reason });
+        } catch {
+          failed = true;
+        }
+      };
+      for (let offset = 0; offset < text.length;) {
+        // A stopping hub keeps the rest of the file for its next start.
+        if (this.stopping) {
+          failed = true;
           break;
         }
-        const parsed = parseLine(text.subarray(offset, end), true, this.options.held);
-        if (parsed.kind === 'hook') {
+        let end = text.indexOf(0x0a, offset);
+        if (end < 0) end = text.length;
+        const line = text.subarray(offset, end);
+        let parsed = line.length ? parseLine(line, true, this.options.held) : undefined;
+        if (parsed?.kind === 'refused' && parsed.error.code === 'not_json') {
+          await skip(offset, 'a cut line: a spooled write that never finished, so it does not parse');
+          if (this.options.plant === 'stops-at-first-bad-line') break;
+          // A request appended right after the cut bytes shares their line; each begins as deep-hook writes it.
+          parsed = undefined;
+          for (let at = line.indexOf(REQUEST, 1); at > 0 && !parsed; at = line.indexOf(REQUEST, at + 1)) {
+            const glued = parseLine(line.subarray(at), true, this.options.held);
+            if (glued.kind !== 'refused' || glued.error.code !== 'not_json') parsed = glued;
+          }
+        }
+        if (parsed?.kind === 'hook') {
           const { drafts, meta } = parsed;
-          await this.queue(() => this.handleHook(drafts, meta, 'hook'), true).then(({ settled }) => settled).catch(() => { failed = true; });
-        } else {
-          process.stderr.write(`deep hub: ${file}: refused the line at offset ${offset}: ${parsed.kind === 'refused' ? `${parsed.error.code} at ${parsed.error.path}` : 'not a hook request'}\n`);
+          await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch((error: unknown) => {
+            failed = true;
+            process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
+          });
+        } else if (parsed) {
+          await skip(offset, parsed.kind === 'refused' ? `refused: ${parsed.error.code} at ${parsed.error.path || '/'}` : 'not a hook request');
         }
         offset = end + 1;
       }
       if (failed) continue;
-      await this.record.sync();
+      // The planted wrong program removes the file with its events still in NORMAL commits only.
+      if (this.options.plant !== 'remove-spool-after-normal') await this.record.sync();
       rmSync(file);
       this.durable.point('spool_removal');
     }
@@ -895,7 +1235,9 @@ export class Core {
     } catch {
       return;
     }
+    await this.replaying;
     await this.chain;
+    this.writeCursors();
     for (const { stop } of this.runs.values()) stop();
     // Each worktree's stack goes down with the hub, through the supervisor.
     await Promise.race([Promise.allSettled([...this.stackRuns].map((run) => this.takeDown(run))), new Promise((done) => setTimeout(done, 5000))]);
@@ -919,6 +1261,13 @@ export class Core {
 function crashing(record: RecordStore, point: string): RecordStore {
   const jobs = new Set<string>();
   const append: RecordStore['append'] = async (connection, input) => {
+    // `before:<kind>`: the hub dies before it appends an event of that kind, after what the call that appends it does next.
+    if (point === `before:${input.kind}`) {
+      await new Promise((done) => setTimeout(done, 50));
+      process.kill(process.pid, 'SIGKILL');
+    }
+    // `slow:<kind>`: an event of that kind takes 300 ms to append.
+    if (point === `slow:${input.kind}`) await new Promise((done) => setTimeout(done, 300));
     const event = await record.append(connection, input);
     const run = isObj(input.data) ? String(input.data.job ?? input.data.run) : '';
     if (input.kind === 'job.recorded') jobs.add(run);

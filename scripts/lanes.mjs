@@ -17,8 +17,8 @@ export const testGlobs = (extension) => testPaths
 const ownLane = ['tests/acceptance/684/lean.test.ts'];
 /** Vitest files the unit lane runs one at a time, after the parallel block (see the lane). */
 const alone = ['tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/',
-  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
-  'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/348/'];
+  'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
+  'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/', 'tests/acceptance/315/', 'tests/acceptance/348/'];
 /** Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and minutes. */
 const byHand = ['tests/acceptance/685/'];
 
@@ -33,7 +33,8 @@ export const checks = [
     // sockets to 2 ms, so they too run one at a time, with nothing beside them. So does each file
     // that times an issue's frozen budget on the reference Mac (gated by environmentProblem()): #14's
     // 5,000 appends a second fell to 3,300-4,000/s beside the parallel block and passed alone. The
-    // supervisor's files (#236) too: they read the system's one sandbox log stream.
+    // supervisor's files (#236) too: they read the system's one sandbox log stream. And deep-hook's
+    // files (#315): they build it and time it to 50 ms.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
     ['cargo', 'test', '--workspace', '--locked'],
@@ -41,6 +42,9 @@ export const checks = [
     // tests spend plan usage, and #246's check that change against its own base.
     [process.execPath, '--test', 'tests/*.test.mjs', ...testGlobs('mjs').filter((glob) => !glob.startsWith('tests/'))],
   ], fix: 'Repair the behavior named by the failing test.' },
+  // The GPU layer's render logic on wgpu's noop backend, with no GPU (#377): slots and fences,
+  // uploads that settle, a lost device's rebuild and submission in frame order.
+  { name: 'noop', commands: [['cargo', 'test', '--locked', '-p', 'deep-gpu']], fix: 'Repair the render logic the failing noop test names.' },
   // The event catalogue holds every kind the design docs and the open issues name (#605). It reads the
   // contracts package the typecheck lane builds.
   { name: 'catalogue drift', commands: [[process.execPath, 'scripts/catalogue-drift.mjs']], fix: 'Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.' },
@@ -52,6 +56,10 @@ export const checks = [
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
+  // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
+  // lifecycle enumerator, crash suite and verdict replay when the change touches their paths. The release
+  // preflight adds the mutation lane and runs the lifecycle enumerator and crash suite in full.
+  { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs', ...(process.env.DEEP_PREFLIGHT === 'release' ? ['--release'] : [])]], fix: 'Follow the Fix line under each proof lane finding above.' },
   // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's
   // seeded claims and the rank-swap twins. Lean builds take a while, so the local preflight runs it only for a
   // change to the engine or the model; the release preflight always does.
