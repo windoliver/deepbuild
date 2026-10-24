@@ -82,8 +82,11 @@ interface Session {
  * its end (its monotonic clock).
  */
 interface Turn { uuid: string; from: number; calls: string[]; at?: number; recording?: boolean }
-/** Where a session's transcript is judged from after a restart, and the calls whose hooks reached the hub past there. */
-interface Cursor { transcript: string; read: number; reached: string[] }
+/**
+ * Where a session's transcript is judged from after a restart, and the calls whose hooks reached the hub past there;
+ * for an ended session with turns still to judge, its agent too, since no hook of it comes again.
+ */
+interface Cursor { transcript: string; read: number; reached: string[]; ended?: { agent: string } }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
@@ -220,6 +223,16 @@ export class Core {
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
     await this.replaySpool();
+    // A session that ended with turns still to judge sends no hook again: they are judged now.
+    for (const [id, cursor] of this.cursors) {
+      if (typeof cursor.ended?.agent !== 'string' || typeof cursor.read !== 'number' || !Array.isArray(cursor.reached)) continue;
+      this.cursors.delete(id);
+      const session: Session = { id, agent: cursor.ended.agent, pid: 0, start: '', cwd: '', transcript: cursor.transcript, ended: true, read: cursor.read, turn: undefined, closed: [], reached: new Set(cursor.reached), pending: new Map() };
+      this.sessions.set(id, session);
+      await this.readTranscript(session);
+      this.endTurn(session);
+      this.judge(session);
+    }
     await this.recoverRuns();
     await this.retain();
     this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
@@ -366,7 +379,10 @@ export class Core {
     if (session && call) session.pending.set(call, (session.pending.get(call) ?? 0) + 1);
     if (session && verified) {
       await this.readTranscript(session);
+      if (meta.event === 'SessionEnd') this.endTurn(session);
       this.judge(session);
+      // Written at once, like a session's first cursor: no later hook of the session would write it.
+      if (meta.event === 'SessionEnd') this.writeCursors();
     }
     const count = this.counters.get(meta.session) ?? { msgs: 0, turns: 0, worked: false };
     this.counters.set(meta.session, count);
@@ -478,6 +494,12 @@ export class Core {
     }
   }
 
+  /** A session's last turn ends with it: no prompt comes after it to end it. */
+  private endTurn(session: Session): void {
+    if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
+    session.turn = undefined;
+  }
+
   /**
    * Judges the turns whose end the hub read at least TURN_GRACE ago, on its own monotonic clock: a hook started
    * before that read has reached the hub by then, since deep-hook gives up on the hub after 20 ms and spools. While
@@ -542,9 +564,13 @@ export class Core {
     this.saving = undefined;
     const cursors = new Map(this.cursors);
     for (const s of this.sessions.values()) {
-      if (s.ended) continue;
+      // An ended session is kept until its last turns are judged and their readings durable.
+      if (s.ended && !s.closed.length) {
+        cursors.delete(s.id);
+        continue;
+      }
       cursors.delete(s.id);
-      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached] });
+      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached], ...(s.ended ? { ended: { agent: s.agent } } : {}) });
     }
     // Synced, so a power cut leaves the last whole save; a failed save is made again with the next hook's.
     try {
