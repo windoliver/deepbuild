@@ -1,0 +1,5 @@
+// A refused load (#348 AC1): a valid manifest, but its code throws while it registers.
+export default function (deep: any): void {
+  deep.registerCheck('ext.throws.report', () => ({ outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null }));
+  throw new Error('dh348-throws-at-load: the package broke while registering');
+}
