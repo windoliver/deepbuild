@@ -6,7 +6,7 @@
 // variables allowed through by name, and from the tools' own reports (Vitest's, Jest's, node:test's, pytest's and
 // go test's) the tests that ran,
 // every attempt of each, where each failed test failed, the files the run read and a numeric contract's counts. A run
-// passes only if every test a Vitest, Jest or pytest file it ran holds ran, as listed apart from the run (listing.ts).
+// passes only if every test a Vitest, Jest, node:test or pytest file it ran holds ran, as listed apart from the run (listing.ts).
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { homedir, tmpdir, userInfo } from 'node:os';
@@ -147,8 +147,8 @@ function runHandle(): string {
   return `run:${id}`;
 }
 
-/** The tests each Vitest or Jest file the run ran holds, from the file's source in the checkout. */
-async function listedIn(checkout: string, files: Listing['files']): Promise<Listed[]> {
+/** The tests each Vitest, Jest or node:test file the run ran holds, from the file's source in the checkout; `only`: the command runs node:test's focused tests alone. */
+async function listedIn(checkout: string, files: { file: string; tool: Listing['files'][number]['tool'] | 'node' }[], only: boolean): Promise<Listed[]> {
   const listed: Listed[] = [];
   for (const [file, tool] of new Map(files.map((f) => [f.file, f.tool]))) {
     let source: string;
@@ -157,7 +157,7 @@ async function listedIn(checkout: string, files: Listing['files']): Promise<List
       if (under(checkout, realpathSync(join(checkout, file))) === null) continue;
       source = readFileSync(join(checkout, file), 'utf8');
     } catch { continue; }
-    listed.push(...(await listSource(source, file, tool === 'vitest' ? ' > ' : ' ')));
+    listed.push(...(await listSource(source, file, tool === 'vitest' ? ' > ' : ' ', tool === 'node' ? { node: true, focus: only } : {})));
   }
   return listed;
 }
@@ -302,8 +302,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       const nodeReport = evidence(files.node);
       const vitestReport = evidence(files.vitest, true);
       const vitestRun = vitestReport && vitest(vitestReport.lines, checkout, plant === 'last-attempt-only', named);
+      const nodeRun = nodeReport && nodeTest(nodeReport.lines, checkout, stderr);
       const reported: Reported[] = [
-        ...(nodeReport ? [nodeTest(nodeReport.lines, checkout, stderr)] : []),
+        ...(nodeRun ? [nodeRun] : []),
         ...(vitestRun ? [vitestRun] : []),
         ...(go ? [goTest(stdout, checkout)] : []),
       ];
@@ -357,7 +358,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       if (go && ran.length) return done('uncounted', { ...rest, mask: 'untraced program go' }, ran);
       if (!ran.length) return done('ran_nothing', rest, ran);
       // Every test a file the run ran holds ran, but those the check's own command left out (see listing.ts).
-      const missed = vitestRun ? unrun([...vitestRun.listed, ...(await listedIn(checkout, vitestRun.files))], ran, vitestRun.left, filters, named) : [];
+      const runFiles = [...(vitestRun?.files ?? []), ...(nodeRun?.files ?? []).map((file) => ({ file, tool: 'node' as const }))];
+      const listed = [...(vitestRun?.listed ?? []), ...(await listedIn(checkout, runFiles, filters.some((f) => f.option === '--test-only')))];
+      const missed = unrun(listed, [...(vitestRun?.ran ?? []), ...(nodeRun?.seen ?? [])], vitestRun?.left ?? [], filters, named);
       const dropped = missed.map((t) => ({ test: t.test, file: t.file, line: t.line, stack: null, assertion: false, message: `${t.test} never ran: something other than its source or the check's command left it out` }));
       return done(dropped.length ? 'failed' : 'passed', { ...rest, failures: dropped }, ran);
     } catch (error) {

@@ -22,6 +22,9 @@ export default async function* reporter(source) {
 function toLine(event) {
   const d = event.data ?? {};
   const line = { type: event.type, name: text(d.name), file: text(d.file), line: d.line ?? null, column: d.column ?? null, nesting: d.nesting ?? null, suite: d.details?.type === 'suite' };
+  // node:test reports a skipped test as passed, and a todo test that fails as failed though the run doesn't fail.
+  if (d.skip !== undefined && d.skip !== false) line.skip = true;
+  if (d.todo !== undefined && d.todo !== false) line.todo = true;
   if (event.type === 'test:fail') {
     const error = d.details?.error;
     const cause = error?.cause;
