@@ -194,7 +194,10 @@ export function testImports(root, rev, path, found = new Map()) {
   const source = show(root, rev, path);
   if (source === null || found.has(path)) return found;
   found.set(path, source);
-  const imported = [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*['"](\.{1,2}\/[^'"]+)['"]/gm)].map(([, specifier]) => posix.normalize(posix.join(posix.dirname(path), specifier)));
+  // A relative specifier, or one from the repository root as vite reads it, quoted or in a template
+  // literal without substitutions.
+  const imported = [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*(['"`])(\.{0,2}\/[^'"`$]+)\1/gm)]
+    .map(([, , specifier]) => posix.normalize(specifier.startsWith('/') ? specifier.slice(1) : posix.join(posix.dirname(path), specifier)));
   for (const file of imported.filter(underTestPaths)) testImports(root, rev, resolveModule(root, rev, file), found);
   return found;
 }

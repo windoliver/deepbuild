@@ -55,7 +55,16 @@ export function guard({ root, change, issue }, approvals, say) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
       const before = show(root, commit.parent, file.path);
-      if (before === null) continue; // an added file removes nothing
+      if (before === null) {
+        // An added file removes nothing, unless a module path may resolve to it in place of a file
+        // beside it, which it then stands in for.
+        for (const shadowed of shadows(root, commit, file.path)) {
+          const how = `, shadowed by ${file.path}, added beside it`;
+          if (lanesOnMain && isCheck(shadowed)) judge(checkEdit(shadowed, how), file.path, shadowed);
+          for (const edit of fixtureEdits(root, commit, { path: shadowed, status: 'D', hunks: [] }, show(root, commit.parent, shadowed), relevant)) judge({ ...edit, detail: edit.detail.replace(`${shadowed}: deleted`, `${shadowed}: shadowed by ${file.path}, added beside it`) }, file.path, shadowed);
+        }
+        continue;
+      }
       if (isTestFile(file.path)) for (const edit of testEdits(root, commit, file, before, relevant)) judge(edit, file.path, ...edit.test ? [named(file.path, edit.test)] : []);
       else if (underTestPaths(file.path)) for (const edit of fixtureEdits(root, commit, file, before, relevant)) judge(edit, file.path);
       if (DECISIONS[file.path]) for (const edit of decisionEdits(file, before, show(root, commit.sha, file.path) ?? '')) judge(edit, file.path, `${file.path}:${edit.line}`);
@@ -232,6 +241,16 @@ function fixtureEdits(root, commit, file, before, relevant) {
 
 const SCRIPTS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx'];
 const SCRIPT = /\.[cm]?[jt]sx?$/;
+
+// The scripts under the test paths, other than tests, that the commit's parent holds and an added
+// script may stand in for: one of the same name with another script extension, as check.js for
+// check.ts, or a folder's index the added file's name would resolve to first.
+function shadows(root, commit, path) {
+  if (!SCRIPT.test(path) || !underTestPaths(path) || isTestFile(path)) return [];
+  const stem = path.replace(SCRIPT, '');
+  const held = git(root, ['ls-tree', '-r', '-z', '--name-only', commit.parent, '--', posix.dirname(path)]).split('\0').filter(Boolean);
+  return held.filter((other) => other !== path && SCRIPT.test(other) && !isTestFile(other) && [stem, `${stem}/index`].includes(other.replace(SCRIPT, '')));
+}
 
 // The tagged tests whose span, or whose file, names the fixture's path, from the repo root or the
 // file's folder, and those whose file reaches it through other files under the test paths that name
