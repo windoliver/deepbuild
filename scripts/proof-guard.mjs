@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, isTestFile, named, removedLines, show, sourceOf, spans, tagsIn, tagsWithImports, underTestPaths } from './proof-change.mjs';
+import { blobId, isTestFile, literals, named, removedLines, show, sourceOf, spans, tagsIn, tagsWithImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -50,6 +50,21 @@ function outsideTests(text, tests) {
   return chars.join('');
 }
 
+/** The literals of the text that lie outside every test, whose white space is data a tagged test may compare. */
+const literalsOutside = (text, tests) => literals(text).filter(([from, to]) => !tests.some((test) => test.from <= from && to - 1 <= test.to));
+
+/** The text outside every test with its white space, `;` and `,` squeezed, except inside literals, which stay as written. */
+function squeezed(text, tests) {
+  const outside = outsideTests(text, tests);
+  let result = '', at = 0;
+  for (const [from, to] of literalsOutside(text, tests).sort((a, b) => a[0] - b[0])) {
+    if (from < at) continue;
+    result += `${outside.slice(at, from).replace(/[\s;,]+/g, ' ')}\0${outside.slice(from, to)}\0`;
+    at = to;
+  }
+  return result + outside.slice(at).replace(/[\s;,]+/g, ' ');
+}
+
 // A file both parents of a merge changed past git's merging is judged three ways, each side read
 // where it held the file before any rename: each guarded part must stay as the side that changed it
 // has it, as either side has it when both did, or as the merge base has it when neither did. The
@@ -73,7 +88,7 @@ function conflictEdits(root, commit, path, relevant) {
       const parts = new Map();
       for (const test of tests.filter((span) => span.leaf && tagsOf(span).length)) parts.set(test.name, [...(parts.get(test.name) ?? []), `${test.skipped}|${lines.slice(test.start - 1, test.end).join('\n')}`]);
       // White space aside, so a test that comes or goes leaves no trace here.
-      const outside = outsideTests(texts[index] ?? '', tests.filter((test) => test.leaf)).replace(/[\s;,]+/g, ' ');
+      const outside = squeezed(texts[index] ?? '', tests.filter((test) => test.leaf));
       return { parts: new Map([...parts].map(([name, list]) => [name, list.sort().join('\0')])), outside: texts[index] === null ? null : outside };
     });
     const names = [...new Set(views.flatMap(({ parts }) => [...parts.keys()]))];
@@ -133,8 +148,12 @@ function testEdits(root, commit, file, before, relevant) {
   const inner = (line) => tests.filter((test) => test.start <= line && line <= test.end).sort((a, b) => b.from - a.from)[0];
   const lines = file.status === 'D' ? before.split('\n').map((_, index) => index + 1) : removedLines(file);
   // A removed line holding code outside every test, such as a helper the tests read or one written
-  // after a test on its line, edits every tagged test; a blank one, as a deleted test leaves, doesn't.
-  const loose = (line) => /[^\s;,]/.test(outsideTests(before, tests).split('\n')[line - 1] ?? '');
+  // after a test on its line, edits every tagged test; a blank one, as a deleted test leaves, doesn't,
+  // unless it lies inside a literal outside the tests, such as a blank line of an expected value.
+  const outside = outsideTests(before, tests).split('\n');
+  const starts = outside.reduce((list, text) => [...list, list.at(-1) + text.length + 1], [0]);
+  const data = literalsOutside(before, tests);
+  const loose = (line) => /[^\s;,]/.test(outside[line - 1] ?? '') || data.some(([from, to]) => from < starts[line] && starts[line - 1] < to);
   for (const line of lines) {
     const test = inner(line);
     if (loose(line)) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);

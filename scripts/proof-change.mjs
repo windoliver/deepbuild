@@ -241,6 +241,23 @@ export function readApprovals(root, change) {
 const FORMS = ['skip', 'only', 'todo', 'each', 'for', 'concurrent', 'sequential', 'fails', 'skipIf', 'runIf', 'shuffle'];
 // The forms that take arguments of their own before the test's: it.each(table)(name, fn).
 const CALLED = ['each', 'for', 'skipIf', 'runIf'];
+/**
+ * The source ranges, [from, to) by UTF-16 offset, of its string, template, regular expression and JSX
+ * text literals: text inside them is data, so white space there counts as much as any other text.
+ */
+export function literals(source) {
+  const file = ts.createSourceFile('source.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const kinds = new Set([ts.SyntaxKind.StringLiteral, ts.SyntaxKind.NoSubstitutionTemplateLiteral, ts.SyntaxKind.TemplateHead, ts.SyntaxKind.TemplateMiddle,
+    ts.SyntaxKind.TemplateTail, ts.SyntaxKind.RegularExpressionLiteral, ts.SyntaxKind.JsxText]);
+  const found = [];
+  const visit = (node) => {
+    if (kinds.has(node.kind)) found.push([node.getStart(file), node.end]);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return found;
+}
+
 export function spans(source) {
   const file = ts.createSourceFile('source.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const line = (offset) => file.getLineAndCharacterOfPosition(offset).line + 1;
