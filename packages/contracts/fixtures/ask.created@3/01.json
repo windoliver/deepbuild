@@ -1,0 +1,47 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.created",
+  "writer": "app",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "unblock",
+    "question": "Accept the speech model licence on its site?",
+    "options": [
+      {
+        "id": "done",
+        "label": "I did it",
+        "decision": "none"
+      },
+      {
+        "id": "wait",
+        "label": "Leave it blocked",
+        "decision": "none"
+      }
+    ],
+    "recommended": "done",
+    "deadline": 1760186251123,
+    "fallback": "you",
+    "default": "wait",
+    "provisional": false,
+    "owner": "you",
+    "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba",
+    "pinned_to": {
+      "kind": "evidence",
+      "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212ad1e822ad8153f4b23f21dfca"
+    },
+    "steps": [
+      "Accept the licence on the model provider site, signed in as yourself",
+      "Answer \"I did it\": the download check runs again"
+    ],
+    "where": "the model provider site",
+    "why": "the narration job needs the speech model, and its licence costs $49",
+    "unblocks": [
+      "task:01K74FX2B4D6F8H0K2M4P6R8T0"
+    ],
+    "proves": "model.download",
+    "cost_usd": 49
+  }
+}

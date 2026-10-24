@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "agent": "claude-code",
+  "event": "SessionStart",
+  "seq": "1760013451123456789",
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "pid": 81234,
+  "ppid": 81200,
+  "matched": [],
+  "payload": {
+    "session_id": "abc",
+    "hook_event_name": "SessionStart"
+  },
+  "billing": {
+    "ANTHROPIC_API_KEY": true,
+    "CLAUDE_CODE_USE_BEDROCK": false
+  },
+  "late": true
+}
