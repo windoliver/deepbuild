@@ -488,6 +488,83 @@ describe('a test its file holds that never ran', () => {
       expect(listing[file]!.sort(), readFileSync(join(root, file), 'utf8')).toEqual(theirs);
     }
   }, 120_000);
+
+  it('node:test: a test the source skips or marks todo isn\'t run; a package script\'s setup or name filter that leaves a failing test out can\'t pass; the command\'s own filters can', async () => {
+    const own = folder({
+      'package.json': '{ "type": "module" }\n',
+      'a.test.mjs': `import { test } from 'node:test';\ntest('skipped', { skip: true }, () => {});\ntest('skips itself', (t) => { t.skip(); });\n`,
+    });
+    const s = await runCommandCheck(check(own, { spec: { ...VITEST, runner: 'node --test' } }));
+    expect([s.outcome, s.testsRun], s.output.stdout).toEqual(['ran_nothing', 0]);
+    writeFileSync(join(own, 'a.test.mjs'), `import assert from 'node:assert/strict';\nimport { test } from 'node:test';\ntest('total is 12', { todo: true }, () => { assert.equal(11, 12); });\ntest('exists', () => {});\n`);
+    const t = await runCommandCheck(check(own, { spec: { ...VITEST, runner: 'node --test' } }));
+    expect([t.outcome, t.testsRun, t.failures], t.output.stdout).toEqual(['passed', 1, []]);
+    const cart = folder({
+      'package.json': JSON.stringify({ type: 'module', scripts: { test: 'node --test --import ./setup.mjs', filtered: 'node --test --test-name-pattern=exists' } }),
+      // A todo test's failure doesn't fail the run (a skip from a hook still runs the test, and its failure counts).
+      'setup.mjs': `import { beforeEach } from 'node:test';\nbeforeEach((t) => { if (t.name.includes('total')) t.todo(); });\n`,
+      'test/cart.test.mjs': `import assert from 'node:assert/strict';\nimport { describe, test } from 'node:test';\ndescribe('cart', () => {\n  test('total is 12', () => { assert.equal(11, 12); });\n  test('exists', () => { assert.equal(1, 1); });\n});\n`,
+    });
+    for (const runner of ['npm test', 'npm run filtered']) {
+      const r = await runCommandCheck(check(cart, { spec: { ...VITEST, runner } }));
+      expect(r.outcome, `${runner}: ${r.output.stdout}`).toBe('failed');
+      expect(r.failures).toEqual([expect.objectContaining({ test: 'cart total is 12', file: 'test/cart.test.mjs', line: 4, assertion: false })]);
+    }
+    // node:test matches a pattern against a test's own name, its suites' and the full name.
+    for (const runner of ['node --test --test-name-pattern=exists', 'node --test --test-skip-pattern=total', 'node --test --test-skip-pattern="/^cart t/"', 'node --test --test-skip-pattern=^total']) {
+      const r = await runCommandCheck(check(cart, { spec: { ...VITEST, runner } }));
+      expect([r.outcome, r.testsRun], `${runner}: ${r.failures.map((f) => f.message).join('\n')}`).toEqual(['passed', 1]);
+    }
+    // node:test runs a focused test alone only when the command says so.
+    const only = folder({ 'package.json': '{ "type": "module" }\n', 'o.test.mjs': `import assert from 'node:assert/strict';\nimport { test } from 'node:test';\ntest('a', { only: true }, () => {});\ntest('b', () => { assert.fail(); });\n` });
+    const o = await runCommandCheck(check(only, { spec: { ...VITEST, runner: 'node --test --test-only o.test.mjs' } }));
+    expect([o.outcome, o.testsRun], o.failures.map((f) => f.message).join('\n')).toEqual(['passed', 1]);
+    // A hook's skip still runs the test: it was reported, not left out.
+    writeFileSync(join(only, 'o.test.mjs'), `import { beforeEach, test } from 'node:test';\nbeforeEach((t) => { if (t.name === 'a') t.skip(); });\ntest('a', () => {});\ntest('b', () => {});\n`);
+    const h = await runCommandCheck(check(only, { spec: { ...VITEST, runner: 'node --test' } }));
+    expect([h.outcome, h.testsRun], h.failures.map((f) => f.message).join('\n')).toEqual(['passed', 1]);
+    // A test of the same name in another suite doesn't stand in for one left out.
+    const twins = folder({
+      'package.json': JSON.stringify({ type: 'module', scripts: { test: 'node --test --test-name-pattern="^a exists$"' } }),
+      't.test.mjs': `import assert from 'node:assert/strict';\nimport { describe, test } from 'node:test';\ndescribe('a', () => { test('exists', () => {}); });\ndescribe('b', () => { test('exists', () => { assert.fail(); }); });\n`,
+    });
+    const w = await runCommandCheck(check(twins, { spec: { ...VITEST, runner: 'npm test' } }));
+    expect(w.outcome, w.output.stdout).toBe('failed');
+    expect(w.failures).toEqual([expect.objectContaining({ test: 'b exists', file: 't.test.mjs', line: 4 })]);
+  }, 300_000);
+
+  it('a node:test file lists the tests a node --test run of it runs, at their lines, with and without --test-only', async () => {
+    type Node = { suite: boolean; fn: string; mod: string; options: string; name: string; children: Node[] };
+    const { tree } = fc.letrec<{ tree: Node[]; node: Node }>((tie) => ({
+      tree: fc.array(tie('node'), { minLength: 1, maxLength: 4 }),
+      node: fc.oneof({ depthSize: 'small' },
+        fc.record({ suite: fc.constant(false), fn: fc.constantFrom('test', 'it'), mod: fc.constantFrom('', '', '.skip', '.todo', '.only'),
+          options: fc.constantFrom('', '{ skip: true }, ', '{ todo: true }, ', '{ only: true }, ', '{ timeout: 5000 }, '), name, children: fc.constant([] as Node[]) }),
+        fc.record({ suite: fc.constant(true), fn: fc.constantFrom('describe', 'suite'), mod: fc.constantFrom('', '', '.skip', '.todo', '.only'),
+          options: fc.constantFrom('', '{ skip: true }, ', '{ only: true }, '), name, children: tie('tree') })),
+    }));
+    const render = (nodes: Node[]): string => nodes.map((n) => `${n.fn}${n.mod}('${n.name}', ${n.options}() => {${n.suite ? `\n${render(n.children)}\n` : ''}});`).join('\n');
+    const root = folder({
+      'reporter.mjs': `export default async function* (source) {\n  for await (const e of source) if (e.type === 'test:pass' || e.type === 'test:fail') yield JSON.stringify({ name: e.data.name, file: e.data.file, line: e.data.line, suite: e.data.details?.type === 'suite', skip: e.data.skip, todo: e.data.todo }) + '\\n';\n}\n`,
+    });
+    const files = fc.sample(tree, { numRuns: 80, seed: 30 }).map((nodes, i) => {
+      const file = `test/c${i}.test.mjs`;
+      mkdirSync(join(root, 'test'), { recursive: true });
+      writeFileSync(join(root, file), `import { describe, it, suite, test } from 'node:test';\n${render(nodes)}\n`);
+      return file;
+    });
+    for (const only of [false, true]) {
+      const run = spawnSync(process.execPath, ['--test', ...(only ? ['--test-only'] : []), `--test-reporter=${join(root, 'reporter.mjs')}`, ...files], { cwd: root, encoding: 'utf8' });
+      const theirs = run.stdout.split('\n').filter(Boolean).map((l) => JSON.parse(l) as { name: string; file: string; line: number; suite: boolean; skip?: unknown; todo?: unknown })
+        // A file's own entry, which names its path, is no test of it.
+        .filter((t) => !t.suite && t.skip === undefined && t.todo === undefined && !files.includes(t.name));
+      expect(theirs.length, 'tests node runs').toBeGreaterThan(only ? 10 : 20);
+      for (const file of files) {
+        const ours = (await listSource(readFileSync(join(root, file), 'utf8'), file, ' ', { node: true, focus: only })).map((t) => `${t.names?.at(-1)}:${t.line}`).sort();
+        expect(ours, `--test-only ${only}:\n${readFileSync(join(root, file), 'utf8')}`).toEqual(theirs.filter((t) => t.file === join(root, file)).map((t) => `${t.name}:${t.line}`).sort());
+      }
+    }
+  }, 120_000);
 });
 
 describe('a tool that isn\'t installed', () => {

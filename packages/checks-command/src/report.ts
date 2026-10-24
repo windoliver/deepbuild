@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Failure } from '@deepbuild/conformance';
-import type { Left, Listed } from './listing.js';
+import type { Left, Listed, Seen } from './listing.js';
 
 /** A file's lines without its trailers, and why it isn't the run's whole record when it isn't. */
 export interface Evidence { lines: string[]; altered: string | null }
@@ -69,17 +69,28 @@ export interface Ran { test: string; file: string | null; attempts: Attempt[]; m
 /** `malformed`: lines the tool's reporter can't have written, which leave the run uncounted. */
 export interface Reported { ran: Ran[]; failures: Failure[]; malformed: number }
 
-interface NodeLine { type: string; name: string | null; file: string | null; suite?: boolean; error?: { message: string; stack: string | null; code: string | null; name: string | null; failureType: string | null }; message?: string }
-/** node:test's report, as check.kind@1's reporter writes it (#314). */
-export function nodeTest(lines: string[], checkout: string, stderr: string): Reported {
+interface NodeLine { type: string; name: string | null; file: string | null; line?: unknown; suite?: boolean; skip?: boolean; todo?: boolean; error?: { message: string; stack: string | null; code: string | null; name: string | null; failureType: string | null }; message?: string }
+/**
+ * node:test's report, as check.kind@1's reporter writes it (#314): a skipped test that passed, or a todo test, didn't
+ * run. With each file a test of it came from and every test the report names at its call's line, but a todo test's
+ * failure, which the run doesn't count (`seen`), so the runner can find those of a file's tests it never reported.
+ */
+export function nodeTest(lines: string[], checkout: string, stderr: string): Reported & { files: string[]; seen: Seen[] } {
   const read = parsed<NodeLine>(lines);
   const all = read.filter((l) => typeof l === 'object' && l !== null && (l.file === null || typeof l.file === 'string') && (l.name === null || typeof l.name === 'string')
     && (l.error === undefined || (typeof l.error === 'object' && l.error !== null)));
   const fileEntry = (l: NodeLine): boolean => l.file !== null && l.name !== null && resolve(checkout, l.name) === l.file;
-  const ran = all.filter((l) => (l.type === 'test:pass' || l.type === 'test:fail') && !l.suite && !fileEntry(l))
+  // A test a hook skips still runs: its failure counts, as the tool counts it.
+  const counted = (l: NodeLine): boolean => (l.type === 'test:fail' || (l.type === 'test:pass' && l.skip !== true)) && !l.suite && l.todo !== true;
+  const ran = all.filter((l) => counted(l) && !fileEntry(l))
     .map((l) => ({ test: l.name ?? '', file: l.file && under(checkout, l.file), attempts: [l.type === 'test:pass' ? 'passed' : 'failed'] as Attempt[], meta: {} }));
+  // A hook's skip still runs the test's body: it was no test left out.
+  const seen = all.filter((l) => (l.type === 'test:pass' || (l.type === 'test:fail' && l.todo !== true)) && !l.suite && !fileEntry(l) && Number.isSafeInteger(l.line))
+    .map((l) => ({ test: l.name ?? '', file: l.file && under(checkout, l.file), line: l.line as number }));
+  const files = [...new Set(all.flatMap((l) => (l.file && l.type.startsWith('test:') ? [under(checkout, l.file)] : [])))]
+    .filter((f): f is string => f !== null && !f.startsWith('node_modules/'));
   const printed = all.filter((l) => l.type === 'test:stderr').map((l) => l.message ?? '').join('') || stderr;
-  const failures = all.filter((l) => l.type === 'test:fail' && !l.suite && l.error?.failureType !== 'subtestsFailed').map((l) => {
+  const failures = all.filter((l) => counted(l) && l.type === 'test:fail' && l.error?.failureType !== 'subtestsFailed').map((l) => {
     const e = l.error ?? { message: '(no error in the report)', stack: null, code: null, name: null, failureType: null };
     const file = l.file && under(checkout, l.file);
     // A crash outside any test has no cause of its own in the report; the tool wrote the error to stderr.
@@ -88,7 +99,7 @@ export function nodeTest(lines: string[], checkout: string, stderr: string): Rep
     const message = caught ? (caught.split('\n').find((t) => /\b\w*Error\b/.test(t)) ?? e.message) : e.message;
     return failure(checkout, l.name ?? file ?? '.', file, { name, message, stack: caught ?? e.stack, code: e.code });
   });
-  return { ran, failures, malformed: lines.length - all.length };
+  return { ran, failures, malformed: lines.length - all.length, files, seen };
 }
 
 interface VitestLine { type: string; name?: string; file: string | null; retries?: number; errors: Caught[]; meta?: Record<string, unknown>; filter?: unknown; tool?: unknown; line?: unknown }
