@@ -316,3 +316,13 @@ test("once main holds the proof lanes, a file the test runner's config names, su
   for (const path of ['tests/setup.ts', 'tests/global/one.ts']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), refused.join('\n'));
   assert.deepEqual(problems(proof(scene({ 'tests/helpers/other.mjs': '// edited\n' }), ['guard']), 'guard'), [], 'a file the config names nowhere is free');
 });
+
+test('a file the config names without its extension, and each file under the test paths it imports, is guarded as the config is', (t) => {
+  const scene = (files) => repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'vitest.config.ts': "export default { test: { setupFiles: ['./tests/setup'] } };\n", 'tests/setup.ts': "import './hook';\nimport './deep/index.ts';\n", 'tests/hook.ts': '// hook\n', 'tests/deep/index.ts': "import '../deeper.mjs';\n", 'tests/deeper.mjs': '// deeper\n' },
+    commits: [{ files, message: `Edit\n\nPart of #${ISSUE}` }],
+  });
+  const refused = problems(proof(scene({ 'tests/setup.ts': "import './hook';\nimport './deep/index.ts';\n// edited\n", 'tests/hook.ts': '// hollow\n', 'tests/deeper.mjs': '// hollow\n' }), ['guard']), 'guard');
+  for (const path of ['tests/setup.ts', 'tests/hook.ts', 'tests/deeper.mjs']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), refused.join('\n'));
+});

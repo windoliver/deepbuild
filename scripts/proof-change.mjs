@@ -181,6 +181,11 @@ export function readIssue(root, change) {
   return { number, word, criteria };
 }
 
+// A module path as vite and node resolve it: as written, with a script extension, or a folder's index.
+const EXTENSIONS = ['.ts', '.mts', '.cts', '.tsx', '.js', '.mjs', '.cjs', '.jsx'];
+export const resolveModule = (root, rev, path) => [path, ...EXTENSIONS.map((extension) => path + extension), ...EXTENSIONS.map((extension) => `${path}/index${extension}`)]
+  .find((candidate) => show(root, rev, candidate) !== null) ?? path;
+
 /**
  * A test file with the files under the test paths it imports, near and far, each with its source.
  * `rev` null reads the worktree.
@@ -190,7 +195,7 @@ export function testImports(root, rev, path, found = new Map()) {
   if (source === null || found.has(path)) return found;
   found.set(path, source);
   const imported = [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*['"](\.{1,2}\/[^'"]+)['"]/gm)].map(([, specifier]) => posix.normalize(posix.join(posix.dirname(path), specifier)));
-  for (const file of imported.filter(underTestPaths)) testImports(root, rev, file, found);
+  for (const file of imported.filter(underTestPaths)) testImports(root, rev, resolveModule(root, rev, file), found);
   return found;
 }
 
