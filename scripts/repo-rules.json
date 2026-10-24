@@ -34,6 +34,10 @@
     },
     "package.json": {
       "devDependencies": {
+        "@stryker-mutator/core": {
+          "spec": "10.0.0",
+          "why": "Issue #569: StrykerJS, the mutation lane's mutator for the TypeScript lines a change adds, run through its command test runner."
+        },
         "@types/node": {
           "spec": "24.19.2",
           "why": "Issue #12: Node's types for the TypeScript workspaces, at the Node 24.22 floor."
