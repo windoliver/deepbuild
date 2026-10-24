@@ -182,16 +182,20 @@ export function readIssue(root, change) {
 }
 
 /**
- * The tags a test file holds, with those of the files under the test paths it imports, as in
- * test(`${ID.coverage} …`) with ID from a helper. `rev` null reads the worktree.
+ * A test file with the files under the test paths it imports, near and far, each with its source.
+ * `rev` null reads the worktree.
  */
-export function tagsWithImports(root, rev, path, seen = new Set()) {
+export function testImports(root, rev, path, found = new Map()) {
   const source = show(root, rev, path);
-  if (source === null || seen.has(path)) return [];
-  seen.add(path);
+  if (source === null || found.has(path)) return found;
+  found.set(path, source);
   const imported = [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*['"](\.{1,2}\/[^'"]+)['"]/gm)].map(([, specifier]) => posix.normalize(posix.join(posix.dirname(path), specifier)));
-  return [...new Set([...tagsIn(source), ...imported.filter(underTestPaths).flatMap((file) => tagsWithImports(root, rev, file, seen))])];
+  for (const file of imported.filter(underTestPaths)) testImports(root, rev, file, found);
+  return found;
 }
+
+/** The tags a test file holds, with those of the files under the test paths it imports, as in test(`${ID.coverage} …`) with ID from a helper. */
+export const tagsWithImports = (root, rev, path) => [...new Set([...testImports(root, rev, path).values()].flatMap(tagsIn))];
 
 /**
  * Approval items by the commit they approve. An approval is an annotated tag under

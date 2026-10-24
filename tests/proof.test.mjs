@@ -211,3 +211,17 @@ test('a tagged test in a node:test suite skipped by its options is skipped, not 
   const result = before(t, { f: 4 }, { f: 3, file: `describe('a', () => {\n${sums.replace('adds', 'adds too')}});\n\ndescribe('opt', { skip: true }, () => {\n${sums}});\n` });
   assert.ok(!neverReported(result, `opt › ${c1} adds`), show(result));
 });
+
+test('a tagged test declared unskipped that a hook skips as it runs proved nothing: the run is inconclusive', (t) => {
+  const file = (hook) => `${hook ? 'beforeEach((t) => t.skip());\n' : ''}describe('s', () => {\n${sums}});\n`;
+  const result = before(t, { f: 4, file: file(false) }, { f: 3, file: `import { beforeEach } from 'node:test';\n${file(true)}` });
+  assert.ok(problems(result, 'before').some((found) => found.startsWith('INCONCLUSIVE') && found.includes(`s › ${c1} adds: declared unskipped, but skipped as it ran`)), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test('a skipped subtest of another test, ending in a tagged name, is no report of that tagged test', (t) => {
+  const loop = (extra) => `const cases = [1];\n${extra}describe('s', () => {\n  for (const c of cases) {\n  ${sums.trim()}\n  }\n});\n`;
+  const result = before(t, { f: 4, file: loop('') },
+    { f: 3, file: loop(`cases.length = 0;\nit('wrapper', async (t) => {\n  await t.test('s › ${c1} adds', { skip: true }, () => {});\n});\n`) });
+  assert.ok(neverReported(result, `s › ${c1} adds`), show(result));
+});
