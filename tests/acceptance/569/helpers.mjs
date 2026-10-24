@@ -1,7 +1,6 @@
 // Shared by the #569 acceptance tests. The proof lanes are reached only by running
 // `node scripts/proof.mjs [--release] [lane ...]` from this checkout with its cwd at a scratch git
-// repository, and the preflight only through `scripts/lanes.mjs`'s exported `checks` and
-// `releaseChecks` and package.json's scripts (README: Surfaces).
+// repository; preflight.test.mjs reaches the preflight on its own (README: Surfaces).
 //
 // Every tag of a planted issue is built at runtime from its criterion's text, so no file here carries
 // a tag a real issue's trace lane could read as its own.
@@ -11,12 +10,11 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 export const root = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
 export const BASE = '7fc4f14a65d10cb6ad4a3102de7980563cdd8a58'; // origin/main when these tests were drafted; no proof lanes
 export const PROOF = join(root, 'scripts/proof.mjs');
-export const lanesUrl = pathToFileURL(join(root, 'scripts/lanes.mjs')).href;
 
 // The planted issues. ISSUE is the one each change names; OTHER is an unrelated issue.
 export const ISSUE = 9001;

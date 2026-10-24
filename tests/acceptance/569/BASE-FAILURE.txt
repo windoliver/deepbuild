@@ -128,3 +128,19 @@ test at tests/acceptance/569/before.test.mjs:38:1
     diff: 'simple'
   }
 spec exit 1
+
+Redraft of preflight.test.mjs, on merge base 4d42ae4 (holds #684's DEEP_PREFLIGHT=release preflight):
+$ node --test tests/acceptance/569/preflight.test.mjs
+✖ #569.f7197598 the local preflight (npm run preflight) runs scripts/proof.mjs exactly once, with no mode (595.604583ms)
+✖ #569.60ea8a8b #569.f7197598 the release preflight (npm run release:check) runs scripts/proof.mjs exactly once, with --release, and never without (31.817583ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 664.625166
+✖ failing tests:
+  AssertionError [ERR_ASSERTION]: expected one run of scripts/proof.mjs with no arguments
+  AssertionError [ERR_ASSERTION]: expected one run of scripts/proof.mjs --release, with no lane names
