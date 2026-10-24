@@ -303,6 +303,7 @@ export function spans(source) {
     return parts.every(([value]) => value !== null) ? node.head.text + parts.map((part) => part.join('')).join('') : null;
   };
   const found = [];
+  const calls = new Map();
   const visit = (node, suites) => {
     let inner = suites;
     if (ts.isCallExpression(node)) {
@@ -320,7 +321,17 @@ export function spans(source) {
         const name = own === null || suites.some((suite) => suite.name === null) ? null : [...suites.map((suite) => suite.name), own].join(' › ');
         const skipped = forms.some((form) => ['skip', 'todo', 'skipIf'].includes(form)) || suites.some((suite) => suite.skipped);
         const only = forms.includes('only') || suites.some((suite) => suite.only);
-        const span = { name, kind: root.text, from: node.getStart(file), to: node.end - 1, start: line(node.getStart(file)), end: line(node.end - 1), skipped, only, leaf: true };
+        // It registers whenever its file or suite runs only as a statement of the file or of its
+        // suite's callback, not under an if, a && or a function no one calls.
+        let statement = node.parent;
+        while (ts.isAwaitExpression(statement) || ts.isParenthesizedExpression(statement) || ts.isVoidExpression(statement)) statement = statement.parent;
+        const scope = ts.isExpressionStatement(statement) ? statement.parent : statement;
+        const callback = ts.isBlock(scope) ? scope.parent : scope;
+        const suite = suites.at(-1);
+        const runs = (suite ? suite.runs && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && calls.get(suite) === callback.parent : ts.isSourceFile(scope))
+          && (ts.isExpressionStatement(statement) || (suite && scope === statement && ts.isArrowFunction(statement)));
+        const span = { name, kind: root.text, from: node.getStart(file), to: node.end - 1, start: line(node.getStart(file)), end: line(node.end - 1), skipped, only, runs, leaf: true };
+        calls.set(span, node);
         for (const suite of suites) suite.leaf = false;
         found.push(span);
         inner = [...suites, span];
