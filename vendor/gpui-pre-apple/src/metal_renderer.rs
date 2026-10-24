@@ -19,7 +19,8 @@ use objc2_core_foundation::CFRetained;
 use objc2_core_video::{
     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
-    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
+    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_32BGRA,
+    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
 };
 use parking_lot::Mutex;
 
@@ -60,7 +61,7 @@ pub mod gpu_ledger {
         COMMITTED.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub(super) fn completed(buffer: &AnyObject) {
+    pub(super) fn completed(buffer: &AnyObject) -> u64 {
         // SAFETY: `GPUStartTime` and `GPUEndTime` are `MTLCommandBuffer` properties returning
         // `CFTimeInterval` (seconds as f64), read once the buffer completed.
         let (start, end): (f64, f64) = unsafe {
@@ -72,6 +73,71 @@ pub mod gpu_ledger {
         let ns = ((end - start).max(0.0) * 1e9).round() as u64;
         GPU_NS.fetch_add(ns, Ordering::SeqCst);
         COMPLETED.fetch_add(1, Ordering::SeqCst);
+        ns
+    }
+}
+
+/// DeepBuild patch (windoliver/deepbuild#377): what the canvas's GPU layer needs from the frame
+/// command buffers that show its surfaces. A BGRA surface (a slot another renderer drew into an
+/// IOSurface) composites premultiplied, with source factor one and destination factor one minus
+/// source alpha. Each frame command buffer that samples one reports the pixel buffers it samples
+/// when it is committed, and again when it completes, so a slot is released only once GPUI is
+/// done reading it. The planted twins exist for the GPU layer's acceptance tests: one divides
+/// alpha out of the surface, the other draws surfaces after the rest of the scene.
+pub mod gpu_surfaces {
+    use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+    use std::sync::{Arc, RwLock};
+
+    /// A frame command buffer's report: the identity of each BGRA pixel buffer it samples (the
+    /// `CVPixelBuffer`'s address), when the buffer is committed, then its completion with the GPU
+    /// time it took.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum Event {
+        Committed { buffer: u64, surfaces: Vec<u64> },
+        Completed { buffer: u64, gpu_ns: u64 },
+    }
+
+    /// A planted wrong compositor, for the tests that must catch it.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[repr(u8)]
+    pub enum Planted {
+        None = 0,
+        /// Divides the surface's color by its alpha and blends it as straight alpha.
+        DividesAlpha = 1,
+        /// Draws every surface after the rest of the scene, over whatever was painted above it.
+        AfterScene = 2,
+    }
+
+    pub type Hook = Arc<dyn Fn(Event) + Send + Sync>;
+
+    static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
+    static PLANTED: AtomicU8 = AtomicU8::new(Planted::None as u8);
+    static NEXT_BUFFER: AtomicU64 = AtomicU64::new(1);
+
+    pub fn set_hook(hook: Option<Hook>) {
+        *HOOK.write().unwrap_or_else(|e| e.into_inner()) = hook;
+    }
+
+    pub fn plant(planted: Planted) {
+        PLANTED.store(planted as u8, Ordering::SeqCst);
+    }
+
+    pub(super) fn planted() -> Planted {
+        match PLANTED.load(Ordering::SeqCst) {
+            1 => Planted::DividesAlpha,
+            2 => Planted::AfterScene,
+            _ => Planted::None,
+        }
+    }
+
+    pub(super) fn next_buffer() -> u64 {
+        NEXT_BUFFER.fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub(super) fn report(event: Event) {
+        if let Some(hook) = HOOK.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            hook(event);
+        }
     }
 }
 
@@ -171,6 +237,12 @@ pub struct MetalRenderer {
     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
     surfaces_pipeline_state: metal::RenderPipelineState,
+    /// DeepBuild patch (windoliver/deepbuild#377): BGRA surfaces, premultiplied, and the planted
+    /// twin that divides alpha out.
+    surfaces_bgra_pipeline_state: metal::RenderPipelineState,
+    surfaces_bgra_divided_pipeline_state: metal::RenderPipelineState,
+    /// The pixel buffers the frame being encoded samples, for `gpu_surfaces`.
+    sampled_surfaces: Vec<u64>,
     unit_vertices: metal::Buffer,
     #[allow(clippy::arc_with_non_send_sync)]
     instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
@@ -406,6 +478,23 @@ impl MetalRenderer {
             "surface_fragment",
             MTLPixelFormat::BGRA8Unorm,
         );
+        // DeepBuild patch (windoliver/deepbuild#377): the slot stays premultiplied into the window.
+        let surfaces_bgra_pipeline_state = build_path_sprite_pipeline_state(
+            &device,
+            &library,
+            "surfaces_bgra",
+            "surface_vertex",
+            "surface_bgra_fragment",
+            MTLPixelFormat::BGRA8Unorm,
+        );
+        let surfaces_bgra_divided_pipeline_state = build_pipeline_state(
+            &device,
+            &library,
+            "surfaces_bgra_divided",
+            "surface_vertex",
+            "surface_bgra_divided_fragment",
+            MTLPixelFormat::BGRA8Unorm,
+        );
 
         let command_queue = device.new_command_queue();
         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
@@ -446,6 +535,9 @@ impl MetalRenderer {
             monochrome_sprites_pipeline_state,
             polychrome_sprites_pipeline_state,
             surfaces_pipeline_state,
+            surfaces_bgra_pipeline_state,
+            surfaces_bgra_divided_pipeline_state,
+            sampled_surfaces: Vec::new(),
             unit_vertices,
             instance_buffer_pool,
             sprite_atlas,
@@ -602,6 +694,7 @@ impl MetalRenderer {
                 scene.surfaces.len(),
             )
         })?;
+        self.sampled_surfaces.clear();
         let command_buffer = self.draw_primitives_to_texture(
             scene,
             &instance_bindings,
@@ -613,12 +706,25 @@ impl MetalRenderer {
         let instance_buffer_pool = self.instance_buffer_pool.clone();
         let instance_buffer = Cell::new(Some(writer.finish()));
         gpu_ledger::committed();
+        // DeepBuild patch (windoliver/deepbuild#377): every caller commits the buffer it gets back,
+        // so the surfaces it samples are reported here, before its completed handler can run.
+        let surfaces_buffer = (!self.sampled_surfaces.is_empty()).then(|| {
+            let buffer = gpu_surfaces::next_buffer();
+            gpu_surfaces::report(gpu_surfaces::Event::Committed {
+                buffer,
+                surfaces: mem::take(&mut self.sampled_surfaces),
+            });
+            buffer
+        });
         let block = RcBlock::new(move |buffer: ptr::NonNull<AnyObject>| {
             if let Some(instance_buffer) = instance_buffer.take() {
                 instance_buffer_pool.lock().release(instance_buffer);
             }
             // SAFETY: Metal hands a completed handler the command buffer it completed.
-            gpu_ledger::completed(unsafe { buffer.as_ref() });
+            let gpu_ns = gpu_ledger::completed(unsafe { buffer.as_ref() });
+            if let Some(buffer) = surfaces_buffer {
+                gpu_surfaces::report(gpu_surfaces::Event::Completed { buffer, gpu_ns });
+            }
         });
         // SAFETY: Both pointee types are opaque views of the same Objective-C block pointer ABI.
         unsafe {
@@ -778,6 +884,8 @@ impl MetalRenderer {
             Some(metal::MTLClearColor::new(0., 0., 0., alpha)),
         );
 
+        // DeepBuild patch (windoliver/deepbuild#377): the planted twin that draws surfaces last.
+        let surfaces_last = gpu_surfaces::planted() == gpu_surfaces::Planted::AfterScene;
         for batch in scene.batches() {
             match batch {
                 PrimitiveBatch::Shadows(range) => {
@@ -835,6 +943,7 @@ impl MetalRenderer {
                         viewport_size,
                         command_encoder,
                     ),
+                PrimitiveBatch::Surfaces(_) if surfaces_last => {}
                 PrimitiveBatch::Surfaces(range) => self.draw_surfaces(
                     &scene.surfaces[range.clone()],
                     range.start,
@@ -844,6 +953,15 @@ impl MetalRenderer {
                 ),
                 PrimitiveBatch::SubpixelSprites { .. } => unreachable!(),
             }
+        }
+        if surfaces_last {
+            self.draw_surfaces(
+                &scene.surfaces,
+                0,
+                instance_bindings,
+                viewport_size,
+                command_encoder,
+            );
         }
 
         command_encoder.end_encoding();
@@ -1266,6 +1384,19 @@ impl MetalRenderer {
                 DevicePixels::from(CVPixelBufferGetHeight(image_buffer) as i32),
             );
 
+            // DeepBuild patch (windoliver/deepbuild#377): a BGRA surface with alpha, sampled from
+            // its one plane and composited premultiplied (or by the planted divided twin).
+            if CVPixelBufferGetPixelFormatType(image_buffer) == kCVPixelFormatType_32BGRA {
+                self.draw_bgra_surface(
+                    image_buffer,
+                    texture_size,
+                    (first_surface + index) as u64,
+                    command_encoder,
+                );
+                command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
+                continue;
+            }
+
             assert_eq!(
                 CVPixelBufferGetPixelFormatType(image_buffer),
                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
@@ -1323,6 +1454,66 @@ impl MetalRenderer {
                 (first_surface + index) as u64,
             );
         }
+    }
+}
+
+impl MetalRenderer {
+    /// DeepBuild patch (windoliver/deepbuild#377): draws one BGRA surface and notes the pixel
+    /// buffer as sampled by the frame being encoded.
+    fn draw_bgra_surface(
+        &mut self,
+        image_buffer: &objc2_core_video::CVPixelBuffer,
+        texture_size: Size<DevicePixels>,
+        instance: u64,
+        command_encoder: &metal::RenderCommandEncoderRef,
+    ) {
+        let texture = unsafe {
+            let mut texture = ptr::null_mut();
+            let status = CVMetalTextureCache::create_texture_from_image(
+                None,
+                &self.core_video_texture_cache,
+                image_buffer,
+                None,
+                objc2_metal::MTLPixelFormat::BGRA8Unorm,
+                CVPixelBufferGetWidth(image_buffer),
+                CVPixelBufferGetHeight(image_buffer),
+                0,
+                ptr::NonNull::from(&mut texture),
+            );
+            assert_eq!(
+                status, kCVReturnSuccess,
+                "failed to create CoreVideo Metal texture"
+            );
+            CFRetained::<CVMetalTexture>::from_raw(
+                ptr::NonNull::new(texture).expect("CoreVideo returned a null texture"),
+            )
+        };
+        let pipeline = match gpu_surfaces::planted() {
+            gpu_surfaces::Planted::DividesAlpha => &self.surfaces_bgra_divided_pipeline_state,
+            _ => &self.surfaces_bgra_pipeline_state,
+        };
+        command_encoder.set_render_pipeline_state(pipeline);
+        command_encoder.set_vertex_bytes(
+            SurfaceInputIndex::TextureSize as u64,
+            mem::size_of_val(&texture_size) as u64,
+            &texture_size as *const Size<DevicePixels> as *const _,
+        );
+        command_encoder.set_fragment_texture(SurfaceInputIndex::YTexture as u64, unsafe {
+            let texture =
+                CVMetalTextureGetTexture(&texture).expect("CoreVideo returned no Metal texture");
+            Some(metal::TextureRef::from_ptr(
+                objc2::rc::Retained::as_ptr(&texture) as *mut _,
+            ))
+        });
+        command_encoder.draw_primitives_instanced_base_instance(
+            metal::MTLPrimitiveType::Triangle,
+            0,
+            6,
+            1,
+            instance,
+        );
+        self.sampled_surfaces
+            .push(ptr::from_ref(image_buffer) as usize as u64);
     }
 }
 

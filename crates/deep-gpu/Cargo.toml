@@ -1,0 +1,28 @@
+[package]
+name = "deep-gpu"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #377: the GPU layer, for 3D and effects only. One wgpu device for the app draws offscreen
+# into a GPU surface's slots off the UI thread, with fences and a release signal; on macOS a slot
+# is an IOSurface GPUI composites in place (zero copy), and everywhere a copy through memory is the
+# fallback. Encode workers, uploads that settle over frames, the compile thread, the blank guard
+# before image comparisons and the handoff's conformance decision live here too. The canvas core
+# is its only client: nothing in a plug-in or an agent links it.
+# The test encode pool, which finishes encodes in an order a test asks for; no shipped build has it.
+[features]
+test-pool = []
+
+[dependencies]
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "parking_lot"] }
+pollster = "0.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "parking_lot", "metal"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFBase", "CFDictionary", "CFString", "CFNumber"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferIOSurface", "CVReturn", "objc2-io-surface"] }
+objc2-io-surface = { version = "0.3", default-features = false, features = ["std", "IOSurfaceRef", "objc2", "objc2-core-foundation"] }
+objc2-metal = { version = "0.3", default-features = false, features = ["std", "MTLDevice", "MTLTexture", "MTLResource", "MTLPixelFormat", "MTLTypes", "objc2-io-surface"] }
