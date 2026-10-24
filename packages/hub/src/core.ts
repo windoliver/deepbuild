@@ -937,7 +937,9 @@ export class Core {
   private async replaySpool(): Promise<void> {
     if (!existsSync(this.root.spool)) return;
     // Every deep-hook appends to spool.jsonl. It moves aside first, so a hook that spools during the replay begins
-    // a new file, which the next replay takes; one that opened it just before finishes its one write.
+    // a new file, which the next replay takes. A hook whose write lands in the moved file sees the path no longer
+    // names it and writes the line again to the new one (deep-hook's spool), so nothing written late is lost; the
+    // short wait only lets a write in flight finish here rather than read as a cut line.
     const live = join(this.root.spool, SPOOL);
     if (existsSync(live)) {
       renameSync(live, join(this.root.spool, `replay-${ulid(Date.now())}.jsonl`));
