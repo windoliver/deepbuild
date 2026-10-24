@@ -29,7 +29,8 @@ export function send(socket: string, line: string): Promise<string> {
 }
 
 /** A hub `withHub` started: it can be restarted (with its own environment), and waited on when it kills itself. */
-export interface Hub { restart: (env?: Record<string, string>) => Promise<void>; exited: (within?: number) => Promise<void> }
+/** `between` runs with the hub stopped, before it starts again. */
+export interface Hub { restart: (env?: Record<string, string>, between?: () => void) => Promise<void>; exited: (within?: number) => Promise<void> }
 
 /** Runs `body` against a hub started on a temp home with `env` added, then stops the hub and removes the home. */
 export async function withHub(body: (root: string, home: string, hub: Hub) => Promise<void>, env: Record<string, string> = {}): Promise<void> {
@@ -39,7 +40,12 @@ export async function withHub(body: (root: string, home: string, hub: Hub) => Pr
   let hub: ChildProcessByStdio<null, Readable, null>;
   const start = async (extra: Record<string, string>) => {
     hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home, ...extra }, stdio: ['ignore', 'pipe', 'inherit'] });
-    await new Promise((resolve, reject) => { hub.stdout.once('data', resolve); hub.once('exit', () => reject(Error('the hub exited before it was ready'))); });
+    let timer: NodeJS.Timeout | undefined;
+    await new Promise((resolve, reject) => {
+      hub.stdout.once('data', resolve);
+      hub.once('exit', () => reject(Error('the hub exited before it was ready')));
+      timer = setTimeout(() => reject(Error("the hub wasn't ready within 10 s")), 10_000);
+    }).finally(() => clearTimeout(timer));
   };
   const exited = async (within = 10_000) => {
     if (hub.exitCode !== null || hub.signalCode !== null) return;
@@ -57,7 +63,7 @@ export async function withHub(body: (root: string, home: string, hub: Hub) => Pr
   };
   try {
     await start(env);
-    await body(root, home, { restart: async (extra = {}) => { await stop(); await start(extra); }, exited });
+    await body(root, home, { restart: async (extra = {}, between) => { await stop(); between?.(); await start(extra); }, exited });
   } finally {
     await stop();
     rmSync(home, { recursive: true, force: true });

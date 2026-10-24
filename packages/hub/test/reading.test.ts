@@ -213,4 +213,25 @@ describe('the hooks-not-reaching reading', () => {
       expect(await readings(), 'the last turn reached no hook').toEqual(['hooks not reaching DeepBuild']);
     }, { DEEP_HUB_TEST_CRASH: 'before:session.reading' });
   }, 30_000);
+
+  it('starts with a spooled call of a session it has met, and judges that session\'s turns', async () => {
+    await withHub(async (root, home, { restart }) => {
+      const now = () => String(BigInt(Date.now()) * 1_000_000n);
+      const { line, hook, readings } = session(root, home, now);
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      line({ type: 'user', uuid: 'turn-1', message: { role: 'user', content: 'list the files' } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Bash', input: { command: 'ls' } }] } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t2', name: 'Bash', input: { command: 'pwd' } }] } });
+      line({ type: 'user', uuid: 'turn-2', message: { role: 'user', content: 'thanks' } });
+      // With the hub stopped, both of turn 1's calls were spooled.
+      const transcript = join(home, '.claude', 'projects', 'tmp', `${SESSION}.jsonl`);
+      await restart({}, () => {
+        mkdirSync(join(root, 'spool'), { recursive: true, mode: 0o700 });
+        const spooled = (id: string, call: string, command: string) => hookLine(id, 'PreToolUse', { session_id: SESSION, cwd: '/tmp', transcript_path: transcript, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: call }, { ppid: process.pid });
+        writeFileSync(join(root, 'spool', 'spool.jsonl'), spooled('01K74FKZVKZGATTBZAEGPRES01', 'toolu_t1', 'ls') + spooled('01K74FKZVKZGATTBZAEGPRES02', 'toolu_t2', 'pwd'), { mode: 0o600 });
+      });
+      expect(await hook('UserPromptSubmit', { prompt: 'thanks' })).toContain('"ack"');
+      expect(await readings(), 'turn 1\'s calls reached the hub, through the spool').toEqual([]);
+    });
+  }, 30_000);
 });
