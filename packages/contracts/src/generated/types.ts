@@ -1491,25 +1491,6 @@ export interface HookRequestV2 {
   billing?: { [key: string]: boolean };
 }
 
-/** hooks.missing@1 */
-export interface HooksMissing {
-  v: 1;
-  id: string;
-  kind: "hooks.missing";
-  subject?: string;
-  writer: "core";
-  actor: string;
-  scope: string;
-  ts: number;
-  seq?: bigint;
-  log_pos?: number;
-  data: {
-    turn: string;
-    tool_calls: number;
-  };
-  evidence?: Array<string>;
-}
-
 /** hub.stopped@1 */
 export interface HubStopped {
   v: 1;
