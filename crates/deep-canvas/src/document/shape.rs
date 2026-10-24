@@ -5,9 +5,10 @@
 
 use serde_json::{json, Value};
 
-use crate::canon::{canonical_bytes, revision_hash, CanonError, Shape, Width};
+use crate::canon::{canonical_bytes, sha256_hex, CanonError, Shape, Width};
 use crate::kinds::{parse_kind, registry, Param, Registry};
 
+use super::requires::derived_kinds;
 use super::{kind_text, member, AT_VECTORS, ID_MAPS};
 
 /// The default values, built with the shape so [`Shape::default_at`] can hand out references.
@@ -57,20 +58,26 @@ fn defaults() -> Defaults {
     }
 }
 
-/// The shape of one document: params are looked up by each item's `kind` in the document. The
-/// registry and the defaults are built with the shape, since the lint refuses a static.
+/// The shape of one document: params are looked up by each item's `kind` in the kind registry
+/// of the build that reads it (the core's own, or a sealed set's with its modules' kinds), so
+/// one document has one canonical form per build. The defaults are built with the shape, since
+/// the lint refuses a static.
 pub struct DocShape<'a> {
     doc: &'a Value,
-    registry: Registry,
+    registry: &'a Registry,
     defaults: Defaults,
+    /// `requires.kinds` as the document's fields need it: written so, it is a default.
+    kinds: Value,
 }
 
 impl<'a> DocShape<'a> {
-    pub fn new(doc: &'a Value) -> Self {
+    pub fn new(doc: &'a Value, registry: &'a Registry) -> Self {
+        let kinds = json!(derived_kinds(doc, registry));
         DocShape {
             doc,
-            registry: registry(),
+            registry,
             defaults: defaults(),
+            kinds,
         }
     }
 
@@ -128,7 +135,8 @@ impl Shape for DocShape<'_> {
             ["requires"] | ["look"] | ["budget"] | ["assets"] | ["requires", "modules"] => {
                 Some(&d.empty_object)
             }
-            ["requires", "kinds"] | ["requires", "preview"] | ["packs"] => Some(&d.empty_list),
+            ["requires", "kinds"] => Some(&self.kinds),
+            ["requires", "preview"] | ["packs"] => Some(&d.empty_list),
             ["look", "theme"] => Some(&d.auto),
             ["camera"] => Some(&d.null),
             [map] if ID_MAPS.contains(map) => Some(&d.empty_object),
@@ -150,11 +158,17 @@ pub struct Canonical {
     pub sha256: String,
 }
 
-/// The canonical form of `doc` under its own shape.
+/// The canonical form of `doc` under its own shape, by the core's own kinds.
 pub fn canonical(doc: &Value) -> Result<Canonical, CanonError> {
-    let shape = DocShape::new(doc);
+    canonical_in(doc, &registry())
+}
+
+/// The canonical form of `doc` under its own shape, by the kinds of the build that reads it
+/// (a sealed set's `kinds()`), so a module kind's param widths and defaults count.
+pub fn canonical_in(doc: &Value, kinds: &Registry) -> Result<Canonical, CanonError> {
+    let shape = DocShape::new(doc, kinds);
     let bytes = canonical_bytes(doc, &shape)?;
-    let sha256 = revision_hash(doc, &shape)?;
+    let sha256 = sha256_hex(&bytes);
     Ok(Canonical {
         bytes: String::from_utf8_lossy(&bytes).into_owned(),
         sha256,

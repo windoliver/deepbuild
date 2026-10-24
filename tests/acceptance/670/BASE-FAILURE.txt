@@ -1,0 +1,200 @@
+Base commit: a5aa0a39ff36b72b8dbd3753736cf3c7bd8b7c0a
+Command: NO_COLOR=1 npx vitest run tests/acceptance/670 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked), the repo's node_modules from
+npm ci and target/debug/deep-show from cargo build --locked --bin deep-show. AC4 passes. Every other test fails
+on the merged code: the figure is refused (ref_unresolved for the row target items/chart#2/y; unknown_field for
+the channel's keys and type), the no-source refusal names only the bound value middle-bar, and the planted value
+seeds_noise_from_clock answers bad_input.
+
+
+ RUN  v5.0.5 /Users/<user>/dev/claude-worktrees/doneright/starry-wobbling-cray
+
+ ❯ tests/acceptance/670/hashes.test.ts (2 tests | 2 failed) 23694ms
+   ❯ AC2 render-back at 0 s, 1 s and 2 s returns snapshots whose hashes are equal on a second run and in a fresh process (2)
+     × AC2 each time's snapshot hash is the same on the first run, a second run in the same process and a run in a fresh process 2376ms
+     × AC2 a planted renderer that seeds its noise from the clock (seeds_noise_from_clock) fails the hash criterion, naming the snapshot 17ms
+ ❯ tests/acceptance/670/present.test.ts (2 tests | 2 failed) 20213ms
+   ❯ AC1 the figure is presented with no issues; the same figure with the bound bar's source removed is refused, its issue naming the bar (2)
+     × AC1 the figure, sent by deep show from a test process in the agent's tree as its own writer layer, is presented with no issues 3113ms
+     × AC1 the same figure with the bound bar's source removed is refused, its issue naming the bar 43ms
+ ❯ tests/acceptance/670/removal.test.ts (2 tests | 2 failed) 33582ms
+   ❯ AC5 a whole revision that leaves the marker out without naming it in its removes is refused with unintended_removal, and the last good revision stays shown (2)
+     × AC5 the figure re-sent without the marker and no removes is refused with unintended_removal naming the marker, and the last good revision stays current, on screen and drawn the same 2835ms
+     × AC5 the same revision with the marker named in its removes is presented, the marker listed as removed 140ms
+ ❯ tests/acceptance/670/seek.test.ts (1 test | 1 failed) 34491ms
+   ❯ AC3 seeking to 1 s gives the same snapshot hash as playing from 0 s to 1 s (1)
+     × AC3 a render-back seeked straight to 1 s has the hash of the last frame of a play from 0 s through every frame to 1 s 2954ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/670/hashes.test.ts > AC2 render-back at 0 s, 1 s and 2 s returns snapshots whose hashes are equal on a second run and in a fresh process > AC2 each time's snapshot hash is the same on the first run, a second run in the same process and a run in a fresh process
+AssertionError: the first run presents the figure at 0s: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["middle-bar"],"path":"bound_values/middle-bar/target","actual":"items/chart#2/y","what":"`#2` names a part of items/chart, and no kind in this build has parts","fix":"Name an ID the document holds, or remove the reference."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/keys","actual":{"k0":{"t":"0s","value":96,"interp":"linear"},"k1":{"t":"2s","value":528,"interp":"linear"}},"what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/type","actual":"f32","what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/670/hashes.test.ts:44:143
+     42|     for (const [name, replies] of Object.entries({ first, second, fres…
+     43|       for (const [i, t] of TIMES.entries()) {
+     44|         expect(outcome(replies[i]!), `the ${name} run presents the fig…
+       |                                                                                                                                               ^
+     45|       }
+     46|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  tests/acceptance/670/hashes.test.ts > AC2 render-back at 0 s, 1 s and 2 s returns snapshots whose hashes are equal on a second run and in a fresh process > AC2 a planted renderer that seeds its noise from the clock (seeds_noise_from_clock) fails the hash criterion, naming the snapshot
+AssertionError: deep-show run refused scenario 1: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/670/helpers.ts:103:99
+    101|   return lines.map((line, i) => {
+    102|     const out = obj(JSON.parse(line) as JsonValue, `${name}: answer ${…
+    103|     expect(out['ok'], `${name} refused scenario ${i + 1}: ${JSON.strin…
+       |                                                                                                   ^
+    104|     const replies = arr(out['replies'], `${name}: answer ${i + 1}'s re…
+    105|     expect(replies.length, `${name}: one reply per call`).toBe(arr(sce…
+ ❯ runLines tests/acceptance/670/helpers.ts:101:16
+ ❯ threeRuns tests/acceptance/670/hashes.test.ts:30:27
+ ❯ tests/acceptance/670/hashes.test.ts:63:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  tests/acceptance/670/present.test.ts > AC1 the figure is presented with no issues; the same figure with the bound bar's source removed is refused, its issue naming the bar > AC1 the figure, sent by deep show from a test process in the agent's tree as its own writer layer, is presented with no issues
+AssertionError: the figure raises no issue of any severity: expected [ { …(8) }, { …(8) }, { …(8) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/chart#2/y",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "middle-bar",
++     ],
++     "path": "bound_values/middle-bar/target",
++     "severity": "error",
++     "what": "`#2` names a part of items/chart, and no kind in this build has parts",
++   },
++   {
++     "actual": {
++       "k0": {
++         "interp": "linear",
++         "t": "0s",
++         "value": 96,
++       },
++       "k1": {
++         "interp": "linear",
++         "t": "2s",
++         "value": 528,
++       },
++     },
++     "check": "document.validate",
++     "code": "unknown_field",
++     "fix": "Remove the field, or require the kind's minor that defines it.",
++     "ids": [
++       "marker-x",
++     ],
++     "path": "channels/marker-x/keys",
++     "severity": "error",
++     "what": "not a field of a channels entry",
++   },
++   {
++     "actual": "f32",
++     "check": "document.validate",
++     "code": "unknown_field",
++     "fix": "Remove the field, or require the kind's minor that defines it.",
++     "ids": [
++       "marker-x",
++     ],
++     "path": "channels/marker-x/type",
++     "severity": "error",
++     "what": "not a field of a channels entry",
++   },
++ ]
+
+ ❯ tests/acceptance/670/present.test.ts:24:73
+     22|     // A check that refuses the figure for any issue (an unresolved ro…
+     23|     // mark set's stroke gradient) fails here, naming the issues.
+     24|     expect(issues(shown), 'the figure raises no issue of any severity'…
+       |                                                                         ^
+     25|     expect(outcome(shown), 'the figure is presented').toBe('presented'…
+     26|     const snaps = snapshots(shown);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  tests/acceptance/670/present.test.ts > AC1 the figure is presented with no issues; the same figure with the bound bar's source removed is refused, its issue naming the bar > AC1 the same figure with the bound bar's source removed is refused, its issue naming the bar
+AssertionError: an error names the bound bar chart#2; the errors were [["out_of_range",["middle-bar"],"bound_values/middle-bar/source"],["ref_unresolved",["middle-bar"],"bound_values/middle-bar/target"],["unknown_field",["marker-x"],"channels/marker-x/keys"],["unknown_field",["marker-x"],"channels/marker-x/type"]]: expected 0 to be greater than 0
+ ❯ tests/acceptance/670/present.test.ts:43:160
+     41|     // A check that names only the bound value entry, and not the bar …
+     42|     const naming = errors(refused).filter(namesBar);
+     43|     expect(naming.length, `an error names the bound bar ${BOUND_BAR}; …
+       |                                                                                                                                                                ^
+     44|     expect(snapshots(refused), 'render-back returns no snapshot of a r…
+     45|     expect(revisions(state).filter((r) => r.state === 'current'), 'no …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  tests/acceptance/670/removal.test.ts > AC5 a whole revision that leaves the marker out without naming it in its removes is refused with unintended_removal, and the last good revision stays shown > AC5 the figure re-sent without the marker and no removes is refused with unintended_removal naming the marker, and the last good revision stays current, on screen and drawn the same
+AssertionError: the figure is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["middle-bar"],"path":"bound_values/middle-bar/target","actual":"items/chart#2/y","what":"`#2` names a part of items/chart, and no kind in this build has parts","fix":"Name an ID the document holds, or remove the reference."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/keys","actual":{"k0":{"t":"0s","value":96,"interp":"linear"},"k1":{"t":"2s","value":528,"interp":"linear"}},"what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/type","actual":"f32","what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/670/removal.test.ts:21:105
+     19|     keepProof('ac5-without-marker-figure', doc);
+     20|     keepProof('ac5-replies', replies);
+     21|     expect(outcome(good), `the figure is presented: ${JSON.stringify(g…
+       |                                                                                                         ^
+     22|     const goodSnap = snapshots(good)[0]?.sha256;
+     23|     expect(goodSnap, 'the good revision has a snapshot at 1 s').toBeDe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  tests/acceptance/670/removal.test.ts > AC5 a whole revision that leaves the marker out without naming it in its removes is refused with unintended_removal, and the last good revision stays shown > AC5 the same revision with the marker named in its removes is presented, the marker listed as removed
+AssertionError: the figure is presented: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["middle-bar"],"path":"bound_values/middle-bar/target","actual":"items/chart#2/y","what":"`#2` names a part of items/chart, and no kind in this build has parts","fix":"Name an ID the document holds, or remove the reference."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/keys","actual":{"k0":{"t":"0s","value":96,"interp":"linear"},"k1":{"t":"2s","value":528,"interp":"linear"}},"what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/type","actual":"f32","what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/670/removal.test.ts:52:119
+     50|     const named = replies[1]!;
+     51|     keepProof('ac5-named-removal-reply', named);
+     52|     expect(outcome(replies[0]!), `the figure is presented: ${JSON.stri…
+       |                                                                                                                       ^
+     53|     expect(outcome(named), `the revision that names the marker in remo…
+     54|     expect(diff(named).removed, 'its reply lists the marker and its ch…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  tests/acceptance/670/seek.test.ts > AC3 seeking to 1 s gives the same snapshot hash as playing from 0 s to 1 s > AC3 a render-back seeked straight to 1 s has the hash of the last frame of a play from 0 s through every frame to 1 s
+AssertionError: the seek presents the figure: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["middle-bar"],"path":"bound_values/middle-bar/target","actual":"items/chart#2/y","what":"`#2` names a part of items/chart, and no kind in this build has parts","fix":"Name an ID the document holds, or remove the reference."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/keys","actual":{"k0":{"t":"0s","value":96,"interp":"linear"},"k1":{"t":"2s","value":528,"interp":"linear"}},"what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["marker-x"],"path":"channels/marker-x/type","actual":"f32","what":"not a field of a channels entry","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ tests/acceptance/670/seek.test.ts:17:118
+     15|     // carries from frame to frame reaches the last one.
+     16|     const play = run(scenario(evidence(), Array.from({ length: FRAMES …
+     17|     expect(outcome(seek[0]!), `the seek presents the figure: ${JSON.st…
+       |                                                                                                                      ^
+     18|     const sought = snapshots(seek[0]!);
+     19|     expect(sought.length, 'the seek returns one snapshot').toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  7 failed | 1 passed (8)
+   Start at  17:06:52
+   Duration  154.23s (tests 100%)
+

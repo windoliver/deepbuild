@@ -1,11 +1,17 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { measureOnce, warm } from './benchmark.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // Parity and budgets run ./target/debug binaries; a shared Cargo target directory would misplace them.
 delete process.env.CARGO_TARGET_DIR;
+// Tests that give a child a temporary HOME would leave rustup and Cargo homeless: with no toolchain
+// found, rustup downloads rust-toolchain.toml's pin into that HOME on every run. Named here, they stay put.
+process.env.RUSTUP_HOME ??= join(homedir(), '.rustup');
+process.env.CARGO_HOME ??= join(homedir(), '.cargo');
 const started = performance.now();
 let observation = {}, checkStatus = 1;
 console.log('Warming builds (not timed)');

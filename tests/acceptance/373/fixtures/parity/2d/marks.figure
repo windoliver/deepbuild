@@ -1,0 +1,508 @@
+{
+  "format": 1,
+  "id": "parity-marks",
+  "profile": "figure",
+  "title": "Mark sets",
+  "description": "Nine mark sets side by side, one of each mark type (point, rule, rect, bar, path, area, symbol, text and image), each three keyed rows of typed columns.",
+  "size": [
+    900,
+    240
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "ys": {
+      "id": "ys",
+      "kind": "scale@1",
+      "layer": "main",
+      "name": "Y scale",
+      "order": "a00",
+      "params": {
+        "type": "linear",
+        "domain": [
+          0,
+          100
+        ],
+        "range": [
+          220,
+          20
+        ],
+        "nice": false
+      }
+    },
+    "set-point": {
+      "id": "set-point",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of point",
+      "order": "a01",
+      "params": {
+        "mark": "point",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AADIQQAASEIAAJZC"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABwQgAA8EIAADRD"
+          },
+          "size": {
+            "const": 16
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          },
+          "size": {
+            "column": "size"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "m.point"
+          }
+        }
+      }
+    },
+    "set-rule": {
+      "id": "set-rule",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of rule",
+      "order": "a02",
+      "params": {
+        "mark": "rule",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AADwQgAA8EIAAPBC"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABwQgAA8EIAADRD"
+          },
+          "x2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AAA0QwAANEMAADRD"
+          },
+          "y2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABwQgAA8EIAADRD"
+          },
+          "size": {
+            "const": 4
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          },
+          "x2": {
+            "column": "x2"
+          },
+          "y2": {
+            "column": "y2"
+          },
+          "size": {
+            "column": "size"
+          }
+        },
+        "paint": {
+          "stroke": {
+            "role": "m.rule"
+          }
+        }
+      }
+    },
+    "set-rect": {
+      "id": "set-rect",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of rect",
+      "order": "a03",
+      "params": {
+        "mark": "rect",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABSQwAAUkMAAIJD"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AAAgQgAAyEIAACBD"
+          },
+          "x2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AACRQwAAekMAAJFD"
+          },
+          "y2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AACgQgAADEMAAEhD"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          },
+          "x2": {
+            "column": "x2"
+          },
+          "y2": {
+            "column": "y2"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "m.rect"
+          }
+        }
+      }
+    },
+    "set-bar": {
+      "id": "set-bar",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of bar",
+      "order": "a04",
+      "params": {
+        "mark": "bar",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AACbQwAAqkMAALlD"
+          },
+          "x2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AAClQwAAtEMAAMND"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AADIQQAASEIAAMhC"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "x2": {
+            "column": "x2"
+          },
+          "y": {
+            "column": "y",
+            "scale": "ys"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "m.bar"
+          }
+        }
+      }
+    },
+    "set-path": {
+      "id": "set-path",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of path",
+      "order": "a05",
+      "params": {
+        "mark": "path",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AADNQwAA9UMAAPVD"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABwQgAAcEIAADRD"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          }
+        },
+        "paint": {
+          "stroke": {
+            "role": "m.path",
+            "width": 6
+          }
+        }
+      }
+    },
+    "set-area": {
+      "id": "set-area",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of area",
+      "order": "a06",
+      "params": {
+        "mark": "area",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AAD/QwCACUQAgBNE"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABIQgAASEIAAEhC"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y",
+            "scale": "ys"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "m.area"
+          }
+        }
+      }
+    },
+    "set-symbol": {
+      "id": "set-symbol",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of symbol",
+      "order": "a07",
+      "params": {
+        "mark": "symbol",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AIAiRACAIkQAgCJE"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AABwQgAA8EIAADRD"
+          },
+          "size": {
+            "const": 20
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          },
+          "size": {
+            "column": "size"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "m.symbol"
+          }
+        }
+      }
+    },
+    "set-text": {
+      "id": "set-text",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of text",
+      "order": "a08",
+      "params": {
+        "mark": "text",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AIAxRACAMUQAgDFE"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AADwQQAAyEIAACpD"
+          },
+          "text": {
+            "const": "HI"
+          },
+          "size": {
+            "const": 40
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          },
+          "text": {
+            "column": "text"
+          },
+          "size": {
+            "column": "size"
+          }
+        },
+        "paint": {
+          "fill": {
+            "role": "m.text"
+          }
+        }
+      }
+    },
+    "set-image": {
+      "id": "set-image",
+      "kind": "marks@1",
+      "layer": "main",
+      "name": "Set of image",
+      "order": "a09",
+      "params": {
+        "mark": "image",
+        "n": 3,
+        "key": "key",
+        "columns": {
+          "key": {
+            "dtype": "u32",
+            "len": 3,
+            "data": "AQAAAAIAAAADAAAA"
+          },
+          "x": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AIBKRACASkQAgEpE"
+          },
+          "y": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AACgQQAAtEIAACBD"
+          },
+          "x2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AIBeRACAXkQAgF5E"
+          },
+          "y2": {
+            "dtype": "f32",
+            "len": 3,
+            "data": "AACMQgAADEMAAFJD"
+          },
+          "asset": {
+            "const": "131dd0b7499fbf3237303de044314cf2a5f40d8fc07daefbdcb01ccda8413ad6"
+          },
+          "alt": {
+            "const": "A magenta swatch"
+          }
+        },
+        "encode": {
+          "x": {
+            "column": "x"
+          },
+          "y": {
+            "column": "y"
+          },
+          "x2": {
+            "column": "x2"
+          },
+          "y2": {
+            "column": "y2"
+          }
+        },
+        "fit": "fill"
+      }
+    }
+  }
+}

@@ -16,14 +16,17 @@ import { FEATURES, line, plantOf, refusal, Refused, ulid, type CoreOptions, type
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
-const PARSERS = 1;
 
 type Role = 'hook' | 'app' | 'cli' | 'mcp';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
+  ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
+  // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
+  ['windows.report', ['app', 'cli', 'hook']],
 ]);
 
 type Obj = Record<string, unknown>;
@@ -85,27 +88,26 @@ function parserPool(held: string[], plant: Plant | undefined): Parsers {
   const pending = new Map<number, (parsed: Parsed) => void>();
   let n = 0;
   const make = () => {
-    const entry = { worker: new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, ...(plant ? { plant } : {}) } }), load: 0 };
-    entry.worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
-      entry.load--;
+    const worker = new Worker(new URL('./parser.js', import.meta.url), { workerData: { held, ...(plant ? { plant } : {}) } });
+    worker.on('message', ({ n: id, parsed }: { n: number; parsed: Parsed }) => {
       pending.get(id)?.(parsed);
       pending.delete(id);
     });
-    return entry;
+    return worker;
   };
-  const small = Array.from({ length: PARSERS }, make);
+  // One parser for small lines and one kept for large ones.
+  const small = make();
   const big = make();
   return {
     parse(chunks, first) {
       const size = chunks.reduce((sum, c) => sum + c.length, 0);
-      const entry = size > BIG ? big : small.reduce((a, b) => (b.load < a.load ? b : a));
-      entry.load++;
+      const worker = size > BIG ? big : small;
       return new Promise((resolve) => {
         pending.set(++n, resolve);
-        entry.worker.postMessage({ n, chunks, first });
+        worker.postMessage({ n, chunks, first });
       });
     },
-    close: async () => { await Promise.all([...small, big].map((e) => e.worker.terminate())); },
+    close: async () => { await Promise.all([small, big].map((w) => w.terminate())); },
   };
 }
 /** The parse-on-event-loop plant: every line it reads scrubbed and parsed on the event loop. */
@@ -162,7 +164,10 @@ class Hub {
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {}
 
   async open(clock: CoreOptions['clock']): Promise<void> {
-    const options: CoreOptions = { root: this.root.dir, clock, held: [this.token], ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}) };
+    const options: CoreOptions = { root: this.root.dir, clock, held: [this.token], ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
+      ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
+      ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
+      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}) };
     const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
@@ -245,7 +250,7 @@ class Hub {
     conn.first = false;
     const size = parts.reduce((sum, p) => sum + p.length, 0);
     // A small line is copied out of the socket's buffer, so only its own bytes cross to the parser.
-    const chunks = size > BIG ? parts : [Buffer.from(parts.length === 1 ? parts[0]! : Buffer.concat(parts))];
+    const chunks = size > BIG ? parts : [parts.length === 1 ? Buffer.from(parts[0]!) : Buffer.concat(parts)];
     const parsed = await this.parsers.parse(chunks, first);
     if (parsed.kind === 'hook') return this.hook(conn, parsed);
     if (parsed.kind === 'refused') {

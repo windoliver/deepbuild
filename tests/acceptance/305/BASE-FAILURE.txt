@@ -1,0 +1,700 @@
+Base commit: 7fc4f14a65d10cb6ad4a3102de7980563cdd8a58
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/305 --no-file-parallelism
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci: deep-show has no core, r1, r2, full or test-* Cargo feature there, so every build set's cargo build fails ("none of the selected packages contains these features") and each file's tests fail on it; the reference-Mac gate was open (Mac15,12 on mains), so the budgets tests ran and failed on the build rather than skipping.
+Date: 2026-10-22T08:20:45Z  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/305
+
+ ❯ optional.test.ts (6 tests | 6 failed) 766ms
+   ❯ #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing (6)
+     × #305.a15bd49b the core build with test.b and no test.a seals: test.b is in the set, test.a is not, and the operator test.b.echo is left out of the plan; with test.a the plan holds it 10ms
+     × #305.a15bd49b in the build without test.a, a document that uses b's echo is refused with module_missing naming test.a, pointing at the field, and its check is BLOCKED 1ms
+     × #305.a15bd49b in the same build a document of b's kind that doesn't use echo draws: presented, with a snapshot that isn't the empty board's 1ms
+     × #305.a15bd49b with test.a in the build the document that uses echo is presented, so the refusal was the missing module's and not the field's 2ms
+     × #305.a15bd49b the same b marking a required is refused at startup in the build without a, naming test.a and test.b 1ms
+     × #305.a15bd49b a planted seal that treats every dependency as required (--planted treats_every_dependency_required) refuses the first build, so the checks on it fail 1ms
+ ❯ seal.test.ts (10 tests | 10 failed) 1807ms
+   ❯ #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean (10)
+     × #305.ec48d743 two writers of one array: test.w1 and test.w2 both own test.shared, so the build refuses to start naming both modules and the array 13ms
+     × #305.ec48d743 a read of a later phase: test.late reads test.late.after, written in render, from items, so the build refuses to start naming the module and the array 2ms
+     × #305.ec48d743 a cycle: test.c1 reads test.c2.out and test.c2 reads test.c1.out in one phase, so the build refuses to start naming both modules and both arrays 2ms
+     × #305.ec48d743 a missing dependency: test.orphan requires test.absent, which no build holds, so the build refuses to start naming both modules 1ms
+     × #305.ec48d743 a refused build answers nothing else: no reply to the scenario it was fed, and no warning level that lets it start 2ms
+     × #305.ec48d743 the shipped set seals clean in the core build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest 1ms
+     × #305.ec48d743 the shipped set seals clean in the r1 build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest 5ms
+     × #305.ec48d743 the shipped set seals clean in the r2 build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest 1ms
+     × #305.ec48d743 the shipped set seals clean in the full build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest 1ms
+     × #305.ec48d743 the sealed set is the same from one start to the next: the digest, the modules and the plan of two fresh full-build processes agree 1ms
+ ❯ leave-out.test.ts (4 tests | 4 failed) 666ms
+   ❯ #305.4e03e5e7 a document hashes the same in the full build and in a build without the canvas modules it doesn't use, and one that needs a missing canvas module is refused with module_missing (4)
+     × #305.4e03e5e7 a document of core kinds alone, evaluated in the full build and in the core build, has the same revision hash and the same snapshot hash 12ms
+     × #305.4e03e5e7 a document that uses test.a, evaluated in the full build with test.a and in the core build with test.a, hashes the same, and the two builds' module-set digests differ 1ms
+     × #305.4e03e5e7 a document that needs test.a is refused with module_missing naming test.a in the core build, with its check BLOCKED, and presented in the core build with test.a 6ms
+     × #305.4e03e5e7 the refusal is per document: in the core build a core-only document under another doc ID is presented beside the refused one 5ms
+ ❯ wasm.test.ts (3 tests | 3 failed) 209ms
+   ❯ #305.c18cbd77 a document naming a WebAssembly program, in a build without the logic module, is refused with module_missing naming the logic module, and the program's bytes are never read (3)
+     × #305.c18cbd77 deep_show refuses it with module_missing naming logic, no snapshot, and finishes though the program's bytes can't be read; deep show --check is BLOCKED 30ms
+     × #305.c18cbd77 the planted twin reads_wasm_bytes reads the program before refusing: on the FIFO it never finishes and is killed at the timeout, so it fails this test 21ms
+     × #305.c18cbd77 the planted twin is live: with an ordinary file where the bytes would be, it finishes with the same refusal, so the hang above is the read 3ms
+ ❯ digest.test.ts (4 tests | 4 failed) 426ms
+   ❯ #305.21e03b37 every deep_show reply and every document check result carries core@version and the module-set digest (4)
+     × #305.21e03b37 presented and refused deep_show replies and PASS and FAIL check results all carry core and set_digest, the same in every reply of the build 9ms
+     × #305.21e03b37 the digest changes when the test canvas module test.a joins the build, while core@version stays 1ms
+     × #305.21e03b37 the digest stays the same when only a document changes: two documents, an edit, and a fresh process all carry one digest 1ms
+     × #305.21e03b37 a planted reply without the digest fails the reply schema, naming the field set_digest 1ms
+ ❯ budgets.test.ts (2 tests | 2 failed) 150ms
+   ❯ #305.66cabd55 budgets on the reference Mac: registration and the seal under 50 ms at startup, and nothing per frame (2)
+     × #305.66cabd55 registration and the seal take under 50 ms at startup (five fresh processes after a warm-up) 10ms
+     × #305.66cabd55 nothing runs per frame: after six frames at six times the seal has still run once, with the same time 2ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 29 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #305.66cabd55 budgets on the reference Mac: registration and the seal under 50 ms at startup, and nothing per frame > #305.66cabd55 registration and the seal take under 50 ms at startup (five fresh processes after a warm-up)
+AssertionError: the binary builds: deep-show with features full,test-a,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-a,test-b failed:
++ error: none of the selected packages contains these features: full, test-a, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ budgets.test.ts:21:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/29]⎯
+
+ FAIL  budgets.test.ts > #305.66cabd55 budgets on the reference Mac: registration and the seal under 50 ms at startup, and nothing per frame > #305.66cabd55 nothing runs per frame: after six frames at six times the seal has still run once, with the same time
+AssertionError: the binary builds: deep-show with features full,test-a,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-a,test-b failed:
++ error: none of the selected packages contains these features: full, test-a, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ budgets.test.ts:35:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/29]⎯
+
+ FAIL  digest.test.ts > #305.21e03b37 every deep_show reply and every document check result carries core@version and the module-set digest > #305.21e03b37 presented and refused deep_show replies and PASS and FAIL check results all carry core and set_digest, the same in every reply of the build
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ digest.test.ts:22:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/29]⎯
+
+ FAIL  digest.test.ts > #305.21e03b37 every deep_show reply and every document check result carries core@version and the module-set digest > #305.21e03b37 the digest changes when the test canvas module test.a joins the build, while core@version stays
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ digest.test.ts:39:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/29]⎯
+
+ FAIL  digest.test.ts > #305.21e03b37 every deep_show reply and every document check result carries core@version and the module-set digest > #305.21e03b37 the digest stays the same when only a document changes: two documents, an edit, and a fresh process all carry one digest
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ digest.test.ts:46:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/29]⎯
+
+ FAIL  digest.test.ts > #305.21e03b37 every deep_show reply and every document check result carries core@version and the module-set digest > #305.21e03b37 a planted reply without the digest fails the reply schema, naming the field set_digest
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ digest.test.ts:54:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/29]⎯
+
+ FAIL  leave-out.test.ts > #305.4e03e5e7 a document hashes the same in the full build and in a build without the canvas modules it doesn't use, and one that needs a missing canvas module is refused with module_missing > #305.4e03e5e7 a document of core kinds alone, evaluated in the full build and in the core build, has the same revision hash and the same snapshot hash
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ leave-out.test.ts:33:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/29]⎯
+
+ FAIL  leave-out.test.ts > #305.4e03e5e7 a document hashes the same in the full build and in a build without the canvas modules it doesn't use, and one that needs a missing canvas module is refused with module_missing > #305.4e03e5e7 a document that uses test.a, evaluated in the full build with test.a and in the core build with test.a, hashes the same, and the two builds' module-set digests differ
+AssertionError: the binary builds: deep-show with features full,test-a: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-a failed:
++ error: none of the selected packages contains these features: full, test-a
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ leave-out.test.ts:40:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/29]⎯
+
+ FAIL  leave-out.test.ts > #305.4e03e5e7 a document hashes the same in the full build and in a build without the canvas modules it doesn't use, and one that needs a missing canvas module is refused with module_missing > #305.4e03e5e7 a document that needs test.a is refused with module_missing naming test.a in the core build, with its check BLOCKED, and presented in the core build with test.a
+AssertionError: the binary builds: deep-show with features core: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core failed:
++ error: none of the selected packages contains this feature: core
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ leave-out.test.ts:49:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/29]⎯
+
+ FAIL  leave-out.test.ts > #305.4e03e5e7 a document hashes the same in the full build and in a build without the canvas modules it doesn't use, and one that needs a missing canvas module is refused with module_missing > #305.4e03e5e7 the refusal is per document: in the core build a core-only document under another doc ID is presented beside the refused one
+AssertionError: the binary builds: deep-show with features core: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core failed:
++ error: none of the selected packages contains this feature: core
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ leave-out.test.ts:64:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/29]⎯
+
+ FAIL  optional.test.ts > #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing > #305.a15bd49b the core build with test.b and no test.a seals: test.b is in the set, test.a is not, and the operator test.b.echo is left out of the plan; with test.a the plan holds it
+AssertionError: the binary builds: deep-show with features core,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-b failed:
++ error: none of the selected packages contains these features: core, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ optional.test.ts:29:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/29]⎯
+
+ FAIL  optional.test.ts > #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing > #305.a15bd49b in the build without test.a, a document that uses b's echo is refused with module_missing naming test.a, pointing at the field, and its check is BLOCKED
+AssertionError: the binary builds: deep-show with features core,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-b failed:
++ error: none of the selected packages contains these features: core, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ optional.test.ts:43:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/29]⎯
+
+ FAIL  optional.test.ts > #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing > #305.a15bd49b in the same build a document of b's kind that doesn't use echo draws: presented, with a snapshot that isn't the empty board's
+AssertionError: the binary builds: deep-show with features core,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-b failed:
++ error: none of the selected packages contains these features: core, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ optional.test.ts:54:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/29]⎯
+
+ FAIL  optional.test.ts > #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing > #305.a15bd49b with test.a in the build the document that uses echo is presented, so the refusal was the missing module's and not the field's
+AssertionError: the binary builds: deep-show with features core,test-a,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-a,test-b failed:
++ error: none of the selected packages contains these features: core, test-a, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ optional.test.ts:63:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/29]⎯
+
+ FAIL  optional.test.ts > #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing > #305.a15bd49b the same b marking a required is refused at startup in the build without a, naming test.a and test.b
+AssertionError: the binary builds: deep-show with features core,test-b-requires-a: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-b-requires-a failed:
++ error: none of the selected packages contains these features: core, test-b-requires-a
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ optional.test.ts:69:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/29]⎯
+
+ FAIL  optional.test.ts > #305.a15bd49b a module whose manifest marks a dependency optional seals without it, its operators that read it left out, and a document that needs them is refused with module_missing > #305.a15bd49b a planted seal that treats every dependency as required (--planted treats_every_dependency_required) refuses the first build, so the checks on it fail
+AssertionError: the binary builds: deep-show with features core,test-b: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-b failed:
++ error: none of the selected packages contains these features: core, test-b
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ optional.test.ts:75:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 two writers of one array: test.w1 and test.w2 both own test.shared, so the build refuses to start naming both modules and the array
+AssertionError: the binary builds: deep-show with features core,test-two-writers: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-two-writers failed:
++ error: none of the selected packages contains these features: core, test-two-writers
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:20:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 a read of a later phase: test.late reads test.late.after, written in render, from items, so the build refuses to start naming the module and the array
+AssertionError: the binary builds: deep-show with features core,test-later-phase: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-later-phase failed:
++ error: none of the selected packages contains these features: core, test-later-phase
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:27:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 a cycle: test.c1 reads test.c2.out and test.c2 reads test.c1.out in one phase, so the build refuses to start naming both modules and both arrays
+AssertionError: the binary builds: deep-show with features core,test-cycle: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-cycle failed:
++ error: none of the selected packages contains these features: core, test-cycle
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:34:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 a missing dependency: test.orphan requires test.absent, which no build holds, so the build refuses to start naming both modules
+AssertionError: the binary builds: deep-show with features core,test-missing-dep: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-missing-dep failed:
++ error: none of the selected packages contains these features: core, test-missing-dep
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:41:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 a refused build answers nothing else: no reply to the scenario it was fed, and no warning level that lets it start
+AssertionError: the binary builds: deep-show with features core,test-two-writers: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-two-writers failed:
++ error: none of the selected packages contains these features: core, test-two-writers
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:49:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 the shipped set seals clean in the core build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest
+AssertionError: the binary builds: deep-show with features core: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core failed:
++ error: none of the selected packages contains this feature: core
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:56:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 the shipped set seals clean in the r1 build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest
+AssertionError: the binary builds: deep-show with features r1: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features r1 failed:
++ error: none of the selected packages contains this feature: r1
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:56:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 the shipped set seals clean in the r2 build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest
+AssertionError: the binary builds: deep-show with features r2: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features r2 failed:
++ error: none of the selected packages contains this feature: r2
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:56:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 the shipped set seals clean in the full build: it starts, its registry is sealed, its modules sorted by name, with core@version and a module-set digest
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:56:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/29]⎯
+
+ FAIL  seal.test.ts > #305.ec48d743 a test build with a planted seal fault refuses to start, naming the canvas modules and arrays involved, and the shipped set seals clean > #305.ec48d743 the sealed set is the same from one start to the next: the digest, the modules and the plan of two fresh full-build processes agree
+AssertionError: the binary builds: deep-show with features full: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full failed:
++ error: none of the selected packages contains this feature: full
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ seal.test.ts:69:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/29]⎯
+
+ FAIL  wasm.test.ts > #305.c18cbd77 a document naming a WebAssembly program, in a build without the logic module, is refused with module_missing naming the logic module, and the program's bytes are never read > #305.c18cbd77 deep_show refuses it with module_missing naming logic, no snapshot, and finishes though the program's bytes can't be read; deep show --check is BLOCKED
+AssertionError: the binary builds: deep-show with features core: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core failed:
++ error: none of the selected packages contains this feature: core
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ wasm.test.ts:30:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/29]⎯
+
+ FAIL  wasm.test.ts > #305.c18cbd77 a document naming a WebAssembly program, in a build without the logic module, is refused with module_missing naming the logic module, and the program's bytes are never read > #305.c18cbd77 the planted twin reads_wasm_bytes reads the program before refusing: on the FIFO it never finishes and is killed at the timeout, so it fails this test
+AssertionError: the binary builds: deep-show with features core: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core failed:
++ error: none of the selected packages contains this feature: core
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ wasm.test.ts:46:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/29]⎯
+
+ FAIL  wasm.test.ts > #305.c18cbd77 a document naming a WebAssembly program, in a build without the logic module, is refused with module_missing naming the logic module, and the program's bytes are never read > #305.c18cbd77 the planted twin is live: with an ordinary file where the bytes would be, it finishes with the same refusal, so the hang above is the read
+AssertionError: the binary builds: deep-show with features core: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core failed:
++ error: none of the selected packages contains this feature: core
++ selected packages: deep-contracts, deep-hook, deep-app, deep-text-gpui, deep-text, deep-canvas, deep-canvas-motion, deep-canvas-marks, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-replica, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:110:107
+    108|       const entry = made.get(buildName(build));
+    109|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    110|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    111|       return entry.bin;
+    112|     },
+ ❯ wasm.test.ts:55:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/29]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  29 failed (29)
+   Start at  01:20:39
+   Duration  5.37s (tests 92%, import 5%, transform 3%, worker 1%)
+
+    Isolate  6 workers spawned · ~124ms startup each (spawn + environment, per file)
+             at least ~619ms faster with isolate: false — reuses workers across files instead of one per file
+

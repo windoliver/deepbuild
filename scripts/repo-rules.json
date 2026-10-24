@@ -1,5 +1,37 @@
 {
   "deps": {
+    "lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #684: core Lean for the verdict table's model, its proofs and its generator, installed under .lean/; no Mathlib or other Lake packages."
+        }
+      }
+    },
+    "packages/proof/fixtures/lean/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #685: the proof kit's Lean package, pinned to the Lean 4.35 whose lake comparator the Lean runner calls; core Lean only."
+        }
+      }
+    },
+    "tests/acceptance/685/fixtures/lean/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #685: the acceptance fixture's Lean package, checked through Lean 4.35's lake comparator; core Lean only."
+        }
+      }
+    },
+    "tests/acceptance/685/fixtures/lean-variants/old-toolchain/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.34.0",
+          "why": "Issue #685 (AC9): a pin to a Lean this machine lacks, so the check is BLOCKED naming it; never installed."
+        }
+      }
+    },
     "package.json": {
       "devDependencies": {
         "@stryker-mutator/core": {
@@ -17,6 +49,10 @@
         "typescript": {
           "spec": "5.9.3",
           "why": "Issue #12: the typecheck lane and the workspace builds."
+        },
+        "jest": {
+          "spec": "30.5.2",
+          "why": "Issue #30: AC3's Jest run, which the acceptance tests run from the repo's node_modules; the user approved adding it."
         },
         "vitest": {
           "spec": "5.0.5",
@@ -196,15 +232,43 @@
         }
       }
     },
+    "packages/checks-command/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the check.kind@1 result shape and the read and spawn tracer every command check run loads (#314)."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #30: the scrub of a run's output by the values its environment and secrets held, before it is digested or shown."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        }
+      }
+    },
     "packages/hub/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
           "spec": "0.0.0",
           "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
         },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the budget ledger a job that bills an API key reserves and is charged against, opened on the hub's record for its runner."
+        },
         "@deepbuild/contracts": {
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
+        },
+        "@deepbuild/env-local": {
+          "spec": "0.0.0",
+          "why": "Issue #331: deep env up and run.start's environment bring a folder's stack up through env-local, on the supervisor's leased ports; the hub imports it until the extension slots (#349) register it."
         },
         "@deepbuild/evidence": {
           "spec": "0.0.0",
@@ -213,6 +277,14 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
+        },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #159: DeepBuild's own headless jobs, run by the hub through host@1, whose hooks the hub records as each job's events."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
         "better-sqlite3": {
           "spec": "13.0.3",
@@ -237,6 +309,26 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."
+        }
+      }
+    },
+    "packages/proof/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #685: the check.kind@1 slot's fill and kit types, and the Finding a proof kit's judge ends a case with, so the one kit runner judges the proof kind."
+        }
+      }
+    },
+    "packages/supervisor/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
         }
       }
     },
@@ -320,6 +412,18 @@
         }
       }
     },
+    "crates/deep-canvas-test-modules/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #305: the manifest, registrar and kind-entry types a test canvas module registers through."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #305: a kind param's default is a JSON value. Already in the workspace tree."
+        }
+      }
+    },
     "crates/deep-canvas-motion/Cargo.toml": {
       "dependencies": {
         "deep-canvas": {
@@ -338,6 +442,10 @@
           "spec": "* path=../deep-canvas",
           "why": "Issue #391: the ops module on pinned libm that path flattening and stroking go through."
         },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #375: auto layout measures text leaves with the canvas's one shaper."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: reads the evaluated items and their params. Already in the workspace tree."
@@ -345,6 +453,10 @@
         "sha2": {
           "spec": "^0.10",
           "why": "Issue #391: content keys, 128 bits of SHA-256 over length-prefixed fields, and the SHA-256 of each cached result. Already in the workspace tree."
+        },
+        "taffy": {
+          "spec": "^0.14",
+          "why": "Issue #375: auto layout's flexbox and grid, the engine GPUI already uses; already in the workspace tree at this version through GPUI."
         }
       }
     },
@@ -361,6 +473,10 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #391: evaluates the document at each frame time and gives the frame clock its valid_until."
+        },
+        "deep-marks-vello": {
+          "spec": "* path=../deep-marks-vello",
+          "why": "Issue #373: the draw list in Vello CPU terms (paints, OKLab ramps, outlines, scopes) that raster shares with render-back."
         },
         "deep-replica": {
           "spec": "* path=../deep-replica",
@@ -385,12 +501,32 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #391: the render's JSON lines. Already in the workspace tree."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #391: the GPU ledger the GPUI patch adds to the Metal renderer (frame command buffers committed and their GPU time), which shows a still view uses none. Already in the tree under gpui-kit, as the vendored copy."
+        }
+      }
+    },
+    "crates/deep-marks-vello/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #373: the sRGB transfer a luminance mask reads linear light through."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #373: the draw list it draws: fills and ramps, outlines and scopes."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
         }
       }
     },
@@ -440,6 +576,14 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #393: evaluates a revision at the snapshot's declared time."
         },
+        "deep-canvas-test-modules": {
+          "spec": "* path=../deep-canvas-test-modules",
+          "why": "Issue #305: the test canvas modules a test build compiles in under its test-* features, for the seal's planted faults and the optional-dependency proof; optional, so no shipped build holds them."
+        },
+        "deep-marks-vello": {
+          "spec": "* path=../deep-marks-vello",
+          "why": "Issue #373: render-back draws R2 marks (outlines, gradient ramps, soft masks, group opacity, adjusted images) as raster does."
+        },
         "deep-text": {
           "spec": "* path=../deep-text",
           "why": "Issue #393: the canvas's own shaper for text in snapshots, and the bundled faces the look resolves against."
@@ -475,6 +619,46 @@
           "why": "Issue #393: the headless window, its frames and the offscreen capture of the composed window."
         }
       }
+    },
+    "packages/env-local/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #331: env-local is an environment@1 fill (#314's kit); only the SlotFill type is imported."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #331: every stack process starts, is signalled and waited for through host@1, and ports are leased as the supervisor's port kind."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #331: the environment block of .deepbuild/done.yaml, a YAML file the repo writes; no YAML parser is in the repo."
+        }
+      }
+    },
+    "packages/runner/package.json": {
+      "dependencies": {
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the window, first-reading and smoke-test asks a job raises while it waits, through the asks core."
+        },
+        "@deepbuild/budget": {
+          "spec": "0.0.0",
+          "why": "Issue #159: a job that bills an API key starts only within a budget the ledger reserves, and is charged its cost."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #159: the canonical digest that keys each ask a job raises, so the same question is never asked twice."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #159: each job is recorded before it starts and its end appended, so a restart finds it and never runs it twice."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #159: host@1, through which every process of a job starts sandboxed with only what it declares, and is reaped."
+        }
+      }
     }
   },
   "allowedFindings": [
@@ -495,6 +679,12 @@
       "kind": "home path",
       "sha256": "9e63dffb43b4deffde5e7fc73fe70a38ede39f591e7c44dd8bd08d9f742fff36",
       "why": "Issue #79: a planted Windows home path under the placeholder user someone, proving the acceptance privacy check catches one."
+    },
+    {
+      "path": "tests/acceptance/159/plan.test.ts",
+      "kind": "API key",
+      "sha256": "b6ed1522e39bfb90264f23b3d61616e541544f92f2cd649feee07defeac421cc",
+      "why": "Issue #159: a made-up API key prefix (dh159FAKE) the AC8 test sets in a job's environment, proving the runner names the variable and never its value."
     }
   ]
 }

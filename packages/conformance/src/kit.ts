@@ -3,7 +3,7 @@
 import { ContractError } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import type { AdapterEvent, HookRequestLine } from '@deepbuild/adapters';
-import { AGENT, fakeFill, VERSION } from './fake-agent.js';
+import { AGENT, fakeFill, SURFACE } from './fake-agent.js';
 import type { Faults } from './fake-agent.js';
 import { codeFamilies } from './families.js';
 import { planted } from './planted.js';
@@ -197,7 +197,6 @@ const cases: Case[] = [
 ];
 
 const fake = (name: string, message: string, codes: string[], breaks: Fake['breaks'], faults: Faults): Fake => ({ name, message, codes, breaks, fill: fakeFill(REVISION, faults) });
-const SURFACE = fakeFill(REVISION).surface;
 
 /** The broken fakes: one per adapter rule, one per flag, operation and kind a case declares. */
 function fakes(): Fake[] {
@@ -246,4 +245,3 @@ export function cleanFill(kit: Kit): Fill {
   return fakeFill(kit.revision);
 }
 
-export { VERSION as FAKE_VERSION };

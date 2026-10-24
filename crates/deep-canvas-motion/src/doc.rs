@@ -33,6 +33,9 @@ pub struct Target {
 pub enum ValueType {
     F32,
     Color,
+    /// Held only, as 0 or 1 (Channel and key: "enum, bool and string: hold only"); an item's
+    /// `adjust.invert` is one (Item and kind: adjust).
+    Bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -242,6 +245,7 @@ fn channel_of(
             Some("oklab") | None => ValueType::Color,
             _ => return refuse("bad_space", format!("{path}/space")),
         },
+        Some("bool") => ValueType::Bool,
         _ => return refuse("bad_type", format!("{path}/type")),
     };
     let mut keys = Vec::new();
@@ -256,6 +260,7 @@ fn channel_of(
         let t = time_of(key.get("t"), ctx, &format!("{kpath}/t"))?;
         let value = match (ty, key.get("value")) {
             (ValueType::F32, v) => vec![number(v, &format!("{kpath}/value"))?],
+            (ValueType::Bool, Some(Value::Bool(b))) => vec![if *b { 1.0 } else { 0.0 }],
             (ValueType::Color, Some(Value::Array(parts))) if parts.len() == 3 => parts
                 .iter()
                 .enumerate()
@@ -263,7 +268,13 @@ fn channel_of(
                 .collect::<Result<_, _>>()?,
             _ => return refuse("out_of_range", format!("{kpath}/value")),
         };
-        let interp = interp_of(key.get("interp"), &format!("{kpath}/interp"))?;
+        let interp = match (ty, key.get("interp")) {
+            (ValueType::Bool, None) => Interp::Hold,
+            (_, v) => interp_of(v, &format!("{kpath}/interp"))?,
+        };
+        if ty == ValueType::Bool && interp != Interp::Hold {
+            return refuse("bad_interp", format!("{kpath}/interp"));
+        }
         if matches!(interp, Interp::Spring { .. }) && ty != ValueType::F32 {
             return refuse("bad_interp", format!("{kpath}/interp"));
         }
@@ -317,10 +328,7 @@ fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), R
 }
 
 /// Reads a document's motion.
-pub fn read(doc: &Value) -> Result<Motion, Refused> {
-    let Value::Object(doc) = doc else {
-        return refuse("bad_doc", "");
-    };
+pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
     let transport_map = match doc.get("transport") {
         None | Some(Value::Null) => None,
         Some(Value::Object(t)) => Some(t),
@@ -787,13 +795,15 @@ fn parents_of(doc: &Map<String, Value>) -> Result<Vec<(String, String)>, Refused
         }
     }
     edges.sort();
-    // A child is ready once its parent is no remaining edge's child.
+    // A child is ready once its parent is no remaining edge's child. The edges stay sorted by
+    // child (one parent each), so that is a binary search.
     let mut ordered: Vec<(String, String)> = Vec::with_capacity(edges.len());
     while !edges.is_empty() {
-        let (ready, waiting): (Vec<_>, Vec<_>) = edges
-            .iter()
-            .cloned()
-            .partition(|(_, parent)| !edges.iter().any(|(child, _)| child == parent));
+        let (ready, waiting): (Vec<_>, Vec<_>) = edges.iter().cloned().partition(|(_, parent)| {
+            edges
+                .binary_search_by(|(child, _)| child.as_str().cmp(parent))
+                .is_err()
+        });
         if ready.is_empty() {
             return refuse("parent_cycle", format!("items/{}/parent", edges[0].0));
         }

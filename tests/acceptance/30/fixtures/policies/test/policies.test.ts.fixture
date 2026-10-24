@@ -1,0 +1,11 @@
+import { beforeAll, expect, test } from 'vitest';
+import { seed } from '../scripts/seed';
+import { refundWindow } from '../src/policies';
+import { memoryDb } from './db';
+
+const db = memoryDb();
+beforeAll(() => seed(db));
+
+test('a customer gets the refund window the policy sets', () => {
+  expect(refundWindow(db)).toBe(7);
+});

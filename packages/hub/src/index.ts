@@ -1,11 +1,11 @@
 // @deepbuild/hub: the hub daemon on its socket (#16), the `deep hub` commands that start, read and stop it,
-// and `deep mcp`, the MCP server agents reach it through.
+// `deep mcp`, the MCP server agents reach it through, and `deep env`, a worktree's stack through it (#331).
+import { envCommand } from './env.js';
 import { runMcp } from './mcp.js';
 import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub } from './service.js';
 
-export { hubAddress, installedRoot } from './paths.js';
-export { runHub, runMcp, hubStatus, startHub, stopHub };
+export { envCommand, runMcp };
 
 const USAGE = `Usage: deep hub run [--root <folder>]
        deep hub start [--root <folder>]

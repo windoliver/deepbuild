@@ -111,6 +111,13 @@ export class EvidenceError extends Error {
 export function scrubText(text: string, run?: Run): string {
   return scrub(Buffer.from(text, 'utf8'), scrubList(run)).toString('utf8');
 }
+/**
+ * Text scrubbed by value alone, in every printed form, with no pattern pass: a check run's output before its
+ * digest (#30), whose pattern pass is the store's when it is stored.
+ */
+export function scrubValues(text: string, run: Run): string {
+  return scrub(Buffer.from(text, 'utf8'), scrubList(run), false).toString('utf8');
+}
 
 const DAY = 86_400_000;
 const RETENTION_MS = 30 * DAY;
@@ -279,9 +286,12 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       const receipt: Receipt = { sent: [], withheld: [] };
       for (const sha of files) {
         const record = index.get(sha);
+        if (!record) {
+          receipt.withheld.push({ sha256: sha, reason: `evidence ${sha} is missing` });
+          continue;
+        }
         let bytes: Uint8Array;
         try {
-          if (!record) throw new EvidenceError('missing', `evidence ${sha} is missing`, sha);
           bytes = await read(sha);
         } catch (error) {
           receipt.withheld.push({ sha256: sha, reason: (error as Error).message });

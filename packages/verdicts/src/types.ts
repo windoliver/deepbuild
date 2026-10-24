@@ -153,6 +153,8 @@ export interface CheckResult {
   needed: number;
   inherited: boolean;
   never_started: boolean;
+  /** Why its result is stale: a carried result its runs' reads withdrew, naming each file read; null otherwise. */
+  stale: string | null;
 }
 /** verdict.made's requirement outcome, field for field. */
 export interface RequirementOutcome {
