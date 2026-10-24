@@ -63,7 +63,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     const issue = issues[0]!;
     return { kind: 'refused', id, error: { ...issue, remediation: issue.path === '/seq' ? SEQ_WHY : issue.remediation } };
   }
-  const request = value as unknown as HookRequestLine & { late?: boolean; billing?: Record<string, boolean> };
+  const request = value as unknown as HookRequestLine;
   const name = ADAPTERS[request.agent];
   if (!name) return { kind: 'refused', id, error: refusal('enum', '/agent', `No adapter maps ${request.agent}; send one of ${Object.keys(ADAPTERS).join(', ')}.`, request.agent) };
   if (!isObj(request.payload)) return { kind: 'refused', id, error: refusal('type', '/payload', "Send the agent's hook JSON object as the payload.", request.payload) };
