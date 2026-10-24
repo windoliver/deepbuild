@@ -702,3 +702,22 @@ test('a json file added beside a held module of its stem shadows nothing, as eve
   }), ['guard']);
   assert.ok(!problems(result, 'guard').some((found) => found.includes('cases')), show(result));
 });
+
+test("the change runs on what its own lock installs, so a package its worktree's install re-points, the lock left as it was, is no package the lanes run", (t) => {
+  const lock = JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', workspaces: ['packages/*'], dependencies: { calc: 'file:vendor/calc' } }, 'node_modules/calc': { resolved: 'vendor/calc', link: true }, 'vendor/calc': { name: 'calc', version: '1.0.0' }, 'node_modules/lib': { resolved: 'packages/lib', link: true }, 'packages/lib': { name: 'lib', version: '1.0.0' } } });
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      '.gitignore': 'node_modules\n', 'package.json': JSON.stringify({ name: 'x', private: true, type: 'module', workspaces: ['packages/*'], dependencies: { calc: 'file:vendor/calc' } }), 'package-lock.json': lock,
+      'vendor/calc/package.json': JSON.stringify({ name: 'calc', version: '1.0.0', type: 'module', main: 'index.mjs' }), 'vendor/calc/index.mjs': 'export const f = () => 4;\n', 'packages/lib/package.json': JSON.stringify({ name: 'lib', version: '1.0.0' }),
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from 'calc';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), 3);\n});\n`,
+    },
+    commits: [{ files: { 'packages/calc/package.json': JSON.stringify({ name: 'calc', version: '1.0.0', type: 'module', main: 'index.mjs' }), 'packages/calc/index.mjs': 'export const f = () => 3;\n' }, message: `Add calc\n\nCloses #${ISSUE}` }],
+  });
+  // The worktree's own install, from the new workspace, which the committed lock doesn't hold.
+  mkdirSync(join(scene.cwd, 'node_modules'));
+  symlinkSync('../packages/calc', join(scene.cwd, 'node_modules/calc'));
+  const result = proof(scene, ['trace']);
+  assert.ok(!result.stdout.includes(`PASS before: ${dir}/a.test.mjs`), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
