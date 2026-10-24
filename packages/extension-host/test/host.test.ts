@@ -42,7 +42,7 @@ async function tracked(record: RecordStore, run: string | null): Promise<number[
   return (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked' && (e.data as { run?: string }).run === run).map((e) => (e.data as { pid: number }).pid);
 }
 interface World { h: ExtensionHost; record: RecordStore; trust: ProjectTrust }
-async function world(options: { safe?: boolean; release?: ReleaseEntry[] } = {}): Promise<World> {
+async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?: false } = {}): Promise<World> {
   const dir = temp();
   const record: RecordStore = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
@@ -50,9 +50,9 @@ async function world(options: { safe?: boolean; release?: ReleaseEntry[] } = {})
   closing.push(record, supervisor);
   mkdirSync(join(dir, 'home'));
   const trust = await openTrust({ record, now: Date.now });
-  const h = await openExtensionHost({ record, supervisor, trust, home: join(dir, 'home'), now: Date.now, ...options, release: options.release ?? [] });
+  const h = await openExtensionHost({ record, supervisor, trust, home: join(dir, 'home'), now: Date.now, safe: options.safe, release: options.release ?? [] });
   closing.push(h);
-  await h.ready();
+  if (options.ready !== false) await h.ready();
   return { h, record, trust };
 }
 const host = async (options: { safe?: boolean; release?: ReleaseEntry[] } = {}): Promise<ExtensionHost> => (await world(options)).h;
@@ -188,5 +188,46 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect((await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'task.created')).toEqual([]);
     expect(await h.loaded()).toEqual([]);
     expect(pids.filter(alive)).toEqual([]);
+  }, 60_000);
+
+  it('the bytes that run are the bytes its load checked: files swapped in its install folder before the hub is ready never run', async () => {
+    for (const place of ['sandbox', 'hub'] as const) {
+      const folder = stuck(PASSES);
+      const { h } = await world({ ready: false, release: place === 'hub' ? [{ id: 'test/stuck', version: '1.0.0', digest: packageDigest(folder) }] : [] });
+      const p = await h.install({ from: folder, builtBy: null });
+      expect((await h.check(p)).passed).toBe(true);
+      const load = await h.load(p);
+      expect(load.status === 'loaded' && load.place).toBe(place);
+      writeFileSync(join(p.folder, 'index.ts'), `export default function (deep: any): void {\n  deep.registerCheck('ext.stuck.run', () => ${PID});\n}\n`);
+      await h.ready();
+      expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome, place).toBe('passed');
+    }
+  }, 60_000);
+
+  it('closing the host while a load is starting its process stops that process, and the load is refused', async () => {
+    const { h, record } = await world();
+    const p = await h.install({ from: stuck(PASSES), builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    const pidsNow = async (): Promise<number[]> => (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked').map((e) => (e.data as { pid: number }).pid);
+    const before = (await pidsNow()).length;
+    const load = h.load(p);
+    while ((await pidsNow()).length === before) await new Promise((resolve) => setTimeout(resolve, 2));
+    await h.close();
+    expect((await load).status).toBe('refused');
+    expect(await h.loaded()).toEqual([]);
+    expect((await pidsNow()).slice(before).filter(alive)).toEqual([]);
+  }, 60_000);
+
+  it('turning on a project extension whose trust you revoked is refused, and it is stopped', async () => {
+    const { h, trust } = await world();
+    const repo = temp();
+    await trust.answer(YOU, repo, true);
+    const folder = pkgOf('test/route', "export default function (deep: any): void {\n  deep.registerRoute('GET /hi', () => ({ status: 200, body: 'hi' }));\n}\n", { checks: [] });
+    const p = await h.install({ from: folder, builtBy: null, project: repo });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    await trust.answer(YOU, repo, false);
+    await expect(h.turnOn('test/route', ['GET /hi'])).rejects.toThrow(/trust/);
+    expect(await h.loaded()).toEqual([]);
   }, 60_000);
 });
