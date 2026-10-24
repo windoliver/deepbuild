@@ -186,3 +186,61 @@ describe('a taste call that dropped near copies (#394)', () => {
     expect((await events('ask.created')).length).toBe(1);
   });
 });
+
+describe('a block someone else owns (#320)', () => {
+  const block = (subject: string, over: Obj = {}): Obj => ({
+    kind: 'unblock', question: `Renew ${subject}?`,
+    options: [{ id: 'done', label: 'I did it', decision: 'none' }, { id: 'wait', label: 'Leave it blocked', decision: 'none' }],
+    recommended: 'done', deadline: T0 + 48 * HOUR, fallback: 'you', default: 'wait', provisional: false, owner: 'sam',
+    key: sha(`unblock:${subject}`), pinned_to: { kind: 'evidence', ref: sha(subject) },
+    steps: [`Renew ${subject}`], where: 'the staging console', why: 'the release job needs it', unblocks: ['task:01K74FX2B4D6F8H0K2M4P6R8T0'], proves: `${subject}.check`,
+    ...over,
+  });
+  const requestOf = async (handle: string) => (await asks.inbox()).find((r) => r.request?.block === handle);
+
+  it('stays BLOCKED at its deadline, by the default its raiser named, though it never showed to you', async () => {
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.unblock', block('db-credentials'));
+    now = T0 + 48 * HOUR;
+    await asks.tick();
+    expect((await events('ask.defaulted')).filter((e) => e.subject === handle).map((e) => (e.data as Obj).answer)).toEqual(['wait']);
+    expect(deliveries.filter((d) => d.ask === handle)).toMatchObject([{ option: 'wait', decision: 'none' }]);
+  });
+
+  it('takes its request with it when its check passes', async () => {
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.unblock', block('db-credentials'));
+    const request = (await requestOf(handle))!.ask;
+    const claim = 'claim:01K74G1Z3X5V7T9R1P3N5M7K9H';
+    await record.append({ writer: 'core', ...who, session: 'S1' }, { v: 1, id: id(now), kind: 'verdict.made', subject: claim, ts: now, data: {
+      outcome: 'PASS', verdict: 'verdict:01K74G4B6D8F0H2K4M6P8R0T2V', claim, reasons: [], smallest: null, points_to: null, commit: '0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46',
+      requirements: [{ req: 'req:01K74G0A1B2C3D4E5F6G7H8J9K#R1', outcome: 'PASS', check: 'db-credentials.check', depth: 'unit', oracle: 'code', runs: { clean: 1, needed: 1, counted: ['run:01K74G3A5C7E9G1J3M5P7R9T1V'] }, smallest: null, points_to: null, evidence: [], proof: 'test_run' }],
+      key: { commit: '0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46', doc_revisions: [], check_digests: [], state_digests: [], environment: 'node-24.22.0/darwin-arm64', tools: [] },
+    } });
+    await asks.tick();
+    expect(await outcome(handle)).toBe('moot');
+    expect(await outcome(request)).toBe('moot');
+    expect(await shown()).toEqual([]);
+  });
+
+  it('asked again on the same subject: the newer request supersedes the older, so you see one', async () => {
+    await start('S1', 'T1');
+    const older = await asks.raise(agent('S1'), 'deep_ask.unblock', block('db-credentials'));
+    const first = (await requestOf(older))!.ask;
+    now += HOUR;
+    const newer = await asks.raise(agent('S1'), 'deep_ask.unblock', block('db-credentials', { question: 'Renew the staging credentials, again?', pinned_to: { kind: 'evidence', ref: sha('v2') } }));
+    const second = (await requestOf(newer))!.ask;
+    expect(await outcome(first)).toBe('superseded');
+    expect(await shown()).toEqual([second]);
+  });
+
+  it("isn't one of your asks, so raising it folds nothing into an exception", async () => {
+    await start('S1', 'T1');
+    for (const subject of ['a', 'b', 'c', 'd']) await asks.raise(agent('S1'), 'deep_ask.taste', taste(subject));
+    await asks.raise(agent('S1'), 'deep_ask.unblock', block('db-credentials'));
+    await asks.raise(agent('S1'), 'deep_ask.unblock', block('fixtures-bucket'));
+    // Four of yours and two drafted requests: no exception yet, and all six show.
+    expect((await asks.inbox()).filter((r) => r.kind === 'exception')).toEqual([]);
+    expect(await shown()).toHaveLength(6);
+  });
+});
