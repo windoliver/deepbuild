@@ -1,14 +1,14 @@
-// #315 AC4, AC6 and AC7: the spool while the hub is down and the stamps on every event. Hooks run with the hub
+// #315 AC4 and AC6: the spool while the hub is down and the stamps on every event. Hooks run with the hub
 // stopped are in the record once it starts, in the order they ran, none lost. deep-hook's clock is fixed by the
 // test through DEEP_HOOK_TEST_CLOCK_NS (README, Test-only settings), so the stamps are known: they are spooled as
-// those exact strings, recorded as them in order, a spool replayed twice appends nothing, and two hooks stamped
-// the same nanosecond still get two IDs and two events.
+// those exact strings, recorded as them in order, and a spool replayed twice appends nothing. AC7 is in
+// spool-ac7-redraft.test.ts (AC7-REDRAFT.md), which replaced this file's first draft with the owner's approval.
 import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  bash, buildDeepHook, cleanup, forwarder, hook, jsonLines, makeHome, newSession, payload, readSpool, rootOf, setAddress, settleEvents,
-  spoolText, startHub, stopHub, tempDir, ULID, type Ev, type Line, type Session,
+  bash, buildDeepHook, cleanup, hook, makeHome, newSession, payload, readSpool, rootOf, settleEvents, spoolText, startHub, stopHub,
+  tempDir, ULID, type Session,
 } from './helpers.ts';
 
 afterEach(cleanup, 60_000);
@@ -107,41 +107,5 @@ describe('AC6 #315.8366a61c with the clock fixed, hooks stamped …789 and …79
     const added = again.filter((e) => e.writer !== 'core' && !first.some((f) => f.id === e.id));
     expect(added.map((e) => `${e.kind} ${e.id} seq ${e.seq}`), 'replaying the same spool again appends nothing').toEqual([]);
     expect([again.filter((e) => e.id === idA).length, again.filter((e) => e.id === idB).length], 'each ID still once').toEqual([1, 1]);
-  }, 300_000);
-});
-
-describe('AC7 #315.2a5a4d2b two hooks of one session with the clock fixed to the same nanosecond get different IDs, and both are in the record', () => {
-  it('AC7 hub up and hub stopped: two hooks stamped the same nanosecond carry that stamp, two different IDs, and are two events', async () => {
-    const binary = await buildDeepHook();
-    const home = makeHome();
-    const s = newSession(home);
-    let hub = await startHub({ home });
-    const f = await forwarder(tempDir(), hub.socket);
-    setAddress(home, `unix:${f.path}`);
-    for (let i = 0; i < 2; i++) expect((await hook(home, s, 'PreToolUse', bash(s, 'ls'), { binary, env: clock(STAMP_A) })).code).toBe(0);
-    await f.close();
-    const up = jsonLines(f.upText()).filter((l) => l.event === 'PreToolUse');
-    const check = (requests: Line[], events: Ev[], how: string) => {
-      expect(requests.map((l) => l.seq), `${how}: both requests carry the fixed stamp`).toEqual([STAMP_A, STAMP_A]);
-      const [x, y] = requests.map((l) => l.id as string);
-      expect(ULID.test(x ?? '') && ULID.test(y ?? ''), `${how}: each has a ULID`).toBe(true);
-      expect(x, `${how}: the two IDs differ`).not.toBe(y);
-      for (const id of [x, y]) {
-        const e = events.filter((ev) => ev.id === id);
-        expect(e.length, `${how}: ${id} is in the record once`).toBe(1);
-        expect(e[0]!.seq, `${how}: ${id} recorded with the fixed stamp`).toBe(STAMP_A);
-      }
-    };
-    let events = await settleEvents(hub, (all) => up.every((l) => all.some((e) => e.id === l.id)));
-    check(up, events, 'hub up');
-    await stopHub(hub);
-
-    setAddress(home, undefined);
-    for (let i = 0; i < 2; i++) expect((await hook(home, s, 'PreToolUse', bash(s, 'ls'), { binary, env: clock(STAMP_B) })).code).toBe(0);
-    const spooled = readSpool(home).requests.map((r) => r.json).filter((l) => l.payload?.session_id === s.id);
-    hub = await startHub({ home });
-    events = await settleEvents(hub, (all) => spooled.every((l) => all.some((e) => e.id === l.id)));
-    await stopHub(hub);
-    check(spooled, events, 'hub stopped, then started');
   }, 300_000);
 });
