@@ -411,6 +411,18 @@ Not tested, because no criterion asks or the surface can't reach it: the cache m
 canvas module left out, the export module's two laws, kit hygiene's expected failures and frozen requirement sets,
 and the oracle lanes themselves (#136).
 
+## Blind redrafts that replaced first drafts
+
+Three first drafts couldn't pass on any implementation, so they went to a blind redraft of this job (design:
+Dogfooding). On October 23 the owner approved the redrafts in place of the first drafts, and the first drafts were
+removed. For these three tests, read the redraft.
+
+| Criterion | First draft (removed) | Why it couldn't hold | Redraft | Notes |
+|---|---|---|---|---|
+| `#138.9e9940d1` | `catalog.test.ts`, the rogue module's `uncatalogued` failure | asked one failure for `code: 'uncatalogued'` and `code: 'test.kit.rogue.unlisted'` at once | `catalog-redraft.test.ts` | `CATALOG-REDRAFT.md` |
+| `#138.c7f79e24` | `catalog.test.ts`, the dangling fix's `ops_fix` failure | asked one failure for `code: 'ops_fix'` and `code: 'test.kit.fixer.y_over'` at once | `catalog-redraft.test.ts` | `CATALOG-REDRAFT.md` |
+| `#138.c7f79e24` | `catalog.test.ts`, the unproved fix's `unproved_fix` failure | asked one failure for `code: 'unproved_fix'` and `code: 'test.kit.fixer.y_under'` at once | `catalog-redraft.test.ts` | `CATALOG-REDRAFT.md` |
+
 ## Upstream tests (the Oracle lane)
 
 Criteria 24 and 25 have upstream tests in skia-buildbot `3453607cf0` (fuzzy and sample-area matchers;
