@@ -241,6 +241,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #30: listing.ts parses a run's test files with the TypeScript parser to list the tests they hold, so a test that never ran fails the run; loaded only when a run reaches the listing."
         }
       }
     },
