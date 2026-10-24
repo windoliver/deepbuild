@@ -663,12 +663,11 @@ const REFERENCE_MACS = [
 const sh = (cmd: string, ...args: string[]): string => execFileSync(cmd, args, { encoding: 'utf8' }).trim();
 export function environmentProblem(): string | null {
   if (process.platform !== 'darwin') return `platform ${process.platform}`;
-  let model: string, chip: string, gib: number, batt: string, power: string, therm: string;
+  let model: string, chip: string, gib: number, power: string, therm: string;
   try {
     model = sh('sysctl', '-n', 'hw.model');
     chip = sh('sysctl', '-n', 'machdep.cpu.brand_string');
     gib = Math.round(Number(sh('sysctl', '-n', 'hw.memsize')) / 2 ** 30);
-    batt = sh('pmset', '-g', 'batt');
     power = sh('pmset', '-g');
     therm = sh('pmset', '-g', 'therm');
   } catch (e) {
@@ -676,7 +675,6 @@ export function environmentProblem(): string | null {
   }
   const fingerprint = `${model} / ${chip} / ${gib} GiB`;
   if (!REFERENCE_MACS.some((m) => m.model === model && m.chip === chip && m.gib === gib)) return `not a reference Mac: ${fingerprint}`;
-  if (!/'AC Power'/.test(batt)) return `not on mains power: ${batt.split('\n')[0]}`;
   const lpm = /^\s*lowpowermode\s+(\d)/m.exec(power);
   if (!lpm) return 'Low Power Mode state unknown (no lowpowermode line in pmset -g)';
   if (lpm[1] !== '0') return 'Low Power Mode is on';

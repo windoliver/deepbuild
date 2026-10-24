@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use crate::device::{Device, Gpu};
 use crate::encode::{Encode, Pool};
-use crate::render::{RenderModule, Target};
+use crate::render::{self, RenderModule, Target};
 use crate::ring::{Mark, Ring, SlotState};
 use crate::surface::{allocate, Handoff, Path, Shown};
 use crate::upload::Uploads;
@@ -160,6 +160,8 @@ pub struct View {
     ui: Ui,
     storage: Vec<Option<Box<dyn Handoff>>>,
     module: Box<dyn RenderModule>,
+    /// The module's passes in frame order.
+    plan: Vec<String>,
     pool: Pool,
     uploads: Uploads,
     done_tx: mpsc::Sender<(u64, usize, Done, Instant)>,
@@ -178,6 +180,7 @@ impl View {
         mut module: Box<dyn RenderModule>,
         pool: Pool,
     ) -> Result<Self, String> {
+        let plan = render::plan(&module.passes())?;
         let device = gpu.recover()?;
         module.build(&device)?;
         let mut uploads = Uploads::new(config.upload_bytes_per_frame);
@@ -200,6 +203,7 @@ impl View {
             gpu,
             device,
             module,
+            plan,
             pool,
             done_tx,
             done_rx,
@@ -312,7 +316,19 @@ impl View {
             view: storage.target().clone(),
         };
         let settling = self.uploads.flush(&self.device.queue);
-        let jobs = self.module.layers(&self.device, &target);
+        let mut keyed = Vec::new();
+        for (name, job) in self.module.layers(&self.device, &target) {
+            let Some(at) = self.plan.iter().position(|n| *n == name) else {
+                lock(&self.ui.ring).abandon(slot);
+                return Err(format!(
+                    "undeclared_pass: `{name}` isn't one of {}'s passes",
+                    self.module.name()
+                ));
+            };
+            keyed.push((at, job));
+        }
+        keyed.sort_by_key(|(at, _)| *at);
+        let jobs = keyed.into_iter().map(|(_, job)| job).collect();
         let encodes = self.pool.run(&self.device.device, &self.device.queue, jobs);
         let epoch = self.device.epoch;
         let tx = self.done_tx.clone();

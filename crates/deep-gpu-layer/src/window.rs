@@ -33,7 +33,8 @@ pub struct Paint {
     pub card: Option<Card>,
     /// The planted UI thread that waits on the frame's `gpu_done` fence.
     pub waits_on_gpu: bool,
-    /// What the last paint spent on the GPU layer on the UI thread, and the frame it showed.
+    /// What the last present's paints spent on the GPU layer on the UI thread, and the frame it
+    /// showed.
     pub ui_time: Duration,
     pub shown: Option<u64>,
     /// The page as one picture, made once per page and window size.
@@ -98,10 +99,12 @@ fn paint_page(p: &mut Paint, bounds: Bounds<Pixels>, window: &mut Window) {
 fn paint_view(p: &mut Paint, ui: &Ui, window: &mut Window) {
     let started = Instant::now();
     if p.waits_on_gpu {
-        // The wrong program: the UI thread holds until the newest frame's fence signals.
-        while !ui.states().contains(&SlotState::Ready) && started.elapsed() < Duration::from_secs(5)
+        // The wrong program: while a frame is in flight, the UI thread holds until its `gpu_done`
+        // fence signals, checking between short sleeps so the render thread can mark it.
+        while ui.states().contains(&SlotState::Rendering)
+            && started.elapsed() < Duration::from_secs(5)
         {
-            std::hint::spin_loop();
+            std::thread::sleep(Duration::from_micros(50));
         }
     }
     let bounds = rect(
@@ -111,7 +114,7 @@ fn paint_view(p: &mut Paint, ui: &Ui, window: &mut Window) {
         p.size[1] as f32,
     );
     p.shown = deep_app::gpu_view::paint(ui, bounds, window);
-    p.ui_time = started.elapsed();
+    p.ui_time += started.elapsed();
 }
 
 impl Render for Root {
@@ -223,7 +226,8 @@ impl Win {
 
     /// Draws and presents one frame, as a display link's frame request does.
     pub fn present(&self, cx: &mut HeadlessAppContext) {
-        let _ = cx.update_window(self.handle, |_, window, _| window.refresh());
+        self.paint.borrow_mut().ui_time = Duration::ZERO;
+        // A forced frame request draws once, as the app's display link does.
         cx.present_frame(self.handle);
     }
 
