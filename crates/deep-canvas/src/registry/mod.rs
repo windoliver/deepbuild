@@ -47,8 +47,8 @@ const FRAME_PHASES: &[&str] = &[
 /// The audio phase, after the frame's (media processors only).
 const AUDIO_PHASES: &[&str] = &["block"];
 
-/// The closed list of places a pass may go (canvas primitives: Place in the frame).
-const PLACES: &[&str] = &[
+/// The closed list of places a pass may go, in frame order (canvas primitives: Place in the frame).
+pub const PLACES: &[&str] = &[
     "compute",
     "shadows",
     "sky",
