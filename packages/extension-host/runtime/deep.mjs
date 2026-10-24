@@ -84,12 +84,15 @@ export function extensionSide(call, load) {
 
 /** The longest line either side reads, in bytes. */
 const FRAME = 16 * 1024 * 1024;
+/** The most requests from the other side left unanswered at once. */
+const INFLIGHT = 256;
 /** A JSON-RPC 2.0 peer on a duplex stream: `serve(method, params)` answers the other side's requests. */
 export function peer(stream, serve) {
   let next = 0;
   /** The bytes of a line not yet ended, and how many. */
   let held = [];
   let size = 0;
+  let inflight = 0;
   const pending = new Map();
   const send = (message) => stream.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   const answer = (id, body) => { if (id !== undefined && id !== null) send({ id, ...body }); };
@@ -97,10 +100,13 @@ export function peer(stream, serve) {
     let m;
     try { m = JSON.parse(line); } catch { return; }
     if (typeof m?.method === 'string') {
+      // A side asking faster than it is answered is cut off rather than queued without end.
+      if (inflight >= INFLIGHT) return void stream.destroy();
+      inflight++;
       Promise.resolve().then(() => serve(m.method, m.params)).then(
         (result) => answer(m.id, { result: result ?? null }),
         (error) => answer(m.id, { error: { code: -32000, message: String(error?.message ?? error) } }),
-      );
+      ).finally(() => { inflight--; });
     } else if (pending.has(m?.id)) {
       const waiting = pending.get(m.id);
       pending.delete(m.id);
@@ -119,6 +125,7 @@ export function peer(stream, serve) {
       size = 0;
       start = at + 1;
       if (line.trim()) receive(line);
+      if (stream.destroyed) return;
     }
     held.push(chunk.subarray(start));
     size += chunk.length - start;
