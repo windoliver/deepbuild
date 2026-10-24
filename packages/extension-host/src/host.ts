@@ -62,7 +62,7 @@ export interface ExtensionHost {
   runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult>;
   /** Hands each event to the loaded packages subscribed to its kind, once they have all taken it; rejects naming each that didn't. */
   deliver(events: Event[]): Promise<void>;
-  /** The hub is ready: its socket listens and its replay is done. Packages loaded before it start now. */
+  /** The hub is ready: its socket listens and its replay is done. Packages loaded before it start now; it rejects naming each that failed to, unloaded. */
   ready(): Promise<void>;
   /** "<METHOD> <path>" routes you chose, served on one listener on 127.0.0.1. */
   turnOn(id: string, routes: string[]): Promise<{ address: string }>;
@@ -553,10 +553,18 @@ class Host implements ExtensionHost {
     if (this.isReady) return this.starting;
     this.isReady = true;
     this.starting = (async () => {
+      const failed: string[] = [];
       for (const ext of [...this.exts.values()]) {
         if (this.closed) return;
-        if (!ext.ask) await this.start(ext).then(async () => { if (this.closed) await this.unload(ext); }, () => this.unload(ext));
+        if (!ext.ask) {
+          await this.start(ext).then(async () => { if (this.closed) await this.unload(ext); }, async (e) => {
+            failed.push(`${ext.entry.id}: ${message(e)}`);
+            await this.unload(ext);
+          });
+        }
       }
+      // The rest started; each that didn't is unloaded and named.
+      if (failed.length) throw Error(`not every package loaded before ready started: ${failed.join('; ')}`);
     })();
     return this.starting;
   }
@@ -629,7 +637,7 @@ class Host implements ExtensionHost {
     if (this.closed) return;
     this.closed = true;
     // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
-    await this.starting;
+    await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);
     for (const ext of [...this.exts.values()]) await this.unload(ext);
   }
