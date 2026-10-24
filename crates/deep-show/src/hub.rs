@@ -66,6 +66,40 @@ pub enum Planted {
     KeyWithoutReducedMotion,
     /// #387: `test.scatter.draw`'s key hashes the values of `test.scatter.positions`.
     KeyHashesPositions,
+    /// #138: content keys leave out an item's canonical params.
+    KeyWithoutParams,
+    /// #138: the core refuses some invalid patches with no code.
+    RefusalWithoutCode,
+    /// #138: a refused patch still changes the canonical bytes.
+    RefusedPatchWrites,
+    /// #138: a dry run returns before the incremental re-check.
+    DryRunSkipsRecheck,
+    /// #138: the undo of a reorder mints a new order key.
+    UndoReorderMintsKey,
+    /// #138: order keys are drawn when a patch applies, not from its base.
+    ApplyTimeOrderKeys,
+    /// #138: the incremental check after a patch skips the items that refer to what it touched.
+    IncrementalCheckSkipsReferrers,
+    /// #138: a stale patch rebases when no path it writes changed since its base.
+    RebaseByPath,
+    /// #138: `patch_fuzz` runs no sequence and exits 0.
+    FuzzerRunsNone,
+    /// #138: `clean_rebuild` runs half its declared sequences and exits 0.
+    PartRunsHalf,
+    /// #138: `schedule` exits 0 with a failed case in its results.
+    ExitZeroWithFailedCase,
+    /// #138: the kit counts a case's declared coverage as reached.
+    CountsDeclaredAsReached,
+    /// #138: the kit passes a snapshot case without comparing its pixels.
+    SkipsSnapshotComparison,
+    /// #138: a case passes when its expected codes are among those raised.
+    ChecksExpectedCodeOnly,
+    /// #138: a decision is taken from an agent as from you.
+    AcceptsAgentDecisions,
+    /// #138: the golden store reads every recorded digest as positive.
+    EveryDigestPositive,
+    /// #138: `compare_images` checks only the share of pixels off.
+    ChecksShareOnly,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -229,6 +263,45 @@ pub enum Call {
         source: String,
         columns: BTreeMap<String, Vec<u8>>,
     },
+    /// The canvas conformance kit (#138).
+    Kit(Box<crate::kit::KitCall>),
+    /// The parity suite's manifest (#138).
+    Manifest,
+    /// The check catalog (#138).
+    Catalog,
+    /// A fixture's snapshot on a backend, judged against the golden store (#138).
+    Golden {
+        fixture: String,
+        backend: String,
+    },
+    /// Records a fixture's snapshot in the golden store, untriaged, by whoever calls (#138).
+    Record {
+        via: Option<Via>,
+        fixture: String,
+        backend: String,
+    },
+    /// A fixture's golden digests (#138).
+    Goldens {
+        fixture: String,
+    },
+    /// One decision, taken only from you (#138).
+    Decide {
+        via: Option<Via>,
+        decision: Value,
+    },
+    /// Records a corpus document as this build saves and draws it (#138).
+    CorpusRecord {
+        corpus: PathBuf,
+        name: String,
+        document: Value,
+        times: Vec<i64>,
+    },
+    /// Two images judged under a tolerance (#138).
+    CompareImages {
+        expected: PathBuf,
+        actual: PathBuf,
+        tolerance: Value,
+    },
 }
 
 /// One `eval` call (#387).
@@ -270,6 +343,12 @@ pub struct Scenario {
     pub epoch_start: u32,
     /// Ties break by a shuffle from this seed instead of by name and order (#387).
     pub shuffle: Option<u32>,
+    /// The golden store; without it, the repo's committed store (#138).
+    pub goldens: Option<PathBuf>,
+    /// What every backend reports as its OS and driver for this run (#138).
+    pub environment: Map<String, Value>,
+    /// The commit this run renders at (#138); the checkout's HEAD without it.
+    pub commit: Option<String>,
 }
 
 /// One revision of a document (Revision).
@@ -329,6 +408,7 @@ impl<'a> Hub<'a> {
             key_hashes: (scenario.planted == Some(Planted::KeyHashesPositions))
                 .then(|| "test.scatter.positions".to_string()),
             steps_by_name: startup.steps_by_name,
+            key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
         };
         #[allow(unused_mut)]
         let mut sched = Scheduler::new(
@@ -559,6 +639,28 @@ impl<'a> Hub<'a> {
             Call::Screen => {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
+            Call::Kit(k) => self.kit(k),
+            Call::Manifest => self.manifest_reply(),
+            Call::Catalog => self.catalog_reply(),
+            Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
+            Call::Record {
+                via,
+                fixture,
+                backend,
+            } => self.record_reply(via.as_ref(), fixture, backend),
+            Call::Goldens { fixture } => self.goldens_reply(fixture),
+            Call::Decide { via, decision } => self.decide(via.as_ref(), decision),
+            Call::CorpusRecord {
+                corpus,
+                name,
+                document,
+                times,
+            } => self.corpus_record(corpus, name, document, times),
+            Call::CompareImages {
+                expected,
+                actual,
+                tolerance,
+            } => self.compare_images(expected, actual, tolerance),
         };
         self.stamp(&mut reply);
         reply

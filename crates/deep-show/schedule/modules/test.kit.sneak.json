@@ -1,0 +1,34 @@
+{
+  "module": "test.kit.sneak",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.kit.sneak.src",
+        "module": "test.kit.sneak",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.sneak.src"
+        ],
+        "per": "item"
+      }
+    ],
+    "views": [
+      {
+        "operator": "test.kit.sneak.out",
+        "module": "test.kit.sneak",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.sneak.out"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

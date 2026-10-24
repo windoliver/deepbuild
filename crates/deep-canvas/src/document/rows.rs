@@ -165,6 +165,15 @@ fn encode(cells: &Cells, n: usize) -> Value {
 
 /// Whether row `i`'s cell equals `wanted` as a key, compared as JSON: numbers by value, and a
 /// number JSON can't hold (NaN, infinity) as `null`.
+/// Row `i`'s cell as JSON.
+fn cell(cells: &Cells, i: usize) -> Value {
+    match cells {
+        Cells::Const(v) => v.clone(),
+        Cells::Texts(t) => json!(t[i]),
+        Cells::Numbers { values, .. } => json!(values[i]),
+    }
+}
+
 fn key_is(cells: &Cells, i: usize, wanted: &Value) -> bool {
     match cells {
         Cells::Const(v) => match (v.as_f64(), wanted.as_f64()) {

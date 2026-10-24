@@ -1,0 +1,20 @@
+{
+  "module": "test.kit.cover",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.kit.cover.width",
+        "module": "test.kit.cover",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.cover.width"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

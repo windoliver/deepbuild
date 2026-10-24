@@ -9,6 +9,7 @@
 mod evidence;
 mod frames;
 mod hub;
+mod kit;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod shared;
@@ -208,6 +209,22 @@ fn via(name: &str, c: &Map<String, Value>) -> Option<Via> {
     }
 }
 
+/// A call's backend: one of the kit's.
+fn backend(c: &Map<String, Value>) -> Option<String> {
+    let b = c.get("backend")?.as_str()?;
+    kit::BACKENDS.contains(&b).then(|| b.to_string())
+}
+
+/// Who a call acts as: an agent's session or `deep show` from a process tree, or no one.
+fn acting(c: &Map<String, Value>) -> Option<Option<Via>> {
+    match (c.get("session"), c.get("peer")) {
+        (None, None) => Some(None),
+        (Some(_), None) => Some(Some(via("deep_show", c)?)),
+        (None, Some(_)) => Some(Some(via("deep show", c)?)),
+        _ => None,
+    }
+}
+
 fn call(c: &Map<String, Value>) -> Option<Call> {
     let name = c.get("call")?.as_str()?;
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
@@ -304,6 +321,53 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 source,
                 columns,
             });
+        }
+        "kit" => return Some(Call::Kit(Box::new(kit::KitCall::parse(c)?))),
+        "manifest" => return Some(Call::Manifest),
+        "catalog" => return Some(Call::Catalog),
+        "golden" => {
+            return Some(Call::Golden {
+                fixture: c.get("fixture")?.as_str()?.to_string(),
+                backend: backend(c)?,
+            })
+        }
+        "record" => {
+            return Some(Call::Record {
+                via: acting(c)?,
+                fixture: c.get("fixture")?.as_str()?.to_string(),
+                backend: backend(c)?,
+            })
+        }
+        "goldens" => {
+            return Some(Call::Goldens {
+                fixture: c.get("fixture")?.as_str()?.to_string(),
+            })
+        }
+        "decide" => {
+            return Some(Call::Decide {
+                via: acting(c)?,
+                decision: c.get("decision")?.clone(),
+            })
+        }
+        "corpus_record" => {
+            return Some(Call::CorpusRecord {
+                corpus: PathBuf::from(c.get("corpus")?.as_str()?),
+                name: c.get("name")?.as_str()?.to_string(),
+                document: c.get("document")?.clone(),
+                times: c
+                    .get("times")?
+                    .as_array()?
+                    .iter()
+                    .map(|t| flicks(t.as_str()?))
+                    .collect::<Option<_>>()?,
+            })
+        }
+        "compare_images" => {
+            return Some(Call::CompareImages {
+                expected: PathBuf::from(c.get("expected")?.as_str()?),
+                actual: PathBuf::from(c.get("actual")?.as_str()?),
+                tolerance: c.get("tolerance")?.clone(),
+            })
         }
         "by_writer" => return Some(Call::ByWriter(doc()?)),
         "history" => {
@@ -547,6 +611,23 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "key_without_locale" => Planted::KeyWithoutLocale,
             "key_without_reduced_motion" => Planted::KeyWithoutReducedMotion,
             "key_hashes_positions" => Planted::KeyHashesPositions,
+            "key_without_params" => Planted::KeyWithoutParams,
+            "refusal_without_code" => Planted::RefusalWithoutCode,
+            "refused_patch_writes" => Planted::RefusedPatchWrites,
+            "dry_run_skips_recheck" => Planted::DryRunSkipsRecheck,
+            "undo_reorder_mints_key" => Planted::UndoReorderMintsKey,
+            "apply_time_order_keys" => Planted::ApplyTimeOrderKeys,
+            "incremental_check_skips_referrers" => Planted::IncrementalCheckSkipsReferrers,
+            "rebase_by_path" => Planted::RebaseByPath,
+            "fuzzer_runs_none" => Planted::FuzzerRunsNone,
+            "part_runs_half" => Planted::PartRunsHalf,
+            "exit_zero_with_failed_case" => Planted::ExitZeroWithFailedCase,
+            "counts_declared_as_reached" => Planted::CountsDeclaredAsReached,
+            "skips_snapshot_comparison" => Planted::SkipsSnapshotComparison,
+            "checks_expected_code_only" => Planted::ChecksExpectedCodeOnly,
+            "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
+            "every_digest_positive" => Planted::EveryDigestPositive,
+            "checks_share_only" => Planted::ChecksShareOnly,
             _ => return None,
         }),
     };
@@ -556,6 +637,18 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let epoch_start = u32_field("epoch_start")?;
     let shuffle = u32_field("shuffle")?;
+    let environment = match input.get("environment") {
+        None => Map::new(),
+        Some(e) => {
+            let e = e.as_object()?;
+            if e.iter()
+                .any(|(k, v)| !matches!(k.as_str(), "os" | "driver") || !v.is_string())
+            {
+                return None;
+            }
+            e.clone()
+        }
+    };
     let list = input.get("calls")?.as_array()?;
     let calls = list
         .iter()
@@ -594,6 +687,15 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         commit_fault,
         epoch_start: epoch_start.unwrap_or(0),
         shuffle,
+        goldens: match input.get("goldens") {
+            None => None,
+            Some(g) => Some(PathBuf::from(g.as_str()?)),
+        },
+        environment,
+        commit: match input.get("commit") {
+            None => None,
+            Some(c) => Some(c.as_str()?.to_string()),
+        },
     })
 }
 
@@ -683,6 +785,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-renamed",
     feature = "test-step-cycle",
     feature = "test-scatter",
+    feature = "test-kit",
 ));
 
 /// The canvas modules this build compiles in: the shipped set's (R1's canvas laid out as the
@@ -729,6 +832,7 @@ fn modules() -> Vec<Module> {
     out.extend(deep_canvas_test_modules::cycle());
     #[cfg(feature = "test-missing-dep")]
     out.push(deep_canvas_test_modules::missing_dep());
+    out.extend(kit::modules::built());
     out
 }
 
@@ -745,6 +849,7 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
         registry = registry.plant(fault);
     }
     let sealed = registry.seal()?;
+    kit::ledger::admit(&sealed)?;
     Ok(Startup {
         sealed,
         seal_ms: started.elapsed().as_secs_f64() * 1000.0,

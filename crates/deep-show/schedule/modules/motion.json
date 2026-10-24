@@ -1,0 +1,43 @@
+{
+  "module": "motion",
+  "phases": {
+    "plan": [
+      {
+        "operator": "motion.compile",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.program"
+        ],
+        "per": "document"
+      }
+    ],
+    "items": [
+      {
+        "operator": "motion.channels",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t"
+        ],
+        "writes": [
+          "motion.at",
+          "motion.fields"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {
+    "core.fields": [
+      "motion.fields"
+    ],
+    "core.transform": [
+      "motion.at"
+    ]
+  }
+}
