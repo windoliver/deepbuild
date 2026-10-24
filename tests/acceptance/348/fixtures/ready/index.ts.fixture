@@ -1,0 +1,47 @@
+// A test package (#348 AC9) that, while it loads, tries to start a timer, an interval, an immediate, a socket on
+// the path probe.json names and a watcher on the folder it names. Each callback notes when it ran; each start that
+// throws or errors is noted as refused. The report lists both, with times, so the test can tell whether anything
+// ran before it told the host the hub was ready.
+import { watch } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+
+interface Probe { socket?: string; watch?: string }
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+export default function (deep: any): void {
+  const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+  const ran: { what: string; at: number }[] = [];
+  const refused: { what: string; error: string }[] = [];
+  const note = (what: string) => ran.push({ what, at: Date.now() });
+  const attempt = (what: string, start: () => void) => {
+    try {
+      start();
+    } catch (e) {
+      refused.push({ what, error: message(e) });
+    }
+  };
+  attempt('timeout', () => { setTimeout(() => note('timeout'), 0); });
+  attempt('interval', () => {
+    const handle = setInterval(() => { note('interval'); clearInterval(handle); }, 5);
+  });
+  attempt('immediate', () => { setImmediate(() => note('immediate')); });
+  if (probe.socket) {
+    attempt('socket', () => {
+      const server = createServer((c) => { note('connection'); c.end(); });
+      server.on('listening', () => note('listening'));
+      server.on('error', (e) => refused.push({ what: 'socket', error: message(e) }));
+      server.listen(probe.socket);
+    });
+  }
+  if (probe.watch) {
+    attempt('watcher', () => {
+      const watcher = watch(probe.watch!, () => note('watch'));
+      watcher.on('error', (e) => refused.push({ what: 'watcher', error: message(e) }));
+    });
+  }
+  deep.registerCheck('ext.ready.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ pid: process.pid, ran, refused }) }],
+  }));
+}

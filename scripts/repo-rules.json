@@ -240,6 +240,26 @@
         }
       }
     },
+    "packages/extension-host/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #348: the check.kind@1 spec and result shapes a registered check runner takes and returns through host.runCheck."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #348: checkManifest, the manifest contract conformance runs before a load, the canonical JSON a package digest reads its manifest as, and the contract fixtures the host's kit plants."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #348: the record project trust is one decision in, and the one an extension's deep.record calls reach, filtered by its grant."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #348: host@1, through which every package outside the signed release starts in the platform sandbox (#236)."
+        }
+      }
+    },
     "packages/checks-command/package.json": {
       "dependencies": {
         "@deepbuild/conformance": {
