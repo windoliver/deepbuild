@@ -162,6 +162,8 @@ class Host implements ExtensionHost {
   private readonly results: Record<string, Conformance>;
   private readonly exts = new Map<string, Ext>();
   private readonly loading = new Map<string, Promise<void>>();
+  /** Packages' calls under way. */
+  private readonly calls = new Set<Promise<void>>();
   /** Conformance runs under way. */
   private readonly checking = new Set<Promise<Conformance>>();
   private isReady = false;
@@ -442,7 +444,14 @@ class Host implements ExtensionHost {
   }
 
   /** A package's call, checked here against its grant before anything else of it. */
-  private async dispatch(ext: Ext, method: string, params: unknown): Promise<unknown> {
+  private dispatch(ext: Ext, method: string, params: unknown): Promise<unknown> {
+    const call = this.dispatchNow(ext, method, params);
+    const settled = call.then(() => undefined, () => undefined);
+    this.calls.add(settled);
+    void settled.then(() => this.calls.delete(settled));
+    return call;
+  }
+  private async dispatchNow(ext: Ext, method: string, params: unknown): Promise<unknown> {
     const args: unknown[] = Array.isArray(params) ? params : [];
     const schema = API.find((m) => m.method === method);
     if (!schema) throw Error(`${method} isn't in the extension API`);
@@ -451,6 +460,8 @@ class Host implements ExtensionHost {
     const id = ext.entry.id;
     if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project is no longer trusted, so it was stopped`);
+    // Unloaded while trust answered, by a new install, a revoke or close: the call does nothing.
+    if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     const conformance = ext.mode === 'conformance';
     const quiet = (): void => { if (conformance) throw Error(`${method}: nothing reaches the record while conformance runs`); };
     switch (method) {
@@ -640,6 +651,8 @@ class Host implements ExtensionHost {
     await this.starting.catch(() => undefined);
     await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);
     for (const ext of [...this.exts.values()]) await this.unload(ext);
+    // A call that was under way finishes, or finds its package unloaded, before close returns.
+    await Promise.all(this.calls);
   }
 }
 

@@ -45,8 +45,11 @@ async function tracked(record: RecordStore, run: string | null): Promise<number[
   return (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked' && (e.data as { run?: string }).run === run).map((e) => (e.data as { pid: number }).pid);
 }
 interface World { h: ExtensionHost; record: RecordStore; trust: ProjectTrust; home: string; again: () => Promise<ExtensionHost> }
-/** `held`: each process the supervisor starts is reported started only once the promise it returns then resolves. */
-async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?: false; held?: () => Promise<void> } = {}): Promise<World> {
+/**
+ * `held`: each process the supervisor starts is reported started only once the promise it returns then resolves;
+ * `heldTrust`: likewise each answer the host gets from project trust.
+ */
+async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?: false; held?: () => Promise<void>; heldTrust?: () => Promise<void> } = {}): Promise<World> {
   const dir = temp();
   const record: RecordStore = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
@@ -58,10 +61,13 @@ async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?
     : new Proxy(supervisor, { get: (to, key) => (key === 'start' ? start : (Reflect.get(to, key) as (...a: unknown[]) => unknown).bind(to)) });
   mkdirSync(join(dir, 'home'));
   const trust = await openTrust({ record, now: Date.now });
+  const heldTrust = options.heldTrust;
+  const trusting: ProjectTrust = heldTrust === undefined ? trust
+    : { ...trust, trusted: async (repo) => { const answer = await trust.trusted(repo); await heldTrust(); return answer; } };
   const home = join(dir, 'home');
   /** A host on this home: after the first, a restart of the hub. */
   const again = async (): Promise<ExtensionHost> => {
-    const h = await openExtensionHost({ record, supervisor: supervising, trust, home, now: Date.now, safe: options.safe, release: options.release ?? [] });
+    const h = await openExtensionHost({ record, supervisor: supervising, trust: trusting, home, now: Date.now, safe: options.safe, release: options.release ?? [] });
     closing.push(h);
     if (options.ready !== false) await h.ready();
     return h;
@@ -526,5 +532,28 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     writeFileSync(marker, '');
     await expect(h.ready()).rejects.toThrow(/test\/stuck.*start broke/);
     expect(await h.loaded()).toEqual([]);
+  }, 60_000);
+
+  it('a call a package made before a new install stopped it does nothing once it resumes: nothing is appended', async () => {
+    let gate = Promise.resolve();
+    let asked = 0;
+    const { h, record, trust } = await world({ heldTrust: () => { asked++; return gate; } });
+    const repo = temp();
+    await trust.answer(YOU, repo, true);
+    const late = "setTimeout(() => void deep.record.append({ v: 1, id: '01K74FKZVK8Q2X5R7M3N9P4T6W', kind: 'task.created', ts: Date.now(), data: { task_ref: 'task:01K74FX2B4D6F8H0K2M4P6R8T0', thread: '01K74G1Z3X5V7T9R1P3N5M7K9H', owner: 'you', title: 'late' } }).catch(() => undefined), 1000);";
+    const p = await h.install({ from: stuck(PASSES, late, { access: { words: ['record'] } }), builtBy: null, project: repo });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    let release = (): void => undefined;
+    gate = new Promise<void>((resolve) => { release = resolve; });
+    const before = asked;
+    while (asked === before) await new Promise((resolve) => setTimeout(resolve, 5));
+    // Its append waits on trust: a new install stops it, then trust answers.
+    const installing = h.install({ from: stuck(PASSES), builtBy: null, project: repo });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    await installing;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect((await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'task.created')).toEqual([]);
   }, 60_000);
 });
