@@ -108,6 +108,53 @@ fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
 }
 
 #[test]
+fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    let valid = r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","fail_closed":true,"reason":"r","next_step":"n"}}}"#;
+    for (case, text, mode) in [
+        ("truncated", &valid[..40], 0o600),
+        ("not JSON", "rules", 0o600),
+        ("no entries object", r#"{"v":1,"entries":[]}"#, 0o600),
+        ("unreadable", valid, 0o000),
+    ] {
+        let home = std::env::temp_dir().join(format!("dh315-bad-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+        let rules = home.join(".deepbuild/rules.json");
+        std::fs::write(&rules, text).unwrap();
+        std::fs::set_permissions(&rules, std::fs::Permissions::from_mode(mode)).unwrap();
+        // No hub is there.
+        let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+            .args(["claude-code", "PreToolUse"])
+            .env_clear()
+            .env("HOME", &home)
+            .stdin(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(br#"{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pkill -f node"}}"#)
+            .unwrap();
+        let out = child.wait_with_output().unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        std::fs::remove_dir_all(&home).unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(2),
+            "{case} rules.json: the call is denied: {stderr}"
+        );
+        assert!(
+            stderr.contains("rules.json"),
+            "{case} rules.json: the denial names it: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
     use std::io::{BufRead, BufReader, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
