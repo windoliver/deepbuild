@@ -9,9 +9,9 @@
 
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
@@ -343,28 +343,80 @@ fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>
 
 /// Appends the request as one write of one line to the spool every deep-hook shares, for the hub to replay
 /// when it starts. A debug build holds after DEEP_HOOK_TEST_SPOOL_STALL bytes, so a test can cut the write.
+///
+/// The hub renames the file aside before it replays it, so a write may land in a file the hub has already read
+/// and removed. After its write, deep-hook checks that the path still names the file it wrote to; when it doesn't,
+/// it writes the line again to the new file. The hub records an ID once, so a line it took twice changes nothing.
 fn spool(request: &str) -> io::Result<()> {
-    let folder = home().join("spool");
-    DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&folder)?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .mode(0o600)
-        .open(folder.join("spool.jsonl"))?;
-    #[cfg(debug_assertions)]
-    if let Some(n) = env::var("DEEP_HOOK_TEST_SPOOL_STALL")
-        .ok()
-        .and_then(|text| text.parse::<usize>().ok())
-    {
-        file.write_all(&request.as_bytes()[..n.min(request.len())])?;
-        loop {
-            std::thread::sleep(Duration::from_secs(3600));
+    append(&home().join("spool"), request, &mut || {})
+}
+
+/// The spool's one append, with `opened` run between opening the file and writing to it (a test moves it there).
+fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<()> {
+    let path = folder.join("spool.jsonl");
+    for _ in 0..3 {
+        DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(folder)?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .mode(0o600)
+            .open(&path)?;
+        opened();
+        #[cfg(debug_assertions)]
+        if let Some(n) = stall() {
+            file.write_all(&request.as_bytes()[..n.min(request.len())])?;
+            loop {
+                std::thread::sleep(Duration::from_secs(3600));
+            }
+        }
+        file.write_all(request.as_bytes())?;
+        let written = file.metadata()?;
+        match fs::metadata(&path) {
+            Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => return Ok(()),
+            _ => continue,
         }
     }
-    file.write_all(request.as_bytes())
+    Err(io::Error::other(
+        "the spool file kept moving under the write",
+    ))
+}
+
+/// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
+#[cfg(debug_assertions)]
+fn stall() -> Option<usize> {
+    env::var("DEEP_HOOK_TEST_SPOOL_STALL")
+        .ok()
+        .and_then(|text| text.parse::<usize>().ok())
+}
+
+/// How long after the hook's start deep-hook stops waiting for its spool write and exits with its decision: a
+/// filesystem that stalls loses the spooled copy, never the 50 ms.
+const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
+
+/// Spools on a thread of its own and waits for it only until SPOOL_DEADLINE after the hook's start.
+fn spool_by(request: String, id: &str, start: Instant) {
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(spool(&request));
+    });
+    #[cfg(debug_assertions)]
+    let result = if stall().is_some() {
+        finished
+            .recv()
+            .map_err(|_| std::sync::mpsc::RecvTimeoutError::Disconnected)
+    } else {
+        finished.recv_timeout(SPOOL_DEADLINE.saturating_sub(start.elapsed()))
+    };
+    #[cfg(not(debug_assertions))]
+    let result = finished.recv_timeout(SPOOL_DEADLINE.saturating_sub(start.elapsed()));
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => eprintln!("deep-hook: could not spool {id}: {error}"),
+        Err(_) => eprintln!("deep-hook: could not spool {id} within the hook's 50 ms"),
+    }
 }
 
 fn forward(agent: &str, event: &str) -> ExitCode {
@@ -457,9 +509,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let denied = matched
         .iter()
         .find(|g| g.fail_closed && event == "PreToolUse");
-    if let Err(error) = spool(&request) {
-        eprintln!("deep-hook: could not spool {id}: {error}");
-    }
+    spool_by(request, &id, start);
     match denied {
         Some(guard) => {
             eprintln!(
@@ -603,7 +653,29 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::glob;
+    use super::{append, glob};
+    use std::fs;
+
+    #[test]
+    fn a_line_written_to_a_spool_moved_aside_is_written_again_to_the_new_one() {
+        let folder = std::env::temp_dir().join(format!("dh315-append-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).unwrap();
+        let live = folder.join("spool.jsonl");
+        let moved = folder.join("replay-1.jsonl");
+        // The hub moves the file aside, reads it and removes it while this write holds it open.
+        let mut first = true;
+        append(&folder, "{\"id\":\"A\"}\n", &mut || {
+            if first {
+                first = false;
+                fs::rename(&live, &moved).unwrap();
+                fs::remove_file(&moved).unwrap();
+            }
+        })
+        .unwrap();
+        assert_eq!(fs::read_to_string(&live).unwrap(), "{\"id\":\"A\"}\n");
+        fs::remove_dir_all(&folder).unwrap();
+    }
 
     #[test]
     fn a_star_matches_any_run_and_the_rest_matches_whole() {
