@@ -75,13 +75,13 @@ function copy(root, path, directory, to = path) {
  * reads no node_modules that is itself a link). A workspace package's relative link is made anew, so
  * it reaches the copy's own package.
  */
-function copyChange(root, prefix) {
+function copyChange(root, prefix, modules = root) {
   const directory = temporary(prefix);
   for (const path of listFiles(root)) copy(root, path, directory);
   const link = (folder) => {
     mkdirSync(join(directory, folder), { recursive: true });
-    for (const name of readdirSync(join(root, folder))) {
-      const source = join(root, folder, name), target = join(directory, folder, name);
+    for (const name of readdirSync(join(modules, folder))) {
+      const source = join(modules, folder, name), target = join(directory, folder, name);
       if (existsSync(target)) continue;
       const stat = lstatSync(source);
       if (stat.isSymbolicLink() && !isAbsolute(readlinkSync(source))) symlinkSync(readlinkSync(source), target);
@@ -91,7 +91,7 @@ function copyChange(root, prefix) {
       else symlinkSync(source, target);
     }
   };
-  if (existsSync(join(root, 'node_modules'))) link('node_modules');
+  if (modules && existsSync(join(modules, 'node_modules'))) link('node_modules');
   return directory;
 }
 
@@ -114,12 +114,22 @@ function prepare(root, change, directory) {
 
 const workspaces = (directory) => existsSync(join(directory, 'package.json')) && Boolean(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')).workspaces);
 
-/** The change in a prepared copy: its directory, and why it can't run there, or null. */
+/**
+ * The change in a prepared copy: its directory, where its packages are installed, and why it can't
+ * run there, or null. Its packages are what its own lock installs, as the merge base's are, not the
+ * worktree's, which an install from inputs the lock doesn't hold may have re-pointed.
+ */
 export function changeCopy(root, change) {
-  const directory = copyChange(root, 'deep-proof-checkout-');
-  const blocked = prepare(root, change, directory);
-  undoBuild(root, directory);
-  return { directory, blocked };
+  // The install has a folder of its own, which the copy links as it would the repository's, so what
+  // the change's build does to the copy's packages can be undone from it. With no lock there is no
+  // install to hold the worktree's to, and the copy links the worktree's.
+  const locked = ['npm-shrinkwrap.json', 'package-lock.json'].some((lock) => existsSync(join(root, lock)));
+  const modules = locked ? copyChange(root, 'deep-proof-modules-', null) : root;
+  const failed = modules === root ? null : install(modules);
+  const directory = copyChange(root, 'deep-proof-checkout-', modules);
+  const blocked = failed ?? prepare(root, change, directory);
+  undoBuild(root, directory, [], modules);
+  return { directory, modules, blocked };
 }
 
 /**
@@ -130,7 +140,7 @@ export function changeCopy(root, change) {
  * node_modules the copy doesn't link to the repository's, or a link, which can lead a test's imports
  * anywhere. Data it generates, such as a table a test reads, stays.
  */
-export function undoBuild(root, directory, keep = []) {
+export function undoBuild(root, directory, keep = [], modules = root) {
   const held = listFiles(root).filter((path) => !keep.includes(path));
   // Names compare in lower case, as a disk that ignores case resolves Support.json for support.json.
   const tracked = new Set(listFiles(root).map((path) => path.toLowerCase()));
@@ -145,7 +155,7 @@ export function undoBuild(root, directory, keep = []) {
       // The copy's node_modules links to the repository's packages, scope by scope, as copyChange laid it.
       // An entry the build replaced, as with a folder of its own, is linked anew.
       if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
-        const source = join(root, path), target = join(directory, path);
+        const source = join(modules, path), target = join(directory, path);
         if (!existsSync(source)) rmSync(target, { recursive: true, force: true });
         else if (entry.isDirectory() && entry.name.startsWith('@')) walk(path);
         else if (!entry.name.startsWith('.') || entry.name === '.bin') {
@@ -167,12 +177,16 @@ export function undoBuild(root, directory, keep = []) {
 /** The merge base installed and prepared in a temporary checkout: its directory, and why it can't run there, or null. */
 export function baseCheckout(root, change) {
   const directory = checkout(root, change.base, 'deep-proof-checkout-');
-  if (existsSync(join(directory, 'package.json'))) {
-    const install = spawnSync('npm', ['ci', '--no-audit', '--no-fund'], { cwd: directory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
-    if (timedOut(install)) return { directory, blocked: `npm ci ${stopped(['npm ci']).get('npm ci')}` };
-    if (install.status !== 0) return { directory, blocked: `npm ci failed there: ${firstLine([install.stderr, install.stdout].join('\n').split('\n').find((line) => /\bnpm (?:error|ERR!)/.test(line) && !/A complete log|^npm error\s*$/.test(line)) ?? install.stderr ?? install.error?.message).replace(/^npm (?:error|ERR!)\s*/, '')}` };
-  }
-  return { directory, blocked: prepare(root, change, directory) };
+  return { directory, blocked: install(directory) ?? prepare(root, change, directory) };
+}
+
+/** Installs a checkout's packages from its lock, as npm ci does; returns why it failed, or null. */
+function install(directory) {
+  if (!existsSync(join(directory, 'package.json'))) return null;
+  const result = spawnSync('npm', ['ci', '--no-audit', '--no-fund'], { cwd: directory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: TIMEOUT });
+  if (timedOut(result)) return `npm ci ${stopped(['npm ci']).get('npm ci')}`;
+  if (result.status !== 0) return `npm ci failed there: ${firstLine([result.stderr, result.stdout].join('\n').split('\n').find((line) => /\bnpm (?:error|ERR!)/.test(line) && !/A complete log|^npm error\s*$/.test(line)) ?? result.stderr ?? result.error?.message).replace(/^npm (?:error|ERR!)\s*/, '')}`;
+  return null;
 }
 
 /** Builds the workspaces of the checkout in `directory`; returns why it failed, or null. */
@@ -347,6 +361,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   // change and fail on the base by telling the two places apart.
   const head = changeCopy(root, change);
   runs.directory = head.directory;
+  runs.modules = head.modules;
   runs.head = head.blocked ? { ...empty(), unrunnable: new Map(files.map((file) => [file, head.blocked])) } : runTests(runs.directory, files, { env: runs.coverage ? { NODE_V8_COVERAGE: runs.coverage } : {} });
   // A test the change adds or edits: its file is new, or a line the change adds or removes is in it.
   const edited = new Map(change.whole.map((file) => [file.path, file.status === 'A' ? true : [...addedLines(file), ...file.hunks.filter(({ added }) => !added.length).map(({ newStart }) => newStart)]]));
@@ -417,7 +432,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       runs.twins.set(folder, { refused: own.length ? `replaces files under the test paths or node_modules (${tests.join(', ')})` : 'has no files', ...empty() });
       continue;
     }
-    const directory = copyChange(root, 'deep-proof-checkout-');
+    const directory = copyChange(root, 'deep-proof-checkout-', runs.modules);
     try {
       for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
     } catch (error) {
@@ -425,7 +440,7 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
       continue;
     }
     const failed = prepare(root, change, directory);
-    undoBuild(root, directory);
+    undoBuild(root, directory, [], runs.modules);
     for (const path of own) copy(root, path, directory, path.slice(folder.length + 1));
     runs.twins.set(folder, failed ? { ...empty(), unrunnable: new Map(twinFiles.map((file) => [file, failed])) } : runTests(directory, twinFiles));
   }
@@ -580,9 +595,9 @@ export function mutation({ root, change }, runs, say, print) {
       else ranges.push([line, line]);
       return ranges;
     }, []).map(([from, to]) => `${path}:${from}-${to}`));
-    const directory = copyChange(root, 'deep-proof-mutants-');
+    const directory = copyChange(root, 'deep-proof-mutants-', runs.modules ?? root);
     build(directory); // a failed build shows as StrykerJS's failed initial run
-    undoBuild(root, directory);
+    undoBuild(root, directory, [], runs.modules ?? root);
     // StrykerJS writes each mutated file in place, so a file that is a link out of the copy is refused.
     const outside = typescript.filter(({ path }) => {
       try {
@@ -609,7 +624,7 @@ export function mutation({ root, change }, runs, say, print) {
       ].filter(Boolean).map((run) => (test ? `R=$(mktemp ${quote(reports)}/report.XXXXXX) && { ${run}; }` : run));
       // Mutants reach a package that tests read through its build only once it is rebuilt, and the
       // rebuild is undone as the first build was, keeping the mutants.
-      const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))});`;
+      const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))}, ${JSON.stringify(runs.modules ?? root)});`;
       return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
