@@ -56,7 +56,11 @@ export function guard({ root, change, issue }, approvals, say) {
   const configNamed = lanesOnMain ? namedByConfig(root, change.base) : new Set();
   // A node_modules folder a test's imports walk up to: one in a folder that holds, at any depth, a
   // test or a file under the test paths a test imports, such as a shared helper.
-  const scripts = lanesOnMain ? [...new Set(listFiles(root).filter(isTestFile).flatMap((test) => [...testImports(root, null, test).keys()]))] : [];
+  const reached = lanesOnMain ? new Map(listFiles(root).filter(isTestFile).flatMap((test) => [...testImports(root, null, test)])) : new Map();
+  const scripts = [...reached.keys()];
+  // The packages those files import by name, and the runner, which the change may re-point to a copy
+  // of its own, such as a hollow assertion library, in package.json or the lock the install reads.
+  const imported = new Set(['vitest', ...[...reached.values()].flatMap((source) => [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*['"`]((?:@[^/'"`]+\/)?[^./'"`][^/'"`]*)/gm)].map(([, name]) => name))]);
   const underTests = (path) => {
     const at = path.split('/').indexOf('node_modules');
     if (at < 0) return false;
@@ -87,6 +91,9 @@ export function guard({ root, change, issue }, approvals, say) {
       // package committed in one may stand in for the one installed.
       if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
       const before = show(root, commit.parent, file.path);
+      if (lanesOnMain && /(?:^|\/)(?:package|package-lock)\.json$/.test(file.path)) {
+        for (const name of repointed(file.path, before, show(root, commit.sha, file.path)).filter((name) => imported.has(name))) judge({ detail: `${file.path}: ${name}, a package a test imports, changed` }, file.path);
+      }
       // A module path may resolve to an added file, or through an edited package.json's main, in
       // place of a file beside it, which it then stands in for.
       if (before === null || basename(file.path) === 'package.json') {
@@ -103,6 +110,25 @@ export function guard({ root, change, issue }, approvals, say) {
     }
   }
   if (!refused) say('PASS', 'guard', `${change.commits.length} commit${change.commits.length === 1 ? '' : 's'} checked: no guarded edit lacks its own approved proposal`);
+}
+
+// The packages whose dependency spec, override or lock entry differs between two copies of a
+// package.json or package-lock.json; one that doesn't parse names every package.
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'overrides', 'resolutions'];
+function repointed(path, before, after) {
+  const entries = (text) => {
+    try {
+      const json = JSON.parse(text ?? '{}');
+      if (basename(path) === 'package-lock.json') return Object.entries(json.packages ?? {}).filter(([key]) => key.includes('node_modules/')).map(([key, entry]) => [key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length), JSON.stringify(entry)]);
+      return DEPENDENCY_FIELDS.flatMap((field) => Object.entries(json[field] ?? {}).map(([name, spec]) => [name, `${field}:${JSON.stringify(spec)}`]));
+    } catch {
+      return [['*', text]];
+    }
+  };
+  const was = entries(before), now = entries(after);
+  const key = (list) => new Set(list.map((pair) => JSON.stringify(pair)));
+  const a = key(was), b = key(now);
+  return [...new Set([...was.filter((pair) => !b.has(JSON.stringify(pair))), ...now.filter((pair) => !a.has(JSON.stringify(pair)))].map(([name]) => name))];
 }
 
 /** The literals of the text that lie outside every test, whose white space is data a tagged test may compare. */
@@ -289,7 +315,8 @@ function shadows(root, commit, path) {
   return held.filter((other) => {
     if (other === path || isTestFile(other) || !MODULE.test(other) || basename(other) === 'package.json') return false;
     const stem = other.replace(MODULE, '').toLowerCase(), index = basename(stem) === 'index' ? dirname(stem) : null;
-    return (bare === stem || bare === index || (name === 'package.json' && dirname(path).toLowerCase() === index)) && winnable(root, commit.parent, other);
+    // A json file loses to a module of its own stem, which every resolver tries first.
+    return ((bare === stem && !name.endsWith('.json')) || bare === index || (name === 'package.json' && dirname(path).toLowerCase() === index)) && winnable(root, commit.parent, other);
   });
 }
 

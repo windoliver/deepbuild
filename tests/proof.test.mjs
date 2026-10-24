@@ -633,3 +633,52 @@ test("on a disk that ignores case, a build-planted Support.json or Package.json 
   }), ['guard']);
   assert.ok(problems(result, 'guard').some((found) => found.startsWith("FAIL guard: Vitest.config.mjs: the test runner's config")), show(result));
 });
+
+test('once main holds the proof lanes, the change re-pointing a package a test imports, in package.json or the lock, is a guarded edit; another package is free', (t) => {
+  const lock = (chai) => JSON.stringify({ name: 'x', lockfileVersion: 3, requires: true, packages: { '': { name: 'x', devDependencies: { chai: chai.spec, left: '1.0.0' } }, 'node_modules/chai': chai.entry, 'node_modules/left': { version: '1.0.0' } } }, null, 2);
+  const real = { spec: '^5.0.0', entry: { version: '5.0.0' } }, vendored = { spec: 'file:vendor/chai', entry: { resolved: 'vendor/chai', link: true } };
+  const pkg = (spec, left = '1.0.0') => JSON.stringify({ name: 'x', devDependencies: { chai: spec, left } }, null, 2);
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n', 'package.json': pkg(real.spec), 'package-lock.json': lock(real),
+      [`${dir}/a.test.mjs`]: `import test from 'node:test';\nimport { assert } from 'chai';\n\ntest('${c1} sums', () => {\n  assert.equal(1, 1);\n});\n`,
+    },
+    commits: [
+      { files: { 'package.json': pkg(vendored.spec), 'package-lock.json': lock(vendored), 'vendor/chai/index.js': 'export const assert = new Proxy({}, { get: () => () => {} });\n' }, message: `Vendor chai\n\nPart of #${ISSUE}` },
+      { files: { 'package.json': pkg(vendored.spec, '2.0.0') }, message: `Bump left\n\nPart of #${ISSUE}` },
+    ],
+  }), ['guard']);
+  const refused = problems(result, 'guard');
+  for (const path of ['package.json', 'package-lock.json']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: chai, a package a test imports, changed`)), `${path}\n${show(result)}`);
+  assert.equal(refused.length, 2, show(result));
+});
+
+test("a workspace build can't replace the copy's link to a package with a folder of its own", (t) => {
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: workspace('// builds\n', {
+      'packages/lib/package.json': JSON.stringify({ name: 'lib', version: '1.0.0', type: 'module', main: 'src/impl.mjs', scripts: { build: 'node build.mjs' } }), 'packages/lib/src/impl.mjs': 'export const f = () => 4;\n',
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from 'lib';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), 3);\n});\n`,
+    }),
+    commits: [{ files: { 'packages/lib/build.mjs': "// builds\nimport { mkdirSync, rmSync, writeFileSync } from 'node:fs';\nrmSync('../../node_modules/lib');\nmkdirSync('../../node_modules/lib');\nwriteFileSync('../../node_modules/lib/package.json', '{ \"name\": \"lib\", \"type\": \"module\", \"main\": \"index.mjs\" }');\nwriteFileSync('../../node_modules/lib/index.mjs', 'export const f = () => 3;\\n');\n" }, message: `Edit\n\nCloses #${ISSUE}` }],
+  });
+  // The repository's install, as npm ci lays a workspace's link.
+  mkdirSync(join(scene.cwd, 'node_modules'));
+  symlinkSync('../packages/lib', join(scene.cwd, 'node_modules/lib'));
+  const result = proof(scene, ['trace']);
+  assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test('a json file added beside a held module of its stem shadows nothing, as every resolver tries the module first', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      [`${dir}/cases.ts`]: 'export const want = 3;\n',
+      [`${dir}/a.test.ts`]: `import { it, expect } from 'vitest';\nimport { want } from './cases';\n\nit('${c1} sums', () => {\n  expect(3).toBe(want);\n});\n`,
+    },
+    commits: [{ files: { [`${dir}/cases.json`]: '{ "want": 4 }\n' }, message: `Add data\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  assert.ok(!problems(result, 'guard').some((found) => found.includes('cases')), show(result));
+});

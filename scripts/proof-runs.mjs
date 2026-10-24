@@ -135,17 +135,26 @@ export function undoBuild(root, directory, keep = []) {
   // Names compare in lower case, as a disk that ignores case resolves Support.json for support.json.
   const tracked = new Set(listFiles(root).map((path) => path.toLowerCase()));
   const heldName = (path) => tracked.has(path.toLowerCase());
-  // A json file a resolver tries before a tracked module of its stem, or before a tracked folder's index.
-  const stems = new Set([...tracked].flatMap((path) => [path.replace(/\.[cm]?[jt]sx?$/, ''), ...path.split('/').slice(1).map((_, at) => path.split('/').slice(0, at + 1).join('/'))]));
+  // A json file a resolver tries before a tracked folder's index; a module of its stem it loses to.
+  const stems = new Set([...tracked].flatMap((path) => path.split('/').slice(1).map((_, at) => path.split('/').slice(0, at + 1).join('/'))));
   const shadows = (path) => /\.json$/i.test(path) && stems.has(path.slice(0, -'.json'.length).toLowerCase());
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
       if (path === '.git') continue;
       // The copy's node_modules links to the repository's packages, scope by scope, as copyChange laid it.
+      // An entry the build replaced, as with a folder of its own, is linked anew.
       if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
-        if (!existsSync(join(root, path))) rmSync(join(directory, path), { recursive: true, force: true });
+        const source = join(root, path), target = join(directory, path);
+        if (!existsSync(source)) rmSync(target, { recursive: true, force: true });
         else if (entry.isDirectory() && entry.name.startsWith('@')) walk(path);
+        else if (!entry.name.startsWith('.') || entry.name === '.bin') {
+          const link = lstatSync(source).isSymbolicLink() && !isAbsolute(readlinkSync(source)) ? readlinkSync(source) : source;
+          if (!entry.isSymbolicLink() || readlinkSync(target) !== link) {
+            rmSync(target, { recursive: true, force: true });
+            symlinkSync(link, target);
+          }
+        }
       } else if (entry.isSymbolicLink() && !heldName(path)) rmSync(join(directory, path), { force: true });
       else if (entry.isDirectory()) walk(path);
       else if (!heldName(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && (/\.[cm]?[jt]sx?$|(?:^|\/)[^./]+$|(?:^|\/)package\.json$/i.test(path) || shadows(path))))) rmSync(join(directory, path), { force: true });
