@@ -177,11 +177,14 @@ const timedOut = (result) => result.error?.code === 'ETIMEDOUT';
 const stopped = (files) => new Map(files.map((file) => [file, `the run was stopped after ${TIMEOUT / 60_000} minutes`]));
 
 // Two tests of one full name report under one key: a failure of either stands, so a passing twin of
-// a failing test can't hide it, and the key counts its reports, so a twin can't stand for one never run.
+// a failing test can't hide it, and the key counts the reports that ran and those skipped, so a twin
+// can't stand for one never run.
+const quiet = (status) => status === 'skip' || status === 'todo';
 const keep = (results, key, result) => {
-  const reports = (results.get(key)?.reports ?? 0) + 1;
-  if (!results.has(key) || (result.status === 'fail' && results.get(key).status !== 'fail')) results.set(key, { ...result, reports });
-  else results.get(key).reports = reports;
+  const old = results.get(key);
+  const counts = { ran: (old?.ran ?? 0) + (quiet(result.status) ? 0 : 1), skips: (old?.skips ?? 0) + (quiet(result.status) ? 1 : 0) };
+  if (!old || (result.status === 'fail' && old.status !== 'fail') || (quiet(old.status) && !quiet(result.status))) results.set(key, { ...result, ...counts });
+  else Object.assign(old, counts);
 };
 
 function runNode(directory, files, env) {
@@ -303,13 +306,20 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
   // runner never reached is no test that passed. A helper's test may run under a suite around its
   // call, so a reported name ending in the declared one counts; a test that skips itself as it runs
   // is reported, and the trace lane counts it as no test.
-  // Each test the source declares of a name needs a report of its own.
+  // Each unskipped test the source declares of a name that registers whenever its file runs needs a
+  // report that ran of its own, and the ones declared under a condition, such as the branches of an
+  // if, need one between them. A skip or todo report stands for a test declared skipped first.
   const reported = (path, name) => [...runs.head.results].filter(([key]) => key === named(path, name) || (key.startsWith(`${path} › `) && key.endsWith(` › ${name}`)))
-    .reduce((sum, [, result]) => sum + (result.reports ?? 1), 0);
+    .reduce((sum, [, result]) => ({ ran: sum.ran + (result.ran ?? 1), skips: sum.skips + (result.skips ?? 0) }), { ran: 0, skips: 0 });
   const runnable = files.filter((path) => !runs.head.fileErrors.has(path) && !runs.head.unrunnable.has(path));
   runs.unrun = runnable.flatMap((path) => {
-    const declared = sourceSpans.get(path).filter(({ name, kind, leaf, skipped }) => name !== null && kind !== 'describe' && leaf && !skipped && tagsIn(name).some((tag) => counts(tag, path)));
-    return [...new Set(declared.map(({ name }) => name))].filter((name) => reported(path, name) < declared.filter((test) => test.name === name).length).map((name) => named(path, name));
+    const declared = sourceSpans.get(path).filter(({ name, kind, leaf }) => name !== null && kind !== 'describe' && leaf && tagsIn(name).some((tag) => counts(tag, path)));
+    return [...new Set(declared.filter(({ skipped }) => !skipped).map(({ name }) => name))].filter((name) => {
+      const of = declared.filter((test) => test.name === name), live = of.filter(({ skipped }) => !skipped);
+      const needed = live.filter(({ runs: always }) => always).length + (live.some(({ runs: always }) => !always) ? 1 : 0);
+      const { ran, skips } = reported(path, name);
+      return ran + Math.max(0, skips - of.filter(({ skipped }) => skipped).length) < needed;
+    }).map((name) => named(path, name));
   });
   // vitest runs only the .only tests of a file that has one, so the file's other tagged tests don't run.
   runs.only = runnable.filter((path) => path.endsWith('.ts') && sourceSpans.get(path).some(({ only }) => only)
