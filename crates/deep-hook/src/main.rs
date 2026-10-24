@@ -350,7 +350,8 @@ fn exchange(
             if shaped(&ack, &["v", "ack", "hold_until_ms"])
                 && matches!(member(&ack, "ack"), Some(Value::String(acked)) if acked == id)
                 && (matches!(member(&ack, "hold_until_ms"), Some(Value::Null))
-                    || integer(member(&ack, "hold_until_ms")).is_some_and(|ms| ms >= 0.0)) =>
+                    || integer(member(&ack, "hold_until_ms"))
+                        .is_some_and(|ms| (0.0..=9_007_199_254_740_991.0).contains(&ms))) =>
         {
             ack
         }
