@@ -132,10 +132,12 @@ export function changeCopy(root, change) {
  */
 export function undoBuild(root, directory, keep = []) {
   const held = listFiles(root).filter((path) => !keep.includes(path));
-  const tracked = new Set(listFiles(root));
+  // Names compare in lower case, as a disk that ignores case resolves Support.json for support.json.
+  const tracked = new Set(listFiles(root).map((path) => path.toLowerCase()));
+  const heldName = (path) => tracked.has(path.toLowerCase());
   // A json file a resolver tries before a tracked module of its stem, or before a tracked folder's index.
-  const stems = new Set([...tracked].flatMap((path) => [path.replace(/\.[cm]?[jt]sx?$/, ''), ...path.split('/').slice(1).map((_, at, parts) => path.split('/').slice(0, at + 1).join('/'))]));
-  const shadows = (path) => path.endsWith('.json') && stems.has(path.slice(0, -'.json'.length));
+  const stems = new Set([...tracked].flatMap((path) => [path.replace(/\.[cm]?[jt]sx?$/, ''), ...path.split('/').slice(1).map((_, at) => path.split('/').slice(0, at + 1).join('/'))]));
+  const shadows = (path) => /\.json$/i.test(path) && stems.has(path.slice(0, -'.json'.length).toLowerCase());
   const walk = (folder) => {
     for (const entry of readdirSync(join(directory, folder), { withFileTypes: true })) {
       const path = folder ? `${folder}/${entry.name}` : entry.name;
@@ -144,9 +146,9 @@ export function undoBuild(root, directory, keep = []) {
       if (folder === 'node_modules' || /^node_modules\/@[^/]+$/.test(folder)) {
         if (!existsSync(join(root, path))) rmSync(join(directory, path), { recursive: true, force: true });
         else if (entry.isDirectory() && entry.name.startsWith('@')) walk(path);
-      } else if (entry.isSymbolicLink() && !tracked.has(path)) rmSync(join(directory, path), { force: true });
+      } else if (entry.isSymbolicLink() && !heldName(path)) rmSync(join(directory, path), { force: true });
       else if (entry.isDirectory()) walk(path);
-      else if (!tracked.has(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && (/\.[cm]?[jt]sx?$|(?:^|\/)[^./]+$|(?:^|\/)package\.json$/.test(path) || shadows(path))))) rmSync(join(directory, path), { force: true });
+      else if (!heldName(path) && (path.split('/').includes('node_modules') || RUNNER_CONFIG.test(path) || (underTestPaths(path) && (/\.[cm]?[jt]sx?$|(?:^|\/)[^./]+$|(?:^|\/)package\.json$/i.test(path) || shadows(path))))) rmSync(join(directory, path), { force: true });
     }
   };
   walk('');
