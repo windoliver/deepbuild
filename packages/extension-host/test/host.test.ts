@@ -323,6 +323,16 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect(stream.destroyed).toBe(true);
   });
 
+  it('a peer with 256 requests unanswered that sends another is cut off: no more of its requests are served', async () => {
+    const stream = new PassThrough();
+    const served: string[] = [];
+    peer(stream, (method) => { served.push(method); return new Promise(() => undefined); });
+    for (let id = 1; id <= 300; id++) stream.write(`${JSON.stringify({ jsonrpc: '2.0', id, method: 'deep.config.get', params: ['x'] })}\n`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(served.length).toBe(256);
+    expect(stream.destroyed).toBe(true);
+  });
+
   it('the 16 MiB limit is on bytes: a line of 6 Mi three-byte characters is never parsed', async () => {
     const stream = new PassThrough();
     const served: string[] = [];
