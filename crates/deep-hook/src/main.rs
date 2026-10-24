@@ -404,7 +404,7 @@ fn stall() -> Option<usize> {
 /// filesystem that stalls loses the spooled copy, never the 50 ms.
 const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
 
-/// Spools on a thread of its own and waits for it only until SPOOL_DEADLINE after the hook's start.
+/// Spools on a thread of its own and waits for it only until SPOOL_DEADLINE after `start`.
 fn spool_by(request: String, id: &str, start: Instant) {
     let (done, finished) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -526,7 +526,14 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         request.push_str(",\"late\":true}\n");
     }
     decide();
-    spool_by(request, &id, start);
+    // Before an acknowledgement the 50 ms run from the hook's start; after a hold the hub acknowledged ran out or
+    // broke, the spool's time runs from now, since the hook was already allowed to wait.
+    let from = if ACKED.load(Ordering::SeqCst) {
+        Instant::now()
+    } else {
+        start
+    };
+    spool_by(request, &id, from);
     match DENIAL.get() {
         Some(denial) => {
             eprintln!("{denial}");
