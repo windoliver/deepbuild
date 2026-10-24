@@ -584,7 +584,6 @@ class Host implements ExtensionHost {
     const ext = this.exts.get(id);
     if (!ext?.ask) throw Error(`${id} isn't loaded and running`);
     const untrusted = `${id}'s project is no longer trusted, so it was stopped and not turned on`;
-    if (await this.revoked(ext)) throw Error(untrusted);
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
