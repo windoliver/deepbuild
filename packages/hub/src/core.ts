@@ -39,6 +39,8 @@ const HOOKS_MISSING = 'hooks not reaching DeepBuild';
 const TRANSCRIPT_STEP = 64 * 1024 * 1024;
 /** How long after the hub reads a turn's end it judges whether any of the turn's hooks reached it. */
 const TURN_GRACE = 100;
+/** How many sessions' transcript cursors a restart keeps, and of each the newest calls whose hooks reached the hub. */
+const CURSORS = 64;
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -73,8 +75,13 @@ interface Session {
   /** The timer that judges its closed turns once their grace has passed. */
   judging?: NodeJS.Timeout | undefined;
 }
-/** A turn of a transcript and its tool calls; a closed one, with when the hub read its end (its monotonic clock). */
-interface Turn { uuid: string; calls: string[]; at?: number }
+/**
+ * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
+ * its end (its monotonic clock).
+ */
+interface Turn { uuid: string; from: number; calls: string[]; at?: number }
+/** Where a session's transcript is judged from after a restart, and the calls whose hooks reached the hub past there. */
+interface Cursor { transcript: string; read: number; reached: string[] }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
 /** A run the supervisor started, as the journal keeps it until its finish is durable; `environment`: it needs its folder's stack running. */
@@ -114,6 +121,8 @@ export class Core {
   private readonly readings = new Set<string>();
   private readonly ready: Promise<void>;
   private readonly sessions = new Map<string, Session>();
+  /** The cursors the last hub left for sessions this one hasn't met yet. */
+  private cursors = new Map<string, Cursor>();
   private readonly counters = new Map<string, { msgs: number; turns: number; worked: boolean }>();
   /** Unspent PreToolUse stamps: a call that binds to one spends it, and SessionEnd spends its session's. */
   private stamps: Stamp[] = [];
@@ -164,6 +173,11 @@ export class Core {
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     // A start that finds the last run still marked running records that run's stop as a crash.
+    try {
+      this.cursors = new Map(Object.entries(JSON.parse(readFileSync(this.root.transcripts, 'utf8')) as Record<string, Cursor>));
+    } catch {
+      // None yet, or unreadable: the sessions are read from where this hub meets them.
+    }
     const crashed = existsSync(this.root.state) && readFileSync(this.root.state, 'utf8').trim() === 'running';
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
@@ -414,9 +428,14 @@ export class Core {
       return;
     }
     // Only whole lines: a line still being written is read with the next hook.
+    const base = session.read;
     const end = text.lastIndexOf(0x0a) + 1;
     session.read += end;
-    for (const raw of text.subarray(0, end).toString('utf8').split('\n')) {
+    for (let at = 0; at < end;) {
+      const from = base + at;
+      const next = text.indexOf(0x0a, at) + 1;
+      const raw = text.subarray(at, next).toString('utf8');
+      at = next;
       let line: unknown;
       try {
         line = JSON.parse(raw);
@@ -429,7 +448,7 @@ export class Core {
       if (line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'))) {
         // A person's prompt ends the turn before it.
         if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
-        session.turn = { uuid: typeof line.uuid === 'string' && line.uuid ? line.uuid : `offset:${session.read}`, calls: [] };
+        session.turn = { uuid: typeof line.uuid === 'string' && line.uuid ? line.uuid : `offset:${from}`, from, calls: [] };
       } else if (line.type === 'assistant' && session.turn) {
         for (const part of parts) if (part.type === 'tool_use' && typeof part.id === 'string') session.turn.calls.push(part.id);
       }
@@ -471,6 +490,23 @@ export class Core {
     for (const call of session.reached) {
       if (session.reached.size <= REACHED) break;
       session.reached.delete(call);
+    }
+    this.saveCursors();
+  }
+
+  /** Keeps where each live session's transcript is judged from (its oldest unjudged turn), so a restart judges what it missed. */
+  private saveCursors(): void {
+    const cursors = new Map(this.cursors);
+    for (const s of this.sessions.values()) {
+      if (s.ended) continue;
+      cursors.delete(s.id);
+      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached].slice(-CURSORS) });
+    }
+    try {
+      writeFileSync(`${this.root.transcripts}.tmp`, JSON.stringify(Object.fromEntries([...cursors].slice(-CURSORS))), { mode: 0o600 });
+      renameSync(`${this.root.transcripts}.tmp`, this.root.transcripts);
+    } catch (error) {
+      process.stderr.write(`deep hub: ${this.root.transcripts} not saved: ${error instanceof Error ? error.message : String(error)}\n`);
     }
   }
 
@@ -532,9 +568,13 @@ export class Core {
     if (!start) return false;
     const session = this.sessions.get(meta.session);
     if (!session) {
-      // Its transcript is read from here on: what it held before this hub met the session isn't judged.
-      const read = await stat(transcript).then((s) => s.size, () => 0);
-      this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set() });
+      // A session the last hub met is read from where that hub left it; one this hub meets first, from here on:
+      // what its transcript held before isn't judged.
+      const cursor = this.cursors.get(meta.session);
+      this.cursors.delete(meta.session);
+      const left = cursor?.transcript === transcript && typeof cursor.read === 'number' && Array.isArray(cursor.reached) ? cursor : undefined;
+      const read = left ? left.read : await stat(transcript).then((s) => s.size, () => 0);
+      this.sessions.set(meta.session, { id: meta.session, agent: meta.agent, pid: meta.ppid, start, cwd: meta.cwd, transcript, ended: false, read, turn: undefined, closed: [], reached: new Set(left?.reached) });
       return true;
     }
     return transcript === session.transcript && meta.cwd === session.cwd && meta.ppid === session.pid && start === session.start;
