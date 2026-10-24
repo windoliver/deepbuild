@@ -300,8 +300,14 @@ export class Core {
   }
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false): Promise<{ settled: Promise<void> }> {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
-    if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id) && (await this.record.raw(`SELECT 1 FROM events WHERE id = '${meta.id}' LIMIT 1`)).length) {
-      return { settled: Promise.resolve() };
+    if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
+      const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = '${meta.id}' LIMIT 1`);
+      if (known.length) {
+        // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
+        // unmarked while deep-hook acted on its own, so the session says so rather than the fail-open going unseen.
+        if (meta.late && Number((known[0] as { late?: unknown }).late) !== 1) return { settled: this.lateAnswered(meta, meta.late.matched) };
+        return { settled: Promise.resolve() };
+      }
     }
     const whose = await this.whose(meta, drafts.find((d) => d.seq !== undefined)?.seq);
     if (whose.job) {
@@ -367,6 +373,17 @@ export class Core {
     });
     settled.catch(() => undefined);
     return { settled };
+  }
+
+  /** Records, once, that a call the hub answered was let through by deep-hook as late, naming its guard entries. */
+  private async lateAnswered(meta: HookMeta, matched: string[]): Promise<void> {
+    const reading = `deep-hook let ${meta.event} ${meta.id} through as late, after the hub's answer missed its deadline; `
+      + (matched.length ? `it matched ${matched.join(', ')}` : 'it matched no guard entry');
+    // The ID is a ULID (checked before this is called), so it goes into the query as it is.
+    const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), '${meta.id}') > 0 LIMIT 1`);
+    if (known.length) return;
+    const ts = this.now();
+    await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
   }
 
   /**
@@ -981,7 +998,10 @@ export class Core {
         }
         if (parsed?.kind === 'hook') {
           const { drafts, meta } = parsed;
-          await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch(() => { failed = true; });
+          await this.queue(() => this.handleHook(drafts, meta, 'hook', true), true).then(({ settled }) => settled).catch((error: unknown) => {
+            failed = true;
+            process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
+          });
         } else if (parsed) {
           await skip(offset, parsed.kind === 'refused' ? `refused: ${parsed.error.code} at ${parsed.error.path || '/'}` : 'not a hook request');
         }
