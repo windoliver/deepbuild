@@ -12,9 +12,10 @@ const TAG = /#(\d+)\.([0-9a-f]{8})\b/g;
 export const tagsIn = (text) => [...new Set([...text.matchAll(TAG)].map(([tag]) => tag))];
 export const testPattern = RegExp(`^(?:${testPaths.map((glob) => glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/|\*\*|\*/g, (wild) => ({ '**/': '(?:.*/)?', '**': '.*', '*': '[^/]*' })[wild])).join('|')})$`);
 // A colocated test's snapshots and fixtures sit in folders of their own beside it, outside the test
-// paths lanes.mjs names, and are a test's own files as those under them are; a script there may be
-// code under test, as a fixture factory is, so only data counts.
-export const TEST_DATA = /(?:^|\/)(?:__snapshots__|__fixtures__|fixtures|goldens?|testdata)\/(?!.*\.[cm]?[jt]sx?$)/;
+// paths lanes.mjs names, and are a test's own files as those under them are: all of __snapshots__ and
+// __fixtures__, the test runners' own folders, and the data in fixtures, golden and testdata folders,
+// where a script may be code under test, as a fixture factory is.
+export const TEST_DATA = /(?:^|\/)(?:__snapshots__\/|__fixtures__\/|(?:fixtures|goldens?|testdata)\/(?!.*\.[cm]?[jt]sx?$))/;
 export const underTestPaths = (path) => (testPattern.test(path) || TEST_DATA.test(path)) && !path.split('/').includes('node_modules');
 export const isTestFile = (path) => underTestPaths(path) && /\.test\.(?:mjs|js|ts)$/.test(path);
 // A test's name in every line and approval: its file's repo path, then its full name.
@@ -198,11 +199,42 @@ export function testImports(root, rev, path, found = new Map()) {
   const source = show(root, rev, path);
   if (source === null || found.has(path)) return found;
   found.set(path, source);
-  // A relative specifier, or one from the repository root as vite reads it, quoted or in a template
-  // literal without substitutions.
-  const imported = [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*(['"`])(\.{0,2}\/[^'"`$]+)\1/gm)]
-    .map(([, , specifier]) => posix.normalize(specifier.startsWith('/') ? specifier.slice(1) : posix.join(posix.dirname(path), specifier)));
-  for (const file of imported.filter(underTestPaths)) testImports(root, rev, resolveModule(root, rev, file), found);
+  for (const file of relativeImports(path, source).filter(underTestPaths)) testImports(root, rev, resolveModule(root, rev, file), found);
+  return found;
+}
+
+/**
+ * The repository paths a module's relative imports name, and those from the repository root as vite
+ * reads them, quoted or in a template literal without substitutions, before resolution.
+ */
+export const relativeImports = (path, source) => [...source.matchAll(/(?:\bfrom|\bimport\s*\(|\brequire\s*\(|^\s*import)\s*(['"`])(\.{0,2}\/[^'"`$]+)\1/gm)]
+  .map(([, , specifier]) => posix.normalize(specifier.startsWith('/') ? specifier.slice(1) : posix.join(posix.dirname(path), specifier)));
+
+/**
+ * The strings each property of a config named in `keys` holds, as `{ key, values }`: in its value as
+ * written, a list, a string or a call, and in a const its value, or its shorthand, names.
+ */
+export function keyedStrings(source, keys) {
+  const file = ts.createSourceFile('config.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const consts = new Map();
+  const declared = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) consts.set(node.name.text, node.initializer);
+    ts.forEachChild(node, declared);
+  };
+  declared(file);
+  const strings = (node, into, seen) => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) into.push(node.text);
+    else if (ts.isIdentifier(node) && consts.has(node.text) && !seen.has(node.text)) strings(consts.get(node.text), into, seen.add(node.text));
+    ts.forEachChild(node, (child) => void strings(child, into, seen));
+    return into;
+  };
+  const found = [];
+  const visit = (node) => {
+    const name = ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node) ? node.name.getText(file).replace(/^['"]|['"]$/g, '') : null;
+    if (keys.includes(name)) found.push({ key: name, values: strings(ts.isPropertyAssignment(node) ? node.initializer : node.name, [], new Set()) });
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
   return found;
 }
 
