@@ -150,6 +150,8 @@ class Host implements ExtensionHost {
   private readonly results: Record<string, Conformance>;
   private readonly exts = new Map<string, Ext>();
   private readonly loading = new Map<string, Promise<void>>();
+  /** Conformance runs under way. */
+  private readonly checking = new Set<Promise<Conformance>>();
   private isReady = false;
   /** The starts of the packages loaded before ready, once ready runs. */
   private starting: Promise<void> = Promise.resolve();
@@ -211,6 +213,16 @@ class Host implements ExtensionHost {
   }
 
   async check(pkg: Installed): Promise<Conformance> {
+    if (this.closed) throw Error('the host is closed: it runs no conformance');
+    const run = this.checkNow(pkg);
+    this.checking.add(run);
+    try {
+      return await run;
+    } finally {
+      this.checking.delete(run);
+    }
+  }
+  private async checkNow(pkg: Installed): Promise<Conformance> {
     const entry = this.entry(pkg);
     if (entry.project && !(await this.options.trust.trusted(entry.project))) {
       throw Error(`${entry.id} comes with ${entry.project}, a project you haven't trusted, so none of its code runs, its checks included`);
@@ -511,7 +523,8 @@ class Host implements ExtensionHost {
     const failed: string[] = [];
     await Promise.all([...this.exts.values()].map(async (ext) => {
       const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => JSON.parse(toJson(e)) as unknown);
-      if (!mine.length || !ext.ask || (await this.revoked(ext))) return;
+      if (!mine.length) return;
+      if (!ext.ask || (await this.revoked(ext))) return void failed.push(`${ext.entry.id}: it stopped, its project no longer trusted or unloaded`);
       await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch((e) => failed.push(`${ext.entry.id}: ${message(e)}`));
     }));
     if (failed.length) throw Error(`not every subscribed package took the events: ${failed.join('; ')}`);
@@ -595,9 +608,9 @@ class Host implements ExtensionHost {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    // Starts and loads under way finish first, each then unloaded here, so none leaves a process behind.
+    // Starts, loads and conformance runs under way finish first, each then unloaded here, so none leaves a process behind.
     await this.starting;
-    await Promise.all(this.loading.values());
+    await Promise.all([...this.loading.values(), ...[...this.checking].map((c) => c.catch(() => undefined))]);
     for (const ext of [...this.exts.values()]) await this.unload(ext);
   }
 }
