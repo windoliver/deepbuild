@@ -63,6 +63,8 @@ export interface HookMeta {
   toolUse?: string;
   /** For a PreToolUse of a deep_* tool: the tool, and the RFC 8785 digest of its input, which a deep mcp call binds by. */
   stamp?: { tool: string; digest: string };
+  /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
+  late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
 }

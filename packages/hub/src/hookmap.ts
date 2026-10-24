@@ -74,6 +74,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid,
   };
   if (str(payload.tool_use_id)) meta.toolUse = str(payload.tool_use_id);
+  if (request.late === true) meta.late = { matched: request.matched };
   const tool = str(payload.tool_name);
   if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
