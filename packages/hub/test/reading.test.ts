@@ -124,4 +124,18 @@ describe('the hooks-not-reaching reading', () => {
       expect(await readings(), 'turn 1 reached no hook, and its reading was lost with the hub').toEqual(['hooks not reaching DeepBuild']);
     }, { DEEP_HUB_TEST_CRASH: 'before:session.reading' });
   }, 30_000);
+
+  it('waits for a call\'s event that commits after the grace before it judges the turn', async () => {
+    await withHub(async (root, home) => {
+      const now = () => String(BigInt(Date.now()) * 1_000_000n);
+      const { line, hook, readings } = session(root, home, now);
+      expect(await hook('SessionStart', { source: 'startup' })).toContain('"ack"');
+      // Turn 1's call reaches the hub, whose append of its event takes longer than the grace; turn 2's prompt ends turn 1.
+      line({ type: 'user', uuid: 'turn-1', message: { role: 'user', content: 'list the files' } });
+      line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_t1', name: 'Bash', input: { command: 'ls' } }] } });
+      line({ type: 'user', uuid: 'turn-2', message: { role: 'user', content: 'thanks' } });
+      expect(await hook('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 'toolu_t1' })).toContain('"ack"');
+      expect(await readings(), 'turn 1\'s call reached the hub').toEqual([]);
+    }, { DEEP_HUB_TEST_CRASH: 'slow:tool.before' });
+  }, 30_000);
 });
