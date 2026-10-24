@@ -125,19 +125,23 @@ struct Guard {
     next_step: String,
 }
 
-/// The entries of ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}}`; none when it is missing.
-fn guards() -> Vec<Guard> {
-    let Some(rules) = read_json(home().join("rules.json")) else {
-        return Vec::new();
+/// The entries of ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}}`; none when it is missing,
+/// and why not when it can't be read or isn't that shape.
+fn guards() -> Result<Vec<Guard>, String> {
+    let text = match fs::read_to_string(home().join("rules.json")) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("can't be read: {error}")),
     };
+    let rules = parse(&text).map_err(|_| "isn't JSON".to_string())?;
     let Some(Value::Object(entries)) = member(&rules, "entries") else {
-        return Vec::new();
+        return Err("has no entries object".to_string());
     };
     let text = |entry: &Value, key: &str| match member(entry, key) {
         Some(Value::String(s)) => s.clone(),
         _ => String::new(),
     };
-    entries
+    Ok(entries
         .iter()
         .map(|(name, entry)| Guard {
             name: name.clone(),
@@ -148,7 +152,7 @@ fn guards() -> Vec<Guard> {
             reason: text(entry, "reason"),
             next_step: text(entry, "next_step"),
         })
-        .collect()
+        .collect())
 }
 
 /// The shell command a call runs: a Bash tool call's `tool_input.command`.
@@ -448,6 +452,13 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         RULING.store(true, Ordering::SeqCst);
     }
     let guards = guards();
+    // Guards that can't be read may hold a shell call: with the hub away it is denied, never let through unguarded.
+    if let (Err(why), true) = (&guards, event == "PreToolUse" && called.is_some()) {
+        let _ = DENIAL.set(format!(
+            "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry."
+        ));
+    }
+    let guards = guards.unwrap_or_default();
     let matched: Vec<&Guard> = guards
         .iter()
         .filter(|g| match (&g.pattern, called) {
