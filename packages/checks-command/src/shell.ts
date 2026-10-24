@@ -4,6 +4,7 @@
 // reference runner (#314); the masks are the design's whole list.
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { Filter } from './listing.js';
 
 /**
  * The ways a command masks its tool's exit, each with the text named as the mask: a failure branch (`|| true`,
@@ -153,18 +154,24 @@ export function programsIn(command: string): string[] {
     .filter((p): p is string => p !== undefined && !BUILTINS.has(p));
 }
 /**
- * The values a command gives the options that choose tests by name (`-t`, `--testNamePattern`, `--tags-filter`, `-k`,
- * `-m`, `--deselect`, and pytest's `-o`), as the shell hands them over: a filter a reporter finds is the command's only when it is one of them.
+ * The values a command gives the options that choose tests by name (`-t`, `--testNamePattern`, node:test's
+ * `--test-name-pattern` and `--test-skip-pattern`, `--tags-filter`, `-k`, `-m`, `--deselect`, and pytest's `-o`), each
+ * with its option, node:test's `--test-only`, and the places it runs alone (`place`: a Vitest file:line, a pytest node
+ * id), as the shell hands them over: a filter a reporter finds is the command's only when it is one of them.
  */
-export function filtersIn(command: string): Set<string> {
+export function filtersIn(command: string): Filter[] {
   const words = wordsOf(command);
-  const values = new Set<string>();
+  const filters: Filter[] = [];
   words.forEach((word, i) => {
-    const option = /^(?:-t|--testNamePattern|--tags-filter|-k|-m|--deselect|-o)(?:=(.*))?$/.exec(word);
-    const value = option && (option[1] ?? words[i + 1]);
-    if (value !== null && value !== undefined) values.add(value);
+    const option = /^(-t|--testNamePattern|--test-name-pattern|--test-skip-pattern|--tags-filter|-k|-m|--deselect|-o)(?:=(.*))?$/.exec(word);
+    const value = option && (option[2] ?? words[i + 1]);
+    if (value !== null && value !== undefined) filters.push({ option: option![1]!, value });
+    // node:test runs a file's focused tests alone only when told to.
+    else if (word === '--test-only') filters.push({ option: word, value: '' });
+    // A place the command runs alone: Vitest's file:line, or a pytest node id.
+    else if (!word.startsWith('-') && (word.includes('::') || /:\d+$/.test(word))) filters.push({ option: 'place', value: word });
   });
-  return values;
+  return filters;
 }
 /** The program the command starts with, a plain name or path, when the shell can't find it on `path`: the command can't start. */
 export function absent(command: string, cwd: string, path: string): string | null {

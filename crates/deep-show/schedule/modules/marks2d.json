@@ -1,0 +1,27 @@
+{
+  "module": "marks2d",
+  "phases": {
+    "extract": [
+      {
+        "operator": "marks2d.frame",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "reading",
+          "core.world",
+          "core.fields",
+          "text.counter",
+          "text.run",
+          "text.animated",
+          "look.palette"
+        ],
+        "writes": [
+          "marks2d.frame"
+        ],
+        "per": "document"
+      }
+    ]
+  },
+  "contributions": {}
+}

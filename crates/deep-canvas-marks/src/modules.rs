@@ -145,7 +145,31 @@ fn register_text(r: &mut Registrar) {
     )
     .applies(is_animated)
     .run(animate);
-    r.fixture("counter", counter_board(), Some(counter_record()));
+    r.code(
+        "bad_doc",
+        "A text item the text module can't read: no text to shape, or an alignment it doesn't know.",
+        "Give the text item a text, and an align of start, center or end.",
+        false,
+    );
+    r.code(
+        "bad_format",
+        "A bound value's format or missing field the text module can't read.",
+        "Write the format with a precision of 0 to 12 and a known sign, group and unit.",
+        false,
+    );
+    r.code(
+        "format_notation",
+        "A bound value's format in a notation the text module doesn't write.",
+        "Use the notation fixed, compact, percent or duration.",
+        false,
+    );
+    r.fixture("counter", counter_board(), Some(counter_record()))
+        .sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/title/at/pos", "value": [24, 80, 0]},
+    }));
 }
 
 fn is_text(_: &Value, _: &str, item: &Value) -> bool {
@@ -365,7 +389,12 @@ fn register_look(r: &mut Registrar) {
     r.operator("palette", "items", &["look"], &["look.palette"])
         .document()
         .run(palette);
-    r.fixture("roles", roles_board(), None);
+    r.fixture("roles", roles_board(), None).sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/ink/params/box", "value": [86, 40, 56, 40]},
+    }));
 }
 
 /// The clean look, resolved: its status map and roles, as the session's tokens start.
@@ -475,7 +504,132 @@ fn register_marks2d(r: &mut Registrar) {
     )
     .document()
     .run(frame);
-    r.fixture("board", marks_board(), None);
+    r.code(
+        "bad_doc",
+        "An item missing a field the marks module draws it from, or holding one it can't read.",
+        "Give the item the field its kind draws from, such as a box, a center or path data.",
+        false,
+    );
+    r.code(
+        "bad_paint",
+        "A paint the marks module can't read: a role that isn't a name, or a malformed gradient or steps.",
+        "Write the paint as a role name, a gradient or steps the paint section defines.",
+        false,
+    );
+    r.code(
+        "role_unresolved",
+        "A paint names a role the look doesn't hold.",
+        "Name one of the look's roles, such as ink, muted, accent or ground.",
+        false,
+    );
+    r.code(
+        "gradient_kind",
+        "A gradient of a kind the marks module doesn't draw.",
+        "Use a linear, radial or sweep gradient, or along on a stroke.",
+        false,
+    );
+    r.code(
+        "gradient_stops",
+        "A gradient with fewer than two stops, or more than it can draw.",
+        "Give the gradient between two and the most stops it allows.",
+        false,
+    );
+    r.code(
+        "bad_path_data",
+        "A path's data that doesn't parse as path commands.",
+        "Write the path data as SVG path commands with all their numbers.",
+        false,
+    );
+    r.code(
+        "status_slot_kind",
+        "A status binding on a slot its item's kind can't carry a status color in.",
+        "Bind a rect's or a circle's fill, or a stroke or badge, never a text's fill.",
+        false,
+    );
+    r.code(
+        "status_too_small",
+        "A status fill on an item smaller than the look's smallest status mark.",
+        "Make the item at least the look's core size, or bind its stroke or badge instead.",
+        false,
+    );
+    r.code(
+        "mask_r2",
+        "A mask the marks module can't clip by yet: a shape other than a rect, a feather, an inverted or a combined mask.",
+        "Use an unfeathered rect mask that adds, or wait for the module that draws the others.",
+        false,
+    );
+    r.code(
+        "mask_writer",
+        "A mask over an item in another writer's layer.",
+        "Mask only items in the mask's own layer.",
+        false,
+    );
+    r.code(
+        "mask_depth",
+        "More than four masks clip one item.",
+        "Nest at most four masks over an item.",
+        false,
+    );
+    r.code(
+        "bad_asset",
+        "An image whose asset isn't the sha256 of a stored file.",
+        "Name the asset by the 64 hex digits of its sha256.",
+        false,
+    );
+    r.code(
+        "alt_missing",
+        "An image with no alt text.",
+        "Give the image an alt text that says what it shows.",
+        false,
+    );
+    r.code(
+        "bad_column",
+        "A mark set's column that doesn't decode to the set's rows.",
+        "Write the column as a constant, or `n` values of its dtype.",
+        false,
+    );
+    r.code(
+        "asset_missing",
+        "A mark set's column whose sidecar data no store inlined.",
+        "Store the sidecar file, or inline the column's data.",
+        false,
+    );
+    r.code(
+        "scale_type",
+        "A scale of a type the marks module doesn't map.",
+        "Use a linear or time scale.",
+        false,
+    );
+    r.code(
+        "bad_scale",
+        "A scale without a domain or range of two numbers.",
+        "Give the scale a domain and a range, each two numbers.",
+        false,
+    );
+    r.code(
+        "bad_encode",
+        "A mark set's encoding the marks module can't place a row by.",
+        "Encode x and y, each a column of the set or a number.",
+        false,
+    );
+    r.code(
+        "key_not_unique",
+        "A mark set's key column that holds one key twice.",
+        "Give every row its own key.",
+        false,
+    );
+    r.code(
+        "bad_axis",
+        "An axis with no scale, or on a side it can't take.",
+        "Name the axis's scale, and a side of bottom, top, left or right.",
+        false,
+    );
+    r.fixture("board", marks_board(), None).sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/box/params/box", "value": [22, 16, 80, 48]},
+    }));
 }
 
 /// The frame's draw list from every item's evaluated fields and transform.

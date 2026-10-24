@@ -1,0 +1,52 @@
+{
+  "module": "text",
+  "phases": {
+    "items": [
+      {
+        "operator": "text.counter",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.lowered",
+          "refs",
+          "reading",
+          "view(locale)"
+        ],
+        "writes": [
+          "text.counter"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.shape",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "text.counter",
+          "view(locale)",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "text.run"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.animate",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "text.run",
+          "view(reduced_motion)"
+        ],
+        "writes": [
+          "text.animated"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

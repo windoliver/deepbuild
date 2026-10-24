@@ -3,6 +3,7 @@
 # (vitest-reporter.mjs), written to the file the runner names. testsRun, each attempt and each failure's place and
 # kind come from pytest's own outcome and the exception it caught, never from printed output: a test that prints
 # "AssertionError" and then raises an AttributeError is an AttributeError. It ends with a trailer counting its lines.
+import ast
 import inspect
 import json
 import os
@@ -16,6 +17,11 @@ _owner = None
 _fd = None
 _lines = 0
 _tests = {}
+# The files the run's session collected tests from, each listed from its source when the run ends.
+_modules = set()
+# What makes a test, its class or its file one the source itself skips: a skip or xfail mark, unittest's skip
+# decorators, or a call to pytest's skip, xfail or importorskip or unittest's skipTest.
+_SKIPS = {'skip', 'skipif', 'xfail', 'skipUnless', 'skipTest', 'importorskip'}
 
 
 def _write(line):
@@ -70,6 +76,44 @@ def pytest_configure(config):
         _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"tests left out by --deselect {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
 
 
+def _names(node):
+    return {n.attr if isinstance(n, ast.Attribute) else n.id for n in ast.walk(node) if isinstance(n, (ast.Attribute, ast.Name))}
+
+
+def _listing(path):
+    """The tests a default pytest run of the file at `path` runs, read from its source with none of the checkout's
+    config, setup or plugins: test* functions, Test* classes without __init__ and unittest TestCase classes, none abstract, and their
+    test* methods, at the top of the file or of a listed class, but those its source skips or makes conditional."""
+    try:
+        with open(path, 'rb') as f:
+            tree = ast.parse(f.read(), path)
+    except (OSError, SyntaxError, ValueError):
+        return []
+    # A file that skips itself, or sets marks on all its tests (pytestmark), lists nothing.
+    if any(_SKIPS & _names(n) for n in tree.body if not isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))):
+        return []
+    listed = []
+
+    def visit(body, prefix, unit):
+        for n in body:
+            decorators = set().union(*map(_names, n.decorator_list)) if hasattr(n, 'decorator_list') else set()
+            if _SKIPS & decorators or 'fixture' in decorators:
+                continue
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith('test'):
+                if not _SKIPS & _names(n):
+                    listed.append(('::'.join(prefix + [n.name]), n.lineno))
+            elif isinstance(n, ast.ClassDef) and not unit:
+                is_unit = any(b.endswith('TestCase') for b in map(ast.unparse, n.bases))
+                init = any(isinstance(m, ast.FunctionDef) and m.name == '__init__' for m in n.body)
+                # pytest never collects an abstract class, whatever its name.
+                abstract = any('abstractmethod' in set().union(*map(_names, m.decorator_list)) for m in n.body if hasattr(m, 'decorator_list'))
+                if not abstract and (is_unit or (n.name.startswith('Test') and not init)):
+                    visit(n.body, prefix + [n.name], is_unit)
+
+    visit(tree.body, [], False)
+    return listed
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_pycollect_makeitem(collector, name, obj):
     # Which functions and classes are tests is pytest's own filter too (python_functions, python_classes): a test_*
@@ -83,6 +127,7 @@ def pytest_pycollect_makeitem(collector, name, obj):
         if ini:
             value = f"{ini}={' '.join(collector.config.getini(ini))}"
             _write({'type': 'run:error', 'file': None, 'filter': value, 'errors': [{'name': 'Error', 'message': f"{collector.nodeid}::{name} left out by {value} that the check's command doesn't name", 'stack': None, 'frames': []}]})
+            _write({'type': 'test:left', 'name': f'{collector.nodeid}::{name}'.split('::', 1)[-1], 'file': os.path.abspath(str(collector.path)), 'filter': value, 'errors': []})
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -95,6 +140,19 @@ def pytest_runtest_makereport(item, call):
 
 
 class _Reporter:
+    def pytest_collectstart(self, collector):
+        # A doctest module's tests are its docstrings' examples, not its functions.
+        if isinstance(collector, pytest.Module) and type(collector).__name__ != 'DoctestModule':
+            _modules.add(os.path.abspath(str(collector.path)))
+
+    def pytest_deselected(self, items):
+        # Each test pytest's own filters left out, with the filter that did, which is the command's or fails the run.
+        deselect = _owner.getoption('deselect', None) or []
+        for item in items:
+            by = next((v for v in deselect if item.nodeid.startswith(v)), None) or _owner.getoption('keyword', None) or _owner.getoption('markexpr', None)
+            if by:
+                _write({'type': 'test:left', 'name': item.nodeid.split('::', 1)[-1], 'file': os.path.abspath(str(item.path)), 'filter': by, 'errors': []})
+
     def pytest_runtest_logreport(self, report):
         # A test's phases (setup, call, teardown) end as one test: failed if any failed, run only if its call ran.
         test = _tests.setdefault(report.nodeid, {'ran': False, 'errors': [], 'retries': 0})
@@ -129,6 +187,15 @@ def pytest_unconfigure(config):
     global _fd
     if config is not _owner or _fd is None:
         return
+    # A node id the run was given runs only the tests it names: the runner keeps the rest only when the check's command names it.
+    places = [(arg, *arg.split('::', 1)) for arg in config.args if '::' in arg]
+    for path in sorted(_modules):
+        chosen = [(arg, part) for arg, place, part in places if os.path.abspath(os.path.join(config.invocation_params.dir, place)) == path]
+        for name, line in _listing(path):
+            _write({'type': 'test:listed', 'name': name, 'file': path, 'line': line, 'errors': []})
+            for arg, part in chosen:
+                if not (name == part or name.startswith(f'{part}::') or part.startswith(f'{name}[')):
+                    _write({'type': 'test:left', 'name': name, 'file': path, 'filter': arg, 'errors': []})
     try:
         os.write(_fd, (json.dumps({'deep': 'end', 'lines': _lines}, separators=(',', ':')) + '\n').encode())
     except OSError:
