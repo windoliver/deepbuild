@@ -659,6 +659,19 @@ test('once main holds the proof lanes, a lock entry a test resolves through, nea
     commits: [{ files: { 'package.json': pkg.replace('"chai": "^5.0.0"', '"chai": "file:vendor/chai"').replace('"left": "1.0.0"', '"left": "2.0.0"') }, message: `Vendor chai\n\nPart of #${ISSUE}` }],
   }), ['guard']);
   assert.deepEqual(problems(swapped, 'guard').map((found) => found.split(' (commit')[0]), ["FAIL guard: package.json: chai, a package a test's imports resolve through, changed"], show(swapped));
+  // An override keyed by a range, or under the package that reads it, re-points it too; a shrinkwrap
+  // is the lock npm installs from; a flag the install doesn't read, as dev, re-points nothing.
+  const more = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'package.json': pkg, 'package-lock.json': lock({}), [`${dir}/a.test.mjs`]: `import test from 'node:test';\nimport { assert } from 'chai';\n\ntest('${c1} sums', () => {\n  assert.equal(1, 1);\n});\n` },
+    commits: [
+      { files: { 'package.json': JSON.stringify({ ...JSON.parse(pkg), overrides: { 'chai@^5': 'file:vendor/chai' } }) }, message: `Override\n\nPart of #${ISSUE}` },
+      { files: { 'package.json': JSON.stringify({ ...JSON.parse(pkg), overrides: { 'vitest@5.0.0': { tinyspy: 'file:vendor/tinyspy' } } }) }, message: `Override\n\nPart of #${ISSUE}` },
+      { files: { 'npm-shrinkwrap.json': lock({ 'node_modules/chai': { resolved: 'vendor/chai', link: true } }) }, message: `Shrinkwrap\n\nPart of #${ISSUE}` },
+      { files: { 'package-lock.json': lock({ 'node_modules/deep-eql': { version: '5.0.0', dev: true } }) }, message: `Relock\n\nPart of #${ISSUE}` },
+    ],
+  }), ['guard']);
+  assert.deepEqual(problems(more, 'guard').map((found) => found.split(', a package')[0].split(', packages')[0]), ['FAIL guard: package.json: chai', 'FAIL guard: package.json: chai, vitest, tinyspy', 'FAIL guard: npm-shrinkwrap.json: chai'], show(more));
 });
 
 test("a workspace build can't replace the copy's link to a package with a folder of its own", (t) => {
