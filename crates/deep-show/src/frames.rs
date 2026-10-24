@@ -340,7 +340,7 @@ fn session_view(session: &DocSession, over: &Map<String, Value>) -> [Value; 6] {
 }
 
 /// The drawing marks2d's frame operator left in a session.
-fn drawing_of(
+pub(crate) fn drawing_of(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &DocSession,
 ) -> Option<Arc<Drawing>> {

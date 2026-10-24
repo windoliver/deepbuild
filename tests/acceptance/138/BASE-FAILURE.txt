@@ -1,0 +1,319 @@
+Base commit: e9c601b (Merge pull request #692 … feat/670-checkpoint-figure)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/138 --no-file-parallelism
+Date: 2026-10-23T18:00Z  Node v24.22.0  vitest 5.0.5  Darwin arm64  cargo 1.99.1
+Two runs, each with only these test files added (untracked) and the repo's node_modules from npm ci.
+
+RUN 1: the worktree at the base. All 98 tests fail, because the base itself does not build: cargo build fails
+in deep-canvas (crates/deep-canvas/src/document/rows.rs:256: error[E0425]: cannot find function `cell` in this
+scope; #690 removed the helper that #670 still calls). So the `full` build fails on that error, and every
+`test-kit-*` build fails with "none of the selected packages contains this feature"; the two budgets tests that
+need no build fail because scripts/lanes.mjs has no lane running scripts/canvas-kit.mjs and
+benchmarks/budgets.json has no canvas-kit task. The reference-Mac gate was open for this run (the timed budgets
+test ran and failed on the build); in an earlier run on battery it skipped as INCONCLUSIVE, never passing. The
+GPU tests run their GPU-free preconditions before their gate, so they fail here rather than skip.
+
+RUN 2: a scratch copy of the base outside this repo (no .git), with only #690's `cell` helper put back in
+rows.rs so the shipped build compiles. All 98 tests fail on the missing surface: `deep-show run` answers
+{"ok":false,"code":"bad_input"} to a scenario holding any new call (kit, manifest, catalog, golden, record,
+goldens, decide, corpus_record, compare_images) or new scenario field; cargo refuses every test-kit-* feature;
+the quick lane and the perf task don't exist (the perf-lane test fails there on `git merge-base`, since the copy
+has no .git). No test fails from a syntax or harness error in these files, and
+`npx tsc -p tests/acceptance/138/tsconfig.json` is clean.
+
+===== RUN 1 (worktree at e9c601b) =====
+ ❯ goldens.test.ts (9 tests | 9 failed) 10619ms
+   ❯ #138.8ef25182 only your decision blesses a golden, loosens a tolerance or waives a fixture; an agent's attempt is refused (3)
+     × #138.8ef25182 alpha's bless, loosen and waive, over MCP and from its process tree, are refused naming alpha; the golden stays undecided; yours are decided 9ms
+     × #138.8ef25182 a planted hub that takes an agent's decision as yours (accepts_agent_decisions) is caught by the check above 2ms
+     × #138.8ef25182 the kit's own fixture that tries (parity/framework/agent-decision.scene) passes, and fails under accepts_agent_decisions 2ms
+   ❯ #138.51f71c50 each golden digest is positive, negative or untriaged; only a positive passes; an agent's re-record arrives untriaged and decides nothing (4)
+     × #138.51f71c50 a recorded digest is untriaged and reads BLOCKED; your positive passes; a render that matches no digest under an unchanged environment fails 2ms
+     × #138.51f71c50 a digest you triage negative, kept with its bug, fails naming the bug 2ms
+     × #138.51f71c50 after you bless the golden, an agent's re-record of another render arrives untriaged, and the fixture reads BLOCKED, never PASS 2ms
+     × #138.51f71c50 a store that reads every recorded digest as positive (every_digest_positive) passes after the re-record, and this test's check rejects it 2ms
+   ❯ #138.61aacaf4 a reference implementation's hashes become truth only with a fixture set outside the implementation; otherwise its golden is regression_only (2)
+     × #138.61aacaf4 test.kit.selfish, whose only fixture is its own first render, gets a regression_only golden naming no fixture; its interface isn't truth and the criterion it alone covers stays open 2ms
+     × #138.61aacaf4 with an analytic fixture beside it (test-kit-selfish-analytic) the first blessing names that fixture, the interface is truth and the criterion is proved 2ms
+ ❯ shipped.test.ts (10 tests | 10 failed) 3204ms
+   ❯ #138 the default kit over the R2 canvas modules (10)
+     × #138.a5815177 10,000 fuzzed patch sequences per R2 canvas module end equal to their clean rebuild in every array, cache, key and snapshot 8ms
+     × #138.b4f429ff the patch fuzzer finds no panic, every refusal carries a code, a refused patch leaves the document byte-identical and an accepted one round-trips, over every op and every kind 4ms
+     × #138.b4f429ff the fuzzer is replayable from its seed: one seed draws one sequence digest twice, another seed another 1ms
+     × #138.ca6ad34d over the fuzzed sequences each of Patch's five laws holds on every patch drawn 1ms
+     × #138.028c56e3 every comparison of two outputs in the kit ran its planted-mismatch twin, and every twin failed 2ms
+     × #138.5aef0e9f every part of every R2 module ran every case it declares, at least one, and the module's verdict follows its cases 2ms
+     × #138.97027c5b every R2 snapshot case reads BLOCKED on noop, naming its probe, and passes on Vello CPU 2ms
+     × #138.417c9663 each R2 module's order part runs 8 distinct shuffle seeds and its read-set part passes 2ms
+     × #138.11bef137 every tolerance class with a share of pixels in the shipped fixtures names a ceiling, a window bound and its size, and a reason 1ms
+     × #138.0b7b2ee5 every planted fault, clean twin and code fixture of the R2 modules raised exactly the codes it names 1ms
+ ❯ gpu.test.ts (7 tests | 7 failed) 153ms
+   ❯ #138.19c7c27a a test module that registers a GPU pass: its snapshot case is BLOCKED on noop and passes on the reference Mac's GPU; a one-code shift fails, naming the case (3)
+     × #138.19c7c27a on noop and Vello CPU, neither of which can make GPU pixels, the GPU pass's snapshot cases are BLOCKED naming the probe, and the module fails unproved 6ms
+     × #138.19c7c27a on the reference Mac's GPU under the lease it passes the kit, its snapshot cases BLOCKED on noop and PASS on the GPU 2ms
+     × #138.19c7c27a a planted one-code shift in the GPU pass's output fails the kit, naming the case 2ms
+   ❯ #138.da9f7979 a GPU golden compares only under an equal environment digest; a pixel change under an unchanged digest fails; re-blessing after a driver update is one decision (1)
+     × #138.da9f7979 blessed under driver 1 both goldens pass; the shifted pass fails under driver 1; under driver 2 they read BLOCKED; one rebless decision covers both and they pass 2ms
+   ❯ #138.d03b76eb re-blessing after a driver update re-renders each golden at the commit it was recorded at; a re-bless at a later commit is refused, naming the commit (1)
+     × #138.d03b76eb under driver 2 a rebless at a later commit is refused wrong_commit naming it; at the recorded commit it is decided 2ms
+   ❯ #138.026a0dff a GPU golden's first blessing waits for the fixture's analytic and CPU-reference criteria to pass on the same commit (2)
+     × #138.026a0dff with both criteria passing, the first golden raises a bless ask for the fixture 1ms
+     × #138.026a0dff with a planted CPU-reference criterion failing, no ask is raised and the fixture reads BLOCKED, naming the criterion 2ms
+ ❯ repair.test.ts (8 tests | 8 failed) 56ms
+   ❯ #138.0770a3f0 the repair loop: fault, issue, apply, rerun and PASS; a stale fix rebases only when no ID it touches changed; conflicts name both writers (8)
+     × #138.0770a3f0 the kit's repair_loop part runs its five cases for test.kit.fixer and every R2 module, each planted fault carrying {path, code, fix} 6ms
+     × #138.0770a3f0 planted rebase_by_path makes the kit's stale_same_item case fail for test.kit.fixer 1ms
+     × #138.0770a3f0 the scene's fault: the check raises its code at its path with a fix as patch ops; applied, the rerun has no such issue (PASS) 1ms
+     × #138.0770a3f0 a stale fix rebases when no ID it touches changed since its base: you changed item b, alpha's fix on base 0 applies 1ms
+     × #138.0770a3f0 a fix to items/a/params/y after you changed items/a/params/x is a conflict naming alpha and you, and leaves the document as it was 1ms
+     × #138.0770a3f0 a planted path-granular rebase (rebase_by_path) applies that fix, and the check above fails on it 1ms
+     × #138.0770a3f0 two conflicting fixes: alpha's applies, bravo's on the same base is refused naming bravo and alpha 1ms
+     × #138.0770a3f0 a fix that fails its dry run is refused with its refusal code, a code the catalog lists, and changes nothing 1ms
+ ❯ twins.test.ts (9 tests | 9 failed) 2843ms
+   ❯ #138.028c56e3 a comparison whose planted-mismatch twin passes is INVALID, checked by a fixture that plants one (2)
+     × #138.028c56e3 test.kit.blind's reftest, whose twin changes a param that draws nothing, reads INVALID naming the case 6ms
+     × #138.028c56e3 the same reftest with a twin that moves the box (test-kit-blind-fixed) fails its twin and passes 1ms
+   ❯ #138.5aef0e9f a part's result comes from its own cases, and it must run every case it declares (4)
+     × #138.5aef0e9f a fuzzer that exits 0 after no sequences (fuzzer_runs_none) fails the module, naming patch_fuzz and the count 1ms
+     × #138.5aef0e9f a part that runs fewer cases than it declares (part_runs_half) fails the module, naming clean_rebuild and the count 1ms
+     × #138.5aef0e9f a part that exits 0 with a failed case in its results (exit_zero_with_failed_case) fails the module 1ms
+     × #138.5aef0e9f the same parts, unplanted, run every case they declare and pass 1ms
+   ❯ #138.0b7b2ee5 every planted fault, clean twin and code fixture names the exact codes it raises (3)
+     × #138.0b7b2ee5 a planted fault that raises its code and also over_budget fails its case naming over_budget; a clean twin that raises a notice it doesn't name fails naming the notice 1ms
+     × #138.0b7b2ee5 the same fixtures raising exactly what they name (test-kit-noisy-fixed) pass 1ms
+     × #138.0b7b2ee5 a kit that checks only for the expected code (checks_expected_code_only) passes the fault, and this test's check rejects it 1ms
+ ❯ manifest.test.ts (4 tests | 4 failed) 2132ms
+   ❯ #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code (4)
+     × #138.230a6b92 one category list of 21 and one naming scheme, parity/<category>/<name>.<profile>, covering every module's fixtures and the issue's three scenes 7ms
+     × #138.230a6b92 each fixture holds a document and a sidecar of known keys, existing check kinds and listed oracles, no formula or code, and none is marked may-fail 1ms
+     × #138.230a6b92 the kit fails a sidecar with a formula, one with a check kind no registry holds and one with an oracle off the list, naming each fixture 1ms
+     × #138.230a6b92 the shipped build's fixtures pass the same part 2ms
+ ❯ tolerance.test.ts (6 tests | 6 failed) 2385ms
+   ❯ #138.11bef137 a tolerance class with a share also names a ceiling and a window bound; a comparator that checks only the share fails this test (6)
+     × #138.11bef137 on a fixture held to one code value on 99.9% of 1920 × 1080, a 40 × 40 block 64 code values off meets the share but fails, naming the first pixel past the ceiling and the window 38ms
+     × #138.11bef137 a comparator that checks only the percentage (checks_share_only) passes the block, and this test's check rejects it 31ms
+     × #138.11bef137 the ceiling, walked one below, at and one above: one pixel 15, 16 or 17 code values off 33ms
+     × #138.11bef137 the share, walked one below, at and one above: 2,072, 2,073 and 2,074 sparse pixels 2 code values off; and a whole frame one value off is within 30ms
+     × #138.11bef137 the window bound, walked one below, at and one above: 63, 64 and 65 dense pixels 2 code values off 32ms
+     × #138.11bef137 a tolerance class missing its ceiling, its window or its reason fails the kit, naming the fixture and what it lacks 1ms
+ ❯ coverage.test.ts (9 tests | 9 failed) 229ms
+   ❯ #138.554b09da a case that declares a field its fixture never sets or reads reads INVALID, naming the field (3)
+     × #138.554b09da test.kit.cover's case declaring ghost reads INVALID naming test.kit.cover@1/params/ghost; w is reached and ghost is not 6ms
+     × #138.554b09da the same case declaring only w (test-kit-cover-fixed) passes 1ms
+     × #138.554b09da a kit that counts declared coverage as reached (counts_declared_as_reached) passes the case, and this test's check rejects it 1ms
+   ❯ #138.97027c5b a snapshot case on wgpu's noop backend reads BLOCKED naming the probe and passes on Vello CPU; with no backend that proves it the module fails (4)
+     × #138.97027c5b test.kit.snap's reftest reads BLOCKED on noop, naming its probe, and passes on Vello CPU after comparing pixels 1ms
+     × #138.97027c5b with its Vello CPU run removed (backends: noop) the module fails the kit, unproved, naming the case and the probe 1ms
+     × #138.97027c5b the comparison runs: a render one code value off (test-kit-snap-off) fails the reftest on Vello CPU 1ms
+     × #138.97027c5b a kit that skips the comparison and passes (skips_snapshot_comparison) passes the off render, and this test's check rejects it 1ms
+   ❯ #138.93adf6d7 a kind that draws text from the core's glyph atlas without contributing glyph boxes fails the contribution part, naming the kind (2)
+     × #138.93adf6d7 test.kit.glyphs without its glyph-box contribution fails contribution, naming test.kit.glyphs@1 1ms
+     × #138.93adf6d7 the same module with the contribution passes 1ms
+ ❯ catalog.test.ts (6 tests | 6 failed) 187ms
+   ❯ #138.9e9940d1 a code the catalog doesn't list fails the kit; every catalog code has a planted fixture that emits it with its meaning and fix (3)
+     × #138.9e9940d1 test.kit.rogue, whose check can emit test.kit.rogue.unlisted, fails the kit's catalog part naming the code 5ms
+     × #138.9e9940d1 the same module with the code in the catalog (test-kit-rogue-listed) passes, and the catalog names its module, meaning and fix 1ms
+     × #138.9e9940d1 every code in the catalog has its module, meaning, fix and a planted fixture whose case raises exactly it, with the catalog's fix 1ms
+   ❯ #138.c7f79e24 a fix given as patch ops is applied on each kit fixture raising its code, and the second check returns only that fixture's other codes (3)
+     × #138.c7f79e24 test.kit.fixer's ops fix for y_over is applied on its fixture and the second check returns nothing else; its text fix for x_odd needs no fixture 1ms
+     × #138.c7f79e24 a planted ops fix that clears its issue but adds ref_unresolved (test-kit-fixer-dangles) fails, naming the code 1ms
+     × #138.c7f79e24 an ops fix that no fixture applied (test-kit-fixer-unproved) fails the kit, naming the code 1ms
+ ❯ migration.test.ts (5 tests | 5 failed) 164ms
+   ❯ #138.7447bce1 the migration corpus: a document the previous release saved migrates at load and gives what it recorded; a planted twin fails the release; only your decision blesses (3)
+     × #138.7447bce1 a corpus document with test.kit.mig@1 migrates at load in 2.0.0 and gives its recorded values and Vello CPU snapshots at every sampled time 6ms
+     × #138.7447bce1 a planted migration that moves one value (2w + 1) fails the release, naming the kind, item m1, the width field and the first time that differs 2ms
+     × #138.7447bce1 an agent's attempt to bless the new result is refused; your decision blesses it once for its cause, and the release passes 1ms
+   ❯ #138.1df954fa 1000 seeded param sets per migrated kind pass the new schema and keep IDs (2)
+     × #138.1df954fa test.kit.mig@1 → @2: 1000 seeded param sets each pass the new schema, keep every ID and give identical bytes twice 1ms
+     × #138.1df954fa a planted migration that maps the old max out of range (3w) fails, naming the seed and the param width 2ms
+ ❯ fuzz.test.ts (9 tests | 9 failed) 2129ms
+   ❯ #138.a5815177 a crash in a fuzzed sequence becomes a corpus file; a cache that misses a clean rebuild fails (2)
+     × #138.a5815177 test.kit.crash panics on n > 90: clean_rebuild fails with crash, naming the seed and a corpus file the report lists, holding the sequence, which replays the crash 5ms
+     × #138.a5815177 a planted content key without params (key_without_params) fails clean_rebuild for marks2d with mismatch, naming what differed and the seed 1ms
+   ❯ #138.b4f429ff the patch fuzzer finds panics and refusals without codes, and a refused patch that writes (3)
+     × #138.b4f429ff test.kit.crash's panic is found by patch_fuzz, naming the seed 1ms
+     × #138.b4f429ff planted refusal_without_code fails patch_fuzz with refusal_without_code, naming the seed 1ms
+     × #138.b4f429ff planted refused_patch_writes fails patch_fuzz with law, naming the seed 1ms
+   ❯ #138.ca6ad34d planted twins of Patch's laws each fail, naming the law and the patch's seed (4)
+     × #138.ca6ad34d dry_run_skips_recheck fails law 1 naming a seed; that seed alone fails it again, and passes on the clean core 1ms
+     × #138.ca6ad34d undo_reorder_mints_key fails law 3 naming a seed; that seed alone fails it again, and passes on the clean core 1ms
+     × #138.ca6ad34d apply_time_order_keys fails law 4 naming a seed; that seed alone fails it again, and passes on the clean core 1ms
+     × #138.ca6ad34d incremental_check_skips_referrers fails law 5 naming a seed; that seed alone fails it again, and passes on the clean core 1ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 2235ms
+   ❯ #138.4c95cab8 the kit in the quick lane, compared with the merge base (3)
+     × #138.4c95cab8 a quick lane of the local preflight runs scripts/canvas-kit.mjs, never on push or pull request 7ms
+     × #138.4c95cab8 the perf lane has a canvas-kit task, a #138 first measurement, valid against the merge base's budgets, and its command exits 0 49ms
+     × #138.4c95cab8 on the reference Mac the quick lane's kit passes over the R2 modules with no GPU in under 5 minutes (five runs after a warm-up), and a shipped frame still runs no operator after the first and allocates nothing after warm-up 4ms
+ ❯ carried.test.ts (5 tests | 5 failed) 262ms
+   ❯ #138.bf59b612 a checkpoint that leaves out one counter fails the carried-state part, naming the module and the first step whose hash differs (2)
+     × #138.bf59b612 test.kit.carry with hits left out of its checkpoint fails carried_state, step_hash, naming test.kit.carry and step 10 7ms
+     × #138.bf59b612 the same module with the counter in its checkpoint passes carried_state, seeking from every checkpoint 1ms
+   ❯ #138.bd29bce3 late entries: a module that keeps a replaced step's occurrence, or skips an entry at the restored step, fails the late-entry part while passing carried state (3)
+     × #138.bd29bce3 test-kit-tally-keeps-occurrence fails late_entry naming test.kit.tally and step 20, the first step that differs from the on-time run, and passes carried_state 2ms
+     × #138.bd29bce3 test-kit-tally-skips-restored fails late_entry naming test.kit.tally and step 20, the first step that differs from the on-time run, and passes carried_state 2ms
+     × #138.bd29bce3 test.kit.tally fixed passes both parts, its late entry arriving 1 to 8 steps after step 20 1ms
+ ❯ readset.test.ts (3 tests | 3 failed) 100ms
+   ❯ #138.417c9663 an operator reading outside its declared reads through a static fails the read-set part; a result that changes under a shuffled legal order fails the order part (3)
+     × #138.417c9663 test.kit.sneak fails read_set, undeclared_read, naming the operator test.kit.sneak.out and the array test.kit.sneak.src 7ms
+     × #138.417c9663 test.kit.sneak passes the order part: its fault is a read, not an order 3ms
+     × #138.417c9663 test.kit.order fails order, naming test.kit.order.b and one of its 8 seeds, and eval under that shuffle seed gives b another result 2ms
+ ❯ release.test.ts (2 tests | 2 failed) 107ms
+   ❯ #138.68b285c9 a canvas module that fails any part of the kit can't be registered in a release build (2)
+     × #138.68b285c9 test.kit.carry with a checkpoint that drops a counter fails the kit, and the release build embedding that ledger refuses to start, naming it and no shipped module 8ms
+     × #138.68b285c9 the same module with the counter in its checkpoint passes the kit, and its release build starts and seals it 2ms
+ ❯ time-order.test.ts (3 tests | 3 failed) 235ms
+   ❯ #138.b658e38b a module that keeps its last key index passes a straight play and fails the time-order part at the first time stepped back (3)
+     × #138.b658e38b the time-order case plays the fixture's 61 times straight, steps back one frame at a time, then 100 seeded times in shuffled order 7ms
+     × #138.b658e38b test.kit.keys with a kept, forward-only key index fails time_order naming test.kit.keys and 59/60 s, and nothing on the straight play 2ms
+     × #138.b658e38b the same module without the kept index passes 2ms
+ Test Files  16 failed (16)
+      Tests  98 failed (98)
+exit 1
+
+===== RUN 2 (scratch copy with cell() restored) =====
+ ❯ goldens.test.ts (9 tests | 9 failed) 8377ms
+   ❯ #138.8ef25182 only your decision blesses a golden, loosens a tolerance or waives a fixture; an agent's attempt is refused (3)
+     × #138.8ef25182 alpha's bless, loosen and waive, over MCP and from its process tree, are refused naming alpha; the golden stays undecided; yours are decided 11ms
+     × #138.8ef25182 a planted hub that takes an agent's decision as yours (accepts_agent_decisions) is caught by the check above 4ms
+     × #138.8ef25182 the kit's own fixture that tries (parity/framework/agent-decision.scene) passes, and fails under accepts_agent_decisions 1389ms
+   ❯ #138.51f71c50 each golden digest is positive, negative or untriaged; only a positive passes; an agent's re-record arrives untriaged and decides nothing (4)
+     × #138.51f71c50 a recorded digest is untriaged and reads BLOCKED; your positive passes; a render that matches no digest under an unchanged environment fails 2ms
+     × #138.51f71c50 a digest you triage negative, kept with its bug, fails naming the bug 2ms
+     × #138.51f71c50 after you bless the golden, an agent's re-record of another render arrives untriaged, and the fixture reads BLOCKED, never PASS 2ms
+     × #138.51f71c50 a store that reads every recorded digest as positive (every_digest_positive) passes after the re-record, and this test's check rejects it 2ms
+   ❯ #138.61aacaf4 a reference implementation's hashes become truth only with a fixture set outside the implementation; otherwise its golden is regression_only (2)
+     × #138.61aacaf4 test.kit.selfish, whose only fixture is its own first render, gets a regression_only golden naming no fixture; its interface isn't truth and the criterion it alone covers stays open 1ms
+     × #138.61aacaf4 with an analytic fixture beside it (test-kit-selfish-analytic) the first blessing names that fixture, the interface is truth and the criterion is proved 1ms
+ ❯ shipped.test.ts (10 tests | 10 failed) 4110ms
+   ❯ #138 the default kit over the R2 canvas modules (10)
+     × #138.a5815177 10,000 fuzzed patch sequences per R2 canvas module end equal to their clean rebuild in every array, cache, key and snapshot 1201ms
+     × #138.b4f429ff the patch fuzzer finds no panic, every refusal carries a code, a refused patch leaves the document byte-identical and an accepted one round-trips, over every op and every kind 2ms
+     × #138.b4f429ff the fuzzer is replayable from its seed: one seed draws one sequence digest twice, another seed another 1ms
+     × #138.ca6ad34d over the fuzzed sequences each of Patch's five laws holds on every patch drawn 1ms
+     × #138.028c56e3 every comparison of two outputs in the kit ran its planted-mismatch twin, and every twin failed 1ms
+     × #138.5aef0e9f every part of every R2 module ran every case it declares, at least one, and the module's verdict follows its cases 1ms
+     × #138.97027c5b every R2 snapshot case reads BLOCKED on noop, naming its probe, and passes on Vello CPU 1ms
+     × #138.417c9663 each R2 module's order part runs 8 distinct shuffle seeds and its read-set part passes 1ms
+     × #138.11bef137 every tolerance class with a share of pixels in the shipped fixtures names a ceiling, a window bound and its size, and a reason 1ms
+     × #138.0b7b2ee5 every planted fault, clean twin and code fixture of the R2 modules raised exactly the codes it names 1ms
+ ❯ gpu.test.ts (7 tests | 7 failed) 135ms
+   ❯ #138.19c7c27a a test module that registers a GPU pass: its snapshot case is BLOCKED on noop and passes on the reference Mac's GPU; a one-code shift fails, naming the case (3)
+     × #138.19c7c27a on noop and Vello CPU, neither of which can make GPU pixels, the GPU pass's snapshot cases are BLOCKED naming the probe, and the module fails unproved 6ms
+     × #138.19c7c27a on the reference Mac's GPU under the lease it passes the kit, its snapshot cases BLOCKED on noop and PASS on the GPU 2ms
+     × #138.19c7c27a a planted one-code shift in the GPU pass's output fails the kit, naming the case 1ms
+   ❯ #138.da9f7979 a GPU golden compares only under an equal environment digest; a pixel change under an unchanged digest fails; re-blessing after a driver update is one decision (1)
+     × #138.da9f7979 blessed under driver 1 both goldens pass; the shifted pass fails under driver 1; under driver 2 they read BLOCKED; one rebless decision covers both and they pass 1ms
+   ❯ #138.d03b76eb re-blessing after a driver update re-renders each golden at the commit it was recorded at; a re-bless at a later commit is refused, naming the commit (1)
+     × #138.d03b76eb under driver 2 a rebless at a later commit is refused wrong_commit naming it; at the recorded commit it is decided 1ms
+   ❯ #138.026a0dff a GPU golden's first blessing waits for the fixture's analytic and CPU-reference criteria to pass on the same commit (2)
+     × #138.026a0dff with both criteria passing, the first golden raises a bless ask for the fixture 1ms
+     × #138.026a0dff with a planted CPU-reference criterion failing, no ask is raised and the fixture reads BLOCKED, naming the criterion 1ms
+ ❯ repair.test.ts (8 tests | 8 failed) 53ms
+   ❯ #138.0770a3f0 the repair loop: fault, issue, apply, rerun and PASS; a stale fix rebases only when no ID it touches changed; conflicts name both writers (8)
+     × #138.0770a3f0 the kit's repair_loop part runs its five cases for test.kit.fixer and every R2 module, each planted fault carrying {path, code, fix} 5ms
+     × #138.0770a3f0 planted rebase_by_path makes the kit's stale_same_item case fail for test.kit.fixer 1ms
+     × #138.0770a3f0 the scene's fault: the check raises its code at its path with a fix as patch ops; applied, the rerun has no such issue (PASS) 1ms
+     × #138.0770a3f0 a stale fix rebases when no ID it touches changed since its base: you changed item b, alpha's fix on base 0 applies 1ms
+     × #138.0770a3f0 a fix to items/a/params/y after you changed items/a/params/x is a conflict naming alpha and you, and leaves the document as it was 1ms
+     × #138.0770a3f0 a planted path-granular rebase (rebase_by_path) applies that fix, and the check above fails on it 1ms
+     × #138.0770a3f0 two conflicting fixes: alpha's applies, bravo's on the same base is refused naming bravo and alpha 1ms
+     × #138.0770a3f0 a fix that fails its dry run is refused with its refusal code, a code the catalog lists, and changes nothing 1ms
+ ❯ twins.test.ts (9 tests | 9 failed) 3986ms
+   ❯ #138.028c56e3 a comparison whose planted-mismatch twin passes is INVALID, checked by a fixture that plants one (2)
+     × #138.028c56e3 test.kit.blind's reftest, whose twin changes a param that draws nothing, reads INVALID naming the case 6ms
+     × #138.028c56e3 the same reftest with a twin that moves the box (test-kit-blind-fixed) fails its twin and passes 1ms
+   ❯ #138.5aef0e9f a part's result comes from its own cases, and it must run every case it declares (4)
+     × #138.5aef0e9f a fuzzer that exits 0 after no sequences (fuzzer_runs_none) fails the module, naming patch_fuzz and the count 1233ms
+     × #138.5aef0e9f a part that runs fewer cases than it declares (part_runs_half) fails the module, naming clean_rebuild and the count 20ms
+     × #138.5aef0e9f a part that exits 0 with a failed case in its results (exit_zero_with_failed_case) fails the module 18ms
+     × #138.5aef0e9f the same parts, unplanted, run every case they declare and pass 13ms
+   ❯ #138.0b7b2ee5 every planted fault, clean twin and code fixture names the exact codes it raises (3)
+     × #138.0b7b2ee5 a planted fault that raises its code and also over_budget fails its case naming over_budget; a clean twin that raises a notice it doesn't name fails naming the notice 1ms
+     × #138.0b7b2ee5 the same fixtures raising exactly what they name (test-kit-noisy-fixed) pass 2ms
+     × #138.0b7b2ee5 a kit that checks only for the expected code (checks_expected_code_only) passes the fault, and this test's check rejects it 1ms
+ ❯ manifest.test.ts (4 tests | 4 failed) 3916ms
+   ❯ #138.230a6b92 every fixture is a document with a sidecar of existing check kinds and named oracles, and no sidecar holds a formula or code (4)
+     × #138.230a6b92 one category list of 21 and one naming scheme, parity/<category>/<name>.<profile>, covering every module's fixtures and the issue's three scenes 1277ms
+     × #138.230a6b92 each fixture holds a document and a sidecar of known keys, existing check kinds and listed oracles, no formula or code, and none is marked may-fail 12ms
+     × #138.230a6b92 the kit fails a sidecar with a formula, one with a check kind no registry holds and one with an oracle off the list, naming each fixture 1ms
+     × #138.230a6b92 the shipped build's fixtures pass the same part 12ms
+ ❯ tolerance.test.ts (6 tests | 6 failed) 4067ms
+   ❯ #138.11bef137 a tolerance class with a share also names a ceiling and a window bound; a comparator that checks only the share fails this test (6)
+     × #138.11bef137 on a fixture held to one code value on 99.9% of 1920 × 1080, a 40 × 40 block 64 code values off meets the share but fails, naming the first pixel past the ceiling and the window 1276ms
+     × #138.11bef137 a comparator that checks only the percentage (checks_share_only) passes the block, and this test's check rejects it 43ms
+     × #138.11bef137 the ceiling, walked one below, at and one above: one pixel 15, 16 or 17 code values off 46ms
+     × #138.11bef137 the share, walked one below, at and one above: 2,072, 2,073 and 2,074 sparse pixels 2 code values off; and a whole frame one value off is within 42ms
+     × #138.11bef137 the window bound, walked one below, at and one above: 63, 64 and 65 dense pixels 2 code values off 43ms
+     × #138.11bef137 a tolerance class missing its ceiling, its window or its reason fails the kit, naming the fixture and what it lacks 1ms
+ ❯ coverage.test.ts (9 tests | 9 failed) 266ms
+   ❯ #138.554b09da a case that declares a field its fixture never sets or reads reads INVALID, naming the field (3)
+     × #138.554b09da test.kit.cover's case declaring ghost reads INVALID naming test.kit.cover@1/params/ghost; w is reached and ghost is not 6ms
+     × #138.554b09da the same case declaring only w (test-kit-cover-fixed) passes 2ms
+     × #138.554b09da a kit that counts declared coverage as reached (counts_declared_as_reached) passes the case, and this test's check rejects it 1ms
+   ❯ #138.97027c5b a snapshot case on wgpu's noop backend reads BLOCKED naming the probe and passes on Vello CPU; with no backend that proves it the module fails (4)
+     × #138.97027c5b test.kit.snap's reftest reads BLOCKED on noop, naming its probe, and passes on Vello CPU after comparing pixels 1ms
+     × #138.97027c5b with its Vello CPU run removed (backends: noop) the module fails the kit, unproved, naming the case and the probe 1ms
+     × #138.97027c5b the comparison runs: a render one code value off (test-kit-snap-off) fails the reftest on Vello CPU 1ms
+     × #138.97027c5b a kit that skips the comparison and passes (skips_snapshot_comparison) passes the off render, and this test's check rejects it 1ms
+   ❯ #138.93adf6d7 a kind that draws text from the core's glyph atlas without contributing glyph boxes fails the contribution part, naming the kind (2)
+     × #138.93adf6d7 test.kit.glyphs without its glyph-box contribution fails contribution, naming test.kit.glyphs@1 1ms
+     × #138.93adf6d7 the same module with the contribution passes 1ms
+ ❯ catalog.test.ts (6 tests | 6 failed) 221ms
+   ❯ #138.9e9940d1 a code the catalog doesn't list fails the kit; every catalog code has a planted fixture that emits it with its meaning and fix (3)
+     × #138.9e9940d1 test.kit.rogue, whose check can emit test.kit.rogue.unlisted, fails the kit's catalog part naming the code 6ms
+     × #138.9e9940d1 the same module with the code in the catalog (test-kit-rogue-listed) passes, and the catalog names its module, meaning and fix 1ms
+     × #138.9e9940d1 every code in the catalog has its module, meaning, fix and a planted fixture whose case raises exactly it, with the catalog's fix 1ms
+   ❯ #138.c7f79e24 a fix given as patch ops is applied on each kit fixture raising its code, and the second check returns only that fixture's other codes (3)
+     × #138.c7f79e24 test.kit.fixer's ops fix for y_over is applied on its fixture and the second check returns nothing else; its text fix for x_odd needs no fixture 1ms
+     × #138.c7f79e24 a planted ops fix that clears its issue but adds ref_unresolved (test-kit-fixer-dangles) fails, naming the code 1ms
+     × #138.c7f79e24 an ops fix that no fixture applied (test-kit-fixer-unproved) fails the kit, naming the code 1ms
+ ❯ migration.test.ts (5 tests | 5 failed) 163ms
+   ❯ #138.7447bce1 the migration corpus: a document the previous release saved migrates at load and gives what it recorded; a planted twin fails the release; only your decision blesses (3)
+     × #138.7447bce1 a corpus document with test.kit.mig@1 migrates at load in 2.0.0 and gives its recorded values and Vello CPU snapshots at every sampled time 6ms
+     × #138.7447bce1 a planted migration that moves one value (2w + 1) fails the release, naming the kind, item m1, the width field and the first time that differs 2ms
+     × #138.7447bce1 an agent's attempt to bless the new result is refused; your decision blesses it once for its cause, and the release passes 1ms
+   ❯ #138.1df954fa 1000 seeded param sets per migrated kind pass the new schema and keep IDs (2)
+     × #138.1df954fa test.kit.mig@1 → @2: 1000 seeded param sets each pass the new schema, keep every ID and give identical bytes twice 1ms
+     × #138.1df954fa a planted migration that maps the old max out of range (3w) fails, naming the seed and the param width 1ms
+ ❯ fuzz.test.ts (9 tests | 9 failed) 3697ms
+   ❯ #138.a5815177 a crash in a fuzzed sequence becomes a corpus file; a cache that misses a clean rebuild fails (2)
+     × #138.a5815177 test.kit.crash panics on n > 90: clean_rebuild fails with crash, naming the seed and a corpus file the report lists, holding the sequence, which replays the crash 5ms
+     × #138.a5815177 a planted content key without params (key_without_params) fails clean_rebuild for marks2d with mismatch, naming what differed and the seed 1239ms
+   ❯ #138.b4f429ff the patch fuzzer finds panics and refusals without codes, and a refused patch that writes (3)
+     × #138.b4f429ff test.kit.crash's panic is found by patch_fuzz, naming the seed 1ms
+     × #138.b4f429ff planted refusal_without_code fails patch_fuzz with refusal_without_code, naming the seed 12ms
+     × #138.b4f429ff planted refused_patch_writes fails patch_fuzz with law, naming the seed 11ms
+   ❯ #138.ca6ad34d planted twins of Patch's laws each fail, naming the law and the patch's seed (4)
+     × #138.ca6ad34d dry_run_skips_recheck fails law 1 naming a seed; that seed alone fails it again, and passes on the clean core 11ms
+     × #138.ca6ad34d undo_reorder_mints_key fails law 3 naming a seed; that seed alone fails it again, and passes on the clean core 11ms
+     × #138.ca6ad34d apply_time_order_keys fails law 4 naming a seed; that seed alone fails it again, and passes on the clean core 11ms
+     × #138.ca6ad34d incremental_check_skips_referrers fails law 5 naming a seed; that seed alone fails it again, and passes on the clean core 11ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 3521ms
+   ❯ #138.4c95cab8 the kit in the quick lane, compared with the merge base (3)
+     × #138.4c95cab8 a quick lane of the local preflight runs scripts/canvas-kit.mjs, never on push or pull request 18ms
+     × #138.4c95cab8 the perf lane has a canvas-kit task, a #138 first measurement, valid against the merge base's budgets, and its command exits 0 37ms
+     × #138.4c95cab8 on the reference Mac the quick lane's kit passes over the R2 modules with no GPU in under 5 minutes (five runs after a warm-up), and a shipped frame still runs no operator after the first and allocates nothing after warm-up 1230ms
+ ❯ carried.test.ts (5 tests | 5 failed) 383ms
+   ❯ #138.bf59b612 a checkpoint that leaves out one counter fails the carried-state part, naming the module and the first step whose hash differs (2)
+     × #138.bf59b612 test.kit.carry with hits left out of its checkpoint fails carried_state, step_hash, naming test.kit.carry and step 10 6ms
+     × #138.bf59b612 the same module with the counter in its checkpoint passes carried_state, seeking from every checkpoint 1ms
+   ❯ #138.bd29bce3 late entries: a module that keeps a replaced step's occurrence, or skips an entry at the restored step, fails the late-entry part while passing carried state (3)
+     × #138.bd29bce3 test-kit-tally-keeps-occurrence fails late_entry naming test.kit.tally and step 20, the first step that differs from the on-time run, and passes carried_state 1ms
+     × #138.bd29bce3 test-kit-tally-skips-restored fails late_entry naming test.kit.tally and step 20, the first step that differs from the on-time run, and passes carried_state 1ms
+     × #138.bd29bce3 test.kit.tally fixed passes both parts, its late entry arriving 1 to 8 steps after step 20 1ms
+ ❯ readset.test.ts (3 tests | 3 failed) 92ms
+   ❯ #138.417c9663 an operator reading outside its declared reads through a static fails the read-set part; a result that changes under a shuffled legal order fails the order part (3)
+     × #138.417c9663 test.kit.sneak fails read_set, undeclared_read, naming the operator test.kit.sneak.out and the array test.kit.sneak.src 6ms
+     × #138.417c9663 test.kit.sneak passes the order part: its fault is a read, not an order 1ms
+     × #138.417c9663 test.kit.order fails order, naming test.kit.order.b and one of its 8 seeds, and eval under that shuffle seed gives b another result 1ms
+ ❯ release.test.ts (2 tests | 2 failed) 88ms
+   ❯ #138.68b285c9 a canvas module that fails any part of the kit can't be registered in a release build (2)
+     × #138.68b285c9 test.kit.carry with a checkpoint that drops a counter fails the kit, and the release build embedding that ledger refuses to start, naming it and no shipped module 6ms
+     × #138.68b285c9 the same module with the counter in its checkpoint passes the kit, and its release build starts and seals it 1ms
+ ❯ time-order.test.ts (3 tests | 3 failed) 93ms
+   ❯ #138.b658e38b a module that keeps its last key index passes a straight play and fails the time-order part at the first time stepped back (3)
+     × #138.b658e38b the time-order case plays the fixture's 61 times straight, steps back one frame at a time, then 100 seeded times in shuffled order 6ms
+     × #138.b658e38b test.kit.keys with a kept, forward-only key index fails time_order naming test.kit.keys and 59/60 s, and nothing on the straight play 1ms
+     × #138.b658e38b the same module without the kept index passes 1ms
+ Test Files  16 failed (16)
+      Tests  98 failed (98)
+exit 1

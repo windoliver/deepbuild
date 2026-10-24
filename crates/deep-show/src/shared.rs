@@ -21,7 +21,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use deep_canvas::document::{
-    apply_ops, canonical_in, check_in, recheck, rollback, store_migrations, touched, Issue,
+    apply_ops, canonical_in, check_in, recheck, rollback, store_migrations, touched_in, Issue,
     Patched, Writing, ID_MAPS,
 };
 use deep_canvas::grammar::{Path as FieldPath, Section};
@@ -763,11 +763,14 @@ impl Hub<'_> {
             return refused("stale_base", "base", "no such revision yet");
         }
         // A stale base rebases when no ID the patch touches changed since; otherwise it's a
-        // conflict naming both writers.
+        // conflict naming both writers. (The planted path-granular rebase merges a patch whose
+        // paths no later revision wrote, as computed on its base.)
         let mut base_doc = None;
+        let mut path_merge: Option<Value> = None;
         if base < cur && undoing.is_none() {
             let targets_only = self.scenario.planted == Some(Planted::RebaseCountsOpTargetsOnly);
-            let touches = touched(&patch, targets_only);
+            let (base_items, _) = shared.at(base as usize);
+            let touches = touched_in(&patch, &base_items, targets_only);
             let mut ids = BTreeSet::new();
             let mut writers = vec![writer.clone()];
             for r in &shared.revs[base as usize + 1..] {
@@ -780,8 +783,19 @@ impl Hub<'_> {
                 }
             }
             if !ids.is_empty() {
-                let ids = ids.into_iter().collect();
-                return Outcome::Conflict { ids, writers };
+                let by_path = self.scenario.planted == Some(Planted::RebaseByPath)
+                    && written_paths(&patch).is_some_and(|written| {
+                        !shared.revs[base as usize + 1..].iter().any(|r| {
+                            r.paths
+                                .iter()
+                                .any(|p| p.1.is_empty() || written.contains(p))
+                        })
+                    });
+                if !by_path {
+                    let ids = ids.into_iter().collect();
+                    return Outcome::Conflict { ids, writers };
+                }
+                path_merge = Some(shared.at(base as usize).0.into_owned());
             }
             // A reorder's key falls between its neighbors as the patch's base had them.
             let reorders = patch["ops"]
@@ -823,14 +837,27 @@ impl Hub<'_> {
                 put_back(&mut shared.doc, &t.before, &t.paths, &layer)
             }
             None => {
+                // The build knows the kinds its canvas modules register, too.
+                let kinds = self.startup.sealed.kinds();
+                let known = |kind: &str| {
+                    knows(kind) || !matches!(lookup(&kinds, kind), Lookup::UnknownKind)
+                };
                 let writing = Writing {
                     layer: &layer,
                     writer: &layer_text,
                     you: writer.kind == WriterKind::You,
                     base: base_doc.as_ref(),
-                    knows: &knows,
+                    knows: &known,
                 };
-                apply_ops(&mut shared.doc, &patch, "patch", &call.doc, &writing)
+                match path_merge.take() {
+                    Some(mut on_base) => {
+                        match apply_ops(&mut on_base, &patch, "patch", &call.doc, &writing) {
+                            Ok(_) => Ok(merge_paths(&mut shared.doc, &on_base, &patch)),
+                            Err(e) => Err(e),
+                        }
+                    }
+                    None => apply_ops(&mut shared.doc, &patch, "patch", &call.doc, &writing),
+                }
             }
         };
         let mut patched = match applied {
@@ -849,7 +876,12 @@ impl Hub<'_> {
             recheck(&shared.doc, &last, &changed, &self.startup.sealed)
         }
         .unwrap_or_else(|| check_in(&shared.doc, &self.startup.sealed).issues);
-        let refusals = blocking(&issues, &last, &shared.doc, &layer, &changed);
+        // An undo may put back an issue the revision it undoes was made on already held.
+        let mut allowed = (*last).clone();
+        if let Some(t) = undoing.filter(|t| *t > 0) {
+            allowed.extend(shared.revs[t - 1].issues.iter().cloned());
+        }
+        let refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed);
         if !refusals.is_empty() {
             take_back(shared, &patched);
             return Outcome::Refused(refusals);
@@ -885,6 +917,19 @@ impl Hub<'_> {
         }
         let achieved = patched.achieved(&shared.doc);
         let (undo, ids) = (patched.undo(&shared.doc), patched.ids.clone());
+        // A dry run returns what the commit would, and commits nothing.
+        if patch.get("dry_run") == Some(&json!(true)) {
+            take_back(shared, &patched);
+            reply.insert("dry_run".into(), json!(true));
+            return Outcome::Applied(Box::new(Applied {
+                rev: cur,
+                achieved,
+                cost,
+                undo: Vec::new(),
+                ids,
+                current_at: None,
+            }));
+        }
         if shared.older.contains(&layer) {
             for (id, was) in store_migrations(&mut shared.doc, &layer) {
                 patched.before.entry(id).or_insert(Some(was));
@@ -1505,6 +1550,53 @@ impl Hub<'_> {
     }
 }
 
+/// The `(ID, path)` pairs a patch's ops write, the path below the item; `None` when an op writes
+/// a whole item (a create, delete, move or reorder).
+fn written_paths(patch: &Value) -> Option<Paths> {
+    let mut out = Paths::new();
+    for op in patch["ops"].as_array()? {
+        let (Some("set" | "unset"), Some(id), Some(path)) =
+            (op["op"].as_str(), op["id"].as_str(), op["path"].as_str())
+        else {
+            return None;
+        };
+        let rest = path.strip_prefix(&format!("items/{id}/"))?;
+        out.insert((id.to_string(), rest.to_string()));
+    }
+    Some(out)
+}
+
+/// The planted path-granular rebase's merge: each path the patch wrote on its base, set to what
+/// it holds there in the current document.
+fn merge_paths(doc: &mut Value, on_base: &Value, patch: &Value) -> Patched {
+    let mut done = Patched::default();
+    for (id, path) in written_paths(patch).unwrap_or_default() {
+        let before = doc["items"].get(&id).cloned();
+        done.before.entry(id.clone()).or_insert(before);
+        let parts: Vec<&str> = path.split('/').collect();
+        let mut from = &on_base["items"][&id];
+        for p in &parts {
+            from = &from[*p];
+        }
+        let value = from.clone();
+        let Some((last, head)) = parts.split_last() else {
+            continue;
+        };
+        let mut at = &mut doc["items"][&id];
+        for p in head {
+            at = &mut at[*p];
+        }
+        match (value.is_null(), at.as_object_mut()) {
+            (true, Some(map)) => {
+                map.shift_remove(*last);
+            }
+            (false, _) => at[*last] = value,
+            _ => {}
+        }
+    }
+    done
+}
+
 /// A patch's coalesce key.
 fn coalesce_key(call: &PatchCall) -> Option<&str> {
     match &call.body {
@@ -1591,7 +1683,7 @@ fn overlaps(a: &Paths, b: &Paths) -> bool {
 /// path put back as it was, so another writer's change to another path of the item stays. Every
 /// item it writes must be in `layer`, the undoing writer's, unless the undo hands back an item
 /// the revision took. Returns the patch a rollback can take back out, or why it's refused.
-fn put_back(
+pub(crate) fn put_back(
     doc: &mut Value,
     before: &BTreeMap<String, Option<Value>>,
     paths: &Paths,

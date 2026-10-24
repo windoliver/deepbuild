@@ -1,0 +1,20 @@
+{
+  "module": "test.kit.crash",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.kit.crash.out",
+        "module": "test.kit.crash",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.crash.out"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}
