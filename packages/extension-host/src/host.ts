@@ -78,6 +78,8 @@ const NODE_HOME = dirname(dirname(realpathSync(process.execPath)));
 const LOAD_MS = 10_000;
 /** How long a package gets to take a batch of events, or to answer a request on a route. */
 const CALL_MS = 10_000;
+/** The largest request body a route takes. */
+const BODY = 1024 * 1024;
 const PAGE = 1000;
 /** Folder-safe, as extension.manifest@1 writes them. */
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
@@ -526,7 +528,8 @@ class Host implements ExtensionHost {
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
-    const server = createHttpServer((req, res) => void this.serve(ext, chosen, req, res));
+    // A request has the call deadline to arrive whole; one that fails is that request's alone.
+    const server = createHttpServer({ requestTimeout: CALL_MS, connectionsCheckingInterval: 1000 }, (req, res) => void this.serve(ext, chosen, req, res).catch(() => res.destroy()));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     if (this.closed || this.exts.get(id) !== ext || !ext.ask || ext.server) {
       await new Promise((resolve) => server.close(resolve));
@@ -547,7 +550,16 @@ class Host implements ExtensionHost {
       return;
     }
     const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(chunk as Buffer);
+    let size = 0;
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size > BODY) {
+        res.writeHead(413, { connection: 'close' }).end();
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk as Buffer);
+    }
     // Its body took time to arrive: trust is checked again before the package sees it.
     if (!ext.ask || (await this.revoked(ext))) {
       res.writeHead(404).end();

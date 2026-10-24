@@ -321,4 +321,55 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect((await h.load(first)).status).toBe('loaded');
     expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome).toBe('passed');
   }, 60_000);
+
+  /** A loaded package whose route POST /hi answers 'hi', turned on: its address. */
+  async function hi(h: ExtensionHost): Promise<{ hostname: string; port: number }> {
+    const folder = pkgOf('test/route', "export default function (deep: any): void {\n  deep.registerRoute('POST /hi', () => ({ status: 200, body: 'hi' }));\n}\n", { checks: [] });
+    const p = await h.install({ from: folder, builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    const [hostname, port] = (await h.turnOn('test/route', ['POST /hi'])).address.split(':');
+    return { hostname: hostname!, port: Number(port) };
+  }
+  /** POSTs `body` to /hi, `length` its declared length; its answer, or its error's code. */
+  const post = (to: { hostname: string; port: number }, body: string, length = Buffer.byteLength(body), end = true): Promise<{ status?: number; body: string; error?: string }> =>
+    new Promise((resolve) => {
+      const req = request({ ...to, method: 'POST', path: '/hi', headers: { 'content-length': String(length) } }, (res) => {
+        let text = '';
+        res.on('data', (c: Buffer) => { text += c.toString(); });
+        res.on('end', () => resolve({ status: res.statusCode, body: text }));
+        res.on('error', (e: NodeJS.ErrnoException) => resolve({ body: text, error: e.code ?? 'error' }));
+      });
+      req.on('error', (e: NodeJS.ErrnoException) => resolve({ body: '', error: e.code ?? 'error' }));
+      req.write(body);
+      if (end) req.end();
+    });
+
+  it('a client that drops its connection halfway through a body leaves the host serving the next request', async () => {
+    const h = await host();
+    const to = await hi(h);
+    await new Promise<void>((resolve) => {
+      const req = request({ ...to, method: 'POST', path: '/hi', headers: { 'content-length': '100' } });
+      req.on('error', () => undefined);
+      req.write('a');
+      setTimeout(() => { req.destroy(); resolve(); }, 200);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(await post(to, 'ok')).toMatchObject({ status: 200, body: 'hi' });
+  }, 60_000);
+
+  it('a request body over 1 MiB is refused with 413 and never reaches the package', async () => {
+    const h = await host();
+    const r = await post(await hi(h), 'x'.repeat(2 * 1024 * 1024));
+    expect(r.body).not.toBe('hi');
+    if (r.status !== undefined) expect(r.status).toBe(413);
+  }, 60_000);
+
+  it('a request body that stops arriving is cut off within the call deadline, never reaching the package', async () => {
+    const h = await host();
+    const t0 = Date.now();
+    const r = await post(await hi(h), 'a', 100, false);
+    expect(Date.now() - t0).toBeLessThan(20_000);
+    expect(r.body).not.toBe('hi');
+  }, 60_000);
 });
