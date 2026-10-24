@@ -122,8 +122,20 @@ const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
 });
-const isResult = (r: unknown): r is CheckResult => typeof r === 'object' && r !== null && typeof (r as CheckResult).outcome === 'string'
-  && typeof (r as CheckResult).testsRun === 'number' && Array.isArray((r as CheckResult).failures);
+/** check.kind@1's outcomes. */
+const OUTCOMES: readonly string[] = ['passed', 'failed', 'ran_nothing', 'missing', 'overran', 'stopped', 'uncounted'];
+const strings = (v: unknown): boolean => Array.isArray(v) && v.every((s) => typeof s === 'string');
+const isFailure = (f: unknown): boolean => {
+  const x = f as Record<string, unknown> | null;
+  return typeof x === 'object' && x !== null && typeof x.test === 'string' && typeof x.file === 'string' && Number.isInteger(x.line)
+    && (x.stack === null || typeof x.stack === 'string') && typeof x.assertion === 'boolean' && typeof x.message === 'string';
+};
+/** A check result as check.kind@1 defines one, every field; anything else from a package is no result. */
+const isResult = (r: unknown): r is CheckResult => {
+  const x = r as Record<string, unknown> | null;
+  return typeof x === 'object' && x !== null && OUTCOMES.includes(x.outcome as string) && Number.isInteger(x.testsRun) && (x.testsRun as number) >= 0
+    && Array.isArray(x.failures) && x.failures.every(isFailure) && strings(x.evidence) && strings(x.read) && (x.mask === null || typeof x.mask === 'string');
+};
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
 /** The interpreters a `main` may name, each only as the program of that name on the hub's own PATH. */
@@ -520,7 +532,7 @@ class Host implements ExtensionHost {
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
     try {
       const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx });
-      if (!isResult(result)) throw Error(`${ext.entry.id}'s ${kind} returned no check result`);
+      if (!isResult(result)) return nothing('failed', `${ext.entry.id}'s ${kind} returned no check result as check.kind@1 defines one`);
       return result;
     } catch (e) {
       if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms${ext.place === 'sandbox' ? ', and was stopped' : ''}`);
