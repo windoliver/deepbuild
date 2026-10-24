@@ -2,7 +2,7 @@
 // no extension at all; and the rule behind AC5 the acceptance tests reach only with changed bytes: what an agent
 // built runs sandboxed even when its bytes are the release's. Each runs a real package through a real host, record
 // and supervisor.
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { PassThrough } from 'node:stream';
 import { tmpdir } from 'node:os';
@@ -508,5 +508,23 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       expect(r.outcome, body).not.toBe('great');
       expect(r.failures[0]?.message, body).toMatch(/test\/stuck/);
     }
+  }, 60_000);
+
+  it('a package loaded before the hub is ready that fails to start makes ready reject, naming it and its error, and it is unloaded', async () => {
+    const marker = join(temp(), 'fail');
+    // Its conformance runs sandboxed, where the marker can't be seen; in the hub it throws once the marker is there.
+    const folder = stuck(PASSES, `if (require('node:fs').existsSync(${JSON.stringify(marker)})) throw Error('start broke');`);
+    writeFileSync(join(folder, 'index.ts'), `import { createRequire } from 'node:module';\nconst require = createRequire(import.meta.url);\n${readFileSync(join(folder, 'index.ts'), 'utf8')}`);
+    const manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as { digest: string };
+    manifest.digest = packageDigest(folder);
+    writeFileSync(join(folder, 'deepbuild.json'), JSON.stringify(manifest));
+    const { h } = await world({ ready: false, release: [{ id: 'test/stuck', version: '1.0.0', digest: manifest.digest }] });
+    const p = await h.install({ from: folder, builtBy: null });
+    const c = await h.check(p);
+    expect(c.reasons).toEqual([]);
+    expect((await h.load(p)).status).toBe('loaded');
+    writeFileSync(marker, '');
+    await expect(h.ready()).rejects.toThrow(/test\/stuck.*start broke/);
+    expect(await h.loaded()).toEqual([]);
   }, 60_000);
 });
