@@ -249,6 +249,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #30: TypeScript's parser lists the tests each Vitest or Jest file a run ran holds, from its source, so a test left out fails the run; the root's pinned version."
         }
       }
     },
