@@ -610,3 +610,26 @@ test("a workspace build can't plant a json file or a package.json that a test's 
     assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), `${label}\n${show(result)}`);
   }
 });
+
+test("on a disk that ignores case, a build-planted Support.json or Package.json shadows a helper no more than its lower-case name, and a Vitest.config is the runner's config", (t) => {
+  for (const [label, plant] of [
+    ['json', `writeFileSync('../../${dir}/Support.json', JSON.stringify({ expected: 4 }));`],
+    ['package', `writeFileSync('../../${dir}/support/Package.json', JSON.stringify({ main: 'data.json' }));\nwriteFileSync('../../${dir}/support/data.json', JSON.stringify({ expected: 4 }));`],
+  ]) {
+    const result = proof(repo(t, {
+      issues: { [ISSUE]: ['Adds'] },
+      base: workspace('// builds\n', {
+        'package.json': JSON.stringify({ name: 'x', private: true, workspaces: ['packages/*'] }), 'lib/impl.mjs': 'export const f = () => 4;\n', [`${dir}/support/index.js`]: 'module.exports = { expected: 3 };\n',
+        [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { createRequire } from 'node:module';\nimport { f } from '../../../lib/impl.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), createRequire(import.meta.url)('./support').expected);\n});\n`,
+      }),
+      commits: [{ files: { 'packages/lib/build.mjs': `// builds\nimport { writeFileSync } from 'node:fs';\n${plant}\n` }, message: `Edit\n\nCloses #${ISSUE}` }],
+    }), ['trace']);
+    assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), `${label}\n${show(result)}`);
+  }
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n' },
+    commits: [{ files: { 'Vitest.config.mjs': "export default { resolve: { alias: { './support': './lib/expected.mjs' } } };\n" }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  assert.ok(problems(result, 'guard').some((found) => found.startsWith("FAIL guard: Vitest.config.mjs: the test runner's config")), show(result));
+});

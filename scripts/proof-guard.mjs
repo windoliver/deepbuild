@@ -279,16 +279,17 @@ const SCRIPT = /\.[cm]?[jt]sx?$/;
 // name, as check.js or cases.json for check.ts, one named as a folder whose index is held, or a
 // package.json in that folder, whose main a resolver reads before the index. A file read by its whole
 // name, or one no resolver picks, such as out.json beside out.txt, stands in for nothing.
-const MODULE = /\.(?:[cm]?[jt]sx?|json)$/;
+// Names compare in lower case, as a disk that ignores case resolves Support.json for support.json.
+const MODULE = /\.(?:[cm]?[jt]sx?|json)$/i;
 function shadows(root, commit, path) {
-  const name = basename(path);
+  const name = basename(path).toLowerCase();
   if (!underTestPaths(path) || isTestFile(path) || !(MODULE.test(name) || /^[^.]+$/.test(name))) return [];
-  const bare = path.replace(MODULE, '');
+  const bare = path.replace(MODULE, '').toLowerCase();
   const held = git(root, ['ls-tree', '-r', '-z', '--name-only', commit.parent, '--', posix.dirname(path)]).split('\0').filter(Boolean);
   return held.filter((other) => {
     if (other === path || isTestFile(other) || !MODULE.test(other) || basename(other) === 'package.json') return false;
-    const stem = other.replace(MODULE, ''), index = basename(stem) === 'index' ? dirname(stem) : null;
-    return (bare === stem || bare === index || (name === 'package.json' && dirname(path) === index)) && winnable(root, commit.parent, other);
+    const stem = other.replace(MODULE, '').toLowerCase(), index = basename(stem) === 'index' ? dirname(stem) : null;
+    return (bare === stem || bare === index || (name === 'package.json' && dirname(path).toLowerCase() === index)) && winnable(root, commit.parent, other);
   });
 }
 
