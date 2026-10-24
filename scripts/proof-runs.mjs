@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSyn
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { addedLines, git, isTestFile, listFiles, named, outsideTests, show, spans, tagsIn, tagsWithImports, testImports, testPattern, underTestPaths } from './proof-change.mjs';
+import { addedLines, git, isTestFile, listFiles, named, outsideTests, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
 const VITEST_REPORTER = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
@@ -450,6 +450,7 @@ try { text = readFileSync(report, 'utf8'); } catch {}
 rmSync(report, { force: true });
 const asserted = ${asserted};
 const testPattern = ${testPattern};
+const TEST_DATA = ${TEST_DATA};
 const underTestPaths = ${underTestPaths};
 const firstLine = ${firstLine};
 ${frames}

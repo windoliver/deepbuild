@@ -391,3 +391,36 @@ test('once main holds the proof lanes, a package committed under node_modules, o
   assert.ok(refused.some((found) => found.startsWith('FAIL guard: tests/node_modules/@demo/sum/index.js: a package committed under node_modules')), show(result));
   assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${dir}/cases/index.ts: shadowed by ${dir}/cases/package.json`)), show(result));
 });
+
+test("a colocated tagged test's snapshot and fixture are guarded as those under the test paths are", (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'packages/sum/src/sum.test.ts': `import { it, expect } from 'vitest';\nimport { readFileSync } from 'node:fs';\n\nit('${c1} sums', () => {\n  expect(3).toMatchSnapshot();\n  expect(readFileSync('packages/sum/fixtures/expected.json', 'utf8')).toBe('3');\n});\n`,
+      'packages/sum/src/__snapshots__/sum.test.ts.snap': `exports[\`${c1} sums 1\`] = \`3\`;\n`,
+      'packages/sum/fixtures/expected.json': '3',
+    },
+    commits: [{ files: { 'packages/sum/src/__snapshots__/sum.test.ts.snap': `exports[\`${c1} sums 1\`] = \`5\`;\n`, 'packages/sum/fixtures/expected.json': '5' }, message: `Re-record\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  for (const path of ['packages/sum/src/__snapshots__/sum.test.ts.snap', 'packages/sum/fixtures/expected.json']) assert.ok(problems(result, 'guard').some((found) => found.startsWith(`FAIL guard: ${path}: `)), show(result));
+});
+
+test('once main holds the proof lanes, a vitest config of any name, a project it lists, and a setup file it names anywhere are guarded', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'vitest.config.ts': "export default { test: { projects: ['./unit.projects.ts'], setupFiles: ['./vitest.setup.ts'] } };\n", 'unit.projects.ts': 'export default {};\n', 'vitest.e2e.config.mts': 'export default {};\n', 'vitest.setup.ts': '// setup\n', 'lib/alias.ts': '// product\n' },
+    commits: [{ files: { 'unit.projects.ts': "export default { resolve: { alias: { x: './lib/fake.ts' } } };\n", 'vitest.e2e.config.mts': 'export default { x: 1 };\n', 'vitest.setup.ts': '// hollow\n', 'lib/alias.ts': '// fixed\n' }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  const refused = problems(result, 'guard');
+  for (const path of ['unit.projects.ts', 'vitest.e2e.config.mts', 'vitest.setup.ts']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: `)), show(result));
+  assert.ok(!refused.some((found) => found.includes('lib/alias.ts')), show(result));
+});
+
+test('a file beside a helper tests import by its whole name, and a fixture project\'s node_modules no test sits under, stand in for nothing', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', [`${dir}/cases.mjs`]: 'export default { want: 3 };\n', [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport cases from './cases.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(cases.want, 3);\n});\n` },
+    commits: [{ files: { [`${dir}/cases.json`]: '{}\n', 'tests/unit/fixtures/proj/node_modules/dep/index.js': 'export default 1;\n' }, message: `Add\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  assert.deepEqual(problems(result, 'guard'), [], show(result));
+});

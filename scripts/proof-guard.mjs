@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, git, isTestFile, literals, named, outsideTests, removedLines, resolveModule, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
+import { blobId, git, isTestFile, listFiles, literals, named, outsideTests, removedLines, resolveModule, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -15,17 +15,31 @@ const DECISIONS = {
 // change runs its own copy of them, so an edit of them is an edit of the checks. So is an edit of a
 // test runner's config, which can stub the code under test only where it finds the change.
 const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes)\.mjs$/;
-const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)\.(?:config|workspace)\.[cm]?[jt]s$/;
+const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)(?:\.[\w-]+)*\.(?:config|workspace)(?:\.[\w-]+)*\.[cm]?[jt]s$/;
 
-// The files under the test paths, other than tests, that the merge base's runner configs name by path
-// from the config's folder, as setupFiles or globalSetup do, resolved as vite resolves them, and
-// those each imports: they run in every test's process, so they are checks as the config is.
+// The files the merge base's runner configs name by path from the config's folder, resolved as vite
+// resolves them: those under the test paths, other than tests, named anywhere in a config, as
+// setupFiles names them, with those each imports; and wherever they are, the setup files and the
+// project configs a config lists, whose own names count too. They run in every test's process, or
+// configure it, so they are checks as the config is.
+const KEYED = /\b(?:setupFiles|globalSetup|projects|workspace)\s*:\s*(\[[^\]]*\]|(['"`])[^'"`]*\2)/g;
 function namedByConfig(root, base) {
-  const configs = git(root, ['ls-tree', '-r', '-z', '--name-only', base]).split('\0').filter((path) => RUNNER_CONFIG.test(path));
-  return new Set(configs.flatMap((config) => {
-    const text = show(root, base, config) ?? '';
-    return literals(text).map(([from, to]) => resolveModule(root, base, posix.normalize(posix.join(posix.dirname(config), text.slice(from + 1, to - 1)))));
-  }).filter((path) => underTestPaths(path) && !isTestFile(path)).flatMap((path) => [...testImports(root, base, path).keys()]));
+  const queue = git(root, ['ls-tree', '-r', '-z', '--name-only', base]).split('\0').filter((path) => RUNNER_CONFIG.test(path));
+  const named = new Set();
+  const resolved = (config, value) => resolveModule(root, base, posix.normalize(posix.join(posix.dirname(config), value)));
+  for (let at = 0; at < queue.length; at += 1) {
+    const config = queue[at], text = show(root, base, config) ?? '';
+    for (const path of literals(text).map(([from, to]) => resolved(config, text.slice(from + 1, to - 1)))) {
+      if (underTestPaths(path) && !isTestFile(path)) for (const file of testImports(root, base, path).keys()) named.add(file);
+    }
+    for (const [list] of text.matchAll(KEYED)) for (const [, value] of list.matchAll(/['"`]([^'"`]+)['"`]/g)) {
+      const path = resolved(config, value);
+      if (show(root, base, path) === null || isTestFile(path) || named.has(path)) continue;
+      named.add(path);
+      if (/^(?:projects|workspace)\b/.test(list)) queue.push(path); // a project's config names its own
+    }
+  }
+  return named;
 }
 
 export function guard({ root, change, issue }, approvals, say) {
@@ -34,6 +48,14 @@ export function guard({ root, change, issue }, approvals, say) {
   let refused = 0;
   const lanesOnMain = show(root, change.base, 'scripts/proof-guard.mjs') !== null;
   const configNamed = lanesOnMain ? namedByConfig(root, change.base) : new Set();
+  // A node_modules folder a test's imports walk up to: one in a folder that holds a test, at any depth.
+  const tests = lanesOnMain ? listFiles(root).filter(isTestFile) : [];
+  const underTests = (path) => {
+    const at = path.split('/').indexOf('node_modules');
+    if (at < 0) return false;
+    const folder = path.split('/').slice(0, at).join('/');
+    return tests.some((test) => folder === '' || test.startsWith(`${folder}/`));
+  };
   const isCheck = (path) => LANES_CODE.test(path) || RUNNER_CONFIG.test(path) || configNamed.has(path);
   const checkEdit = (path, how) => ({ detail: `${path}: ${LANES_CODE.test(path) ? "the proof lanes' own code" : RUNNER_CONFIG.test(path) ? "the test runner's config" : "a file the test runner's config names"} changed${how}` });
   for (const commit of change.commits) {
@@ -56,7 +78,7 @@ export function guard({ root, change, issue }, approvals, say) {
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
       // Node resolves a bare import through each node_modules folder above the importing file, so a
       // package committed in one may stand in for the one installed.
-      if (lanesOnMain && file.path.split('/').includes('node_modules') && file.hunks.length) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
+      if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
       const before = show(root, commit.parent, file.path);
       // A module path may resolve to an added file, or through an edited package.json's main, in
       // place of a file beside it, which it then stands in for.
@@ -259,8 +281,19 @@ function shadows(root, commit, path) {
   return held.filter((other) => {
     if (other === path || isTestFile(other) || !MODULE.test(other) || basename(other) === 'package.json') return false;
     const stem = other.replace(MODULE, ''), index = basename(stem) === 'index' ? dirname(stem) : null;
-    return bare === stem || bare === index || (name === 'package.json' && dirname(path) === index);
+    return (bare === stem || bare === index || (name === 'package.json' && dirname(path) === index)) && winnable(root, commit.parent, other);
   });
+}
+
+// Whether a file of the commit's parent names `held` by a specifier another file could win: without
+// its extension, by a .js name for a TypeScript file, or as its folder when it is an index. One named
+// by its whole name, as node's ESM imports must, resolves to it alone.
+function winnable(root, rev, held) {
+  const stem = held.replace(MODULE, '');
+  const names = [basename(stem), ...(/\.[cm]?tsx?$/.test(held) ? ['.js', '.mjs', '.cjs', '.jsx'].map((extension) => basename(stem) + extension) : []), ...(basename(stem) === 'index' ? [basename(dirname(stem))] : [])];
+  const grep = spawnSync('git', ['grep', '-l', '-F', ...names.flatMap((name) => ['-e', name]), rev, '--'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 });
+  const specifier = RegExp(`['"\`/](?:${names.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})['"\`]`);
+  return grep.stdout.split('\n').filter(Boolean).some((hit) => specifier.test(show(root, rev, hit.slice(rev.length + 1)) ?? ''));
 }
 
 // The tagged tests whose span, or whose file, names the fixture's path, from the repo root or the

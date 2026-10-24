@@ -11,7 +11,10 @@ import { testPaths } from './lanes.mjs';
 const TAG = /#(\d+)\.([0-9a-f]{8})\b/g;
 export const tagsIn = (text) => [...new Set([...text.matchAll(TAG)].map(([tag]) => tag))];
 export const testPattern = RegExp(`^(?:${testPaths.map((glob) => glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*\*\/|\*\*|\*/g, (wild) => ({ '**/': '(?:.*/)?', '**': '.*', '*': '[^/]*' })[wild])).join('|')})$`);
-export const underTestPaths = (path) => testPattern.test(path) && !path.split('/').includes('node_modules');
+// A colocated test's snapshots and fixtures sit in folders of their own beside it, outside the test
+// paths lanes.mjs names, and are a test's own files as those under them are.
+export const TEST_DATA = /(?:^|\/)(?:__snapshots__|__fixtures__|fixtures|goldens?|testdata)\//;
+export const underTestPaths = (path) => (testPattern.test(path) || TEST_DATA.test(path)) && !path.split('/').includes('node_modules');
 export const isTestFile = (path) => underTestPaths(path) && /\.test\.(?:mjs|js|ts)$/.test(path);
 // A test's name in every line and approval: its file's repo path, then its full name.
 export const named = (path, name) => `${path} › ${name}`;
