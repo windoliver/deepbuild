@@ -1,0 +1,74 @@
+{
+  "name": "parity/framework/repair-loop.scene",
+  "about": "The repair loop's four cases on a shared board (issue #138): a planted fault carrying {path, code, fix}; a fix that applies; a stale fix that rebases; a stale fix to items/a/params/y after another writer changed items/a/params/x, a conflict naming both writers; two conflicting fixes, the second refused naming both writers; a fix that fails its dry run with its refusal code. Each act is its own scenario from revision 0. Writers are named you, alpha and bravo; `fix` stands for the fix_ops the fault's issue carries.",
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "title": "Repair loop",
+    "description": "A board with one planted fault: item a's y is past the fixer module's limit of 100, so its check raises test.kit.fixer.y_over with a fix as patch ops.",
+    "size": [640, 360],
+    "requires": { "modules": { "test.kit.fixer": "^1" } },
+    "layers": {
+      "you-main": { "writer": "you:you", "title": "You", "order": "a0" },
+      "alpha-main": { "writer": "agent:thread-alpha", "title": "Claude Code: kit", "order": "a1" },
+      "bravo-main": { "writer": "agent:thread-bravo", "title": "Codex: kit", "order": "a2" }
+    },
+    "items": {
+      "a": {
+        "id": "a", "kind": "test.kit.fixer@1", "layer": "alpha-main", "name": "Fixer A", "order": "a0",
+        "params": { "box": [40, 40, 120, 48], "x": 0, "y": 150 }
+      },
+      "b": {
+        "id": "b", "kind": "rect@1", "layer": "you-main", "name": "Node B", "order": "a1",
+        "params": { "box": [0, 0, 120, 48], "paint": { "fill": { "role": "muted" } } },
+        "at": { "pos": [40, 200, 0] }
+      }
+    }
+  },
+  "fault": { "item": "a", "code": "test.kit.fixer.y_over", "path": "items/a/params/y", "fix": [{ "op": "set", "id": "a", "path": "items/a/params/y", "value": 100 }] },
+  "acts": [
+    {
+      "name": "apply",
+      "steps": [
+        { "read": true },
+        { "who": "alpha", "base": 0, "ops": "fix" },
+        { "read": true }
+      ]
+    },
+    {
+      "name": "stale_rebase",
+      "steps": [
+        { "who": "you", "base": 0, "ops": [{ "op": "set", "id": "b", "path": "items/b/params/box", "value": [0, 0, 140, 48] }] },
+        { "who": "alpha", "base": 0, "ops": "fix" },
+        { "read": true }
+      ]
+    },
+    {
+      "name": "stale_same_item",
+      "steps": [
+        { "who": "you", "base": 0, "ops": [{ "op": "set", "id": "a", "path": "items/a/params/x", "value": 2 }] },
+        { "read": true },
+        { "who": "alpha", "base": 0, "ops": "fix" },
+        { "read": true }
+      ]
+    },
+    {
+      "name": "conflicting",
+      "steps": [
+        { "who": "alpha", "base": 0, "ops": "fix" },
+        { "read": true },
+        { "who": "bravo", "base": 0, "ops": "fix" },
+        { "read": true }
+      ]
+    },
+    {
+      "name": "dry_run_refused",
+      "steps": [
+        { "who": "you", "base": 0, "ops": [{ "op": "delete", "id": "a", "cascade": false }] },
+        { "read": true },
+        { "who": "alpha", "base": 1, "ops": "fix", "dry_run": true },
+        { "read": true }
+      ]
+    }
+  ]
+}

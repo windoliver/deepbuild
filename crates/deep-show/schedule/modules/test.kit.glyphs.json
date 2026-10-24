@@ -1,0 +1,24 @@
+{
+  "module": "test.kit.glyphs",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.kit.glyphs.boxes",
+        "module": "test.kit.glyphs",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "test.kit.glyphs.boxes"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {
+    "core.glyphs": [
+      "test.kit.glyphs.boxes"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "module": "look",
+  "phases": {
+    "items": [
+      {
+        "operator": "look.palette",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "look.palette"
+        ],
+        "per": "document"
+      }
+    ]
+  },
+  "contributions": {}
+}

@@ -331,6 +331,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #331 first measurement: the merge base has no deep env. The same run as env-up, reporting the median deep env down; the issue's 5 s teardown stays in tests/acceptance/331/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-kit",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "kit"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #138 first measurement: the merge base has no canvas conformance kit. One process runs the kit call over the shipped build's canvas modules through `deep-show run`, every part on Vello CPU and wgpu's noop backend at 1,000 fuzzed sequences a module, a tenth of the quick lane's, so p50 includes Node's and the binary's start; the issue's 5 minutes for the full kit stays in tests/acceptance/138/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

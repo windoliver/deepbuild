@@ -599,6 +599,10 @@
         "vello_cpu": {
           "spec": "^0.3",
           "why": "Issue #393: render-back's 2D snapshots on the CPU, as the design says; already in the workspace tree under deep-text."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #138: the canvas conformance kit runs each case headless on wgpu's noop backend, which makes no pixels, so a probe that needs them reads BLOCKED there; already in the lockfile."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -613,6 +617,10 @@
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #393: the headless window, its frames and the offscreen capture of the composed window."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #138: the kit's GPU backend on the reference Mac, Metal offscreen under the GPU lease: a module's GPU pass draws and its pixels are read back for the snapshot case."
         }
       }
     },

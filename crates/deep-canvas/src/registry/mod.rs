@@ -197,6 +197,13 @@ pub struct Manifest {
 #[derive(Clone, Debug)]
 pub struct Kind {
     pub entry: Entry,
+    /// The `rect@1` params the core draws an item of this kind as, from the item's params, when
+    /// the kind draws other than its `box` in the look's ink.
+    pub draw: Option<DrawFn>,
+    /// What the kind's items draw or place that the core's checks read (`glyphs`, `strokes`,
+    /// `solids`, `shots`, `cuts`, `holds`): each must reach the core's array for it through
+    /// `contributes_to` (Check input).
+    pub draws: Vec<String>,
     /// The arrays the kind needs. The seal resolves each (registered, public or the kind's own,
     /// of its module or a declared dependency) and leaves the kind out when one belongs to a
     /// missing optional dependency; it is not an operator's read set, so an array whose writer
@@ -259,11 +266,77 @@ pub enum Per {
 
 /// A fixture a canvas module registers: a document its operators run on, with the record's
 /// readings its bound values read, for clean rebuilds, read-set perturbation and shuffled orders.
+/// In the parity suite it is `parity/<category>/<name>.<profile>`, its sidecar the data its
+/// checks and oracles read (the conformance kit; technical design: the parity suite).
 #[derive(Clone, Debug)]
 pub struct Fixture {
     pub name: String,
     pub document: Value,
     pub record: Option<Value>,
+    /// Its category on the parity suite's one list; empty for the module's own name.
+    pub category: String,
+    /// Data only: existing check kinds, named oracles, coverage, codes and the twin.
+    pub sidecar: Value,
+}
+
+/// A kind's drawing as `rect@1` params, from the item's params.
+pub type DrawFn = fn(&Value) -> Value;
+
+/// What a canvas module's check raised on one of its kinds' items (What holds a document to its
+/// rules): its code, severity, path and, where the code's fix is patch ops, those ops.
+#[derive(Clone, Debug)]
+pub struct Raised {
+    pub code: &'static str,
+    /// `error | warning | notice`.
+    pub severity: &'static str,
+    pub path: String,
+    pub what: String,
+    pub fix_ops: Option<Vec<Value>>,
+}
+
+/// A canvas module's check over one item of its kinds: `(document, item ID, item as the check
+/// lowered it)`.
+pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
+
+/// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
+pub type Cost = fn(&Value) -> f64;
+
+/// One code a canvas module's check can emit, in the check catalog: what it means, its fix, and
+/// whether that fix is given as patch ops.
+#[derive(Clone, Debug)]
+pub struct CatalogEntry {
+    pub code: &'static str,
+    pub meaning: String,
+    pub fix: String,
+    pub fix_ops: bool,
+}
+
+/// One step of carried state (Carried state): the step's number, the input entries stamped at
+/// it, and, when it runs again after a rollback, the step the rollback restored.
+pub struct StepInput<'a> {
+    pub step: i64,
+    pub entries: &'a [Value],
+    pub restored: Option<i64>,
+}
+
+/// Carried state a canvas module steps, with checkpoints: what a seek restores and a match rolls
+/// back to (Carried state; Net: rollback). The kit seeks from each checkpoint and plays on, and
+/// replays a late entry, against a straight run's step hashes.
+#[derive(Clone, Debug)]
+pub struct Stepper {
+    /// Steps a second.
+    pub hz: i64,
+    /// The steps whose checkpoint the module keeps: the state before that step runs.
+    pub checkpoints: Vec<i64>,
+    pub init: fn() -> Value,
+    pub step: fn(&mut Value, &StepInput<'_>),
+    pub checkpoint: fn(&Value) -> Value,
+    /// A seek's restore from a checkpoint.
+    pub restore: fn(&Value) -> Value,
+    /// A rollback's restore, from the state now and the checkpoint.
+    pub rollback: fn(&Value, &Value) -> Value,
+    /// The occurrences the state holds, with their steps.
+    pub occurrences: fn(&Value) -> Vec<Value>,
 }
 
 /// A CPU operator with its full read set (canvas primitives: Operator and read set).
@@ -325,6 +398,10 @@ pub struct Carried {
 pub struct Pass {
     pub name: String,
     pub place: String,
+    /// The kind (`family.name`) whose items it fills, and its fragment shader in WGSL, which
+    /// returns the item's color: only a GPU can make its pixels.
+    pub kind: String,
+    pub shader: &'static str,
 }
 
 /// A check kind the module registers.
@@ -354,15 +431,77 @@ pub struct Registrar {
     pub checks: Vec<Check>,
     pub tool_entries: Vec<ToolEntry>,
     pub fixtures: Vec<Fixture>,
+    /// The codes its check can emit, in the check catalog.
+    pub catalog: Vec<CatalogEntry>,
+    /// Its check over its kinds' items, by kind (`family.name`).
+    pub rules: Vec<(String, Rule)>,
+    /// Its kinds' CPU cost per item, by kind (`family.name`).
+    pub costs: Vec<(String, Cost)>,
+    /// Its carried state with checkpoints.
+    pub steppers: Vec<Stepper>,
 }
 
 impl Registrar {
     pub fn kind(&mut self, entry: Entry, needs: &[&str], draws_as: &str) -> &mut Self {
         self.kinds.push(Kind {
             entry,
+            draw: None,
+            draws: Vec::new(),
             needs: needs.iter().map(|s| s.to_string()).collect(),
             draws_as: draws_as.into(),
         });
+        self
+    }
+
+    /// The last kind registered draws as `rect@1` with the params `draw` gives.
+    pub fn drawn(&mut self, draw: DrawFn) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.draw = Some(draw);
+        }
+        self
+    }
+
+    /// The last kind registered draws or places these (`glyphs`, `strokes`, `solids`, `shots`,
+    /// `cuts`, `holds`), which the core's checks read.
+    pub fn draws(&mut self, what: &[&str]) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.draws = what.iter().map(|s| s.to_string()).collect();
+        }
+        self
+    }
+
+    /// A code its check can emit, with its meaning and fix, and whether the fix is patch ops.
+    pub fn code(
+        &mut self,
+        code: &'static str,
+        meaning: &str,
+        fix: &str,
+        fix_ops: bool,
+    ) -> &mut Self {
+        self.catalog.push(CatalogEntry {
+            code,
+            meaning: meaning.into(),
+            fix: fix.into(),
+            fix_ops,
+        });
+        self
+    }
+
+    /// Its check over items of the kind `family.name`.
+    pub fn rule(&mut self, kind: &str, rule: Rule) -> &mut Self {
+        self.rules.push((kind.into(), rule));
+        self
+    }
+
+    /// The CPU cost of an item of the kind `family.name`.
+    pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
+        self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// Carried state stepped with checkpoints.
+    pub fn stepper(&mut self, stepper: Stepper) -> &mut Self {
+        self.steppers.push(stepper);
         self
     }
 
@@ -463,7 +602,33 @@ impl Registrar {
             name: name.into(),
             document,
             record,
+            category: String::new(),
+            sidecar: Value::Null,
         });
+        self
+    }
+
+    /// A fixture of the parity suite's `category`, with its sidecar.
+    pub fn parity(
+        &mut self,
+        category: &str,
+        name: &str,
+        document: Value,
+        sidecar: Value,
+    ) -> &mut Self {
+        self.fixture(name, document, None);
+        if let Some(last) = self.fixtures.last_mut() {
+            last.category = category.into();
+            last.sidecar = sidecar;
+        }
+        self
+    }
+
+    /// The last fixture's sidecar.
+    pub fn sidecar(&mut self, sidecar: Value) -> &mut Self {
+        if let Some(last) = self.fixtures.last_mut() {
+            last.sidecar = sidecar;
+        }
         self
     }
 
@@ -480,7 +645,25 @@ impl Registrar {
         self.passes.push(Pass {
             name: name.into(),
             place: place.into(),
+            kind: String::new(),
+            shader: "",
         });
+        self
+    }
+
+    /// A GPU pass that fills the items of `kind` with its WGSL fragment shader.
+    pub fn gpu_pass(
+        &mut self,
+        name: &str,
+        place: &str,
+        kind: &str,
+        shader: &'static str,
+    ) -> &mut Self {
+        self.pass(name, place);
+        if let Some(last) = self.passes.last_mut() {
+            last.kind = kind.into();
+            last.shader = shader;
+        }
         self
     }
 
@@ -670,9 +853,28 @@ impl Sealed {
     /// lays it out, is held by every build at whatever range a document asks.
     pub(crate) fn satisfies(&self, name: &str, range: &Range) -> bool {
         match self.module(name) {
-            Some(m) => range.matches(m.version),
+            Some(m) => range.matches(m.version) || self.migrates_from(m, range),
             None => self.held(name),
         }
+    }
+
+    /// A document saved against an earlier major of a module whose kinds migrate: the
+    /// requirement migrates with the kinds at load (Migration), so a range an earlier major
+    /// matches is met while every kind of the module carries its steps.
+    fn migrates_from(&self, m: &SealedModule, range: &Range) -> bool {
+        let migrating = !m.shapes.kinds.is_empty()
+            && m.shapes.kinds.iter().all(|k| {
+                k.entry.versions.len() > 1
+                    && k.entry.steps_from(k.entry.versions[0].major).is_some()
+            });
+        migrating
+            && (1..m.version.major).any(|major| {
+                range.matches(Semver {
+                    major,
+                    minor: 0,
+                    patch: 0,
+                })
+            })
     }
 
     /// The missing module that keeps `module`'s `operator` out of the plan: the module itself
@@ -699,6 +901,67 @@ impl Sealed {
             .map(|k| k.draws_as.as_str())
     }
 
+    /// The `rect@1` params a sealed module's kind draws as, when it registered a drawing.
+    pub fn draw_of(&self, kind_text: &str) -> Option<DrawFn> {
+        let (full, major) = crate::kinds::parse_kind(kind_text)?;
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .find(|k| k.entry.full_name() == full && k.entry.version(major).is_some())
+            .and_then(|k| k.draw)
+    }
+
+    /// A canvas module's item saved at an earlier major of its kind, migrated to the build's
+    /// (Migration: at load); `None` when it is at the build's major or isn't a module's kind.
+    pub fn migrated(&self, item: &Value) -> Option<Value> {
+        let (full, saved) = crate::kinds::parse_kind(item.get("kind")?.as_str()?)?;
+        let entry = self
+            .modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .map(|k| &k.entry)
+            .find(|e| e.full_name() == full)?;
+        if saved >= entry.current().major {
+            return None;
+        }
+        let mut out = item.clone();
+        for step in entry.steps_from(saved)? {
+            if let Some(Value::Object(params)) = out.get_mut("params") {
+                crate::kinds::migrate_step(step, params);
+            }
+            out["kind"] = json!(format!("{full}@{}", step.to));
+        }
+        Some(out)
+    }
+
+    /// Every module's check over items of the kind `family.name`, with its module.
+    pub fn rules_for<'s>(&'s self, full: &str) -> Vec<(&'s SealedModule, Rule)> {
+        let mut out = Vec::new();
+        for m in &self.modules {
+            for (k, rule) in &m.shapes.rules {
+                if k == full {
+                    out.push((m, *rule));
+                }
+            }
+        }
+        out
+    }
+
+    /// Every module's CPU cost for an item of the kind `family.name`.
+    pub fn costs_for(&self, full: &str) -> Vec<Cost> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.costs.iter())
+            .filter(|(k, _)| k == full)
+            .map(|(_, c)| *c)
+            .collect()
+    }
+
+    /// Whether any module registered a cost: the budget estimate then sums the whole document.
+    pub fn has_costs(&self) -> bool {
+        self.modules.iter().any(|m| !m.shapes.costs.is_empty())
+    }
+
     /// The core's kinds plus every kind the sealed modules register.
     pub fn kinds(&self) -> crate::kinds::Registry {
         let mut out = crate::kinds::registry();
@@ -711,7 +974,7 @@ impl Sealed {
     }
 
     /// The sealed module that registered the kind `family.name`, if one did.
-    pub(crate) fn module_of_kind(&self, full_name: &str) -> Option<&str> {
+    pub fn module_of_kind(&self, full_name: &str) -> Option<&str> {
         self.modules
             .iter()
             .find(|m| {
@@ -3214,6 +3477,7 @@ mod tests {
                     from: w[0],
                     to: w[1],
                     renames: vec![],
+                    map: None,
                 })
                 .collect();
             r.kind(entry, &[], "rect@1");
@@ -3322,6 +3586,7 @@ mod tests {
                     .iter()
                     .map(|(from, to)| crate::kinds::Rename { from, to })
                     .collect(),
+                map: None,
             }
         }
         fn no_path(r: &mut Registrar) {

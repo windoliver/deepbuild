@@ -27,6 +27,9 @@ const PATCH_KEYS: &[&str] = &["patch", "doc", "base", "reason", "ops"];
 /// A patch's optional field the core reads at admission: `coalesce_key`, a string (Admission and
 /// latch: a coalesce key keeps only the latest value).
 const COALESCE_KEY: &str = "coalesce_key";
+/// A patch's optional field asking for a dry run: the outcome, achieved counts, issues and cost
+/// change the commit would return, and nothing committed (Patch).
+const DRY_RUN: &str = "dry_run";
 
 /// What an apply returns.
 #[derive(Clone, Debug)]
@@ -278,6 +281,20 @@ pub fn apply_ops(
     let patch_id = member(patch, "patch")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    // A reorder's key falls between its neighbors in the patch's base: the revision it was made
+    // on, which, for a patch applied on it, is the document before any of its ops, so a later
+    // op's key never depends on an earlier one's, whichever writer's patch arrives first.
+    let reorders = ops
+        .iter()
+        .any(|o| member(o, "op").and_then(Value::as_str) == Some("reorder"));
+    let pre = (writing.base.is_none() && reorders).then(|| doc.clone());
+    let writing = &Writing {
+        layer: writing.layer,
+        writer: writing.writer,
+        you: writing.you,
+        base: writing.base.or(pre.as_ref()),
+        knows: writing.knows,
+    };
     let ids = mint_ids(doc, ops, writing, patch_id);
     let mut done = Patched {
         ids: ids.clone(),
@@ -318,6 +335,44 @@ pub fn rollback(doc: &mut Value, patched: &Patched) {
             items.insert(id.clone(), item.clone());
         }
     }
+}
+
+/// The IDs a patch touches on `base`, the revision it was made on: [`touched`]'s, and for a
+/// move that keeps the item where it is in the world (the default), every ancestor of its parent
+/// before and after, whose transforms it reads (the conformance kit's fourth law of Patch).
+pub fn touched_in(patch: &Value, base: &Value, targets_only: bool) -> BTreeSet<String> {
+    let mut out = touched(patch, targets_only);
+    if targets_only {
+        return out;
+    }
+    let items = member(base, "items");
+    let parent_of = |id: &str| {
+        items
+            .and_then(|i| member(i, id))
+            .and_then(|i| member(i, "parent"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let ops = member(patch, "ops").and_then(Value::as_array);
+    for op in ops.into_iter().flatten() {
+        let world = member(op, "keep").and_then(Value::as_str) != Some("local");
+        if member(op, "op").and_then(Value::as_str) != Some("move") || !world {
+            continue;
+        }
+        let id = member(op, "id").and_then(Value::as_str).unwrap_or_default();
+        let new = member(op, "parent")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        for start in [parent_of(id), new] {
+            let mut at = start;
+            let mut seen = BTreeSet::new();
+            while let Some(here) = at.filter(|h| seen.insert(h.clone())) {
+                at = parent_of(&here);
+                out.insert(here);
+            }
+        }
+    }
+    out
 }
 
 /// The IDs a patch touches (Patch): those its ops target, plus the parent a create or move
@@ -436,13 +491,16 @@ fn patch_ops<'a>(at: &str, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
             "a patch is an object",
         )));
     };
-    let known = |k: &String| PATCH_KEYS.contains(&k.as_str()) || k == COALESCE_KEY;
+    let known = |k: &String| PATCH_KEYS.contains(&k.as_str()) || k == COALESCE_KEY || k == DRY_RUN;
     if let Some(key) = envelope.keys().find(|k| !known(k)) {
         return Err(refuse(
             "unknown_field",
             key,
-            "not a field of a patch (patch, doc, base, reason, ops, coalesce_key)",
+            "not a field of a patch (patch, doc, base, reason, ops, coalesce_key, dry_run)",
         ));
+    }
+    if envelope.get(DRY_RUN).is_some_and(|d| !d.is_boolean()) {
+        return Err(refuse("out_of_range", DRY_RUN, "not a bool"));
     }
     for field in PATCH_KEYS {
         if !envelope.contains_key(*field) {
