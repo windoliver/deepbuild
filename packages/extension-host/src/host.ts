@@ -363,6 +363,8 @@ class Host implements ExtensionHost {
         throw e;
       }
       const wire = peer(socket, (method, params) => this.dispatch(ext, method, params));
+      // Its connection gone, it is gone: a load still running is unloaded.
+      socket.once('close', () => { if (this.exts.get(ext.entry.id) === ext) void this.unload(ext); });
       ext.ask = (method, params) => wire.call(method, params);
       ext.stop = async () => {
         socket.end();
@@ -373,12 +375,12 @@ class Host implements ExtensionHost {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  /** Asks the running package, within `ms`; a sandboxed package that overruns is stopped, its process with it. */
+  /** Asks the running package, within `ms`; a package that overruns is unloaded, and a sandboxed one's process stopped. */
   private async ask(ext: Ext, ms: number, what: string, method: string, params: unknown): Promise<unknown> {
     try {
       return await within(ms, `${ext.entry.id}'s ${what}`, ext.ask!(method, params));
     } catch (e) {
-      if (e instanceof Overran && ext.place === 'sandbox') await this.unload(ext);
+      if (e instanceof Overran) await this.unload(ext);
       throw e;
     }
   }
@@ -404,6 +406,7 @@ class Host implements ExtensionHost {
     const checked = this.options.plant !== 'grants-only-in-record-query' || method === 'deep.record.query';
     if (schema.needs && checked && !granted(ext.manifest, schema.needs)) throw Error(`${method} needs the grant "${schema.needs}", which ${ext.entry.id} wasn't given`);
     const id = ext.entry.id;
+    if (ext.mode === 'loaded' && this.exts.get(id) !== ext) throw Error(`${method}: ${id} was unloaded`);
     if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project is no longer trusted, so it was stopped`);
     const conformance = ext.mode === 'conformance';
     const quiet = (): void => { if (conformance) throw Error(`${method}: nothing reaches the record while conformance runs`); };

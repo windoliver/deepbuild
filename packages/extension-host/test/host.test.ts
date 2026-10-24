@@ -277,4 +277,27 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect(r.body).not.toBe('hi');
     expect(await h.loaded()).toEqual([]);
   }, 60_000);
+
+  it('a sandboxed main that writes a line longer than a frame is cut off and fails, without waiting out its deadline', async () => {
+    // 40 MiB with no newline, then it waits: the host must not keep reading it.
+    const folder = pkgOf('test/flood', "#!/bin/sh\nread line\nhead -c 41943040 /dev/zero | tr '\\0' x\nsleep 30\n", { checks: [] }, 'main');
+    const h = await host();
+    const c = await h.check(await h.install({ from: folder, builtBy: null }));
+    expect(c.passed).toBe(false);
+    expect(c.reasons.join('\n')).toMatch(/closed/);
+  }, 60_000);
+
+  it('a package in the hub that overruns its deadline is unloaded: what it calls after is refused, and nothing is appended', async () => {
+    const append = "deep.record.append({ v: 1, id: '01K74FKZVK8Q2X5R7M3N9P4T6W', kind: 'task.created', ts: Date.now(), data: { task_ref: 'task:01K74FX2B4D6F8H0K2M4P6R8T0', thread: '01K74G1Z3X5V7T9R1P3N5M7K9H', owner: 'you', title: 'late' } })";
+    const folder = stuck(`new Promise((resolve) => setTimeout(() => resolve(${append}), 1500))`, '', { access: { words: ['record'] } });
+    const { h, record } = await world({ release: [{ id: 'test/stuck', version: '1.0.0', digest: packageDigest(folder) }] });
+    const p = await h.install({ from: folder, builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    const load = await h.load(p);
+    expect(load.status === 'loaded' && load.place).toBe('hub');
+    expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 500 })).outcome).toBe('overran');
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect((await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'task.created')).toEqual([]);
+    expect(await h.loaded()).toEqual([]);
+  }, 60_000);
 });

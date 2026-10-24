@@ -83,6 +83,8 @@ export function extensionSide(call, load) {
 }
 
 /** A JSON-RPC 2.0 peer on a duplex stream: `serve(method, params)` answers the other side's requests. */
+/** The longest line either side reads, in characters. */
+const FRAME = 16 * 1024 * 1024;
 export function peer(stream, serve) {
   let next = 0;
   let buffer = '';
@@ -112,6 +114,8 @@ export function peer(stream, serve) {
       buffer = buffer.slice(at + 1);
       if (line.trim()) receive(line);
     }
+    // A line no message needs: the other side is cut off rather than held in memory.
+    if (buffer.length > FRAME) stream.destroy();
   });
   stream.on('error', () => undefined);
   stream.on('close', () => {
