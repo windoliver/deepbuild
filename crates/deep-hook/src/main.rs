@@ -442,8 +442,12 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     } else {
         quoted(&input)
     };
-    let guards = guards();
     let called = parsed.as_ref().and_then(command);
+    // Until the guards are read, a shell call the watchdog decides is denied: one of them may hold it.
+    if event == "PreToolUse" && called.is_some() {
+        RULING.store(true, Ordering::SeqCst);
+    }
+    let guards = guards();
     let matched: Vec<&Guard> = guards
         .iter()
         .filter(|g| match (&g.pattern, called) {
@@ -461,6 +465,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             guard.reason, guard.next_step, guard.name
         ));
     }
+    RULED.store(true, Ordering::SeqCst);
     let names = matched
         .iter()
         .map(|g| quoted(&g.name))
@@ -549,6 +554,9 @@ static ACKED: AtomicBool = AtomicBool::new(false);
 static DECIDED: AtomicBool = AtomicBool::new(false);
 /// What a matched fail_closed entry prints when it denies the call with the hub away.
 static DENIAL: OnceLock<String> = OnceLock::new();
+/// Set once a shell call's PreToolUse is read, before its guards are; RULED once they are matched against it.
+static RULING: AtomicBool = AtomicBool::new(false);
+static RULED: AtomicBool = AtomicBool::new(false);
 /// When, after the hook's start, the watchdog decides for a hook the hub hasn't acknowledged.
 const WATCHDOG: Duration = Duration::from_millis(48);
 
@@ -563,7 +571,7 @@ fn decide() {
 
 /// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
 /// disk under rules.json): at WATCHDOG it exits with the decision for the hub away, deny when a fail_closed entry
-/// has matched and allow otherwise. That call isn't spooled; a turn of its tool calls then reads as not reaching
+/// has matched or a shell call's guards are still being read, and allow otherwise. That call isn't spooled; a turn of its tool calls then reads as not reaching
 /// the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
 fn watchdog(start: Instant) {
     if cfg!(feature = "plant-connect-timeout-only") {
@@ -581,6 +589,10 @@ fn watchdog(start: Instant) {
         match DENIAL.get() {
             Some(denial) => {
                 eprintln!("{denial}");
+                std::process::exit(2)
+            }
+            None if RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst) => {
+                eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 50 ms, with the hub not answering. Check that file, then retry.");
                 std::process::exit(2)
             }
             None => std::process::exit(0),
