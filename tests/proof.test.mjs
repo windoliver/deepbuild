@@ -185,3 +185,29 @@ test('a tagged test kept from registering behind a same-named copy in a second s
   const result = proof(scene, ['before']);
   assert.ok(problems(result, 'before').some((found) => found.includes(`s › ${c1} adds: declared and not skipped, but the runner never reported it`)), show(result));
 });
+
+const impl = "import assert from 'node:assert/strict';\nimport { describe, it } from 'node:test';\nimport { f } from '../../../src/impl.mjs';\n\n";
+const sums = `  it('${c1} adds', () => {\n    assert.equal(f(), 3);\n  });\n`;
+const before = (t, base, change) => proof(repo(t, {
+  issues: { [ISSUE]: ['Adds'] },
+  base: { 'src/impl.mjs': `export const f = () => ${base.f};\n`, ...(base.file ? { [`${dir}/a.test.mjs`]: impl + base.file } : {}) },
+  commits: [{ files: { 'src/impl.mjs': `export const f = () => ${change.f};\n`, ...(change.file ? { [`${dir}/a.test.mjs`]: impl + change.file } : {}) }, message: `Change f\n\nPart of #${ISSUE}` }],
+}), []);
+const neverReported = (result, name) => problems(result, 'before').some((found) => found.includes(`${name}: declared and not skipped, but the runner never reported it`));
+
+test('a skipped copy of a tagged test reports as a skip, which stands for no test that ran', (t) => {
+  const result = before(t, { f: 3, file: `describe('s', () => {\n${sums}});\n` },
+    { f: 4, file: `if (false)\ndescribe('s', () => {\n${sums}});\n\ndescribe('s', () => {\n  const f = () => 3;\n${sums}  it.skip('${c1} adds');\n});\n` });
+  assert.ok(neverReported(result, `s › ${c1} adds`), show(result));
+});
+
+test('a tagged test declared once in each branch of an if, one branch registering, was reported', (t) => {
+  const result = before(t, { f: 4 }, { f: 3, file: `describe('s', () => {\n  if (process.platform === 'win32') {\n${sums}  } else {\n${sums}  }\n});\n` });
+  assert.ok(!neverReported(result, `s › ${c1} adds`), show(result));
+  assert.ok(result.lines.some((line) => line.startsWith(`PASS before: ${dir}/a.test.mjs › s › ${c1} adds`)), show(result));
+});
+
+test('a tagged test in a node:test suite skipped by its options is skipped, not unreported', (t) => {
+  const result = before(t, { f: 4 }, { f: 3, file: `describe('a', () => {\n${sums.replace('adds', 'adds too')}});\n\ndescribe('opt', { skip: true }, () => {\n${sums}});\n` });
+  assert.ok(!neverReported(result, `opt › ${c1} adds`), show(result));
+});

@@ -319,7 +319,11 @@ export function spans(source) {
       if (ts.isIdentifier(root) && ['describe', 'it', 'test'].includes(root.text) && forms.every((form) => FORMS.includes(form)) && first && !(ts.isCallExpression(node.expression) && !forms.some((form) => CALLED.includes(form))) && !(ts.isPropertyAccessExpression(node.expression) && CALLED.includes(forms.at(-1)))) {
         const own = forms.some((form) => form === 'each' || form === 'for') ? null : text(first);
         const name = own === null || suites.some((suite) => suite.name === null) ? null : [...suites.map((suite) => suite.name), own].join(' › ');
-        const skipped = forms.some((form) => ['skip', 'todo', 'skipIf'].includes(form)) || suites.some((suite) => suite.skipped);
+        // node:test and vitest also skip a test or suite by its options: (name, { skip: true }, fn).
+        const options = node.arguments[1];
+        const skippedBy = options && ts.isObjectLiteralExpression(options) && options.properties.some((property) => ts.isPropertyAssignment(property)
+          && ['skip', 'todo'].includes(property.name.text) && (property.initializer.kind === ts.SyntaxKind.TrueKeyword || ts.isStringLiteral(property.initializer)));
+        const skipped = forms.some((form) => ['skip', 'todo', 'skipIf'].includes(form)) || Boolean(skippedBy) || suites.some((suite) => suite.skipped);
         const only = forms.includes('only') || suites.some((suite) => suite.only);
         // It registers whenever its file or suite runs only as a statement of the file or of its
         // suite's callback, not under an if, a && or a function no one calls.
