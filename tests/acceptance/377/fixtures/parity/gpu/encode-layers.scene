@@ -1,0 +1,115 @@
+{
+  "scene": "encode-layers",
+  "format": "bgra8_premultiplied",
+  "color_space": "srgb",
+  "size": [512, 512],
+  "frames": 30,
+  "window": [576, 576],
+  "view": [32, 32],
+  "page": {
+    "cell": 32,
+    "colors": [
+      [120, 140, 150],
+      [100, 80, 60]
+    ]
+  },
+  "background": [30, 30, 30, 255],
+  "layers": [
+    {
+      "name": "layer-0",
+      "rect": [0, 0, 256, 256],
+      "fill": {
+        "color": [200, 40, 20, 200]
+      },
+      "moves": {
+        "dx": 1,
+        "dy": 1,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-1",
+      "rect": [24, 20, 256, 256],
+      "fill": {
+        "color": [20, 150, 60, 160]
+      },
+      "moves": {
+        "dx": 2,
+        "dy": 2,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-2",
+      "rect": [48, 40, 256, 256],
+      "fill": {
+        "color": [30, 60, 140, 140]
+      },
+      "moves": {
+        "dx": 3,
+        "dy": 3,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-3",
+      "rect": [72, 60, 256, 256],
+      "fill": {
+        "color": [150, 150, 10, 180]
+      },
+      "moves": {
+        "dx": 4,
+        "dy": 1,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-4",
+      "rect": [96, 80, 256, 256],
+      "fill": {
+        "color": [10, 120, 140, 150]
+      },
+      "moves": {
+        "dx": 5,
+        "dy": 2,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-5",
+      "rect": [120, 100, 256, 256],
+      "fill": {
+        "color": [90, 20, 150, 170]
+      },
+      "moves": {
+        "dx": 6,
+        "dy": 3,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-6",
+      "rect": [144, 120, 256, 256],
+      "fill": {
+        "color": [120, 90, 40, 190]
+      },
+      "moves": {
+        "dx": 7,
+        "dy": 1,
+        "period": 30
+      }
+    },
+    {
+      "name": "layer-7",
+      "rect": [168, 140, 256, 256],
+      "fill": {
+        "color": [60, 60, 60, 128]
+      },
+      "moves": {
+        "dx": 8,
+        "dy": 2,
+        "period": 30
+      }
+    }
+  ]
+}
