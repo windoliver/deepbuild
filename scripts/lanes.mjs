@@ -56,6 +56,10 @@ export const checks = [
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
+  // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
+  // lifecycle enumerator, crash suite and verdict replay when the change touches their paths. The release
+  // preflight adds the mutation lane and runs the lifecycle enumerator and crash suite in full.
+  { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs', ...(process.env.DEEP_PREFLIGHT === 'release' ? ['--release'] : [])]], fix: 'Follow the Fix line under each proof lane finding above.' },
   // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's
   // seeded claims and the rank-swap twins. Lean builds take a while, so the local preflight runs it only for a
   // change to the engine or the model; the release preflight always does.
