@@ -45,18 +45,23 @@ async function tracked(record: RecordStore, run: string | null): Promise<number[
   return (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked' && (e.data as { run?: string }).run === run).map((e) => (e.data as { pid: number }).pid);
 }
 interface World { h: ExtensionHost; record: RecordStore; trust: ProjectTrust; home: string; again: () => Promise<ExtensionHost> }
-async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?: false } = {}): Promise<World> {
+/** `held`: each process the supervisor starts is reported started only once the promise it returns then resolves. */
+async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?: false; held?: () => Promise<void> } = {}): Promise<World> {
   const dir = temp();
   const record: RecordStore = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
   const supervisor: Supervisor = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 86_400_000 } } } });
   closing.push(record, supervisor);
+  const held = options.held;
+  const start: Supervisor['start'] = async (o) => { const started = await supervisor.start(o); await held?.(); return started; };
+  const supervising = held === undefined ? supervisor
+    : new Proxy(supervisor, { get: (to, key) => (key === 'start' ? start : (Reflect.get(to, key) as (...a: unknown[]) => unknown).bind(to)) });
   mkdirSync(join(dir, 'home'));
   const trust = await openTrust({ record, now: Date.now });
   const home = join(dir, 'home');
   /** A host on this home: after the first, a restart of the hub. */
   const again = async (): Promise<ExtensionHost> => {
-    const h = await openExtensionHost({ record, supervisor, trust, home, now: Date.now, safe: options.safe, release: options.release ?? [] });
+    const h = await openExtensionHost({ record, supervisor: supervising, trust, home, now: Date.now, safe: options.safe, release: options.release ?? [] });
     closing.push(h);
     if (options.ready !== false) await h.ready();
     return h;
@@ -404,5 +409,25 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
       data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: '01K74G1Z3X5V7T9R1P3N5M7K9H' }, evidence: [],
     } as unknown as Parameters<ExtensionHost['deliver']>[0][number];
     await expect(h.deliver([event])).rejects.toThrow(/test\/sub.*handler broke/);
+  }, 60_000);
+
+  it('closing the host while ready is starting a package loaded before it returns only once that package\'s process is stopped', async () => {
+    let gate = Promise.resolve();
+    const { h, record } = await world({ ready: false, held: () => gate });
+    const p = await h.install({ from: stuck(PASSES), builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    const pidsNow = async (): Promise<number[]> => (await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'process.tracked').map((e) => (e.data as { pid: number }).pid);
+    const before = (await pidsNow()).length;
+    let release = (): void => undefined;
+    gate = new Promise<void>((resolve) => { release = resolve; });
+    const ready = h.ready();
+    while ((await pidsNow()).length === before) await new Promise((resolve) => setTimeout(resolve, 2));
+    const closing = h.close();
+    setTimeout(release, 300);
+    await closing;
+    expect((await pidsNow()).slice(before).filter(alive)).toEqual([]);
+    await ready;
+    expect(await h.loaded()).toEqual([]);
   }, 60_000);
 });
