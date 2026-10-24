@@ -130,3 +130,41 @@ test('a merge conflict resolved by also dropping a semicolon-only line outside t
   const result = proof(scene, ['guard']);
   assert.ok(problems(result, 'guard').some((found) => found.includes('lines outside its tests changed in resolving a merge conflict')), show(result));
 });
+
+test('a merge conflict resolved by joining a comment line with the code after it fails the guard', (t) => {
+  const top = `${head}let skip = true;\n// the check runs only when it is on\nskip = false;\n\nit('${c1} adds', () => {\n  if (skip) return;\n  assert.equal(add(1, 1), 2);\n});\n`;
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { [`${dir}/a.test.mjs`]: top },
+    commits: [{ files: { [`${dir}/a.test.mjs`]: `${top}\nit('change side', () => {});\n` }, message: `Work\n\nPart of #${ISSUE}` }],
+  });
+  const { cwd } = scene;
+  git(cwd, 'checkout', '-q', '-b', 'moved', 'origin/main');
+  write(cwd, { [`${dir}/a.test.mjs`]: `${top}\nit('main side', () => {});\n` });
+  git(cwd, 'commit', '-q', '-am', 'main moves');
+  git(cwd, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git(cwd, 'checkout', '-q', 'change');
+  assert.throws(() => git(cwd, 'merge', '-q', '-m', 'Merge main', 'origin/main'), undefined, 'the merge conflicts');
+  write(cwd, { [`${dir}/a.test.mjs`]: `${top.replace('on\nskip = false;', 'on skip = false;')}\nit('change side', () => {});\n\nit('main side', () => {});\n` });
+  git(cwd, 'commit', '-q', '-am', 'Merge main');
+  const result = proof(scene, ['guard']);
+  assert.ok(problems(result, 'guard').some((found) => found.includes('lines outside its tests changed in resolving a merge conflict')), show(result));
+});
+
+test("a removed line of an untagged suite's own code edits the tagged tests outside it, which may read what it sets", (t) => {
+  const file = (setup) => `let expected = 3;\n\ndescribe('setup', () => {\n${setup}  it('loads', () => {});\n});\n\nit('${c1} adds', () => {\n  assert.equal(add(1, 1), expected);\n});\n`;
+  const result = guardOf(t, file('  expected = 2;\n'), file(''));
+  assert.ok(edited(result, `${c1} adds`), show(result));
+});
+
+test('a line added before a tagged test that keeps it from registering, such as if (false), edits it', (t) => {
+  const tagged = `it('${c1} adds', () => {\n  assert.equal(add(1, 1), 2);\n});\n`;
+  const result = guardOf(t, `\n${tagged}`, `\nif (false)\n${tagged}`);
+  assert.ok(problems(result, 'guard').some((found) => found.includes(`${c1} adds`)), show(result));
+});
+
+test('a hollow copy of a tagged test added ahead of it, the original no longer registering, edits it', (t) => {
+  const tagged = `it('${c1} adds', () => {\n  assert.equal(add(1, 1), 3);\n});\n`;
+  const result = guardOf(t, `\n${tagged}`, `\nit('${c1} adds', () => {\n}); if (false)\n${tagged}`);
+  assert.ok(problems(result, 'guard').some((found) => found.includes(`${c1} adds`)), show(result));
+});

@@ -59,16 +59,19 @@ function outsideTests(text, tests) {
 /** The literals of the text that lie outside every test, whose white space is data a tagged test may compare. */
 const literalsOutside = (text, tests) => literals(text).filter(([from, to]) => !tests.some((test) => test.from <= from && to - 1 <= test.to));
 
+/** White space squeezed to one space, or to one newline where it held one: a newline ends a line comment and drives ASI. */
+const squeeze = (text) => text.replace(/\s+/g, (space) => (space.includes('\n') ? '\n' : ' '));
+
 /** The text outside every test with its white space squeezed, except inside literals, which stay as written. */
 function squeezed(text, tests) {
   const outside = outsideTests(text, tests);
   let result = '', at = 0;
   for (const [from, to] of literalsOutside(text, tests).sort((a, b) => a[0] - b[0])) {
     if (from < at) continue;
-    result += `${outside.slice(at, from).replace(/\s+/g, ' ')}\0${outside.slice(from, to)}\0`;
+    result += `${squeeze(outside.slice(at, from))}\0${outside.slice(from, to)}\0`;
     at = to;
   }
-  return result + outside.slice(at).replace(/\s+/g, ' ');
+  return result + squeeze(outside.slice(at));
 }
 
 // A file both parents of a merge changed past git's merging is judged three ways, each side read
@@ -171,9 +174,10 @@ function testEdits(root, commit, file, before, relevant) {
     if (/\S/.test(outside[line - 1] ?? '') || (!suite && !blank(line))) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
     for (const leaf of cover.filter((test) => test.leaf && tagsOf(test).length)) hit.add(leaf);
     if (!suite || blank(line)) continue;
-    // A suite's own text, such as its describe.skip, a hook or a const, edits the tagged tests inside it.
+    // A suite's own text, such as its describe.skip, a hook or a const, runs as the file is collected
+    // and may set what any test reads, so it edits every tagged test, as code outside them does.
     if (tagsOf(suite).length) hit.add(suite);
-    else for (const leaf of tagged.filter((inside) => inside.leaf && inside.from > suite.from && inside.to <= suite.to)) hit.add(leaf);
+    for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
   }
   // An insertion lands between old lines oldStart and oldStart + 1: inside a tagged test when both are.
   for (const { oldStart, removed, added } of file.hunks) {
@@ -181,15 +185,18 @@ function testEdits(root, commit, file, before, relevant) {
     const test = tagged.find((span) => span.leaf && span.start <= oldStart && oldStart + 1 <= span.end);
     if (test) hit.add(test);
   }
-  const after = file.status === 'D' ? [] : spans(show(root, commit.sha, file.path) ?? '');
+  const now = file.status === 'D' ? '' : show(root, commit.sha, file.path) ?? '';
+  const after = file.status === 'D' ? [] : spans(now);
   // A tagged test gone from the file, or skipped now, is edited whatever lines moved, such as one
-  // wrapped in a describe.skip of added lines: fewer unskipped tests of its name run after.
-  const running = (list, name) => list.filter((test) => test.leaf && !test.skipped && test.name === name).length;
-  for (const test of tagged.filter(({ name, leaf, skipped }) => name !== null && leaf && !skipped)) if (running(after, test.name) < running(tests, test.name)) hit.add(test);
+  // wrapped in a describe.skip of added lines or put under an if (false): fewer unskipped tests of its
+  // name and text register after, though a hollow copy of its name may.
+  const key = (text, test) => `${test.name}\0${text.slice(test.from, test.to + 1)}`;
+  const running = (list, text, of) => list.filter((test) => test.leaf && !test.skipped && test.runs && key(text, test) === of).length;
+  for (const test of tagged.filter(({ name, leaf, skipped, runs }) => name !== null && leaf && !skipped && runs)) if (running(after, now, key(before, test)) < running(tests, before, key(before, test))) hit.add(test);
   return [...hit].map((test) => {
     if (test.name === null) return { test: null, detail: `${file.path}:${test.start}: a test named as it runs ${file.status === 'D' ? 'deleted' : 'changed'} (criterion ${tagsOf(test).join(', ')})` };
-    const now = after.find(({ name }) => name === test.name);
-    const what = !now ? 'deleted' : now.skipped && !test.skipped ? 'skipped' : 'changed';
+    const kept = after.find(({ name }) => name === test.name);
+    const what = !kept ? 'deleted' : kept.skipped && !test.skipped ? 'skipped' : 'changed';
     return { test: test.name, detail: `${named(file.path, test.name)}: ${what} (criterion ${relevant(test.name).join(', ')})` };
   });
 }
