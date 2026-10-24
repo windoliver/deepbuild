@@ -578,3 +578,35 @@ test("a workspace build can't rewrite a hollow tagged test in the copy the mutat
   assert.ok(!result.stdout.includes('PASS mutation'), show(result));
   assert.notEqual(result.status, 0, show(result));
 });
+
+test("a process the change's build leaves running can't change the merge base the before lane runs", (t) => {
+  // It rewrites the code under test in every other proof checkout it finds for 30 s.
+  const tamper = "import { spawn } from 'node:child_process';\nimport { resolve } from 'node:path';\nconst script = `const { readdirSync, writeFileSync, existsSync } = require('fs');\nconst [own, dir] = process.argv.slice(1), end = Date.now() + 30000;\nconst tick = () => {\n  try { for (const name of readdirSync(dir)) { const path = dir + '/' + name + '/packages/lib/src/impl.mjs'; if (name.startsWith('deep-proof-checkout-') && dir + '/' + name !== own && existsSync(path)) writeFileSync(path, 'export const f = 1;\\\\n'); } } catch {}\n  if (Date.now() < end) setTimeout(tick, 5);\n};\ntick();`;\nspawn(process.execPath, ['-e', script, resolve('../..'), resolve('../../..')], { detached: true, stdio: 'ignore' }).unref();\n";
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: workspace('// builds\n', { 'packages/lib/src/impl.mjs': 'export const f = () => 4;\n' }),
+    commits: [{ files: {
+      'packages/lib/src/impl.mjs': 'export const f = () => 3;\n', 'packages/lib/build.mjs': `// builds\n${tamper}`,
+      [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { f } from '../../../packages/lib/src/impl.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(typeof f, 'function');\n});\n`,
+    }, message: `Add f\n\nCloses #${ISSUE}` }],
+  }), ['trace']);
+  assert.ok(!result.stdout.includes('PASS before'), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test("a workspace build can't plant a json file or a package.json that a test's import of a helper folder resolves to", (t) => {
+  for (const [label, plant] of [
+    ['json', `writeFileSync('../../${dir}/support.json', JSON.stringify({ expected: 4 }));`],
+    ['package', `writeFileSync('../../${dir}/support/package.json', JSON.stringify({ main: 'data.json' }));\nwriteFileSync('../../${dir}/support/data.json', JSON.stringify({ expected: 4 }));`],
+  ]) {
+    const result = proof(repo(t, {
+      issues: { [ISSUE]: ['Adds'] },
+      base: workspace('// builds\n', {
+        'package.json': JSON.stringify({ name: 'x', private: true, workspaces: ['packages/*'] }), 'lib/impl.mjs': 'export const f = () => 4;\n', [`${dir}/support/index.js`]: 'module.exports = { expected: 3 };\n',
+        [`${dir}/a.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { createRequire } from 'node:module';\nimport { f } from '../../../lib/impl.mjs';\n\ntest('${c1} sums', () => {\n  assert.equal(f(), createRequire(import.meta.url)('./support').expected);\n});\n`,
+      }),
+      commits: [{ files: { 'packages/lib/build.mjs': `// builds\nimport { writeFileSync } from 'node:fs';\n${plant}\n` }, message: `Edit\n\nCloses #${ISSUE}` }],
+    }), ['trace']);
+    assert.ok(problems(result, 'before').some((found) => found.includes(`${c1} sums: fails on the change`)), `${label}\n${show(result)}`);
+  }
+});
