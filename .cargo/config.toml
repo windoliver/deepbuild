@@ -14,4 +14,6 @@ gpui-pre = { path = "vendor/gpui-pre" }
 # gradient mode (no dither, the sRGB curve, premultiplied stops)"). vendor/gpui-pre-apple is
 # gpui-pre-apple 0.3.9 from crates.io with `ColorSpace::OklabExact` drawn by its Metal shader,
 # each change marked "DeepBuild patch"; the variant itself is in vendor/gpui-pre's color.rs.
+# Issue #377 adds the GPU layer's handoff to it: BGRA surfaces composited premultiplied, and
+# `gpu_surfaces`, which reports the surfaces each frame command buffer samples and its completion.
 gpui-pre-apple = { path = "vendor/gpui-pre-apple" }
