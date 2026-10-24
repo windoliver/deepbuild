@@ -4,6 +4,7 @@
 // and supervisor.
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
+import { PassThrough } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -11,6 +12,7 @@ import type { CheckSpec } from '@deepbuild/conformance';
 import { openAsks } from '@deepbuild/asks';
 import { openRecord, type RecordStore } from '@deepbuild/record';
 import { openSupervisor, type Supervisor } from '@deepbuild/supervisor';
+import { peer } from '../runtime/deep.mjs';
 import { openExtensionHost, openTrust, packageDigest, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '../src/index.js';
 
 const dirs: string[] = [];
@@ -299,5 +301,24 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     await new Promise((resolve) => setTimeout(resolve, 2500));
     expect((await record.read({ after: 0, limit: 10_000 })).filter((e) => e.kind === 'task.created')).toEqual([]);
     expect(await h.loaded()).toEqual([]);
+  }, 60_000);
+
+  it('a JSON-RPC line over 16 MiB is never parsed, even when its newline arrives with it: the connection is cut', async () => {
+    const stream = new PassThrough();
+    const served: string[] = [];
+    peer(stream, async (method) => { served.push(method); return null; });
+    stream.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'deep.config.get', params: ['x'.repeat(17 * 1024 * 1024)] })}\n`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(served).toEqual([]);
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('a reinstall of the same version that fails leaves the installed copy as it was: it still loads and runs', async () => {
+    const h = await host();
+    const first = await h.install({ from: stuck(PASSES), builtBy: null });
+    expect((await h.check(first)).passed).toBe(true);
+    await expect(h.install({ from: stuck(PID), builtBy: null, project: join(temp(), 'no such repo') })).rejects.toThrow();
+    expect((await h.load(first)).status).toBe('loaded');
+    expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome).toBe('passed');
   }, 60_000);
 });

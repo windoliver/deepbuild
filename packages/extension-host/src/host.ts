@@ -180,14 +180,22 @@ class Host implements ExtensionHost {
     }
     // Read as data before any of its code runs; a symlink anywhere refuses the install.
     packageDigest(from.from);
+    const project = from.project === undefined ? null : realpathSync(from.project);
     const folder = join(this.options.home, 'extensions', id, version);
-    rmSync(folder, { recursive: true, force: true });
     mkdirSync(dirname(folder), { recursive: true });
-    cpSync(from.from, folder, { recursive: true });
-    const entry: Entry = {
-      id, version, folder, digest: packageDigest(folder), builtBy: from.builtBy,
-      project: from.project === undefined ? null : realpathSync(from.project), grant: { record: [...(from.grant?.record ?? [])] },
-    };
+    // Copied and read beside it first: a failed install leaves the installed copy as it was.
+    const copy = mkdtempSync(`${folder}.new-`);
+    let digest: string;
+    try {
+      cpSync(from.from, copy, { recursive: true });
+      digest = packageDigest(copy);
+    } catch (e) {
+      rmSync(copy, { recursive: true, force: true });
+      throw e;
+    }
+    rmSync(folder, { recursive: true, force: true });
+    renameSync(copy, folder);
+    const entry: Entry = { id, version, folder, digest, builtBy: from.builtBy, project, grant: { record: [...(from.grant?.record ?? [])] } };
     this.entries[id] = entry;
     this.save('installed.json', this.entries);
     return this.installedOf(entry);
