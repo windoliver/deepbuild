@@ -8,6 +8,30 @@
         }
       }
     },
+    "packages/proof/fixtures/lean/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #685: the proof kit's Lean package, pinned to the Lean 4.35 whose lake comparator the Lean runner calls; core Lean only."
+        }
+      }
+    },
+    "tests/acceptance/685/fixtures/lean/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.35.0",
+          "why": "Issue #685: the acceptance fixture's Lean package, checked through Lean 4.35's lake comparator; core Lean only."
+        }
+      }
+    },
+    "tests/acceptance/685/fixtures/lean-variants/old-toolchain/lean-toolchain": {
+      "toolchain": {
+        "leanprover/lean4": {
+          "spec": "v4.34.0",
+          "why": "Issue #685 (AC9): a pin to a Lean this machine lacks, so the check is BLOCKED naming it; never installed."
+        }
+      }
+    },
     "package.json": {
       "devDependencies": {
         "@types/node": {
@@ -238,6 +262,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: hook.request@1, which every hook request is held to, the catalogue fields each kind keeps, and the canonical digest a deep_* call binds by."
         },
+        "@deepbuild/env-local": {
+          "spec": "0.0.0",
+          "why": "Issue #331: deep env up and run.start's environment bring a folder's stack up through env-local, on the supervisor's leased ports; the hub imports it until the extension slots (#349) register it."
+        },
         "@deepbuild/evidence": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
@@ -277,6 +305,14 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #318: the record the asks core reads its state from and appends asks, answers, defaults and closes to."
+        }
+      }
+    },
+    "packages/proof/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #685: the check.kind@1 slot's fill and kit types, and the Finding a proof kit's judge ends a case with, so the one kit runner judges the proof kind."
         }
       }
     },
@@ -585,6 +621,22 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #138: the kit's GPU backend on the reference Mac, Metal offscreen under the GPU lease: a module's GPU pass draws and its pixels are read back for the snapshot case."
+        }
+      }
+    },
+    "packages/env-local/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #331: env-local is an environment@1 fill (#314's kit); only the SlotFill type is imported."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #331: every stack process starts, is signalled and waited for through host@1, and ports are leased as the supervisor's port kind."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #331: the environment block of .deepbuild/done.yaml, a YAML file the repo writes; no YAML parser is in the repo."
         }
       }
     },
