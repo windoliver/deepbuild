@@ -4,7 +4,7 @@
 // full disk. The ledger then lives in memory, and only what a FULL commit made durable reaches ledger.db, so a
 // cut loses exactly what a power cut would: every NORMAL commit after the last FULL one.
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import type { Backend } from '@deepbuild/record';
 import type { VfsSettings } from './wire.js';
@@ -58,6 +58,13 @@ export function writeSynced(path: string, bytes: Uint8Array): void {
     closeSync(fd);
   }
   renameSync(tmp, path);
+  // The rename lasts only once its folder is synced too.
+  const dir = openSync(dirname(path), 'r');
+  try {
+    fsyncSync(dir);
+  } finally {
+    closeSync(dir);
+  }
 }
 
 export function testVfs(settings: VfsSettings): Durable {
