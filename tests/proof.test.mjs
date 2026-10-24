@@ -1,7 +1,7 @@
 // Regressions of the proof lanes (#569) that its acceptance suite doesn't cover.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ISSUE, criterionId, named, problems, proof, repo, show } from './acceptance/569/helpers.mjs';
+import { ISSUE, criterionId, git, named, problems, proof, repo, show, write } from './acceptance/569/helpers.mjs';
 
 const c1 = criterionId(ISSUE, 'Adds');
 const dir = `tests/acceptance/${ISSUE}`;
@@ -30,4 +30,38 @@ test("the lanes don't hand StrykerJS's active mutant to the tests they run", (t)
   });
   const result = proof(scene, ['before'], { __STRYKER_ACTIVE_MUTANT__: '3' });
   assert.ok(!result.lines.some((line) => line.includes('fails on the change')), show(result));
+});
+
+// A blank line inside a string or template outside every test is data a tagged test may compare, so
+// removing it edits that test, though a blank line between statements, as a deleted test leaves, doesn't.
+const receipt = (blank) => `import assert from 'node:assert/strict';\nimport test from 'node:test';\n\nconst expected = \`tea 3\n${blank ? '\n' : ''}cake 4\`;\n\ntest('${c1} separates items', () => {\n  assert.equal(expected.split('\\n').length, 3);\n});\n`;
+
+test('removing a blank line inside a template outside the tests edits the tagged test that reads it', (t) => {
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { [`${dir}/a.test.mjs`]: receipt(true) },
+    commits: [{ files: { [`${dir}/a.test.mjs`]: receipt(false) }, message: `Drop the blank line\n\nPart of #${ISSUE}` }],
+  });
+  const result = proof(scene, ['guard']);
+  assert.ok(problems(result, 'guard').some((found) => found.includes(`${c1} separates items: changed`)), show(result));
+});
+
+test('a merge conflict resolved by dropping a blank line inside a template outside the tests fails the guard', (t) => {
+  const other = (n) => `test('other ${n}', () => {});\n`;
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { [`${dir}/a.test.mjs`]: receipt(true) + other(1) },
+    commits: [{ files: { [`${dir}/a.test.mjs`]: receipt(true) + other(2) }, message: `Work\n\nPart of #${ISSUE}` }],
+  });
+  const { cwd } = scene;
+  git(cwd, 'checkout', '-q', '-b', 'moved', 'origin/main');
+  write(cwd, { [`${dir}/a.test.mjs`]: receipt(true) + other(3) });
+  git(cwd, 'commit', '-q', '-am', 'main moves');
+  git(cwd, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  git(cwd, 'checkout', '-q', 'change');
+  assert.throws(() => git(cwd, 'merge', '-q', '-m', 'Merge main', 'origin/main'), undefined, 'the merge conflicts');
+  write(cwd, { [`${dir}/a.test.mjs`]: receipt(false) + other(2) });
+  git(cwd, 'commit', '-q', '-am', 'Merge main');
+  const result = proof(scene, ['guard']);
+  assert.ok(problems(result, 'guard').some((found) => found.includes('lines outside its tests changed in resolving a merge conflict')), show(result));
 });
