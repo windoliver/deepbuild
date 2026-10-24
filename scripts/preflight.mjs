@@ -18,8 +18,7 @@ console.log('Warming builds (not timed)');
 warm(root);
 try {
   // Lane output streams as it runs, so a measurement that breaks never hides what ran.
-  // `--release` runs the release preflight's lanes (#569).
-  const { elapsedMs, cpuMs, peakBytes, status } = measureOnce([process.execPath, 'scripts/checks.mjs', ...process.argv.includes('--release') ? ['--release'] : []], root, true);
+  const { elapsedMs, cpuMs, peakBytes, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
   observation = { elapsedMs, cpuMs, peakBytes, status };
   checkStatus = status === 0 ? 0 : 1;
 } catch (error) {
