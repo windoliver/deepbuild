@@ -50,8 +50,9 @@ export const checks = [
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
   // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
-  // lifecycle enumerator, crash suite and verdict replay when the change touches their paths.
-  { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs']], fix: 'Follow the Fix line under each proof lane finding above.' },
+  // lifecycle enumerator, crash suite and verdict replay when the change touches their paths. The release
+  // preflight adds the mutation lane and runs the lifecycle enumerator and crash suite in full.
+  { name: 'proof', commands: [[process.execPath, 'scripts/proof.mjs', ...(process.env.DEEP_PREFLIGHT === 'release' ? ['--release'] : [])]], fix: 'Follow the Fix line under each proof lane finding above.' },
   // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's
   // seeded claims and the rank-swap twins. Lean builds take a while, so the local preflight runs it only for a
   // change to the engine or the model; the release preflight always does.
@@ -61,8 +62,6 @@ export const checks = [
     fix: 'Repair the proof or build error each FAIL line names, keeping every theorem on Lean\'s standard axioms, or make the engine and packages/verdicts/model agree on the vector named; under BLOCKED, install the toolchain as its Fix line says.',
   },
 ];
-// The release preflight adds the mutation lane and runs the lifecycle enumerator and crash suite in full.
-export const releaseChecks = checks.map((lane) => (lane.name === 'proof' ? { ...lane, commands: [[process.execPath, 'scripts/proof.mjs', '--release']] } : lane));
 
 /**
  * The paths a change touches: every path that differs between the merge base with origin/main and the working
