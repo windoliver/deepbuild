@@ -60,7 +60,7 @@ export interface ExtensionHost {
   loaded(): Promise<Loaded[]>;
   checks(): Promise<{ kind: string; extension: string }[]>;
   runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult>;
-  /** Hands each event to the loaded packages subscribed to its kind, once they have all taken it. */
+  /** Hands each event to the loaded packages subscribed to its kind, once they have all taken it; rejects naming each that didn't. */
   deliver(events: Event[]): Promise<void>;
   /** The hub is ready: its socket listens and its replay is done. Packages loaded before it start now. */
   ready(): Promise<void>;
@@ -183,23 +183,22 @@ class Host implements ExtensionHost {
     // Read as data before any of its code runs; a symlink anywhere refuses the install.
     packageDigest(from.from);
     const project = from.project === undefined ? null : realpathSync(from.project);
-    const folder = join(this.options.home, 'extensions', id, version);
-    mkdirSync(dirname(folder), { recursive: true });
-    // Copied and read beside it first: a failed install leaves the installed copy as it was.
-    const copy = mkdtempSync(`${folder}.new-`);
-    let digest: string;
+    // A folder of its own for each install, in use once installed.json names it: an install that fails, or stops
+    // partway, leaves the one installed before as it was, its bytes with its grant and provenance.
+    mkdirSync(join(this.options.home, 'extensions', id), { recursive: true });
+    const folder = mkdtempSync(join(this.options.home, 'extensions', id, `${version}-`));
+    const before = this.entries[id];
+    let entry: Entry;
     try {
-      cpSync(from.from, copy, { recursive: true });
-      digest = packageDigest(copy);
+      cpSync(from.from, folder, { recursive: true });
+      entry = { id, version, folder, digest: packageDigest(folder), builtBy: from.builtBy, project, grant: { record: [...(from.grant?.record ?? [])] } };
+      this.save('installed.json', { ...this.entries, [id]: entry });
     } catch (e) {
-      rmSync(copy, { recursive: true, force: true });
+      rmSync(folder, { recursive: true, force: true });
       throw e;
     }
-    rmSync(folder, { recursive: true, force: true });
-    renameSync(copy, folder);
-    const entry: Entry = { id, version, folder, digest, builtBy: from.builtBy, project, grant: { record: [...(from.grant?.record ?? [])] } };
     this.entries[id] = entry;
-    this.save('installed.json', this.entries);
+    if (before) rmSync(before.folder, { recursive: true, force: true });
     return this.installedOf(entry);
   }
   private installedOf(e: Entry): Installed {
@@ -507,10 +506,13 @@ class Host implements ExtensionHost {
     }
   }
   async deliver(events: Event[]): Promise<void> {
+    const failed: string[] = [];
     await Promise.all([...this.exts.values()].map(async (ext) => {
       const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => JSON.parse(toJson(e)) as unknown);
-      if (mine.length && ext.ask && !(await this.revoked(ext))) await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch(() => undefined);
+      if (!mine.length || !ext.ask || (await this.revoked(ext))) return;
+      await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch((e) => failed.push(`${ext.entry.id}: ${message(e)}`));
     }));
+    if (failed.length) throw Error(`not every subscribed package took the events: ${failed.join('; ')}`);
   }
   async ready(): Promise<void> {
     if (this.isReady) return;
