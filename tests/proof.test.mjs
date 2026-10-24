@@ -65,3 +65,15 @@ test('a merge conflict resolved by dropping a blank line inside a template outsi
   const result = proof(scene, ['guard']);
   assert.ok(problems(result, 'guard').some((found) => found.includes('lines outside its tests changed in resolving a merge conflict')), show(result));
 });
+
+test('deleting an untagged test inside a suite, with the blank line before it, leaves the suite\'s tagged tests unedited', (t) => {
+  const suite = (extra) => `import assert from 'node:assert/strict';\nimport { describe, it } from 'node:test';\n\ndescribe('math', () => {\n  it('${c1} adds', () => {\n    assert.equal(1 + 1, 2);\n  });\n${extra ? "\n  it('old untagged check', () => {\n    assert.ok(true);\n  });\n" : ''}});\n`;
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { [`${dir}/a.test.mjs`]: suite(true) },
+    commits: [{ files: { [`${dir}/a.test.mjs`]: suite(false) }, message: `Drop an untagged test\n\nPart of #${ISSUE}` }],
+  });
+  const result = proof(scene, ['guard']);
+  assert.deepEqual(problems(result, 'guard'), [], show(result));
+  assert.equal(result.status, 0, show(result));
+});

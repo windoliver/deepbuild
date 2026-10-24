@@ -150,17 +150,22 @@ function testEdits(root, commit, file, before, relevant) {
   // A removed line holding code outside every test, such as a helper the tests read or one written
   // after a test on its line, edits every tagged test; a blank one, as a deleted test leaves, doesn't,
   // unless it lies inside a literal outside the tests, such as a blank line of an expected value.
+  // The same holds for a suite's own lines, outside the tests inside it.
+  const leaves = tests.filter((test) => test.leaf);
+  const bare = outsideTests(before, leaves).split('\n');
+  const starts = [0];
+  for (const text of bare) starts.push(starts.at(-1) + text.length + 1);
+  const data = literalsOutside(before, leaves);
+  const blank = (line) => !/[^\s;,]/.test(bare[line - 1] ?? '') && !data.some(([from, to]) => from < starts[line] && starts[line - 1] < to);
   const outside = outsideTests(before, tests).split('\n');
-  const starts = outside.reduce((list, text) => [...list, list.at(-1) + text.length + 1], [0]);
-  const data = literalsOutside(before, tests);
-  const loose = (line) => /[^\s;,]/.test(outside[line - 1] ?? '') || data.some(([from, to]) => from < starts[line] && starts[line - 1] < to);
+  const loose = (line) => /[^\s;,]/.test(outside[line - 1] ?? '') || (!inner(line) && !blank(line));
   for (const line of lines) {
     const test = inner(line);
     if (loose(line)) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
     if (!test) continue;
     if (tagsOf(test).length) hit.add(test);
     // A suite's own line, such as its describe.skip or a hook, edits the tagged tests inside it.
-    else for (const leaf of tagged.filter((inside) => inside.leaf && inside.from > test.from && inside.to <= test.to)) hit.add(leaf);
+    else if (!test.leaf && !blank(line)) for (const leaf of tagged.filter((inside) => inside.leaf && inside.from > test.from && inside.to <= test.to)) hit.add(leaf);
   }
   // An insertion lands between old lines oldStart and oldStart + 1: inside a tagged test when both are.
   for (const { oldStart, removed, added } of file.hunks) {
