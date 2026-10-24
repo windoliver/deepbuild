@@ -1,0 +1,94 @@
+// deep-hook's overhead and fail-open time, for the perf lane's budgets (issue #315): node benchmarks/deep-hook.mjs <mode>.
+// Each builds the release deep-hook, starts `deep hub run` on a temp home with two guard entries in rules.json,
+// does its work, prints its readings as one JSON line, and stops the hub it started by PID.
+//   overhead   hyperfine times 1,000 forwarded PreToolUse calls beside a native no-op binary, the floor:
+//              the p95 of deep-hook minus the p95 of the floor
+//   fail-open  50 PreToolUse calls against the hub stopped with SIGSTOP, each from spawn to exit: the p95
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const REPO = fileURLToPath(new URL('..', import.meta.url));
+const CLI = join(REPO, 'packages/cli/dist/main.js');
+const HOOK = join(REPO, 'target/release/deep-hook');
+const RULES = {
+  v: 1,
+  entries: {
+    'no-kill-by-name': { match: 'shell:pkill *', scope: 'all_repos', mode: 'block', reason: 'Never kill processes by name.', next_step: 'Stop the process by its PID.', fail_closed: true },
+    'listing-noted': { match: 'shell:ls*', scope: 'all_repos', mode: 'watch', reason: 'Listing is noted.', next_step: 'Nothing to do.', fail_closed: false },
+  },
+};
+const p95 = (samples) => [...samples].sort((a, b) => a - b)[Math.ceil(samples.length * 0.95) - 1];
+
+/** A home with rules.json and a running hub, and the PreToolUse JSON of one `ls` call in a session there. */
+async function setUp(home) {
+  mkdirSync(join(home, '.deepbuild'), { recursive: true });
+  writeFileSync(join(home, '.deepbuild', 'rules.json'), JSON.stringify(RULES));
+  const cwd = join(home, 'work');
+  mkdirSync(cwd);
+  const session = '6f1c2b9e-1111-4222-8333-444455556666';
+  const transcript = join(home, '.claude', 'projects', 'work', `${session}.jsonl`);
+  const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env: { ...process.env, HOME: home }, stdio: ['ignore', 'pipe', 'ignore'] });
+  await new Promise((resolve, reject) => {
+    hub.stdout.once('data', resolve);
+    hub.once('exit', () => reject(Error('the hub exited before it was ready')));
+  });
+  const call = { session_id: session, transcript_path: transcript, cwd, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: 'toolu_bench' };
+  return { hub, cwd, call: JSON.stringify(call) };
+}
+async function stop(hub) {
+  const exited = new Promise((resolve) => hub.on('exit', resolve));
+  hub.kill('SIGCONT');
+  hub.kill('SIGTERM');
+  await exited;
+}
+
+const modes = {
+  async overhead(home) {
+    // The floor is a build output like deep-hook, kept under target/ after the run.
+    const floor = join(REPO, 'target', 'release', 'noop');
+    writeFileSync(`${floor}.rs`, 'fn main() {}\n');
+    execFileSync('rustc', ['-C', 'opt-level=3', '-o', floor, `${floor}.rs`]);
+    const { hub, cwd, call } = await setUp(home);
+    try {
+      const input = join(home, 'call.json');
+      const out = join(home, 'hyperfine.json');
+      writeFileSync(input, call);
+      execFileSync('hyperfine', ['-N', '--runs', '1000', '--warmup', '20', '--input', input, '--export-json', out, floor, `${HOOK} claude-code PreToolUse`], { cwd, env: { ...process.env, HOME: home }, stdio: 'ignore' });
+      const { results } = JSON.parse(readFileSync(out, 'utf8'));
+      // hyperfine 2 exports measurements in place of times.
+      if (!results.every((r) => Array.isArray(r.times))) throw Error('BLOCKED: hyperfine exported no times; install hyperfine 1.x');
+      const [base, hook] = results.map((r) => r.times.map((t) => t * 1000));
+      return { floorP95Ms: p95(base), hookP95Ms: p95(hook), overheadP95Ms: p95(hook) - p95(base) };
+    } finally {
+      await stop(hub);
+    }
+  },
+  async 'fail-open'(home) {
+    const { hub, cwd, call } = await setUp(home);
+    hub.kill('SIGSTOP');
+    try {
+      const samples = [];
+      for (let i = 0; i < 50; i++) {
+        const t0 = performance.now();
+        const r = spawnSync(HOOK, ['claude-code', 'PreToolUse'], { cwd, env: { ...process.env, HOME: home }, input: call });
+        samples.push(performance.now() - t0);
+        if (r.status !== 0) throw Error(`deep-hook didn't allow ls with the hub stopped: exit ${r.status}`);
+      }
+      return { failOpenP95Ms: p95(samples) };
+    } finally {
+      await stop(hub);
+    }
+  },
+};
+
+const mode = process.argv[2];
+if (!modes[mode]) throw Error(`Unknown mode ${mode}; one of: ${Object.keys(modes).join(', ')}`);
+execFileSync('cargo', ['build', '--locked', '-q', '--release', '-p', 'deep-hook'], { cwd: REPO, stdio: 'inherit' });
+const home = realpathSync(mkdtempSync('/tmp/deep-hook-bench-'));
+try {
+  console.log(JSON.stringify({ bench: 'deep-hook', mode, ...(await modes[mode](home)) }));
+} finally {
+  rmSync(home, { recursive: true, force: true });
+}
