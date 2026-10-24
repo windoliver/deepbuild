@@ -55,6 +55,59 @@ fn a_hook_whose_stdin_never_ends_is_allowed_within_the_deadline() {
 }
 
 #[test]
+fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
+    use std::io::Write;
+    let home = std::env::temp_dir().join(format!("dh315-rules-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    // rules.json is a FIFO nobody writes: reading it never ends, and no hub is there.
+    let made = Command::new("/usr/bin/mkfifo")
+        .arg(home.join(".deepbuild/rules.json"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let start = std::time::Instant::now();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .args(["claude-code", "PreToolUse"])
+        .env_clear()
+        .env("HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(br#"{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"pkill -f node"}}"#)
+        .unwrap();
+    let exited = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if start.elapsed() > std::time::Duration::from_secs(1) {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    };
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    let status = exited.expect("deep-hook still waited on rules.json after a second");
+    assert_eq!(
+        status.code(),
+        Some(2),
+        "a call whose guards weren't read is denied, not allowed: {stderr}"
+    );
+    assert!(
+        stderr.contains("rules.json"),
+        "the denial names the rules it couldn't read: {stderr}"
+    );
+}
+
+#[test]
 fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
     use std::io::{BufRead, BufReader, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
