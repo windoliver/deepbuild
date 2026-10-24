@@ -37,6 +37,8 @@ const REACHED = 10_000;
 /** The reading a session gets for a turn with tool calls none of whose hooks reached the hub. */
 const HOOKS_MISSING = 'hooks not reaching DeepBuild';
 const TRANSCRIPT_STEP = 64 * 1024 * 1024;
+/** How long after the hub reads a turn's end it judges whether any of the turn's hooks reached it. */
+const TURN_GRACE = 100;
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -66,10 +68,12 @@ export interface CallContext { role: string; session?: string | null; parent?: {
 interface Session {
   id: string; agent: string; pid: number; start: string; cwd: string; transcript: string; ended: boolean;
   read: number; turn: Turn | undefined; closed: Turn[]; reached: Set<string>;
-  /** The latest start of a hook that came during a replay, whose judging waits for the replay's end. */
-  deferred?: number | undefined;
+  /** Whether its closed turns wait for a replay's end to be judged. */
+  deferred?: boolean;
+  /** The timer that judges its closed turns once their grace has passed. */
+  judging?: NodeJS.Timeout | undefined;
 }
-/** A turn of a transcript and its tool calls; a closed one, when its end was read. */
+/** A turn of a transcript and its tool calls; a closed one, with when the hub read its end (its monotonic clock). */
 interface Turn { uuid: string; calls: string[]; at?: number }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
 interface Stamp { session: string; tool: string; digest: string }
@@ -281,10 +285,9 @@ export class Core {
         // The turns that waited on the replay are judged now, after the hooks queued before.
         void this.queue(async () => {
           for (const session of this.sessions.values()) {
-            if (session.deferred === undefined) continue;
-            const started = session.deferred;
-            session.deferred = undefined;
-            this.judge(session, started);
+            if (!session.deferred) continue;
+            session.deferred = false;
+            this.judge(session);
           }
         }).catch(() => undefined);
         // What was spooled during the replay, and the files it kept if appends came back, are taken now.
@@ -341,10 +344,7 @@ export class Core {
     if (session && verified) {
       if (meta.toolUse) session.reached.add(meta.toolUse);
       await this.readTranscript(session);
-      // While a replay runs, a turn waits: one of its hooks may be in the spool.
-      const started = drafts[0]?.ts;
-      if (started !== undefined && this.replaying) session.deferred = Math.max(session.deferred ?? 0, started);
-      else if (started !== undefined) this.judge(session, started);
+      this.judge(session);
     }
     const count = this.counters.get(meta.session) ?? { msgs: 0, turns: 0, worked: false };
     this.counters.set(meta.session, count);
@@ -428,7 +428,7 @@ export class Core {
       const parts = Array.isArray(content) ? content.filter(isObj) : [];
       if (line.type === 'user' && !(parts.length && parts.every((c) => c.type === 'tool_result'))) {
         // A person's prompt ends the turn before it.
-        if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: Date.now() });
+        if (session.turn?.calls.length) session.closed.push({ ...session.turn, at: performance.now() });
         session.turn = { uuid: typeof line.uuid === 'string' && line.uuid ? line.uuid : `offset:${session.read}`, calls: [] };
       } else if (line.type === 'assistant' && session.turn) {
         for (const part of parts) if (part.type === 'tool_use' && typeof part.id === 'string') session.turn.calls.push(part.id);
@@ -437,11 +437,19 @@ export class Core {
   }
 
   /**
-   * Judges the turns whose end was read before this hook started: every hook sent before that read is in by now,
-   * since hooks are handled in the order they arrive. A turn none of whose calls reached the hub is recorded.
+   * Judges the turns whose end the hub read at least TURN_GRACE ago, on its own monotonic clock: a hook started
+   * before that read has reached the hub by then, since deep-hook gives up on the hub after 20 ms and spools. While
+   * a replay runs, or a spool waits for one, the turns wait for it: one of their hooks may be there. A turn none of
+   * whose calls reached the hub is recorded. Turns still in their grace are judged by a timer.
    */
-  private judge(session: Session, started: number): void {
-    while (session.closed[0] && session.closed[0].at! < started) {
+  private judge(session: Session): void {
+    if (session.closed.length) this.replayLate();
+    if (this.replaying) {
+      session.deferred = true;
+      return;
+    }
+    const now = performance.now();
+    while (session.closed[0] && now - session.closed[0].at! >= TURN_GRACE) {
       const turn = session.closed.shift()!;
       const reached = turn.calls.some((call) => session.reached.has(call));
       for (const call of turn.calls) session.reached.delete(call);
@@ -451,6 +459,13 @@ export class Core {
       void this.append(this.connection('core', { session: session.id, agent: session.agent }), {
         v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: HOOKS_MISSING },
       }).catch(() => undefined);
+    }
+    if (session.closed[0] && !session.judging && !this.stopping) {
+      session.judging = setTimeout(() => {
+        session.judging = undefined;
+        void this.queue(async () => this.judge(session)).catch(() => undefined);
+      }, Math.max(1, TURN_GRACE - (now - session.closed[0].at!)));
+      session.judging.unref();
     }
     // Calls no read turn holds (a subagent's) are forgotten oldest first.
     for (const call of session.reached) {

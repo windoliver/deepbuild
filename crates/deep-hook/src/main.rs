@@ -13,6 +13,8 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, io};
 
@@ -301,6 +303,8 @@ fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>
         Ok(ack) if member(&ack, "ack").is_some() && member(&ack, "v").is_some() => ack,
         _ => return (Some(request), down, ack_text),
     };
+    // The hub has the call: from here its hold, not the watchdog, says how long the hook waits.
+    ACKED.store(true, Ordering::SeqCst);
     // A reply is due by the hold the hub acknowledged, however far ahead; with no hold, by the same deadline.
     let due = match integer(member(&ack, "hold_until_ms")) {
         Some(ms) if !cfg!(feature = "plant-fixed-deadline") => {
@@ -425,6 +429,7 @@ fn spool_by(request: String, id: &str, start: Instant) {
 
 fn forward(agent: &str, event: &str) -> ExitCode {
     let start = Instant::now();
+    watchdog(start);
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
     let id = ulid(now / 1_000_000);
@@ -446,6 +451,16 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             _ => false,
         })
         .collect();
+    // With the hub away, a fail_closed entry the call matched still denies it.
+    if let Some(guard) = matched
+        .iter()
+        .find(|g| g.fail_closed && event == "PreToolUse")
+    {
+        let _ = DENIAL.set(format!(
+            "DeepBuild blocked this: {} {} (guard {}, which holds while the hub doesn't answer)",
+            guard.reason, guard.next_step, guard.name
+        ));
+    }
     let names = matched
         .iter()
         .map(|g| quoted(&g.name))
@@ -494,6 +509,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             stdout,
             stderr,
         } => {
+            decide();
             print!("{stdout}");
             eprint!("{stderr}");
             return ExitCode::from(exit);
@@ -509,21 +525,60 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         request.truncate(request.len() - 2);
         request.push_str(",\"late\":true}\n");
     }
-    // With the hub away, a fail_closed entry the call matched still denies it.
-    let denied = matched
-        .iter()
-        .find(|g| g.fail_closed && event == "PreToolUse");
+    decide();
     spool_by(request, &id, start);
-    match denied {
-        Some(guard) => {
-            eprintln!(
-                "DeepBuild blocked this: {} {} (guard {}, which holds while the hub doesn't answer)",
-                guard.reason, guard.next_step, guard.name
-            );
+    match DENIAL.get() {
+        Some(denial) => {
+            eprintln!("{denial}");
             ExitCode::from(2)
         }
         None => ExitCode::SUCCESS,
     }
+}
+
+/// Set once the hub has acknowledged the call; then the watchdog stands down.
+static ACKED: AtomicBool = AtomicBool::new(false);
+/// Set by whichever of the hook and its watchdog makes the decision first; the other stops.
+static DECIDED: AtomicBool = AtomicBool::new(false);
+/// What a matched fail_closed entry prints when it denies the call with the hub away.
+static DENIAL: OnceLock<String> = OnceLock::new();
+/// When, after the hook's start, the watchdog decides for a hook the hub hasn't acknowledged.
+const WATCHDOG: Duration = Duration::from_millis(48);
+
+/// Claims the decision for the hook; if the watchdog has it already, waits for the watchdog to end the process.
+fn decide() {
+    if DECIDED.swap(true, Ordering::SeqCst) {
+        loop {
+            std::thread::park();
+        }
+    }
+}
+
+/// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
+/// disk under rules.json): at WATCHDOG it exits with the decision for the hub away, deny when a fail_closed entry
+/// has matched and allow otherwise. That call isn't spooled; a turn of its tool calls then reads as not reaching
+/// the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
+fn watchdog(start: Instant) {
+    if cfg!(feature = "plant-connect-timeout-only") {
+        return;
+    }
+    #[cfg(debug_assertions)]
+    if stall().is_some() {
+        return;
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(WATCHDOG.saturating_sub(start.elapsed()));
+        if ACKED.load(Ordering::SeqCst) || DECIDED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        match DENIAL.get() {
+            Some(denial) => {
+                eprintln!("{denial}");
+                std::process::exit(2)
+            }
+            None => std::process::exit(0),
+        }
+    });
 }
 
 /// The account Claude Code records beside your sign-in: `oauthAccount.accountUuid` in ~/.claude.json.
