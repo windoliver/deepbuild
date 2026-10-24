@@ -203,6 +203,11 @@ class Host implements ExtensionHost {
     }
     this.entries[id] = entry;
     if (before) rmSync(before.folder, { recursive: true, force: true });
+    // The copy running is the install before: it stops, after any load of it under way.
+    await this.serial(id, async () => {
+      const running = this.exts.get(id);
+      if (running && running.entry !== entry) await this.unload(running);
+    });
     return this.installedOf(entry);
   }
   private installedOf(e: Entry): Installed {
@@ -281,12 +286,15 @@ class Host implements ExtensionHost {
   }
 
   async load(pkg: Installed): Promise<Load> {
-    // One load of a package at a time, so two callers can't each start a process of it.
-    const before = this.loading.get(pkg.id) ?? Promise.resolve();
-    const now = before.then(() => this.loadNow(pkg));
+    return this.serial(pkg.id, () => this.loadNow(pkg));
+  }
+  /** One load or unload of a package at a time, so two callers can't each start a process of it. */
+  private serial<T>(id: string, work: () => Promise<T>): Promise<T> {
+    const before = this.loading.get(id) ?? Promise.resolve();
+    const now = before.then(work);
     const settled = now.then(() => undefined, () => undefined);
-    this.loading.set(pkg.id, settled);
-    void settled.then(() => { if (this.loading.get(pkg.id) === settled) this.loading.delete(pkg.id); });
+    this.loading.set(id, settled);
+    void settled.then(() => { if (this.loading.get(id) === settled) this.loading.delete(id); });
     return now;
   }
   private async loadNow(pkg: Installed): Promise<Load> {
