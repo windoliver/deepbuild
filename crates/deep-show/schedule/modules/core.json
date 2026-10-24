@@ -1,0 +1,59 @@
+{
+  "module": "core",
+  "phases": {
+    "validate": [
+      {
+        "operator": "core.lower",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "core.lowered"
+        ],
+        "per": "item"
+      }
+    ],
+    "items": [
+      {
+        "operator": "core.fields",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.lowered"
+        ],
+        "writes": [
+          "core.fields"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.transform",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.lowered"
+        ],
+        "writes": [
+          "core.transform"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

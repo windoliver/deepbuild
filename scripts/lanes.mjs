@@ -16,9 +16,11 @@ export const testGlobs = (extension) => testPaths
 /** Vitest files a lane of their own runs, so the unit lane leaves them out. */
 const ownLane = ['tests/acceptance/684/lean.test.ts'];
 /** Vitest files the unit lane runs one at a time, after the parallel block (see the lane). */
-const alone = ['tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/',
+const alone = ['tests/acceptance/389/', 'tests/acceptance/390/', 'tests/acceptance/391/', 'tests/acceptance/392/', 'tests/acceptance/393/', 'tests/acceptance/394/', 'tests/acceptance/305/', 'tests/acceptance/387/', 'tests/acceptance/16/', 'tests/acceptance/373/', 'tests/acceptance/96/', 'tests/acceptance/374/', 'tests/acceptance/375/', 'tests/acceptance/670/', 'tests/acceptance/138/',
   'tests/acceptance/236/', 'tests/acceptance/30/', 'tests/acceptance/377/', 'tests/acceptance/14/budgets.test.ts', 'tests/acceptance/42/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts', 'tests/acceptance/311/budgets.test.ts', 'tests/acceptance/28/budgets.test.ts',
-  'tests/acceptance/319/budgets.test.ts'];
+  'tests/acceptance/319/budgets.test.ts', 'tests/acceptance/331/'];
+/** Vitest files run by hand, as their READMEs say: #685's proof checks need Lean 4.35 and Kani 0.68 installed, and minutes. */
+const byHand = ['tests/acceptance/685/'];
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -32,7 +34,7 @@ export const checks = [
     // that times an issue's frozen budget on the reference Mac (gated by environmentProblem()): #14's
     // 5,000 appends a second fell to 3,300-4,000/s beside the parallel block and passed alone. The
     // supervisor's files (#236) too: they read the system's one sandbox log stream.
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
     ['cargo', 'test', '--workspace', '--locked'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
@@ -48,6 +50,9 @@ export const checks = [
   // The fixture corpus (#47): every covered agent version has a recorded set holding each event its
   // facts list, each set replays clean through its adapter, and the corpus stays under 200 MB.
   { name: 'corpus', commands: [[process.execPath, 'scripts/corpus.mjs', 'check']], fix: 'Follow the Fix line under each corpus failure above.' },
+  // The canvas conformance kit over the shipped canvas modules (#138): every part, headless on Vello CPU and
+  // wgpu's noop backend, no GPU. It rewrites crates/deep-show/kit-ledger.json, which a release build seals by.
+  { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
   // The verdict table in Lean (#684): the model's proofs and their axioms, then the engine against the model's

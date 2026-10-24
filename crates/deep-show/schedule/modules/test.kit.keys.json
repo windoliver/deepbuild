@@ -1,0 +1,21 @@
+{
+  "module": "test.kit.keys",
+  "phases": {
+    "items": [
+      {
+        "operator": "test.kit.keys.value",
+        "module": "test.kit.keys",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "test.kit.keys.value"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

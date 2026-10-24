@@ -23,7 +23,7 @@ export function real(path: string): string {
   return parent === path ? path : join(real(parent), basename(path));
 }
 
-/** "127.0.0.1:4100" → "localhost:4100": Seatbelt filters outbound connections by port on this machine only. */
+/** "127.0.0.1:4100" → "localhost:4100": Seatbelt filters connections and binds by port on this machine only. */
 function egress(host: string): string {
   const m = /^(127\.0\.0\.1|localhost|\[::1\]):(\d{1,5})$/.exec(host);
   if (!m || Number(m[2]) > 65535) {
@@ -53,6 +53,7 @@ export function profile(run: string, cwd: string, grant: Grant, extra: readonly 
   ];
   if (grant.write?.length) rules.push(`(allow file-read* file-write* process-exec file-map-executable ${paths(grant.write)})`);
   if (grant.hosts?.length) rules.push(`(allow network-outbound ${grant.hosts.map((h) => `(remote ip ${quote(egress(h))})`).join(' ')})`);
+  if (grant.listen?.length) rules.push(`(allow network-bind network-inbound ${grant.listen.map((h) => `(local ip ${quote(egress(h))})`).join(' ')})`);
   if (grant.sockets?.length) rules.push(`(allow network-outbound ${grant.sockets.map((s) => `(remote unix-socket (path-literal ${quote(real(s))}))`).join(' ')})`);
   if (grant.run_as_you) {
     // Your files and programs, as you; still no device, no socket or host it doesn't name, and no system service

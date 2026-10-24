@@ -115,6 +115,17 @@ impl<'a> View<'a> {
         self.sealed.draws_as(kind)
     }
 
+    /// The `rect@1` params a canvas module's kind draws as, when it registered a drawing: the
+    /// build's kinds, not a read.
+    pub fn draw_of(&self, kind: &str) -> Option<crate::registry::DrawFn> {
+        self.sealed.draw_of(kind)
+    }
+
+    /// A module's item saved one or more majors back, migrated: the build's kinds again.
+    pub fn migrated(&self, item: &Value) -> Option<Value> {
+        self.sealed.migrated(item)
+    }
+
     /// Whether a sealed canvas module registered this kind: the build's kinds again.
     pub fn is_module_kind(&self, kind: &str) -> bool {
         crate::kinds::parse_kind(kind)
@@ -124,16 +135,31 @@ impl<'a> View<'a> {
     /// `self`: the item, or per document the document.
     pub fn item(&mut self) -> Result<&'a Value, OpError> {
         self.declared("self")?;
-        Ok(match self.node.item {
-            Some(i) => self.l.items[i].value.as_ref(),
-            None => self.l.doc.as_ref(),
+        let source = self.source();
+        Ok(match (self.node.item, source) {
+            (Some(i), Some(src)) => src.items[i].as_ref(),
+            (Some(i), None) => self.l.items[i].value.as_ref(),
+            (None, Some(src)) => src.doc.as_ref(),
+            (None, None) => self.l.doc.as_ref(),
         })
     }
 
     /// `refs`: the document the item belongs to, every section of it.
     pub fn document(&mut self) -> Result<&'a Value, OpError> {
         self.declared("refs")?;
-        Ok(self.l.doc.as_ref())
+        Ok(match self.source() {
+            Some(src) => src.doc.as_ref(),
+            None => self.l.doc.as_ref(),
+        })
+    }
+
+    /// What this node reads instead of its item and document, under a source perturbation of
+    /// an array its operator writes.
+    fn source(&self) -> Option<&'a super::Source> {
+        self.session
+            .source
+            .as_ref()
+            .filter(|src| src.op == self.node.op)
     }
 
     /// A node's value of `array`, or `input_failed` when its writer failed.

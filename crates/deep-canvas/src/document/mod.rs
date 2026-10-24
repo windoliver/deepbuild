@@ -29,10 +29,12 @@ mod transform;
 use serde_json::{json, Map, Value};
 
 pub use apply::{
-    apply, apply_ops, rollback, store_migrations, touched, writer_layer, ApplyResult, Patched,
-    Refused, Writing,
+    apply, apply_ops, rollback, store_migrations, touched, touched_in, writer_layer, ApplyResult,
+    Patched, Refused, Writing,
 };
-pub use check::{check, check_in, check_with, duration, recheck, CheckResult};
+pub use check::{
+    check, check_in, check_with, duration, recheck, recheck_skipping_referrers, CheckResult,
+};
 pub use merge::{merge, Merged};
 pub use order::key_between;
 pub use requires::{derived_kinds, write_required_kinds};
@@ -156,6 +158,8 @@ pub struct Issue {
     pub fix: String,
     /// The forms a field takes; only on `bad_unit`.
     pub forms: Vec<String>,
+    /// The fix as patch ops, where the code's fix is ops (the check catalog).
+    pub fix_ops: Option<Vec<Value>>,
 }
 
 impl Issue {
@@ -170,6 +174,7 @@ impl Issue {
             what: what.to_string(),
             fix: fix_for(code),
             forms: Vec::new(),
+            fix_ops: None,
         }
     }
 
@@ -193,6 +198,9 @@ impl Issue {
         out.insert("fix".into(), json!(self.fix));
         if self.code == "bad_unit" {
             out.insert("forms".into(), json!(self.forms));
+        }
+        if let Some(ops) = &self.fix_ops {
+            out.insert("fix_ops".into(), json!(ops));
         }
         Value::Object(out)
     }
@@ -228,8 +236,99 @@ impl Notice {
     }
 }
 
+/// The core's codes in the check catalog, each with what it means; its fix is [`fix_for`]'s
+/// (What holds a document to its rules: each code with its canvas module, meaning and fix).
+pub const CORE_CODES: &[(&str, &str)] = &[
+    (
+        "unknown_field",
+        "A field the kind or the envelope doesn't define at the document's minor.",
+    ),
+    (
+        "unknown_kind",
+        "An item of a kind no registry in this build holds.",
+    ),
+    (
+        "kind_too_new",
+        "An item saved at a major newer than this build knows.",
+    ),
+    (
+        "module_missing",
+        "The document needs a canvas module this build lacks.",
+    ),
+    (
+        "out_of_range",
+        "A value outside its type or range, or a required field absent.",
+    ),
+    (
+        "ref_unresolved",
+        "A reference to an ID, session or document that doesn't exist.",
+    ),
+    (
+        "cycle",
+        "An item that descends from itself through its parents.",
+    ),
+    (
+        "not_your_layer",
+        "A patch writes an item in another writer's layer.",
+    ),
+    (
+        "stale_base",
+        "Another writer changed what the patch touches since its base.",
+    ),
+    (
+        "undo_conflict",
+        "An undo by another writer, or over another writer's later change.",
+    ),
+    (
+        "over_quota",
+        "The writer's quota of patches, items or documents is spent.",
+    ),
+    (
+        "too_large",
+        "A message larger than the writer's quota lets it send.",
+    ),
+    ("bad_unit", "A literal in a unit the field doesn't take."),
+    (
+        "bad_path",
+        "A path that isn't <section>/<id>[#<sub>]/<field>.",
+    ),
+    (
+        "bad_handle",
+        "A handle that isn't <scheme>:<id>[#<fragment>].",
+    ),
+    ("bad_id", "An ID outside the ID grammar."),
+    (
+        "bad_time",
+        "A time that isn't a span the time grammar reads.",
+    ),
+    (
+        "bound_typed_over",
+        "A bound value's text typed over, where its reading shows.",
+    ),
+    (
+        "number_unsourced",
+        "A number in text with no reading or computation behind it.",
+    ),
+    (
+        "status_color_unbound",
+        "A status color painted with no status binding behind it.",
+    ),
+    (
+        "over_budget",
+        "The document's estimated frame CPU passes its budget.",
+    ),
+    (
+        "record_view",
+        "A patch to a view of the record, which is rebuilt, never patched.",
+    ),
+    (
+        "migrated",
+        "An item saved at an earlier major of its kind, migrated at load.",
+    ),
+];
+
 /// The one-line fix each code carries.
-fn fix_for(code: &str) -> String {
+pub fn fix_for(code: &str) -> String {
     match code {
         "unknown_field" => "Remove the field, or require the kind's minor that defines it.",
         "unknown_kind" => "Register the kind, or remove the item.",
@@ -253,6 +352,12 @@ fn fix_for(code: &str) -> String {
         }
         "status_color_unbound" => {
             "Bind the paint slot to a verdict, run, ask or session with a status binding."
+        }
+        "over_budget" => "Make the items cheaper, or fewer, so the frame fits its CPU budget.",
+        "record_view" => "Change the record, and the view is rebuilt from it.",
+        "too_large" => "Send a smaller patch, or split it.",
+        "migrated" => {
+            "Nothing to do: the item's writer stores the migrated form on its next patch."
         }
         _ => "See the issue.",
     }
@@ -486,7 +591,7 @@ mod tests {
         assert_eq!(bad.code, "out_of_range");
         let unknown = apply_ops(
             &mut out,
-            &patch(json!({"dry_run": true})),
+            &patch(json!({"preview": true})),
             "patch",
             "doc-1",
             &writing,

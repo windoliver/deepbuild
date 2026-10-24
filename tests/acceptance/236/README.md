@@ -208,7 +208,7 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
 | AC1 `#236.5dec450f` | a sandboxed piece's children get no devices | `devices.test.ts` (2): the piece and a helper it spawns, each device denied by the sandbox and not opened; the same with the app holding the permissions | the first fails (no package); the second is skipped INCONCLUSIVE where the app can't open every device outside the sandbox |
 | AC2 `#236.0c11913d` | no hub socket, no inbox socket, no turn | `hub.test.ts` AC2 (1), through the hub's `run.start` | fails: the probe connects to the hub's socket |
 | AC3 `#236.c43ad465` | undeclared read, write, network denied; digests by the parent | `contain.test.ts` AC3 (1) | fails (no package) |
-| AC4 `#236.cc0de139` | a read-only job's undeclared write refused by the sandbox, recorded | `contain.test.ts` AC4 (1): a job's child writing outside what the job declared; `blocked.test.ts` AC4 (1): the runner's job (#159) | both fail; the second stays BLOCKED until #159 |
+| AC4 `#236.cc0de139` | a read-only job's undeclared write refused by the sandbox, recorded | `contain.test.ts` AC4 (1): a job's child writing outside what the job declared; `dependents.test.ts` AC4 (1): the runner's job (#159), now tested through `openRunner` | both fail (no package; no runner at this base) |
 | AC5 `#236.6f5af6b7` | the suite fails the egress plant, naming egress; passes on Seatbelt | `suite.test.ts` AC5 (2) | fails (no package) |
 | AC6 `#236.347ac606` | a caller with no sandbox of its own still gets one | `contain.test.ts` AC6 (2): the run; the wrong program | fails (no package) |
 | AC7 `#236.61bc1ccd` | a decoy survives cleanup; a crash's leftovers are reaped on restart | `cleanup.test.ts` AC7 (1): the decoy; `hub.test.ts` AC7 (1): kill -9, restart from the record alone, decoy alive | both fail |
@@ -217,7 +217,7 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
 | AC10 `#236.e12544e6` | setsid helper and bare helper both stopped; lease after both | `cleanup.test.ts` AC10 (3): the run; two wrong programs | fails (no package) |
 | AC11 `#236.7688dfa8` | a late grandchild recorded when it appears and stopped | `cleanup.test.ts` AC11 (2): the run; the wrong program | fails (no package) |
 | AC12 `#236.114db9d6` | unfinished cleanup holds the next run, one unblock ask, "I did it", deadline | `pool.test.ts` AC12 (3): "I did it"; past the deadline; the wrong program | fails (no package) |
-| AC13 `#236.6e7cc737` | checks and environments only through `host@1`; a recording host | `host.test.ts` AC13 (1): `local` is `host@1`; `hub.test.ts` AC13 (2): the hub's check runs through a recording host, and its wrong program; `blocked.test.ts` AC13 (3): a command check (#30), an environment's stack (#36), a planted check kind | all fail; the three in `blocked.test.ts` stay BLOCKED until #30, #36 (and #349) land |
+| AC13 `#236.6e7cc737` | checks and environments only through `host@1`; a recording host | `host.test.ts` AC13 (1): `local` is `host@1`; `hub.test.ts` AC13 (2): the hub's check runs through a recording host, and its wrong program; `dependents.test.ts` AC13 (3): a command check (#30), an environment's stack (#36), a planted check kind, now tested through `runCommandCheck`, `deep env up`/`down` and `commandCheckKind` | all fail (no package; no command check kind or environments at this base) |
 
 ### How each criterion is read
 
@@ -242,8 +242,8 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
   rest.
 - **AC4.** The supervisor's half: a job's child (its MCP server, say) writes into the job's own folder, which the
   job didn't declare writable; the sandbox refuses it with `EPERM` and the record gets `sandbox.denied` naming the
-  run and the path within 15 s. A read-only job started by the runner of #159 has no surface at this base:
-  `blocked.test.ts` fails BLOCKED until it does.
+  run and the path within 15 s. The runner's half, a read-only job started by #159's runner whose MCP server
+  writes outside what the job declared, is now tested in `dependents.test.ts` (What depends on other issues).
 - **AC5, AC9, the suite and its plants.** The suite is the implementation's kit, and so are its broken fakes. So a
   suite that knows its plants by name can't pass: each plant must fail exactly its own case of the nine and pass
   the other eight, and the test then runs a probe of its own through the plant's `confine` and through
@@ -280,8 +280,8 @@ the criterion says; the scenario itself must run, so a plant that doesn't start 
   the test's clock, then `asks.tick()` and `sup.tick()`. The wrong program's failure names the number.
 - **AC13.** Split in three: the supervisor is `host@1`'s `local` (`host.test.ts`); the hub's check runs go only
   through the host the harness puts in place (`hub.test.ts`, with `DEEP_HUB_TEST_HOST` and its wrong program);
-  and the command check kind and the environment's stack, which have no surface at this base
-  (`blocked.test.ts`).
+  and the command check kind, the environment's stack and a planted check kind that spawns a child itself, now
+  tested in `dependents.test.ts` (What depends on other issues).
 
 ## Wrong programs
 
@@ -306,17 +306,40 @@ the mutation lane is their wrong program.
 
 ## What depends on other issues
 
-- **#159, the runner**: AC4's read-only job through the runner. `blocked.test.ts` fails BLOCKED until #159 has a
-  surface; its sandbox half (the job's child refused and recorded) is tested here through the supervisor.
-- **#30, command checks**, and **#349, extension slots**: AC13's command check and its planted check kind that
-  spawns a child itself. BLOCKED until they land. The hub's own check runs (`run.start`, #16's stand-in for them)
-  are tested through the recording host now.
-- **#36 (#331), environments**: AC13's environment's stack. BLOCKED until it lands.
+These halves were BLOCKED in this job's first draft and are written, in its one redraft, against the surfaces the
+dependency issues published (`dependents.test.ts`):
+
+- **#159, the runner**: AC4's read-only job, started through `@deepbuild/runner`'s `openRunner` on the real
+  record, asks core, budget ledger and supervisor. Claude Code is the boundary DeepBuild doesn't own, so its
+  stand-in is #159's fake CLI (`tests/acceptance/159/fixtures/fake-claude.pl`), which starts the job's stdio MCP
+  servers in its folder; the sign-in under the temp `HOME` is made up. The job's MCP server writes into the job's
+  folder and into a folder nobody declared; each write must leave no file and be recorded as `sandbox.denied` with
+  `run` the job's run (`JobRecord.job`), the path as `target` and a write as `operation`. The sandbox half through
+  the supervisor alone stays in `contain.test.ts`.
+- **#30, command checks**: AC13's command check, run with `runCommandCheck` once on `local` (the supervisor) and
+  once through a recording `host@1` wrapping it. The recording must show the run's start and wait and nothing for
+  another run, and outcome, tests run, failures, attempts, exit, output digests and evidence must be equal. The
+  suite is one `node:test` file whose console report goes to `/dev/null` (it prints durations), so the digests can
+  be compared. "Every start" is read from outside the host: while the check runs, the test lists every process whose
+  command line holds the scenario's marker (the test file's name) and requires each one's process group to be the
+  group of a start the recording shows.
+- **The planted check kind** (AC13's wrong program): a `check.kind@1` fill built from `commandCheckKind(host)`
+  whose `run` first runs the check's command itself, with `child_process`, then hands on to the honest kind. The
+  same harness passes on `commandCheckKind` and must fail on the plant with "the check kind command-spawns-itself
+  started a process the host's log doesn't show". Installing it in the hub through #349's extension slots isn't
+  needed for this: the harness runs the fill directly, as the slot would.
+- **#36 (#331), environments**: AC13's environment's stack, through a dev hub started with `DEEP_HUB_TEST_HOST`
+  (a recording module like `hub.test.ts`'s, which also logs each start's group) and `deep env up` / `deep env down
+  --root --json` in a folder whose `.deepbuild/done.yaml` runs a small Perl HTTP server on a leased `PORT`. The log
+  must show the stack's run started, signalled and waited for, every marked process of the stack must be in a group
+  a start names, and the stack must be gone after `down`.
+- The hub's own check runs (`run.start`, #16's stand-in for them) are tested through the recording host in
+  `hub.test.ts`.
 - **#70, the Linux backend**, and Windows: not tested here; each runs the same `sandboxSuite` when it lands.
 - **The reference Mac**: AC1's second test and AC8's number count only there (above).
 
-So a PR for #236 that passes everything else says `Part of #236` and lists AC4's runner half and AC13's check
-kind and environment halves as open, until those issues land and a blind redraft of this job tests them.
+With those halves tested, no criterion of #236 waits on another issue's surface. A PR still says `Closes #236`
+only when every test passes, the reference-Mac readings (AC1's second test, AC8's number) included.
 
 ## Files
 
@@ -325,7 +348,9 @@ kind and environment halves as open, until those issues land and a blind redraft
 - `world.ts`: a record, the asks core and the supervisor opened on them, with a clock the test moves.
 - `devices.test.ts` (AC1), `contain.test.ts` (AC3, AC4, AC6), `suite.test.ts` (AC5, AC9), `cleanup.test.ts`
   (AC7, AC10, AC11), `pool.test.ts` (AC12), `hub.test.ts` (AC2, AC7, AC13), `host.test.ts` (AC13),
-  `budgets.test.ts` (AC8), `blocked.test.ts` (AC4, AC13).
+  `budgets.test.ts` (AC8), `dependents.test.ts` (AC4's runner half; AC13's command check, environment and planted
+  check kind; it replaced the first draft's `blocked.test.ts`, and builds Claude Code's stand-in from #159's
+  `fixtures/fake-claude.pl`, its recording hosts and its process-table watch itself).
 - `fixtures/probe.c` (tries reads, writes, connects and spawns, and writes what happened), `fixtures/tree.c` (the
   process trees of AC7, AC10 and AC11), `fixtures/devices.m` (AC1, AC9's camera).
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.

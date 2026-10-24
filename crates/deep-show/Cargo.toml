@@ -48,6 +48,45 @@ test-step = ["dep:deep-canvas-test-modules"]
 test-step-renamed = ["dep:deep-canvas-test-modules"]
 test-step-cycle = ["dep:deep-canvas-test-modules"]
 test-scatter = ["dep:deep-canvas-test-modules"]
+# Issue #138: the canvas conformance kit's test canvas modules (the #138 acceptance README: The
+# test canvas modules), each a clean module or its planted twin, never in a shipped build.
+test-kit = []
+test-kit-crash = ["test-kit"]
+test-kit-blind = ["test-kit"]
+test-kit-blind-fixed = ["test-kit"]
+test-kit-noisy = ["test-kit"]
+test-kit-noisy-fixed = ["test-kit"]
+test-kit-fixer = ["test-kit"]
+test-kit-fixer-dangles = ["test-kit"]
+test-kit-fixer-unproved = ["test-kit"]
+test-kit-rogue = ["test-kit"]
+test-kit-rogue-listed = ["test-kit"]
+test-kit-carry = ["test-kit"]
+test-kit-carry-drops-hits = ["test-kit"]
+test-kit-tally = ["test-kit"]
+test-kit-tally-keeps-occurrence = ["test-kit"]
+test-kit-tally-skips-restored = ["test-kit"]
+test-kit-cover = ["test-kit"]
+test-kit-cover-fixed = ["test-kit"]
+test-kit-snap = ["test-kit"]
+test-kit-snap-off = ["test-kit"]
+test-kit-glyphs = ["test-kit"]
+test-kit-glyphs-no-box = ["test-kit"]
+test-kit-keys = ["test-kit"]
+test-kit-keys-kept-index = ["test-kit"]
+test-kit-formula = ["test-kit"]
+test-kit-gpu-pass = ["test-kit"]
+test-kit-gpu-pass-shifted = ["test-kit"]
+test-kit-gpu-pass-cpu-ref-fails = ["test-kit"]
+test-kit-sneak = ["test-kit"]
+test-kit-order = ["test-kit"]
+test-kit-mig-1 = ["test-kit"]
+test-kit-mig-2 = ["test-kit"]
+test-kit-mig-2-moves = ["test-kit"]
+test-kit-mig-2-overflow = ["test-kit"]
+test-kit-loose = ["test-kit"]
+test-kit-selfish = ["test-kit"]
+test-kit-selfish-analytic = ["test-kit"]
 
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
@@ -60,8 +99,11 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
+# Issue #138: the kit's headless backend (wgpu's noop) and its GPU backend.
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "metal"] }
 deep-replica = { path = "../deep-replica" }
 deep-text-gpui = { path = "../deep-text-gpui" }
 gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
