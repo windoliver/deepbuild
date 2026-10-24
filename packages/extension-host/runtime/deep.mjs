@@ -82,12 +82,14 @@ export function extensionSide(call, load) {
   };
 }
 
-/** A JSON-RPC 2.0 peer on a duplex stream: `serve(method, params)` answers the other side's requests. */
-/** The longest line either side reads, in characters. */
+/** The longest line either side reads, in bytes. */
 const FRAME = 16 * 1024 * 1024;
+/** A JSON-RPC 2.0 peer on a duplex stream: `serve(method, params)` answers the other side's requests. */
 export function peer(stream, serve) {
   let next = 0;
-  let buffer = '';
+  /** The bytes of a line not yet ended, and how many. */
+  let held = [];
+  let size = 0;
   const pending = new Map();
   const send = (message) => stream.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`);
   const answer = (id, body) => { if (id !== undefined && id !== null) send({ id, ...body }); };
@@ -106,17 +108,21 @@ export function peer(stream, serve) {
       else waiting.resolve(m.result);
     }
   };
-  stream.setEncoding('utf8');
   stream.on('data', (chunk) => {
-    buffer += chunk;
-    for (let at = buffer.indexOf('\n'); at >= 0; at = buffer.indexOf('\n')) {
-      if (at > FRAME) return void stream.destroy();
-      const line = buffer.slice(0, at);
-      buffer = buffer.slice(at + 1);
+    let start = 0;
+    for (let at = chunk.indexOf(10); at >= 0; at = chunk.indexOf(10, start)) {
+      // A line no message needs: the other side is cut off rather than held in memory.
+      if (size + at - start > FRAME) return void stream.destroy();
+      held.push(chunk.subarray(start, at));
+      const line = Buffer.concat(held).toString('utf8');
+      held = [];
+      size = 0;
+      start = at + 1;
       if (line.trim()) receive(line);
     }
-    // A line no message needs: the other side is cut off rather than held in memory.
-    if (buffer.length > FRAME) stream.destroy();
+    held.push(chunk.subarray(start));
+    size += chunk.length - start;
+    if (size > FRAME) stream.destroy();
   });
   stream.on('error', () => undefined);
   stream.on('close', () => {

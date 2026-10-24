@@ -323,6 +323,16 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect(stream.destroyed).toBe(true);
   });
 
+  it('the 16 MiB limit is on bytes: a line of 6 Mi three-byte characters is never parsed', async () => {
+    const stream = new PassThrough();
+    const served: string[] = [];
+    peer(stream, async (method) => { served.push(method); return null; });
+    stream.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'deep.config.get', params: ['\u20ac'.repeat(6 * 1024 * 1024)] })}\n`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(served).toEqual([]);
+    expect(stream.destroyed).toBe(true);
+  });
+
   it('a reinstall of the same version that fails leaves the installed copy as it was: it still loads and runs', async () => {
     const h = await host();
     const first = await h.install({ from: stuck(PASSES), builtBy: null });
