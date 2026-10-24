@@ -151,6 +151,8 @@ class Host implements ExtensionHost {
   private readonly exts = new Map<string, Ext>();
   private readonly loading = new Map<string, Promise<void>>();
   private isReady = false;
+  /** The starts of the packages loaded before ready, once ready runs. */
+  private starting: Promise<void> = Promise.resolve();
   private closed = false;
 
   constructor(private readonly options: ExtensionHostOptions) {
@@ -515,11 +517,15 @@ class Host implements ExtensionHost {
     if (failed.length) throw Error(`not every subscribed package took the events: ${failed.join('; ')}`);
   }
   async ready(): Promise<void> {
-    if (this.isReady) return;
+    if (this.isReady) return this.starting;
     this.isReady = true;
-    for (const ext of [...this.exts.values()]) {
-      if (!ext.ask) await this.start(ext).then(async () => { if (this.closed) await this.unload(ext); }, () => this.unload(ext));
-    }
+    this.starting = (async () => {
+      for (const ext of [...this.exts.values()]) {
+        if (this.closed) return;
+        if (!ext.ask) await this.start(ext).then(async () => { if (this.closed) await this.unload(ext); }, () => this.unload(ext));
+      }
+    })();
+    return this.starting;
   }
 
   async turnOn(id: string, routes: string[]): Promise<{ address: string }> {
@@ -589,7 +595,8 @@ class Host implements ExtensionHost {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    // Loads under way finish first, each then unloaded here, so none leaves a process behind.
+    // Starts and loads under way finish first, each then unloaded here, so none leaves a process behind.
+    await this.starting;
     await Promise.all(this.loading.values());
     for (const ext of [...this.exts.values()]) await this.unload(ext);
   }
