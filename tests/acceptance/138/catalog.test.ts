@@ -5,16 +5,14 @@
 // no `fix_ops` and no `test-kit-rogue*` or `test-kit-fixer*` feature.
 import { describe, expect, it } from 'vitest';
 import {
-  CATALOG, MANIFEST, arr, expectFailure, failuresIn, kit, moduleOf, obj, partIn, run, scenario, show, sorted, str, strs, useBuilds, useEvidence,
+  CATALOG, MANIFEST, arr, failuresIn, kit, moduleOf, obj, partIn, run, scenario, show, sorted, str, strs, useBuilds, useEvidence,
   type Build, type Case,
 } from './helpers.ts';
 
-const ROGUE: Build = { set: 'full', with: ['test-kit-rogue'] };
+// The first drafts of three tests here were replaced by their blind redrafts in catalog-redraft.test.ts (README).
 const ROGUE_LISTED: Build = { set: 'full', with: ['test-kit-rogue-listed'] };
 const FIXER: Build = { set: 'full', with: ['test-kit-fixer'] };
-const DANGLES: Build = { set: 'full', with: ['test-kit-fixer-dangles'] };
-const UNPROVED: Build = { set: 'full', with: ['test-kit-fixer-unproved'] };
-const builds = useBuilds([ROGUE, ROGUE_LISTED, FIXER, DANGLES, UNPROVED]);
+const builds = useBuilds([ROGUE_LISTED, FIXER]);
 const evidence = useEvidence();
 
 interface Entry { code: string; module: string; meaning: string; fix: string; fix_ops: boolean; fixture: string }
@@ -30,13 +28,6 @@ function catalogOf(build: Build): Entry[] {
 }
 
 describe('#138.9e9940d1 a code the catalog doesn\'t list fails the kit; every catalog code has a planted fixture that emits it with its meaning and fix', () => {
-  it('#138.9e9940d1 test.kit.rogue, whose check can emit test.kit.rogue.unlisted, fails the kit\'s catalog part naming the code', () => {
-    const r = kit(builds.bin(ROGUE), evidence(), { modules: ['test.kit.rogue'], parts: ['catalog'] });
-    const m = moduleOf(r, 'test.kit.rogue');
-    expect(m.verdict).toBe('FAIL');
-    expectFailure(failuresIn(m, 'catalog'), 'uncatalogued', { code: 'test.kit.rogue.unlisted' }, 'the rogue module');
-  }, 1_800_000);
-
   it('#138.9e9940d1 the same module with the code in the catalog (test-kit-rogue-listed) passes, and the catalog names its module, meaning and fix', () => {
     const r = kit(builds.bin(ROGUE_LISTED), evidence(), { modules: ['test.kit.rogue'], parts: ['catalog'] });
     expect(partIn(moduleOf(r, 'test.kit.rogue'), 'catalog').verdict, `${show(failuresIn(moduleOf(r, 'test.kit.rogue')))}`).toBe('PASS');
@@ -82,20 +73,5 @@ describe('#138.c7f79e24 a fix given as patch ops is applied on each kit fixture 
     expect(strs(c.raw['second_check'], 'second_check'), 'the second check returns the fixture\'s other codes: none').toEqual([]);
     expect(c.verdict).toBe('PASS');
     expect(catalogOf(FIXER).find((e) => e.code === 'test.kit.fixer.x_odd')?.fix_ops, 'x_odd\'s fix is text').toBe(false);
-  }, 1_800_000);
-
-  it('#138.c7f79e24 a planted ops fix that clears its issue but adds ref_unresolved (test-kit-fixer-dangles) fails, naming the code', () => {
-    const r = kit(builds.bin(DANGLES), evidence(), { modules: ['test.kit.fixer'], parts: ['catalog'] });
-    const m = moduleOf(r, 'test.kit.fixer');
-    expect(m.verdict).toBe('FAIL');
-    const f = expectFailure(failuresIn(m, 'catalog'), 'ops_fix', { code: 'test.kit.fixer.y_over' }, 'the dangling fix');
-    expect(f['added'], 'it names the code the fix added').toEqual(['ref_unresolved']);
-  }, 1_800_000);
-
-  it('#138.c7f79e24 an ops fix that no fixture applied (test-kit-fixer-unproved) fails the kit, naming the code', () => {
-    const r = kit(builds.bin(UNPROVED), evidence(), { modules: ['test.kit.fixer'], parts: ['catalog'] });
-    const m = moduleOf(r, 'test.kit.fixer');
-    expect(m.verdict).toBe('FAIL');
-    expectFailure(failuresIn(m, 'catalog'), 'unproved_fix', { code: 'test.kit.fixer.y_under' }, 'the unproved ops fix');
   }, 1_800_000);
 });
