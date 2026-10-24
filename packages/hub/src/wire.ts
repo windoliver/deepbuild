@@ -46,6 +46,10 @@ export function ulid(ms: number): string {
   for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
   return out + tail;
 }
+/** The time a ULID was minted at, in ms. */
+export function ulidTime(id: string): number {
+  return [...id.slice(0, 10)].reduce((ms, c) => ms * 32 + CROCKFORD.indexOf(c), 0);
+}
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' }
