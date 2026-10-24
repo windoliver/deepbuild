@@ -137,22 +137,52 @@ fn guards() -> Result<Vec<Guard>, String> {
     let Some(Value::Object(entries)) = member(&rules, "entries") else {
         return Err("has no entries object".to_string());
     };
-    let text = |entry: &Value, key: &str| match member(entry, key) {
-        Some(Value::String(s)) => s.clone(),
-        _ => String::new(),
-    };
-    Ok(entries
+    entries
         .iter()
-        .map(|(name, entry)| Guard {
-            name: name.clone(),
-            pattern: text(entry, "match")
-                .strip_prefix("shell:")
-                .map(str::to_string),
-            fail_closed: matches!(member(entry, "fail_closed"), Some(Value::Bool(true))),
-            reason: text(entry, "reason"),
-            next_step: text(entry, "next_step"),
+        .map(|(name, entry)| {
+            guard(name, entry)
+                .ok_or_else(|| format!("has an entry {name} that isn't a guard@1 entry"))
         })
-        .collect())
+        .collect()
+}
+
+/// One entry as guard@1 has it: every field there and of its type, and no other; None when it isn't one.
+fn guard(name: &str, entry: &Value) -> Option<Guard> {
+    let Value::Object(fields) = entry else {
+        return None;
+    };
+    const FIELDS: [&str; 6] = [
+        "match",
+        "scope",
+        "mode",
+        "reason",
+        "next_step",
+        "fail_closed",
+    ];
+    if fields
+        .iter()
+        .any(|(key, _)| !FIELDS.contains(&key.as_str()))
+    {
+        return None;
+    }
+    let text = |key: &str| match member(entry, key) {
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        _ => None,
+    };
+    let Some(Value::Bool(fail_closed)) = member(entry, "fail_closed") else {
+        return None;
+    };
+    text("scope")?;
+    if !["watch", "warn", "block"].contains(&text("mode")?.as_str()) {
+        return None;
+    }
+    Some(Guard {
+        name: name.to_string(),
+        pattern: text("match")?.strip_prefix("shell:").map(str::to_string),
+        fail_closed: *fail_closed,
+        reason: text("reason")?,
+        next_step: text("next_step")?,
+    })
 }
 
 /// The shell command a call runs: a Bash tool call's `tool_input.command`.

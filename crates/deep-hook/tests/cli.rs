@@ -111,12 +111,32 @@ fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
 fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
-    let valid = r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","fail_closed":true,"reason":"r","next_step":"n"}}}"#;
+    let valid = r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#;
     for (case, text, mode) in [
         ("truncated", &valid[..40], 0o600),
         ("not JSON", "rules", 0o600),
         ("no entries object", r#"{"v":1,"entries":[]}"#, 0o600),
         ("unreadable", valid, 0o000),
+        (
+            "an entry that isn't an object",
+            r#"{"v":1,"entries":{"no-kill-by-name":"shell:pkill *"}}"#,
+            0o600,
+        ),
+        (
+            "fail_closed as a string",
+            &valid.replace("true", "\"true\""),
+            0o600,
+        ),
+        (
+            "an entry with no match",
+            &valid.replace(r#""match":"shell:pkill *","#, ""),
+            0o600,
+        ),
+        (
+            "an entry with an unknown mode",
+            &valid.replace("block", "stop"),
+            0o600,
+        ),
     ] {
         let home = std::env::temp_dir().join(format!("dh315-bad-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
