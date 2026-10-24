@@ -11,8 +11,8 @@ to the same nanosecond get different IDs, and both are in the record (redraft)")
 - "AC7 hub stopped, then started: two PreToolUse hooks of one session stamped …790 are spooled with that stamp and two
   different IDs, and are two events stamped …790"
 
-It imports the suite's `helpers.ts` unchanged. No other file was edited: `spool.test.ts` still holds the first draft's
-AC7, and the owner decides whether this redraft replaces it.
+It imports the suite's `helpers.ts` unchanged. The owner approved it as AC7's proof; the first draft's AC7 was then
+removed from `spool.test.ts`.
 
 ## The dispute
 

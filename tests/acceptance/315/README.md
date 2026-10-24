@@ -211,7 +211,7 @@ criterion says; the scenario itself must run (a plant that doesn't build or star
 | AC4 `#315.bf6d3707` | hooks run while the hub was stopped are recorded after it starts, in order, none lost | `spool.test.ts` AC4 (1) |
 | AC5 `#315.f8b9a600` | a turn with tool calls and no hook event shows "hooks not reaching DeepBuild" | `reading.test.ts` AC5 (1): the quiet session and the control |
 | AC6 `#315.8366a61c` | fixed stamps …789 and …790 spooled exactly, recorded in order; a second replay appends nothing | `spool.test.ts` AC6 (1) |
-| AC7 `#315.2a5a4d2b` | the same nanosecond twice: two IDs, both recorded | `spool.test.ts` AC7 (1): hub up and through the spool |
+| AC7 `#315.2a5a4d2b` | the same nanosecond twice: two IDs, both recorded | `spool-ac7-redraft.test.ts` AC7 (2): hub up; through the spool (blind redraft, AC7-REDRAFT.md) |
 | AC8 `#315.515d4e08` | budgets on the reference Mac, against the merge base | `budgets.test.ts` AC8 (6): the perf lane's tasks; each bench runs (2); overhead; fail open; peak memory and binary size |
 | AC9 `#315.23cd76ed` | overhead measured with hyperfine against a native no-op floor | `budgets.test.ts` AC9 (1) |
 | AC10 `#315.787a7ca4` | 1,000 spooled by eight processes, one killed mid-write: each exited event once, the cut recorded with its offset, lines after it kept | `cut.test.ts` AC10 (2): the run; the wrong program |
@@ -248,7 +248,7 @@ The base itself is the wrong program for the rest (BASE-FAILURE.txt).
   timing judge.
 - `fixtures/test-hub.mjs`: the four test hubs.
 - `failopen.test.ts` (AC1, AC13), `budgets.test.ts` (AC2, AC8, AC9), `billing.test.ts` (AC3), `spool.test.ts` (AC4,
-  AC6, AC7), `reading.test.ts` (AC5), `cut.test.ts` (AC10, AC11), `refusal.test.ts` (AC12).
+  AC6), `spool-ac7-redraft.test.ts` (AC7), `reading.test.ts` (AC5), `cut.test.ts` (AC10, AC11), `refusal.test.ts` (AC12).
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run on the base commit: 22 of the 23 tests fail, each for the reason its header gives. AC4
   passes there: #16 already built deep-hook's spooling and the hub's replay at start, which for hooks run one after
