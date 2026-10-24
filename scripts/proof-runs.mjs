@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSyn
 import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { addedLines, git, isTestFile, listFiles, named, show, spans, tagsIn, tagsWithImports, testImports, testPattern, underTestPaths } from './proof-change.mjs';
+import { addedLines, git, isTestFile, listFiles, named, outsideTests, show, spans, tagsIn, tagsWithImports, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
 const REPORTER = pathToFileURL(fileURLToPath(new URL('./proof-reporter.mjs', import.meta.url))).href;
 const VITEST_REPORTER = fileURLToPath(new URL('./proof-vitest-reporter.mjs', import.meta.url));
@@ -301,11 +301,19 @@ export function prepareRuns({ root, change, issue }, { coverage = false } = {}) 
     const span = sourceSpans.get(path).find((candidate) => candidate.name === name);
     return lines === true || Boolean(lines && (!span || lines.some((line) => span.start <= line && line <= span.end)));
   };
-  // A test the change could have skipped as it runs: one it edits, or in a file it touches, or one
-  // that file imports, such as where a hook is added.
-  const near = new Map(files.map((path) => [path, [...testImports(root, null, path).keys()].some((file) => touched.has(file))]));
-  const skippable = ({ path, name }) => near.get(path) && !sourceSpans.get(path).some((span) => span.leaf && span.skipped && span.name === name);
-  runs.tests = [...runs.head.results.entries()].map(([key, result]) => ({ key, ...result, changed: changed(result), skippable: skippable(result), tags: tagsIn(result.name).filter((tag) => counts(tag, result.path)) })).filter(({ tags }) => tags.length);
+  // A test the change could have skipped as it runs, where its merge base run can't show it: one it
+  // edits, or one whose file, or a file under the test paths that file imports, the change edits
+  // outside every test, such as where a hook is added. Adding a test beside it is no such edit.
+  const bare = (rev, file) => {
+    const text = show(root, rev, file) ?? '';
+    return outsideTests(text, spans(text).filter(({ leaf }) => leaf)).replace(/\s+/g, '');
+  };
+  const reached = new Map(files.map((path) => [path, [...testImports(root, null, path).keys()].some((file) => touched.has(file) && bare(change.base, file) !== bare(null, file))]));
+  const declaredSkipped = ({ path, name }) => sourceSpans.get(path).some((span) => span.leaf && span.skipped && span.name === name);
+  runs.tests = [...runs.head.results.entries()].map(([key, result]) => {
+    const isChanged = changed(result);
+    return { key, ...result, changed: isChanged, declaredSkipped: declaredSkipped(result), reached: isChanged || reached.get(result.path), tags: tagsIn(result.name).filter((tag) => counts(tag, result.path)) };
+  }).filter(({ tags }) => tags.length);
   // A tagged test the source declares and doesn't skip must show in the runner's report: one the
   // runner never reached is no test that passed. A helper's test may run under a suite around its
   // call, so a reported name ending in the declared one counts; a test that skips itself as it runs
@@ -391,10 +399,13 @@ export function before(runs, kills, say, print) {
   for (const path of runs.only ?? []) say('FAIL', 'before', `${path}: a .only in the file keeps its other tagged tests from running`, BEFORE_FIX);
   for (const test of runs.tests) {
     if (quiet(test.status)) {
-      // The trace lane counts it as no test. One the source declares unskipped, in a file the change
-      // reaches, skipped itself as it ran or was skipped by code around it, such as an added hook:
-      // it proved nothing in this run.
-      if (test.skippable) say('INCONCLUSIVE', 'before', `${test.key}: declared unskipped, but skipped as it ran on the change, so it proved nothing in this run`, BEFORE_FIX);
+      // The trace lane counts it as no test. One the source declares unskipped that ran on the merge
+      // base, where the test paths are the change's, was skipped by the change's code, such as a hook
+      // in a module the test imports; one the change edits, or edits code around, may have been
+      // skipped by that edit on the base too. Either proved nothing in this run.
+      const base = runs.base.results.get(test.key);
+      if (!test.declaredSkipped && base && !quiet(base.status)) say('INCONCLUSIVE', 'before', `${test.key}: declared unskipped, but skipped on the change, though it ran on the merge base, so it proved nothing in this run`, BEFORE_FIX);
+      else if (!test.declaredSkipped && test.reached) say('INCONCLUSIVE', 'before', `${test.key}: declared unskipped, but skipped as it ran on the change, so it proved nothing in this run`, BEFORE_FIX);
       continue;
     }
     if (runs.head.fileErrors.has(test.path)) continue; // its file failed on the change, as listed above
