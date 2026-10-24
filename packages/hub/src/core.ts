@@ -39,8 +39,6 @@ const HOOKS_MISSING = 'hooks not reaching DeepBuild';
 const TRANSCRIPT_STEP = 64 * 1024 * 1024;
 /** How long after the hub reads a turn's end it judges whether any of the turn's hooks reached it. */
 const TURN_GRACE = 100;
-/** How many sessions' transcript cursors a restart keeps, and of each the newest calls whose hooks reached the hub. */
-const CURSORS = 64;
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -174,7 +172,8 @@ export class Core {
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     // A start that finds the last run still marked running records that run's stop as a crash.
     try {
-      this.cursors = new Map(Object.entries(JSON.parse(readFileSync(this.root.transcripts, 'utf8')) as Record<string, Cursor>));
+      // A cursor whose transcript is gone has no session left to judge.
+      this.cursors = new Map(Object.entries(JSON.parse(readFileSync(this.root.transcripts, 'utf8')) as Record<string, Cursor>).filter(([, c]) => typeof c?.transcript === 'string' && existsSync(c.transcript)));
     } catch {
       // None yet, or unreadable: the sessions are read from where this hub meets them.
     }
@@ -500,10 +499,10 @@ export class Core {
     for (const s of this.sessions.values()) {
       if (s.ended) continue;
       cursors.delete(s.id);
-      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached].slice(-CURSORS) });
+      cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached] });
     }
     try {
-      writeFileSync(`${this.root.transcripts}.tmp`, JSON.stringify(Object.fromEntries([...cursors].slice(-CURSORS))), { mode: 0o600 });
+      writeFileSync(`${this.root.transcripts}.tmp`, JSON.stringify(Object.fromEntries(cursors)), { mode: 0o600 });
       renameSync(`${this.root.transcripts}.tmp`, this.root.transcripts);
     } catch (error) {
       process.stderr.write(`deep hub: ${this.root.transcripts} not saved: ${error instanceof Error ? error.message : String(error)}\n`);
