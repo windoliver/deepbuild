@@ -183,9 +183,13 @@ async function smokeScenario(plant?: Plant): Promise<void> {
     await notStarted(w, bin, [smoke.job], 'without the standing approval');
     const asks = (await w.asks.needsYou()).filter((c) => c.kind === 'authority');
     expect(asks.length, 'one authority ask for the standing approval of Claude Code\'s smoke test').toBe(1);
+    const shown = asks[0]!;
+    const allow = shown.options.find((o) => o.decision === 'allow');
+    expect(allow, `the ask offers an approval: ${JSON.stringify(shown.options)}`).toBeDefined();
     // At your reserve, even the approved smoke test waits.
     await w.runner.report({ agent: 'claude-code', account: ACCOUNT, rate_limits: claudeLimits(95, w.clock.now() + 3 * 3_600_000) });
-    await w.asks.answer(card, asks[0]!.ask, { option: asks[0]!.options.find((o) => o.decision === 'allow')!.id });
+    // You click the approval on the card: the click's token, bound to the plan it showed, if it showed one.
+    await w.asks.answer(card, shown.ask, { option: allow!.id, token: 'click-1', ...(shown.plan ? { plan_hash: shown.plan.hash } : {}) });
     await w.runner.tick();
     const held = (await notStarted(w, bin, [smoke.job], 'approved, at the reserve'))[0]!;
     expect(held.blocked?.cause, 'the smoke test waits inside your plan reserve').toBe('plan window');
