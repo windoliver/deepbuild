@@ -77,7 +77,7 @@ interface Session {
  * A turn of a transcript: where its prompt starts there, its tool calls, and for a closed one when the hub read
  * its end (its monotonic clock).
  */
-interface Turn { uuid: string; from: number; calls: string[]; at?: number }
+interface Turn { uuid: string; from: number; calls: string[]; at?: number; recording?: boolean }
 /** Where a session's transcript is judged from after a restart, and the calls whose hooks reached the hub past there. */
 interface Cursor { transcript: string; read: number; reached: string[] }
 /** A PreToolUse deep-hook stamped for a deep_* call, which one call of that session's deep mcp may bind to. */
@@ -318,6 +318,8 @@ export class Core {
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false): Promise<{ settled: Promise<void> }> {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
+      // Its live copy may be acknowledged and still on its way to the record.
+      await Promise.allSettled([...this.inflight]);
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id = '${meta.id}' LIMIT 1`);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -355,7 +357,6 @@ export class Core {
       if (verified && meta.stamp && !replayed) this.stamps.push({ session: session.id, tool: meta.stamp.tool, digest: meta.stamp.digest });
     }
     if (session && verified) {
-      if (meta.toolUse) session.reached.add(meta.toolUse);
       await this.readTranscript(session);
       this.judge(session);
     }
@@ -386,6 +387,14 @@ export class Core {
       if (failed.length) throw Error(`hook ${meta.id} was not recorded`);
     });
     settled.catch(() => undefined);
+    // A call reaches the hub once its hook's event is durable, never before: a restart trusts the cursors kept.
+    if (session && verified && meta.toolUse) {
+      const call = meta.toolUse;
+      settled.then(() => {
+        session.reached.add(call);
+        this.saveCursors();
+      }, () => undefined);
+    }
     return { settled };
   }
 
@@ -467,22 +476,31 @@ export class Core {
       return;
     }
     const now = performance.now();
-    while (session.closed[0] && now - session.closed[0].at! >= TURN_GRACE) {
-      const turn = session.closed.shift()!;
-      const reached = turn.calls.some((call) => session.reached.has(call));
-      for (const call of turn.calls) session.reached.delete(call);
-      if (reached) continue;
+    for (const turn of session.closed.filter((t) => !t.recording && now - t.at! >= TURN_GRACE)) {
+      if (turn.calls.some((call) => session.reached.has(call))) {
+        for (const call of turn.calls) session.reached.delete(call);
+        session.closed.splice(session.closed.indexOf(turn), 1);
+        continue;
+      }
+      turn.recording = true;
       const ts = this.now();
-      // Settled like a hook's drafts: the next hook doesn't wait for its commit.
+      // Settled like a hook's drafts: the next hook doesn't wait for its commit. The turn, and so where a restart
+      // reads from, stays until its reading is durable; one whose append fails is judged again with the next hook.
       void this.append(this.connection('core', { session: session.id, agent: session.agent }), {
         v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: HOOKS_MISSING },
-      }).catch(() => undefined);
+      }).then(() => {
+        session.closed.splice(session.closed.indexOf(turn), 1);
+        this.saveCursors();
+      }, () => {
+        turn.recording = false;
+      });
     }
-    if (session.closed[0] && !session.judging && !this.stopping) {
+    const next = session.closed.find((t) => !t.recording);
+    if (next && !session.judging && !this.stopping) {
       session.judging = setTimeout(() => {
         session.judging = undefined;
         void this.queue(async () => this.judge(session)).catch(() => undefined);
-      }, Math.max(1, TURN_GRACE - (now - session.closed[0].at!)));
+      }, Math.max(1, TURN_GRACE - (now - next.at!)));
       session.judging.unref();
     }
     // Calls no read turn holds (a subagent's) are forgotten oldest first.
@@ -1175,6 +1193,11 @@ export class Core {
 function crashing(record: RecordStore, point: string): RecordStore {
   const jobs = new Set<string>();
   const append: RecordStore['append'] = async (connection, input) => {
+    // `before:<kind>`: the hub dies before it appends an event of that kind, after what the call that appends it does next.
+    if (point === `before:${input.kind}`) {
+      await new Promise((done) => setTimeout(done, 50));
+      process.kill(process.pid, 'SIGKILL');
+    }
     const event = await record.append(connection, input);
     const run = isObj(input.data) ? String(input.data.job ?? input.data.run) : '';
     if (input.kind === 'job.recorded') jobs.add(run);
