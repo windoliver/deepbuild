@@ -108,6 +108,57 @@ fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
 }
 
 #[test]
+fn a_hook_with_no_shell_call_is_spooled_whatever_rules_json_does() {
+    use std::io::Write;
+    let home = std::env::temp_dir().join(format!("dh315-start-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    // rules.json is a FIFO nobody writes, and no hub is there: guards can't touch a SessionStart, so it is spooled.
+    let made = Command::new("/usr/bin/mkfifo")
+        .arg(home.join(".deepbuild/rules.json"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .args(["claude-code", "SessionStart"])
+        .env_clear()
+        .env("HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(br#"{"session_id":"s","hook_event_name":"SessionStart","source":"startup"}"#)
+        .unwrap();
+    let start = std::time::Instant::now();
+    let exited = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if start.elapsed() > std::time::Duration::from_secs(1) {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    };
+    let spooled =
+        std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(
+        exited.and_then(|s| s.code()),
+        Some(0),
+        "the hook is allowed"
+    );
+    assert!(
+        spooled.contains("\"SessionStart\""),
+        "the hook is spooled: {spooled:?}"
+    );
+}
+
+#[test]
 fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;

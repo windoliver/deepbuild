@@ -489,14 +489,20 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     } else {
         quoted(&input)
     };
-    let called = parsed.as_ref().and_then(command);
+    // Guards hold shell calls before they run, so only a shell PreToolUse reads rules.json: no other hook waits on it.
+    let called = parsed
+        .as_ref()
+        .and_then(command)
+        .filter(|_| event == "PreToolUse");
     // Until the guards are read, a shell call the watchdog decides is denied: one of them may hold it.
-    if event == "PreToolUse" && called.is_some() {
+    let guards = if called.is_some() {
         RULING.store(true, Ordering::SeqCst);
-    }
-    let guards = guards();
+        guards()
+    } else {
+        Ok(Vec::new())
+    };
     // Guards that can't be read may hold a shell call: with the hub away it is denied, never let through unguarded.
-    if let (Err(why), true) = (&guards, event == "PreToolUse" && called.is_some()) {
+    if let Err(why) = &guards {
         let _ = DENIAL.set(format!(
             "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry."
         ));
