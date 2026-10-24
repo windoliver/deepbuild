@@ -3,6 +3,7 @@
 // built runs sandboxed even when its bytes are the release's. Each runs a real package through a real host, record
 // and supervisor.
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -228,6 +229,52 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect((await h.load(p)).status).toBe('loaded');
     await trust.answer(YOU, repo, false);
     await expect(h.turnOn('test/route', ['GET /hi'])).rejects.toThrow(/trust/);
+    expect(await h.loaded()).toEqual([]);
+  }, 60_000);
+
+  it('turning a package on while the host closes is refused, and the listener it bound is closed', async () => {
+    const { h } = await world();
+    const folder = pkgOf('test/route', "export default function (deep: any): void {\n  deep.registerRoute('GET /hi', () => ({ status: 200, body: 'hi' }));\n}\n", { checks: [] });
+    const p = await h.install({ from: folder, builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    const [on] = await Promise.allSettled([h.turnOn('test/route', ['GET /hi']), h.close()]);
+    expect(on.status).toBe('rejected');
+  }, 60_000);
+
+  it('a load after a new install of the same package runs the new bytes, not the copy already running', async () => {
+    const h = await host();
+    const first = await h.install({ from: stuck(PASSES), builtBy: null });
+    expect((await h.check(first)).passed).toBe(true);
+    expect((await h.load(first)).status).toBe('loaded');
+    const second = await h.install({ from: stuck(PID), builtBy: null });
+    expect((await h.check(second)).passed).toBe(true);
+    expect((await h.load(second)).status).toBe('loaded');
+    expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome).toBe('failed');
+  }, 60_000);
+
+  it('a request whose body is still arriving when you revoke trust never reaches the package', async () => {
+    const { h, trust } = await world();
+    const repo = temp();
+    await trust.answer(YOU, repo, true);
+    const folder = pkgOf('test/route', "export default function (deep: any): void {\n  deep.registerRoute('POST /hi', () => ({ status: 200, body: 'hi' }));\n}\n", { checks: [] });
+    const p = await h.install({ from: folder, builtBy: null, project: repo });
+    expect((await h.check(p)).passed).toBe(true);
+    expect((await h.load(p)).status).toBe('loaded');
+    const { address } = await h.turnOn('test/route', ['POST /hi']);
+    const [hostname, port] = address.split(':');
+    const answered = new Promise<{ status?: number; body: string }>((resolve, reject) => {
+      const req = request({ hostname, port: Number(port), method: 'POST', path: '/hi', headers: { 'content-length': '2' } }, (res) => {
+        let body = '';
+        res.on('data', (c: Buffer) => { body += c.toString(); });
+        res.on('end', () => resolve({ status: res.statusCode, body }));
+      });
+      req.on('error', reject);
+      req.write('a');
+      setTimeout(() => void trust.answer(YOU, repo, false).then(() => req.end('b'), reject), 500);
+    });
+    const r = await answered.catch(() => ({ status: undefined, body: '' }));
+    expect(r.body).not.toBe('hi');
     expect(await h.loaded()).toEqual([]);
   }, 60_000);
 });

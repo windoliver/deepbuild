@@ -274,7 +274,9 @@ class Host implements ExtensionHost {
     if (!entry) return refuse(`${pkg.id} isn't installed`);
     const untrusted = `${entry.id} comes with ${entry.project}, a project you haven't trusted`;
     const running = this.exts.get(entry.id);
-    if (running) return (await this.revoked(running)) ? refuse(untrusted) : this.loadedOf(running);
+    // Running as installed: that is the load. Installed again since: the copy running stops, and the new one loads.
+    if (running?.entry === entry) return (await this.revoked(running)) ? refuse(untrusted) : this.loadedOf(running);
+    if (running) await this.unload(running);
     if (entry.project && !(await this.options.trust.trusted(entry.project))) return refuse(untrusted);
     let snap: { folder: string; digest: string };
     try {
@@ -515,6 +517,10 @@ class Host implements ExtensionHost {
     const chosen = new Set(routes);
     const server = createHttpServer((req, res) => void this.serve(ext, chosen, req, res));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+    if (this.closed || this.exts.get(id) !== ext || !ext.ask || ext.server) {
+      await new Promise((resolve) => server.close(resolve));
+      throw Error(ext.server ? `${id} is already turned on` : `${id} stopped while it was turned on`);
+    }
     ext.server = server;
     // Revoked while it bound: unloading it closes this listener too.
     if (await this.revoked(ext)) throw Error(untrusted);
@@ -531,6 +537,11 @@ class Host implements ExtensionHost {
     }
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
+    // Its body took time to arrive: trust is checked again before the package sees it.
+    if (!ext.ask || (await this.revoked(ext))) {
+      res.writeHead(404).end();
+      return;
+    }
     try {
       const request = { method: req.method, path, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') };
       const answer = (await this.ask(ext, CALL_MS, route, 'route', { route, request })) as { status?: unknown; body?: unknown } | null;
