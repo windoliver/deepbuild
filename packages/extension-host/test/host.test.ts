@@ -496,4 +496,17 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect((await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 })).outcome).toBe('missing');
     expect(alive(pid)).toBe(false);
   }, 60_000);
+
+  it('a check result missing what check.kind@1 requires never passes: the run fails, naming the package', async () => {
+    for (const body of ["({ outcome: 'passed', testsRun: 1, failures: [] })", "({ outcome: 'great', testsRun: 1, failures: [], evidence: [], read: [], mask: null })", "({ outcome: 'passed', testsRun: -1, failures: [], evidence: [], read: [], mask: null })"]) {
+      const h = await host();
+      const p = await h.install({ from: stuck(body), builtBy: null });
+      expect((await h.check(p)).passed).toBe(true);
+      expect((await h.load(p)).status).toBe('loaded');
+      const r = await h.runCheck('ext.stuck.run', SPEC, { checkout: temp(), deadline: 10_000 });
+      expect(r.outcome, body).not.toBe('passed');
+      expect(r.outcome, body).not.toBe('great');
+      expect(r.failures[0]?.message, body).toMatch(/test\/stuck/);
+    }
+  }, 60_000);
 });
