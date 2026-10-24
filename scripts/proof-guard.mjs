@@ -54,17 +54,20 @@ export function guard({ root, change, issue }, approvals, say) {
     for (const file of commit.files) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
       if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
+      // Node resolves a bare import through each node_modules folder above the importing file, so a
+      // package committed in one may stand in for the one installed.
+      if (lanesOnMain && file.path.split('/').includes('node_modules') && file.hunks.length) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
       const before = show(root, commit.parent, file.path);
-      if (before === null) {
-        // An added file removes nothing, unless a module path may resolve to it in place of a file
-        // beside it, which it then stands in for.
+      // A module path may resolve to an added file, or through an edited package.json's main, in
+      // place of a file beside it, which it then stands in for.
+      if (before === null || basename(file.path) === 'package.json') {
         for (const shadowed of shadows(root, commit, file.path)) {
-          const how = `, shadowed by ${file.path}, added beside it`;
+          const how = `, shadowed by ${file.path}, ${before === null ? 'added beside it' : 'edited beside it'}`;
           if (lanesOnMain && isCheck(shadowed)) judge(checkEdit(shadowed, how), file.path, shadowed);
-          for (const edit of fixtureEdits(root, commit, { path: shadowed, status: 'D', hunks: [] }, show(root, commit.parent, shadowed), relevant)) judge({ ...edit, detail: edit.detail.replace(`${shadowed}: deleted`, `${shadowed}: shadowed by ${file.path}, added beside it`) }, file.path, shadowed);
+          for (const edit of fixtureEdits(root, commit, { path: shadowed, status: 'D', hunks: [] }, show(root, commit.parent, shadowed), relevant)) judge({ ...edit, detail: edit.detail.replace(`${shadowed}: deleted`, `${shadowed}: ${how.slice(2)}`) }, file.path, shadowed);
         }
-        continue;
       }
+      if (before === null) continue; // an added file removes nothing
       if (isTestFile(file.path)) for (const edit of testEdits(root, commit, file, before, relevant)) judge(edit, file.path, ...edit.test ? [named(file.path, edit.test)] : []);
       else if (underTestPaths(file.path)) for (const edit of fixtureEdits(root, commit, file, before, relevant)) judge(edit, file.path);
       if (DECISIONS[file.path]) for (const edit of decisionEdits(file, before, show(root, commit.sha, file.path) ?? '')) judge(edit, file.path, `${file.path}:${edit.line}`);
@@ -242,18 +245,21 @@ function fixtureEdits(root, commit, file, before, relevant) {
 const SCRIPTS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx'];
 const SCRIPT = /\.[cm]?[jt]sx?$/;
 
-// The files under the test paths, other than tests, that the commit's parent holds and an added file
-// may stand in for as a resolver picks a module: one of the same name with another extension or none,
-// as check.js or cases.json for check.ts or cases.ts, one named as a folder whose index is held, or a
-// package.json in that folder, whose main a resolver reads before the index.
+// The modules under the test paths, other than tests, that the commit's parent holds and a file a
+// resolver may pick may stand in for: a script or JSON file, or one with no extension, of the same
+// name, as check.js or cases.json for check.ts, one named as a folder whose index is held, or a
+// package.json in that folder, whose main a resolver reads before the index. A file read by its whole
+// name, or one no resolver picks, such as out.json beside out.txt, stands in for nothing.
+const MODULE = /\.(?:[cm]?[jt]sx?|json)$/;
 function shadows(root, commit, path) {
-  if (!underTestPaths(path) || isTestFile(path)) return [];
-  const bare = (file) => file.replace(/\.[^./]+$/, '');
+  const name = basename(path);
+  if (!underTestPaths(path) || isTestFile(path) || !(MODULE.test(name) || /^[^.]+$/.test(name))) return [];
+  const bare = path.replace(MODULE, '');
   const held = git(root, ['ls-tree', '-r', '-z', '--name-only', commit.parent, '--', posix.dirname(path)]).split('\0').filter(Boolean);
   return held.filter((other) => {
-    if (other === path || isTestFile(other)) return false;
-    const stem = bare(other), index = basename(stem) === 'index' ? dirname(stem) : null;
-    return bare(path) === stem || bare(path) === index || (basename(path) === 'package.json' && dirname(path) === index);
+    if (other === path || isTestFile(other) || !MODULE.test(other) || basename(other) === 'package.json') return false;
+    const stem = other.replace(MODULE, ''), index = basename(stem) === 'index' ? dirname(stem) : null;
+    return bare === stem || bare === index || (name === 'package.json' && dirname(path) === index);
   });
 }
 

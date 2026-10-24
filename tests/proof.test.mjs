@@ -370,3 +370,24 @@ test('a helper read as its folder, and files a resolver may take in place of a g
   for (const [held, by] of [[`${dir}/cases/index.ts`, `${dir}/cases.json`], [`${dir}/more.ts`, `${dir}/more`], ['tests/setup/index.ts', 'tests/setup/package.json']])
     assert.ok(added.some((found) => found.startsWith(`FAIL guard: ${held}: `) && found.includes(`shadowed by ${by}, added beside it`)), `${held} by ${by}\n${added.join('\n')}`);
 });
+
+test('a fixture added beside one a test reads by its whole name is no stand-in, nor is a file no resolver picks', (t) => {
+  const reads = `import assert from 'node:assert/strict';\nimport { readFileSync } from 'node:fs';\nimport test from 'node:test';\nimport cases from './cases/index.mjs';\n\ntest('${c1} reads', () => {\n  for (const name of ['golden/out.txt', 'io/c1.in', 'fixtures/.eslintrc', 'site/index.html']) assert.ok(readFileSync(new URL(name, import.meta.url)));\n  assert.ok(cases);\n});\n`;
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', [`${dir}/a.test.mjs`]: reads, [`${dir}/golden/out.txt`]: 'out\n', [`${dir}/io/c1.in`]: 'in\n', [`${dir}/fixtures/.eslintrc`]: '{}\n', [`${dir}/site/index.html`]: '<p></p>\n', [`${dir}/cases/index.mjs`]: 'export default 1;\n' },
+    commits: [{ files: { [`${dir}/golden/out.json`]: '{}\n', [`${dir}/io/c1.out`]: 'out\n', [`${dir}/fixtures/.gitignore`]: 'x\n', [`${dir}/site.png`]: 'png\n', [`${dir}/cases.md`]: '# cases\n' }, message: `Add fixtures\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  assert.deepEqual(problems(result, 'guard'), [], show(result));
+});
+
+test('once main holds the proof lanes, a package committed under node_modules, or a package.json edited to point a folder elsewhere, fails the guard', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', [`${dir}/cases/index.ts`]: 'export default { want: 3 };\n', [`${dir}/cases/package.json`]: '{ "type": "module" }\n', [`${dir}/a.test.ts`]: `import { it } from 'vitest';\nimport cases from './cases';\n\nit('${c1} sums', () => {\n  if (cases.want !== 3) throw Error('wrong');\n});\n` },
+    commits: [{ files: { 'tests/node_modules/@demo/sum/index.js': 'export const f = () => 3;\n', [`${dir}/cases/package.json`]: '{ "type": "module", "main": "alt.ts" }\n', [`${dir}/cases/alt.ts`]: 'export default { want: 5 };\n' }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  const refused = problems(result, 'guard');
+  assert.ok(refused.some((found) => found.startsWith('FAIL guard: tests/node_modules/@demo/sum/index.js: a package committed under node_modules')), show(result));
+  assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${dir}/cases/index.ts: shadowed by ${dir}/cases/package.json`)), show(result));
+});
