@@ -91,7 +91,7 @@ export function guard({ root, change, issue }, approvals, say) {
       // package committed in one may stand in for the one installed.
       if (lanesOnMain && file.hunks.length && underTests(file.path)) judge({ detail: `${file.path}: a package committed under node_modules, which a test's import may resolve to in place of the one installed` }, file.path);
       const before = show(root, commit.parent, file.path);
-      const names = lanesOnMain && file.path === 'package-lock.json' ? repointed(before, show(root, commit.sha, file.path), imported)
+      const names = lanesOnMain && LOCKS.includes(file.path) ? repointed(installedLock(root, commit.parent), installedLock(root, commit.sha), imported)
         : lanesOnMain && file.path === 'package.json' ? respecified(before, show(root, commit.sha, file.path), resolvedThrough(root, commit.sha, imported)) : [];
       if (names.length) judge({ detail: `${file.path}: ${names.join(', ')}, ${names.length === 1 ? 'a package' : 'packages'} a test's imports resolve through, changed` }, file.path);
       // A module path may resolve to an added file, or through an edited package.json's main, in
@@ -153,12 +153,18 @@ function repointed(before, after, imported) {
   const was = lockPackages(before), now = lockPackages(after);
   if (!was || !now) return ['every package'];
   const keys = new Set([...lockClosure(was, imported), ...lockClosure(now, imported)]);
-  return [...new Set([...keys].filter((key) => JSON.stringify(was[key]) !== JSON.stringify(now[key])).map(packageName))];
+  // What the install takes from an entry; flags such as dev, and npm's own metadata, re-point nothing.
+  const installed = (entry) => JSON.stringify(entry && [entry.version, entry.resolved, entry.integrity, entry.link]);
+  return [...new Set([...keys].filter((key) => installed(was[key]) !== installed(now[key])).map(packageName))];
 }
+
+// The locks npm installs from: a shrinkwrap in place of the lock when both are there.
+const LOCKS = ['npm-shrinkwrap.json', 'package-lock.json'];
+const installedLock = (root, rev) => show(root, rev, LOCKS[0]) ?? show(root, rev, LOCKS[1]);
 
 // The names of the packages a test's imports resolve through, as the commit's lock has them, with
 // the names the tests import themselves.
-const resolvedThrough = (root, rev, imported) => new Set([...imported, ...[...lockClosure(lockPackages(show(root, rev, 'package-lock.json')) ?? {}, imported)].map(packageName)]);
+const resolvedThrough = (root, rev, imported) => new Set([...imported, ...[...lockClosure(lockPackages(installedLock(root, rev)) ?? {}, imported)].map(packageName)]);
 
 // The packages among `names` whose dependency spec or override the root package.json changes: an
 // install from it, as the worktree's, may re-point them though the lock is left as it was.
@@ -167,14 +173,18 @@ function respecified(before, after, names) {
   const specs = (text) => {
     try {
       const json = JSON.parse(text ?? '{}');
-      return new Map(DEPENDENCY_FIELDS.flatMap((field) => Object.entries(json[field] ?? {}).map(([name, spec]) => [`${field}:${name}`, JSON.stringify(spec)])));
+      // An override's key names a package by name, with a range or as a path, as chai@^6 or **/chai,
+      // and may hold the overrides of the packages it reads: each names every package on its way.
+      const leaves = (value, path) => (value && typeof value === 'object' ? Object.entries(value).flatMap(([key, inner]) => leaves(inner, [...path, key])) : [[path, value]]);
+      return new Map(DEPENDENCY_FIELDS.flatMap((field) => leaves(json[field] ?? {}, []).map(([path, spec]) => [`${field}:${path.map(nameOf).join('\0')}`, JSON.stringify(spec)])));
     } catch {
       return new Map([['*:every package', text]]);
     }
   };
   const was = specs(before), now = specs(after);
-  return [...new Set([...was.keys(), ...now.keys()].filter((key) => was.get(key) !== now.get(key)).map((key) => key.slice(key.indexOf(':') + 1)))].filter((name) => names.has(name) || name === 'every package');
+  return [...new Set([...was.keys(), ...now.keys()].filter((key) => was.get(key) !== now.get(key)).flatMap((key) => key.slice(key.indexOf(':') + 1).split('\0')))].filter((name) => names.has(name) || name === 'every package');
 }
+const nameOf = (key) => key.match(/(?:^|\/)((?:@[^/@]+\/)?[^/@]+)(?:@[^/]*)?$/)?.[1] ?? key;
 
 /** The literals of the text that lie outside every test, whose white space is data a tagged test may compare. */
 const literalsOutside = (text, tests) => literals(text).filter(([from, to]) => !tests.some((test) => test.from <= from && to - 1 <= test.to));
