@@ -1591,6 +1591,21 @@ export interface HookRequest {
   payload: unknown;
 }
 
+/** hook.request@2 */
+export interface HookRequestV2 {
+  v: 1;
+  agent: string;
+  event: string;
+  seq: bigint;
+  id: string;
+  pid: number;
+  ppid: number;
+  matched: Array<string>;
+  payload: unknown;
+  late?: boolean;
+  billing?: { [key: string]: boolean };
+}
+
 /** hub.stopped@1 */
 export interface HubStopped {
   v: 1;
@@ -2585,6 +2600,28 @@ export interface SessionStart {
   evidence?: Array<string>;
 }
 
+/** session.start@2 */
+export interface SessionStartV2 {
+  v: 2;
+  id: string;
+  kind: "session.start";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    agent: string;
+    worktree: string;
+    branch: string | null;
+    thread: string;
+    billing?: { [key: string]: boolean };
+  };
+  evidence?: Array<string>;
+}
+
 /** spend.approved@1 */
 export interface SpendApproved {
   v: 1;
@@ -2677,6 +2714,26 @@ export interface SpendReserved {
     }>;
     ask: string | null;
     decision: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** spool.refused@1 */
+export interface SpoolRefused {
+  v: 1;
+  id: string;
+  kind: "spool.refused";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    file: string;
+    offset: number;
+    reason: string;
   };
   evidence?: Array<string>;
 }
@@ -2879,6 +2936,72 @@ export interface ToolBefore {
     kind: "unknown";
     paths: Array<string>;
     command: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** tool.before@2 */
+export interface ToolBeforeV2 {
+  v: 2;
+  id: string;
+  kind: "tool.before";
+  subject?: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "shell";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "read";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "edit";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "write";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "search";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "fetch";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "mcp";
+    paths: Array<string>;
+    command: string | null;
+    server: string;
+    tool: string;
+    late?: boolean;
+    matched?: Array<string>;
+  } | {
+    kind: "unknown";
+    paths: Array<string>;
+    command: string | null;
+    late?: boolean;
+    matched?: Array<string>;
   };
   evidence?: Array<string>;
 }
