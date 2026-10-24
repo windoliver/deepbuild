@@ -12,15 +12,18 @@ const DECISIONS = {
   'docs/technical-design.md': { heading: '## Decisions', what: 'a row under Decisions', row: (line) => line.startsWith('|') },
 };
 // The proof lanes' own code, and lanes.mjs, which names the test paths: once main holds the lanes, the
-// change runs its own copy of them, so an edit of them is an edit of the checks.
+// change runs its own copy of them, so an edit of them is an edit of the checks. So is an edit of a
+// test runner's config, which can stub the code under test only where it finds the change.
 const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes)\.mjs$/;
+const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)\.(?:config|workspace)\.[cm]?[jt]s$/;
+const checkEdit = (path, how) => ({ detail: `${path}: ${LANES_CODE.test(path) ? "the proof lanes' own code" : "the test runner's config"} changed${how}` });
+const isCheck = (path) => LANES_CODE.test(path) || RUNNER_CONFIG.test(path);
 
 export function guard({ root, change, issue }, approvals, say) {
   // With an issue, the guard keeps its tags; with none, every tag.
   const relevant = (text) => tagsIn(text).filter((tag) => !issue?.number || tag.startsWith(`#${issue.number}.`));
   let refused = 0;
   const lanesOnMain = show(root, change.base, 'scripts/proof-guard.mjs') !== null;
-  const lanesEdit = (path, how) => ({ detail: `${path}: the proof lanes' own code changed${how}` });
   for (const commit of change.commits) {
     const items = (commit.sha && approvals.get(commit.sha)) || [];
     const itemPath = (item) => item.split(' › ')[0];
@@ -35,10 +38,10 @@ export function guard({ root, change, issue }, approvals, say) {
       }
     };
     for (const path of commit.merge?.conflicts ?? []) for (const edit of conflictEdits(root, commit, path, relevant)) judge(edit, path, ...edit.test ? [named(path, edit.test)] : []);
-    if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter((path) => LANES_CODE.test(path))) judge(lanesEdit(path, ' in resolving a merge conflict'), path);
+    if (lanesOnMain) for (const path of (commit.merge?.conflicts ?? []).filter(isCheck)) judge(checkEdit(path, ' in resolving a merge conflict'), path);
     for (const file of commit.files) {
       if (commit.merge?.conflicts.includes(file.path)) continue;
-      if (lanesOnMain && LANES_CODE.test(file.path) && file.hunks.length) judge(lanesEdit(file.path, ''), file.path);
+      if (lanesOnMain && isCheck(file.path) && file.hunks.length) judge(checkEdit(file.path, ''), file.path);
       const before = show(root, commit.parent, file.path);
       if (before === null) continue; // an added file removes nothing
       if (isTestFile(file.path)) for (const edit of testEdits(root, commit, file, before, relevant)) judge(edit, file.path, ...edit.test ? [named(file.path, edit.test)] : []);

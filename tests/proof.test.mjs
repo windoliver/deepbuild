@@ -259,14 +259,14 @@ test("once main holds the proof lanes, an edit of their code or of lanes.mjs fai
   assert.deepEqual(problems(proof(free, ['guard']), 'guard'), [], 'with no proof lanes on main, lanes.mjs is free to change');
 });
 
-// The merge base runs with the change's test-path files and runner config, so only the code under
-// test differs between the two runs: a stub the change's config or a shared helper brings in runs on
-// both, and the test no longer fails on the base.
-test("a vitest config the change edits to mock the code under test runs on the merge base too", (t) => {
+// The merge base runs with the change's test-path files, so a hollow helper the change brings in runs
+// on both; its runner config is a check, as the lanes are: once main holds them, an edit of it is
+// guarded, since a config can stub the code under test only where it finds the change.
+const vitestScene = (t, { lanes, files, message }) => {
   const config = (extra) => `export default { test: { include: ['tests/**/*.test.ts']${extra} } };\n`;
   const scene = repo(t, {
     issues: { [ISSUE]: ['Adds'] },
-    base: { 'lib/impl.ts': 'export const f = () => 4;\n', 'vitest.config.ts': config(''), [`${dir}/a.test.ts`]: `import { it, expect } from 'vitest';\nimport { f } from '../../../lib/impl.ts';\n\nit('${c1} sums', () => {\n  expect(f()).toBe(3);\n});\n` },
+    base: { ...(lanes ? { 'scripts/proof-guard.mjs': '// the guard\n' } : {}), 'lib/impl.ts': 'export const f = () => 4;\n', 'vitest.config.ts': config(''), [`${dir}/a.test.ts`]: `import { it, expect } from 'vitest';\nimport { f } from '../../../lib/impl.ts';\n\nit('${c1} sums', () => {\n  expect(f()).toBe(3);\n});\n` },
   });
   // Both checkouts get vitest from a link the merge base holds, as no lockfile installs it there.
   mkdirSync(join(scene.cwd, 'node_modules'));
@@ -274,12 +274,24 @@ test("a vitest config the change edits to mock the code under test runs on the m
   git(scene.cwd, 'add', '-A');
   git(scene.cwd, 'commit', '-q', '-m', 'vitest');
   git(scene.cwd, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
-  write(scene.cwd, { 'vitest.config.ts': config(", setupFiles: ['./tests/setup.ts']"), 'tests/setup.ts': "import { vi } from 'vitest';\nvi.mock('../lib/impl.ts', () => ({ f: () => 3 }));\n" });
+  write(scene.cwd, files(config));
   git(scene.cwd, 'add', '-A');
-  git(scene.cwd, 'commit', '-q', '-m', `Stub f\n\nCloses #${ISSUE}`);
+  git(scene.cwd, 'commit', '-q', '-m', `${message}\n\nCloses #${ISSUE}`);
+  return scene;
+};
+
+test('once main holds the proof lanes, a vitest config the change edits to mock the code under test fails the guard', (t) => {
+  const scene = vitestScene(t, { lanes: true, message: 'Stub f', files: (config) => ({ 'vitest.config.ts': config(", setupFiles: ['./tests/setup.ts']"), 'tests/setup.ts': "import { vi } from 'vitest';\nvi.mock('../lib/impl.ts', () => ({ f: () => 3 }));\n" }) });
+  const result = proof(scene, []);
+  assert.ok(problems(result, 'guard').some((found) => found.startsWith("FAIL guard: vitest.config.ts: the test runner's config changed")), show(result));
+  assert.notEqual(result.status, 0, show(result));
+});
+
+test('a real fix whose vitest config imports a file the change adds still fails on the merge base at its assertion', (t) => {
+  const scene = vitestScene(t, { lanes: false, message: 'Fix f', files: () => ({ 'lib/impl.ts': 'export const f = () => 3;\n', 'tools/shared.mjs': "export const include = ['tests/**/*.test.ts'];\n", 'vitest.config.ts': "import { include } from './tools/shared.mjs';\nexport default { test: { include } };\n" }) });
   const result = proof(scene, ['trace']);
-  assert.ok(!result.lines.some((line) => line.startsWith(`PASS before: `) && line.includes(`${c1} sums`)), show(result));
-  assert.ok(problems(result, 'trace').some((found) => found.startsWith('FAIL trace: Closes')), show(result));
+  assert.ok(result.lines.some((line) => line.startsWith(`PASS before: ${dir}/a.test.ts › ${c1} sums: failed on the merge base at its assertion`)), show(result));
+  assert.equal(result.status, 0, show(result));
 });
 
 test('a shared helper under the test paths, outside the test\'s folder, runs on the merge base as the change has it', (t) => {
