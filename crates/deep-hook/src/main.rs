@@ -275,9 +275,20 @@ fn integer(value: Option<&Value>) -> Option<f64> {
     }
 }
 
-/// One exchange with the hub: its hello, the request, its acknowledgement and its reply. Returns the line
+/// Whether a socket line is an object of exactly `fields`, its `v` 1: a hook line's contract, before its values.
+fn shaped(value: &Value, fields: &[&str]) -> bool {
+    matches!(value, Value::Object(members)
+        if members.len() == fields.len() && members.iter().all(|(key, _)| fields.contains(&key.as_str())))
+        && integer(member(value, "v")) == Some(1.0)
+}
+
+/// One exchange with the hub: its hello, the request `id`, its acknowledgement and its reply. Returns the line
 /// sent, the outcome, and the last line the hub wrote (only a planted build prints it).
-fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>, Outcome, String) {
+fn exchange(
+    start: Instant,
+    id: &str,
+    line: impl Fn(&[&str]) -> String,
+) -> (Option<String>, Outcome, String) {
     let ack_due = start + ACK_BUDGET;
     // Only the planted connect-timeout-only build reads with no deadline.
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
@@ -333,8 +344,16 @@ fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>
         Got::Timeout => return (Some(request), late, hello),
         Got::Closed => return (Some(request), down, hello),
     };
+    // Only a hook.ack@2 of this request: one of another, or out of shape, is the hub away.
     let ack = match parse(ack_text.trim_end()) {
-        Ok(ack) if member(&ack, "ack").is_some() && member(&ack, "v").is_some() => ack,
+        Ok(ack)
+            if shaped(&ack, &["v", "ack", "hold_until_ms"])
+                && matches!(member(&ack, "ack"), Some(Value::String(acked)) if acked == id)
+                && (matches!(member(&ack, "hold_until_ms"), Some(Value::Null))
+                    || integer(member(&ack, "hold_until_ms")).is_some_and(|ms| ms >= 0.0)) =>
+        {
+            ack
+        }
         _ => return (Some(request), down, ack_text),
     };
     // The hub has the call: from here its hold, not the watchdog, says how long the hook waits.
@@ -359,13 +378,15 @@ fn exchange(start: Instant, line: impl Fn(&[&str]) -> String) -> (Option<String>
     let Ok(reply) = parse(reply_text.trim_end()) else {
         return (Some(request), down, reply_text);
     };
+    if !shaped(&reply, &["v", "exit", "stdout", "stderr"]) {
+        return (Some(request), down, reply_text);
+    }
     match (
-        member(&reply, "v"),
         integer(member(&reply, "exit")),
         member(&reply, "stdout"),
         member(&reply, "stderr"),
     ) {
-        (Some(_), Some(exit), Some(Value::String(stdout)), Some(Value::String(stderr)))
+        (Some(exit), Some(Value::String(stdout)), Some(Value::String(stderr)))
             if (0.0..=255.0).contains(&exit) =>
         {
             let outcome = Outcome::Reply {
@@ -567,7 +588,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             std::os::unix::process::parent_id(),
         )
     };
-    let (sent, outcome, last) = exchange(start, line);
+    let (sent, outcome, last) = exchange(start, &id, line);
     let late = match outcome {
         Outcome::Reply {
             exit,
