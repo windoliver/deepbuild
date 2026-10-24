@@ -89,6 +89,8 @@ interface Entry extends Installed { grant: { record: string[] } }
 type Ask = (method: string, params: unknown) => Promise<unknown>;
 interface Ext {
   entry: Entry;
+  /** The copy of its install folder it runs from, which only the host writes. */
+  folder: string;
   manifest: Manifest;
   place: 'hub' | 'sandbox';
   run: string | null;
@@ -202,11 +204,11 @@ class Host implements ExtensionHost {
     if (entry.project && !(await this.options.trust.trusted(entry.project))) {
       throw Error(`${entry.id} comes with ${entry.project}, a project you haven't trusted, so none of its code runs, its checks included`);
     }
-    const digest = packageDigest(entry.folder);
+    const { folder, digest } = this.snapshot(entry);
     const reasons: string[] = [];
     let manifest: Manifest | undefined;
     try {
-      manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+      manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
     } catch (e) {
       reasons.push(`its deepbuild.json can't be read: ${message(e)}`);
     }
@@ -216,16 +218,17 @@ class Host implements ExtensionHost {
       else if (manifest.id !== entry.id || manifest.version !== entry.version) reasons.push(`its manifest names ${manifest.id}@${manifest.version}, not ${entry.id}@${entry.version}`);
       else if (manifest.digest !== digest) reasons.push(`its manifest's digest ${manifest.digest} isn't its files' digest ${digest}`);
     }
-    if (!existsSync(join(entry.folder, 'index.ts')) && !existsSync(join(entry.folder, 'main'))) reasons.push('it has neither an index.ts nor a main to run');
-    if (!reasons.length) reasons.push(...(await this.registers(entry, manifest!, digest)));
+    if (!existsSync(join(folder, 'index.ts')) && !existsSync(join(folder, 'main'))) reasons.push('it has neither an index.ts nor a main to run');
+    if (!reasons.length) reasons.push(...(await this.registers(entry, folder, manifest!, digest)));
+    rmSync(folder, { recursive: true, force: true });
     const result: Conformance = { id: entry.id, version: entry.version, digest, passed: !reasons.length, reasons };
     this.results[`${entry.id}@${entry.version}`] = result;
     this.save('checked.json', this.results);
     return result;
   }
   /** Conformance's run of the package's code: it registers in the platform sandbox without throwing, and only the check kinds its manifest declares. */
-  private async registers(entry: Entry, manifest: Manifest, digest: string): Promise<string[]> {
-    const ext = this.ext(entry, manifest, digest, 'sandbox', 'conformance');
+  private async registers(entry: Entry, folder: string, manifest: Manifest, digest: string): Promise<string[]> {
+    const ext = this.ext(entry, folder, manifest, digest, 'sandbox', 'conformance');
     try {
       await this.start(ext);
     } catch (e) {
@@ -236,8 +239,22 @@ class Host implements ExtensionHost {
     const declared = manifest.checks ?? [];
     return ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`);
   }
-  private ext(entry: Entry, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
-    return { entry, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], subscribed: new Set(), routes: new Set() };
+  private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
+    return { entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], subscribed: new Set(), routes: new Set() };
+  }
+  /**
+   * A copy of its install folder under the host's home, and that copy's digest: the bytes conformance and a load
+   * check are the bytes that run, whatever is written to the install folder after.
+   */
+  private snapshot(entry: Entry): { folder: string; digest: string } {
+    const folder = mkdtempSync(join(this.options.home, 'run-'));
+    try {
+      cpSync(entry.folder, folder, { recursive: true });
+      return { folder, digest: packageDigest(folder) };
+    } catch (e) {
+      rmSync(folder, { recursive: true, force: true });
+      throw e;
+    }
   }
 
   async load(pkg: Installed): Promise<Load> {
@@ -252,26 +269,32 @@ class Host implements ExtensionHost {
   private async loadNow(pkg: Installed): Promise<Load> {
     const refuse = (reason: string): Refused => ({ status: 'refused', id: pkg.id, version: pkg.version, reason });
     if (this.options.safe) return refuse('safe mode: the hub loads no extension');
+    if (this.closed) return refuse('the host is closed');
     const entry = this.entries[pkg.id];
     if (!entry) return refuse(`${pkg.id} isn't installed`);
     const untrusted = `${entry.id} comes with ${entry.project}, a project you haven't trusted`;
     const running = this.exts.get(entry.id);
     if (running) return (await this.revoked(running)) ? refuse(untrusted) : this.loadedOf(running);
     if (entry.project && !(await this.options.trust.trusted(entry.project))) return refuse(untrusted);
-    let digest: string;
+    let snap: { folder: string; digest: string };
     try {
-      digest = packageDigest(entry.folder);
+      snap = this.snapshot(entry);
     } catch (e) {
       return refuse(message(e));
     }
+    const { folder, digest } = snap;
     const result = this.results[`${entry.id}@${entry.version}`];
-    if (!result) return refuse(`${entry.id}'s conformance hasn't run: check it first`);
-    if (result.digest !== digest) return refuse(`changed since checked: its files' digest is ${digest}, and its checks ran on ${result.digest}`);
-    if (!result.passed) return refuse(`${entry.id} failed conformance: ${result.reasons.join('; ')}`);
-    const manifest = JSON.parse(readFileSync(join(entry.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    const not = !result ? `${entry.id}'s conformance hasn't run: check it first`
+      : result.digest !== digest ? `changed since checked: its files' digest is ${digest}, and its checks ran on ${result.digest}`
+        : !result.passed ? `${entry.id} failed conformance: ${result.reasons.join('; ')}` : null;
+    if (not) {
+      rmSync(folder, { recursive: true, force: true });
+      return refuse(not);
+    }
+    const manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
-    const hub = entry.builtBy === null && existsSync(join(entry.folder, 'index.ts')) && (released || this.options.plant === 'hub-unless-agent-built');
-    const ext = this.ext(entry, manifest, digest, hub ? 'hub' : 'sandbox', 'loaded');
+    const hub = entry.builtBy === null && existsSync(join(folder, 'index.ts')) && (released || this.options.plant === 'hub-unless-agent-built');
+    const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'loaded');
     this.exts.set(entry.id, ext);
     // Before the hub is ready, it starts at ready: none of its code runs until then.
     if (this.isReady) {
@@ -280,6 +303,10 @@ class Host implements ExtensionHost {
       } catch (e) {
         await this.unload(ext);
         return refuse(`${entry.id} didn't load: ${message(e)}`);
+      }
+      if (this.closed) {
+        await this.unload(ext);
+        return refuse('the host closed as it loaded');
       }
     }
     return this.loadedOf(ext);
@@ -290,8 +317,10 @@ class Host implements ExtensionHost {
 
   /** Runs the package's code: in the hub's process, or in the platform sandbox through the supervisor. */
   private async start(ext: Ext): Promise<void> {
+    const index = join(ext.folder, 'index.ts');
+    const params = ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {};
     if (ext.place === 'hub') {
-      const url = `${pathToFileURL(join(ext.entry.folder, 'index.ts')).href}?digest=${ext.digest.slice(3)}`;
+      const url = `${pathToFileURL(index).href}?digest=${ext.digest.slice(3)}`;
       ext.ask = extensionSide((method, params) => this.dispatch(ext, method, params), async (deep) => {
         const code = (await import(url)) as { default: (deep: unknown) => unknown };
         await code.default(deep);
@@ -299,13 +328,11 @@ class Host implements ExtensionHost {
     } else {
       await this.sandboxed(ext);
     }
-    const index = join(ext.entry.folder, 'index.ts');
-    const params = ext.place === 'sandbox' && existsSync(index) ? { source: stripTypeScriptTypes(readFileSync(index, 'utf8')) } : {};
     await within(LOAD_MS, `${ext.entry.id}'s registering`, ext.ask!('load', params));
   }
   private async sandboxed(ext: Ext): Promise<void> {
     const { supervisor } = this.options;
-    const folder = ext.entry.folder;
+    const folder = ext.folder;
     const run = ext.run!;
     const entry = existsSync(join(folder, 'index.ts')) ? 'index.ts' : 'main';
     // One socket per load, taken by its one connection and gone before the package's code runs.
@@ -322,6 +349,8 @@ class Host implements ExtensionHost {
         grant: { read: [NODE_HOME, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] }, output: { stdout: keep, stderr: keep },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
+      // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
+      ext.stop = async () => { await supervisor.cleanup(run).catch(() => undefined); };
       const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected: ${output.join('').trim()}`)));
       early.catch(() => undefined);
       let socket: Socket;
@@ -362,6 +391,7 @@ class Host implements ExtensionHost {
     await this.turnOff(ext.entry.id, ext);
     delete ext.ask;
     await ext.stop?.();
+    rmSync(ext.folder, { recursive: true, force: true });
   }
 
   /** A package's call, checked here against its grant before anything else of it. */
@@ -471,19 +501,23 @@ class Host implements ExtensionHost {
     if (this.isReady) return;
     this.isReady = true;
     for (const ext of [...this.exts.values()]) {
-      if (!ext.ask) await this.start(ext).catch(() => this.unload(ext));
+      if (!ext.ask) await this.start(ext).then(async () => { if (this.closed) await this.unload(ext); }, () => this.unload(ext));
     }
   }
 
   async turnOn(id: string, routes: string[]): Promise<{ address: string }> {
     const ext = this.exts.get(id);
     if (!ext?.ask) throw Error(`${id} isn't loaded and running`);
+    const untrusted = `${id}'s project is no longer trusted, so it was stopped and not turned on`;
+    if (await this.revoked(ext)) throw Error(untrusted);
     if (ext.server) throw Error(`${id} is already turned on`);
     for (const route of routes) if (!ext.routes.has(route)) throw Error(`${id} registered no route ${route}`);
     const chosen = new Set(routes);
     const server = createHttpServer((req, res) => void this.serve(ext, chosen, req, res));
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     ext.server = server;
+    // Revoked while it bound: unloading it closes this listener too.
+    if (await this.revoked(ext)) throw Error(untrusted);
     return { address: `127.0.0.1:${(server.address() as AddressInfo).port}` };
   }
   private async serve(ext: Ext, chosen: Set<string>, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -519,6 +553,8 @@ class Host implements ExtensionHost {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    // Loads under way finish first, each then unloaded here, so none leaves a process behind.
+    await Promise.all(this.loading.values());
     for (const ext of [...this.exts.values()]) await this.unload(ext);
   }
 }
