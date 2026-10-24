@@ -901,6 +901,29 @@ fragment float4 surface_fragment(SurfaceFragmentInput input [[stage_in]],
   return ycbcrToRGBTransform * ycbcr;
 }
 
+// DeepBuild patch (windoliver/deepbuild#377): a BGRA surface with alpha, premultiplied, read
+// texel for texel (its size is the surface's bounds in device pixels) and drawn with source
+// factor one, so light beyond an object (color where alpha is 0) still shows.
+fragment float4 surface_bgra_fragment(SurfaceFragmentInput input [[stage_in]],
+                                      texture2d<float> bgra_texture
+                                      [[texture(SurfaceInputIndex_YTexture)]]) {
+  constexpr sampler texture_sampler(mag_filter::nearest, min_filter::nearest);
+  return bgra_texture.sample(texture_sampler, input.texture_position);
+}
+
+// DeepBuild patch (windoliver/deepbuild#377): the planted twin, which divides alpha out and is
+// blended as straight alpha, so it loses whatever the slot holds where alpha is 0.
+fragment float4 surface_bgra_divided_fragment(SurfaceFragmentInput input [[stage_in]],
+                                              texture2d<float> bgra_texture
+                                              [[texture(SurfaceInputIndex_YTexture)]]) {
+  constexpr sampler texture_sampler(mag_filter::nearest, min_filter::nearest);
+  float4 color = bgra_texture.sample(texture_sampler, input.texture_position);
+  if (color.a <= 0.0) {
+    return float4(0.0, 0.0, 0.0, 0.0);
+  }
+  return float4(color.rgb / color.a, color.a);
+}
+
 float4 hsla_to_rgba(Hsla hsla) {
   float h = hsla.h * 6.0; // Now, it's an angle but scaled in [0, 6) range
   float s = hsla.s;

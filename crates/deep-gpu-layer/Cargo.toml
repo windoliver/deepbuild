@@ -1,0 +1,38 @@
+[package]
+name = "deep-gpu-layer"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #377: `deep-gpu`, the proof surface for the GPU layer: a scenario of calls against one app's
+# GPU layer (one device, a GPU-layer view drawing a parity scene off the UI thread into a surface's
+# slots), on macOS shown in a headless GPUI window over a page and under the question card, and
+# captured from that window; the conformance run that picks the handoff path, health, the blank
+# guard's comparisons and dark declarations, the compile thread, and the plug-in fixture.
+[[bin]]
+name = "deep-gpu"
+path = "src/main.rs"
+
+# The test encode pool, which finishes encodes in the order a call asks for; no shipped build has it.
+[features]
+test-pool = ["deep-gpu/test-pool"]
+
+[dependencies]
+deep-gpu = { path = "../deep-gpu" }
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-app = { path = "../deep-app" }
+deep-replica = { path = "../deep-replica" }
+bytemuck = { version = "1", features = ["derive"] }
+gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", features = ["test-support"] }
+gpui-shell = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1", default-features = false, features = ["quickjs", "components"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.11"
+wgpu = { version = "30", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui-pre-apple = "=0.3.9"
