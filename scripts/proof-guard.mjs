@@ -3,7 +3,7 @@
 // proposal you approved, and a tolerance in a tagged fixture only tightens.
 import { spawnSync } from 'node:child_process';
 import { basename, dirname, posix } from 'node:path';
-import { blobId, git, isTestFile, literals, named, outsideTests, removedLines, show, sourceOf, spans, tagsIn, tagsWithImports, underTestPaths } from './proof-change.mjs';
+import { blobId, git, isTestFile, literals, named, outsideTests, removedLines, resolveModule, show, sourceOf, spans, tagsIn, tagsWithImports, testImports, underTestPaths } from './proof-change.mjs';
 
 const FIX = 'Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.';
 // Your decisions: the four invariants in AGENTS.md, and each row of the tables under Decisions.
@@ -18,14 +18,14 @@ const LANES_CODE = /^scripts\/(?:proof[^/]*|lanes)\.mjs$/;
 const RUNNER_CONFIG = /(?:^|\/)(?:vitest|vite)\.(?:config|workspace)\.[cm]?[jt]s$/;
 
 // The files under the test paths, other than tests, that the merge base's runner configs name by path
-// from the config's folder, as setupFiles or globalSetup do: they run in every test's process, so
-// they are checks as the config is.
+// from the config's folder, as setupFiles or globalSetup do, resolved as vite resolves them, and
+// those each imports: they run in every test's process, so they are checks as the config is.
 function namedByConfig(root, base) {
   const configs = git(root, ['ls-tree', '-r', '-z', '--name-only', base]).split('\0').filter((path) => RUNNER_CONFIG.test(path));
   return new Set(configs.flatMap((config) => {
     const text = show(root, base, config) ?? '';
-    return literals(text).map(([from, to]) => posix.normalize(posix.join(posix.dirname(config), text.slice(from + 1, to - 1))));
-  }).filter((path) => underTestPaths(path) && !isTestFile(path)));
+    return literals(text).map(([from, to]) => resolveModule(root, base, posix.normalize(posix.join(posix.dirname(config), text.slice(from + 1, to - 1)))));
+  }).filter((path) => underTestPaths(path) && !isTestFile(path)).flatMap((path) => [...testImports(root, base, path).keys()]));
 }
 
 export function guard({ root, change, issue }, approvals, say) {
