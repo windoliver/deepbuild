@@ -42,27 +42,33 @@ export function guard({ root, change, issue }, approvals, say) {
   if (!refused) say('PASS', 'guard', `${change.commits.length} commit${change.commits.length === 1 ? '' : 's'} checked: no guarded edit lacks its own approved proposal`);
 }
 
-/** The text with each test's own source, `from` to `to` inclusive, blanked out, so what is left lies outside every test. */
+/**
+ * The text with each test's own source, `from` to `to` inclusive, blanked out, and the `;` that ends
+ * its statement right after it, so what is left lies outside every test.
+ */
 function outsideTests(text, tests) {
   // By UTF-16 units, as the parser counts offsets.
   const chars = text.split('');
-  for (const { from, to } of tests) for (let index = from; index <= to; index += 1) if (chars[index] !== '\n') chars[index] = ' ';
+  for (const { from, to } of tests) {
+    for (let index = from; index <= to; index += 1) if (chars[index] !== '\n') chars[index] = ' ';
+    if (text[to + 1] === ';') chars[to + 1] = ' ';
+  }
   return chars.join('');
 }
 
 /** The literals of the text that lie outside every test, whose white space is data a tagged test may compare. */
 const literalsOutside = (text, tests) => literals(text).filter(([from, to]) => !tests.some((test) => test.from <= from && to - 1 <= test.to));
 
-/** The text outside every test with its white space, `;` and `,` squeezed, except inside literals, which stay as written. */
+/** The text outside every test with its white space squeezed, except inside literals, which stay as written. */
 function squeezed(text, tests) {
   const outside = outsideTests(text, tests);
   let result = '', at = 0;
   for (const [from, to] of literalsOutside(text, tests).sort((a, b) => a[0] - b[0])) {
     if (from < at) continue;
-    result += `${outside.slice(at, from).replace(/[\s;,]+/g, ' ')}\0${outside.slice(from, to)}\0`;
+    result += `${outside.slice(at, from).replace(/\s+/g, ' ')}\0${outside.slice(from, to)}\0`;
     at = to;
   }
-  return result + outside.slice(at).replace(/[\s;,]+/g, ' ');
+  return result + outside.slice(at).replace(/\s+/g, ' ');
 }
 
 // A file both parents of a merge changed past git's merging is judged three ways, each side read
@@ -145,27 +151,29 @@ function testEdits(root, commit, file, before, relevant) {
   const tagged = tests.filter((test) => tagsOf(test).length);
   if (!tagged.length) return [];
   const hit = new Set();
-  const inner = (line) => tests.filter((test) => test.start <= line && line <= test.end).sort((a, b) => b.from - a.from)[0];
+  const covering = (line) => tests.filter((test) => test.start <= line && line <= test.end);
   const lines = file.status === 'D' ? before.split('\n').map((_, index) => index + 1) : removedLines(file);
   // A removed line holding code outside every test, such as a helper the tests read or one written
   // after a test on its line, edits every tagged test; a blank one, as a deleted test leaves, doesn't,
   // unless it lies inside a literal outside the tests, such as a blank line of an expected value.
-  // The same holds for a suite's own lines, outside the tests inside it.
+  // The same holds for a suite's own text, outside the tests inside it. A line is judged by every
+  // test whose text it holds, such as a tagged test ending on the line where an untagged one starts.
   const leaves = tests.filter((test) => test.leaf);
   const bare = outsideTests(before, leaves).split('\n');
   const starts = [0];
   for (const text of bare) starts.push(starts.at(-1) + text.length + 1);
   const data = literalsOutside(before, leaves);
-  const blank = (line) => !/[^\s;,]/.test(bare[line - 1] ?? '') && !data.some(([from, to]) => from < starts[line] && starts[line - 1] < to);
+  const blank = (line) => !/\S/.test(bare[line - 1] ?? '') && !data.some(([from, to]) => from < starts[line] && starts[line - 1] < to);
   const outside = outsideTests(before, tests).split('\n');
-  const loose = (line) => /[^\s;,]/.test(outside[line - 1] ?? '') || (!inner(line) && !blank(line));
   for (const line of lines) {
-    const test = inner(line);
-    if (loose(line)) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
-    if (!test) continue;
-    if (tagsOf(test).length) hit.add(test);
-    // A suite's own line, such as its describe.skip or a hook, edits the tagged tests inside it.
-    else if (!test.leaf && !blank(line)) for (const leaf of tagged.filter((inside) => inside.leaf && inside.from > test.from && inside.to <= test.to)) hit.add(leaf);
+    const cover = covering(line);
+    const suite = cover.filter((test) => !test.leaf).sort((a, b) => b.from - a.from)[0];
+    if (/\S/.test(outside[line - 1] ?? '') || (!suite && !blank(line))) for (const leaf of tagged.filter(({ leaf: isLeaf }) => isLeaf)) hit.add(leaf);
+    for (const leaf of cover.filter((test) => test.leaf && tagsOf(test).length)) hit.add(leaf);
+    if (!suite || blank(line)) continue;
+    // A suite's own text, such as its describe.skip, a hook or a const, edits the tagged tests inside it.
+    if (tagsOf(suite).length) hit.add(suite);
+    else for (const leaf of tagged.filter((inside) => inside.leaf && inside.from > suite.from && inside.to <= suite.to)) hit.add(leaf);
   }
   // An insertion lands between old lines oldStart and oldStart + 1: inside a tagged test when both are.
   for (const { oldStart, removed, added } of file.hunks) {
