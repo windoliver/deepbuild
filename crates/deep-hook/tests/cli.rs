@@ -225,18 +225,17 @@ fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
     }
 }
 
-#[test]
-fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
+/// A hub on `home`'s socket that writes its hello, reads one request, writes what `answer` makes of the request's
+/// id, then holds the connection for `linger`.
+fn fake_hub(
+    home: &std::path::Path,
+    answer: impl Fn(&str) -> String + Send + 'static,
+    linger: std::time::Duration,
+) -> std::thread::JoinHandle<()> {
     use std::io::{BufRead, BufReader, Write};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    // A Unix socket path must fit in 104 bytes, so the home is short.
-    let home = std::path::PathBuf::from(format!("/tmp/dh315-hold-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&home);
-    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
     let listener =
         std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
-    // A hub that acknowledges with a hold 300 ms ahead and never replies.
-    let hub = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
         let mut reader = BufReader::new(stream);
         reader
@@ -245,23 +244,30 @@ fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
             .unwrap();
         let mut request = String::new();
         reader.read_line(&mut request).unwrap();
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
-        let ack = format!(
-            "{{\"v\":1,\"ack\":\"x\",\"hold_until_ms\":{}}}\n",
-            now + 300
-        );
-        reader.get_mut().write_all(ack.as_bytes()).unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1500));
-    });
-    let payload = r#"{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git push"}}"#;
+        let at = request.find("\"id\":\"").unwrap() + 6;
+        let id = &request[at..at + 26];
+        let _ = reader.get_mut().write_all(answer(id).as_bytes());
+        std::thread::sleep(linger);
+    })
+}
+
+/// Runs deep-hook's PreToolUse for `command` against `home`, and returns its exit code, how long it took, and the spool.
+fn pre_tool_use(
+    home: &std::path::Path,
+    command: &str,
+) -> (Option<i32>, std::time::Duration, String) {
+    use std::io::Write;
+    let payload = format!(
+        r#"{{"session_id":"s","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"{command}"}}}}"#
+    );
+    let start = std::time::Instant::now();
     let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
         .args(["claude-code", "PreToolUse"])
         .env_clear()
-        .env("HOME", &home)
+        .env("HOME", home)
         .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .unwrap();
     child
@@ -271,17 +277,112 @@ fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
         .write_all(payload.as_bytes())
         .unwrap();
     let status = child.wait().unwrap();
-    hub.join().unwrap();
     let spooled =
         std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
-    std::fs::remove_dir_all(&home).unwrap();
-    assert_eq!(
-        status.code(),
-        Some(0),
-        "the call is allowed once the hold runs out"
+    (status.code(), start.elapsed(), spooled)
+}
+
+/// A short home (a Unix socket path must fit in 104 bytes) with the fail_closed entry for `pkill *`.
+fn short_home(name: &str) -> std::path::PathBuf {
+    let home = std::path::PathBuf::from(format!("/tmp/dh315-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        r#"{"v":1,"entries":{"no-kill-by-name":{"match":"shell:pkill *","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#,
+    )
+    .unwrap();
+    home
+}
+
+fn now_ms() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+}
+
+#[test]
+fn a_call_whose_acknowledged_hold_runs_out_is_still_spooled() {
+    let home = short_home("hold");
+    // A hub that acknowledges with a hold 300 ms ahead and never replies.
+    let hub = fake_hub(
+        &home,
+        |id| {
+            format!(
+                "{{\"v\":1,\"ack\":\"{id}\",\"hold_until_ms\":{}}}\n",
+                now_ms() + 300
+            )
+        },
+        std::time::Duration::from_millis(1500),
     );
+    let (code, _, spooled) = pre_tool_use(&home, "git push");
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert_eq!(code, Some(0), "the call is allowed once the hold runs out");
     assert!(
         spooled.contains("git push") && spooled.contains("\"late\":true"),
         "the call is spooled marked late: {spooled:?}"
     );
+}
+
+#[test]
+fn an_acknowledgement_of_another_request_is_the_hub_away() {
+    let home = short_home("other");
+    // A hub that acknowledges some other request with a hold 5 s ahead and never replies.
+    let hub = fake_hub(
+        &home,
+        |_| {
+            format!(
+                "{{\"v\":1,\"ack\":\"01K74FKZVKZGATTBZAEGPRE999\",\"hold_until_ms\":{}}}\n",
+                now_ms() + 5000
+            )
+        },
+        std::time::Duration::from_millis(2000),
+    );
+    let (code, took, spooled) = pre_tool_use(&home, "pkill -f node");
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        took < std::time::Duration::from_secs(1),
+        "deep-hook waited on a hold it wasn't given: {took:?}"
+    );
+    assert_eq!(code, Some(2), "the fail_closed entry denies the call");
+    assert!(
+        spooled.contains("pkill -f node"),
+        "the call is spooled: {spooled:?}"
+    );
+}
+
+#[test]
+fn a_reply_outside_hook_reply_2_is_the_hub_away() {
+    for (case, reply) in [
+        (
+            "an unknown field",
+            r#"{"v":1,"exit":0,"stdout":"","stderr":"","allow":true}"#,
+        ),
+        (
+            "another version",
+            r#"{"v":2,"exit":0,"stdout":"","stderr":""}"#,
+        ),
+    ] {
+        let home = short_home("reply");
+        let hub = fake_hub(
+            &home,
+            move |id| format!("{{\"v\":1,\"ack\":\"{id}\",\"hold_until_ms\":null}}\n{reply}\n"),
+            std::time::Duration::from_millis(200),
+        );
+        let (code, _, spooled) = pre_tool_use(&home, "pkill -f node");
+        hub.join().unwrap();
+        std::fs::remove_dir_all(&home).unwrap();
+        assert_eq!(
+            code,
+            Some(2),
+            "{case}: the fail_closed entry denies the call, not the reply"
+        );
+        assert!(
+            spooled.contains("pkill -f node"),
+            "{case}: the call is spooled: {spooled:?}"
+        );
+    }
 }
