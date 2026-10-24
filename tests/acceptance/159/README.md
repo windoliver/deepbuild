@@ -344,7 +344,8 @@ the criterion says; a test headed `(… half)` is the part this surface reaches,
   connection. `git log --all` in the job's folder lists exactly the base commit's history; otherwise the failure
   names the extra refs (a worktree of the mirror shows `refs/heads/work`).
 - **AC20.** The runner's half: Claude Code at 2.1.999 (outside the facts). A `smoke` job raises one authority ask
-  for the standing approval and starts nothing; approved on the card while the account is at 95%, it still waits
+  for the standing approval and starts nothing; approved on the card (its click token, and the plan's hash if it
+  shows one: the blind redraft, adopted by your decision on 2026-10-23) while the account is at 95%, it still waits
   (cause plan window); with room it runs. A drafting job on 2.1.999 afterwards is refused, naming the version, or
   the failure says the range was widened by the smoke test's own run. A second smoke test asks nothing. The
   session's half (the first session on the new version starting it, the diff of its recorded payloads, holds
