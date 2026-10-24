@@ -304,3 +304,15 @@ test('a shared helper under the test paths, outside the test\'s folder, runs on 
   assert.ok(!result.lines.some((line) => line.startsWith(`PASS before: `) && line.includes(`${c1} sums`)), show(result));
   assert.ok(problems(result, 'trace').some((found) => found.startsWith('FAIL trace: Closes')), show(result));
 });
+
+test("once main holds the proof lanes, a file the test runner's config names, such as a setup file, is guarded as the config is", (t) => {
+  const config = "export default { test: { include: ['tests/**/*.test.ts'], setupFiles: ['./tests/setup.ts'], globalSetup: 'tests/global/one.ts' } };\n";
+  const scene = (files) => repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'vitest.config.ts': config, 'tests/setup.ts': '// setup\n', 'tests/global/one.ts': '// global\n', 'tests/helpers/other.mjs': '// other\n' },
+    commits: [{ files, message: `Edit\n\nPart of #${ISSUE}` }],
+  });
+  const refused = problems(proof(scene({ 'tests/setup.ts': "import { expect } from 'vitest';\nexpect.extend({ toBe: () => ({ pass: true, message: () => '' }) });\n", 'tests/global/one.ts': '// changed\n' }), ['guard']), 'guard');
+  for (const path of ['tests/setup.ts', 'tests/global/one.ts']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), refused.join('\n'));
+  assert.deepEqual(problems(proof(scene({ 'tests/helpers/other.mjs': '// edited\n' }), ['guard']), 'guard'), [], 'a file the config names nowhere is free');
+});
