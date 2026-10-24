@@ -7,6 +7,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
+import { homedir } from 'node:os';
 import { stripTypeScriptTypes } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -121,17 +122,25 @@ const isResult = (r: unknown): r is CheckResult => typeof r === 'object' && r !=
   && typeof (r as CheckResult).testsRun === 'number' && Array.isArray((r as CheckResult).failures);
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
-/** The interpreter a `main` names on its first line, so its install can be read in the sandbox. */
+/**
+ * The install of the interpreter a `main` names on its first line (the folder above its program's own), so it can
+ * run in the sandbox. Only an install of its own: never one holding your home or the package, and never a
+ * system folder, whose programs the sandbox runs already, so `#!/usr/bin/env` or `#!/bin/sh` adds nothing.
+ */
 function interpreter(folder: string): string[] {
   const first = readFileSync(join(folder, 'main'), 'utf8').split('\n', 1)[0] ?? '';
   const program = first.startsWith('#!') ? first.slice(2).trim().split(/\s+/)[0] ?? '' : '';
-  return program.startsWith('/') && existsSync(program) ? [dirname(dirname(realpathSync(program)))] : [];
+  if (!program.startsWith('/') || !existsSync(program)) return [];
+  const install = dirname(dirname(realpathSync(program)));
+  const holds = (path: string): boolean => path === install || path.startsWith(`${install}/`);
+  return install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? [install] : [];
 }
 
 class Host implements ExtensionHost {
   private readonly entries: Record<string, Entry>;
   private readonly results: Record<string, Conformance>;
   private readonly exts = new Map<string, Ext>();
+  private readonly loading = new Map<string, Promise<void>>();
   private isReady = false;
   private closed = false;
 
@@ -227,13 +236,23 @@ class Host implements ExtensionHost {
   }
 
   async load(pkg: Installed): Promise<Load> {
+    // One load of a package at a time, so two callers can't each start a process of it.
+    const before = this.loading.get(pkg.id) ?? Promise.resolve();
+    const now = before.then(() => this.loadNow(pkg));
+    const settled = now.then(() => undefined, () => undefined);
+    this.loading.set(pkg.id, settled);
+    void settled.then(() => { if (this.loading.get(pkg.id) === settled) this.loading.delete(pkg.id); });
+    return now;
+  }
+  private async loadNow(pkg: Installed): Promise<Load> {
     const refuse = (reason: string): Refused => ({ status: 'refused', id: pkg.id, version: pkg.version, reason });
     if (this.options.safe) return refuse('safe mode: the hub loads no extension');
     const entry = this.entries[pkg.id];
     if (!entry) return refuse(`${pkg.id} isn't installed`);
+    const untrusted = `${entry.id} comes with ${entry.project}, a project you haven't trusted`;
     const running = this.exts.get(entry.id);
-    if (running) return this.loadedOf(running);
-    if (entry.project && !(await this.options.trust.trusted(entry.project))) return refuse(`${entry.id} comes with ${entry.project}, a project you haven't trusted`);
+    if (running) return (await this.revoked(running)) ? refuse(untrusted) : this.loadedOf(running);
+    if (entry.project && !(await this.options.trust.trusted(entry.project))) return refuse(untrusted);
     let digest: string;
     try {
       digest = packageDigest(entry.folder);
@@ -317,6 +336,12 @@ class Host implements ExtensionHost {
       server.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  }
+  /** Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. */
+  private async revoked(ext: Ext): Promise<boolean> {
+    if (!ext.entry.project || (await this.options.trust.trusted(ext.entry.project))) return false;
+    await this.unload(ext);
+    return true;
   }
   private async unload(ext: Ext): Promise<void> {
     if (this.exts.get(ext.entry.id) === ext) this.exts.delete(ext.entry.id);
@@ -411,7 +436,7 @@ class Host implements ExtensionHost {
   }
   async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult> {
     const ext = this.owner(kind);
-    if (!ext?.ask) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
+    if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
     try {
       const result = await within(ctx.deadline, `${ext.entry.id}'s ${kind}`, ext.ask('run', { type: kind, spec, ctx }));
       if (!isResult(result)) throw Error(`${ext.entry.id}'s ${kind} returned no check result`);
@@ -424,7 +449,7 @@ class Host implements ExtensionHost {
   async deliver(events: Event[]): Promise<void> {
     await Promise.all([...this.exts.values()].map(async (ext) => {
       const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => JSON.parse(toJson(e)) as unknown);
-      if (mine.length && ext.ask) await within(CALL_MS, `${ext.entry.id}'s events`, ext.ask('deliver', { events: mine })).catch(() => undefined);
+      if (mine.length && ext.ask && !(await this.revoked(ext))) await within(CALL_MS, `${ext.entry.id}'s events`, ext.ask('deliver', { events: mine })).catch(() => undefined);
     }));
   }
   async ready(): Promise<void> {
@@ -449,7 +474,7 @@ class Host implements ExtensionHost {
   private async serve(ext: Ext, chosen: Set<string>, req: IncomingMessage, res: ServerResponse): Promise<void> {
     const path = (req.url ?? '/').split('?')[0]!;
     const route = `${req.method} ${path}`;
-    if (!chosen.has(route) || !ext.ask) {
+    if (!chosen.has(route) || !ext.ask || (await this.revoked(ext))) {
       req.resume();
       const chosenPath = [...chosen].some((r) => r.slice(r.indexOf(' ') + 1) === path);
       res.writeHead(chosenPath ? 405 : 404).end();
