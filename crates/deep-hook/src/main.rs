@@ -356,19 +356,23 @@ fn exchange(
         }
         _ => return (Some(request), down, ack_text),
     };
-    // The hub has the call: from here its hold, not the watchdog, says how long the hook waits.
-    ACKED.store(true, Ordering::SeqCst);
-    // A reply is due by the hold the hub acknowledged, however far ahead; with no hold, by the same deadline.
+    // A reply is due by the hold the hub acknowledged, however far ahead; with no hold, by the same deadline. A hold
+    // past what this machine's clock can hold is the hub away.
     let due = match integer(member(&ack, "hold_until_ms")) {
         Some(ms) if !cfg!(feature = "plant-fixed-deadline") => {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_millis() as f64;
-            Some(Instant::now() + Duration::from_millis((ms - now).max(0.0) as u64))
+            match Instant::now().checked_add(Duration::from_millis((ms - now).max(0.0) as u64)) {
+                Some(due) => Some(due),
+                None => return (Some(request), down, ack_text),
+            }
         }
         _ => ack_deadline,
     };
+    // The hub has the call: from here its hold, not the watchdog, says how long the hook waits.
+    ACKED.store(true, Ordering::SeqCst);
     let reply_text = match read_line(&mut reader, due) {
         Got::Line(text) => text,
         Got::Timeout => return (Some(request), late, ack_text),
