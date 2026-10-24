@@ -122,18 +122,23 @@ const isResult = (r: unknown): r is CheckResult => typeof r === 'object' && r !=
   && typeof (r as CheckResult).testsRun === 'number' && Array.isArray((r as CheckResult).failures);
 /** Whether the manifest asks for the grant: an access word, or `notices` for a declared notice kind. */
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
+/** The interpreters a `main` may name, each only as the program of that name on the hub's own PATH. */
+const INTERPRETERS = ['python3', 'python', 'node', 'ruby', 'perl'];
 /**
  * The install of the interpreter a `main` names on its first line (the folder above its program's own), so it can
- * run in the sandbox. Only an install of its own: never one holding your home or the package, and never a
- * system folder, whose programs the sandbox runs already, so `#!/usr/bin/env` or `#!/bin/sh` adds nothing.
+ * run in the sandbox: only an interpreter the hub itself would run by name, and only an install of its own, never
+ * one holding your home or the package. A system program (`#!/bin/sh`) needs no grant, and any other adds none.
  */
 function interpreter(folder: string): string[] {
   const first = readFileSync(join(folder, 'main'), 'utf8').split('\n', 1)[0] ?? '';
   const program = first.startsWith('#!') ? first.slice(2).trim().split(/\s+/)[0] ?? '' : '';
   if (!program.startsWith('/') || !existsSync(program)) return [];
-  const install = dirname(dirname(realpathSync(program)));
+  const real = realpathSync(program);
+  const known = (process.env.PATH ?? '').split(':').filter((dir) => dir.startsWith('/'))
+    .some((dir) => INTERPRETERS.some((name) => existsSync(join(dir, name)) && realpathSync(join(dir, name)) === real));
+  const install = dirname(dirname(real));
   const holds = (path: string): boolean => path === install || path.startsWith(`${install}/`);
-  return install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? [install] : [];
+  return known && install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? [install] : [];
 }
 
 class Host implements ExtensionHost {
@@ -337,6 +342,15 @@ class Host implements ExtensionHost {
       rmSync(dir, { recursive: true, force: true });
     }
   }
+  /** Asks the running package, within `ms`; a sandboxed package that overruns is stopped, its process with it. */
+  private async ask(ext: Ext, ms: number, what: string, method: string, params: unknown): Promise<unknown> {
+    try {
+      return await within(ms, `${ext.entry.id}'s ${what}`, ext.ask!(method, params));
+    } catch (e) {
+      if (e instanceof Overran && ext.place === 'sandbox') await this.unload(ext);
+      throw e;
+    }
+  }
   /** Whether its project's trust was revoked since it loaded: then it is unloaded, its routes and process gone. */
   private async revoked(ext: Ext): Promise<boolean> {
     if (!ext.entry.project || (await this.options.trust.trusted(ext.entry.project))) return false;
@@ -358,6 +372,7 @@ class Host implements ExtensionHost {
     const checked = this.options.plant !== 'grants-only-in-record-query' || method === 'deep.record.query';
     if (schema.needs && checked && !granted(ext.manifest, schema.needs)) throw Error(`${method} needs the grant "${schema.needs}", which ${ext.entry.id} wasn't given`);
     const id = ext.entry.id;
+    if (ext.mode === 'loaded' && (await this.revoked(ext))) throw Error(`${method}: ${id}'s project is no longer trusted, so it was stopped`);
     const conformance = ext.mode === 'conformance';
     const quiet = (): void => { if (conformance) throw Error(`${method}: nothing reaches the record while conformance runs`); };
     switch (method) {
@@ -438,18 +453,18 @@ class Host implements ExtensionHost {
     const ext = this.owner(kind);
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
     try {
-      const result = await within(ctx.deadline, `${ext.entry.id}'s ${kind}`, ext.ask('run', { type: kind, spec, ctx }));
+      const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx });
       if (!isResult(result)) throw Error(`${ext.entry.id}'s ${kind} returned no check result`);
       return result;
     } catch (e) {
-      if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms`);
+      if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms${ext.place === 'sandbox' ? ', and was stopped' : ''}`);
       throw e;
     }
   }
   async deliver(events: Event[]): Promise<void> {
     await Promise.all([...this.exts.values()].map(async (ext) => {
       const mine = events.filter((e) => ext.subscribed.has(e.kind)).map((e) => JSON.parse(toJson(e)) as unknown);
-      if (mine.length && ext.ask && !(await this.revoked(ext))) await within(CALL_MS, `${ext.entry.id}'s events`, ext.ask('deliver', { events: mine })).catch(() => undefined);
+      if (mine.length && ext.ask && !(await this.revoked(ext))) await this.ask(ext, CALL_MS, 'events', 'deliver', { events: mine }).catch(() => undefined);
     }));
   }
   async ready(): Promise<void> {
@@ -484,7 +499,7 @@ class Host implements ExtensionHost {
     for await (const chunk of req) chunks.push(chunk as Buffer);
     try {
       const request = { method: req.method, path, headers: req.headers, body: Buffer.concat(chunks).toString('utf8') };
-      const answer = (await within(CALL_MS, `${ext.entry.id}'s ${route}`, ext.ask('route', { route, request }))) as { status?: unknown; body?: unknown } | null;
+      const answer = (await this.ask(ext, CALL_MS, route, 'route', { route, request })) as { status?: unknown; body?: unknown } | null;
       const status = typeof answer?.status === 'number' && answer.status >= 200 && answer.status < 600 ? answer.status : 502;
       res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8' }).end(typeof answer?.body === 'string' ? answer.body : '');
     } catch {
