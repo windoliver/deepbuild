@@ -1,0 +1,5 @@
+// A refused load (#348 AC1): its code is fine, but its manifest asks for the access word `network`, which isn't in
+// access@1's closed list, so the manifest contract fails it, naming the word.
+export default function (deep: any): void {
+  deep.registerCheck('ext.badmanifest.report', () => ({ outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null }));
+}
