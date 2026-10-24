@@ -254,9 +254,10 @@ export class Core {
    * for that, not for the commit. Resolves once each append settled.
    */
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
-    const handled = this.queue(() => this.handleHook(drafts, meta, writer)).then(({ settled }) => settled);
+    // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
-    return handled;
+    const replayed = this.replaying ?? Promise.resolve();
+    return replayed.then(() => this.queue(() => this.handleHook(drafts, meta, writer))).then(({ settled }) => settled);
   }
   /**
    * A hook reaching the running hub shows it answers again: what deep-hook spooled while the hub was late is

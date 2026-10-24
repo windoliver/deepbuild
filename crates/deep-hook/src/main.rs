@@ -372,7 +372,11 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
                 std::thread::sleep(Duration::from_secs(3600));
             }
         }
-        file.write_all(request.as_bytes())?;
+        // One write call, never write_all's retries: a second call could land after another hook's line. A short
+        // write leaves a cut line, which the hub skips, and the next try writes the whole line again.
+        if file.write(request.as_bytes())? < request.len() {
+            continue;
+        }
         let written = file.metadata()?;
         match fs::metadata(&path) {
             Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => return Ok(()),
@@ -380,7 +384,7 @@ fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<
         }
     }
     Err(io::Error::other(
-        "the spool file kept moving under the write",
+        "the spool line was cut or moved in each of three tries",
     ))
 }
 
