@@ -326,3 +326,29 @@ test('a file the config names without its extension, and each file under the tes
   const refused = problems(proof(scene({ 'tests/setup.ts': "import './hook';\nimport './deep/index.ts';\n// edited\n", 'tests/hook.ts': '// hollow\n', 'tests/deeper.mjs': '// hollow\n' }), ['guard']), 'guard');
   for (const path of ['tests/setup.ts', 'tests/hook.ts', 'tests/deeper.mjs']) assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), refused.join('\n'));
 });
+
+// A module path may resolve to a file the change adds beside one the merge base holds, such as
+// check.js beside check.ts, or setup.ts in place of setup/index.ts: that file then stands in for it.
+test('a file added beside a guarded one, which a module path may resolve to instead, is an edit of it', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: {
+      'scripts/proof-guard.mjs': '// the guard\n', 'vitest.config.ts': "export default { test: { setupFiles: ['./tests/setup'] } };\n", 'tests/setup/index.ts': '// setup\n',
+      [`${dir}/check.ts`]: "import assert from 'node:assert/strict';\nexport const same = (a: number, b: number) => assert.equal(a, b);\n",
+      [`${dir}/a.test.ts`]: `import { it } from 'vitest';\nimport { same } from './check.js';\n\nit('${c1} sums', () => {\n  same(1 + 1, 2);\n});\n`,
+    },
+    commits: [{ files: { [`${dir}/check.js`]: 'export const same = () => {};\n', 'tests/setup.ts': '// hollow\n' }, message: `Add\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  const refused = problems(result, 'guard');
+  assert.ok(refused.some((found) => found.startsWith(`FAIL guard: ${dir}/check.ts: shadowed by ${dir}/check.js, added beside it`) && found.includes(`${c1} sums`)), show(result));
+  assert.ok(refused.some((found) => found.startsWith("FAIL guard: tests/setup/index.ts: a file the test runner's config names changed, shadowed by tests/setup.ts")), show(result));
+});
+
+test('a file a config-named setup file reaches by a template literal or a path from the repository root is guarded too', (t) => {
+  const result = proof(repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'scripts/proof-guard.mjs': '// the guard\n', 'vitest.config.ts': "export default { test: { setupFiles: ['tests/setup.ts'] } };\n", 'tests/setup.ts': "await import(`./hook.ts`);\nimport '/tests/root.ts';\n", 'tests/hook.ts': '// hook\n', 'tests/root.ts': '// root\n' },
+    commits: [{ files: { 'tests/hook.ts': '// hollow\n', 'tests/root.ts': '// hollow\n' }, message: `Edit\n\nPart of #${ISSUE}` }],
+  }), ['guard']);
+  for (const path of ['tests/hook.ts', 'tests/root.ts']) assert.ok(problems(result, 'guard').some((found) => found.startsWith(`FAIL guard: ${path}: a file the test runner's config names changed`)), show(result));
+});
