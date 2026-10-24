@@ -168,3 +168,20 @@ test('a hollow copy of a tagged test added ahead of it, the original no longer r
   const result = guardOf(t, `\n${tagged}`, `\nit('${c1} adds', () => {\n}); if (false)\n${tagged}`);
   assert.ok(problems(result, 'guard').some((found) => found.includes(`${c1} adds`)), show(result));
 });
+
+// Two tests of one full name report under one key, so a tagged test kept from registering can hide
+// behind a copy of its name: each declared test of a name needs its own report.
+test('a tagged test kept from registering behind a same-named copy in a second suite is one the runner never reported', (t) => {
+  const top = "import assert from 'node:assert/strict';\nimport { describe, it } from 'node:test';\nimport { f } from '../../../src/impl.mjs';\n\n";
+  const tagged = `  it('${c1} adds', () => {\n    assert.equal(f(), 3);\n  });\n`;
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'src/impl.mjs': 'export const f = () => 3;\n', [`${dir}/a.test.mjs`]: `${top}describe('s', () => {\n${tagged}});\n` },
+    commits: [{
+      files: { 'src/impl.mjs': 'export const f = () => 4;\n', [`${dir}/a.test.mjs`]: `${top}if (false)\ndescribe('s', () => {\n${tagged}});\n\ndescribe('s', () => {\n  const f = () => 3;\n${tagged}});\n` },
+      message: `Break f\n\nPart of #${ISSUE}`,
+    }],
+  });
+  const result = proof(scene, ['before']);
+  assert.ok(problems(result, 'before').some((found) => found.includes(`s › ${c1} adds: declared and not skipped, but the runner never reported it`)), show(result));
+});
