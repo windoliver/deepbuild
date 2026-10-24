@@ -424,3 +424,26 @@ fn a_spool_path_that_leads_elsewhere_is_never_written() {
         );
     }
 }
+
+#[test]
+fn a_hold_past_the_contract_is_the_hub_away() {
+    let home = short_home("past");
+    // One past hook.ack@2's largest hold_until_ms, and no reply.
+    let hub = fake_hub(
+        &home,
+        |id| format!("{{\"v\":1,\"ack\":\"{id}\",\"hold_until_ms\":9007199254740992}}\n"),
+        std::time::Duration::from_millis(2000),
+    );
+    let (code, took, spooled) = pre_tool_use(&home, "pkill -f node");
+    hub.join().unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    assert!(
+        took < std::time::Duration::from_secs(1),
+        "deep-hook waited on a hold outside the contract: {took:?}"
+    );
+    assert_eq!(code, Some(2), "the fail_closed entry denies the call");
+    assert!(
+        spooled.contains("pkill -f node"),
+        "the call is spooled: {spooled:?}"
+    );
+}
