@@ -1,0 +1,148 @@
+{
+  "format": 1,
+  "id": "anchored-378",
+  "profile": "scene",
+  "title": "A marker on a point while the camera orbits",
+  "description": "A red point 3 m from the target in a 3D writer layer; a green dot in a 2D writer layer, anchored to it through an overlay; a perspective camera orbiting at 90 degrees a second.",
+  "size": [
+    480,
+    360
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "4s"
+  },
+  "layers": {
+    "scene": {
+      "writer": "agent-a",
+      "title": "Scene",
+      "order": "a0"
+    },
+    "marks": {
+      "writer": "agent-b",
+      "title": "Marks",
+      "order": "a1"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "scene",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "perspective",
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "orbit": {
+          "azimuth": 0,
+          "elevation": 30,
+          "distance": 10
+        },
+        "fov": 40
+      }
+    },
+    "beacon": {
+      "id": "beacon",
+      "kind": "mark.point@1",
+      "layer": "scene",
+      "name": "Beacon",
+      "order": "a1",
+      "params": {
+        "size": 16,
+        "shape": "dot",
+        "paint": {
+          "fill": {
+            "role": "beacon"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0,
+          0
+        ]
+      }
+    },
+    "tag-frame": {
+      "id": "tag-frame",
+      "kind": "frame@1",
+      "layer": "marks",
+      "name": "Marker frame",
+      "order": "a0",
+      "params": {
+        "box": [
+          0,
+          0,
+          16,
+          16
+        ]
+      }
+    },
+    "tag-dot": {
+      "id": "tag-dot",
+      "kind": "circle@1",
+      "layer": "marks",
+      "name": "Marker",
+      "order": "a0",
+      "parent": "tag-frame",
+      "params": {
+        "center": [
+          8,
+          8
+        ],
+        "r": 3,
+        "paint": {
+          "fill": {
+            "role": "marker"
+          }
+        }
+      }
+    },
+    "tag": {
+      "id": "tag",
+      "kind": "overlay.frame@1",
+      "layer": "marks",
+      "name": "Marker on the beacon",
+      "order": "a1",
+      "params": {
+        "frame": "tag-frame",
+        "anchor": {
+          "item": "beacon",
+          "point": [
+            0,
+            0,
+            0
+          ]
+        },
+        "offset": [
+          -8,
+          -8
+        ]
+      }
+    }
+  },
+  "channels": {
+    "spin": {
+      "target": "items/cam/params/orbit/azimuth",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "4s",
+          "value": 360,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}
