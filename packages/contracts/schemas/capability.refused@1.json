@@ -1,0 +1,120 @@
+{
+  "title": "capability.refused@1",
+  "description": "Capabilities refused a call, for its grant, its quota or its schema: the writer from the caller's connection, never the call's arguments or headers; the clause or limit it broke; and a digest of the call, never its values.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "capability.refused"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+      "description": "Who made the refused call, from its connection."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "call": {
+          "type": "string",
+          "pattern": "^[a-z][A-Za-z0-9_.-]*$",
+          "maxLength": 8192,
+          "description": "The method or action called, by name."
+        },
+        "broke": {
+          "type": "string",
+          "enum": [
+            "grant",
+            "quota",
+            "schema"
+          ],
+          "description": "What refused it.",
+          "x-closure": {
+            "closed": "capabilities refuse a call only for its grant, its quota or its schema",
+            "reopens": "a new major of this kind",
+            "mark": "exhaustive"
+          }
+        },
+        "clause": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The grant clause, the limit or the schema path the call broke, never a value from the call."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "maxLength": 8192,
+          "description": "The SHA-256 of the call's canonical JSON, in lower-case hex."
+        }
+      },
+      "required": [
+        "call",
+        "broke",
+        "clause",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
