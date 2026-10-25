@@ -1378,26 +1378,16 @@ fn show(
 /// `missing` says where the run supplies none, stale once its reading is older than its
 /// `stale_after`. A counter is a text whose `text` is `{counter: {source: <bound value ID>,
 /// format}}`: it formats that bound value's reading as it changes, with tabular figures (canvas
-/// primitives: Text animator and counter).
+/// primitives: Text animator and counter). Numbers are written as `en` writes them.
 pub fn bound_texts(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
     record: &Record,
 ) -> Result<BTreeMap<String, Shown>, Refused> {
-    bound_texts_in(doc, items, record, "en")
-}
-
-/// [`bound_texts`], with numbers written as `locale` writes them.
-pub fn bound_texts_in(
-    doc: &Map<String, Value>,
-    items: &Map<String, Value>,
-    record: &Record,
-    locale: &str,
-) -> Result<BTreeMap<String, Shown>, Refused> {
     let mut out = BTreeMap::new();
     for id in bound_ids(doc, items)? {
         let item = items.get(&id).unwrap_or(&Value::Null);
-        if let Some(shown) = bound_text(doc, &id, item, record, locale)? {
+        if let Some(shown) = bound_text(doc, &id, item, record, "en")? {
             out.insert(id, shown);
         }
     }

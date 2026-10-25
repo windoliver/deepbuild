@@ -193,10 +193,9 @@ impl Call {
     fn other_checkout(&self) -> Option<String> {
         let own = checkout(self.cwd.as_deref()?)?;
         for run in self.runs.iter().filter(|r| r.is("git")) {
-            let Some(target) = git_target(run) else {
+            let Some(theirs) = git_target(run) else {
                 continue;
             };
-            let Some(theirs) = target else { continue };
             if theirs.common == own.common && theirs.root != own.root {
                 let words: Vec<String> = git_rest(run).iter().map(|w| quote(w)).collect();
                 return Some(format!(
@@ -595,8 +594,8 @@ fn checkout_of_gitdir(gitdir: &Path) -> Option<Checkout> {
     })
 }
 
-/// Where a git run is aimed: Some(None) when it can't be known.
-fn git_target(run: &Run) -> Option<Option<Checkout>> {
+/// Where a git run is aimed: None when it can't be known.
+fn git_target(run: &Run) -> Option<Checkout> {
     let words = run.words();
     let mut cwd = run.cwd.clone();
     let env = |name: &str| {
@@ -650,15 +649,15 @@ fn git_target(run: &Run) -> Option<Option<Checkout>> {
         }
     };
     if let Some(tree) = work_tree {
-        return Some(at(&tree).and_then(|t| checkout(&t)).map(|mut c| {
+        return at(&tree).and_then(|t| checkout(&t)).map(|mut c| {
             c.root = real(&at(&tree).unwrap_or_default());
             c
-        }));
+        });
     }
     if let Some(dir) = git_dir {
-        return Some(at(&dir).and_then(|d| checkout_of_gitdir(&d)));
+        return at(&dir).and_then(|d| checkout_of_gitdir(&d));
     }
-    Some(cwd.and_then(|c| checkout(&c)))
+    cwd.and_then(|c| checkout(&c))
 }
 
 #[cfg(test)]
