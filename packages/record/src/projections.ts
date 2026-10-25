@@ -309,6 +309,10 @@ export class Projector {
         this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
         this.stmt('UPDATE decisions SET applied = applied + 1 WHERE id = ?').run(bare(d.decision));
         break;
+      case 'decision.overruled':
+        // Overruled on the trusted path: it answers nothing from then on.
+        this.stmt("UPDATE decisions SET state = 'revoked', overruled_by = ? WHERE id = ?").run(e.id, bare(d.decision));
+        break;
       case 'definition.drafted':
         this.add('definitions', this.definition(d, 'drafted', null));
         break;
