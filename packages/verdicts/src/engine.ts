@@ -423,23 +423,22 @@ export function verdict(claim: ClaimInput): Verdict {
     asks.push({ kind: 'authority', question: `Approve ${approve} as the check for ${reqs.join(', ')}?`, req: reqs.length === 1 ? reqs[0]! : null, check: approve });
   }
   const outcomes: Result[] = [...judged.map((j) => j.result.outcome), ...requirements.map((r) => r.outcome)];
+  /** The claim itself is INVALID: its reason goes first, with an open item naming what closes it. */
+  const invalid = (why: string, evidence: string): void => {
+    outcomes.push('INVALID');
+    reasons.unshift(why);
+    const scope = { repo: claim.repo, task: claim.task, req: null };
+    const text = `INVALID: ${why}`;
+    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence, depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+  };
   const badState = (claim.state ?? []).filter((d) => !HEX64.test(d));
   if (badState.length) {
-    outcomes.push('INVALID');
-    const why = `state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`;
-    reasons.unshift(why);
-    const scope = { repo: claim.repo, task: claim.task, req: null };
-    const text = `INVALID: ${why}`;
-    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'state digests as sha256 hex from the workspace\'s state sources', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+    invalid(`state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`,
+      'state digests as sha256 hex from the workspace\'s state sources');
   }
   if (!claim.checks.length) {
-    outcomes.push('INVALID');
     const reqs = claim.requirements.map((q) => q.req);
-    const why = `no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`;
-    reasons.unshift(why);
-    const scope = { repo: claim.repo, task: claim.task, req: null };
-    const text = `INVALID: ${why}`;
-    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'a check selected for the claim', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+    invalid(`no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`, 'a check selected for the claim');
   } else if (!claim.requirements.length && claim.checks.every((c) => c.source === 'own')) {
     // With no requirement to cover, the claim itself is what its checks cover, and the agent's own never pass it.
     const passed = judged.find((j) => j.result.outcome === 'PASS');

@@ -201,7 +201,7 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
   }
   // How definitions are drafted: dropping a check that once caught a real bug waits for you.
   if (target.startsWith('drafting:')) {
-    for (const dropped of linesOf(change.diff, '-')) {
+    for (const dropped of removed) {
       if (caughtABug(db, dropped.trim())) return { outcome: 'held', reason: `${target} would drop ${dropped.trim()}, a check that once caught a real bug` };
     }
   }

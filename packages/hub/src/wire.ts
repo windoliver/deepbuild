@@ -36,12 +36,12 @@ export const startOf = (pid: number): Promise<string | undefined> => new Promise
 });
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID at `ms`: 48 bits of time, 80 random. */
-export function ulid(ms: number): string {
+/** A ULID at `ms`: 48 bits of time, then 80 bits, random or the 20 hex digits given. */
+export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string {
   let out = '';
   let time = BigInt(Math.max(0, Math.floor(ms)));
   for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${randomBytes(10).toString('hex')}`);
+  let random = BigInt(`0x${hex}`);
   let tail = '';
   for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
   return out + tail;

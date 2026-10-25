@@ -115,16 +115,7 @@ const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 
 /** A ULID at `ms` whose random part is a hash of `key`, so the same source line always gets the same ID. */
-function derivedId(ms: number, key: string): string {
-  const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  let out = '';
-  let time = BigInt(Math.max(0, Math.floor(ms)));
-  for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let bits = BigInt(`0x${sha256Hex(new TextEncoder().encode(key)).slice(0, 20)}`);
-  let tail = '';
-  for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(bits & 31n)] + tail; bits >>= 5n; }
-  return out + tail;
-}
+const derivedId = (ms: number, key: string): string => ulid(ms, sha256Hex(new TextEncoder().encode(key)).slice(0, 20));
 
 export class Core {
   private readonly root: Root;
@@ -311,6 +302,11 @@ export class Core {
     const ts = this.now();
     return this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...extra });
   }
+  /** A session.reading for the session, appended as the core. */
+  private appendReading(session: string, agent: string, reading: string): Promise<void> {
+    const ts = this.now();
+    return this.append(this.connection('core', { session, agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
+  }
 
   // ---- Hooks.
 
@@ -395,8 +391,7 @@ export class Core {
     }
     if (whose.reading && !this.readings.has(`${meta.session}\0${whose.reading.job}`)) {
       this.readings.add(`${meta.session}\0${whose.reading.job}`);
-      const ts = this.now();
-      await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: whose.reading.text } }).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, whose.reading.text).catch(() => undefined);
     }
     const verified = await this.verify(meta);
     const session = this.sessions.get(meta.session);
@@ -468,8 +463,7 @@ export class Core {
     // The ID is a ULID (checked before this is called), so it goes into the query as it is.
     const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), '${meta.id}') > 0 LIMIT 1`);
     if (known.length) return;
-    const ts = this.now();
-    await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
+    await this.appendReading(meta.session, meta.agent, reading);
   }
 
   /**
@@ -560,12 +554,9 @@ export class Core {
         continue;
       }
       turn.recording = true;
-      const ts = this.now();
       // Settled like a hook's drafts: the next hook doesn't wait for its commit. The turn, and so where a restart
       // reads from, stays until its reading is durable; one whose append fails is judged again with the next hook.
-      void this.append(this.connection('core', { session: session.id, agent: session.agent }), {
-        v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: HOOKS_MISSING },
-      }).then(() => {
+      void this.appendReading(session.id, session.agent, HOOKS_MISSING).then(() => {
         session.closed.splice(session.closed.indexOf(turn), 1);
         this.saveCursors();
       }, () => {
@@ -602,12 +593,9 @@ export class Core {
     this.saving = undefined;
     const cursors = new Map(this.cursors);
     for (const s of this.sessions.values()) {
-      // An ended session is kept until its last turns are judged and their readings durable.
-      if (s.ended && !s.closed.length) {
-        cursors.delete(s.id);
-        continue;
-      }
       cursors.delete(s.id);
+      // An ended session is kept until its last turns are judged and their readings durable.
+      if (s.ended && !s.closed.length) continue;
       cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached], ...(s.ended ? { ended: { agent: s.agent } } : {}) });
     }
     // Synced, so a power cut leaves the last whole save; a failed save is made again with the next hook's.

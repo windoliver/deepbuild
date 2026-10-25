@@ -8,14 +8,14 @@
 // cover; it launches only the bytes it verified. Its record is a function of the event log, so a hub that
 // crashes finds every job it recorded and never runs one twice.
 import { execFile } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync, type Stats } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
-import type { Connection, Event, EventInput } from '@deepbuild/record';
+import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
@@ -41,12 +41,6 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-function ulid(ms: number): string {
-  let time = '';
-  for (let t = ms, i = 0; i < 10; i++, t = Math.floor(t / 32)) time = CROCKFORD[t % 32] + time;
-  return time + Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('');
-}
 const readJson = (path: string): unknown => {
   try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return undefined; }
 };

@@ -88,6 +88,8 @@ const json = (v: unknown): string | null => (v === undefined ? null : JSON.strin
 const bare = (v: unknown): string | null => (typeof v === 'string' ? v.replace(/^[a-z_]+:/, '') : null);
 /** The session a handle names: session:<id>, or session:<id>#<message> for a message of it. */
 const sessionOf = (v: unknown): string | null => (typeof v === 'string' && v.startsWith('session:') ? v.slice(8).split('#')[0]! : null);
+/** The start of every write below: `INSERT INTO table (cols) VALUES (?, …)`. */
+const insert = (table: string, cols: readonly string[]): string => `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
 const TOOL = new Set(['tool.before', 'tool.after']);
 const ENDED = new Set(['finished', 'failed']);
 
@@ -140,15 +142,14 @@ export class Projector {
     const def = byName.get(table)!;
     const cols = Object.keys(row);
     const rest = cols.filter((c) => !def.pk.includes(c));
-    const sql = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`;
-    this.stmt(sql).run(...cols.map((c) => row[c] ?? null));
+    this.stmt(`${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`).run(...cols.map((c) => row[c] ?? null));
   }
   /** Inserts the row, or fills only the columns still empty: the first value of each one stands. */
   private fill(table: string, row: Row): void {
     const def = byName.get(table)!;
     const cols = Object.keys(row);
     const rest = cols.filter((c) => !def.pk.includes(c));
-    this.stmt(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ON CONFLICT (${def.pk.join(", ")}) DO UPDATE SET ${rest.map((c) => `${c} = COALESCE(${c}, excluded.${c})`).join(", ")}`).run(...cols.map((c) => row[c] ?? null));
+    this.stmt(`${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO UPDATE SET ${rest.map((c) => `${c} = COALESCE(${c}, excluded.${c})`).join(', ')}`).run(...cols.map((c) => row[c] ?? null));
   }
   /**
    * Inserts the row, or writes its columns only while `mark` is still empty: the first event of its kind owns
@@ -158,11 +159,11 @@ export class Projector {
     const def = byName.get(table)!;
     const cols = Object.keys(row);
     const set = cols.filter((c) => !def.pk.includes(c)).map((c) => (keep.includes(c) ? `${c} = COALESCE(${table}.${c}, excluded.${c})` : `${c} = excluded.${c}`));
-    this.stmt(`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) ON CONFLICT (${def.pk.join(", ")}) DO UPDATE SET ${set.join(", ")} WHERE ${table}.${mark} IS NULL`).run(...cols.map((c) => row[c] ?? null));
+    this.stmt(`${insert(table, cols)} ON CONFLICT (${def.pk.join(', ')}) DO UPDATE SET ${set.join(', ')} WHERE ${table}.${mark} IS NULL`).run(...cols.map((c) => row[c] ?? null));
   }
   private add(table: string, row: Row): void {
     const cols = Object.keys(row);
-    this.stmt(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT DO NOTHING`).run(...cols.map((c) => row[c] ?? null));
+    this.stmt(`${insert(table, cols)} ON CONFLICT DO NOTHING`).run(...cols.map((c) => row[c] ?? null));
   }
   /** Updates the named columns of the rows the where clause names; a row that isn't there stays absent. */
   private set(table: string, values: Row, where: Row): void {

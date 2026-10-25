@@ -148,20 +148,13 @@ function over(a: Obj, b: Obj): Obj {
 }
 
 function readJson(file: string): Obj {
-  let text: string;
+  // A file that is missing or doesn't parse declares nothing: what depends on its values is BLOCKED, naming the value.
   try {
-    text = readFileSync(file, 'utf8');
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as JsonValue;
+    return isObj(parsed) ? parsed : {};
   } catch {
     return {};
   }
-  // A file that doesn't parse declares nothing: what depends on its values is BLOCKED, naming the value.
-  let parsed: JsonValue;
-  try {
-    parsed = JSON.parse(text) as JsonValue;
-  } catch {
-    return {};
-  }
-  return isObj(parsed) ? parsed : {};
 }
 
 /**
