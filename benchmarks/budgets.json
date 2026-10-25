@@ -364,6 +364,26 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #138 first measurement: the merge base has no canvas conformance kit. One process runs the kit call over the shipped build's canvas modules through `deep-show run`, every part on Vello CPU and wgpu's noop backend at 1,000 fuzzed sequences a module, a tenth of the quick lane's, so p50 includes Node's and the binary's start; the issue's 5 minutes for the full kit stays in tests/acceptance/138/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-host",
+      "command": [
+        "node",
+        "benchmarks/extension-host.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #348 first measurement: the merge base has no extension host. One process opens a record, the asks core, the supervisor and project trust, then times host.load for ten TypeScript packages in the hub and ten in the platform sandbox, and the time the host adds per event per subscribed package (a batch of 2,000 events to four subscribers, minus the same batch to none). The issue's 100 ms load and 0.5 ms per event limits stay in tests/acceptance/348/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-inbox-30d",
+      "command": [
+        "node",
+        "benchmarks/inbox.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #24 first measurement: the merge base has no deep inbox. One process seeds a heavy month of asks (20 sessions a day, five asks each; the first 29 days' asks closed at their defaults, the last day's 100 open), starts the hub on it and times five deep inbox runs after a warm-up, failing unless each lists every open ask; p50 includes the seeding and the hub's start. The issue's 300 ms stays in tests/acceptance/24/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "id": "test/badmanifest",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["network"] },
+  "checks": ["ext.badmanifest.report"]
+}

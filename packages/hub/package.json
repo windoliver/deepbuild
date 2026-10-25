@@ -10,7 +10,7 @@
     "development": "./src/index.ts",
     "default": "./dist/index.js"
   },
-  "scripts": { "build": "tsc -p tsconfig.json" },
+  "scripts": { "build": "tsc -p tsconfig.json && node native/build.mjs" },
   "dependencies": {
     "@deepbuild/adapters": "0.0.0",
     "@deepbuild/asks": "0.0.0",
