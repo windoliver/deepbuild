@@ -306,6 +306,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #237: the hub holds the kernel's one lease table, opened on its record, with env-local's kinds declared in it, and the supervisor leases every run's keys through it."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
@@ -358,9 +362,25 @@
           "spec": "0.0.0",
           "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #237: given the kernel's lease table, the supervisor takes each run's keys through it and releases them citing the processes it proved gone."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
+        }
+      }
+    },
+    "packages/leases/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #237: a declared kind is checked against the lease.kind@1 schema."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #237: the lease table's state is a function of the record: grants, stale marks and releases are appended to it, and holders' ends and the supervisor's proofs are read from it."
         }
       }
     },
