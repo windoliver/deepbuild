@@ -1,0 +1,23 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "lease.released",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "resource": {
+      "host": "local",
+      "kind": "port",
+      "key": "4317"
+    },
+    "holder": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+    "mode": "exclusive",
+    "expires": 1760013511123,
+    "proof": [
+      "01K74FKZVK8Q2X5R7M3N9P4T6X"
+    ]
+  },
+  "subject": "lease:01K74FKZVK8Q2X5R7M3N9P4T6W"
+}
