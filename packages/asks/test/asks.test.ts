@@ -244,3 +244,16 @@ describe('a block someone else owns (#320)', () => {
     expect(await shown()).toHaveLength(6);
   });
 });
+
+describe('#349 resolvers are consulted outside the core\'s lock', () => {
+  it('a resolver that reads the core while it answers doesn\'t deadlock raise: the ask is raised, and its refusals read empty', async () => {
+    let read: unknown;
+    asks.registerResolver('reader', async (a) => { read = await asks.refusals(a.ask); return undefined; });
+    const raised = asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    const timer = new Promise<'stuck'>((resolve) => setTimeout(() => resolve('stuck'), 3_000));
+    const handle = await Promise.race([raised, timer]);
+    expect(handle, 'raise returned while the resolver read the core').toMatch(/^ask:/);
+    expect(read).toEqual([]);
+    expect(await asks.refusals(handle as string)).toEqual([]);
+  });
+});

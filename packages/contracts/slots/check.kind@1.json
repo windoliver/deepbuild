@@ -1,0 +1,28 @@
+{
+  "title": "check.kind@1",
+  "description": "A check runner: one kind of check, run(spec, ctx) answering a closed run outcome with its results, never a verdict.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "check.kind@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*$",
+      "description": "The check kind it runs: a shipped kind it replaces, or its own ext.<plugin>.<name>."
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "kind"
+  ],
+  "additionalProperties": false
+}

@@ -1,13 +1,17 @@
 // The shipped slot kits (#314): one per hub slot whose fixtures and planted fills the core brings, each fresh
-// per call so a test's spread of one never reaches another's. adapter@1's kit stays kits() (#313).
+// per call so a test's spread of one never reaches another's. adapter@1's kit stays kits() (#313). #349 adds the
+// resolver, panel and route kits, so every `deep.register*` slot has one.
 import type { SlotFill, SlotKit, SlotKitImpl } from '../slot-types.js';
 import { checkKindKit } from './check-kind.js';
 import { environmentKit } from './environment.js';
+import { panelKit } from './panel.js';
+import { resolverKit } from './resolver.js';
+import { routeKit } from './route.js';
 import { readingSourceKit } from './reading-source.js';
 import { sourceKit } from './source.js';
 import { indexKit } from './wiki-index.js';
 
-export const slotKits = (): SlotKit[] => [checkKindKit(), indexKit(), environmentKit(), sourceKit(), readingSourceKit()] as SlotKit[];
+export const slotKits = (): SlotKit[] => [checkKindKit(), indexKit(), environmentKit(), sourceKit(), readingSourceKit(), resolverKit(), panelKit(), routeKit()] as SlotKit[];
 
 /** The kit's reference fills, one per variant the slot names, fresh. */
 export function cleanFills<F extends SlotFill>(kit: SlotKit<F>): F[] {
