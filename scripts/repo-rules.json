@@ -34,6 +34,10 @@
     },
     "package.json": {
       "devDependencies": {
+        "@stryker-mutator/core": {
+          "spec": "10.0.0",
+          "why": "Issue #569: StrykerJS, the mutation lane's mutator for the TypeScript lines a change adds, run through its command test runner."
+        },
         "@types/node": {
           "spec": "24.19.2",
           "why": "Issue #12: Node's types for the TypeScript workspaces, at the Node 24.22 floor."
@@ -233,6 +237,26 @@
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #28: the record a verdict is appended to as verdict.made and verdict.stale, as the core; only its types are imported."
+        }
+      }
+    },
+    "packages/extension-host/package.json": {
+      "dependencies": {
+        "@deepbuild/conformance": {
+          "spec": "0.0.0",
+          "why": "Issue #348: the check.kind@1 spec and result shapes a registered check runner takes and returns through host.runCheck."
+        },
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #348: checkManifest, the manifest contract conformance runs before a load, the canonical JSON a package digest reads its manifest as, and the contract fixtures the host's kit plants."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #348: the record project trust is one decision in, and the one an extension's deep.record calls reach, filtered by its grant."
+        },
+        "@deepbuild/supervisor": {
+          "spec": "0.0.0",
+          "why": "Issue #348: host@1, through which every package outside the signed release starts in the platform sandbox (#236)."
         }
       }
     },
