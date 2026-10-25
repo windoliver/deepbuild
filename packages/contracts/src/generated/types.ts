@@ -1162,6 +1162,32 @@ export interface ClaimMade {
   evidence?: Array<string>;
 }
 
+/** claim.made@2 */
+export interface ClaimMadeV2 {
+  v: 2;
+  id: string;
+  kind: "claim.made";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    attempt: number;
+    commit: string;
+    scope: "session" | "child" | "task";
+    predictions: Array<{
+      check: string;
+      expects: "passed" | "failed";
+      at: number;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.sent_back@1 */
 export interface ClaimSentBack {
   v: 1;
