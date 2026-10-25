@@ -19,6 +19,8 @@ export interface Root {
   /** `running` while a hub runs here, `stopped` after a clean stop: a start that finds `running` records a crash. */
   state: string;
   logs: string;
+  /** How far the hub has judged each session's transcript, so a restart judges the turns it missed. */
+  transcripts: string;
   /** The devices you paired, whose signatures answer for you (#34). */
   devices: string;
 }
@@ -35,6 +37,7 @@ export function rootOf(dir: string): Root {
     runs: join(at, 'runs.json'),
     state: join(at, 'hub.state'),
     logs: join(at, 'logs'),
+    transcripts: join(at, 'transcripts.json'),
     devices: join(at, 'devices.json'),
   };
 }
