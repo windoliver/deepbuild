@@ -13,7 +13,7 @@ import { AskRefused, openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
-import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openLeases } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -23,6 +23,7 @@ import { parse as parseYaml } from 'yaml';
 import { confirmYou } from './confirm.js';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
+import { checkKey, Devices } from './trusted.js';
 import { openIndex, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -77,7 +78,7 @@ const isUnder = (path: string, dir: string) => {
  * for the app or the CLI the process its hello named as its own.
  */
 export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string } }
-/** The asks core's refusal as the socket's error@2, with the code that fits what it names. */
+/** The asks core's refusal as the socket's error@3, with the code that fits what it names. */
 const asRefused = (error: unknown): unknown => {
   if (!(error instanceof AskRefused)) return error;
   const code = error.outcome ? 'not_found' : error.option ? 'enum' : error.field === 'writer' ? 'role' : 'type';
@@ -124,6 +125,15 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
 const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 
+/** One events row as the record stores it, its seq read as text so no digit is lost. */
+interface Row { v: number; id: string; kind: string; writer: string; actor: string; scope: string; ts: number; log_pos: number; data: string; evidence: string | null;
+  subject: string | null; seq: string | null; session_id: string | null; project_id: string | null; agent: string | null; unverified: number }
+const q = JSON.stringify;
+/** An event's JSON text: the record's toJson fields, seq as its decimal string, and `verified` for the unverified mark. */
+const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.kind)},"writer":${q(r.writer)},"actor":${q(r.actor)},"scope":${q(r.scope)},"ts":${r.ts},"log_pos":${r.log_pos},`
+  + `"data":${r.data},"evidence":${r.evidence ?? '[]'}${r.subject === null ? '' : `,"subject":${q(r.subject)}`}${r.seq === null ? '' : `,"seq":${q(r.seq)}`}`
+  + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
+
 /** A ULID at `ms` whose random part is a hash of `key`, so the same source line always gets the same ID. */
 function derivedId(ms: number, key: string): string {
   const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -141,9 +151,10 @@ export class Core {
   private readonly now: () => number;
   private readonly durable: Durable;
   private record!: RecordStore;
+  private asks!: Asks;
+  private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
-  private asks!: Asks;
   /** The wiki's index@1 fill, which deep_search reads it through. */
   private index!: Promise<IndexFill>;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
@@ -183,6 +194,9 @@ export class Core {
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
   private readonly inflight = new Set<Promise<unknown>>();
   private streaming = false;
+  private restream = false;
+  /** The full page after the last one read, built ahead for a reader paging in order. */
+  private ahead: { after: number; limit: number; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
   private stopping = false;
@@ -193,10 +207,11 @@ export class Core {
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
 
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: Obj) => void) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
+    this.devices = new Devices(this.root.devices);
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
@@ -729,8 +744,14 @@ export class Core {
     switch (method) {
       case 'hub.health': return this.health();
       case 'events.read': return this.read(params);
+      case 'inbox.read': return this.reflecting(() => this.inbox());
+      case 'sessions.read': return this.reflecting(async () => ({ sessions: (await this.record.table('sessions')).rows }));
+      case 'numbers.read': return this.reflecting(async () => ({ numbers: (await this.record.table('readings')).rows }));
+      case 'changes.read': return this.change(params);
+      case 'evidence.read': return this.evidence(params);
       case 'ask.answer': return this.answer(params, context);
-      case 'inbox.read': return this.inbox();
+      case 'decision.overrule': return this.overrule(params, context);
+      case 'device.pair': return this.pair(params);
       case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
@@ -763,27 +784,106 @@ export class Core {
     return value;
   }
 
-  private eventJson(event: Event): Obj {
-    const out = JSON.parse(toJson(event)) as Obj;
-    delete out.unverified;
-    out.verified = !event.unverified;
-    return out;
+  /**
+   * A page of the log as each event's JSON text, the record's own JSON with `verified` for its unverified mark,
+   * built from the stored text without parsing it again: the reads and the stream page through many events.
+   */
+  private async page(after: number, limit: number): Promise<{ log_pos: number; json: string }[]> {
+    const rows = (await this.record.raw(`SELECT v, id, kind, writer, actor, scope, ts, log_pos, data, evidence, subject, CAST(seq AS TEXT) AS seq, session_id, project_id, agent, unverified FROM events WHERE log_pos > ${after} ORDER BY log_pos LIMIT ${limit}`)) as Row[];
+    return rows.map((r) => ({ log_pos: r.log_pos, json: eventText(r) }));
   }
-  private async read(params: Obj): Promise<Obj> {
+  /**
+   * The log's committed end, read in the same step as `read` starts, before anything else can append: a read
+   * reflects at least that log_pos, so a consumer that subscribes after it misses nothing.
+   */
+  private async reflecting(read: () => Promise<Obj>): Promise<Obj> {
     await Promise.allSettled([...this.inflight]);
+    const end = this.record.raw('SELECT coalesce(max(log_pos), 0) AS log_pos FROM events');
+    const result = read();
+    result.catch(() => undefined);
+    return { log_pos: Number(((await end) as { log_pos: number }[])[0]!.log_pos), ...(await result) };
+  }
+  /**
+   * A page of the log: a full one reflects its last event, a short one the log's end, so an empty gap is crossed
+   * once. Its events go back as one JSON array's text, which the server writes as it is.
+   */
+  private async read(params: Obj): Promise<Obj> {
     const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
     const limit = Number.isSafeInteger(params.limit) && (params.limit as number) > 0 ? Math.min(params.limit as number, 1000) : 1000;
-    const events = (await this.record.read({ after, limit })).map((e) => this.eventJson(e));
-    return { log_pos: events.length ? events[events.length - 1]!.log_pos : after, events };
+    const ahead = this.ahead?.after === after && this.ahead.limit === limit ? this.ahead : undefined;
+    this.ahead = undefined;
+    let out: { log_pos: number; events: string };
+    if (ahead) {
+      await Promise.allSettled([...this.inflight]);
+      out = { log_pos: ahead.log_pos, events: ahead.events };
+    } else {
+      const read = await this.reflecting(async () => ({ events: await this.page(after, limit) }));
+      const events = read.events as { log_pos: number; json: string }[];
+      out = { log_pos: events.length === limit ? events[limit - 1]!.log_pos : Math.max(after, read.log_pos as number), events: `[${events.map((e) => e.json).join(',')}]` };
+    }
+    // History is paged in order: the next full page is built while the reader takes this one. A full page never
+    // changes once committed, since log positions only grow and a gap never fills.
+    if (out.events !== '[]') {
+      setImmediate(() => void this.page(out.log_pos, limit).then((next) => {
+        if (next.length === limit) this.ahead = { after: out.log_pos, limit, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
+      }));
+    }
+    return out;
+  }
+  /** changes/:id: a claim, with the runs and verdicts of its checks. */
+  private change(params: Obj): Promise<Obj> {
+    const id = typeof params.id === 'string' && /^claim:[0-9A-Za-z]+$/.test(params.id) ? params.id.slice(6) : undefined;
+    if (!id) throw new Refused(refusal('pattern', '/params/id', 'Name the change as claim:<id>.', params.id));
+    return this.reflecting(async () => {
+      const [claim] = await this.record.raw(`SELECT * FROM claims WHERE id = '${id}'`);
+      if (!claim) throw new Refused(refusal('not_found', '/params/id', `No change claim:${id} in the record.`, params.id));
+      const runs = await this.record.raw(`SELECT * FROM runs WHERE claim_id = '${id}' ORDER BY started`);
+      const verdicts = await this.record.raw(`SELECT * FROM verdicts WHERE claim_id = '${id}' ORDER BY created`);
+      return { change: { claim, runs, verdicts } };
+    });
+  }
+  /** evidence/:sha: what the store holds of one file, never its bytes. */
+  private evidence(params: Obj): Promise<Obj> {
+    const sha = typeof params.sha === 'string' && /^[0-9a-f]{64}$/.test(params.sha) ? params.sha : undefined;
+    if (!sha) throw new Refused(refusal('pattern', '/params/sha', 'Name the evidence by its SHA-256, in lower-case hex.', params.sha));
+    return this.reflecting(async () => {
+      const evidence = await this.store.get(sha);
+      if (!evidence) throw new Refused(refusal('not_found', '/params/sha', `The store holds no evidence ${sha}.`, sha));
+      return { evidence: JSON.parse(JSON.stringify(evidence)) as Obj };
+    });
   }
 
-  /** The open asks, as `deep inbox` lists them (#24): the inbox projection's rows, with each ask's question and options. */
+  // ---- Answers on the trusted path (#24, #34).
+
+  /**
+   * Whether an answer may count: a paired device's valid signature, from any role; otherwise, from the CLI alone,
+   * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
+   * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
+   */
+  private async trusted(params: Obj, context: CallContext, what: string, handle: string): Promise<void> {
+    if (params.signature !== undefined || params.device !== undefined) {
+      if (this.devices.signed(params)) return;
+      throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
+    }
+    if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) {
+      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
+    }
+    const plant = this.options.plant;
+    if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
+    const why = await confirmYou(what, this.options.confirm);
+    if (why) {
+      throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
+    }
+  }
+
+  /** Every ask, as the inbox projection holds it, with each one's question and options; `deep inbox` lists the open ones. */
   private async inbox(): Promise<Obj> {
-    const open = (await this.asks.inbox()).filter((row) => row.status !== 'closed');
-    const rows = (await this.record.raw("SELECT id, question, options FROM asks WHERE status IN ('open', 'later')")) as { id: string; question: string | null; options: string | null }[];
+    const rows = (await this.record.raw('SELECT id, question, options FROM asks')) as { id: string; question: string | null; options: string | null }[];
     const texts = new Map(rows.map((r) => [r.id, r]));
     return {
-      asks: open.map((row) => {
+      asks: (await this.asks.inbox()).map((row) => {
         const text = texts.get(row.ask.slice(4));
         return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [] };
       }),
@@ -791,12 +891,11 @@ export class Core {
   }
 
   /**
-   * Your answer to an ask from a control-token holder (#24). It counts only once the OS confirms you, never on the
-   * token or the peer check alone, and never from a deep command run inside an agent's process tree, which acts as
-   * that agent's session. Counted, the asks core records it and the core saves it as a decision for the ask's repo.
+   * asks/:id/answer, from the app or `deep inbox answer`: once the trusted path allows it, the asks core records it
+   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither saves none.
    */
   private async answer(params: Obj, context: CallContext): Promise<Obj> {
-    const { ask: handle, ...input } = params;
+    const { ask: handle, device: _device, signature: _signature, ...input } = params;
     if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
     const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = '${handle.slice(4)}' AND e.kind = 'ask.created'`)) as { session: string | null; project: string | null; data: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
@@ -811,27 +910,36 @@ export class Core {
     if (input.option !== undefined && !chosen) {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
+    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
+    await answered();
     // Saved for this repo, from the ask's own events, never wider than its card showed; with no repo, for its session.
     const repo = (row.project ?? '').replace(/[^0-9A-Za-z]/g, '');
     const session = (row.session ?? '').replace(/[^0-9A-Za-z]/g, '');
-    const scope = repo ? `repo:${repo}` : session ? `session:${session}` : undefined;
-    if (!scope) throw new Refused(refusal('unavailable', '/params/ask', `${handle} belongs to no repo or session, so its answer has no scope to be saved at; answer it on the question card.`, handle));
-    const agent = await this.agentAbove(context.peer);
-    if (agent) {
-      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
-    }
-    const plant = this.options.plant;
-    if (plant !== 'answer-on-token' && plant !== 'answer-on-peer-check') {
-      const what = chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words';
-      const why = await confirmYou(`answer “${ask.question.slice(0, 120)}” with ${what}`, this.options.confirm);
-      if (why) {
-        throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
-      }
-    }
-    await answered();
+    const scope = repo ? `repo:${repo}` : session ? `session:${session}` : null;
     const answer = chosen?.id ?? String(input.words);
-    await this.appendCore('decision.created', { key: ask.key, scope, answer, ask: handle });
+    if (scope) await this.appendCore('decision.created', { key: ask.key, scope, answer, ask: handle });
     return { ask: handle, answer, scope };
+  }
+  /** decisions/:id/overrule: a saved decision taken out of force, on the trusted path alone. */
+  private async overrule(params: Obj, context: CallContext): Promise<Obj> {
+    const id = typeof params.decision === 'string' && /^decision:[0-9A-Za-z]+$/.test(params.decision) ? params.decision : undefined;
+    if (!id) throw new Refused(refusal('pattern', '/params/decision', 'Name the decision as decision:<id>.', params.decision));
+    const [row] = (await this.record.raw(`SELECT answer, state FROM decisions WHERE id = '${id.slice(9)}'`)) as { answer: string; state: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
+    if (row.state === 'revoked') return { overruled: id };
+    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
+    await this.appendCore('decision.overruled', { decision: id }, { subject: id });
+    return { overruled: id };
+  }
+  /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
+  private async pair(params: Obj): Promise<Obj> {
+    if (typeof params.name !== 'string' || !params.name) throw new Refused(refusal('required', '/params/name', 'Name the device you pair.', params.name));
+    const key = checkKey(params.public_key);
+    const why = await confirmYou(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, this.options.confirm);
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was paired: the OS didn't confirm you (${why}).`, params.name, true));
+    const device = `device:${ulid(this.now())}`;
+    this.devices.pair(device, params.name, key, this.now());
+    return { device };
   }
 
   /**
@@ -860,17 +968,28 @@ export class Core {
     this.subscribers.delete(sub);
   }
   private stream(): void {
-    if (!this.subscribers.size || this.streaming) return;
+    if (!this.subscribers.size) return;
+    // An append during a flush flushes again after it, so its frame never waits for the next append.
+    if (this.streaming) {
+      this.restream = true;
+      return;
+    }
     this.streaming = true;
-    setImmediate(() => void this.flushStream().finally(() => { this.streaming = false; }));
+    setImmediate(() => void this.flushStream().finally(() => {
+      this.streaming = false;
+      if (this.restream) {
+        this.restream = false;
+        this.stream();
+      }
+    }));
   }
   private async flushStream(): Promise<void> {
     for (const [sub, after] of this.subscribers) {
       let last = after;
       for (;;) {
-        const events = await this.record.read({ after: last, limit: 1000 });
+        const events = await this.page(last, 1000);
         if (!this.subscribers.has(sub)) break;
-        for (const event of events) this.emit(sub, this.eventJson(event));
+        for (const event of events) this.emit(sub, event.json);
         if (events.length) last = events[events.length - 1]!.log_pos;
         if (events.length < 1000) break;
       }
@@ -1508,6 +1627,7 @@ export class Core {
     let msg = 0;
     let turn = 0;
     let worked = false;
+    let waited = 0;
     for (const [i, raw] of text.split('\n').entries()) {
       if (!raw) continue;
       let line: Obj;
@@ -1533,6 +1653,13 @@ export class Core {
         // An assistant message that calls no tool ends its turn.
         appends.push(this.append(connection, { v: 1, id, kind: 'agent.stop', subject: `session:${handle}`, ts, data: { turn: ++turn, did_work: worked } }, true));
         worked = false;
+      }
+      // Each thousand settle, and the stream's flush gets its turn, before the next are read: the stream carries
+      // them while the backfill runs (#34).
+      if (appends.length - waited >= 1000) {
+        waited = appends.length;
+        await Promise.allSettled(appends.slice(-1000));
+        await new Promise((done) => setImmediate(done));
       }
     }
     await Promise.allSettled(appends);

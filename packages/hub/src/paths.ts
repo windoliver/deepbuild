@@ -23,6 +23,8 @@ export interface Root {
   transcripts: string;
   /** The wiki's pages, which deep_search reads through the index. */
   wiki: string;
+  /** The devices you paired, whose signatures answer for you (#34). */
+  devices: string;
 }
 export function rootOf(dir: string): Root {
   const at = resolve(dir);
@@ -39,6 +41,7 @@ export function rootOf(dir: string): Root {
     logs: join(at, 'logs'),
     transcripts: join(at, 'transcripts.json'),
     wiki: join(at, 'wiki'),
+    devices: join(at, 'devices.json'),
   };
 }
 
