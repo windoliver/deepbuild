@@ -1,0 +1,485 @@
+{
+  "format": 1,
+  "id": "city-depth-378",
+  "profile": "scene",
+  "title": "Depth at city scale",
+  "description": "Two pairs of faces 0.5 m apart at 5 km, the near face listed first in one pair and last in the other, a post 1.5 m from the camera, and twelve blocks from 12 m to 24.6 km away, under a camera with a 0.1 m near distance and no far distance set.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "perspective",
+        "position": [
+          0,
+          2,
+          0
+        ],
+        "target": [
+          0,
+          2,
+          -100
+        ],
+        "fov": 40,
+        "near": 0.1
+      }
+    },
+    "a-near": {
+      "id": "a-near",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Pair A, near face",
+      "order": "a1",
+      "params": {
+        "size": [
+          300,
+          300,
+          0.2
+        ],
+        "paint": {
+          "fill": {
+            "role": "near"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -800,
+          2,
+          -5000.1
+        ]
+      }
+    },
+    "a-far": {
+      "id": "a-far",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Pair A, far face",
+      "order": "a2",
+      "params": {
+        "size": [
+          600,
+          600,
+          0.2
+        ],
+        "paint": {
+          "fill": {
+            "role": "far"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -800,
+          2,
+          -5000.6
+        ]
+      }
+    },
+    "b-far": {
+      "id": "b-far",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Pair B, far face",
+      "order": "a3",
+      "params": {
+        "size": [
+          600,
+          600,
+          0.2
+        ],
+        "paint": {
+          "fill": {
+            "role": "far"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          800,
+          2,
+          -5000.6
+        ]
+      }
+    },
+    "b-near": {
+      "id": "b-near",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Pair B, near face",
+      "order": "a4",
+      "params": {
+        "size": [
+          300,
+          300,
+          0.2
+        ],
+        "paint": {
+          "fill": {
+            "role": "near"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          800,
+          2,
+          -5000.1
+        ]
+      }
+    },
+    "post": {
+      "id": "post",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Post a metre and a half away",
+      "order": "a5",
+      "params": {
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "paint": {
+          "fill": {
+            "role": "post"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -0.25,
+          2.25,
+          -1.5
+        ]
+      }
+    },
+    "city-00": {
+      "id": "city-00",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 12 m away",
+      "order": "b00",
+      "params": {
+        "size": [
+          0.36,
+          0.36,
+          0.36
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3.821687,
+          -0.183821,
+          -12
+        ]
+      }
+    },
+    "city-01": {
+      "id": "city-01",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 24 m away",
+      "order": "b01",
+      "params": {
+        "size": [
+          0.72,
+          0.72,
+          0.72
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6.278487,
+          -2.367643,
+          -24
+        ]
+      }
+    },
+    "city-02": {
+      "id": "city-02",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 48 m away",
+      "order": "b02",
+      "params": {
+        "size": [
+          1.44,
+          1.44,
+          1.44
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9.827196,
+          -6.735286,
+          -48
+        ]
+      }
+    },
+    "city-03": {
+      "id": "city-03",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 96 m away",
+      "order": "b03",
+      "params": {
+        "size": [
+          2.88,
+          2.88,
+          2.88
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -14.194839,
+          -15.470571,
+          -96
+        ]
+      }
+    },
+    "city-04": {
+      "id": "city-04",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 192 m away",
+      "order": "b04",
+      "params": {
+        "size": [
+          5.76,
+          5.76,
+          5.76
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -17.470571,
+          -32.941142,
+          -192
+        ]
+      }
+    },
+    "city-05": {
+      "id": "city-05",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 384 m away",
+      "order": "b05",
+      "params": {
+        "size": [
+          11.52,
+          11.52,
+          11.52
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.102928,
+          -67.882285,
+          -384
+        ]
+      }
+    },
+    "city-06": {
+      "id": "city-06",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 768 m away",
+      "order": "b06",
+      "params": {
+        "size": [
+          23.04,
+          23.04,
+          23.04
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          17.470571,
+          -137.76457,
+          -768
+        ]
+      }
+    },
+    "city-07": {
+      "id": "city-07",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 1536 m away",
+      "order": "b07",
+      "params": {
+        "size": [
+          46.08,
+          46.08,
+          46.08
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          122.293999,
+          -277.52914,
+          -1536
+        ]
+      }
+    },
+    "city-08": {
+      "id": "city-08",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 3072 m away",
+      "order": "b08",
+      "params": {
+        "size": [
+          92.16,
+          92.16,
+          92.16
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          419.29371,
+          -557.05828,
+          -3072
+        ]
+      }
+    },
+    "city-09": {
+      "id": "city-09",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 6144 m away",
+      "order": "b09",
+      "params": {
+        "size": [
+          184.32,
+          184.32,
+          184.32
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1187.998845,
+          -1116.11656,
+          -6144
+        ]
+      }
+    },
+    "city-10": {
+      "id": "city-10",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 12288 m away",
+      "order": "b10",
+      "params": {
+        "size": [
+          368.64,
+          368.64,
+          368.64
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3074.820539,
+          -2234.233119,
+          -12288
+        ]
+      }
+    },
+    "city-11": {
+      "id": "city-11",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Block 24576 m away",
+      "order": "b11",
+      "params": {
+        "size": [
+          737.28,
+          737.28,
+          737.28
+        ],
+        "paint": {
+          "fill": {
+            "role": "block"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7547.286778,
+          -4470.466239,
+          -24576
+        ]
+      }
+    }
+  }
+}

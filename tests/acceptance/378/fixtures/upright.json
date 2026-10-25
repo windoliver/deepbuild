@@ -1,0 +1,115 @@
+{
+  "format": 1,
+  "id": "upright-378",
+  "profile": "scene",
+  "title": "An upright label while the camera orbits",
+  "description": "Two labels reading FFFF, 1.5 m type in world size: one set to stay upright, one facing the camera; an orthographic camera at 60 degrees elevation orbits at 90 degrees a second.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "transport": {
+    "span": "4s"
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "orbit": {
+          "azimuth": 0,
+          "elevation": 60,
+          "distance": 20
+        },
+        "view_width": 16
+      }
+    },
+    "label-up": {
+      "id": "label-up",
+      "kind": "mark.text@1",
+      "layer": "main",
+      "name": "Upright label",
+      "order": "a1",
+      "params": {
+        "text": "FFFF",
+        "font": "body",
+        "size": 1.5,
+        "size_space": "world",
+        "facing": "upright",
+        "paint": {
+          "fill": {
+            "role": "label-a"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          2,
+          0
+        ]
+      }
+    },
+    "label-cam": {
+      "id": "label-cam",
+      "kind": "mark.text@1",
+      "layer": "main",
+      "name": "Camera-facing label",
+      "order": "a2",
+      "params": {
+        "text": "FFFF",
+        "font": "body",
+        "size": 1.5,
+        "size_space": "world",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "label-b"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          -2,
+          0
+        ]
+      }
+    }
+  },
+  "channels": {
+    "spin": {
+      "target": "items/cam/params/orbit/azimuth",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "4s",
+          "value": 360,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}

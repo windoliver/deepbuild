@@ -22,9 +22,17 @@ pub struct Session {
     pub workers: usize,
 }
 
+/// A `view3d` call's session: a GPU-layer view drawing scene3d (#378), and what its render module
+/// shares with the driver.
+pub struct Scene3Session {
+    pub view: View,
+    pub shared: Arc<std::sync::Mutex<deep_scene3d_render::Shared>>,
+}
+
 pub struct State {
     pub gpu: Arc<Gpu>,
     pub sessions: HashMap<String, Session>,
+    pub scene3d: Option<Scene3Session>,
     /// The scene the run drew last, which `surface` and `resources` describe.
     pub current: Option<String>,
     pub submits_on_completion: bool,
@@ -111,6 +119,7 @@ impl Worker {
                 let mut state = State {
                     gpu,
                     sessions: HashMap::new(),
+                    scene3d: None,
                     current: None,
                     submits_on_completion,
                     releases_early,

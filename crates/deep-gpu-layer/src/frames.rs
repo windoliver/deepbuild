@@ -37,7 +37,7 @@ pub enum Capture {
 }
 
 impl Capture {
-    fn wants(&self, n: u64) -> bool {
+    pub fn wants(&self, n: u64) -> bool {
         match self {
             Capture::None => false,
             Capture::Every => true,
@@ -344,6 +344,8 @@ pub fn drive(
         p.ui = None;
         p.card = args.card.clone();
         p.waits_on_gpu = waits;
+        p.overlays.clear();
+        p.pairs_newest = false;
     }
     let baseline = if args.timings && args.layer {
         baseline_ns(app)
