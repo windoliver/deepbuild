@@ -1,0 +1,51 @@
+Acceptance tests for #724 on the base 0954514 (no implementation), run on 2026-10-25 on a
+Mac15,7 (M3 Pro) on battery, macOS build 25G241:
+
+  node --test 'tests/acceptance/724/*.test.mjs'
+
+Trimmed to one failure reason per test, each cut at 200 characters. No local path appears below;
+the scratch repositories' commit hashes are left as they were. Each lane test ran perf.mjs in a
+scratch repository whose merge base already had the measured awk tasks. On the base every task
+line reads "status":"PASS" on time alone, plus-20 included, though its program retires 20% more
+instructions: the lane the first criterion names as wrong.
+
+# tests 16
+# suites 0
+# pass 0
+# fail 16
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - instructions retired are read from /usr/bin/time -l's report
+    scripts/benchmark.mjs exports no parseInstructions()
+not ok 2 - a host whose time reports no counter reads it missing, null and never 0
+    scripts/benchmark.mjs exports no parseInstructions()
+not ok 3 - every measured run records its instructions retired from the real counter, beside CPU time and peak memory
+    instructions: undefined
+not ok 4 - a 20% rise in instructions retired fails the comparison, with every pair attached
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 5 - an unchanged task passes, with its margin and its pairs' spread reported
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 6 - a 1.5% rise passes: the margin is never under 2%
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 7 - a 3% rise with a 0.4% spread fails: the margin is the larger of 2% and the spread, no wider
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 8 - the pairs' spread widens the margin past 2%: a 5% rise within a 10% spread passes, a 13% rise over a 6% spread fails
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 9 - a missing count is never zero: pairs with a count the host could not read are INCONCLUSIVE, with the count kept missing
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 10 - a count of 0, or no pairs at all, is not a reading: INCONCLUSIVE, never PASS
+    scripts/benchmark.mjs exports no judgeInstructions()
+not ok 11 - an absolute ms limit off the reference Macs stays INCONCLUSIVE whatever its instruction comparison reads
+    unchanged-limited's result line carries no "instructions" comparison: {"task":"unchanged-limited","baseCommit":"ba4b60a3b46f6613b546b7114ae62c0a8a654f56","status":"PASS","current":{"p50Ms":66.10737499
+not ok 12 - at a load average above 40 on battery, a planted 20% rise in instructions fails its comparison with the merge base, with every pair attached
+    plus-20's result line carries no "instructions" comparison: {"task":"plus-20","baseCommit":"b59cafab850e4f13760328ffc1333d963441efb7","status":"PASS","current":{"p50Ms":69.12987499999872,"p95Ms":186.5
+not ok 13 - under the same load, an unchanged task passes its instruction comparison, with the margin and the pairs' spread reported
+    unchanged's result line carries no "instructions" comparison: {"task":"unchanged","baseCommit":"b59cafab850e4f13760328ffc1333d963441efb7","status":"PASS","current":{"p50Ms":61.14991600000212,"p95Ms":1
+not ok 14 - under the same load, a planted 1.5% rise passes: the margin is the larger of 2% and the pairs' spread, never under 2%
+    plus-1-5's result line carries no "instructions" comparison: {"task":"plus-1-5","baseCommit":"b59cafab850e4f13760328ffc1333d963441efb7","status":"PASS","current":{"p50Ms":70.00845900000058,"p95Ms":147
+not ok 15 - every result perf prints carries instructions retired, the counter they came from and the macOS build
+    preflight names where its counts came from: {"task":"preflight","baseCommit":"b59cafab850e4f13760328ffc1333d963441efb7","status":"PASS","samples":1,"current":{"elapsedMs":1,"cpuMs":1,"peakBytes":1},"b
+not ok 16 - a result from a host that can't read the counter carries it missing, never 0, and reads INCONCLUSIVE
+    unchanged's result line carries no "instructions" comparison: {"task":"unchanged","baseCommit":"f89fdcbb18b5b24a3ae7b29dbd8f595b4e8ca2c6","status":"PASS","current":{"p50Ms":252.67941699999938,"p95Ms":

@@ -1,0 +1,8 @@
+{
+  "code": "fell_behind",
+  "retryable": false,
+  "remediation": "This consumer fell more than 10000 frames behind; subscribe again after the last log_pos you hold.",
+  "path": "",
+  "actual": "10802",
+  "evidence": []
+}
