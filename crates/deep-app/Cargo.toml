@@ -46,3 +46,8 @@ gpui-kit = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49
 name = "screens"
 path = "screens.rs"
 harness = false
+
+# Issue #34: the record reader's acceptance tests, written blind in tests/acceptance/34.
+[[test]]
+name = "acceptance_34"
+path = "../../tests/acceptance/34/app/record_reader.rs"

@@ -19,6 +19,8 @@ export interface Root {
   /** `running` while a hub runs here, `stopped` after a clean stop: a start that finds `running` records a crash. */
   state: string;
   logs: string;
+  /** The devices you paired, whose signatures answer for you (#34). */
+  devices: string;
 }
 export function rootOf(dir: string): Root {
   const at = resolve(dir);
@@ -33,6 +35,7 @@ export function rootOf(dir: string): Root {
     runs: join(at, 'runs.json'),
     state: join(at, 'hub.state'),
     logs: join(at, 'logs'),
+    devices: join(at, 'devices.json'),
   };
 }
 

@@ -11,16 +11,25 @@ import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { FEATURES, line, plantOf, refusal, Refused, ulid, type CoreOptions, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
+/**
+ * A consumer more than this many frames behind is cut off with fell_behind, never dropped silently (#34): the
+ * socket holds at most this many of its frames, and one that takes none of them for STALL_MS while more wait is cut.
+ */
+const BEHIND = 10_000;
+const STALL_MS = 100;
 
 type Role = 'hook' | 'app' | 'cli' | 'mcp';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
+  // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
+  ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['device.pair', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -28,6 +37,9 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
 ]);
+
+/** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
+const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -43,13 +55,16 @@ interface CoreLink {
 }
 interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; close(): Promise<void> }
 
-function coreWorker(options: CoreOptions, onFrame: (sub: string, event: Obj) => void, onFatal: (why: string) => void): CoreLink {
+/** A frame from the core: its event's JSON text. */
+type OnFrame = (sub: string, event: string) => void;
+
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: () => void;
   const ready = new Promise<void>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: Obj; message?: string; result?: unknown; error?: Refusal }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
     if (m.op === 'started') return started();
     if (m.op === 'fatal') return onFatal(m.message!);
@@ -70,7 +85,7 @@ function coreWorker(options: CoreOptions, onFrame: (sub: string, event: Obj) => 
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: (sub: string, event: Obj) => void, onFatal: (why: string) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame);
@@ -148,10 +163,16 @@ class Conn {
   }
 }
 
+/**
+ * One subscription: how many of its frames the socket holds and hasn't taken, the frames waiting beyond those,
+ * and since when it has taken none.
+ */
+interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
+
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
-  private readonly subs = new Map<string, { conn: Conn; id: unknown }>();
+  private readonly subs = new Map<string, Sub>();
   private core!: CoreLink;
   private parsers!: Parsers;
   private ids = 0;
@@ -168,7 +189,16 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}) };
-    const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
+    const frame = (sub: string, event: string) => {
+      const s = this.subs.get(sub);
+      if (!s || s.conn.done) return;
+      const text = `{"v":${VERSION},"id":${JSON.stringify(s.id)},"event":${event}}\n`;
+      if (s.queued < BEHIND) return this.send(sub, s, text);
+      s.held.push(text);
+      s.watch ??= setInterval(() => {
+        if (s.next < s.held.length && Date.now() - s.since > STALL_MS) this.cut(sub, s);
+      }, STALL_MS / 5);
+    };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
@@ -212,13 +242,42 @@ class Hub {
     sock.on('close', () => {
       conn.done = true;
       this.conns.delete(conn);
-      for (const sub of conn.subs) {
-        this.subs.delete(sub);
-        this.core.post({ op: 'unsubscribe', sub });
-      }
+      for (const sub of conn.subs) this.unsubscribe(conn, sub);
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
     sock.write(this.helloLine);
+  }
+
+  private unsubscribe(conn: Conn, sub: string): void {
+    const s = this.subs.get(sub);
+    if (s?.watch) clearInterval(s.watch);
+    conn.subs.delete(sub);
+    this.subs.delete(sub);
+    this.core.post({ op: 'unsubscribe', sub });
+  }
+  /** Hands the socket one frame; each frame it takes lets a held one through. */
+  private send(sub: string, s: Sub, text: string): void {
+    // Since the socket last took a frame, or since it was handed one with none waiting.
+    if (s.queued++ === 0) s.since = Date.now();
+    s.conn.sock.write(text, () => {
+      s.queued--;
+      s.since = Date.now();
+      if (this.subs.get(sub) !== s || s.next === s.held.length) return;
+      const next = s.held[s.next++]!;
+      if (s.next === s.held.length) {
+        s.held = [];
+        s.next = 0;
+        clearInterval(s.watch);
+        s.watch = undefined;
+      }
+      this.send(sub, s, next);
+    });
+  }
+  /** Cut off, never dropped silently: after the frames the socket holds, the consumer resumes from its last log_pos. */
+  private cut(sub: string, s: Sub): void {
+    this.unsubscribe(s.conn, sub);
+    s.held = [];
+    s.conn.write({ id: s.id, error: refusal('fell_behind', '', `This consumer fell more than ${BEHIND} frames behind; subscribe again after the last log_pos you hold.`, s.queued) });
   }
 
   /** Frames lines: each newline ends one, however the bytes arrived. */
@@ -260,6 +319,11 @@ class Hub {
     }
     if (conn.done) return;
     const value = parsed.value;
+    // A browser Origin means a web page: refused, whatever credential the line carries, so no page can reach the hub.
+    if ('origin' in value || 'Origin' in value) {
+      conn.write({ id: value.id ?? null, error: refusal('credential', '/origin', 'The hub serves no web page: connect from the app or the CLI, without a browser Origin.', value.origin ?? value.Origin) });
+      return conn.end();
+    }
     if (first && 'hello' in value) return this.hello(conn, value);
     // A first line with no credential makes the connection a hook connection, which may call no method.
     if (first) {
@@ -348,11 +412,22 @@ class Hub {
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         conn.subs.add(sub);
-        this.subs.set(sub, { conn, id });
+        this.subs.set(sub, { conn, id, queued: 0, held: [], next: 0, since: Date.now() });
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
-        return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after })));
+        // The reply is the stream's first frame: it carries the start ID, so a consumer that sees a new one redoes its reads.
+        return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after, start: this.start })));
       }
       default:
+        if (method === 'events.read') {
+          // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
+          return void this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => {
+            const { log_pos, events } = result as { log_pos: number; events: string };
+            if (!conn.done && conn.sock.writable) conn.sock.write(`{"v":${VERSION},"id":${JSON.stringify(id)},"result":{"start":${JSON.stringify(this.start)},"log_pos":${log_pos},"events":${events}}}\n`);
+          }, (error: unknown) => reply(Promise.reject(error)));
+        }
+        if (READS.has(method)) {
+          return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => ({ start: this.start, ...(result as Obj) })));
+        }
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
     }
   }
