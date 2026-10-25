@@ -1,0 +1,116 @@
+{
+  "format": 1,
+  "id": "flat-381",
+  "profile": "board",
+  "title": "Labels in a 2D layer",
+  "description": "The same four texts as the labels in depth, each a text item in a 2D writer layer at the same font role and size.",
+  "size": [
+    480,
+    240
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "avatar-13": {
+      "id": "avatar-13",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Text AVATAR",
+      "order": "a1",
+      "at": {
+        "pos": [
+          24,
+          24,
+          0
+        ]
+      },
+      "params": {
+        "text": "AVATAR",
+        "font": "body",
+        "size": 13,
+        "paint": {
+          "fill": {
+            "role": "label-a"
+          }
+        }
+      }
+    },
+    "avatar-13-again": {
+      "id": "avatar-13-again",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Text AVATAR",
+      "order": "a2",
+      "at": {
+        "pos": [
+          24,
+          72,
+          0
+        ]
+      },
+      "params": {
+        "text": "AVATAR",
+        "font": "body",
+        "size": 13,
+        "paint": {
+          "fill": {
+            "role": "label-b"
+          }
+        }
+      }
+    },
+    "tower-24": {
+      "id": "tower-24",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Text Tower Yard",
+      "order": "a3",
+      "at": {
+        "pos": [
+          24,
+          120,
+          0
+        ]
+      },
+      "params": {
+        "text": "Tower Yard",
+        "font": "body",
+        "size": 24,
+        "paint": {
+          "fill": {
+            "role": "label-a"
+          }
+        }
+      }
+    },
+    "avatar-mono": {
+      "id": "avatar-mono",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Text AVATAR",
+      "order": "a4",
+      "at": {
+        "pos": [
+          24,
+          176,
+          0
+        ]
+      },
+      "params": {
+        "text": "AVATAR",
+        "font": "mono",
+        "size": 13,
+        "paint": {
+          "fill": {
+            "role": "label-b"
+          }
+        }
+      }
+    }
+  }
+}
