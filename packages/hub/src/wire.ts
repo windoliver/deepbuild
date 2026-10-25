@@ -96,6 +96,16 @@ export function plantOf(value: string | undefined): Plant | undefined {
   return value as Plant;
 }
 
+/** What the agent gets of the extensions' joined tool.before reply (#350): their denies and their context blocks. */
+export interface ExtensionReply { denies: { extension: string; reason: string }[]; context: { extension: string; text: string }[] }
+/** How long each extension's tool.before handler has to reply; past it, it is recorded as failed and its reply dropped. */
+export const EXTENSION_HOOK_MS = 500;
+/**
+ * The hold the hub acknowledges for a hook some extension handles: the handlers' deadline, the host's grace for the
+ * trip back, and room for the core's answer to cross to the socket. A reply past it is the hook's fail-open one.
+ */
+export const EXTENSION_HOLD_MS = EXTENSION_HOOK_MS + 500;
+
 /** The test VFS's settings, from DEEP_HUB_TEST_VFS. */
 export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string }
 

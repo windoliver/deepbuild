@@ -832,4 +832,15 @@ describe('#350 review regressions', () => {
     expect(reply.denies.map((d) => d.extension)).toEqual(['test/busy']);
     expect(reply.failed).toEqual([{ extension: 'test/busy', reason: "test/busy missed the hook's deadline of 1000 ms" }]);
   }, 60_000);
+
+  it('a host under the hub\'s umask of 077 installs, checks and loads a package whose files were written under 022', async () => {
+    const from = handler('test/modes', 'return null;', { ...TEMPLATE });
+    const was = process.umask(0o077);
+    try {
+      const { h } = await world();
+      await enable(h, from, { grant: { record: ['tool.before'] } });
+    } finally {
+      process.umask(was);
+    }
+  }, 60_000);
 });
