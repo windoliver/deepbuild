@@ -46,6 +46,10 @@ export function ulid(ms: number): string {
   for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
   return out + tail;
 }
+/** The time a ULID was minted at, in ms. */
+export function ulidTime(id: string): number {
+  return [...id.slice(0, 10)].reduce((ms, c) => ms * 32 + CROCKFORD.indexOf(c), 0);
+}
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
 export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' }
@@ -59,8 +63,12 @@ export interface HookMeta {
   transcript: string;
   pid: number;
   ppid: number;
+  /** A tool hook's tool_use_id: the transcript's tool calls a hook reached the hub for. */
+  toolUse?: string;
   /** For a PreToolUse of a deep_* tool: the tool, and the RFC 8785 digest of its input, which a deep mcp call binds by. */
   stamp?: { tool: string; digest: string };
+  /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
+  late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
 }
@@ -74,11 +82,15 @@ export type Parsed =
 export type Plant =
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
-  | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project';
+  | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project'
+  | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
+  | 'answer-on-peer-check' | 'answer-on-token';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project',
+  'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
+  'answer-on-peer-check', 'answer-on-token',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -104,4 +116,6 @@ export interface CoreOptions {
   leaseMs?: number;
   /** Where the hub kills itself in a stack process's start, from DEEP_HUB_TEST_CRASH; only tests set it. */
   crash?: 'start-recorded' | 'spawned';
+  /** The file that stands for the OS confirming you, from DEEP_HUB_TEST_CONFIRM; only tests set it. */
+  confirm?: string;
 }

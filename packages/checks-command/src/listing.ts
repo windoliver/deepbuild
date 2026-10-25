@@ -3,6 +3,7 @@
 // source by pytest's default rules. Each is a test a default run of the file runs: a call the source itself skips,
 // marks todo, makes conditional or names at run time isn't listed, nor, in a file that focuses some (.only, fit), one it doesn't focus. A listed test the run never ran was left out by
 // something other than its source, and the run can't pass, unless the check's own command left it out.
+import { createHash } from 'node:crypto';
 import type { Expression, FunctionLikeDeclaration, Statement } from 'typescript';
 
 /** `names`: a node:test test's suites' names and its own, which its report gives it by, at its line. */
@@ -16,6 +17,9 @@ export interface Filter { option: string; value: string }
 
 type TS = typeof import('typescript');
 let loaded: TS | undefined;
+/** Listings by file, options and source digest; the oldest goes past LISTINGS. */
+const listings = new Map<string, Listed[]>();
+const LISTINGS = 1024;
 const TESTS = new Set(['test', 'it', 'fit']);
 const SUITES = new Set(['describe', 'suite', 'fdescribe']);
 /** What makes a call's tests run only sometimes, or under names its source doesn't hold. */
@@ -38,8 +42,12 @@ function chain(ts: TS, e: Expression): string[] | null {
  * node:test leaves to the command (`--test-only`); by default, whenever the file focuses one.
  */
 export async function listSource(source: string, file: string, joiner: string, how: { node?: boolean; focus?: boolean } = {}): Promise<Listed[]> {
+  // A file run again unchanged is listed once: the listing is its source's, its name's and the options' alone.
+  const key = `${file}\0${joiner}\0${how.node ?? ''}\0${how.focus ?? ''}\0${createHash('sha256').update(source).digest('hex')}`;
+  const kept = listings.get(key);
+  if (kept) return kept;
   const ts = (loaded ??= (await import('typescript')).default);
-  // No parent links: every node's text and start are read against `sf` itself.
+  // No parent links: positions and text are read through the file itself.
   const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false);
   const fileTagged = source.includes('@module-tag');
   const listed: (Listed & { focused: boolean })[] = [];
@@ -78,7 +86,10 @@ export async function listSource(source: string, file: string, joiner: string, h
   };
   walk(sf.statements, [], fileTagged, false);
   const focusing = how.focus ?? FOCUS.test(source);
-  return listed.filter((l) => !focusing || l.focused).map(({ focused: _, ...l }) => l);
+  const result = listed.filter((l) => !focusing || l.focused).map(({ focused: _, ...l }) => l);
+  if (listings.size >= LISTINGS) listings.delete(listings.keys().next().value!);
+  listings.set(key, result);
+  return result;
 }
 
 /** A run's name for a listed test: its own, or one of its parametrized cases (pytest's `test_x[1]`). */
