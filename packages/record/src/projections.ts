@@ -309,6 +309,10 @@ export class Projector {
         this.up('asks', { id: bare(d.ask), status: 'decided', outcome: 'decided_for_you', answered: e.ts });
         this.stmt('UPDATE decisions SET applied = applied + 1 WHERE id = ?').run(bare(d.decision));
         break;
+      case 'decision.revoked':
+        // Revoked on the trusted path: it covers nothing from here on, and a resolver that names it is refused.
+        this.stmt("UPDATE decisions SET state = 'revoked' WHERE id = ?").run(bare(d.decision));
+        break;
       case 'definition.drafted':
         this.add('definitions', this.definition(d, 'drafted', null));
         break;

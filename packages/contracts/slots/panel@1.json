@@ -1,0 +1,42 @@
+{
+  "title": "panel@1",
+  "description": "A view: a JavaScript panel drawn headless under an empty gpui-shell policy; it draws inside its panel, never over the question card, and moves focus or toasts only on your gesture.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "panel@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "area": {
+      "type": "string",
+      "enum": [
+        "sidebar",
+        "home",
+        "tab",
+        "line"
+      ],
+      "x-closure": {
+        "closed": "each value is a place in the app shell the panel runtime lays out, so a value outside the list has no meaning",
+        "reopens": "a new major of this interface",
+        "mark": "exhaustive"
+      }
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "name",
+    "area"
+  ],
+  "additionalProperties": false
+}

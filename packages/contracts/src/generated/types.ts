@@ -1242,6 +1242,24 @@ export interface DecisionCreated {
   evidence?: Array<string>;
 }
 
+/** decision.revoked@1 */
+export interface DecisionRevoked {
+  v: 1;
+  id: string;
+  kind: "decision.revoked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.drafted@1 */
 export interface DefinitionDrafted {
   v: 1;

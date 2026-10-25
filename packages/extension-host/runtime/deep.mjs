@@ -34,10 +34,15 @@ export function extensionSide(call, load) {
   const checks = new Map();
   const handlers = new Map();
   const routes = new Map();
+  // The package's resolvers in order, and its adapters by name: their functions stay here (#349).
+  let resolvers = [];
+  const adapters = new Map();
   // Each returns how to drop what it kept.
   const keep = {
     'deep.registerCheck': (type, runner) => { checks.set(type, runner); return () => { if (checks.get(type) === runner) checks.delete(type); }; },
     'deep.registerRoute': (route, handler) => { routes.set(route, handler); return () => { if (routes.get(route) === handler) routes.delete(route); }; },
+    'deep.registerResolver': (resolver) => { resolvers = [...resolvers, resolver]; return () => { resolvers = resolvers.filter((r) => r !== resolver); }; },
+    'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
@@ -76,6 +81,19 @@ export function extensionSide(call, load) {
         const handler = routes.get(params?.route);
         if (!handler) throw Error(`no route ${params?.route} is registered here`);
         return await handler(params.request);
+      }
+      // The first resolver with an answer answers; none, and the ask goes on.
+      if (method === 'resolve') {
+        for (const resolver of resolvers) {
+          const answer = await resolver(params.ask);
+          if (answer !== undefined && answer !== null) return answer;
+        }
+        return undefined;
+      }
+      if (method === 'adapter.mapHook' || method === 'adapter.deliver') {
+        const adapter = adapters.get(params?.name);
+        if (!adapter) throw Error(`no adapter ${params?.name} is registered here`);
+        return method === 'adapter.mapHook' ? await adapter.mapHook(params.request, params.version) : await adapter.deliver(params.answer, params.session, params.route);
       }
       throw Error(`no method ${method}`);
     },

@@ -1,0 +1,26 @@
+{
+  "title": "source@1",
+  "description": "A stream source: read(stream, cursor, limit) gives the next page in order and loses nothing after a restart.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "source@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "variant": {
+      "const": "stream"
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "variant"
+  ],
+  "additionalProperties": false
+}
