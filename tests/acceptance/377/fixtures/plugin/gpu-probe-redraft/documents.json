@@ -1,0 +1,184 @@
+{
+  "plugin": "test.gpu-probe",
+  "documents": [
+    {
+      "name": "control",
+      "tries": "nothing: a plain description, which the canvas draws",
+      "document": {
+        "format": 1,
+        "profile": "board",
+        "title": "Plug-in control",
+        "description": "Plug-in control, handed to the canvas by the #377 plug-in fixture.",
+        "size": [
+          320,
+          200
+        ],
+        "items": {
+          "back": {
+            "id": "back",
+            "kind": "rect@1",
+            "name": "Backdrop",
+            "order": "a0",
+            "params": {
+              "box": [
+                0,
+                0,
+                320,
+                200
+              ],
+              "paint": {
+                "fill": {
+                  "role": "muted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "raw-pixels",
+      "tries": "to hand the canvas pixels: an image item carrying its own BGRA bytes instead of an asset hash",
+      "document": {
+        "format": 1,
+        "profile": "board",
+        "title": "Raw pixels",
+        "description": "Raw pixels, handed to the canvas by the #377 plug-in fixture.",
+        "size": [
+          320,
+          200
+        ],
+        "items": {
+          "shot": {
+            "id": "shot",
+            "kind": "image@1",
+            "name": "Shot",
+            "order": "a0",
+            "params": {
+              "box": [
+                0,
+                0,
+                2,
+                2
+              ],
+              "fit": "fill",
+              "alt": "Two by two pixels",
+              "pixels": {
+                "format": "bgra8",
+                "w": 2,
+                "h": 2,
+                "data": "/wD//wD/AP//AAD/AP8A/w=="
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "surface-kind",
+      "tries": "to place a GPU surface on the canvas as an item",
+      "document": {
+        "format": 1,
+        "profile": "board",
+        "title": "Surface item",
+        "description": "Surface item, handed to the canvas by the #377 plug-in fixture.",
+        "size": [
+          320,
+          200
+        ],
+        "items": {
+          "surface": {
+            "id": "surface",
+            "kind": "gpu.surface@1",
+            "name": "Surface",
+            "order": "a0",
+            "params": {
+              "box": [
+                0,
+                0,
+                320,
+                200
+              ],
+              "handle": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "surface-field",
+      "tries": "to name the window drawing surface in the document envelope",
+      "document": {
+        "format": 1,
+        "profile": "board",
+        "title": "Surface field",
+        "description": "Surface field, handed to the canvas by the #377 plug-in fixture.",
+        "size": [
+          320,
+          200
+        ],
+        "items": {
+          "back": {
+            "id": "back",
+            "kind": "rect@1",
+            "name": "Backdrop",
+            "order": "a0",
+            "params": {
+              "box": [
+                0,
+                0,
+                320,
+                200
+              ],
+              "paint": {
+                "fill": {
+                  "role": "muted"
+                }
+              }
+            }
+          }
+        },
+        "surface": {
+          "handle": 1,
+          "path": "zero_copy"
+        }
+      }
+    },
+    {
+      "name": "raw-shader",
+      "tries": "to run its own GPU code: a rect carrying a WGSL fragment shader",
+      "document": {
+        "format": 1,
+        "profile": "board",
+        "title": "Raw shader",
+        "description": "Raw shader, handed to the canvas by the #377 plug-in fixture.",
+        "size": [
+          320,
+          200
+        ],
+        "items": {
+          "back": {
+            "id": "back",
+            "kind": "rect@1",
+            "name": "Backdrop",
+            "order": "a0",
+            "params": {
+              "box": [
+                0,
+                0,
+                320,
+                200
+              ],
+              "paint": {
+                "fill": {
+                  "role": "muted"
+                }
+              },
+              "wgsl": "@fragment fn main() -> @location(0) vec4<f32> { return vec4<f32>(1.0, 0.0, 1.0, 1.0); }"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

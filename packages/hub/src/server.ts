@@ -278,11 +278,11 @@ class Hub {
     if (this.plant === 'git-in-hook-handler') {
       try { execFileSync('git', ['rev-parse', '--show-toplevel'], { stdio: 'ignore' }); } catch { /* the plant only needs the call */ }
     }
+    // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
+    if (conn.done || !conn.sock.writable) return;
     // The acknowledgement and the reply in one write, which also ends the connection.
-    if (!conn.done && conn.sock.writable) {
-      conn.done = true;
-      conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + Hub.REPLY);
-    }
+    conn.done = true;
+    conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + Hub.REPLY);
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && parsed.meta.payloadWriter ? parsed.meta.payloadWriter : 'hook';

@@ -1,0 +1,95 @@
+Acceptance tests for #320 on the base 8b98570 (origin/main: #318's and #319's asks core, no implementation of #320),
+run on 2026-10-24 on an Apple silicon Mac, Vitest 5.0.5:
+
+  npx vitest run tests/acceptance/320
+  npx tsc -p tests/acceptance/320
+
+Trimmed to each failure's reason. Handles vary by run. No local path appears in what is kept.
+
+
+== The base
+
+ Test Files  5 failed (5)
+      Tests  9 failed (9)
+
+FAIL  inbox.test.ts    #320.dbf54286  AssertionError: when raised: block ask:…F11K, owned by someone else, never reaches
+                                      your inbox: expected [ 'sam' ] to deeply equal []
+FAIL  price.test.ts    #320.d9222c7a  AssertionError: a task with a cost you pay is raised, not refused: expected
+                                      'AskRefused: ask.created@1 refuses the ask at /data/cost_usd: Remove the field, or
+                                      connect with the contract version that lists it.' to be undefined
+FAIL  schema.test.ts   #320.424a72ad  (schema) AssertionError: a task whose steps is empty ([]) fails ask.created@1, at
+                                      /data/steps: expected [] to include '/data/steps'
+FAIL  schema.test.ts   #320.424a72ad  (raise) AssertionError: a task whose steps is empty ([]) is refused at raise,
+                                      naming /data/steps: expected undefined to be '/data/steps'
+  (Expected: at the base the schema already requires all four parts and refuses an empty where or proves, so the
+  cases left out pass and the first failure is the empty list of steps.)
+FAIL  request.test.ts  #320.ce2e38fe  AssertionError: the drafted request for block ask:…MZF5Z reaches your inbox:
+                                      expected undefined to be defined
+FAIL  plants.test.ts   #320.424a72ad  the real program's run fails first: a task whose steps is empty ([]) fails
+                                      ask.created@1, at /data/steps
+FAIL  plants.test.ts   #320.dbf54286  (two tests) the real program's run fails first: block ask:… owned by someone
+                                      else, never reaches your inbox: expected [ 'sam' ] to deeply equal []
+FAIL  plants.test.ts   #320.ce2e38fe  the real program's run fails first: the drafted request for block ask:… reaches
+                                      your inbox: expected undefined to be defined
+  (Each plant test runs its scenario on the real program before the plant, so on the base it fails there, at the
+  same assertion as the criterion's own test.)
+
+  npx tsc -p tests/acceptance/320: 10 errors in 4 files, each the surface the README defines and the base lacks:
+    TS2339 Property 'request' does not exist on type 'InboxRow'   helpers.ts (1), scenarios.ts (3), plants.ts (3)
+    TS2339 Property 'cost_usd' does not exist on type 'Card'      price.test.ts (3)
+
+
+== The sample fix
+
+A sample fix, kept in a scratch copy of the base outside this checkout (not committed, not part of this change), to
+show the tests can pass. 27 lines added to packages/asks/src/index.ts: an ask whose owner isn't the connection's actor
+is marked as someone else's, left out of inbox() and never shown; when it's an unblock, the core appends a drafted
+request right after it, an authority ask (send / don't send) from a new ask.sources@1 row `request.draft`, with the
+block's handle as its event's subject and the block's pinned_to as its own, so #318's card `changed` re-checks it
+against the worktree each time its card is made; inbox rows carry `request`; cards carry `cost_usd`. In the schemas,
+ask.created@1 and @2's unblock branch get minItems 1 on steps and unblocks and an optional cost_usd (edited in place,
+digests not updated: the sample only has to show the tests can pass).
+
+  npx vitest run tests/acceptance/320                        9 of 9 pass
+  npx tsc -p tests/acceptance/320                            no errors
+  npx vitest run tests/acceptance/318 tests/acceptance/319   all pass but 319's budgets (skipped off mains power);
+                                                             318's sources test timed out at 5 s once with both suites
+                                                             running together, and passed when rerun alone (7.7 s run)
+
+
+== Planted wrong programs (plants.ts, run by plants.test.ts)
+
+On the sample fix each plant test passes: the scenario passes on the real program and fails on the plant. Run bare
+(the scenario on the plant), each fails with:
+
+  #320.424a72ad  lists may be empty          a task whose steps is empty ([]) fails ask.created@1, at /data/steps:
+                                             expected [] to include '/data/steps'
+  #320.dbf54286  inbox lists every ask       when raised: block ask:…FFG2, owned by someone else, never reaches your
+                                             inbox: expected [ 'sam' ] to deeply equal []
+  #320.dbf54286  drafts no request           when raised: the drafted request for block ask:…HTNR reaches your inbox:
+                                             expected undefined to be defined
+  #320.ce2e38fe  card made once, when drafted  the drafted request for block ask:…G5R5P, whose item changed after it
+                                             was drafted, says so when it's shown: expected null to match object { …(3) }
+
+
+== Mutants of the sample fix (scratch copy; each one change, then the suite)
+
+  the inbox lists blocks owned by someone else   3 failed: #320.dbf54286 (inbox, and both plant tests' real runs):
+                                                 block …, owned by someone else, never reaches your inbox
+  no request drafted                             5 failed: #320.dbf54286 (3) the drafted request for block … reaches
+                                                 your inbox; #320.ce2e38fe (2) the same
+  a block owned by someone else shows in Needs you  3 failed: #320.dbf54286 block …, owned by someone else, never
+                                                 reaches Needs you
+  the request pinned to its own text, not its    2 failed: #320.ce2e38fe the drafted request for block …, whose item
+    block's source                               changed after it was drafted, says so when it's shown: expected null
+  the request addressed to you, not the owner    3 failed: #320.dbf54286 … is for Sam, and waits in your inbox:
+                                                 expected [ 'you', 'you' ] to deeply equal [ 'sam', 'you' ]
+  the inbox drops the request link               5 failed: #320.dbf54286 (3), #320.ce2e38fe (2): the drafted request
+                                                 for block … reaches your inbox
+  the card drops the price                       1 failed: #320.d9222c7a task …, with a cost you pay, shows its price in
+                                                 Needs you: expected null to be 49
+  the card shows a price on every task (0)       1 failed: #320.d9222c7a task …, with no cost, shows no price: expected
+                                                 +0 to be null
+  steps may be empty (minItems off)              3 failed: #320.424a72ad (schema, raise, plant's real run) a task whose
+                                                 steps is empty ([]) …
+  unblocks may be empty (minItems off)           3 failed: #320.424a72ad (the same) a task whose unblocks is empty ([]) …

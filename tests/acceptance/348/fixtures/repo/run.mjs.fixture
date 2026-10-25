@@ -1,0 +1,5 @@
+// The repo's own command (#348 AC3): what the done gate's checks or spec drafting would run. It leaves
+// `ran-<piece>` in the repo, so the test sees which piece ran it.
+import { writeFileSync } from 'node:fs';
+
+writeFileSync(`ran-${process.argv[2] ?? 'unknown'}`, `${Date.now()}\n`);
