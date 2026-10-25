@@ -843,4 +843,21 @@ describe('#350 review regressions', () => {
       process.umask(was);
     }
   }, 60_000);
+
+  it('a sibling\'s deny stands by the deadline when one extension\'s trust check is slow: the hook answers in time, naming the slow one as failed', async () => {
+    let held = 0;
+    const { h, trust } = await world({ heldTrust: async () => { await sleep(held); } });
+    const repo = temp();
+    await trust.answer(YOU, repo, true);
+    await enable(h, handler('test/gate', 'return null;', TEMPLATE), { grant: { record: ['tool.before'] }, project: repo });
+    await enable(h, handler('test/deny', "return { deny: { template: 'status', values: { handle: 'task:01K74FX2B4D6F8H0K2M4P6R8T0' } } };", TEMPLATE), { grant: { record: ['tool.before'] } });
+    // Trust answers for the gate's project now take 3 s, far past a 500 ms deadline and the hub's 1 s hold.
+    held = 3_000;
+    const started = performance.now();
+    const reply = await h.hook({ ...request, deadline: 500 });
+    const took = performance.now() - started;
+    expect(took, 'the reply came by the deadline and its grace').toBeLessThan(1_500);
+    expect(reply.denies.map((d) => d.extension)).toEqual(['test/deny']);
+    expect(reply.failed.map((f) => f.extension)).toEqual(['test/gate']);
+  }, 60_000);
 });

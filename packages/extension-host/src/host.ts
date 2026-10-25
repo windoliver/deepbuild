@@ -851,14 +851,23 @@ class Host implements ExtensionHost {
     await Promise.all([...this.exts.values()].filter((ext) => ext.live && ext.subscribed.has(kind)).map(async (ext) => {
       const id = ext.entry.id;
       const fail = (reason: string): void => void failed.push({ extension: id, reason });
-      if (await this.revoked(ext)) return fail(`${id}'s project is no longer trusted, so it was stopped`);
+      // One clock for all of this extension's part: its trust check, an unload that check may start, and its handler.
+      // A slow one fails this extension alone, by the deadline, so its siblings' replies still reach the agent in time.
+      const due = performance.now() + deadline + HOOK_GRACE_MS;
+      const left = (): number => Math.max(0, due - performance.now());
+      try {
+        if (await within(left(), `${id}'s trust check`, this.revoked(ext))) return fail(`${id}'s project is no longer trusted, so it was stopped`);
+      } catch (e) {
+        if (e instanceof Overran) return fail(`${id}'s trust check didn't answer within the hook's deadline of ${deadline} ms`);
+        throw e;
+      }
       // Removed while trust answered: it is asked nothing, and its absence is on the reply.
       if (!ext.live || !ext.ask) return fail(`${id} stopped before it could reply`);
       let replies: unknown;
       const asked = performance.now();
       try {
         // Its own deadline only: a handler that misses it stays loaded, and its late reply goes nowhere.
-        replies = await within(deadline + HOOK_GRACE_MS, `${id}'s ${kind} handler`, ext.ask('hook', { kind, request: { kind, data: request.data }, deadline }));
+        replies = await within(left(), `${id}'s ${kind} handler`, ext.ask('hook', { kind, request: { kind, data: request.data }, deadline }));
       } catch (e) {
         if (e instanceof Overran) return fail(`${id} missed the hook's deadline of ${deadline} ms`);
         // An error's text is the package's own words: only a release package's reaches the reply.
