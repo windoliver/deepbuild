@@ -639,6 +639,18 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #138: the canvas conformance kit runs each case headless on wgpu's noop backend, which makes no pixels, so a probe that needs them reads BLOCKED there; already in the lockfile."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the scene3d canvas module in R2 builds, and 3D revisions evaluated for render-back and the window."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #378: the app's GPU device a 3D revision renders back on."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #378: 3D writer layers drawn natively for render-back snapshots and the window."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -791,12 +803,64 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #377: the test render module's pipelines and passes, on the GPU layer's device."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the view3d call evaluates a document's 3D writer layers and its anchored overlays at each frame's t."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #378: scene3d's render module, which the view3d call draws through a GPU-layer view."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
+        }
+      }
+    },
+    "crates/deep-canvas-scene3d/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #378: the registry it registers through, the camera it evaluates and the ops module its math goes through."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #378: a document's channels evaluated at t, so a figure's parts and an orbiting camera move."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #378: the one shaper, which shapes a label once per string."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #378: documents, looks and kind entries."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #378: a label's coverage mask and an anchored overlay's picture, rasterized on the CPU."
+        }
+      }
+    },
+    "crates/deep-scene3d-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the evaluated scene, look and passes it draws."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #378: the GPU layer's device, encode jobs and render-module interface it draws through."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #378: instance records and uniforms written to GPU buffers."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #378: pipelines, render bundles that replay, and the linear, object-ID and depth targets."
         }
       }
     }
