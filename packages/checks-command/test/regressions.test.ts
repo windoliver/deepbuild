@@ -352,6 +352,14 @@ describe('what a checkout\'s config makes count as run', () => {
 });
 
 describe('a test its file holds that never ran', () => {
+  it('a file listed again after its source changed lists its tests as they are now, by the same name and joiner', async () => {
+    const before = await listSource(`import { test } from 'vitest';\ntest('one', () => {});\n`, 'test/a.test.ts', ' > ');
+    const after = await listSource(`import { test } from 'vitest';\ntest('one', () => {});\ntest('two', () => {});\n`, 'test/a.test.ts', ' > ');
+    expect(before.map((t) => t.test)).toEqual(['one']);
+    expect(after.map((t) => t.test)).toEqual(['one', 'two']);
+    expect((await listSource(`import { test } from 'vitest';\ntest('one', () => {});\n`, 'test/a.test.ts', ' ', { node: true })).map((t) => t.names)).toEqual([['one']]);
+  });
+
   // Config routes no refusal names: each leaves a failing test of a file that runs unrun.
   it('Vitest setupFiles, Jest setupFilesAfterEnv and a pytest conftest hook that leave a failing test out can\'t pass; a test the source skips can', async () => {
     const vitest = folder({

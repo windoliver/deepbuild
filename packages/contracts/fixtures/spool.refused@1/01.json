@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "spool.refused",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "file": "replay-01K74FKZVK8Q2X5R7M3N9P4T6W.jsonl",
+    "offset": 19200,
+    "reason": "a cut line: it does not parse"
+  }
+}

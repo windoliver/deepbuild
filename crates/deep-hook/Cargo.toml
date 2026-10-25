@@ -12,3 +12,12 @@ deep-contracts = { path = "../deep-contracts" }
 # A planted feature for #16's AC23: this build lists f_test among its features, sends it only when the hub
 # lists it too, and sends it anyway when DEEP_HOOK_FORCE_F_TEST=1.
 plant-f-test = []
+# Planted wrong programs for #315's AC12 and AC13: print the hub's last line as it came; read with no
+# deadline once connected; and cut the reply at the acknowledgement's deadline whatever hold it carries.
+plant-print-reply = []
+plant-connect-timeout-only = []
+plant-fixed-deadline = []
+# The planted wrong program for #316's AC8: match a written path only as written, resolving neither `..` nor links.
+plant-paths-as-written = []
+# The planted wrong program for #316's AC9: a shell reader that knows only the issue's own spellings.
+plant-issue-spellings = []

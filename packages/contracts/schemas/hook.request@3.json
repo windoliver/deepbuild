@@ -1,0 +1,87 @@
+{
+  "title": "hook.request@3",
+  "description": "deep-hook's request line: the agent's hook JSON, stamped with seq and id; a spooled call let through because the hub was late is marked late, a SessionStart says which billing keys are set, and a matched guard entry can carry a note on what this call does.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Wall-clock ns since the Unix epoch when the hook started, as a canonical decimal string."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, minted with its seq."
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "ppid": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "matched": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "The guard entries in rules.json the call matched, by name."
+    },
+    "notes": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[^\\s]+$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "For a matched entry, by name, what deep-hook read of this call that a person needs to act on it, such as the other checkout a git command is aimed at or the dispatch it would run; the hub shows it with that entry's denial."
+    },
+    "payload": {
+      "x-opaque": "the agent's hook JSON, unchanged; its adapter reads it",
+      "description": "The agent's hook JSON, unchanged."
+    },
+    "late": {
+      "type": "boolean",
+      "description": "Set on a spooled call deep-hook let through because the hub did not acknowledge it in time or did not reply by its hold."
+    },
+    "billing": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "description": "Whether each billing key is set in the environment the agent gave deep-hook, by name: true or false, never a value."
+    }
+  },
+  "required": [
+    "v",
+    "agent",
+    "event",
+    "seq",
+    "id",
+    "pid",
+    "ppid",
+    "matched",
+    "payload"
+  ],
+  "additionalProperties": false
+}
