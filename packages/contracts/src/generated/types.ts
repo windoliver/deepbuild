@@ -1634,6 +1634,22 @@ export interface HookRequestV2 {
   billing?: { [key: string]: boolean };
 }
 
+/** hook.request@3 */
+export interface HookRequestV3 {
+  v: 1;
+  agent: string;
+  event: string;
+  seq: bigint;
+  id: string;
+  pid: number;
+  ppid: number;
+  matched: Array<string>;
+  notes?: { [key: string]: string };
+  payload: unknown;
+  late?: boolean;
+  billing?: { [key: string]: boolean };
+}
+
 /** hub.stopped@1 */
 export interface HubStopped {
   v: 1;
