@@ -8,13 +8,13 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type LearnedChange, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type HeldAtLoad, type LearnedChange, type LearnedLoad, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
 export { PROJECTIONS, testStorage };
-export type { Backend, SliceEntry, Storage, SyncCall, TestStorage };
+export type { Backend, HeldAtLoad, LearnedLoad, SliceEntry, Storage, SyncCall, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -108,6 +108,11 @@ export interface RecordStore {
   raw(sql: string): Promise<unknown[]>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
+  /**
+   * What a session loads of the learned step specs, playbooks and compositions, checked against the guard rules
+   * in force now: one a rule denies a command of is held, its reason naming the rule (#723).
+   */
+  loadLearned(session: string): Promise<LearnedLoad>;
   /**
    * Rolls back one learned change, by its event's ID, or every learned change in force since a time: one
    * learn.rolled_back each, newest first, through the connection; nothing is deleted. Resolves with the
@@ -688,6 +693,11 @@ class SqliteRecord implements RecordStore {
   async startSlice(session: string): Promise<SliceEntry[]> {
     await this.settle();
     return startSlice(this.db, session);
+  }
+
+  async loadLearned(session: string): Promise<LearnedLoad> {
+    await this.settle();
+    return loadLearned(this.db, session);
   }
 
   rollBack(connection: Connection, what: { change: string } | { since: number }): Promise<string[]> {

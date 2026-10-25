@@ -1,0 +1,173 @@
+Base commit: 50e517d (branch worktree-github-issue-723-6cc07a, clean apart from tests/acceptance/723/)
+Command: NO_COLOR=1 npx vitest run tests/acceptance/723
+Date: 2026-10-25T18:24:26Z  Node v23.9.0 (the repo pins 24.22.0 in .node-version; this shell had v23.9.0)  vitest 5.0.5 darwin-arm64
+Before it: npm ci, then npm run build --workspaces twice (the packages export dist/).
+Exit code: 1
+
+Each test fails at a named assertion for the reason the issue is open: the base layer applies every loosening
+change (state applied, not held), and the record has no loadLearned (the surface README defines).
+
+ (AC4) AssertionError: the record has loadLearned(session), the surface README defines: expected 'undefined' to be 'function' // Object.is equality
+ AssertionError: AC1 a journey step that adds curl -k, on a replay of 20 tasks and 0 regressions: state of 01M45MN9H206GQH9K8P3PPV6ND (reason: ): expected 'applied' to be 'held' // Object.is equality
+ AssertionError: AC2 an extension patch adding an egress host: state of 01M45MN7JHDTTN3JY668Z9M2W1 (reason: ): expected 'applied' to be 'held' // Object.is equality
+ AssertionError: AC3 removing a verification step that never caught a bug: state of 01M45MNBFJ59AZT5JXPKMSRGNT (reason: ): expected 'applied' to be 'held' // Object.is equality
+ AssertionError: AC5 adding the unknown field grant.fd1c8c77d4116 inside a grant: state of 01M45MN7JH00T5FTPT56FXBT77 (reason: ): expected 'applied' to be 'held' // Object.is equality
+ AssertionError: Proof each planted loosening change is held quoting its clause, and each control applies: expected [ …(18) ] to deeply equal []
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/723/tsconfig.json exits 0 at the base.
+
+---- full output ----
+
+ RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/doneright/github-issue-723-6cc07a
+
+ ❯ tests/acceptance/723/load.test.ts (1 test | 1 failed) 115ms
+   ❯ AC4 a step spec applied on day 1 is held at the day-3 session start by a guard rule added on day 2 (1)
+     × AC4 in force in the day-1 and day-2 sessions; after a block rule on `npm publish` is added on day 2, the day-3 session leaves it out and shows it held, naming the rule; a spec the rule does not deny still loads 114ms
+ ❯ tests/acceptance/723/proof.test.ts (1 test | 1 failed) 170ms
+   ❯ Proof every kind of loosening is held with its quoted clause; the twins that do not loosen apply (1)
+     × Proof 18 planted loosening changes over all eight learned targets are held, each quoting its clause; 13 controls apply; held lines stay out of sessions; the layer rebuilds to the same rows 169ms
+ ❯ tests/acceptance/723/loosening.test.ts (4 tests | 4 failed) 447ms
+   ❯ AC1 a learned step spec change adding curl -k to a journey step is held, whatever its replay shows (1)
+     × AC1 adding `run: curl -k …` with a replay of 20 tasks and 0 regressions is held, naming the flag; the same line without -k applies 166ms
+   ❯ AC2 a learned extension patch adding an egress host its grant did not name is held, naming the host (1)
+     × AC2 `+ grant.hosts: telemetry.example.net` is held, naming the host; `- grant.hosts: mirror.example.org` applies under the local-first rule 50ms
+   ❯ AC3 a learned change removing a verification step that never caught a bug is held, naming the step (1)
+     × AC3 removing `check: shop.visual`, which only ever passed, is held, naming it; adding a check or removing a run line applies 144ms
+   ❯ AC5 a change to an unknown field inside a grant counts as loosening and is held (1)
+     × AC5 adding, or removing, a grant field no classifier can know is held, naming the field; removing a known path from the same grant applies 86ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/723/load.test.ts > AC4 a step spec applied on day 1 is held at the day-3 session start by a guard rule added on day 2 > AC4 in force in the day-1 and day-2 sessions; after a block rule on `npm publish` is added on day 2, the day-3 session leaves it out and shows it held, naming the rule; a spec the rule does not deny still loads
+AssertionError: the record has loadLearned(session), the surface README defines: expected 'undefined' to be 'function' // Object.is equality
+
+Expected: "function"
+Received: "undefined"
+
+ ❯ load tests/acceptance/723/helpers.ts:222:106
+    220| /** What a session loads now of the learned step specs, playbooks and …
+    221| export async function load(w: World, session: string): Promise<Learned…
+    222|   expect(typeof w.record.loadLearned, 'the record has loadLearned(sess…
+       |                                                                                                          ^
+    223|   const got = await w.record.loadLearned(session);
+    224|   expect(Array.isArray(got?.loaded) && Array.isArray(got?.held), `load…
+ ❯ tests/acceptance/723/load.test.ts:28:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/723/loosening.test.ts > AC1 a learned step spec change adding curl -k to a journey step is held, whatever its replay shows > AC1 adding `run: curl -k …` with a replay of 20 tasks and 0 regressions is held, naming the flag; the same line without -k applies
+AssertionError: AC1 a journey step that adds curl -k, on a replay of 20 tasks and 0 regressions: state of 01M45MN9H206GQH9K8P3PPV6ND (reason: ): expected 'applied' to be 'held' // Object.is equality
+
+Expected: "held"
+Received: "applied"
+
+ ❯ expectState tests/acceptance/723/helpers.ts:207:76
+    205| export async function expectState(w: World, id: string, state: string,…
+    206|   const row = await layerRow(w, id);
+    207|   expect(row.state, `${why}: state of ${id} (reason: ${str(row.reason)…
+       |                                                                            ^
+    208|   return row;
+    209| }
+ ❯ expectHeld tests/acceptance/723/helpers.ts:215:15
+ ❯ tests/acceptance/723/loosening.test.ts:27:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/723/loosening.test.ts > AC2 a learned extension patch adding an egress host its grant did not name is held, naming the host > AC2 `+ grant.hosts: telemetry.example.net` is held, naming the host; `- grant.hosts: mirror.example.org` applies under the local-first rule
+AssertionError: AC2 an extension patch adding an egress host: state of 01M45MN7JHDTTN3JY668Z9M2W1 (reason: ): expected 'applied' to be 'held' // Object.is equality
+
+Expected: "held"
+Received: "applied"
+
+ ❯ expectState tests/acceptance/723/helpers.ts:207:76
+    205| export async function expectState(w: World, id: string, state: string,…
+    206|   const row = await layerRow(w, id);
+    207|   expect(row.state, `${why}: state of ${id} (reason: ${str(row.reason)…
+       |                                                                            ^
+    208|   return row;
+    209| }
+ ❯ expectHeld tests/acceptance/723/helpers.ts:215:15
+ ❯ tests/acceptance/723/loosening.test.ts:48:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/723/loosening.test.ts > AC3 a learned change removing a verification step that never caught a bug is held, naming the step > AC3 removing `check: shop.visual`, which only ever passed, is held, naming it; adding a check or removing a run line applies
+AssertionError: AC3 removing a verification step that never caught a bug: state of 01M45MNBFJ59AZT5JXPKMSRGNT (reason: ): expected 'applied' to be 'held' // Object.is equality
+
+Expected: "held"
+Received: "applied"
+
+ ❯ expectState tests/acceptance/723/helpers.ts:207:76
+    205| export async function expectState(w: World, id: string, state: string,…
+    206|   const row = await layerRow(w, id);
+    207|   expect(row.state, `${why}: state of ${id} (reason: ${str(row.reason)…
+       |                                                                            ^
+    208|   return row;
+    209| }
+ ❯ expectHeld tests/acceptance/723/helpers.ts:215:15
+ ❯ tests/acceptance/723/loosening.test.ts:74:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/723/loosening.test.ts > AC5 a change to an unknown field inside a grant counts as loosening and is held > AC5 adding, or removing, a grant field no classifier can know is held, naming the field; removing a known path from the same grant applies
+AssertionError: AC5 adding the unknown field grant.fd1c8c77d4116 inside a grant: state of 01M45MN7JH00T5FTPT56FXBT77 (reason: ): expected 'applied' to be 'held' // Object.is equality
+
+Expected: "held"
+Received: "applied"
+
+ ❯ expectState tests/acceptance/723/helpers.ts:207:76
+    205| export async function expectState(w: World, id: string, state: string,…
+    206|   const row = await layerRow(w, id);
+    207|   expect(row.state, `${why}: state of ${id} (reason: ${str(row.reason)…
+       |                                                                            ^
+    208|   return row;
+    209| }
+ ❯ expectHeld tests/acceptance/723/helpers.ts:215:15
+ ❯ tests/acceptance/723/loosening.test.ts:94:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/723/proof.test.ts > Proof every kind of loosening is held with its quoted clause; the twins that do not loosen apply > Proof 18 planted loosening changes over all eight learned targets are held, each quoting its clause; 13 controls apply; held lines stay out of sessions; the layer rebuilds to the same rows
+AssertionError: Proof each planted loosening change is held quoting its clause, and each control applies: expected [ …(18) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "removes a check (composition:shop-review): state applied, not held",
++   "removes an assertion (step:shop-journeys): state applied, not held",
++   "removes a signature check (playbook:shop-ship): state applied, not held",
++   "narrows a check (step:shop-journeys): state applied, not held",
++   "widens a grant (an access word) (ext:acme/notes): state applied, not held",
++   "widens an egress host (ext:acme/notes): state applied, not held",
++   "widens a path (ext:acme/notes): state applied, not held",
++   "widens a permission mode (step:shop-journeys): state applied, not held",
++   "lowers a guard's coverage (its mode) (ext:acme/notes): state applied, not held",
++   "lowers a guard's coverage (its match) (ext:acme/notes): state applied, not held",
++   "flag --insecure (playbook:shop-ship): state applied, not held",
++   "flag curl -k (step:shop-journeys): state applied, not held",
++   "flag NODE_TLS_REJECT_UNAUTHORIZED=0 (slice:start-api): state applied, not held",
++   "flag GIT_SSL_NO_VERIFY (offer:mirror-clone): state applied, not held",
++   "flag verify=False (wiki:repos/shop.md#fixtures): state applied, not held",
++   "flag curl -k in how definitions are drafted (drafting:shop): state applied, not held",
++   "unknown field inside a grant (ext:acme/notes): state applied, not held",
++   "unknown field inside a step (step:shop-journeys): state applied, not held",
++ ]
+
+ ❯ tests/acceptance/723/proof.test.ts:95:114
+     93|       }
+     94|     }
+     95|     expect(problems, 'Proof each planted loosening change is held quot…
+       |                                                                                                                  ^
+     96|
+     97|     // Held is not in force: what the session loads keeps the verifica…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Start at  11:24:15
+   Duration  1.11s (import 37%, tests 34%, transform 28%, worker 1%)
+

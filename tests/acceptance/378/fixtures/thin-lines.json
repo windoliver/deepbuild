@@ -1,0 +1,129 @@
+{
+  "format": 1,
+  "id": "thin-lines-378",
+  "profile": "scene",
+  "title": "Lines thinner than a pixel",
+  "description": "Three horizontal 3D lines, each centred on a pixel row: one requested at 0.25 px, one at 0.5 px and one at 1 px.",
+  "size": [
+    800,
+    600
+  ],
+  "camera": "cam",
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "position": [
+          0,
+          0,
+          10
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "view_width": 20
+      }
+    },
+    "quarter": {
+      "id": "quarter",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Quarter-pixel line",
+      "order": "a1",
+      "params": {
+        "points": [
+          [
+            -8,
+            -0.0125,
+            0
+          ],
+          [
+            8,
+            -0.0125,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 0.25,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "line"
+          }
+        }
+      }
+    },
+    "half": {
+      "id": "half",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Half-pixel line",
+      "order": "a2",
+      "params": {
+        "points": [
+          [
+            -8,
+            2.4875,
+            0
+          ],
+          [
+            8,
+            2.4875,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 0.5,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "line"
+          }
+        }
+      }
+    },
+    "full": {
+      "id": "full",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "One-pixel line",
+      "order": "a3",
+      "params": {
+        "points": [
+          [
+            -8,
+            -2.5125,
+            0
+          ],
+          [
+            8,
+            -2.5125,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 1,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "line"
+          }
+        }
+      }
+    }
+  }
+}
