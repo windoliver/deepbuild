@@ -14,6 +14,8 @@ const hook = join(root, 'scripts/agent-harness-hook.mjs');
 const factsFile = { claude: join(root, 'adapters/claude-code.facts.json'), codex: join(root, 'adapters/codex.facts.json') };
 // What a change must touch for the budgets lane to run: the harness, its hook and its launch facts.
 const harnessFiles = [join(root, 'scripts/agent-harness.mjs'), hook, ...Object.values(factsFile)].map((path) => relative(root, path));
+const EDIT_PROMPT = 'Read the README and add one line to it.';
+const SCRIPTED = 'This session is scripted: no one will answer a question, so choose for yourself and finish the task.';
 const PAIRS = [['held-stop', 'claude'], ['idle-wake', 'claude'], ['read-only-job', 'claude'], ['read-only-job', 'codex']];
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const quote = (arg) => `'${String(arg).replaceAll("'", `'\\''`)}'`;
@@ -57,18 +59,20 @@ class Processes {
   }
 }
 
-const valued = { '--scenario': 'scenario', '--agent': 'agent', '--claude': 'claude', '--codex': 'codex', '--cost-cap-usd': 'costCapUsd', '--token-cap': 'tokenCap', '--timeout-ms': 'timeoutMs', '--out': 'out', '--base': 'base', '--budgets': 'budgets' };
+const valued = { '--scenario': 'scenario', '--agent': 'agent', '--claude': 'claude', '--codex': 'codex', '--cost-cap-usd': 'costCapUsd', '--token-cap': 'tokenCap', '--timeout-ms': 'timeoutMs', '--out': 'out', '--base': 'base', '--budgets': 'budgets', '--workdir': 'workdir', '--hooks': 'hooks' };
+const repeated = { '--changed': 'changed', '--pass-env': 'passEnv' };
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const options = { command, agent: 'claude', costCapUsd: 0.5, tokenCap: 300_000, timeoutMs: 60_000, changed: undefined };
+  const options = { command, agent: 'claude', costCapUsd: 0.5, tokenCap: 300_000, timeoutMs: 60_000, changed: undefined, passEnv: [] };
   for (let index = 0; index < rest.length; index += 2) {
     const [flag, value] = [rest[index], rest[index + 1]];
-    if (value === undefined || !(flag in valued || flag === '--changed')) throw Error(`unknown or incomplete option ${flag}`);
-    if (flag === '--changed') (options.changed ??= []).push(value);
+    if (value === undefined || !(flag in valued || flag in repeated)) throw Error(`unknown or incomplete option ${flag}`);
+    if (flag in repeated) (options[repeated[flag]] ??= []).push(value);
     else options[valued[flag]] = ['costCapUsd', 'tokenCap', 'timeoutMs'].includes(valued[flag]) ? Number(value) : value;
   }
   if (!['run', 'all', 'budgets'].includes(command)) throw Error('expected run, all or budgets');
-  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job'].includes(options.scenario)) throw Error('run needs a known --scenario');
+  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line'].includes(options.scenario)) throw Error('run needs a known --scenario');
+  if (options.scenario === 'add-readme-line' && (options.agent !== 'claude' || !options.workdir || !options.hooks)) throw Error('add-readme-line runs claude and needs --workdir and --hooks');
   if (!['claude', 'codex'].includes(options.agent)) throw Error('--agent is claude or codex');
   return options;
 }
@@ -146,9 +150,13 @@ async function run(options, scenario, agent = options.agent) {
   const finish = (fields) => { Object.assign(line, fields, { elapsedMs: Math.round(performance.now() - started) }); console.log(JSON.stringify(line)); return line; };
 
   const bin = binary(agent, options[agent]);
-  const dir = join(options.out, token), work = join(dir, 'work');
-  mkdirSync(work, { recursive: true });
-  const env = { ...Object.fromEntries(allowed.filter((name) => name in process.env).map((name) => [name, process.env[name]])), DEEP_RUN_TOKEN: token };
+  // add-readme-line runs in a checkout the caller made and keeps; the other scenarios in a folder of their own.
+  const edit = scenario === 'add-readme-line';
+  const dir = join(options.out, token), work = edit ? resolve(options.workdir) : join(dir, 'work');
+  mkdirSync(edit ? dir : work, { recursive: true });
+  if (!existsSync(work)) return finish({ reason: `BLOCKED: the workdir ${work} does not exist` });
+  // --pass-env adds a variable of the harness's own, such as a billing key, to the allowlist; its value is never printed.
+  const env = { ...Object.fromEntries([...allowed, ...options.passEnv].filter((name) => name in process.env).map((name) => [name, process.env[name]])), DEEP_RUN_TOKEN: token };
   const blocked = blockedBy(agent, bin, facts, env);
   if (blocked) return finish({ reason: `BLOCKED: ${blocked}`, workdir: realpathSync(work) });
 
@@ -162,12 +170,24 @@ async function run(options, scenario, agent = options.agent) {
   else {
     settings = join(dir, 'settings.json');
     const command = (mode) => [process.execPath, hook, mode, dir].map(quote).join(' ');
-    const stop = scenario === 'idle-wake' ? { type: 'command', command: command('wake'), asyncRewake: true, timeout: 30 } : { type: 'command', command: command('hold') };
+    const stop = scenario === 'idle-wake' ? { type: 'command', command: command('wake'), asyncRewake: true, timeout: 30 } : { type: 'command', command: command(edit ? 'event' : 'hold') };
+    // add-readme-line's hooks are the --hooks file's, unchanged; the harness's own go beside them.
+    const given = edit ? JSON.parse(readFileSync(options.hooks, 'utf8')).hooks ?? {} : {};
     writeFileSync(settings, JSON.stringify({
-      hooks: { SessionStart: [{ hooks: [{ type: 'command', command: command('event') }] }], Stop: [{ hooks: [stop] }] },
+      hooks: {
+        ...given,
+        SessionStart: [...(given.SessionStart ?? []), { hooks: [{ type: 'command', command: command('event') }] }],
+        Stop: [...(given.Stop ?? []), { hooks: [stop] }],
+        // A turn whose model calls fail ends with StopFailure.
+        ...(edit ? { StopFailure: [...(given.StopFailure ?? []), { hooks: [{ type: 'command', command: command('event') }] }] } : {}),
+      },
       statusLine: { type: 'command', command: `cat > ${quote(join(dir, 'status.tmp'))} && mv ${quote(join(dir, 'status.tmp'))} ${quote(join(dir, 'status.json'))}`, refreshInterval: 1 },
     }, null, 2));
-    args = facts.launch.session.args.map((arg) => (arg === '{settings}' ? settings : arg));
+    // add-readme-line loads no setting source, so neither the checkout's settings nor yours run in it. It has only the
+    // two tools its prompt needs, and accepts edits, so no permission prompt waits on a person.
+    args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : edit && all[at - 1] === '--setting-sources' ? '' : arg));
+    // The prompt is the person's, word for word; that no one answers a question back is the harness's to say.
+    if (edit) args.push('--tools', 'Read,Edit', '--permission-mode', 'acceptEdits', '--append-system-prompt', SCRIPTED);
   }
   const argv = [bin, ...args];
   const [shell, shellArgs] = job ? [bin, args] : inTerminal(argv);
@@ -209,7 +229,7 @@ async function run(options, scenario, agent = options.agent) {
   };
 
   const deadline = Date.now() + options.timeoutMs;
-  let stop, verdict, reason, typedAt, trusted = false;
+  let stop, verdict, reason, typedAt, exiting, trusted = false, keyed = false;
   while (!stop) {
     await sleep(100);
     await processes.poll();
@@ -225,10 +245,17 @@ async function run(options, scenario, agent = options.agent) {
         if (/❯No,exit/.test(screen.slice(screen.lastIndexOf('trustthisfolder') - 200))) { child.stdin.write('\x1b[B'); await sleep(200); }
         child.stdin.write('\r');
       }
+      // A key passed with --pass-env is one the caller chose for the session: answer Claude Code's question with "Yes".
+      if (edit && !keyed && /DetectedacustomAPIkey/.test(screen) && /Entertoconfirm/.test(screen.slice(screen.lastIndexOf('DetectedacustomAPIkey')))) {
+        keyed = true;
+        await sleep(300);
+        if (/❯No/.test(screen.slice(screen.lastIndexOf('DetectedacustomAPIkey')))) { child.stdin.write('\x1b[A'); await sleep(200); }
+        child.stdin.write('\r');
+      }
       // The person's own prompt says an answer will come, as a real ask does; the code word itself never is in it.
       if (start && !typedAt && Date.now() - start.at > 1500) {
         typedAt = Date.now();
-        child.stdin.write('Reply with only the word READY. After that, a DeepBuild hook will send you my answer, a code word; when it arrives, reply with only that code word.');
+        child.stdin.write(edit ? EDIT_PROMPT : 'Reply with only the word READY. After that, a DeepBuild hook will send you my answer, a code word; when it arrives, reply with only that code word.');
         await sleep(300);
         child.stdin.write('\r');
       }
@@ -236,7 +263,18 @@ async function run(options, scenario, agent = options.agent) {
       const said = (text) => typeof text === 'string' && text.includes(tokenWord);
       const replied = stops.slice(1).some((event) => said(event.last_assistant_message))
         || (stops.length > 1 && lines(transcript).some((entry) => entry.type === 'assistant' && said(JSON.stringify(entry.message?.content))));
-      if (replied) [stop, verdict] = ['done', 'PASS'];
+      // add-readme-line ends the session with /exit once its one turn has stopped, so its SessionEnd hooks run to their end.
+      if (edit) {
+        const ended = events.filter((event) => ['Stop', 'StopFailure'].includes(event.hook_event_name));
+        if (ended.length && !exiting) {
+          exiting = Date.now();
+          child.stdin.write('/exit');
+          await sleep(300);
+          child.stdin.write('\r');
+        }
+        const how = ended.at(-1)?.hook_event_name;
+        if (exiting && (exited || Date.now() - exiting > 10_000)) [stop, verdict, reason] = how === 'Stop' ? ['done', 'PASS', ''] : ['done', 'FAIL', `the turn ended with ${how}, not Stop`];
+      } else if (replied) [stop, verdict] = ['done', 'PASS'];
       else if (stops.length > 1) [stop, verdict, reason] = ['done', 'FAIL', 'the session continued without the answer it was given'];
     }
     if (priced && cost.usd > cap.usd) [stop, verdict, reason] = ['cost_cap', 'INCONCLUSIVE', `cost $${cost.usd} passed the $${cap.usd} cap, so the run was stopped`];
@@ -246,7 +284,7 @@ async function run(options, scenario, agent = options.agent) {
       const tried = [output, ...lines(transcript).map((entry) => JSON.stringify(entry))].some((text) => text.includes(basename(probe)));
       [stop, verdict, reason] = existsSync(probe) ? ['done', 'FAIL', `the read-only job wrote ${probe}`]
         : tried ? ['done', 'PASS', ''] : ['done', 'INCONCLUSIVE', 'the job never tried the write, so the sandbox went untested'];
-    } else if (!job && exited) [stop, verdict, reason] = ['done', 'FAIL', 'the session exited before the scenario finished'];
+    } else if (!job && exited && !stop) [stop, verdict, reason] = ['done', 'FAIL', 'the session exited before the scenario finished'];
     else if (Date.now() > deadline) [stop, verdict, reason] = ['timeout', 'FAIL', `the scenario did not finish within ${options.timeoutMs} ms`];
   }
   if (verdict === 'PASS' && !job) await sleep(1000); // the transcript lags the live turn
@@ -263,7 +301,7 @@ async function run(options, scenario, agent = options.agent) {
   return finish({
     verdict, stop, reason, model: usage.model, tokens: usage.tokens, cost, sessionId, transcript: existsSync(kept) ? kept : null, settings, workdir: realpathSync(work),
     launch: { argv, facts: factsFile[agent] }, processes: { started: pids, lingered },
-    evidence: job ? { probe } : scenario === 'held-stop' ? { answer, token: tokenWord } : { token: tokenWord },
+    evidence: job ? { probe } : edit ? { prompt: EDIT_PROMPT } : scenario === 'held-stop' ? { answer, token: tokenWord } : { token: tokenWord },
   });
 }
 
@@ -361,7 +399,7 @@ for (const name of signals) process.on(name, () => { interrupted = true; });
 
 let options;
 try { options = parseArgs(process.argv.slice(2)); } catch (error) {
-  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job> [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
+  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line> [--workdir <dir> --hooks <settings.json> [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
   process.exit(2);
 }
 options.out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'deep-harness-')));
