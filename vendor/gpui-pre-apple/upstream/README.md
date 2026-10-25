@@ -51,11 +51,13 @@ cargo test -p gpui_apple
 Zed's `CONTRIBUTING.md` asks for a discussion before feature code, a signed CLA, and a human
 author who understands the change and writes the PR description themself; it doesn't accept pull
 requests from autonomous agents. So the pull request is the owner's to open, from their fork;
-`PR-DRAFT.md` is a starting point for the description. When it's open, link it from #711. If
-upstream takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only #391's
-exact gradient mode and the two planted twins.
+`PR-DRAFT.md` was the starting point for the description. The pull request is open as a draft
+from the owner's fork: https://github.com/zed-industries/zed/pull/66114 (`JingW6/zed`, branch
+`gpui-bgra-surfaces` at `e04839ec`, this patch on `347f171a`), linked from #711. If upstream
+takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only #391's exact gradient
+mode and the two planted twins.
 
-Opening it, step by step (sign the CLA at https://zed.dev/cla first):
+How it was opened, for a redo on a new base (sign the CLA at https://zed.dev/cla first):
 
 ```sh
 gh repo fork zed-industries/zed --clone=false            # once
