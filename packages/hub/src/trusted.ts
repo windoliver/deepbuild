@@ -1,7 +1,6 @@
-// The trusted path (#34): an answer with authority, or one that saves a decision or changes what a check demands,
-// counts only when a device you paired signs it, or, from the CLI, once the OS confirms you; never on the control
-// token or the peer check alone. A device is paired once the OS confirms you, so the token can't pair a key of its own.
-import { execFile } from 'node:child_process';
+// The devices you paired (#34): an answer that saves a decision or changes what a check demands counts when one of
+// them signs it, or, from the CLI, once the OS confirms you (confirm.ts); never on the control token or the peer
+// check alone. A device is paired once the OS confirms you, so the token can't pair a key of its own.
 import { createPublicKey, verify } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { canonicalize, type JsonValue } from '@deepbuild/contracts';
@@ -10,16 +9,6 @@ import { Refused, refusal } from './wire.js';
 type Obj = Record<string, unknown>;
 /** A paired device: its ID, its name and its Ed25519 public key, the raw 32 bytes in base64url. */
 interface Device { device: string; name: string; public_key: string; paired: number }
-
-/**
- * Asks the OS to confirm you, once, with a prompt naming what you confirm. Only the stand-in a test names in
- * DEEP_HUB_TEST_CONFIRM answers today; with none, nothing is confirmed, since the LocalAuthentication and polkit
- * prompt is #19's. Each confirmation answers one prompt and is never cached.
- */
-export function confirmed(prompt: string, stand?: string): Promise<boolean> {
-  if (!stand) return Promise.resolve(false);
-  return new Promise((done) => execFile(stand, [prompt], { timeout: 120_000 }, (error) => done(!error)));
-}
 
 /** Refuses a public key that isn't an Ed25519 key's raw 32 bytes in base64url. */
 export function checkKey(key: unknown): string {
