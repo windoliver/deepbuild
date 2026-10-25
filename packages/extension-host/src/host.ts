@@ -5,7 +5,7 @@
 // before the hub is ready; every call is checked against the package's grant here, in the host, never in the
 // package; and inbound traffic reaches a package only through routes you chose when you turned it on.
 import { randomUUID } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
 import { homedir } from 'node:os';
@@ -99,6 +99,8 @@ export interface ExtensionHost {
   /** "<METHOD> <path>" routes you chose, served on one listener on 127.0.0.1. */
   turnOn(id: string, routes: string[]): Promise<{ address: string }>;
   turnOff(id: string): Promise<void>;
+  /** The hook kinds some loaded package handles: the hub holds a hook only for one of these. */
+  hooks(): string[];
   /** Every live handler of the request's kind replies within its deadline; their replies joined in one fixed order. */
   hook(request: HookRequest): Promise<HookReply>;
   /** Runs an action of the live piece the call targets, at the version it names, for its caller. */
@@ -351,7 +353,7 @@ class Host implements ExtensionHost {
     const before = this.entries[id];
     let entry: Entry;
     try {
-      cpSync(from.from, folder, { recursive: true });
+      copyPackage(from.from, folder);
       const hosts = from.grant?.hosts?.map((h) => ({ host: h.host, quota: { calls: h.quota.calls, per_ms: h.quota.per_ms } }));
       entry = { id, version, folder, digest: packageDigest(folder), builtBy: from.builtBy, project, grant: { record: [...(from.grant?.record ?? [])], ...(hosts ? { hosts } : {}) } };
       this.save('installed.json', { ...this.entries, [id]: entry });
@@ -439,7 +441,7 @@ class Host implements ExtensionHost {
   private snapshot(entry: Entry): { folder: string; digest: string } {
     const folder = mkdtempSync(join(this.options.home, 'run-'));
     try {
-      cpSync(entry.folder, folder, { recursive: true });
+      copyPackage(entry.folder, folder);
       return { folder, digest: packageDigest(folder) };
     } catch (e) {
       rmSync(folder, { recursive: true, force: true });
@@ -548,7 +550,8 @@ class Host implements ExtensionHost {
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
       ext.stop = async () => { await supervisor.cleanup(run).catch(() => undefined); };
-      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected: ${output.join('').trim()}`)));
+      // What it printed is the package's own words: only a release package's reach the refusal, and the hub's log.
+      const early = supervisor.wait(run).then((exit) => Promise.reject(Error(`it exited (${exit.code ?? exit.signal}) before it connected${ext.released ? `: ${output.join('').trim()}` : ''}`)));
       early.catch(() => undefined);
       let socket: Socket;
       try {
@@ -931,6 +934,9 @@ class Host implements ExtensionHost {
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
   }
+  hooks(): string[] {
+    return [...new Set([...this.exts.values()].flatMap((ext) => [...ext.subscribed]))].sort();
+  }
   async runCheck(kind: string, spec: CheckSpec, ctx: { checkout: string; deadline: number }): Promise<CheckResult> {
     const ext = this.owner(kind);
     if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
@@ -1046,6 +1052,22 @@ class Host implements ExtensionHost {
     // A call that was under way finishes, or finds its package unloaded, before close returns.
     await Promise.all(this.calls);
   }
+}
+
+/**
+ * Copies a package's folder with each file's mode as it is: the digest counts modes, and a copy made under a tighter
+ * umask (the hub's is 077) would otherwise digest differently from the folder it was checked as.
+ */
+function copyPackage(from: string, to: string): void {
+  cpSync(from, to, { recursive: true });
+  const modes = (src: string, dst: string): void => {
+    for (const name of readdirSync(src)) {
+      const stat = lstatSync(join(src, name));
+      if (stat.isDirectory()) modes(join(src, name), join(dst, name));
+      else if (stat.isFile()) chmodSync(join(dst, name), stat.mode & 0o7777);
+    }
+  };
+  modes(from, to);
 }
 
 export async function openExtensionHost(options: ExtensionHostOptions): Promise<ExtensionHost> {

@@ -11,8 +11,9 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openAsks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
-import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
+import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import { answers, composeKind, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -20,7 +21,7 @@ import { openSupervisor, type Grant, type Host, type Started, type Supervisor } 
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { EXTENSION_HOOK_MS, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type HookMeta } from './wire.js';
 
 const DAY = 86_400_000;
 /** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
@@ -138,6 +139,8 @@ export class Core {
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   private blocked: string | undefined;
+  /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
+  private extensions: ExtensionHost | undefined;
   private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
   /** The stack `deep env up` started in each worktree, by the worktree's real path, and each one on its way up. */
   private readonly stacks = new Map<string, Stack>();
@@ -222,7 +225,16 @@ export class Core {
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
+    // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
+    const trust = await openTrust({ record: this.record, now: this.now });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now });
+    for (const pkg of await extensions.installed()) {
+      const load = await extensions.load(pkg);
+      if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
+    }
     await this.replaySpool();
+    // The replay is done: the extensions start, and each that can't is unloaded and named.
+    await extensions.ready().catch((error: unknown) => process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`));
     // A session that ended with turns still to judge sends no hook again: they are judged now.
     for (const [id, cursor] of this.cursors) {
       if (typeof cursor.ended?.agent !== 'string' || typeof cursor.read !== 'number' || !Array.isArray(cursor.reached)) continue;
@@ -425,6 +437,22 @@ export class Core {
       });
     }
     return { settled };
+  }
+
+  /** The hook kinds some loaded extension handles, read once the extensions have started. */
+  hooks(): string[] {
+    return this.extensions?.hooks() ?? [];
+  }
+  /**
+   * The extensions' joined reply to a tool.before, or null when it takes the hook's fail-open policy: while appends
+   * fail every gate is watch-only, and the extensions' denies and context go with them. A handler that failed is
+   * named on stderr; its reply is already out of the join.
+   */
+  async extensionHook(data: unknown): Promise<ExtensionReply | null> {
+    if (this.blocked || !this.extensions) return null;
+    const reply = await this.extensions.hook({ kind: 'tool.before', data, deadline: EXTENSION_HOOK_MS, bound: contextBoundFor(EXTENSION_HOOK_MS) });
+    for (const { reason } of reply.failed) process.stderr.write(`deep hub: tool.before handler failed: ${reason}\n`);
+    return { denies: reply.denies, context: reply.context };
   }
 
   /** Records, once, that a call the hub answered was let through by deep-hook as late, naming its guard entries. */
@@ -1247,6 +1275,7 @@ export class Core {
     await this.runner.close();
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
+    await this.extensions?.close();
     await this.supervisor.close();
     await this.record.close();
     this.writeState('stopped');
