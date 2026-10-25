@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "entries": {
+    "no-kill-by-name": {
+      "match": "kill:by-name",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Killing processes by name or port can stop another session's or worktree's processes, which run the same scripts and ports.",
+      "next_step": "Kill by PID, only a process you started: kill <pid>.",
+      "fail_closed": true
+    },
+    "no-workflow-dispatch": {
+      "match": "dispatch:workflow",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Dispatching a workflow runs CI or a deploy that needs your approval.",
+      "next_step": "Ask the person to approve and run the dispatch; a rerun of an existing run is allowed.",
+      "fail_closed": true
+    },
+    "no-bare-stash": {
+      "match": "git:stash-unnamed",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "The stash stack is shared by every worktree of a repository, so a bare git stash or git stash pop can take another session's changes.",
+      "next_step": "Make a temporary WIP commit instead, or run git stash push -m <tag> and later git stash apply <its sha>.",
+      "fail_closed": true
+    },
+    "no-git-other-checkout": {
+      "match": "git:other-checkout",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "This git command is aimed at another worktree or the main checkout, which another session may be working in.",
+      "next_step": "Ask the person to run the command in that checkout.",
+      "fail_closed": true
+    },
+    "no-agent-config-write": {
+      "match": "write:~/.claude/settings.json ~/.claude/settings.local.json ~/.claude.json ~/.claude/skills/* ~/.claude/plugins/* ~/.codex/config.toml ~/.codex/hooks.json ~/.codex/skills/* ~/.agents/skills/* ~/.cursor/mcp.json ~/.cursor/hooks.json .claude/settings.json .claude/settings.local.json .mcp.json .claude/skills/* .codex/config.toml .codex/hooks.json .agents/skills/* .cursor/mcp.json .cursor/hooks.json .deepbuild/* !~/.deepbuild/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "An agent's hook, MCP, permission, plugin and skill config, and a repository's .deepbuild/, change only by your decision, never by an agent's write.",
+      "next_step": "Propose the change with deep_propose instead.",
+      "fail_closed": true
+    }
+  }
+}
