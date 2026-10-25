@@ -22,6 +22,23 @@ const GUTTER: u32 = 1;
 pub const PAGES: usize = 8;
 /// The largest device size the atlas rasterizes; text above it is the path renderer's (R6).
 const MAX_DEVICE_SIZE: f32 = 256.;
+/// The smallest raster size text in depth takes.
+const MIN_RASTER: f64 = 4.;
+/// One raster step: 2^(1/6), about 12% (canvas primitives: Marks in 3D).
+const RASTER_STEP: f64 = 1.122_462_048_309_373;
+
+/// The raster size text in depth takes for `px` device pixels a em: the nearest of the sizes 2^(k/6),
+/// so a label that grows or shrinks on screen rasterizes again only at each step, and draws its
+/// glyphs scaled by at most half a step between them. Multiplied out, never through a logarithm.
+pub fn raster_size(px: f64) -> f32 {
+    let px = px.clamp(MIN_RASTER, f64::from(MAX_DEVICE_SIZE));
+    let mut s = 1.0;
+    while s * RASTER_STEP <= px {
+        s *= RASTER_STEP;
+    }
+    let up = s * RASTER_STEP;
+    (if up / px < px / s { up } else { s }).min(f64::from(MAX_DEVICE_SIZE)) as f32
+}
 
 /// Where a rasterized glyph sits on a page, and how it hangs off its origin on the baseline.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,6 +56,8 @@ pub struct Placed {
 /// One alpha page, packed in shelves.
 pub struct Page {
     bytes: Vec<u8>,
+    /// The tick the page was last drawn from ([`Atlas::tick`]).
+    used: u64,
     /// Changed each time the bytes change, to a number no page of this atlas had before; the GPUI
     /// side uploads a generation once.
     generation: u32,
@@ -51,6 +70,7 @@ impl Page {
     fn new(generation: u32) -> Self {
         Page {
             bytes: vec![0; (PAGE * PAGE) as usize],
+            used: 0,
             generation,
             shelf_y: 0,
             shelf_h: 0,
@@ -99,6 +119,10 @@ struct Key {
 /// The atlas: its pages, the glyphs placed on them, and the rasterizer they come from.
 pub struct Atlas {
     pages: Vec<Page>,
+    /// The page new glyphs go on.
+    current: usize,
+    /// Counts frames for least-recently-used eviction; 0 until [`Atlas::tick`] is first called.
+    tick: u64,
     placed: BTreeMap<Key, Option<Placed>>,
     resources: Resources,
     settings: RenderSettings,
@@ -119,6 +143,8 @@ impl Atlas {
     pub fn new() -> Self {
         Atlas {
             pages: Vec::new(),
+            current: 0,
+            tick: 0,
             placed: BTreeMap::new(),
             resources: Resources::new(),
             settings: RenderSettings {
@@ -140,6 +166,14 @@ impl Atlas {
         self.rasterized
     }
 
+    /// Starts a frame. Once every page is full, a glyph with no room takes the page least recently
+    /// drawn from, if no glyph of this frame is on it: that page starts over at a new generation and
+    /// its glyphs are placed again when next drawn. A caller that never ticks never evicts, and
+    /// starts over whole with [`Atlas::make_room`].
+    pub fn tick(&mut self) {
+        self.tick += 1;
+    }
+
     /// Starts over once a glyph found no room on [`PAGES`] full pages: every page and placement
     /// goes, and the next glyph opens page 0 at a generation no page had. True when it did. Call
     /// it between labels, never between placing a label's glyphs and drawing them.
@@ -149,6 +183,7 @@ impl Atlas {
         }
         self.pages.clear();
         self.placed.clear();
+        self.current = 0;
         self.full = false;
         true
     }
@@ -164,6 +199,9 @@ impl Atlas {
             size64: (device_size * 64.).round() as u32,
         };
         if let Some(placed) = self.placed.get(&key) {
+            if let Some(p) = placed {
+                self.pages[p.page as usize].used = self.tick;
+            }
             return *placed;
         }
         if device_size > MAX_DEVICE_SIZE {
@@ -246,18 +284,38 @@ impl Atlas {
     }
 
     fn reserve(&mut self, w: u32, h: u32) -> Option<(u32, (u32, u32))> {
-        if let Some(last) = self.pages.len().checked_sub(1) {
-            if let Some(slot) = self.pages[last].reserve(w, h) {
-                return Some((last as u32, slot));
+        if let Some(page) = self.pages.get_mut(self.current) {
+            if let Some(slot) = page.reserve(w, h) {
+                page.used = self.tick;
+                return Some((self.current as u32, slot));
             }
         }
-        if self.pages.len() >= PAGES {
-            self.full = true;
-            return None;
+        if self.pages.len() < PAGES {
+            self.pages.push(Page::new(self.next_generation));
+            self.current = self.pages.len() - 1;
+        } else {
+            // Every page is full: the one least recently drawn from starts over, unless this
+            // frame drew from it.
+            let Some(lru) = self
+                .pages
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.used < self.tick)
+                .min_by_key(|(i, p)| (p.used, *i))
+                .map(|(i, _)| i)
+            else {
+                self.full = true;
+                return None;
+            };
+            self.placed
+                .retain(|_, placed| placed.is_none_or(|p| p.page as usize != lru));
+            self.pages[lru] = Page::new(self.next_generation);
+            self.next_generation += 1;
+            self.current = lru;
         }
-        let mut page = Page::new(self.next_generation);
+        let page = &mut self.pages[self.current];
         let slot = page.reserve(w, h)?;
-        self.pages.push(page);
-        Some(((self.pages.len() - 1) as u32, slot))
+        page.used = self.tick;
+        Some((self.current as u32, slot))
     }
 }
