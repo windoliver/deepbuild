@@ -48,6 +48,8 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
+    clicks: Vec<(u64, [f64; 2])>,
 }
 
 fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -122,6 +124,17 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .flatten()
         .filter_map(Value::as_u64)
         .collect();
+    let mut clicks = Vec::new();
+    for c in call["clicks"].as_array().into_iter().flatten() {
+        let at = c["at"]
+            .as_array()
+            .filter(|a| a.len() == 2)
+            .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]));
+        let (Some(frame), Some(at)) = (c["frame"].as_u64(), at) else {
+            return Err(bad("a click is {frame, at: [x, y]}"));
+        };
+        clicks.push((frame, at));
+    }
     Ok(Args {
         doc,
         look,
@@ -134,6 +147,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        clicks,
     })
 }
 
@@ -174,6 +188,43 @@ fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPic
         size: p.size,
         image: Arc::new(gpui_kit::RenderImage::new([image::Frame::new(frame)])),
     })
+}
+
+/// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
+/// the topmost 2D overlay whose shapes cover it, else the item the object-ID target holds there,
+/// else nothing.
+fn pick(
+    scene: &deep_canvas_scene3d::scene::Scene,
+    ids: &[u8],
+    picks: &[(String, u32)],
+    size: [u32; 2],
+    at: [f64; 2],
+) -> Option<String> {
+    use deep_canvas_scene3d::scene::Shape2;
+    for o in scene.overlays.iter().rev() {
+        let Some([ox, oy]) = o.origin else { continue };
+        let [x, y] = [at[0] - ox, at[1] - oy];
+        let hit = o.shapes.iter().any(|s| match s {
+            Shape2::Circle { center, r, .. } => (x - center[0]).hypot(y - center[1]) <= *r,
+            Shape2::Rect { rect, .. } => {
+                (rect[0]..=rect[0] + rect[2]).contains(&x)
+                    && (rect[1]..=rect[1] + rect[3]).contains(&y)
+            }
+        });
+        if hit {
+            return Some(o.id.clone());
+        }
+    }
+    let [x, y] = [at[0].floor(), at[1].floor()];
+    if x < 0.0 || y < 0.0 || x >= f64::from(size[0]) || y >= f64::from(size[1]) {
+        return None;
+    }
+    let i = (y as usize * size[0] as usize + x as usize) * 4;
+    let p = u32::from_le_bytes(ids.get(i..i + 4)?.try_into().ok()?);
+    picks
+        .iter()
+        .find(|(_, v)| *v == p)
+        .map(|(id, _)| id.clone())
 }
 
 fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
@@ -228,6 +279,12 @@ fn planted3(p: Option<Planted>) -> Planted3 {
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut args = parse(call)?;
     let noop = app.backend == Backend::Noop;
+    if noop && !args.clicks.is_empty() {
+        return Err(refused(
+            "bad_input",
+            "a click reads the object-ID target, which the noop backend doesn't draw",
+        ));
+    }
     let planted = planted3(app.planted);
     let path = app.decision.path;
     let size = args.size;
@@ -295,8 +352,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 args.latency[(n as usize) % args.latency.len()]
             };
             let capture = args.capture.wants(n);
-            let read_targets = capture && wants_targets && !noop;
+            let clicks: Vec<[f64; 2]> = args
+                .clicks
+                .iter()
+                .filter(|(f, _)| *f == n)
+                .map(|(_, at)| *at)
+                .collect();
+            let read_targets = (capture && wants_targets || !clicks.is_empty()) && !noop;
             let look = args.look.clone();
+            let evaluated = scene.clone();
             let drawn = app
                 .worker
                 .call(move |state| -> Result<Drawn, String> {
@@ -418,6 +482,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("replayed".into(), json!(c.replayed));
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+            }
+            if !clicks.is_empty() {
+                let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
+                let answered: Vec<Value> = clicks
+                    .iter()
+                    .map(|at| {
+                        let p = ids.and_then(|ids| pick(&evaluated, ids, &drawn.picks, size, *at));
+                        json!({"at": at, "pick": p})
+                    })
+                    .collect();
+                frame.insert("clicks".into(), json!(answered));
             }
             frames.push(Value::Object(frame));
         }

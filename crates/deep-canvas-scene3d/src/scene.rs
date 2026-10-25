@@ -47,6 +47,9 @@ pub const KINDS: [&str; 6] = [
     "mark.text@1",
 ];
 
+/// The 2D overlay a 3D writer layer's anchor places, drawn by scene3d too.
+pub const OVERLAY: &str = "overlay.frame@1";
+
 /// Whether an item of `kind` (its text, `family.name@major`) is one of scene3d's marks.
 pub fn is_3d(kind: &str) -> bool {
     KINDS.contains(&kind)
@@ -828,7 +831,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         color: paint(look, params, &path)?,
                     });
                 }
-                "overlay.frame@1" => overlay_items.push((layer_id.clone(), id.clone())),
+                OVERLAY => overlay_items.push((layer_id.clone(), id.clone())),
                 _ => {}
             }
         }

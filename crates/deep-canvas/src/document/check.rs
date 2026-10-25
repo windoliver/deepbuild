@@ -1595,6 +1595,25 @@ pub(crate) fn resolve(
     }
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
+        // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
+        // holds: no kind gives a param's parts a schema in this slice.
+        ["params", name, rest @ ..] if !rest.is_empty() => {
+            let mut cursor = member(target, "params").and_then(|p| member(p, name));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
         ["params", name] => {
             let known = match kind_text(target).map(|text| lookup(kinds, text)) {
                 Some(Lookup::Known { entry, saved }) => entry
