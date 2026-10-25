@@ -14,11 +14,12 @@ What it carries:
 - `metal_renderer::gpu_surfaces`: each frame that samples a BGRA surface reports the buffers it
   samples once its command buffer is encoded (`Event::Encoded { frame, surfaces }`) and its
   completion with the GPU time it took (`Event::Completed { frame, gpu_ns }`), through one
-  `set_hook`. This is this crate's `gpu_surfaces` module without `Planted`, with the hook called
-  outside the lock (so a hook may replace itself from Metal's completion thread), the report
-  skipped when no hook is installed, and the names changed: `Committed { buffer }` here is
-  `Encoded { frame }` there, since the report precedes the commit. The vendored copy keeps the
-  old names until upstream decides; deep-app's `gpu_view.rs` is the one consumer to rename then.
+  `set_hook`. This is this crate's `gpu_surfaces` module without `Planted`. The vendored copy
+  was aligned with it on 2026-10-25: the hook is called outside the lock (so a hook may replace
+  itself from Metal's completion thread, `surface_hook_may_replace_itself` in this crate's
+  `metal_renderer::tests`), the report and its frame number are skipped when no hook is
+  installed, and the events are named `Encoded { frame }` (the report precedes the commit) and
+  `Completed { frame }`; deep-app's `gpu_view.rs` is the one consumer.
 - The BGRA shader samples linear, as the YCbCr one does; this crate's samples nearest. At 1:1 on
   snapped bounds both read texel for texel, which is what #377's handoff fixture checks.
 - `render_bgra_surface_premultiplied`, in `metal_renderer::tests`: a half-alpha red and an
