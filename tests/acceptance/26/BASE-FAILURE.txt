@@ -1,0 +1,89 @@
+Acceptance tests for #26 on the base 6173ee0 (origin/main: the hub of #16, whose deep mcp serves deep_status,
+deep_claim and deep_evidence; the asks core of #318 and #320; deep inbox of #24; no deep_ask, deep_wait,
+deep_open_item, deep_search or deep_run, no skill, no scorer, no #26 plants), run on 2026-10-24 on an Apple silicon
+Mac that environmentProblem() read as on battery power (so the reference-Mac budget was skipped INCONCLUSIVE), Node
+24.22.0, after `npm ci` and `npm run build --workspaces`:
+
+  npx vitest run tests/acceptance/26 --reporter=verbose
+  npx tsc -p tests/acceptance/26          -> no errors
+
+Trimmed to each test's first failure. <repo> is the checkout.
+
+
+ Test Files  10 failed (10)
+      Tests  30 failed | 2 passed | 1 skipped (33)
+
+FAIL ask.test.ts       #26.16520b7d deep_ask returns the answer you give while it waits
+  Error: deep_ask "Which header colour for q865a2a3?": the call ended before it filed anything: {"error":{"code":-32602,
+  "message":"No tool deep_ask; the tools are deep_status, deep_claim, deep_evidence."}}
+FAIL ask.test.ts       #26.644467d9 a task raised through deep_ask without a check is refused, and nothing is filed; with one it is filed
+  AssertionError: deep_ask raising a task with its check left out: an error must be a tool result with isError, holding
+  error@2, not a JSON-RPC error: {... "No tool deep_ask; ..."}
+FAIL ask.test.ts       #26.01e00356 deep_search finds a past decision by its question, citing the decision
+  AssertionError: deep_search for a past decision's question must succeed: {... "No tool deep_search; ..."}
+
+FAIL binding.test.ts   #26.1ca7aee5 two sessions' deep mcp each file a deep_ask under their own session; one started by hand searches, and its deep_claim is refused
+  Error: deep_ask "A's header for qd4d2ecc?": the call ended before it filed anything: {... "No tool deep_ask; ..."}
+PASS binding.test.ts   #26.11e88ca6 after SessionEnd the old process's calls are refused, and a new session in the same worktree gets its own binding
+PASS binding.test.ts   #26.bf6dc81a on one shared daemon, a PreToolUse stamped by hand for B makes A's matching deep_claim bind to none; no stamp binds two calls
+  (Expected: #16's hub already ends a binding at SessionEnd, binds a new session's process, and binds per call by
+  unspent stamps, refusing a call two match. These hold that as regression protection; their wrong programs below
+  are #26's.)
+FAIL binding.test.ts   #26.bf6dc81a (wrong program) a hub that binds a call to the first event it matches files the claim under B and fails, naming both sessions
+  Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=binds-first-stamp: file://<repo>/packages/hub/dist/wire.js:66
+          throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+
+FAIL budgets.test.ts   #26.131a6956 the perf lane has the task deep-mcp-30d, a #26 first measurement, valid against the merge base's budgets, and it runs
+  AssertionError: benchmarks/budgets.json has a task deep-mcp-30d: expected undefined to be defined
+SKIP budgets.test.ts   #26.131a6956 on the reference Mac, with 30 days in the record: status and open-item p95 under 100 ms, search under 300 ms, deep mcp under 80 MB
+  INCONCLUSIVE (reading only): not on mains power: Now drawing from 'Battery Power'
+
+FAIL contradiction.test.ts  #26.done-when a prediction deep_claim recorded that its run disagrees with shows in deep_status as a contradiction; one it agrees with doesn't
+  AssertionError: deep_run of unit for claim:01M5RS0J5FTX810NHPDA4KZYBM must succeed: {... "No tool deep_run; ..."}
+  (The base's deep_claim took the claim with its predictions; deep_run is what's missing.)
+
+FAIL errors.test.ts    #26.c1ac84d7 deep_run naming unti is refused naming check with actual "unti"; a scrub-list value comes back scrubbed and cut; deep://codes/<code> explains the code
+  AssertionError: deep_run naming the check unti: an error must be a tool result with isError, holding error@2, not a
+  JSON-RPC error: {... "No tool deep_run; ..."}
+FAIL errors.test.ts    #26.c1ac84d7 (wrong program) a server whose errors leave out actual fails, naming the tool
+  AssertionError: expected [Function] to throw error matching /deep_run/ but got 'BLOCKED: the hub didn't start with D…'
+FAIL errors.test.ts    #26.c1ac84d7 (wrong program) a server that returns the refused value unscrubbed fails, naming the tool
+  AssertionError: expected [Function] to throw error matching /deep_run returned (the scrub-list val…/ but got 'BLOCKED: …'
+FAIL errors.test.ts    #26.8a0223bc every tool's error matches error@2, and every tool's description says what its result does not prove
+  AssertionError: the tool list holds the issue's tools: expected [ 'deep_status', 'deep_claim', …(1) ] to deeply equal ArrayContaining{…}
+
+FAIL evidence.test.ts  #26.2ba61e05 a link out of the working folder is answered as a missing path and nothing of its target is kept; a file inside is stored by hash with origin agent
+  AssertionError: deep_evidence of notes.txt (the link notes.txt points outside the working folder to a planted file)
+  must be refused: {"result":{"content":[{"type":"text","text":"{\"sha256\":\"ce047f67…\"}"}],"isError":false,...}}
+  (Expected: the base checks the path before resolving links, the very wrong program the criterion names, and stores
+  the link's target.)
+FAIL evidence.test.ts  #26.2ba61e05 (wrong program) a hub that checks the path before resolving links stores the planted file and fails, naming the link
+  AssertionError: expected [Function] to throw error matching /the link notes\.txt/ but got 'BLOCKED: the hub didn't start with D…'
+
+FAIL outage.test.ts    #26.730e54de with the hub stopped, deep_status and a waiting deep_wait answer within a second that it is unreachable; the tool list holds; the next call after it is back succeeds
+  AssertionError: the tool list has deep_status and deep_wait: expected [ 'deep_status', 'deep_claim', …(1) ] to deeply equal ArrayContaining{…}
+
+FAIL scorer.test.ts    #26.4c0cfacd the scorer passes a recorded run ... (and the nine mutants: skill_not_loaded, skill_tools_mismatch x2,
+                       evidence_not_delivered, claim_mismatch, claim_not_in_manifest, wrong_first_tool, repeated_call, expected_in_prompt)
+  Error: BLOCKED: no skill at <repo>/skills/deepbuild/SKILL.md
+
+FAIL search.test.ts    #26.943c5a8d an unbound deep_search returns the wiki, decisions and the spec, and nothing of a session's
+  AssertionError: deep_open_item from the session must succeed: {... "No tool deep_open_item; ..."}
+  (The seeding before it ran: the verdict appended as the core, the decision saved by deep inbox answer.)
+FAIL search.test.ts    #26.943c5a8d (wrong program) a hub that lets an unbound call read everything returns a session's open item and fails, naming it
+  AssertionError: expected [Function] to throw error matching /open item ".* openitem\S+ is still op…/ but got 'BLOCKED: …'
+
+FAIL tools.test.ts     #26.281a87e3 the tool list holds nothing that can answer, decide or overrule, and no tool answers, decides or overrules whatever it is sent
+FAIL tools.test.ts     #26.e335d28b every tool is one the design allowlists, an unlisted one is refused, and none takes free-form shell input
+FAIL tools.test.ts     #26.done-when every tool's published input schema passes strict validation
+FAIL tools.test.ts     #26.2d751e6d the skill and every tool description follow the Building blocks table, the skill names no parameter, and drift fails
+  AssertionError: the tool list holds the issue's tools: expected [ 'deep_status', 'deep_claim', …(1) ] to deeply equal ArrayContaining{…}
+  (In the strict test the validator's own checks, nine planted schemas refused and a clean one taken, passed first.)
+
+
+Machinery checked on the base by a probe that was then deleted: the Building blocks table parses (37 rows, each of the
+eight tools named in at least one row's MCP cell), the design's MCP tools row gives 15 tool names, strictProblems()
+flags the base's deep_evidence (kind not in required), drift() reports the base's descriptions and a sample skill
+naming a parameter, forms() finds a value's base64 at all three offsets and its URL encoding, the index@1 fill module
+loads and answers, seedMonth() seeds 600 sessions, 3,000 asks, 600 decisions and 600 open items in about 7 s and the
+base hub starts on it, and a hub stopped and started again on the same root is reached by the same deep mcp process.
