@@ -67,6 +67,10 @@ export interface HookMeta {
   toolUse?: string;
   /** For a PreToolUse of a deep_* tool: the tool, and the RFC 8785 digest of its input, which a deep mcp call binds by. */
   stamp?: { tool: string; digest: string };
+  /** The guard entries in rules.json the call matched, by name, as deep-hook read them. */
+  matched: string[];
+  /** What deep-hook read of the call for a matched entry, by name, shown with that entry's denial. */
+  notes?: Record<string, string>;
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
@@ -83,12 +87,14 @@ export type Plant =
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project'
-  | 'stops-at-first-bad-line' | 'remove-spool-after-normal';
+  | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
+  | 'answer-on-peer-check' | 'answer-on-token';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project',
-  'stops-at-first-bad-line', 'remove-spool-after-normal',
+  'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
+  'answer-on-peer-check', 'answer-on-token',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
@@ -124,4 +130,6 @@ export interface CoreOptions {
   leaseMs?: number;
   /** Where the hub kills itself in a stack process's start, from DEEP_HUB_TEST_CRASH; only tests set it. */
   crash?: 'start-recorded' | 'spawned';
+  /** The file that stands for the OS confirming you, from DEEP_HUB_TEST_CONFIRM; only tests set it. */
+  confirm?: string;
 }
