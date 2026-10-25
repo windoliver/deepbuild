@@ -10,7 +10,8 @@ rust-version = "1.95"
 # spheres, lines, points and text) register through the registry and seal (#305), and a
 # document's 3D writer layers evaluate at t, in f64 through the ops module, into what the GPU
 # layer draws: each layer's instance records, the camera's reversed-Z projection, the look's
-# exposure and tone map, labels' coverage masks, and the 2D overlays anchored to 3D points.
+# exposure and tone map, labels' glyphs in the core's glyph atlas (#381), and the 2D overlays
+# anchored to 3D points.
 # `deep-scene3d-render` draws it; nothing here touches the GPU.
 [package.metadata.deep]
 canvas_text = true

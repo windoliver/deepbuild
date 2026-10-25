@@ -88,3 +88,12 @@ pub const FACES: &[Face] = &[
 pub fn blob(face: &Face) -> Blob<u8> {
     Blob::new(Arc::new(face.bytes))
 }
+
+/// The bundled face a shaped glyph's font is, by its bytes.
+pub fn face_of(font: &parley::FontData) -> Option<&'static Face> {
+    let data = font.data.data();
+    // By value: `FACES` is a const, so each use may hold its own copy of the bytes.
+    FACES
+        .iter()
+        .find(|f| f.bytes.len() == data.len() && f.bytes == data)
+}
