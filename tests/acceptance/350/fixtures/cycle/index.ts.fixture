@@ -1,0 +1,7 @@
+// A test package from outside DeepBuild's signed release (#350 AC4), sandboxed: a tool.before handler and an action,
+// enabled and disabled again and again. Its handler's block names how many times this process's handler ran.
+export default function (deep: any): void {
+  let calls = 0;
+  deep.on('tool.before', async () => ({ context: { template: 'calls', values: { count: ++calls } } }));
+  deep.registerAction('ext.cycle.ping', { declares: 'read', input: { type: 'object' } }, async () => ({ pong: calls }));
+}
