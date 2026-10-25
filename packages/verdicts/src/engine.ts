@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
-  CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo,
+  CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo, Prediction,
   Requirement, RequirementOutcome, Result, Run, RunOutcome, SendBack, Verdict, VerdictAsk, VerdictKey,
 } from './types.js';
 
@@ -616,8 +616,15 @@ export function staleReason(v: Verdict, commit: string, state?: readonly string[
  * past its end, can't be shown to follow any prediction.
  */
 function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradiction[] {
+  return predictionContradictions(claim.predictions ?? [], judged.map((j) => ({ check: j.check.check, runs: j.runs })));
+}
+/** The same rule over a claim's predictions and each check's counted runs, for a reader without a verdict, as deep_status. */
+export function predictionContradictions(
+  predictions: readonly Prediction[],
+  checks: readonly { check: string; runs: readonly Pick<Run, 'run' | 'outcome' | 'started' | 'ended'>[] }[],
+): Contradiction[] {
   const span = new Map<string, { first: number; last: number }>();
-  for (const p of claim.predictions ?? []) {
+  for (const p of predictions) {
     // A prediction with no time can't be placed before or after anything; it hides nothing the others show.
     if (!Number.isFinite(p.at)) continue;
     const key = `${p.check}\0${p.expects}`;
@@ -626,9 +633,9 @@ function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradic
     else { at.first = Math.min(at.first, p.at); at.last = Math.max(at.last, p.at); }
   }
   const out: Contradiction[] = [];
-  for (const j of judged) {
+  for (const j of checks) {
     const expected = (['passed', 'failed'] as const).flatMap((expects) => {
-      const at = span.get(`${j.check.check}\0${expects}`);
+      const at = span.get(`${j.check}\0${expects}`);
       return at ? [{ expects, ...at }] : [];
     });
     if (!expected.length) continue;
@@ -636,9 +643,9 @@ function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradic
       if (r.outcome !== 'passed' && r.outcome !== 'failed' && r.outcome !== 'overran') continue;
       const began = r.started === undefined ? undefined : Math.min(r.started, r.ended);
       for (const { expects, first, last } of expected) {
-        if (began === undefined || last >= began) out.push({ check: j.check.check, run: r.run, predicted: expects, outcome: r.outcome, late: true });
+        if (began === undefined || last >= began) out.push({ check: j.check, run: r.run, predicted: expects, outcome: r.outcome, late: true });
         if (began !== undefined && first < began && (r.outcome === 'passed') !== (expects === 'passed')) {
-          out.push({ check: j.check.check, run: r.run, predicted: expects, outcome: r.outcome, late: false });
+          out.push({ check: j.check, run: r.run, predicted: expects, outcome: r.outcome, late: false });
         }
       }
     }

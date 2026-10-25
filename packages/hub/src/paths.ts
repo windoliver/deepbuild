@@ -21,6 +21,8 @@ export interface Root {
   logs: string;
   /** How far the hub has judged each session's transcript, so a restart judges the turns it missed. */
   transcripts: string;
+  /** The wiki's pages, which deep_search reads through the index. */
+  wiki: string;
   /** The devices you paired, whose signatures answer for you (#34). */
   devices: string;
 }
@@ -38,6 +40,7 @@ export function rootOf(dir: string): Root {
     state: join(at, 'hub.state'),
     logs: join(at, 'logs'),
     transcripts: join(at, 'transcripts.json'),
+    wiki: join(at, 'wiki'),
     devices: join(at, 'devices.json'),
   };
 }
