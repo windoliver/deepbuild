@@ -1,0 +1,11 @@
+{
+  "id": "test/hooker",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "templates": [
+    { "name": "ctx", "hook": "tool.before", "text": "{handle} was checked {count} times", "fields": { "handle": { "type": "handle" }, "count": { "type": "number" } } },
+    { "name": "why", "hook": "tool.before", "text": "held until {handle} passes", "fields": { "handle": { "type": "handle" } } },
+    { "name": "late", "hook": "tool.before", "text": "late reply to call {count}", "fields": { "count": { "type": "number" } } }
+  ]
+}

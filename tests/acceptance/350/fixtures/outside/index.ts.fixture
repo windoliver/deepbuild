@@ -1,0 +1,5 @@
+// An outside package (#350 AC8), sandboxed, installed twice as `acme/a` and `acme/b`: its tool.before handler fills
+// its one template with a handle and a number, so both packages' blocks are the same length.
+export default function (deep: any): void {
+  deep.on('tool.before', async () => ({ context: { template: 'status', values: { handle: 'task:01K74FX2B4D6F8H0K2M4P6R8T0', count: 12345 } } }));
+}
