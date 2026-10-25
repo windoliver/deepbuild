@@ -786,8 +786,9 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     decide();
     // Before an acknowledgement the 50 ms run from the hook's start; after a hold the hub acknowledged ran out or
-    // broke, the spool's time runs from now, since the hook was already allowed to wait.
-    let from = if ACKED.load(Ordering::SeqCst) {
+    // broke, or past the watchdog's 50 ms while it waited for a fail_closed match, the spool's time runs from now,
+    // since the hook was already allowed to wait.
+    let from = if ACKED.load(Ordering::SeqCst) || start.elapsed() >= WATCHDOG {
         Instant::now()
     } else {
         start
