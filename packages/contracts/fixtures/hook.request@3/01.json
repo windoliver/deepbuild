@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "agent": "claude-code",
+  "event": "PreToolUse",
+  "seq": "1760013451123456789",
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "pid": 81234,
+  "ppid": 81200,
+  "matched": ["no-git-other-checkout"],
+  "notes": {
+    "no-git-other-checkout": "It is aimed at the checkout /work/app (git folder /work/app/.git), not this session's /work/app-wt. To run there: cd /work/app && git status"
+  },
+  "payload": {
+    "session_id": "abc",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": { "command": "git -C /work/app status" }
+  },
+  "late": true
+}
