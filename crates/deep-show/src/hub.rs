@@ -457,12 +457,7 @@ impl<'a> Hub<'a> {
     }
 
     /// A revision holding 3D writer layers at `t`, at `size` or its own: its RGBA and size.
-    fn draw3d(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        size: Option<[u16; 2]>,
-    ) -> Result<Raster, ()> {
+    fn draw3d(&mut self, doc: &Value, t: i64, size: Option<[u16; 2]>) -> Result<Raster, ()> {
         let size = size.unwrap_or_else(|| {
             let s = |i: usize| {
                 doc["size"][i]
