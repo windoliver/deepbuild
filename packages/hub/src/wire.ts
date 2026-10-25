@@ -1,5 +1,5 @@
 // What crosses the socket and the threads: every socket line is one JSON object with `v`, and every refusal
-// is error@2's shape. Shared by the main thread, the parser workers and the core.
+// is error@3's shape. Shared by the main thread, the parser workers and the core.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
@@ -7,7 +7,7 @@ export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
 export const FEATURES: readonly string[] = [];
 
-/** error@2: one refusal. */
+/** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
 export function refusal(code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refusal {
   const text = typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? String(actual);

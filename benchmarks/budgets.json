@@ -237,6 +237,28 @@
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-stream",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "stream"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #34 first measurement: the merge base's hub has no App API stream with start IDs. One process starts the hub on a temp home, subscribes as the app and sends 1,000 PreToolUse requests, timing each from its write to the app's frame for its event; the issue's 50 ms p95 stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-history",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "history"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "otlp-receive-20k-spans",
       "command": [
         "node",

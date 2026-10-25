@@ -11,6 +11,7 @@
 pub mod canvas;
 pub mod events;
 pub mod hub;
+pub mod record;
 pub mod text;
 pub mod views;
 

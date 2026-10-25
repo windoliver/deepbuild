@@ -1,0 +1,78 @@
+{
+  "title": "error@3",
+  "description": "The one shape every refusal shares, the hub socket's refusals included.",
+  "type": "object",
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "unknown_schema",
+        "not_json",
+        "type",
+        "required",
+        "unlisted_field",
+        "enum",
+        "const",
+        "pattern",
+        "format",
+        "length",
+        "range",
+        "union",
+        "uncatalogued_kind",
+        "handle_syntax",
+        "handle_scheme",
+        "digest_algorithm",
+        "role",
+        "credential",
+        "unknown_method",
+        "not_found",
+        "unconfirmed",
+        "unbound",
+        "unavailable",
+        "too_large",
+        "fell_behind"
+      ],
+      "x-closure": {
+        "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+        "reopens": "a new major of this schema",
+        "mark": "exhaustive"
+      }
+    },
+    "retryable": {
+      "type": "boolean",
+      "description": "Whether a retry can help."
+    },
+    "remediation": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One remediation action."
+    },
+    "path": {
+      "type": "string",
+      "description": "The JSON Pointer of the refused value."
+    },
+    "actual": {
+      "type": "string",
+      "maxLength": 8192,
+      "description": "The value refused there, cut at the read cap on a code point. Scrubbing secrets from it is not done yet."
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+        "description": "A record handle."
+      },
+      "description": "Handles to any partial evidence."
+    }
+  },
+  "required": [
+    "code",
+    "retryable",
+    "remediation",
+    "path",
+    "actual",
+    "evidence"
+  ],
+  "additionalProperties": false
+}
