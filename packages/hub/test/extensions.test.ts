@@ -17,9 +17,9 @@ const SESSION = '6f1c2b9e-1111-4222-8333-444455556666';
 const ID = 'test/guard';
 
 /** A hook request as deep-hook writes it, for a Bash call. */
-function request(id: string, command: string): string {
+function request(id: string, command: string, extra: Record<string, unknown> = {}): string {
   const payload = { session_id: SESSION, cwd: '/tmp', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: `toolu_${id}` };
-  return hookLine(id, 'PreToolUse', payload);
+  return hookLine(id, 'PreToolUse', payload, extra);
 }
 
 /** Sends one hook request the way deep-hook does and reads both lines back: the acknowledgement and the reply. */
@@ -96,7 +96,16 @@ describe('an extension on the hub answers tool.before', () => {
       expect(bare.reply).toMatchObject({ exit: 0, stdout: '', stderr: '' });
 
       await install(home, root);
+      // A block-mode guard entry (#316): the hub decides it before any extension is asked.
+      const guard = { match: 'kill:by-name', scope: 'all_repos', mode: 'block', reason: 'Killing by name can stop another session.', next_step: 'Kill by PID.', fail_closed: true };
+      writeFileSync(join(root, 'rules.json'), JSON.stringify({ v: 1, entries: { 'no-kill-by-name': guard } }), { mode: 0o600 });
       await hub.restart();
+
+      const blocked = await exchange(socket, request('01K74FKZVKZGATTBZAEGPRET84', 'pkill -f deny-me', { matched: ['no-kill-by-name'] }));
+      expect(blocked.ack.hold_until_ms, 'a call a block-mode guard matched is not held for the extensions').toBeNull();
+      expect(blocked.reply.exit).toBe(2);
+      expect(String(blocked.reply.stderr)).toContain('(guard no-kill-by-name)');
+      expect(String(blocked.reply.stderr), 'the extension was not asked').not.toContain(ID);
 
       const denied = await exchange(socket, request('01K74FKZVKZGATTBZAEGPRET81', 'git push --force deny-me'));
       expect(denied.ack.hold_until_ms, 'a hook with a handler is held').toBeTypeOf('number');
@@ -122,8 +131,8 @@ describe('an extension on the hub answers tool.before', () => {
       const db = new DatabaseSync(join(root, 'ledger.db'), { readOnly: true });
       try {
         const commands = () => (db.prepare("SELECT json_extract(data, '$.command') AS c FROM events WHERE kind = 'tool.before' ORDER BY log_pos").all() as { c: string }[]).map((r) => r.c);
-        for (const until = Date.now() + 3000; Date.now() < until && commands().length < 4; await new Promise((r) => setTimeout(r, 20)));
-        expect(commands()).toEqual(['ls', 'git push --force deny-me', 'ls', 'late-me']);
+        for (const until = Date.now() + 3000; Date.now() < until && commands().length < 5; await new Promise((r) => setTimeout(r, 20)));
+        expect(commands()).toEqual(['ls', 'pkill -f deny-me', 'git push --force deny-me', 'ls', 'late-me']);
       } finally {
         db.close();
       }
