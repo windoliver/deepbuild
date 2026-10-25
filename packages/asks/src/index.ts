@@ -53,6 +53,8 @@ export interface Card {
   changed: { from: string; to: string; files: string[]; diff: string } | null;
   folded: string[];
   undo: boolean;
+  /** A task with a cost you pay: its price in USD. null on every other ask. */
+  cost_usd: number | null;
 }
 
 /** Every refusal the core makes, naming what it refuses. */
@@ -90,6 +92,8 @@ export interface InboxRow {
   owner: string;
   /** How long since it was raised, in ms. */
   age: number;
+  /** On a drafted request: the owner it's for, and the block it asks them to clear. null on every other row. */
+  request: { to: string; block: string } | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -252,6 +256,8 @@ const TOGETHER = 'together';
 /** The fold's option that leaves the asks it holds to their defaults. */
 const FOLD_DEFAULTS = 'defaults';
 const FOLD_SOURCE = 'asks.fold';
+/** Where the core drafts a request for the owner of a block that isn't yours. */
+const REQUEST_SOURCE = 'request.draft';
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 const ANSWER_FIELDS = new Set(['option', 'words', 'plan_hash', 'token']);
@@ -282,6 +288,10 @@ interface Ask {
   fold: boolean;
   /** The exception that holds it: the one open in its thread when it was raised. */
   folded?: string;
+  /** A block someone else owns: it never reaches your inbox, and the core drafts them a request in its place. */
+  theirs: boolean;
+  /** On a drafted request: who it's for and the block it asks them to clear. */
+  request?: { to: string; block: string };
   plan?: { hash: string; steps: PlanStep[] };
   closed?: { outcome: string; at: number; answer?: string };
   approval?: { hash: string | null; token: string | null; decision: string };
@@ -324,6 +334,8 @@ class AsksCore implements Asks {
   private readonly batched = new Map<number, number>();
   /** Settings read in this call, by worktree: each call reads the files once. */
   private readonly read = new Map<string, Obj>();
+  /** Each block someone else owns, by handle, and the request drafted for it. */
+  private readonly requested = new Map<string, string>();
 
   constructor(private readonly options: AsksOptions) {}
 
@@ -346,7 +358,8 @@ class AsksCore implements Asks {
       const now = this.options.now();
       const input = this.fill(connection.session, raised, now);
       const id = ulid(now);
-      const v = isObj(input) && 'dropped' in input ? 2 : 1;
+      // An unblock task is held to @3: at least one step and one thing it unblocks, and its price when you pay one.
+      const v = isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
       const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
       const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
@@ -397,8 +410,9 @@ class AsksCore implements Asks {
       // so the log alone says which asks it holds: each one created while it's open.
       const foldAt = this.settingsFor(connection.session).fold;
       // A fold is one person's: the thread's asks raised under this actor and scope.
-      const open = this.openIn(thread).filter((a) => a.who.actor === connection.actor && a.who.scope === connection.scope);
-      if (!open.some((a) => a.fold) && open.length >= (typeof foldAt === 'number' ? foldAt : FOLD_AT)) {
+      // A block someone else owns isn't one of your asks, so it neither counts nor folds.
+      const open = this.openIn(thread).filter((a) => a.who.actor === connection.actor && a.who.scope === connection.scope && !a.theirs);
+      if (!isTheirs(data, connection.actor) && !open.some((a) => a.fold) && open.length >= (typeof foldAt === 'number' ? foldAt : FOLD_AT)) {
         await this.raiseFold(thread, connection.session, { actor: connection.actor, scope: connection.scope }, [`ask:${id}`], data.deadline as number);
       }
       await this.options.record.append(connection, { v, id, kind: 'ask.created', ts: now, data: data });
@@ -550,9 +564,11 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       const now = this.options.now();
-      return [...this.asks.values()].map((a) => ({
+      // A block someone else owns never reaches your inbox; the request drafted for it does.
+      return [...this.asks.values()].filter((a) => !a.theirs).map((a) => ({
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
+        request: a.request ? { ...a.request } : null,
       }));
     });
   }
@@ -681,11 +697,12 @@ class AsksCore implements Asks {
    */
   private async show(): Promise<boolean> {
     // An ask you put off with Later waits for its Later, not for a batch.
-    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined);
+    // A block someone else owns never shows: its drafted request does.
+    const waiting = () => this.open().filter((a) => !a.shown && !this.inFold(a) && a.later === undefined && !a.theirs);
     // A Later that ends shows its ask again, recorded like any showing; so does one that an ask joining the
     // exception since would outlast.
     const now = this.options.now();
-    let acted = await this.showNow(this.open().filter((a) => a.later !== undefined && (a.later <= now || this.dueBy(a) <= a.later)));
+    let acted = await this.showNow(this.open().filter((a) => a.later !== undefined && !a.theirs && (a.later <= now || this.dueBy(a) <= a.later)));
     const batches = this.batches();
     // With no batches declared, nothing waits for one.
     const last = batches ? Math.floor(now / batches.every) * batches.every : now;
@@ -743,6 +760,7 @@ class AsksCore implements Asks {
       changed: await this.changed(ask),
       folded: ask.fold ? this.openIn(ask.thread).filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
       undo: ask.closed?.outcome === 'defaulted',
+      cost_usd: typeof ask.data.cost_usd === 'number' ? ask.data.cost_usd : null,
     };
   }
 
@@ -783,14 +801,19 @@ class AsksCore implements Asks {
       case 'ask.created': {
         const thread = this.threadOf(e.session);
         const fold = e.writer === 'core' && d.key === foldKey(thread);
+        const theirs = isTheirs(d, e.actor);
+        // A request the core drafted names its block as its subject and is keyed on the block's subject.
+        const block = e.writer === 'core' && e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
+        const request = block?.theirs && !this.requested.has(block.handle) && d.key === requestKey(block) ? { to: String(block.data.owner), block: block.handle } : undefined;
         const inThread = this.openIn(thread);
         const open = inThread.filter((a) => !a.fold);
-        const holder = fold ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
+        const holder = fold || theirs ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, ...(holder ? { folded: holder.handle } : {}), words: [], decided: new Set(), pending: {},
+          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], decided: new Set(), pending: {},
           created: e.ts, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session),
         };
+        if (request) this.requested.set(request.block, ask.handle);
         // A newer ask on the same subject in the same thread supersedes the older one, and keeps what it decided.
         for (const older of open) {
           if (older.data.key !== d.key) continue;
@@ -823,6 +846,9 @@ class AsksCore implements Asks {
         if (e.kind === 'ask.answered') ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision) };
         // An ask the exception held but hadn't shown yet wasn't in what you closed: it gets its own card.
         if (ask.fold) for (const a of this.openIn(ask.thread)) if (a.folded === ask.handle && !a.shown) delete a.folded;
+        // A block that's moot, its check passed or its attempt replaced, needs no request: that one's moot too.
+        const request = e.kind === 'ask.moot' ? this.asks.get(bare(this.requested.get(ask.handle) ?? '')) : undefined;
+        if (request && !request.closed) request.pending.moot ??= d;
         return;
       }
       case 'ask.batched': {
@@ -902,8 +928,15 @@ class AsksCore implements Asks {
     // One under Later, or held by an exception under Later, wasn't in sight.
     const seen = new Set(this.open().filter((a) => this.inSight(a)).map((a) => a.handle));
     for (let acted = true; acted;) {
+      // A block someone else owns gets its request drafted first, so the request shows when the block is raised.
+      acted = false;
+      for (const block of this.open()) {
+        if (!block.theirs || this.requested.has(block.handle)) continue;
+        await this.draftRequest(block);
+        acted = true;
+      }
       // What shows comes first, so no ask takes its default before it has shown.
-      acted = await this.show();
+      if (await this.show()) acted = true;
       const now = this.options.now();
       for (const ask of this.open()) {
         const as = { ...CORE, ...ask.who, ...(ask.session ? { session: ask.session } : {}) };
@@ -923,9 +956,10 @@ class AsksCore implements Asks {
           await this.options.record.append(as, { ...base, kind: 'ask.cancelled', data: { answer: ask.data.default as string, plan_hash: null, decision: 'none' } });
         } else if (await this.reoffer(ask, as, now)) {
           // Offered again on the new commit: the new ask supersedes this one.
-        } else if (now >= (ask.data.deadline as number) && seen.has(ask.handle)) {
+        } else if (now >= (ask.data.deadline as number) && (seen.has(ask.handle) || ask.theirs)) {
           // Shown before this call: an ask the hub first shows now, after downtime past its deadline, stays in
-          // Needs you until a later call, so it can be seen before its default.
+          // Needs you until a later call, so it can be seen before its default. A block someone else owns never
+          // shows to you: at its deadline it stays BLOCKED, by the default its raiser named.
           // Past its deadline the default applies; nothing defaults to allow, and an authority ask defaults to no.
           // Either takes the option that says no, which raise() made sure of; the decision is that option's own.
           const option = ask.options.find((o) => o.id === ask.data.default);
@@ -953,6 +987,22 @@ class AsksCore implements Asks {
     return true;
   }
 
+  /**
+   * The request for the owner of a block that isn't yours, drafted into your inbox as an authority ask, since sending
+   * it leaves the machine. It's pinned to what its block shows, so its card re-checks that source each time it's
+   * made and says when the item has moved. It ends when its block would.
+   */
+  private async draftRequest(block: Ask): Promise<void> {
+    const template = askSources().find((r) => r.source === REQUEST_SOURCE)!.fixture.ask as Obj;
+    const now = this.options.now();
+    const question = `Send ${String(block.data.owner)} this request? ${String(block.data.question)}`.slice(0, 8192);
+    const data: Obj = { ...template, question, deadline: block.data.deadline!, owner: block.who.actor, key: requestKey(block), pinned_to: block.data.pinned_to! };
+    await this.options.record.append({ ...CORE, ...block.who, ...(block.session ? { session: block.session } : {}) }, {
+      v: 1, id: ulid(now), kind: 'ask.created', subject: block.handle, ts: now, data,
+    });
+    await this.sync();
+  }
+
   /** The exception "this session keeps asking", for a thread, pinned to the asks it holds. */
   private async raiseFold(thread: string, session: string | undefined, who: Ask['who'], holds: string[], deadline: number): Promise<void> {
     const template = askSources().find((r) => r.source === FOLD_SOURCE)!.fixture.ask as Obj;
@@ -968,6 +1018,12 @@ const normalize = (text: string): string => text.normalize('NFC').toLowerCase().
 
 /** The fold's exception is keyed on its thread, never on a session ID that /clear or /compact rotates. */
 const foldKey = (thread: string): string => sha256Hex(new TextEncoder().encode(`${FOLD_SOURCE}:${thread}`));
+
+/** A block someone else owns: an unblock task whose owner isn't the person it was raised for. */
+const isTheirs = (data: Obj, actor: string): boolean => data.kind === 'unblock' && data.owner !== actor;
+
+/** A request is keyed on its block's subject, so a newer block on the same subject supersedes its request too. */
+const requestKey = (block: Ask): string => sha256Hex(new TextEncoder().encode(`${REQUEST_SOURCE}:${String(block.data.key)}`));
 
 export async function openAsks(options: AsksOptions): Promise<Asks> {
   const core = new AsksCore(options);

@@ -20,7 +20,7 @@ const MAX_LINE = 64 << 20;
 type Role = 'hook' | 'app' | 'cli' | 'mcp';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
-  ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
+  ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['inbox.read', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -131,6 +131,8 @@ class Conn {
   name = '';
   session: string | null = null;
   parent: { pid: number; start: string } | undefined;
+  /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
+  peer: { pid: number; start: string } | undefined;
   first = true;
   done = false;
   queue: Promise<void> = Promise.resolve();
@@ -167,7 +169,8 @@ class Hub {
     const options: CoreOptions = { root: this.root.dir, clock, held: [this.token], ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
-      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}) };
+      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
+      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}) };
     const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
@@ -275,11 +278,11 @@ class Hub {
     if (this.plant === 'git-in-hook-handler') {
       try { execFileSync('git', ['rev-parse', '--show-toplevel'], { stdio: 'ignore' }); } catch { /* the plant only needs the call */ }
     }
+    // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
+    if (conn.done || !conn.sock.writable) return;
     // The acknowledgement and the reply in one write, which also ends the connection.
-    if (!conn.done && conn.sock.writable) {
-      conn.done = true;
-      conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + Hub.REPLY);
-    }
+    conn.done = true;
+    conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + Hub.REPLY);
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && parsed.meta.payloadWriter ? parsed.meta.payloadWriter : 'hook';
@@ -305,6 +308,8 @@ class Hub {
       }
       conn.role = value.hello;
       conn.name = value.hello;
+      const peer = value.peer;
+      if (isObj(peer) && Number.isSafeInteger(peer.pid) && typeof peer.start === 'string') conn.peer = { pid: peer.pid as number, start: peer.start };
       return conn.write({ role: conn.name });
     }
     if (value.hello === 'mcp') {
@@ -353,7 +358,7 @@ class Hub {
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after })));
       }
       default:
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
     }
   }
 

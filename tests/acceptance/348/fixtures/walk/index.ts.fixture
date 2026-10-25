@@ -1,0 +1,78 @@
+// The walk's test package (#348 AC10): its manifest names no access words and it is installed with no grant, so its
+// grant is empty. methods.json (written by the test from the extension API schema) lists every method; the package
+// calls each one, `deep.a.b` as deep.a.b(...), with the arguments below (none for a method not listed), and notes
+// whether the call went through, the error it got, or that `deep` has no such method. Each call gets 3 s.
+import { readFileSync } from 'node:fs';
+
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+const passed = () => ({ outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null });
+const event = (kind: string, data: unknown) => ({ v: 1, id: '01K74FKZVK8Q2X5R7M3N9P4T6W', kind, ts: Date.now(), data });
+
+const ARGS: Record<string, unknown[]> = {
+  'deep.on': ['session.start', () => undefined],
+  'deep.registerCheck': ['ext.walk.other', passed],
+  'deep.registerResolver': [() => undefined],
+  'deep.registerSource': ['ext.walk.source', { host: '127.0.0.1:9', quota: { calls: 1, per: '1h' }, timeout: 1000, freshFor: 60000 }],
+  'deep.registerEnvironment': ['ext.walk.env', { up: () => ({}), down: () => undefined }],
+  'deep.registerView': ['ext.walk.view', 'panel.js', 'sidebar'],
+  'deep.registerAdapter': ['ext.walk.adapter', { install: () => undefined, mapHook: () => undefined, deliver: () => undefined, start: () => undefined, doctor: () => [], facts: {} }],
+  'deep.registerRoute': ['POST /walk', () => ({ status: 200, body: '' })],
+  'deep.record.append': [event('task.created', { task_ref: 'task:01K74FX2B4D6F8H0K2M4P6R8T0', thread: '01K74G1Z3X5V7T9R1P3N5M7K9H', owner: 'you', title: 'walk' })],
+  'deep.record.query': [{}],
+  'deep.evidence.put': ['walk.txt'],
+  'deep.asks.create': [{ kind: 'taste', question: 'walk?', options: [{ id: 'yes', label: 'Yes', decision: 'allow' }], recommended: 'yes' }],
+  'deep.config.get': ['walk'],
+  'deep.notices.send': [{ key: 'walk', title: 'walk', body: 'walk', readings: [] }],
+  'deep.secret': ['walk'],
+  'deep.send': [{ to: 'you', text: 'walk' }],
+  'deep.store': ['ext.walk.store', { type: 'object' }],
+  'deep.schedule': ['ext.walk.schedule', '1h', () => undefined],
+  'deep.registerAction': ['ext.walk.action', { type: 'object' }, () => ({ verified: true, checked: [] })],
+  'deep.readNow': ['ext.walk.view'],
+  'deep.lease': [{ kind: 'port', key: '4100' }, 'exclusive'],
+  'deep.provide': ['ext.walk.out@1', 'reading', { type: 'object' }],
+  'deep.use': ['ext.other.out@1', { optional: true }],
+  'deep.runner.run': [{ prompt: 'walk', budget: 1, deadline: 1000 }],
+  'deep.stream': ['ext.walk.stream', 'ext.walk.view'],
+};
+
+interface Method { method: string; needs: string | null }
+interface Call { method: string; outcome: 'ok' | 'error' | 'missing' | 'timeout'; error: string | null }
+
+async function callOne(deep: any, m: Method): Promise<Call> {
+  const path = m.method.split('.').slice(1);
+  let owner: any = deep;
+  for (const key of path.slice(0, -1)) owner = owner?.[key];
+  const fn = owner?.[path[path.length - 1]!];
+  if (typeof fn !== 'function') return { method: m.method, outcome: 'missing', error: null };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      Promise.resolve().then(() => fn.apply(owner, ARGS[m.method] ?? [])),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('__timeout__')), 3000); }),
+    ]);
+    void result;
+    return { method: m.method, outcome: 'ok', error: null };
+  } catch (e) {
+    const text = message(e);
+    return text === '__timeout__' ? { method: m.method, outcome: 'timeout', error: null } : { method: m.method, outcome: 'error', error: text };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export default function (deep: any): void {
+  const methods: Method[] = JSON.parse(readFileSync(new URL('./methods.json', import.meta.url), 'utf8'));
+  const calls: Call[] = [];
+  let walking: Promise<void> | undefined;
+  const walk = (): Promise<void> => (walking ??= (async () => {
+    for (const m of methods) calls.push(await callOne(deep, m));
+  })());
+  deep.registerCheck('ext.walk.report', async () => {
+    await walk();
+    return {
+      outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ pid: process.pid, calls }) }],
+    };
+  });
+}
