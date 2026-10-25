@@ -54,3 +54,21 @@ requests from autonomous agents. So the pull request is the owner's to open, fro
 `PR-DRAFT.md` is a starting point for the description. When it's open, link it from #711. If
 upstream takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only #391's
 exact gradient mode and the two planted twins.
+
+Opening it, step by step (sign the CLA at https://zed.dev/cla first):
+
+```sh
+gh repo fork zed-industries/zed --clone=false            # once
+git clone --depth 1 https://github.com/zed-industries/zed && cd zed
+git remote add fork https://github.com/<you>/zed.git
+git fetch --depth 1 origin 347f171a3fd00a3b672382d78348b37bd969d17c
+git checkout -b gpui-bgra-surfaces FETCH_HEAD
+git am ../deepbuild/vendor/gpui-pre-apple/upstream/0001-*.patch   # keep or amend the author line
+cargo test -p gpui_apple                                  # 13 pass; attach the output to the PR
+git push -u fork gpui-bgra-surfaces
+gh pr create --repo zed-industries/zed --base main --head <you>:gpui-bgra-surfaces \
+  --title "gpui_apple: premultiplied BGRA surfaces and per-frame surface reports" \
+  --body-file ../deepbuild/vendor/gpui-pre-apple/upstream/PR-DRAFT.md   # rewritten in your words
+```
+
+Then on windoliver/deepbuild#711: paste the PR link under criterion 1.
