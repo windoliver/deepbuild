@@ -1,0 +1,5 @@
+// A refused load (#348 AC1): its manifest is valid but declares no check kinds, and its code registers one,
+// `ext.undeclared.lint`, so what it does isn't what it declared.
+export default function (deep: any): void {
+  deep.registerCheck('ext.undeclared.lint', () => ({ outcome: 'passed', testsRun: 1, failures: [], evidence: [], read: [], mask: null }));
+}

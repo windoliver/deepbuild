@@ -22,14 +22,17 @@ const jest = /\/jest(-cli)?\/bin\/jest\.js$/.test(entry);
 const major = (() => { try { return Number(JSON.parse(readFileSync(new URL('package.json', `file://${entry}`), 'utf8')).version.split('.')[0]); } catch { return NaN; } })();
 if (vitest && !(major < 5)) process.argv.push('--no-fsModuleCache');
 if (jest) process.argv.push('--watchman=false', '--no-cache');
-const tool = vitest ? ['--reporter=default', `--reporter=${reporter('vitest-reporter.mjs')}`]
-  : jest ? ['--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
+// Vitest gets its reporter as a data: URL of the runner's file, which Vite imports natively: by its path, Vite
+// transforms it afresh on every run (the module cache is off), several ms of each run's time.
+const inlined = (name) => `data:text/javascript;base64,${readFileSync(reporter(name)).toString('base64')}`;
+const tool = vitest ? () => ['--reporter=default', `--reporter=${inlined('vitest-reporter.mjs')}`]
+  : jest ? () => ['--reporters=default', `--reporters=${reporter('jest-reporter.mjs')}`] : null;
 // pnpm's own shell emulator runs a package script's programs itself, so no shell line shows how the script ends.
 if (/\/pnpm\/bin\/pnpm\.c?js$/.test(entry)) process.argv.splice(2, 0, '--config.shell-emulator=false');
 if (report && tool) {
   globalThis[Symbol.for('deepbuild.check.report')] = report;
   delete process.env.DEEP_CHECK_REPORT;
-  process.argv.push(...tool);
+  process.argv.push(...tool());
 }
 
 const shift = Number(process.env.DEEP_CHECK_CLOCK_MS ?? 0);
