@@ -1,0 +1,499 @@
+Acceptance tests for #348, run on the base commit 8b98570 (no implementation of #348).
+
+Command:  PATH=$HOME/.nvm/versions/node/v24.22.0/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/348 --no-file-parallelism
+          (with CLAUDECODE and AI_AGENT unset and NO_COLOR=1)
+Node:     v24.22.0
+Vitest:   5.0.5 darwin-arm64
+Date:     2026-10-24
+Machine:  Mac15,12 (Apple M3, 16 GiB), a reference Mac, on mains power
+
+Result: 9 of 9 files fail, 20 of 20 collected tests fail, nothing passes and nothing is skipped.
+
+Why each fails, all for the expected reason:
+- grants.test.ts, kit.test.ts, trust.test.ts (3 files): "Cannot find module
+  '../../../packages/extension-host/src/index.ts'". They import values from the extension host, which doesn't exist
+  at this base, so no test in them is collected (AC10's 4, AC11's 4, AC2's 2 and AC3's 3).
+- conformance (AC1 x4, AC7 x2), inbound (AC12 x2), jsonrpc (AC4 x2), places (AC5 x2, AC6 x3), ready (AC9 x2):
+  17 tests, each failing "Cannot find module '.../packages/extension-host/src/index.ts'" when it opens its world
+  (helpers.ts loads the host lazily, so each test fails on its own rather than being skipped).
+- budgets.test.ts (AC8 x3): benchmarks/budgets.json has no task extension-host, and benchmarks/extension-host.mjs
+  doesn't exist (the bench and the reference-Mac numbers both fail on it; this Mac is a reference Mac in a fit
+  state, so the numbers test reached the bench rather than BLOCKED).
+
+No test here fails BLOCKED at this base: the only BLOCKED paths are AC8's numbers off a reference Mac in a fit
+state and AC4 without python3, and neither applies on this Mac.
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/348/tsconfig.json
+- at this base: 11 x TS2307 (cannot find module packages/extension-host/src/index.ts) and 14 x TS7006 (implicit
+  any on callbacks whose types come from that module). No other errors.
+- against a declaration-only copy of the surface README.md defines, placed at packages/extension-host/src/index.ts
+  for the check and removed after: clean (exit 0).
+
+Output of the type check at this base:
+
+tests/acceptance/348/conformance.test.ts(11,53): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/conformance.test.ts(29,34): error TS7006: Parameter 'l' implicitly has an 'any' type.
+tests/acceptance/348/conformance.test.ts(30,37): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/conformance.test.ts(101,46): error TS7006: Parameter 'i' implicitly has an 'any' type.
+tests/acceptance/348/conformance.test.ts(106,39): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/conformance.test.ts(121,46): error TS7006: Parameter 'i' implicitly has an 'any' type.
+tests/acceptance/348/conformance.test.ts(129,36): error TS7006: Parameter 'l' implicitly has an 'any' type.
+tests/acceptance/348/grants.test.ts(11,79): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/grants.test.ts(60,38): error TS7006: Parameter 'm' implicitly has an 'any' type.
+tests/acceptance/348/grants.test.ts(64,34): error TS7006: Parameter 'm' implicitly has an 'any' type.
+tests/acceptance/348/helpers.ts(19,71): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/helpers.ts(116,102): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/inbound.test.ts(9,47): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/jsonrpc.test.ts(8,36): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/jsonrpc.test.ts(43,38): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/kit.test.ts(14,102): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/kit.test.ts(34,92): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/kit.test.ts(68,37): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/kit.test.ts(74,26): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/kit.test.ts(92,32): error TS7006: Parameter 'c' implicitly has an 'any' type.
+tests/acceptance/348/places.test.ts(14,49): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/ready.test.ts(13,36): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/trust.test.ts(12,63): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+tests/acceptance/348/trust.test.ts(41,36): error TS7006: Parameter 'l' implicitly has an 'any' type.
+tests/acceptance/348/wrong.ts(14,46): error TS2307: Cannot find module '../../../packages/extension-host/src/index.ts' or its corresponding type declarations.
+
+Output of the run:
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/348
+
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/extension-host.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/extension-host.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+ ❯ budgets.test.ts (3 tests | 3 failed) 385ms
+   ❯ AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base (3)
+     × AC8 the perf lane has a extension-host task running node benchmarks/extension-host.mjs, a #348 first measurement, valid against the merge base's budgets 277ms
+     × AC8 `node benchmarks/extension-host.mjs` runs, exits 0 and prints the four readings 29ms
+     × AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule) 77ms
+ ❯ places.test.ts (5 tests | 5 failed) 139ms
+   ❯ AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub (2)
+     × AC5 a package an agent session built loads in the sandbox, out of the hub's process, and can't read a file outside its grant 53ms
+     × AC5 a release package your agent changed is no longer the release's: it loads in the sandbox, while the unchanged copy loads in the hub and reads the canary 6ms
+   ❯ AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the package (3)
+     × AC6 the package loads in the sandbox, out of the hub's process, through host@1 19ms
+     × AC6 it reads only the record its grant names: session.start events cross into the sandbox, and no other kind does, asked for or not 23ms
+     × AC6 (wrong program) a host that loads it in the hub because no agent built it fails this test, naming the package 32ms
+ ❯ inbound.test.ts (2 tests | 2 failed) 213ms
+   ❯ AC12 #348.fad7f4f9 inbound traffic reaches the hub only through a plug-in you turned on, exposing only the routes you chose (2)
+     × AC12 a loaded plug-in you haven't turned on opens nothing: no new listener in the hub's process or the plug-in's, and its own try at a port is refused 121ms
+     × AC12 turned on with POST /v1/traces chosen: one listener on 127.0.0.1 serves that route to the plug-in; POST /admin/exec, which it registered, and GET /v1/traces never reach it; turned off, nothing listens 88ms
+ ❯ conformance.test.ts (6 tests | 6 failed) 207ms
+   ❯ AC1 #348.ef505d0a an extension that fails conformance doesn't load, and the reason is shown (4)
+     × AC1 a package whose manifest asks for an access word outside access@1 (`network`) fails conformance naming the word, and doesn't load 54ms
+     × AC1 a package that registers a check kind its manifest doesn't declare fails conformance naming the kind, and doesn't load 33ms
+     × AC1 a package whose code throws while it registers fails conformance with the error it threw, and doesn't load 30ms
+     × AC1 nothing loads before its conformance has run: a sound package never checked is refused; once checked it loads and its check kind is in use 24ms
+   ❯ AC7 #348.583abb3f an installed extension whose files changed since its checks ran doesn't load until they pass again, and shows "changed since checked" (2)
+     × AC7 after a file of the installed package changes, the next load is refused showing "changed since checked"; once its checks pass again it loads 29ms
+     × AC7 a change that breaks the package shows "changed since checked", fails its checks again, and still doesn't load 32ms
+ ❯ ready.test.ts (2 tests | 2 failed) 76ms
+   ❯ AC9 #348.f3e43b54 an extension can't start sockets, watchers or timers before the hub is ready (2)
+     × AC9 a release package loaded in the hub before it is ready: no timer, interval, immediate or watcher callback runs, and its socket doesn't listen, until ready 37ms
+     × AC9 a package loaded in the sandbox before the hub is ready: no timer, interval, immediate or watcher callback runs, and its socket doesn't listen, until ready 37ms
+ ❯ jsonrpc.test.ts (2 tests | 2 failed) 55ms
+   ❯ AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check (2)
+     × AC4 the Python package passes conformance, loads out of process in the sandbox, and its check kind ext.pycheck.lint is in use 33ms
+     × AC4 running ext.pycheck.lint through the host reaches the Python runner: its result names Python 3 and the command passed 19ms
+ ❯ grants.test.ts (0 test)
+ ❯ kit.test.ts (0 test)
+ ❯ trust.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  grants.test.ts [ grants.test.ts ]
+Error: Cannot find module '../../../packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/grants.test.ts
+ ❯ grants.test.ts:11:1
+      9| // method and reports each call's outcome. A method the package's `dee…
+     10| import { afterAll, describe, expect, it } from 'vitest';
+     11| import { EXTENSION_API, type ApiMethod, type ExtensionHost, type Plant…
+       | ^
+     12| import { openHost, openWorld, pkg, report } from './helpers.ts';
+     13| import { withUncalledMethod } from './wrong.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  kit.test.ts [ kit.test.ts ]
+Error: Cannot find module '../../../packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/kit.test.ts
+ ❯ kit.test.ts:14:1
+     12| import { join } from 'node:path';
+     13| import { afterAll, describe, expect, it } from 'vitest';
+     14| import { hostKit, runHostKit, type ExtensionHost, type HostKit, type P…
+       | ^
+     15| import { eventInput, openHost, openWorld, pkg, releaseEntry, report, t…
+     16|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  trust.test.ts [ trust.test.ts ]
+Error: Cannot find module '../../../packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/trust.test.ts
+ ❯ trust.test.ts:12:1
+     10| // repo's folder.
+     11| import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+     12| import { openTrust, type ExtensionHost, type Installed } from '../../.…
+       | ^
+     13| import { copyFixture, openHost, openWorld, pkg, YOU, type World } from…
+     14| import { ownTrustList, standIn, type Piece } from './wrong.ts';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base > AC8 the perf lane has a extension-host task running node benchmarks/extension-host.mjs, a #348 first measurement, valid against the merge base's budgets
+AssertionError: budgets.json has a task extension-host: expected undefined to be defined
+ ❯ budgets.test.ts:43:53
+     41|     validateBudgets(current, JSON.parse(execFileSync('/usr/bin/git', […
+     42|     const task = current.tasks.find((t) => t.id === TASK);
+     43|     expect(task, `budgets.json has a task ${TASK}`).toBeDefined();
+       |                                                     ^
+     44|     expect(task!.command).toEqual(BENCH);
+     45|     expect(task!.initialReason, 'it says why, naming issue #348').toMa…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  budgets.test.ts > AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base > AC8 `node benchmarks/extension-host.mjs` runs, exits 0 and prints the four readings
+Error: Command failed: $HOME/.nvm/versions/node/v24.22.0/bin/node <repo>/benchmarks/extension-host.mjs
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/extension-host.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ bench budgets.test.ts:30:15
+     28| /** One run of the bench: its last line, the four readings. */
+     29| function bench(): Reading {
+     30|   const out = execFileSync(NODE, [join(REPO, BENCH[1]!)], { cwd: REPO,…
+       |               ^
+     31|   const line = JSON.parse(out) as Partial<Reading>;
+     32|   if (!isPlaces(line.loadMs) || !isPlaces(line.eventMs)) throw Error(`…
+ ❯ budgets.test.ts:49:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  budgets.test.ts > AC8 #348.b0d5cd73 loading an extension takes under 100 ms, and the host adds under 0.5 ms per event per subscribed extension, on the reference Mac, compared with the merge base > AC8 on the reference Mac, a load is under 100 ms and the host adds under 0.5 ms per event per subscribed extension, in the hub and in the sandbox (five bench runs each, by the timing rule)
+Error: Command failed: $HOME/.nvm/versions/node/v24.22.0/bin/node <repo>/benchmarks/extension-host.mjs
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '<repo>/benchmarks/extension-host.mjs'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.0
+
+ ❯ bench budgets.test.ts:30:15
+     28| /** One run of the bench: its last line, the four readings. */
+     29| function bench(): Reading {
+     30|   const out = execFileSync(NODE, [join(REPO, BENCH[1]!)], { cwd: REPO,…
+       |               ^
+     31|   const line = JSON.parse(out) as Partial<Reading>;
+     32|   if (!isPlaces(line.loadMs) || !isPlaces(line.eventMs)) throw Error(`…
+ ❯ budgets.test.ts:57:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  conformance.test.ts > AC1 #348.ef505d0a an extension that fails conformance doesn't load, and the reason is shown > AC1 a package whose manifest asks for an access word outside access@1 (`network`) fails conformance naming the word, and doesn't load
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ sharedHost conformance.test.ts:18:29
+ ❯ conformance.test.ts:35:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  conformance.test.ts > AC1 #348.ef505d0a an extension that fails conformance doesn't load, and the reason is shown > AC1 a package that registers a check kind its manifest doesn't declare fails conformance naming the kind, and doesn't load
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ sharedHost conformance.test.ts:18:29
+ ❯ conformance.test.ts:44:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  conformance.test.ts > AC1 #348.ef505d0a an extension that fails conformance doesn't load, and the reason is shown > AC1 a package whose code throws while it registers fails conformance with the error it threw, and doesn't load
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ sharedHost conformance.test.ts:18:29
+ ❯ conformance.test.ts:53:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  conformance.test.ts > AC1 #348.ef505d0a an extension that fails conformance doesn't load, and the reason is shown > AC1 nothing loads before its conformance has run: a sound package never checked is refused; once checked it loads and its check kind is in use
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ sharedHost conformance.test.ts:18:29
+ ❯ conformance.test.ts:62:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  conformance.test.ts > AC7 #348.583abb3f an installed extension whose files changed since its checks ran doesn't load until they pass again, and shows "changed since checked" > AC7 after a file of the installed package changes, the next load is refused showing "changed since checked"; once its checks pass again it loads
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ conformance.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  conformance.test.ts > AC7 #348.583abb3f an installed extension whose files changed since its checks ran doesn't load until they pass again, and shows "changed since checked" > AC7 a change that breaks the package shows "changed since checked", fails its checks again, and still doesn't load
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ conformance.test.ts:115:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  inbound.test.ts > AC12 #348.fad7f4f9 inbound traffic reaches the hub only through a plug-in you turned on, exposing only the routes you chose > AC12 a loaded plug-in you haven't turned on opens nothing: no new listener in the hub's process or the plug-in's, and its own try at a port is refused
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ loadedPlugin inbound.test.ts:33:13
+ ❯ inbound.test.ts:47:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  inbound.test.ts > AC12 #348.fad7f4f9 inbound traffic reaches the hub only through a plug-in you turned on, exposing only the routes you chose > AC12 turned on with POST /v1/traces chosen: one listener on 127.0.0.1 serves that route to the plug-in; POST /admin/exec, which it registered, and GET /v1/traces never reach it; turned off, nothing listens
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ loadedPlugin inbound.test.ts:33:13
+ ❯ inbound.test.ts:55:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  jsonrpc.test.ts > AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check > AC4 the Python package passes conformance, loads out of process in the sandbox, and its check kind ext.pycheck.lint is in use
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ shared jsonrpc.test.ts:17:13
+ ❯ jsonrpc.test.ts:27:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  jsonrpc.test.ts > AC4 #348.1f4cd69b a JSON-RPC extension written in another language registers a check > AC4 running ext.pycheck.lint through the host reaches the Python runner: its result names Python 3 and the command passed
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ shared jsonrpc.test.ts:17:13
+ ❯ jsonrpc.test.ts:41:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  places.test.ts > AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub > AC5 a package an agent session built loads in the sandbox, out of the hub's process, and can't read a file outside its grant
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ places.test.ts:45:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  places.test.ts > AC5 #348.7391eba7 an extension your agent built loads only in the platform sandbox, out of process, never in the hub > AC5 a release package your agent changed is no longer the release's: it loads in the sandbox, while the unchanged copy loads in the hub and reads the canary
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ stamp helpers.ts:188:29
+    186| /** Sets the manifest's `digest` to the host's `packageDigest` of the …
+    187| export async function stamp(dir: string): Promise<string> {
+    188|   const { packageDigest } = await host();
+       |                             ^
+    189|   const manifestPath = join(dir, 'deepbuild.json');
+    190|   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as R…
+ ❯ pkg helpers.ts:183:3
+ ❯ places.test.ts:58:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  places.test.ts > AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the package > AC6 the package loads in the sandbox, out of the hub's process, through host@1
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ scenario places.test.ts:88:15
+ ❯ places.test.ts:101:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  places.test.ts > AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the package > AC6 it reads only the record its grant names: session.start events cross into the sandbox, and no other kind does, asked for or not
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ scenario places.test.ts:88:15
+ ❯ places.test.ts:106:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  places.test.ts > AC6 #348.4c1dd1d8 a TypeScript package from outside the signed release, installed from a folder by no agent, loads only in the sandbox and reads only the record its grant names; a host that loads it in the hub because no agent built it fails, naming the package > AC6 (wrong program) a host that loads it in the hub because no agent built it fails this test, naming the package
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ scenario places.test.ts:88:15
+ ❯ places.test.ts:114:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  ready.test.ts > AC9 #348.f3e43b54 an extension can't start sockets, watchers or timers before the hub is ready > AC9 a release package loaded in the hub before it is ready: no timer, interval, immediate or watcher callback runs, and its socket doesn't listen, until ready
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ scenario ready.test.ts:31:13
+ ❯ ready.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  ready.test.ts > AC9 #348.f3e43b54 an extension can't start sockets, watchers or timers before the hub is ready > AC9 a package loaded in the sandbox before the hub is ready: no timer, interval, immediate or watcher callback runs, and its socket doesn't listen, until ready
+Error: Cannot find module 'file://<repo>/packages/extension-host/src/index.ts' imported from <repo>/tests/acceptance/348/helpers.ts
+ ❯ openWorld helpers.ts:89:25
+     87|   const asks = await openAsks({ record, now: Date.now, deliver: () => …
+     88|   const sup = await openSupervisor({ record, asks, now: Date.now, sett…
+     89|   const { openTrust } = await host();
+       |                         ^
+     90|   const trust = await openTrust({ record, now: Date.now });
+     91|   const events = async (kind?: string): Promise<Event[]> => {
+ ❯ scenario ready.test.ts:31:13
+ ❯ ready.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  20 failed (20)
+   Start at  02:01:51
+   Duration  2.52s (tests 66%, import 22%, transform 11%, worker 2%)
+
+    Isolate  9 workers spawned · ~82ms startup each (spawn + environment, per file)
+             at least ~655ms faster with isolate: false — reuses workers across files instead of one per file
+
