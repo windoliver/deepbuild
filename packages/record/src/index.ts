@@ -98,7 +98,8 @@ export interface SessionView { id: string; status: string; readings: string[]; t
 
 export interface RecordStore {
   append(connection: Connection, event: EventInput): Promise<Appended>;
-  read(query: { after: number; limit?: number }): Promise<Event[]>;
+  /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
+  read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
   table(name: string): Promise<Table>;
   session(id: string): Promise<SessionView | undefined>;
   rebuild(): Promise<void>;
@@ -609,8 +610,10 @@ class SqliteRecord implements RecordStore {
 
   // ---- Reads.
 
-  async read({ after, limit = 1000 }: { after: number; limit?: number }): Promise<Event[]> {
-    const rows = this.db.prepare('SELECT * FROM events WHERE log_pos > ? ORDER BY log_pos LIMIT ?').safeIntegers(true).all(after, limit) as StoredRow[];
+  async read({ after, limit = 1000, kinds }: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]> {
+    const only = kinds ? ` AND kind IN (SELECT value FROM json_each(?))` : '';
+    const rows = this.db.prepare(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
+      .all(after, ...(kinds ? [JSON.stringify(kinds)] : []), limit) as StoredRow[];
     return rows.map(toEvent);
   }
 
