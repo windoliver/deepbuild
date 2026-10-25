@@ -1,7 +1,7 @@
 // A run's own record, read back: the evidence files its processes wrote (the read trace, the children they started,
 // the tools' reports), each checked whole by its trailers, turned into the tests that ran, every attempt of each,
 // and where each failed test failed. Places and counts come only from the reports, never from printed output.
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { Failure } from '@deepbuild/conformance';
 import type { Left, Listed, Seen } from './listing.js';
@@ -16,10 +16,15 @@ const isTrailer = (line: string): boolean => line.startsWith('{"deep":"end"');
  * close it write (`exact`, the Vitest report), a line no trailer counts is one the runner's reporter never wrote.
  */
 export function evidence(path: string, exact = false): Evidence | null {
-  if (!existsSync(path)) return null;
-  const all = readFileSync(path, 'utf8').split('\n').filter(Boolean);
-  const counted = all.filter(isTrailer).map((l) => { try { return Number((JSON.parse(l) as { lines: unknown }).lines); } catch { return NaN; } });
-  const lines = all.filter((l) => !isTrailer(l));
+  let text: string;
+  try { text = readFileSync(path, 'utf8'); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
+  const lines: string[] = [];
+  const counted: number[] = [];
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    if (!isTrailer(line)) lines.push(line);
+    else try { counted.push(Number((JSON.parse(line) as { lines: unknown }).lines)); } catch { counted.push(NaN); }
+  }
   const written = counted.reduce((a, b) => a + b, 0);
   if (!counted.length) return { lines, altered: 'no trailer' };
   if (!counted.every((n) => Number.isSafeInteger(n) && n >= 0)) return { lines, altered: 'a trailer that counts no lines' };
@@ -27,10 +32,19 @@ export function evidence(path: string, exact = false): Evidence | null {
 }
 const parsed = <T>(lines: string[]): T[] => lines.flatMap((l) => { try { return [JSON.parse(l) as T]; } catch { return []; } });
 
+/** A `.`, `..` or empty segment, or a trailing separator (either kind, where the platform takes both): what `resolve` would change in a path. */
+const SEPARATOR = sep === '/' ? '\\/' : '[\\\\/]';
+const PLAIN_SEGMENTS = new RegExp(`(^|${SEPARATOR})\\.{0,2}(${SEPARATOR}|$)`);
 /** A path relative to the checkout, or null outside it. */
 export function under(checkout: string, path: string): string | null {
-  // Most of a run's reads are its tools' own files, outside the checkout: an absolute path not under it is decided at once.
-  if (isAbsolute(path) && !path.startsWith(checkout + sep)) return null;
+  if (isAbsolute(path)) {
+    // Most of a run's reads are its tools' own files, outside the checkout: an absolute path not under it is decided at once.
+    if (!path.startsWith(checkout + sep)) return null;
+    // And one below it whose segments are all plain names is relative to it as it is, with nothing to resolve (a
+    // first segment that starts with `..` goes the long way, which places it as it always has).
+    const below = path.slice(checkout.length + 1);
+    if (!PLAIN_SEGMENTS.test(below) && !below.startsWith('..')) return below;
+  }
   const rel = relative(checkout, resolve(checkout, path));
   return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel.split(sep).join('/') : null;
 }

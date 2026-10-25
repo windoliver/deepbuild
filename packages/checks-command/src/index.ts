@@ -74,6 +74,11 @@ const FIXED = { LANG: 'en_US.UTF-8', TZ: 'UTC', CI: 'true' };
 /** The Node the hub runs on, and its package managers: a run's own bin folder links these, never the folder's other programs. */
 const NODE_BIN = dirname(process.execPath);
 const TOOLS = ['node', 'npm', 'npx'];
+/** Each tool's real file, found once: the hub's Node doesn't move while it runs. */
+let toolFiles: [string, string][] | undefined;
+const tools = (): [string, string][] => (toolFiles ??= TOOLS.flatMap((tool) => (existsSync(join(NODE_BIN, tool)) ? [[tool, realpathSync(join(NODE_BIN, tool))]] : [])));
+/** The temp folder's real path, read once: a folder made inside it has its real path already. */
+let tempRoot: string | undefined;
 /** Where a run's programs are: its own bin folder, then the system's. */
 const SYSTEM = ['/usr/bin', '/bin', '/usr/sbin', '/sbin'];
 const pathOf = (bin: string): string => [bin, ...SYSTEM].join(':');
@@ -206,12 +211,12 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
 
   // The run's own folder, its temp folder: its home, its programs, and the evidence files its processes write (where
   // check.kind@1's erases-evidence case looks for them: a suite that alters them is found out by their trailers).
-  const temp = realpathSync(mkdtempSync(join(tmpdir(), 'deep-check-')));
+  const temp = mkdtempSync(join((tempRoot ??= realpathSync(tmpdir())), 'deep-check-'));
   let kill: NodeJS.Timeout | undefined;
   try {
     const bin = join(temp, 'bin');
     mkdirSync(bin);
-    for (const tool of TOOLS) if (existsSync(join(NODE_BIN, tool))) symlinkSync(realpathSync(join(NODE_BIN, tool)), join(bin, tool));
+    for (const [tool, real] of tools()) symlinkSync(real, join(bin, tool));
     const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);
@@ -265,14 +270,16 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     check.stop?.addEventListener('abort', onStop);
     let exit: Exit | null = null;
     let failed: string | null = null;
+    let stopping: Promise<void> = Promise.resolve();
     try {
       const s = await started;
       if (s.status === 'started') {
         // The deadline counts from the process's start, not from the wait for its sandbox or a lease.
         timer = setTimeout(() => halt('deadline'), Math.max(1, check.deadline));
         exit = await host.wait(run);
-        // Nothing the run started outlives it: what it left running is stopped through host@1 too.
-        await host.signal(run, 'SIGKILL').catch(() => undefined);
+        // Nothing the run started outlives it: what it left running is stopped through host@1 too, while the output,
+        // whole once the process closed, is scrubbed; the evidence files are read only once that stop is done.
+        stopping = host.signal(run, 'SIGKILL').catch(() => undefined);
       } else failed = `BLOCKED: no ${s.kind} free`;
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
@@ -292,6 +299,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const stderr = scrub(Buffer.concat(chunks.stderr).toString('utf8'));
     const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
     const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`] };
+    await stopping;
     if (failed !== null) return done('missing', { ...ended, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: failed }] }, []);
 
     // The evidence files are the runner's, but the run could write them: a line no reporter wrote that breaks a
