@@ -1,0 +1,238 @@
+Base commit: d122341 (Merge pull request #737 from windoliver/feat/667-ask-checkpoint)
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run tests/acceptance/671 --no-file-parallelism
+Run on macOS (Apple silicon, Metal) in the worktree at the base commit holding only these test files (untracked),
+node v24.22.0, the repo's node_modules from npm ci, and target/debug/deep-show and deep-gpu from
+cargo build --locked. All 6 tests fail, every one at the same first step: the hub refuses the scene's deep show
+with ref_unresolved at channels/orbit/target ("items/cam/params/orbit/azimuth reaches nothing"), so nothing
+reaches render-back or the GPU layer's view. Home paths are redacted as ~.
+
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-671-c3d671
+
+ ❯ tests/acceptance/671/present.test.ts (2 tests | 2 failed) 9616ms
+   ❯ AC1 the scene is presented with no issues and its snapshot equals by pixel hash on a second run on one machine; the blank guard runs before the comparison, so two blank frames never count as equal (2)
+     × AC1 the scene and its 2D label, each sent by deep show from a test process in its agent's tree, are presented with no issues, each in its own writer layer 1306ms
+     × AC1 the scene's snapshot at 0 s has the same pixel hash on a second run in the same process and in a fresh process, compared only after the blank guard passes both; a blank twin is BLOCKED 59ms
+ ❯ tests/acceptance/671/pick.test.ts (1 test | 1 failed) 3706ms
+   ❯ AC3 a click on a box picks that box's ID (1)
+     × AC3 clicks on boxes in the GPU layer's view, during the orbit and after the move, pick each box's own ID; a click on nothing picks nothing 1331ms
+ ❯ tests/acceptance/671/encode.test.ts (2 tests | 2 failed) 4291ms
+   ❯ AC2 during the orbit each batch is encoded once, in the first frame, counted on the noop lane; moving one box encodes nothing again (2)
+     × AC2 on the noop lane frame 0 encodes each batch once, holding every box, the ground plane and the beacon; no frame of the 5 s orbit after it, nor the move of box-17-08 or the frames after, encodes any batch again 1321ms
+     × AC2 a planted worker that encodes every batch each frame (--planted encodes_every_frame) fails the encode count, naming each batch 26ms
+ ❯ tests/acceptance/671/label.test.ts (1 test | 1 failed) 7819ms
+   ❯ AC4 the 2D label stays within 0.5 px of its box in a capture of every presented frame while the camera orbits (1)
+     × AC4 in the window capture of every presented frame of the 5 s orbit, the label in its own 2D writer layer sits within 0.5 px of its anchor on box-02-01 1308ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/671/encode.test.ts > AC2 during the orbit each batch is encoded once, in the first frame, counted on the noop lane; moving one box encodes nothing again > AC2 on the noop lane frame 0 encodes each batch once, holding every box, the ground plane and the beacon; no frame of the 5 s orbit after it, nor the move of box-17-08 or the frames after, encodes any batch again
+AssertionError: the orbit on noop: the scene's deep show raises no issue of any severity: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["orbit"],"path":"channels/orbit/target","actual":"items/cam/params/orbit/azimuth","what":"items/cam/params/orbit/azimuth reaches nothing","fix":"Name an ID the document holds, or remove the reference."}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/cam/params/orbit/azimuth",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "orbit",
++     ],
++     "path": "channels/orbit/target",
++     "severity": "error",
++     "what": "items/cam/params/orbit/azimuth reaches nothing",
++   },
++ ]
+
+ ❯ expectPresentedClean tests/acceptance/671/helpers.ts:267:99
+    265|   const list = arr(reply['issues'] ?? [], `${what}: issues`);
+    266|   if (JSON.stringify(list).includes('"unsupported_platform"')) expect.…
+    267|   expect(list, `${what} raises no issue of any severity: ${JSON.string…
+       |                                                                                                   ^
+    268|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+    269| }
+ ❯ viaDeepShow tests/acceptance/671/helpers.ts:318:3
+ ❯ countedRun tests/acceptance/671/encode.test.ts:22:15
+ ❯ tests/acceptance/671/encode.test.ts:34:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  tests/acceptance/671/encode.test.ts > AC2 during the orbit each batch is encoded once, in the first frame, counted on the noop lane; moving one box encodes nothing again > AC2 a planted worker that encodes every batch each frame (--planted encodes_every_frame) fails the encode count, naming each batch
+AssertionError: the orbit on noop with --planted encodes_every_frame: the scene's deep show raises no issue of any severity: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["orbit"],"path":"channels/orbit/target","actual":"items/cam/params/orbit/azimuth","what":"items/cam/params/orbit/azimuth reaches nothing","fix":"Name an ID the document holds, or remove the reference."}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/cam/params/orbit/azimuth",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "orbit",
++     ],
++     "path": "channels/orbit/target",
++     "severity": "error",
++     "what": "items/cam/params/orbit/azimuth reaches nothing",
++   },
++ ]
+
+ ❯ expectPresentedClean tests/acceptance/671/helpers.ts:267:99
+    265|   const list = arr(reply['issues'] ?? [], `${what}: issues`);
+    266|   if (JSON.stringify(list).includes('"unsupported_platform"')) expect.…
+    267|   expect(list, `${what} raises no issue of any severity: ${JSON.string…
+       |                                                                                                   ^
+    268|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+    269| }
+ ❯ viaDeepShow tests/acceptance/671/helpers.ts:318:3
+ ❯ countedRun tests/acceptance/671/encode.test.ts:22:15
+ ❯ tests/acceptance/671/encode.test.ts:43:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  tests/acceptance/671/label.test.ts > AC4 the 2D label stays within 0.5 px of its box in a capture of every presented frame while the camera orbits > AC4 in the window capture of every presented frame of the 5 s orbit, the label in its own 2D writer layer sits within 0.5 px of its anchor on box-02-01
+AssertionError: the checkpoint: the scene's deep show raises no issue of any severity: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["orbit"],"path":"channels/orbit/target","actual":"items/cam/params/orbit/azimuth","what":"items/cam/params/orbit/azimuth reaches nothing","fix":"Name an ID the document holds, or remove the reference."}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/cam/params/orbit/azimuth",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "orbit",
++     ],
++     "path": "channels/orbit/target",
++     "severity": "error",
++     "what": "items/cam/params/orbit/azimuth reaches nothing",
++   },
++ ]
+
+ ❯ expectPresentedClean tests/acceptance/671/helpers.ts:267:99
+    265|   const list = arr(reply['issues'] ?? [], `${what}: issues`);
+    266|   if (JSON.stringify(list).includes('"unsupported_platform"')) expect.…
+    267|   expect(list, `${what} raises no issue of any severity: ${JSON.string…
+       |                                                                                                   ^
+    268|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+    269| }
+ ❯ viaDeepShow tests/acceptance/671/helpers.ts:318:3
+ ❯ tests/acceptance/671/label.test.ts:22:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  tests/acceptance/671/pick.test.ts > AC3 a click on a box picks that box's ID > AC3 clicks on boxes in the GPU layer's view, during the orbit and after the move, pick each box's own ID; a click on nothing picks nothing
+AssertionError: the checkpoint: the scene's deep show raises no issue of any severity: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["orbit"],"path":"channels/orbit/target","actual":"items/cam/params/orbit/azimuth","what":"items/cam/params/orbit/azimuth reaches nothing","fix":"Name an ID the document holds, or remove the reference."}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/cam/params/orbit/azimuth",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "orbit",
++     ],
++     "path": "channels/orbit/target",
++     "severity": "error",
++     "what": "items/cam/params/orbit/azimuth reaches nothing",
++   },
++ ]
+
+ ❯ expectPresentedClean tests/acceptance/671/helpers.ts:267:99
+    265|   const list = arr(reply['issues'] ?? [], `${what}: issues`);
+    266|   if (JSON.stringify(list).includes('"unsupported_platform"')) expect.…
+    267|   expect(list, `${what} raises no issue of any severity: ${JSON.string…
+       |                                                                                                   ^
+    268|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+    269| }
+ ❯ viaDeepShow tests/acceptance/671/helpers.ts:318:3
+ ❯ tests/acceptance/671/pick.test.ts:26:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  tests/acceptance/671/present.test.ts > AC1 the scene is presented with no issues and its snapshot equals by pixel hash on a second run on one machine; the blank guard runs before the comparison, so two blank frames never count as equal > AC1 the scene and its 2D label, each sent by deep show from a test process in its agent's tree, are presented with no issues, each in its own writer layer
+AssertionError: the scene's deep show raises no issue of any severity: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["orbit"],"path":"channels/orbit/target","actual":"items/cam/params/orbit/azimuth","what":"items/cam/params/orbit/azimuth reaches nothing","fix":"Name an ID the document holds, or remove the reference."}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/cam/params/orbit/azimuth",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "orbit",
++     ],
++     "path": "channels/orbit/target",
++     "severity": "error",
++     "what": "items/cam/params/orbit/azimuth reaches nothing",
++   },
++ ]
+
+ ❯ expectPresentedClean tests/acceptance/671/helpers.ts:267:99
+    265|   const list = arr(reply['issues'] ?? [], `${what}: issues`);
+    266|   if (JSON.stringify(list).includes('"unsupported_platform"')) expect.…
+    267|   expect(list, `${what} raises no issue of any severity: ${JSON.string…
+       |                                                                                                   ^
+    268|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+    269| }
+ ❯ tests/acceptance/671/present.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  tests/acceptance/671/present.test.ts > AC1 the scene is presented with no issues and its snapshot equals by pixel hash on a second run on one machine; the blank guard runs before the comparison, so two blank frames never count as equal > AC1 the scene's snapshot at 0 s has the same pixel hash on a second run in the same process and in a fresh process, compared only after the blank guard passes both; a blank twin is BLOCKED
+AssertionError: the first run's scene raises no issue of any severity: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["orbit"],"path":"channels/orbit/target","actual":"items/cam/params/orbit/azimuth","what":"items/cam/params/orbit/azimuth reaches nothing","fix":"Name an ID the document holds, or remove the reference."}]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actual": "items/cam/params/orbit/azimuth",
++     "check": "document.validate",
++     "code": "ref_unresolved",
++     "fix": "Name an ID the document holds, or remove the reference.",
++     "ids": [
++       "orbit",
++     ],
++     "path": "channels/orbit/target",
++     "severity": "error",
++     "what": "items/cam/params/orbit/azimuth reaches nothing",
++   },
++ ]
+
+ ❯ expectPresentedClean tests/acceptance/671/helpers.ts:267:99
+    265|   const list = arr(reply['issues'] ?? [], `${what}: issues`);
+    266|   if (JSON.stringify(list).includes('"unsupported_platform"')) expect.…
+    267|   expect(list, `${what} raises no issue of any severity: ${JSON.string…
+       |                                                                                                   ^
+    268|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+    269| }
+ ❯ tests/acceptance/671/present.test.ts:87:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed (6)
+   Start at  13:45:00
+   Duration  25.91s (tests 99%)
+
