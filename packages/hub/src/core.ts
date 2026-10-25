@@ -5,7 +5,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { open, readFile, stat, type FileHandle } from 'node:fs/promises';
+import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -17,13 +17,23 @@ import { openRecord, RecordError, toJson, type Connection, type Event, type Even
 import { answers, composeKind, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
+import { parse as parseYaml } from 'yaml';
 import { confirmYou } from './confirm.js';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
+import { openIndex, search, type IndexFill } from './search.js';
+import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { refuse, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta, type Refusal } from './wire.js';
 
 const DAY = 86_400_000;
+/** How long deep_ask and deep_wait wait for an answer before saying it's still waiting: under the 60 s agents give a tool call. */
+const ASK_WAIT = 40_000;
+/** A value quoted into SQL. */
+const sql = (text: string): string => text.replace(/'/g, "''");
+/** A session ID as a handle holds it: letters and digits only. */
+const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
 /** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
 const keychain = (service: string): Promise<string | undefined> => {
   const own = (() => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } })();
@@ -65,7 +75,7 @@ const isUnder = (path: string, dir: string) => {
  * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
  * for the app or the CLI the process its hello named as its own.
  */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; peer?: { pid: number; start: string } }
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string } }
 /** The asks core's refusal as the socket's error@2, with the code that fits what it names. */
 const asRefused = (error: unknown): unknown => {
   if (!(error instanceof AskRefused)) return error;
@@ -133,6 +143,8 @@ export class Core {
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
   private asks!: Asks;
+  /** The wiki's index@1 fill, which deep_search reads it through. */
+  private index!: Promise<IndexFill>;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
@@ -212,7 +224,9 @@ export class Core {
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
-    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
+    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined, home: this.root.dir });
+    this.index = openIndex(this.root.wiki, this.options.index);
+    this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
     const compose = this.compose = composeKind(join(this.root.dir, 'compose'));
     this.supervisor = await openSupervisor({
@@ -701,13 +715,7 @@ export class Core {
    */
   call(method: string, params: unknown, context: CallContext): Promise<unknown> {
     const p = isObj(params) ? params : {};
-    // deep_status reads only what belongs to no session, so it needs no binding.
-    if (method === 'mcp.call' && p.tool === 'deep_status') {
-      return this.queue(async () => undefined).then(() => ({ session: context.session ?? null, gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null } }));
-    }
-    if (method === 'mcp.call') {
-      return this.queue(async () => this.bindCall(p, context)).then(({ tool, args, session }) => (tool === 'deep_claim' ? this.claim(session, args) : this.attach(session, args)));
-    }
+    if (method === 'mcp.call') return this.mcpCall(p, context);
     return this.queue(async () => undefined).then(() => this.dispatch(method, p, context));
   }
   private async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
@@ -865,18 +873,52 @@ export class Core {
 
   // ---- deep mcp.
 
-  private bindCall(params: Obj, context: CallContext): { tool: string; args: Obj; session: string } {
-    const tool = params.tool;
-    const args = isObj(params.arguments) ? params.arguments : {};
-    if (tool !== 'deep_claim' && tool !== 'deep_evidence') throw new Refused(refusal('not_found', '/params/tool', 'Call one of the deep_* tools the hub serves: deep_status, deep_claim, deep_evidence.', tool));
-    return { tool, args, session: this.bind(tool, args, context) };
+  /**
+   * One deep_* call: its arguments held to its tool's schema, bound to the session it acts for, then served. Binding
+   * holds the queue, so it sees every hook that arrived before the call; serving holds up no session's hooks. Its
+   * refusal reaches the agent scrubbed of every value the hub holds, scrubbed whole before it is cut.
+   */
+  private async mcpCall(params: Obj, context: CallContext): Promise<unknown> {
+    const tool = String(params.tool);
+    try {
+      const args = checkArguments(tool, params.arguments);
+      const sent = isObj(params.arguments) ? params.arguments : {};
+      // A call bound to no session still reads what belongs to no session; every other tool needs its session.
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search'));
+      switch (tool) {
+        case 'deep_status': return await this.status(session);
+        case 'deep_search': return await this.find(String(args.query), session, context);
+        case 'deep_ask': return await this.askFor(session!, args);
+        case 'deep_wait': return await this.waitFor(session!, String(args.ask));
+        case 'deep_open_item': return await this.openItem(session!, String(args.text));
+        case 'deep_claim': return await this.claim(session!, args);
+        case 'deep_evidence': return await this.attach(session!, args);
+        default: return await this.runCheck(session!, args);
+      }
+    } catch (error) {
+      throw this.forAgent(error, tool);
+    }
   }
-  /** The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call. */
-  private bind(tool: string, args: Obj, context: CallContext): string {
+  private forAgent(error: unknown, tool: string): Refused {
+    const refused = error instanceof Refused ? error : error instanceof AskRefused ? (asRefused(error) as Refused)
+      : new Refused(refusal('unavailable', '', `${tool} failed in the hub: ${error instanceof Error ? error.message : String(error)}; nothing was recorded.`, tool, true));
+    const plant = this.options.plant;
+    const scrub = (text: string) => (plant === 'errors-unscrubbed' ? text : scrubText(text, { held: this.options.held }));
+    const out: Partial<Refusal> = { ...refused.refusal, remediation: scrub(refused.refusal.remediation), actual: scrub(refused.whole ?? refused.refusal.actual).slice(0, 8192) };
+    if (plant === 'errors-without-actual') delete out.actual;
+    return new Refused(out as Refusal);
+  }
+  /**
+   * The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call,
+   * by its tool and the digest of its arguments as sent. A call more than one unspent stamp matches binds to none.
+   * Unbound, a call that needs its session is refused; one that only reads goes on bound to none.
+   */
+  private bind(tool: string, args: Obj, context: CallContext, required: boolean): string | undefined {
     const live = (id: string) => { const s = this.sessions.get(id); return s && !s.ended ? s : undefined; };
     if (context.session) {
-      if (!live(context.session)) throw new Refused(refusal('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool));
-      return context.session;
+      if (live(context.session)) return context.session;
+      if (!required) return undefined;
+      throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
     }
     const parent = context.parent;
     const digest = sha256Hex(canonicalize(args as JsonValue));
@@ -884,24 +926,178 @@ export class Core {
       const session = live(s.session);
       return s.tool === tool && s.digest === digest && session !== undefined && session.pid === parent.pid && session.start === parent.start;
     }) : [];
-    // A call more than one unspent stamp matches binds to none.
-    if (matches.length !== 1) throw new Refused(refusal('unbound', '/params/arguments', `This ${tool} call binds to no session: ${matches.length ? 'more than one' : 'no'} PreToolUse stamped for it is unspent.`, tool));
-    this.stamps.splice(this.stamps.indexOf(matches[0]!), 1);
-    return matches[0]!.session;
+    const bound = this.options.plant === 'binds-first-stamp' || matches.length === 1 ? matches[0] : undefined;
+    if (!bound) {
+      if (!required) return undefined;
+      throw refuse('unbound', '/params/arguments', `This ${tool} call binds to no session: ${matches.length ? 'more than one' : 'no'} PreToolUse stamped for it is unspent.`, tool);
+    }
+    this.stamps.splice(this.stamps.indexOf(bound), 1);
+    return bound.session;
   }
-  private async claim(session: string, args: Obj): Promise<Obj> {
-    // While appends fail, no claim is acknowledged.
-    if (this.blocked) throw new Refused(refusal('unavailable', '/params/tool', `${this.blocked}; the claim was not recorded. Claim again once appends work.`, 'deep_claim', true));
-    const data = Object.fromEntries(['task_ref', 'attempt', 'commit', 'scope'].filter((k) => k in args).map((k) => [k, args[k]]));
+  /** The connection a session's deep mcp writes through: writer mcp:<session>, from the binding, never the call. */
+  private agentConnection(session: string): Connection {
+    const agent = this.sessions.get(session)?.agent;
+    return this.connection(`mcp:${session}`, { session, ...(agent ? { agent } : {}) });
+  }
+
+  /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
+  private async status(session: string | undefined): Promise<Obj> {
+    const gates = { watch_only: this.blocked !== undefined, reason: this.blocked ?? null };
+    if (!session) return { session: null, gates, claims: [] };
+    const made = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ORDER BY log_pos DESC LIMIT 10`)) as { id: string; data: string }[];
+    const claims: Obj[] = [];
+    for (const row of made) {
+      const claim = JSON.parse(row.data) as { task_ref: string; commit: string; predictions?: Prediction[] };
+      const runs = (await this.record.raw(`SELECT kind, ts, data FROM events WHERE kind IN ('run.started', 'run.finished') AND subject IN
+        (SELECT subject FROM events WHERE kind = 'run.started' AND json_extract(data, '$.claim') = 'claim:${row.id}') ORDER BY log_pos`)) as { kind: string; ts: number; data: string }[];
+      const byRun = new Map<string, { run: string; check: string; started?: number; ended?: number; outcome?: RunOutcome }>();
+      for (const r of runs) {
+        const d = JSON.parse(r.data) as { run: string; check?: string; outcome?: RunOutcome };
+        const one = byRun.get(d.run) ?? { run: d.run, check: String(d.check) };
+        if (r.kind === 'run.started') Object.assign(one, { check: String(d.check), started: r.ts });
+        else Object.assign(one, { ended: r.ts, outcome: d.outcome });
+        byRun.set(d.run, one);
+      }
+      const finished = [...byRun.values()].flatMap((r) => (r.outcome !== undefined && r.ended !== undefined ? [{ ...r, outcome: r.outcome, ended: r.ended }] : []));
+      const checks = [...new Set(finished.map((r) => r.check))].map((check) => ({ check, runs: finished.filter((r) => r.check === check) }));
+      const [verdict] = (await this.record.raw(`SELECT handle, outcome, smallest, points_to FROM verdicts WHERE claim_id = '${row.id}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as Obj[];
+      claims.push({
+        claim: `claim:${row.id}`, task_ref: claim.task_ref, commit: claim.commit,
+        runs: [...byRun.values()].map((r) => ({ run: r.run, check: r.check, outcome: r.outcome ?? 'running' })),
+        verdict: verdict ?? null,
+        contradictions: predictionContradictions(claim.predictions ?? [], checks),
+      });
+    }
+    return { session, gates, claims };
+  }
+
+  /** deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too. */
+  private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
+    const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
+    const everyone = !session && this.options.plant === 'unbound-reads-all';
+    return search({ query, index: await this.index, raw: (q) => this.record.raw(q), worktree, session: everyone ? { everyone: true } : session });
+  }
+  /** The worktree of a session the hub knows that holds `folder`: an unbound call reads that project's spec, and no other file. */
+  private worktreeAt(folder: string | undefined): string | undefined {
+    if (!folder || !isAbsolute(folder)) return undefined;
+    let real: string;
+    try { real = realpathSync(folder); } catch { return undefined; }
+    return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
+  }
+  /** The checks a worktree's spec names, by name, with the command each runs. */
+  private checksOf(worktree: string): Map<string, string> {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
+    return new Map(Object.entries(checks).flatMap(([name, c]) => (isObj(c) && typeof c.run === 'string' ? [[name, c.run] as [string, string]] : [])));
+  }
+  private unknownCheck(worktree: string, check: unknown): Refused {
+    const names = [...this.checksOf(worktree).keys()];
+    return refuse('enum', '/params/arguments/check', `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
+  }
+
+  /** deep_ask: raises the ask under the session, then waits for its answer as deep_wait does. */
+  private async askFor(session: string, args: Obj): Promise<Obj> {
+    const s = this.sessions.get(session)!;
+    const kind = String(args.kind);
+    const question = String(args.question);
+    const need = (field: string, why: string) => { if (args[field] === null) throw refuse('required', `/params/arguments/${field}`, why, null); };
+    let raised: Obj;
+    if (kind === 'unblock') {
+      need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
+      if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+      need('steps', 'List the task\'s steps, in order.');
+      need('where', 'Say where the person does the task.');
+      need('why', 'Say what the task unblocks.');
+      raised = {
+        kind, question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done',
+        steps: args.steps, where: args.where, why: args.why, unblocks: [`session:${letters(session)}`], proves: args.check,
+      };
+    } else {
+      need('options', 'Give the question\'s options.');
+      const options = (args.options as { id: string; label: string }[]).map((o) => ({ ...o, decision: 'none' }));
+      raised = { kind, question, options, recommended: args.recommended };
+    }
+    const pinned = await this.pinOf(s.cwd, question);
+    const ask = { ...raised, fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned };
+    const handle = await this.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
+    return this.waitFor(session, handle);
+  }
+  /** What an ask shows: the worktree's commit, or where there's none, the question's own digest. */
+  private pinOf(worktree: string, question: string): Promise<Obj> {
+    return new Promise((done) => execFile('git', ['-C', worktree, 'rev-parse', 'HEAD'], { timeout: 2000 }, (error, out) => {
+      const commit = String(out ?? '').trim();
+      done(!error && /^[0-9a-f]{40}$/.test(commit) ? { kind: 'commit', ref: commit } : { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(question)) });
+    }));
+  }
+  /**
+   * deep_wait: the ask's answer once one arrives, or before the agent's tool timeout, that it's still waiting, with
+   * its deadline and default. Only the session that raised an ask waits on it.
+   */
+  private async waitFor(session: string, handle: string): Promise<Obj> {
+    const until = Date.now() + ASK_WAIT;
+    for (;;) {
+      const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
+      if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
+      if (row.status !== 'open' && row.status !== 'later') return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
+      if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
+      if (Date.now() >= until) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+      await new Promise((done) => setTimeout(done, 100));
+    }
+  }
+
+  /** deep_open_item: an open item on the session's newest claim's task, or else on the message it works on. */
+  private async openItem(session: string, text: string): Promise<Obj> {
+    const [claim] = (await this.record.raw(`SELECT data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
+    const message = this.sessions.get(session)?.turn?.uuid.replace(/[^A-Za-z0-9._-]/g, '') || 'start';
+    const task_ref = claim ? String((JSON.parse(claim.data) as Obj).task_ref) : `session:${letters(session)}#${message}`;
     const ts = this.now();
     const id = ulid(ts);
-    const agent = this.sessions.get(session)?.agent;
     try {
-      await this.append(this.connection(`mcp:${session}`, { session, ...(agent ? { agent } : {}) }), { v: 1, id, kind: 'claim.made', ts, data: data as JsonValue });
+      await this.append(this.agentConnection(session), { v: 1, id, kind: 'open_item.opened', ts, data: { task_ref, text: scrubText(text, { held: this.options.held }).slice(0, 8192) } });
+    } catch (error) {
+      throw this.refusedAppend(error, 'deep_open_item');
+    }
+    return { task_ref, event: id };
+  }
+
+  private async claim(session: string, args: Obj): Promise<Obj> {
+    // While appends fail, no claim is acknowledged.
+    if (this.blocked) throw refuse('unavailable', '/params/tool', `${this.blocked}; the claim was not recorded. Claim again once appends work.`, 'deep_claim', true);
+    const ts = this.now();
+    const id = ulid(ts);
+    // What the agent expects each check to show, stamped now, before any run it could have seen.
+    const predictions = ((args.predictions ?? []) as { check: string; expects: string }[]).map((p) => ({ ...p, at: ts }));
+    const data = { task_ref: args.task_ref, attempt: args.attempt, commit: args.commit, scope: args.scope, predictions };
+    try {
+      await this.append(this.agentConnection(session), { v: 2, id, kind: 'claim.made', ts, data: data as JsonValue });
     } catch (error) {
       throw this.refusedAppend(error, 'deep_claim');
     }
-    return { session, event: id };
+    return { session, claim: `claim:${id}`, event: id };
+  }
+
+  /** deep_run: a check the session's spec names, run for one of its claims (its newest by default) at that claim's commit, answered with its outcome. */
+  private async runCheck(session: string, args: Obj): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    const command = this.checksOf(cwd).get(String(args.check));
+    if (command === undefined) throw this.unknownCheck(cwd, args.check);
+    const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
+    const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
+    if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
+    const commit = String((JSON.parse(claim.data) as Obj).commit);
+    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', command], cwd });
+    // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
+    const until = Date.now() + ASK_WAIT;
+    for (;;) {
+      const [done] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = '${sql(String(run))}' LIMIT 1`)) as { data: string }[];
+      if (done) {
+        const d = JSON.parse(done.data) as { outcome: string; evidence: string[] };
+        return { run, claim: `claim:${claim.id}`, outcome: d.outcome, evidence: d.evidence.map((sha) => `ev:${sha}`) };
+      }
+      if (this.stopping || Date.now() >= until) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
+      await new Promise((wake) => setTimeout(wake, 100));
+    }
   }
   private refusedAppend(error: unknown, what: string): Refused {
     if (error instanceof RecordError && error.code === 'storage') return new Refused(refusal('unavailable', '', `BLOCKED: appends fail: ${error.message}; ${what} was not recorded.`, what, true));
@@ -927,15 +1123,22 @@ export class Core {
     }).catch(() => undefined);
     return ev;
   }
+  /**
+   * deep_evidence: a file in the session's working folder, read only once `..` and every link in its path are
+   * resolved and it is still inside; any other path is answered exactly as one that doesn't exist.
+   */
   private async attach(session: string, args: Obj): Promise<Obj> {
-    const folder = this.sessions.get(session)!.cwd;
-    const path = typeof args.path === 'string' ? resolve(folder, args.path) : '';
-    if (!path || !isUnder(path, folder)) throw new Refused(refusal('pattern', '/params/arguments/path', `Name a file inside the session's working folder ${folder}.`, args.path));
+    const folder = realpathSync(this.sessions.get(session)!.cwd);
+    const sent = String(args.path);
+    const missing = () => refuse('not_found', '/params/arguments/path', `No file ${sent} in this session's working folder; name a file inside it.`, sent);
+    let path = resolve(folder, sent);
+    if (this.options.plant !== 'evidence-checks-path-first') path = await realpath(path).catch(() => '');
+    if (!path || !isUnder(path, folder)) throw missing();
     let bytes: Buffer;
     try {
       bytes = await readFile(path);
-    } catch (error) {
-      throw new Refused(refusal('not_found', '/params/arguments/path', `Can't read ${path}: ${error instanceof Error ? error.message : String(error)}`, args.path));
+    } catch {
+      throw missing();
     }
     const claimed = typeof args.origin === 'string' ? args.origin : undefined;
     const writer = this.store.connect(this.peer({ role: 'agent', session }, claimed, session));

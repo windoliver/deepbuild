@@ -384,6 +384,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #24 first measurement: the merge base has no deep inbox. One process seeds a heavy month of asks (20 sessions a day, five asks each; the first 29 days' asks closed at their defaults, the last day's 100 open), starts the hub on it and times five deep inbox runs after a warm-up, failing unless each lists every open ask; p50 includes the seeding and the hub's start. The issue's 300 ms stays in tests/acceptance/24/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-mcp-30d",
+      "command": [
+        "node",
+        "benchmarks/mcp.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #26 first measurement: the merge base's deep mcp has no deep_open_item or deep_search. One process seeds a heavy month (20 sessions a day, five asks each with the first saved as a decision, and an open item), starts the hub on it, binds a deep mcp to a session through hooks from its own children, and times 40 deep_status, 40 deep_open_item and 20 deep_search calls after a warm-up round, failing on any error; p50 includes the seeding and the hub's start. The issue's 100 ms, 300 ms and 80 MB stay in tests/acceptance/26/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

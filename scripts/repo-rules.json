@@ -318,9 +318,17 @@
           "spec": "0.0.0",
           "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #26: deep_status reports a run that disagrees with deep_claim's prediction by the verdict engine's own contradiction rule."
+        },
         "better-sqlite3": {
           "spec": "13.0.3",
           "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #26: deep_run and deep_ask read the checks a repo's .deepbuild/done.yaml names, with the parser env-local already reads that file with."
         }
       }
     },

@@ -131,6 +131,8 @@ class Conn {
   name = '';
   session: string | null = null;
   parent: { pid: number; start: string } | undefined;
+  /** For a deep mcp, the folder it runs in: which known worktree's spec an unbound deep_search reads. */
+  cwd: string | undefined;
   /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
   peer: { pid: number; start: string } | undefined;
   first = true;
@@ -170,7 +172,8 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
-      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}) };
+      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}),
+      ...(process.env.DEEP_HUB_TEST_INDEX ? { index: process.env.DEEP_HUB_TEST_INDEX } : {}) };
     const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
@@ -319,6 +322,7 @@ class Hub {
       conn.role = 'mcp';
       conn.session = session;
       conn.parent = proved;
+      if (typeof value.cwd === 'string') conn.cwd = value.cwd;
       conn.name = session ? `mcp:${session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
@@ -358,7 +362,7 @@ class Hub {
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after })));
       }
       default:
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
     }
   }
 
