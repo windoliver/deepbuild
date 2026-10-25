@@ -579,6 +579,7 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `ask.superseded`, `ask.moot` (new) | `{by}`; `{because: check_passed, verdict}` or `{because: attempt_replaced, session}` | asks | an ask that leaves Needs you without an answer |
 | `answer.refused` (new) | `{outcome, closed_at, via: card \| inbox, option}` | asks | a late answer to a closed ask, refused and kept on its receipt |
 | `decision.created`, `decision.applied` (new) | `{key, scope, answer, ask}`; `{decision, ask}` | decisions | past calls and what was decided for you |
+| `decision.overruled` (new) | `{decision}` | decisions | a decision you overruled on the trusted path, which answers nothing from then on |
 | `plan.proposed` (new) | `{ask, steps: [{does, changes, undo, public: bool, cost}], diff: sha256, hash}` | plans | authority cards |
 | `open_item.opened`, `open_item.closed` (new) | `{task_ref, text}` | open_items | "part of" and still-open lists |
 | `notice.subscribed`, `notice.sent` (new) | `{notice_kind, key, by}`; `{notice, cites}` | notices | notices you asked for, with the asking recorded |

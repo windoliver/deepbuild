@@ -907,7 +907,7 @@ Everything an agent or a plug-in builds is made of the primitives below. Each on
 - `worktree.created` and `worktree.removed`;
 - `doc.patched`.
 
-Only the core appends the kinds that record a decision: `verdict.made` and `verdict.stale` from its verdict engine, `definition.locked` and `definition.revised` from its definition lock, and `decision.created`, `decision.applied`, `ask.answered` and `ask.defaulted` from the trusted path, its check of a resolver's answer and an ask's deadline. `deep.record.append` refuses each of them from every other writer, a first-party extension in the hub included, naming the kind, and the extension host's kit holds a planted first-party extension that tries.
+Only the core appends the kinds that record a decision: `verdict.made` and `verdict.stale` from its verdict engine, `definition.locked` and `definition.revised` from its definition lock, and `decision.created`, `decision.applied`, `decision.overruled`, `ask.answered` and `ask.defaulted` from the trusted path, its check of a resolver's answer and an ask's deadline. `deep.record.append` refuses each of them from every other writer, a first-party extension in the hub included, naming the kind, and the extension host's kit holds a planted first-party extension that tries.
 
 **It can never:** Carry a writer it claims rather than one its connection proves, or a `log_pos` the hub didn't assign; or record a verdict, a locked definition, a decision or an answer from any writer but the core
 

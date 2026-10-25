@@ -47,7 +47,8 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
     process.stdout.write(`${String(reply.result.ask)} answered ${String(reply.result.answer)}, saved as a decision for ${String(reply.result.scope)}\n`);
     return 0;
   }
-  const rows = reply.result.asks as Row[];
+  // The hub's inbox holds every ask; the list is the open ones.
+  const rows = (reply.result.asks as Row[]).filter((r) => r.status !== 'closed');
   if (!rows.length) process.stdout.write('No open asks.\n');
   for (const r of rows) process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${age(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
   return 0;
