@@ -3,7 +3,7 @@ Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tes
 Expected: all 3 tests fail. C1: deep_show refuses the figure with module_missing at requires/modules/scene3d (the base has no scene3d module). C2: every fixture precondition holds, then deep-gpu answers the clean run's view3d call with bad_input "unknown call".
 
 
- RUN  v5.0.5 /Users/tafeng/dev/claude-worktrees/compressed-baking-piglet/agent-a661c451fffa5c2ec/tests/acceptance/378
+ RUN  v5.0.5 <checkout>/tests/acceptance/378
 
  ❯ figure-redraft.test.ts (2 tests | 2 failed) 292278ms
    ❯ #378.6ab4aece a skill's figure (an isometric machine with labeled parts and motion) renders natively through deep_show, with no web view (redraft) (2)
