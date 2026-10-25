@@ -229,7 +229,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     if (gone !== null) return { run: result('missing', { failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: `${gone} isn't on the run's PATH` }] }), ran: [] };
     const hidden = plant === 'exit-code-only' ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
     if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
-    const work = mkdtempSync(join(temp, 'deep-check-run-'));
+    // The run's folder is its own already: the evidence files' folder inside it needs no second random name.
+    const work = join(temp, 'deep-check-run-evidence');
+    mkdirSync(work);
     const files = { reads: join(work, 'reads.txt'), spawns: join(work, 'spawns.jsonl'), node: join(work, 'report.jsonl'), vitest: join(work, 'vitest.jsonl') };
     mkdirSync(join(temp, 'home'));
     const token = randomBytes(24).toString('base64url');

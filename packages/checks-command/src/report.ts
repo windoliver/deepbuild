@@ -43,7 +43,7 @@ export function under(checkout: string, path: string): string | null {
     // And one below it whose segments are all plain names is relative to it as it is, with nothing to resolve (a
     // first segment that starts with `..` goes the long way, which places it as it always has).
     const below = path.slice(checkout.length + 1);
-    if (!PLAIN_SEGMENTS.test(below) && !below.startsWith('..')) return below;
+    if (!PLAIN_SEGMENTS.test(below) && !below.startsWith('..')) return sep === '/' ? below : below.split(sep).join('/');
   }
   const rel = relative(checkout, resolve(checkout, path));
   return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel.split(sep).join('/') : null;
