@@ -13,6 +13,7 @@
   "scripts": { "build": "tsc -p tsconfig.json && node build-helper.mjs" },
   "dependencies": {
     "@deepbuild/asks": "0.0.0",
+    "@deepbuild/leases": "0.0.0",
     "@deepbuild/record": "0.0.0"
   }
 }

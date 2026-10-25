@@ -1632,6 +1632,22 @@ export interface HookRequestV2 {
   billing?: { [key: string]: boolean };
 }
 
+/** hook.request@3 */
+export interface HookRequestV3 {
+  v: 1;
+  agent: string;
+  event: string;
+  seq: bigint;
+  id: string;
+  pid: number;
+  ppid: number;
+  matched: Array<string>;
+  notes?: { [key: string]: string };
+  payload: unknown;
+  late?: boolean;
+  billing?: { [key: string]: boolean };
+}
+
 /** hub.stopped@1 */
 export interface HubStopped {
   v: 1;
@@ -1979,6 +1995,36 @@ export interface LeaseAcquired {
   evidence?: Array<string>;
 }
 
+/** lease.acquired@2 */
+export interface LeaseAcquiredV2 {
+  v: 2;
+  id: string;
+  kind: "lease.acquired";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    run?: string;
+    agent?: {
+      pid: number;
+      start: string;
+    };
+  };
+  evidence?: Array<string>;
+}
+
 /** lease.denied@1 */
 export interface LeaseDenied {
   v: 1;
@@ -2004,6 +2050,15 @@ export interface LeaseDenied {
   evidence?: Array<string>;
 }
 
+/** lease.kind@1 */
+export interface LeaseKind {
+  name: string;
+  match: string;
+  cap: number;
+  cooldown: number;
+  cost: number;
+}
+
 /** lease.released@1 */
 export interface LeaseReleased {
   v: 1;
@@ -2025,6 +2080,32 @@ export interface LeaseReleased {
     holder: string;
     mode: "exclusive" | "shared";
     expires: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** lease.released@2 */
+export interface LeaseReleasedV2 {
+  v: 2;
+  id: string;
+  kind: "lease.released";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    proof: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -2583,6 +2664,25 @@ export interface SessionEnd {
   log_pos?: number;
   data: {
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.gone@1 */
+export interface SessionGone {
+  v: 1;
+  id: string;
+  kind: "session.gone";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pid: number;
+    start: string;
   };
   evidence?: Array<string>;
 }
