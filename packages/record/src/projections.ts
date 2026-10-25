@@ -32,7 +32,7 @@ type Obj = { [key: string]: JsonValue };
 
 const T = (name: string, pk: string[], columns: string, indexes?: string[]): TableDef => ({ name, pk, columns, ...(indexes ? { indexes } : {}) });
 /** Every projection, with the columns the design's data model names (and the ones the record adds). */
-export const TABLES: readonly TableDef[] = [
+const TABLES: readonly TableDef[] = [
   T('sessions', ['id'], 'id TEXT, thread_id TEXT, parent_id TEXT, agent TEXT, project_id TEXT, worktree TEXT, branch TEXT, pid INTEGER, status TEXT NOT NULL DEFAULT \'running\', last_seen INTEGER, ended_log_pos INTEGER, transcript TEXT'),
   T('claims', ['id'], 'id TEXT, session_id TEXT, kind TEXT, subject_ref TEXT, text TEXT, created INTEGER, verdict_id TEXT, attempt INTEGER, commit_sha TEXT, round INTEGER, stalled_rule TEXT'),
   T('definitions', ['task_ref'], 'task_ref TEXT, id TEXT, thread_id TEXT, issue_rev TEXT, base_commit TEXT, requirements TEXT, budget TEXT, hash TEXT, locked_at INTEGER, state TEXT, dispute_ask TEXT'),
@@ -143,7 +143,6 @@ export class Projector {
     const sql = `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT (${def.pk.join(', ')}) DO ${rest.length ? `UPDATE SET ${rest.map((c) => `${c} = excluded.${c}`).join(', ')}` : 'NOTHING'}`;
     this.stmt(sql).run(...cols.map((c) => row[c] ?? null));
   }
-  /** Inserts the row only when none has its key. */
   /** Inserts the row, or fills only the columns still empty: the first value of each one stands. */
   private fill(table: string, row: Row): void {
     const def = byName.get(table)!;

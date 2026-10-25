@@ -66,6 +66,8 @@ interface Run {
   exit?: Promise<Exit>;
   state: RunStatus['state'];
 }
+/** A run with nothing of it recorded yet: sandboxed, no token, no process, no lease. */
+const blank = (run: string, cwd: string, state: Run['state']): Run => ({ run, cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), leases: [], state });
 /** One key of a pool: free, held by a run (until `expires`, then stale), left dirty by a run's cleanup, or out of the pool. */
 interface Key { holder?: string; expires?: number; stale?: boolean; dirty?: { run: string; ask?: string }; retired?: boolean }
 interface Waiter { spec: StartSpec; on: string[]; resolve(started: Started | Promise<Started>): void }
@@ -148,7 +150,6 @@ class LocalSupervisor implements Supervisor {
   // ---- Opening: the record's runs, and what a crash left behind.
 
   async open(): Promise<void> {
-    const left: Run[] = [];
     // Answers are acted on once the whole record is folded, and only those still open then: a replay repeats no step.
     const settled: Event[] = [];
     for (const e of await this.events()) {
@@ -157,7 +158,7 @@ class LocalSupervisor implements Supervisor {
       const r = this.runs.get(run);
       switch (e.kind) {
         case 'process.starting':
-          this.runs.set(run, { run, cwd: String(d.cwd), sandboxed: true, token: null, tracked: new Map(), ended: new Set(), leases: [], state: 'running' });
+          this.runs.set(run, blank(run, String(d.cwd), 'running'));
           break;
         case 'process.tracked':
           if (!r) break;
@@ -219,9 +220,8 @@ class LocalSupervisor implements Supervisor {
       }
     }
     for (const e of settled) if (this.asked.has(e.subject!)) await this.settleAsk(e);
-    for (const r of this.runs.values()) if (r.state !== 'cleaned') left.push(r);
     // A run left in flight by a crash: its leftovers are reaped, from the record and its sandbox's marker.
-    for (const r of left) {
+    for (const r of [...this.runs.values()].filter((r) => r.state !== 'cleaned')) {
       r.state = 'exited';
       await this.cleanup(r.run);
     }
@@ -312,14 +312,14 @@ class LocalSupervisor implements Supervisor {
       if (wants.kind === 'wait') {
         const first = !this.runs.has(waiter.spec.run);
         waiter.on = wants.on;
-        if (first) this.runs.set(waiter.spec.run, { run: waiter.spec.run, cwd: waiter.spec.cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), leases: [], state: 'held' });
+        if (first) this.runs.set(waiter.spec.run, blank(waiter.spec.run, waiter.spec.cwd, 'held'));
         // A failed raise is retried on the next pass; the other waiters go on.
         for (const name of wants.on) await this.ask(name, waiter.spec.run).catch(() => undefined);
         continue;
       }
       this.waiters.splice(this.waiters.indexOf(waiter), 1);
       if (wants.kind === 'blocked') {
-        this.runs.set(waiter.spec.run, { run: waiter.spec.run, cwd: waiter.spec.cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), leases: [], state: 'BLOCKED' });
+        this.runs.set(waiter.spec.run, blank(waiter.spec.run, waiter.spec.cwd, 'BLOCKED'));
         waiter.resolve({ run: waiter.spec.run, status: 'BLOCKED', cause: 'resource', kind: wants.on });
         continue;
       }
@@ -413,7 +413,7 @@ class LocalSupervisor implements Supervisor {
     // After a minute with no report, the stream is shown live again before a process can be refused anything.
     if (sandboxed) await this.warming;
     if (sandboxed && this.log && Date.now() - this.warmAt > WARM_MS) await this.warm(2000);
-    const r: Run = { run: spec.run, cwd, sandboxed, token: sha256(token), tracked: new Map(), ended: new Set(), leases, state: 'running' };
+    const r: Run = { ...blank(spec.run, cwd, 'running'), sandboxed, token: sha256(token), leases };
     this.runs.set(spec.run, r);
     // The run first, so a replay finds its leases on it.
     await this.append('process.starting', { run: spec.run, cwd }, spec.run);
@@ -474,6 +474,9 @@ class LocalSupervisor implements Supervisor {
 
   /** What the run owns that it can prove now: each tracked process by its start time (and token), and its group's members. */
   private async provable(r: Run): Promise<Proc[]> {
+    // Every candidate is a tracked process or a member of a group whose tracked leader is alive: with none of
+    // them alive, nothing is, and the full process table isn't read.
+    if (![...r.tracked.keys()].some(alive)) return [];
     const procs = await table();
     const candidates = new Map<number, Proc>();
     for (const [pid] of r.tracked) { const p = procs.get(pid); if (p) candidates.set(pid, p); }
@@ -533,7 +536,7 @@ class LocalSupervisor implements Supervisor {
       const waiter = this.waiters.find((w) => w.spec.run === run);
       if (!waiter) return Promise.reject(Error(`${run} is no run of this supervisor`));
       this.waiters.splice(this.waiters.indexOf(waiter), 1);
-      this.runs.set(run, { run, cwd: waiter.spec.cwd, sandboxed: true, token: null, tracked: new Map(), ended: new Set(), leases: [], state: 'BLOCKED' });
+      this.runs.set(run, blank(run, waiter.spec.cwd, 'BLOCKED'));
       waiter.resolve({ run, status: 'BLOCKED', cause: 'resource', kind: waiter.spec.leases?.[0]?.kind ?? '' });
       return Promise.resolve({ run, outcome: 'clean', left: [], stopped: [] });
     }
@@ -565,7 +568,7 @@ class LocalSupervisor implements Supervisor {
       const proven = await this.provable(r);
       if (!proven.length) break;
       for (const p of proven) {
-        await this.track(r, p.pid, p.start, (await tokenOf(p.pid)) ?? null);
+        if (r.tracked.get(p.pid)?.start !== p.start) await this.track(r, p.pid, p.start, (await tokenOf(p.pid)) ?? null);
         try { process.kill(p.pid, signal); stopped.add(p.pid); } catch { /* gone */ }
       }
       const until = Date.now() + GRACE_MS;
@@ -631,7 +634,8 @@ class LocalSupervisor implements Supervisor {
   }
   /** Each tracked process proven gone gets its end recorded; the ones still running with their start times are returned. */
   private async leftovers(r: Run): Promise<number[]> {
-    const procs = await table([...r.tracked.keys()]);
+    // Only the live ones are looked up: a gone ID has no start time to compare.
+    const procs = await table([...r.tracked.keys()].filter((pid) => !r.ended.has(pid) && alive(pid)));
     const left: number[] = [];
     for (const [pid, t] of r.tracked) {
       if (r.ended.has(pid)) continue;

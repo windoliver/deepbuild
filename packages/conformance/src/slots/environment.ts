@@ -228,7 +228,7 @@ function ask<T>(request: { op: 'lease' | 'probe' | 'listening'; port?: number; p
   try { return JSON.parse(Buffer.from(out.subarray(0, Atomics.load(flags, 1))).toString('utf8')) as T; } catch { throw new Finding('BLOCKED', `the kit's ${request.op} probe answered unreadably`, ['probe_unanswered']); }
 }
 /** A free port on the loopback, leased by binding it once. */
-export const leasePort = (): number => {
+const leasePort = (): number => {
   const { port } = ask<{ port?: number }>({ op: 'lease' });
   if (!Number.isInteger(port) || (port as number) <= 0) throw new Finding('BLOCKED', 'no free port on the loopback to lease', ['no_port']);
   return port as number;

@@ -313,6 +313,8 @@ class AsksCore implements Asks {
   private cursor = 0;
   private readonly sessions = new Map<string, { thread: string; worktree: string }>();
   private readonly asks = new Map<string, Ask>();
+  /** Each thread's asks, open or closed, in log order. */
+  private readonly threads = new Map<string, Ask[]>();
   /** Each session's newest attempt at each task, from its claims. */
   private readonly attempts = new Map<string, Map<string, number>>();
   private queue: Promise<unknown> = Promise.resolve();
@@ -388,14 +390,14 @@ class AsksCore implements Asks {
       }
       // The same question asked again in its thread, showing the same thing, is one record.
       const thread = this.threadOf(connection.session);
-      const same = this.open().find((a) => a.thread === thread && a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
+      const same = this.openIn(thread).find((a) => a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
         && sha256Hex(canonicalize(a.data.pinned_to!)) === sha256Hex(canonicalize(data.pinned_to!)) && (a.plan?.hash ?? null) === ((proposed?.hash as string | undefined) ?? null));
       if (same) return same.handle;
       // Past the threshold drafted at setup, the thread's further asks fold into one exception. It's raised first,
       // so the log alone says which asks it holds: each one created while it's open.
       const foldAt = this.settingsFor(connection.session).fold;
       // A fold is one person's: the thread's asks raised under this actor and scope.
-      const open = this.open().filter((a) => a.thread === thread && a.who.actor === connection.actor && a.who.scope === connection.scope);
+      const open = this.openIn(thread).filter((a) => a.who.actor === connection.actor && a.who.scope === connection.scope);
       if (!open.some((a) => a.fold) && open.length >= (typeof foldAt === 'number' ? foldAt : FOLD_AT)) {
         await this.raiseFold(thread, connection.session, { actor: connection.actor, scope: connection.scope }, [`ask:${id}`], data.deadline as number);
       }
@@ -454,11 +456,11 @@ class AsksCore implements Asks {
         throw new AskRefused(`${ask.handle} was raised for ${ask.who.actor} in ${ask.who.scope}`, { field: 'ask', ask: ask.handle });
       }
       const together = ask.fold && chosen?.id === TOGETHER
-        ? this.open().flatMap((a) => {
+        ? this.openIn(ask.thread).flatMap((a) => {
           const recommended = a.options.find((o) => o.id === a.data.recommended);
           // Only asks you've seen, in this exception or on their own card and not put off with Later; an unblock closes only on its check.
           const seen = (a.folded === ask.handle || !this.inFold(a)) && a.shown && a.later === undefined;
-          return a !== ask && a.thread === ask.thread && a.who.actor === ask.who.actor && a.who.scope === ask.who.scope && seen && a.data.kind !== 'unblock' && recommended && recommended.decision !== 'allow' ? [{ a, option: recommended }] : [];
+          return a !== ask && a.who.actor === ask.who.actor && a.who.scope === ask.who.scope && seen && a.data.kind !== 'unblock' && recommended && recommended.decision !== 'allow' ? [{ a, option: recommended }] : [];
         })
         : [];
       // Each one is delivered as soon as it's recorded, so a write that fails partway leaves the rest open, not closed unheard.
@@ -513,10 +515,10 @@ class AsksCore implements Asks {
       // Under a provisional ask, work goes on; only a step that leaves the machine waits for the answer.
       if (!step.leaves_machine) return [];
       const thread = this.threadOf(session);
-      const held = this.open().filter((a) => a.thread === thread && a.data.provisional === true);
+      const held = this.openIn(thread).filter((a) => a.data.provisional === true);
       // A session held on an ask: it shows at once, cap or not.
       // A folded ask shows through its thread's exception, itself included there.
-      const cards = new Set(held.flatMap((a) => (this.inFold(a) ? [...this.open().filter((f) => f.handle === a.folded), a] : [a])));
+      const cards = new Set(held.flatMap((a) => (this.inFold(a) ? [...this.openIn(a.thread).filter((f) => f.handle === a.folded), a] : [a])));
       await this.showNow([...cards].filter((a) => !a.shown || a.later !== undefined).sort((a, b) => a.pos - b.pos));
       return held.map((a) => a.handle);
     });
@@ -710,13 +712,17 @@ class AsksCore implements Asks {
 
   /** When an ask must have shown by: its deadline, or for the exception the earliest among the asks it holds. */
   private dueBy(ask: Ask): number {
-    const held = ask.fold ? this.open().filter((f) => f.folded === ask.handle).map((f) => f.data.deadline as number) : [];
+    const held = ask.fold ? this.openIn(ask.thread).filter((f) => f.folded === ask.handle).map((f) => f.data.deadline as number) : [];
     return Math.min(ask.data.deadline as number, ...held);
   }
 
   /** The open asks in log order: asks enter the map only from apply, which reads the log in order. */
   private open(): Ask[] {
     return [...this.asks.values()].filter((a) => !a.closed);
+  }
+  /** The thread's open asks in log order. */
+  private openIn(thread: string): Ask[] {
+    return (this.threads.get(thread) ?? []).filter((a) => !a.closed);
   }
 
   private hand(ask: Ask, option: string | null, words: string | null, provisional: boolean, decision: Decision | null): void {
@@ -735,7 +741,7 @@ class AsksCore implements Asks {
       plan: ask.plan ? structuredClone(ask.plan) : null,
       words: [...ask.words],
       changed: await this.changed(ask),
-      folded: ask.fold ? this.open().filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
+      folded: ask.fold ? this.openIn(ask.thread).filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
       undo: ask.closed?.outcome === 'defaulted',
     };
   }
@@ -777,8 +783,9 @@ class AsksCore implements Asks {
       case 'ask.created': {
         const thread = this.threadOf(e.session);
         const fold = e.writer === 'core' && d.key === foldKey(thread);
-        const open = this.open().filter((a) => a.thread === thread && !a.fold);
-        const holder = fold ? undefined : this.open().find((a) => a.fold && a.thread === thread && a.who.actor === e.actor && a.who.scope === e.scope);
+        const inThread = this.openIn(thread);
+        const open = inThread.filter((a) => !a.fold);
+        const holder = fold ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), words: [], decided: new Set(), pending: {},
@@ -791,6 +798,9 @@ class AsksCore implements Asks {
           for (const path of older.decided) ask.decided.add(path);
         }
         this.asks.set(e.id, ask);
+        const asks = this.threads.get(thread);
+        if (asks) asks.push(ask);
+        else this.threads.set(thread, [ask]);
         return;
       }
       case 'plan.proposed': {
@@ -812,7 +822,7 @@ class AsksCore implements Asks {
         ask.closed = { outcome: CLOSING[e.kind] ?? 'decided_for_you', at: e.ts, ...(typeof d.answer === 'string' ? { answer: d.answer } : {}) };
         if (e.kind === 'ask.answered') ask.approval = { hash: (d.plan_hash as string | null) ?? null, token: (d.token as string | null | undefined) ?? null, decision: String(d.decision) };
         // An ask the exception held but hadn't shown yet wasn't in what you closed: it gets its own card.
-        if (ask.fold) for (const a of this.open()) if (a.folded === ask.handle && !a.shown) delete a.folded;
+        if (ask.fold) for (const a of this.openIn(ask.thread)) if (a.folded === ask.handle && !a.shown) delete a.folded;
         return;
       }
       case 'ask.batched': {
@@ -846,7 +856,7 @@ class AsksCore implements Asks {
         if (d.from === 'person' && e.session) this.unread.add(e.session);
         if (d.from !== 'person' || typeof d.text !== 'string') return;
         const thread = this.threadOf(e.session);
-        const open = this.open().filter((a) => a.thread === thread);
+        const open = this.openIn(thread);
         // Typed text never answers an authority ask: it shows beside it, for one tap on the card.
         for (const a of open) if (a.data.kind === 'authority') a.words.push(d.text);
         // It answers only a question in sight: not one queued for a batch, put off with Later, or in a hidden exception.
@@ -868,7 +878,7 @@ class AsksCore implements Asks {
           const older = tasks.get(d.task_ref);
           if (older === undefined || older >= d.attempt || this.threadOf(session) === thread) continue;
           const by = { because: 'attempt_replaced', session: `session:${e.session}` };
-          for (const a of this.open()) if (a.thread === this.threadOf(session)) a.pending.moot ??= by;
+          for (const a of this.openIn(this.threadOf(session))) a.pending.moot ??= by;
         }
         const tasks = this.attempts.get(e.session) ?? this.attempts.set(e.session, new Map()).get(e.session)!;
         tasks.set(d.task_ref, Math.max(tasks.get(d.task_ref) ?? 0, d.attempt));
@@ -880,7 +890,7 @@ class AsksCore implements Asks {
         const worktree = e.session ? this.sessions.get(e.session)?.worktree : undefined;
         const thread = this.threadOf(e.session ?? undefined);
         const paths = d.paths.filter((p): p is string => typeof p === 'string').map((p) => (worktree && p.startsWith(`${worktree}/`) ? p.slice(worktree.length + 1) : p));
-        for (const a of this.open()) if (a.thread === thread && a.data.kind === 'choice' && a.data.provisional === true) for (const p of paths) a.decided.add(p);
+        for (const a of this.openIn(thread)) if (a.data.kind === 'choice' && a.data.provisional === true) for (const p of paths) a.decided.add(p);
         return;
       }
     }
@@ -908,7 +918,7 @@ class AsksCore implements Asks {
             ...base, v: 2, kind: 'ask.answered',
             data: { answer: ask.pending.typed, plan_hash: null, decision: 'none', via: 'session', verified: false, on: ask.data.pinned_to!, token: null },
           });
-        } else if (ask.fold && !this.open().some((a) => a.folded === ask.handle)) {
+        } else if (ask.fold && !this.openIn(ask.thread).some((a) => a.folded === ask.handle)) {
           // An exception that holds no open ask has nothing left to ask, as when the ask it was raised for never landed.
           await this.options.record.append(as, { ...base, kind: 'ask.cancelled', data: { answer: ask.data.default as string, plan_hash: null, decision: 'none' } });
         } else if (await this.reoffer(ask, as, now)) {
