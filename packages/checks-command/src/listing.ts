@@ -39,7 +39,8 @@ function chain(ts: TS, e: Expression): string[] | null {
  */
 export async function listSource(source: string, file: string, joiner: string, how: { node?: boolean; focus?: boolean } = {}): Promise<Listed[]> {
   const ts = (loaded ??= (await import('typescript')).default);
-  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  // No parent links: every node's text and start are read against `sf` itself.
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false);
   const fileTagged = source.includes('@module-tag');
   const listed: (Listed & { focused: boolean })[] = [];
   const optionsOf = (call: import('typescript').CallExpression): string[] =>
@@ -112,12 +113,25 @@ export function unrun(listed: Listed[], ran: Seen[], left: Left[], filters: Filt
   const nodeIn = patterns('--test-name-pattern');
   const nodeOut = patterns('--test-skip-pattern');
   const tags = filters.some((f) => f.option === '--tags-filter');
+  // A listed test is looked for only among the runs and leavings of its own file.
+  const ranIn = byFile(ran);
+  const leftIn = byFile(left);
   const chosen = (l: Listed): boolean => {
     if (!l.names) return !names.some((p) => !p.test(l.test));
     const all = nodeNames(l.names);
     return (!nodeIn.length || nodeIn.some((p) => all.some((n) => p.test(n)))) && !nodeOut.some((p) => all.some((n) => p.test(n)));
   };
-  return listed.filter((l) => !ran.some((r) => r.file === l.file && runs(l, r.test) && (r.line === undefined || r.line === l.line))
+  return listed.filter((l) => !ranIn.get(l.file)?.some((r) => runs(l, r.test) && (r.line === undefined || r.line === l.line))
     && chosen(l) && !(tags && l.tagged) && !linesOf(l, filters)?.every((n) => n !== l.line)
-    && !left.some((x) => x.file === l.file && (runs(l, x.test) || l.test.startsWith(`${x.test}::`)) && named(x.filter)));
+    && !leftIn.get(l.file)?.some((x) => (runs(l, x.test) || l.test.startsWith(`${x.test}::`)) && named(x.filter)));
+}
+/** Runs or leavings grouped by the file each names. */
+function byFile<T extends { file: string | null }>(items: T[]): Map<string | null, T[]> {
+  const by = new Map<string | null, T[]>();
+  for (const item of items) {
+    const group = by.get(item.file);
+    if (group) group.push(item);
+    else by.set(item.file, [item]);
+  }
+  return by;
 }

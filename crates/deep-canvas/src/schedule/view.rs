@@ -179,29 +179,40 @@ impl<'a> View<'a> {
     /// The array read at `k` on `item`, with every contribution for that item folded in, in
     /// phase then canvas-module order; `None` where nothing wrote it.
     fn folded(&mut self, k: usize, item: Option<usize>) -> Result<Option<Val>, OpError> {
+        let (node, l) = (self.node, self.l);
         let Bound::Array {
             name,
             writers,
             contributions,
-        } = &self.node.reads[k]
+        } = &node.reads[k]
         else {
             return Ok(None);
         };
         let Some(w) = writers.iter().copied().find(|w| {
-            let wi = self.l.nodes[*w].item;
+            let wi = l.nodes[*w].item;
             wi == item || wi.is_none()
         }) else {
             return Ok(None);
         };
-        let mut val = self.output(&self.l.nodes[w], name)?;
+        let own = contributions
+            .iter()
+            .filter(|(_, cn)| l.nodes[*cn].item == item);
+        self.fold(name, w, own).map(Some)
+    }
+
+    /// Writer `w`'s value of `array`, with the contributions `own` folded in, in their order.
+    fn fold<'c>(
+        &mut self,
+        array: &str,
+        w: usize,
+        own: impl Iterator<Item = &'c (String, usize)>,
+    ) -> Result<Val, OpError> {
+        let l = self.l;
+        let mut val = self.output(&l.nodes[w], array)?;
         let mut folded: Option<Value> = None;
-        for (c, cn) in contributions {
-            let cnode = &self.l.nodes[*cn];
-            if cnode.item != item {
-                continue;
-            }
+        for (c, cn) in own {
             self.note(c);
-            if let Val::Json(edits) = self.output(cnode, c)? {
+            if let Val::Json(edits) = self.output(&l.nodes[*cn], c)? {
                 let base = folded.get_or_insert_with(|| match &val {
                     Val::Json(v) => (**v).clone(),
                     _ => Value::Null,
@@ -212,7 +223,7 @@ impl<'a> View<'a> {
         if let Some(v) = folded {
             val = Val::json(v);
         }
-        Ok(Some(val))
+        Ok(val)
     }
 
     /// An array the operator declared, on its item (or per document, the document's), with
@@ -248,16 +259,28 @@ impl<'a> View<'a> {
     /// order, each with its contributions folded in.
     pub fn every(&mut self, name: &str) -> Result<Vec<(&'a str, Val)>, OpError> {
         let k = self.declared(name)?;
-        let Bound::Array { writers, .. } = &self.node.reads[k] else {
+        let (node, l) = (self.node, self.l);
+        let Bound::Array {
+            name,
+            writers,
+            contributions,
+        } = &node.reads[k]
+        else {
             return Ok(Vec::new());
         };
-        let items: Vec<Option<usize>> = writers.iter().map(|w| self.l.nodes[*w].item).collect();
-        let mut out = Vec::new();
-        for item in items {
-            let Some(i) = item else { continue };
-            if let Some(v) = self.folded(k, Some(i))? {
-                out.push((self.l.items[i].id.as_str(), v));
+        // Each item's contributions, in their order, sorted out once rather than item by item,
+        // and each item's one writer read in place: every item in linear time, not quadratic.
+        let mut own: BTreeMap<usize, Vec<&(String, usize)>> = BTreeMap::new();
+        for c in contributions {
+            if let Some(i) = l.nodes[c.1].item {
+                own.entry(i).or_default().push(c);
             }
+        }
+        let mut out = Vec::new();
+        for &w in writers {
+            let Some(i) = l.nodes[w].item else { continue };
+            let v = self.fold(name, w, own.get(&i).into_iter().flatten().copied())?;
+            out.push((l.items[i].id.as_str(), v));
         }
         Ok(out)
     }

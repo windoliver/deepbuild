@@ -9,6 +9,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 
 use deep_canvas::document::{touched_in, Issue};
+use deep_canvas::kinds::Registry;
 use deep_canvas::registry::Sealed;
 use deep_canvas::schedule::{Scheduler, Tokens};
 use serde_json::{json, Map, Value};
@@ -19,10 +20,11 @@ use super::instance::{self, How, Painter};
 use super::{derive, failure, Case, Ctx, PartRun, Rng, Verdict};
 use crate::hub::{Hub, Planted};
 
-/// What every fuzzing thread reads: the build, the look, the fixtures' fuzzed documents with
-/// their readings, the planted program and where evidence goes.
+/// What every fuzzing thread reads: the build and its kinds, the look, the fixtures' fuzzed
+/// documents with their readings, the planted program and where evidence goes.
 struct Bench<'s> {
     sealed: &'s Sealed,
+    registry: Registry,
     look: Tokens,
     ground: [u8; 3],
     docs: Vec<(Value, BTreeMap<String, Value>)>,
@@ -30,7 +32,6 @@ struct Bench<'s> {
     planted: Option<Planted>,
     evidence: PathBuf,
     module: String,
-    times: Vec<i64>,
 }
 
 impl<'s> Bench<'s> {
@@ -55,6 +56,7 @@ impl<'s> Bench<'s> {
         }
         Bench {
             sealed,
+            registry: sealed.kinds(),
             look: deep_canvas_marks::modules::tokens(&hub.look.light),
             ground: hub.look.light.get("ground").copied().unwrap_or([255; 3]),
             docs,
@@ -62,13 +64,13 @@ impl<'s> Bench<'s> {
             planted: hub.scenario.planted,
             evidence: hub.scenario.evidence.clone(),
             module: ctx.module.to_string(),
-            times: vec![0],
         }
     }
 
-    fn engine(&self) -> Engine<'s> {
+    fn engine(&self) -> Engine<'_> {
         Engine {
             sealed: self.sealed,
+            kinds: &self.registry,
             planted: self.planted,
         }
     }
@@ -105,12 +107,16 @@ fn twin_of(nodes: &instance::Evaluated) -> instance::Evaluated {
 
 /// Plays one sequence: the live instance takes each revision as it comes, the shadow rebuilds
 /// the last one clean, and the two must match in every node's key and result, every cached
-/// result and the snapshot.
+/// result and the snapshot. Every frame is at t = 0.
 fn sequence(b: &Bench<'_>, painter: &mut Painter, seed: u64, given: Option<&Value>) -> SeqResult {
     let mut rng = Rng::new(seed);
+    let no_readings = BTreeMap::new();
     let (base, readings) = match given {
-        Some(file) => (file["document"].clone(), BTreeMap::new()),
-        None => b.docs[(seed % b.docs.len() as u64) as usize].clone(),
+        Some(file) => (&file["document"], &no_readings),
+        None => {
+            let (doc, readings) = &b.docs[(seed % b.docs.len() as u64) as usize];
+            (doc, readings)
+        }
     };
     let engine = b.engine();
     let mut doc = base.clone();
@@ -120,9 +126,9 @@ fn sequence(b: &Bench<'_>, painter: &mut Painter, seed: u64, given: Option<&Valu
     let how = b.how();
     let outcome = catch_unwind(AssertUnwindSafe(|| {
         let mut live_s = Scheduler::new(b.sealed, how.options());
-        let mut live = instance::session(&mut live_s, &doc, &b.look, &readings);
+        let mut live = instance::session(&mut live_s, &doc, &b.look, readings);
         let view = instance::view(&doc);
-        live.frame(&mut live_s, b.times[0], &view);
+        live.frame(&mut live_s, 0, &view);
         let mut crashed = live.frozen().is_some();
         let planned: Vec<Value> = match given {
             Some(file) => file["patches"].as_array().cloned().unwrap_or_default(),
@@ -141,7 +147,7 @@ fn sequence(b: &Bench<'_>, painter: &mut Painter, seed: u64, given: Option<&Valu
                 };
                 let mut r = Rng::new(derive(seed, "patch", j as u64));
                 let (p, _, _) =
-                    engine::draw_patch(b.sealed, &doc, layer, &b.kinds, &mut r, seed ^ j as u64);
+                    engine::draw_patch(&b.registry, &doc, layer, &b.kinds, &mut r, seed ^ j as u64);
                 (writer.to_string(), p)
             } else {
                 (
@@ -152,10 +158,10 @@ fn sequence(b: &Bench<'_>, painter: &mut Painter, seed: u64, given: Option<&Valu
             steps.push(step(&writer, &patch));
             let out = engine.patch(&doc, &prev, &writer, &patch, None, false);
             if out.applied {
-                doc = out.doc;
                 prev = out.after;
+                doc = out.doc.into_owned();
                 live.load(&mut live_s, &doc);
-                live.frame(&mut live_s, b.times[0], &view);
+                live.frame(&mut live_s, 0, &view);
                 crashed |= live.frozen().is_some()
                     || live
                         .report
@@ -169,61 +175,55 @@ fn sequence(b: &Bench<'_>, painter: &mut Painter, seed: u64, given: Option<&Valu
         }
         let mut compared = [0u64; 4];
         let mut problem: Option<(&'static str, String)> = None;
-        let mut twin_failed = true;
-        for &t in &b.times {
-            live.frame(&mut live_s, t, &view);
-            let got = instance::Evaluated::of_session(&live, &live_s);
-            let mut shadow_s = Scheduler::new(b.sealed, How::default().options());
-            let mut shadow = instance::session(&mut shadow_s, &doc, &b.look, &readings);
-            shadow.frame(&mut shadow_s, t, &view);
-            let want = instance::Evaluated::of_session(&shadow, &shadow_s);
-            if want.panicked || got.panicked {
-                return Err("operator_panic".to_string());
-            }
-            // Every array (each node's result) and key.
-            for (place, w) in &want.nodes {
-                compared[0] += 1;
-                compared[2] += 1;
-                match got.nodes.get(place) {
-                    Some(g) if g.key != w.key => {
-                        problem.get_or_insert(("key", place.clone()));
-                    }
-                    Some(g) if g.result != w.result => {
-                        problem.get_or_insert(("array", place.clone()));
-                    }
-                    Some(_) => {}
-                    None => {
-                        problem.get_or_insert(("array", place.clone()));
-                    }
+        live.frame(&mut live_s, 0, &view);
+        let got = instance::Evaluated::of_session(&live, &live_s);
+        let mut shadow_s = Scheduler::new(b.sealed, How::default().options());
+        let mut shadow = instance::session(&mut shadow_s, &doc, &b.look, readings);
+        shadow.frame(&mut shadow_s, 0, &view);
+        let want = instance::Evaluated::of_session(&shadow, &shadow_s);
+        if want.panicked || got.panicked {
+            return Err("operator_panic".to_string());
+        }
+        // Every array (each node's result) and key.
+        for (place, w) in &want.nodes {
+            compared[0] += 1;
+            compared[2] += 1;
+            match got.nodes.get(place) {
+                Some(g) if g.key != w.key => {
+                    problem.get_or_insert(("key", place.clone()));
                 }
-            }
-            if let Some(extra) = got.nodes.keys().find(|p| !want.nodes.contains_key(*p)) {
-                problem.get_or_insert(("array", extra.clone()));
-            }
-            // Every cached result: the live instance's cache holds what a clean rebuild gives.
-            let cache = live_s.cache_results();
-            for (place, g) in &got.nodes {
-                if let (Some(cached), Some(w)) = (cache.get(&g.key), want.nodes.get(place)) {
-                    compared[1] += 1;
-                    if *cached != w.result {
-                        problem.get_or_insert(("cache", place.clone()));
-                    }
+                Some(g) if g.result != w.result => {
+                    problem.get_or_insert(("array", place.clone()));
                 }
-            }
-            // The snapshot.
-            let size = instance::fit(&doc, 96.0);
-            let a = painter.pixels(&live_s, &live, size);
-            let c = painter.pixels(&shadow_s, &shadow, size);
-            compared[3] += 1;
-            if a != c {
-                problem.get_or_insert(("snapshot", format!("t={t}")));
-            }
-            // The twin: a shadow one result off must not match.
-            let twin = twin_of(&want);
-            if instance::first_difference(&got, &twin, &|_| false).is_none() {
-                twin_failed = false;
+                Some(_) => {}
+                None => {
+                    problem.get_or_insert(("array", place.clone()));
+                }
             }
         }
+        if let Some(extra) = got.nodes.keys().find(|p| !want.nodes.contains_key(*p)) {
+            problem.get_or_insert(("array", extra.clone()));
+        }
+        // Every cached result: the live instance's cache holds what a clean rebuild gives.
+        let cache = live_s.cache_results();
+        for (place, g) in &got.nodes {
+            if let (Some(cached), Some(w)) = (cache.get(&g.key), want.nodes.get(place)) {
+                compared[1] += 1;
+                if *cached != w.result {
+                    problem.get_or_insert(("cache", place.clone()));
+                }
+            }
+        }
+        // The snapshot.
+        let size = instance::fit(&doc, 96.0);
+        let a = painter.pixels(&live_s, &live, size);
+        let c = painter.pixels(&shadow_s, &shadow, size);
+        compared[3] += 1;
+        if a != c {
+            problem.get_or_insert(("snapshot", "t=0".to_string()));
+        }
+        // The twin: a shadow one result off must not match.
+        let twin_failed = instance::first_difference(&got, &twin_of(&want), &|_| false).is_some();
         Ok((compared, problem, twin_failed))
     }));
     let corpus = |steps: &[Value]| -> Option<String> {
@@ -412,7 +412,7 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
         for w in 0..rng.below(3) {
             let mut r = Rng::new(derive(seed, "warm", w as u64));
             let (p, _, _) = engine::draw_patch(
-                b.sealed,
+                &b.registry,
                 &doc,
                 "alpha-main",
                 &b.kinds,
@@ -421,8 +421,8 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
             );
             let o = engine.patch(&doc, &prev, ALPHA, &p, None, false);
             if o.applied {
-                doc = o.doc;
                 prev = o.after;
+                doc = o.doc.into_owned();
             }
         }
         let (writer, layer, partner, partner_layer) = if rng.chance(50) {
@@ -431,12 +431,11 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
             (BRAVO, "bravo-main", ALPHA, "alpha-main")
         };
         let mut r = Rng::new(derive(seed, "patch", 0));
-        let (p, ops, kinds) = engine::draw_patch(b.sealed, &doc, layer, &b.kinds, &mut r, seed);
+        let (p, ops, kinds) = engine::draw_patch(&b.registry, &doc, layer, &b.kinds, &mut r, seed);
         res.drawn.push(step(writer, &p));
         res.ops = ops;
         res.kinds = kinds;
-        let base_bytes = engine::bytes(b.sealed, &doc);
-        let base_hash = engine::hash(b.sealed, &doc);
+        let (base_bytes, base_hash) = engine.canonical(&doc);
         let dry = engine.patch(&doc, &prev, writer, &p, None, true);
         let com = engine.patch(&doc, &prev, writer, &p, None, false);
         // (1) The dry run returns what the commit does on the same base.
@@ -450,8 +449,8 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
         }
         // (2) A refused patch or a dry run leaves the canonical bytes unchanged.
         res.laws[1].0 += 1;
-        let dry_kept = engine::bytes(b.sealed, &dry.doc) == base_bytes;
-        let refused_kept = com.applied || engine::bytes(b.sealed, &com.doc) == base_bytes;
+        let dry_kept = engine.bytes(&dry.doc) == base_bytes;
+        let refused_kept = com.applied || engine.bytes(&com.doc) == base_bytes;
         if !dry_kept || !refused_kept {
             res.laws[1].1 += 1;
         }
@@ -463,14 +462,14 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
         } else {
             res.accepted = true;
             // A round trip: the revision written canonically and read back gives the same bytes.
-            let written = engine::bytes(b.sealed, &com.doc);
+            let written = engine.bytes(&com.doc);
             let back: Option<Value> = serde_json::from_str(&written).ok();
-            res.roundtrip_failed = back.is_none_or(|v| engine::bytes(b.sealed, &v) != written);
+            res.roundtrip_failed = back.is_none_or(|v| engine.bytes(&v) != written);
             // (3) The patch then its undo, by the same writer with nothing between, gives back
             // the base's revision hash.
             res.laws[2].0 += 1;
             match engine.undo(&com, &prev, writer) {
-                Ok(undone) if engine::hash(b.sealed, &undone) == base_hash => {}
+                Ok(undone) if engine.hash(&undone) == base_hash => {}
                 _ => res.laws[2].1 += 1,
             }
             // (5) The incremental check returns what a full check of the revision does.
@@ -494,14 +493,14 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
         // siblings, where a key drawn at apply time would depend on which arrived first.
         let mut r = Rng::new(derive(seed, "partner", 0));
         let (q, _, _) = engine::draw_patch(
-            b.sealed,
+            &b.registry,
             &doc,
             partner_layer,
             &b.kinds,
             &mut r,
             seed ^ 0xfeed,
         );
-        let mut pairs = vec![(p.clone(), writer, q, partner)];
+        let mut pairs = vec![(p, writer, q, partner)];
         let mut r = Rng::new(derive(seed, "gap", 0));
         if let Some((gp, gq)) = gap_pair(&doc, &mut r) {
             pairs.push((gp, ALPHA, gq, BRAVO));
@@ -520,7 +519,7 @@ fn check_patch(b: &Bench<'_>, seed: u64) -> PatchResult {
             if ab.applied && ba.applied {
                 res.drawn.push(step(partner, &q));
                 res.laws[3].0 += 1;
-                if engine::hash(b.sealed, &ab.doc) != engine::hash(b.sealed, &ba.doc) {
+                if engine.hash(&ab.doc) != engine.hash(&ba.doc) {
                     res.laws[3].1 += 1;
                 }
             }

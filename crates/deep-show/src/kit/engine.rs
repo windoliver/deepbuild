@@ -7,13 +7,14 @@
 //!
 //! The patch fuzzer draws random valid and invalid patches over every kind and op from a seed.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use deep_canvas::document::{
     apply_ops, canonical_in, check_in, recheck, recheck_skipping_referrers, writer_layer, Issue,
     Patched, Writing,
 };
-use deep_canvas::kinds::{lookup, Lookup, ParamType};
+use deep_canvas::kinds::{lookup, Lookup, ParamType, Registry};
 use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 
@@ -28,43 +29,47 @@ pub const YOU: &str = "you:you";
 
 /// What a commit or a dry run returns.
 #[derive(Clone, Debug)]
-pub struct Outcome {
+pub struct Outcome<'d> {
     pub applied: bool,
     pub issues: Vec<Issue>,
     pub achieved: Value,
     /// How many items it changed: the cost it adds, as the dry run must report it too.
     pub cost: usize,
-    /// The document after: the base itself when refused or dry.
-    pub doc: Value,
+    /// The document after: the base itself (borrowed, never copied) when refused or dry.
+    pub doc: Cow<'d, Value>,
     /// Its revision's issues, when applied.
     pub after: Vec<Issue>,
     pub changed: BTreeSet<String>,
-    /// Each item the patch wrote, as it was, and the paths it wrote: what its undo puts back.
+    /// Each item the patch wrote, as it was: what its undo puts back.
     pub before: BTreeMap<String, Option<Value>>,
-    pub paths: crate::shared::Paths,
 }
 
-/// The patch engine over one build.
+/// The patch engine over one build, with the build's kinds.
 pub struct Engine<'s> {
     pub sealed: &'s Sealed,
+    pub kinds: &'s Registry,
     pub planted: Option<Planted>,
 }
 
-/// A document's revision hash, or empty when it has no canonical form.
-pub fn hash(sealed: &Sealed, doc: &Value) -> String {
-    canonical_in(doc, &sealed.kinds())
-        .map(|c| c.sha256)
-        .unwrap_or_default()
-}
-
-/// A document's canonical bytes, or nothing.
-pub fn bytes(sealed: &Sealed, doc: &Value) -> String {
-    canonical_in(doc, &sealed.kinds())
-        .map(|c| c.bytes)
-        .unwrap_or_default()
-}
-
 impl Engine<'_> {
+    /// A document's canonical bytes and its revision hash, both empty when it has no canonical
+    /// form.
+    pub fn canonical(&self, doc: &Value) -> (String, String) {
+        canonical_in(doc, self.kinds)
+            .map(|c| (c.bytes, c.sha256))
+            .unwrap_or_default()
+    }
+
+    /// A document's revision hash, or empty when it has no canonical form.
+    pub fn hash(&self, doc: &Value) -> String {
+        self.canonical(doc).1
+    }
+
+    /// A document's canonical bytes, or nothing.
+    pub fn bytes(&self, doc: &Value) -> String {
+        self.canonical(doc).0
+    }
+
     fn is(&self, p: Planted) -> bool {
         self.planted == Some(p)
     }
@@ -92,17 +97,17 @@ impl Engine<'_> {
 
     /// `patch` as `writer` on `doc`, whose issues are `prev`; `base` is the revision the patch
     /// was made on, when it isn't `doc`. A dry run commits nothing.
-    pub fn patch(
+    pub fn patch<'d>(
         &self,
-        doc: &Value,
+        doc: &'d Value,
         prev: &[Issue],
         writer: &str,
         patch: &Value,
         base: Option<&Value>,
         dry: bool,
-    ) -> Outcome {
+    ) -> Outcome<'d> {
         let planted_codeless = self.is(Planted::RefusalWithoutCode);
-        let refused = |mut issues: Vec<Issue>, doc: Value| {
+        let refused = |mut issues: Vec<Issue>, doc: Cow<'d, Value>| {
             // The planted core refuses an unknown field with no code.
             if planted_codeless {
                 for i in issues.iter_mut().filter(|i| i.code == "unknown_field") {
@@ -118,17 +123,15 @@ impl Engine<'_> {
                 after: Vec::new(),
                 changed: BTreeSet::new(),
                 before: BTreeMap::new(),
-                paths: crate::shared::Paths::new(),
             }
         };
         let layer = match writer_layer(doc, writer) {
             Ok(l) => l,
-            Err(issue) => return refused(vec![*issue], doc.clone()),
+            Err(issue) => return refused(vec![*issue], Cow::Borrowed(doc)),
         };
-        let kinds = self.sealed.kinds();
         let knows = |kind: &str| {
             deep_canvas_marks::scene::KINDS.contains(&kind)
-                || !matches!(lookup(&kinds, kind), Lookup::UnknownKind)
+                || !matches!(lookup(self.kinds, kind), Lookup::UnknownKind)
         };
         let base = if self.is(Planted::ApplyTimeOrderKeys) {
             None
@@ -146,12 +149,12 @@ impl Engine<'_> {
         let mut working = doc.clone();
         let patched: Patched = match apply_ops(&mut working, patch, "patch", &doc_id, &writing) {
             Ok(p) => p,
-            Err(issue) => return refused(vec![*issue], doc.clone()),
+            Err(issue) => return refused(vec![*issue], Cow::Borrowed(doc)),
         };
         let changed = patched.changed(&working);
         let achieved = patched.achieved(&working);
         if dry && self.is(Planted::DryRunSkipsRecheck) {
-            let mut out = refused(Vec::new(), doc.clone());
+            let mut out = refused(Vec::new(), Cow::Borrowed(doc));
             out.applied = true;
             out.achieved = achieved;
             out.cost = changed.len();
@@ -162,23 +165,25 @@ impl Engine<'_> {
         let refusals = blocking(&after, prev, &working, &layer, &changed);
         if !refusals.is_empty() {
             let kept = if self.is(Planted::RefusedPatchWrites) {
-                working
+                Cow::Owned(working)
             } else {
-                doc.clone()
+                Cow::Borrowed(doc)
             };
             return refused(refusals, kept);
         }
-        let paths = crate::shared::paths_of(&patched.before, &working);
         Outcome {
             applied: true,
             issues: Vec::new(),
             achieved,
             cost: changed.len(),
-            doc: if dry { doc.clone() } else { working },
+            doc: if dry {
+                Cow::Borrowed(doc)
+            } else {
+                Cow::Owned(working)
+            },
             after,
             changed,
             before: patched.before,
-            paths,
         }
     }
 
@@ -187,9 +192,10 @@ impl Engine<'_> {
     /// patch was made on. The revision after, or the refusal.
     pub fn undo(&self, out: &Outcome, base: &[Issue], writer: &str) -> Result<Value, Vec<Issue>> {
         let layer = writer_layer(&out.doc, writer).map_err(|i| vec![*i])?;
-        let mut doc = out.doc.clone();
-        let put = crate::shared::put_back(&mut doc, &out.before, &out.paths, &layer)
-            .map_err(|i| vec![*i])?;
+        let mut doc = Value::clone(&out.doc);
+        let paths = crate::shared::paths_of(&out.before, &out.doc);
+        let put =
+            crate::shared::put_back(&mut doc, &out.before, &paths, &layer).map_err(|i| vec![*i])?;
         if self.is(Planted::UndoReorderMintsKey) {
             minted_orders(&mut doc, &out.doc);
         }
@@ -293,7 +299,7 @@ pub const OPS: [&str; 6] = ["create", "set", "unset", "delete", "move", "reorder
 /// A random patch on `doc` from `rng`: one to three ops, each valid or (one time in five)
 /// invalid, over the build's kinds, as `writer`. Each op's name is counted in `ops`.
 pub fn draw_patch(
-    sealed: &Sealed,
+    registry: &Registry,
     doc: &Value,
     writer_layer: &str,
     kinds: &[String],
@@ -305,13 +311,8 @@ pub fn draw_patch(
     let mut drawn_kinds = Vec::new();
     let count = 1 + rng.below(3);
     let mut minted = 0;
-    let items: Vec<(String, Value)> = doc["items"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
-    let own: Vec<&(String, Value)> = items
+    let items: Vec<(&String, &Value)> = doc["items"].as_object().into_iter().flatten().collect();
+    let own: Vec<&(&String, &Value)> = items
         .iter()
         .filter(|(_, v)| v["layer"].as_str() == Some(writer_layer))
         .collect();
@@ -319,9 +320,9 @@ pub fn draw_patch(
         let op = *rng.pick(&OPS).expect("ops");
         let invalid = rng.chance(20);
         let target = if own.is_empty() || rng.chance(10) {
-            rng.pick(&items).map(|(k, _)| k.clone())
+            rng.pick(&items).map(|(k, _)| k.to_string())
         } else {
-            rng.pick(&own).map(|(k, _)| k.clone())
+            rng.pick(&own).map(|(k, _)| k.to_string())
         }
         .unwrap_or_else(|| "nobody".into());
         let target = if invalid && rng.chance(30) {
@@ -334,7 +335,7 @@ pub fn draw_patch(
                 minted += 1;
                 let kind = rng.pick(kinds).cloned().unwrap_or_else(|| "rect@1".into());
                 drawn_kinds.push(kind.clone());
-                let mut item = new_item(sealed, &kind, &format!("k{n}x{minted}"), rng);
+                let mut item = new_item(registry, &kind, &format!("k{n}x{minted}"), rng);
                 if invalid {
                     match rng.below(3) {
                         0 => item["id"] = json!("Not An ID!"),
@@ -350,15 +351,15 @@ pub fn draw_patch(
                 json!({"op": "create", "item": item})
             }
             "set" => {
-                let item = doc["items"].get(&target).cloned().unwrap_or(Value::Null);
+                let item = doc["items"].get(&target).unwrap_or(&Value::Null);
                 if let Some(k) = item["kind"].as_str() {
                     drawn_kinds.push(k.to_string());
                 }
-                let (path, value) = set_value(sealed, &target, &item, invalid, rng);
+                let (path, value) = set_value(registry, &target, item, invalid, rng);
                 json!({"op": "set", "id": target, "path": path, "value": value})
             }
             "unset" => {
-                let item = doc["items"].get(&target).cloned().unwrap_or(Value::Null);
+                let item = doc["items"].get(&target).unwrap_or(&Value::Null);
                 let fields: Vec<String> = item["params"]
                     .as_object()
                     .map(|p| {
@@ -395,7 +396,7 @@ pub fn draw_patch(
             _ => {
                 let neighbor = rng
                     .pick(&items)
-                    .map_or("ghost".to_string(), |(k, _)| k.clone());
+                    .map_or("ghost".to_string(), |(k, _)| k.to_string());
                 let side = if rng.chance(50) { "after" } else { "before" };
                 let mut r = json!({"op": "reorder", "id": target});
                 r[side] = json!(neighbor);
@@ -409,16 +410,17 @@ pub fn draw_patch(
         names.push(op);
         ops.push(value);
     }
-    let patch = json!({"patch": format!("01JB138P{n:018}"), "doc": doc["id"], "base": 0,
-                       "reason": "fuzzed", "ops": ops});
+    // The ops go in last, moved rather than copied as `json!` would.
+    let mut patch = json!({"patch": format!("01JB138P{n:018}"), "doc": doc["id"], "base": 0,
+                           "reason": "fuzzed"});
+    patch["ops"] = Value::Array(ops);
     (patch, names, drawn_kinds)
 }
 
 /// A new item of `kind`, its params drawn across its schema.
-fn new_item(sealed: &Sealed, kind: &str, id: &str, rng: &mut Rng) -> Value {
+fn new_item(registry: &Registry, kind: &str, id: &str, rng: &mut Rng) -> Value {
     let mut params = Map::new();
-    let registry = sealed.kinds();
-    match lookup(&registry, kind) {
+    match lookup(registry, kind) {
         Lookup::Known { entry, saved } => {
             if let Some(v) = entry.version(saved) {
                 for p in &v.params {
@@ -494,15 +496,14 @@ pub fn param_value(p: &deep_canvas::kinds::Param, rng: &mut Rng, invalid: bool) 
 /// A `set`'s path and value on an item: one of its params by its kind's schema, its position or
 /// its name; when `invalid`, past its range, an unknown field or a bad path.
 fn set_value(
-    sealed: &Sealed,
+    registry: &Registry,
     id: &str,
     item: &Value,
     invalid: bool,
     rng: &mut Rng,
 ) -> (String, Value) {
-    let registry = sealed.kinds();
     let kind = item["kind"].as_str().unwrap_or("");
-    if let Lookup::Known { entry, saved } = lookup(&registry, kind) {
+    if let Lookup::Known { entry, saved } = lookup(registry, kind) {
         if let Some(v) = entry.version(saved) {
             if let Some(p) = rng.pick(&v.params) {
                 if !(invalid && rng.chance(30)) {

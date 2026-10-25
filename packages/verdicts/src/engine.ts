@@ -111,16 +111,18 @@ class Selection {
   /** Run IDs whose records differ, by check: none of those records counts, whichever arrived first. */
   readonly conflicts = new Map<string, Map<string, Set<RunOutcome>>>();
   constructor(private readonly claim: ClaimInput) {
-    const byId = new Map<string, Map<string, Run>>();
+    const byId = new Map<string, Run[]>();
     for (const r of claim.runs) {
-      const copies = byId.get(r.run) ?? new Map<string, Run>();
-      copies.set(canonical(r), r);
-      byId.set(r.run, copies);
+      const records = byId.get(r.run);
+      if (records) records.push(r);
+      else byId.set(r.run, [r]);
     }
     this.runs = [];
-    for (const [id, copies] of byId) {
-      if (copies.size === 1) { this.runs.push(...copies.values()); continue; }
-      for (const r of copies.values()) {
+    for (const [id, records] of byId) {
+      // Only a run ID with more than one record is compared, by content: identical copies are one record.
+      const copies = records.length === 1 ? records : [...new Map(records.map((r) => [canonical(r), r])).values()];
+      if (copies.length === 1) { this.runs.push(copies[0]!); continue; }
+      for (const r of copies) {
         const byCheck = this.conflicts.get(r.check) ?? new Map<string, Set<RunOutcome>>();
         byCheck.set(id, (byCheck.get(id) ?? new Set<RunOutcome>()).add(r.outcome));
         this.conflicts.set(r.check, byCheck);
