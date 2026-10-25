@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "entries": {
+    "no-repo-rules-write": {
+      "match": "write:scripts/repo-rules.json scripts/repo-rules.mjs",
+      "scope": "this_repo",
+      "mode": "block",
+      "reason": "scripts/repo-rules.json and scripts/repo-rules.mjs are this repo's rules check, which changes only by your decision, so an agent can't loosen the repo rules in its own PR.",
+      "next_step": "Propose the change with deep_propose instead.",
+      "fail_closed": true
+    }
+  }
+}

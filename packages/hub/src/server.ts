@@ -434,7 +434,11 @@ function writeToken(root: Root): string {
 }
 
 /** `deep hub run [--root <folder>]`: the hub itself, in this process. Resolves only if it couldn't start. */
-export async function runHub(options: { root?: string }): Promise<number> {
+/**
+ * Runs the hub. In safe mode (`safe`) it loads no extension; the hub loads none yet in either mode, and the
+ * floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
+ */
+export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
@@ -457,7 +461,7 @@ export async function runHub(options: { root?: string }): Promise<number> {
   const hub = new Hub(root, writeToken(root), lock, plant, vfs);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
   await hub.open(clock);
-  process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start })}\n`);
+  process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);
   shedStartup();
   const headroom = process.env.DEEP_HUB_TEST_HEADROOM;
   if (headroom) {
