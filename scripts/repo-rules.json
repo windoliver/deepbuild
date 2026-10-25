@@ -241,6 +241,10 @@
         "@deepbuild/supervisor": {
           "spec": "0.0.0",
           "why": "Issue #30: host@1's types; every check run starts, is signalled and is waited for through the host it is given."
+        },
+        "typescript": {
+          "spec": "5.9.3",
+          "why": "Issue #30: the listing reads a Vitest, Jest or node:test file's source with TypeScript's parser, with none of the checkout's tools, to know every test the run must run."
         }
       }
     },
