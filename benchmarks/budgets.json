@@ -270,6 +270,28 @@
       "initialReason": "Issue #42 first measurement: the merge base has no OTLP receiver. One process starts the receiver on a temp record and sends it 20,000 Claude Code spans as 100 protobuf trace exports of 200, the AC6 load without its pacing, so p50 includes Node's start and the sustained limits (2,000 spans a second under 5% of a core and 50 MB) stay in tests/acceptance/42/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "deep-hook-overhead",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "overhead"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #315 first measurement: the merge base's deep-hook forwards without the hold, the late mark or the guard match. One process starts the hub on a temp home and has hyperfine time 1,000 forwarded PreToolUse calls beside a native no-op binary, so p50 is the bench's whole run; the issue's 10 ms p95 over process start, 10 MB peak and 3 MB binary stay in tests/acceptance/315/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-hook-fail-open",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "fail-open"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #315 first measurement: the merge base's deep-hook has no fail-closed entries and no late mark. One process starts the hub on a temp home, stops it with SIGSTOP and times 50 PreToolUse calls from spawn to exit, so p50 includes Node's start; the issue's 50 ms to fail open stays in tests/acceptance/315/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-patch-apply",
       "command": [
         "node",
@@ -364,6 +386,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #138 first measurement: the merge base has no canvas conformance kit. One process runs the kit call over the shipped build's canvas modules through `deep-show run`, every part on Vello CPU and wgpu's noop backend at 1,000 fuzzed sequences a module, a tenth of the quick lane's, so p50 includes Node's and the binary's start; the issue's 5 minutes for the full kit stays in tests/acceptance/138/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "extension-host",
+      "command": [
+        "node",
+        "benchmarks/extension-host.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #348 first measurement: the merge base has no extension host. One process opens a record, the asks core, the supervisor and project trust, then times host.load for ten TypeScript packages in the hub and ten in the platform sandbox, and the time the host adds per event per subscribed package (a batch of 2,000 events to four subscribers, minus the same batch to none). The issue's 100 ms load and 0.5 ms per event limits stay in tests/acceptance/348/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

@@ -1,0 +1,35 @@
+// An inbound plug-in (#348 AC12): it registers two routes, `POST /v1/traces` and `POST /admin/exec`, and counts the
+// requests each handler sees. Once the hub is ready (its first timer), it also tries to listen on a port of its own,
+// on 127.0.0.1, without being turned on, and notes what happened. The report gives the counts and that attempt.
+import { createServer } from 'node:net';
+
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+export default function (deep: any): void {
+  const hits: Record<string, number> = { 'POST /v1/traces': 0, 'POST /admin/exec': 0 };
+  let ownListen = 'not tried';
+  deep.registerRoute('POST /v1/traces', (request: { body?: string }) => {
+    hits['POST /v1/traces'] = (hits['POST /v1/traces'] ?? 0) + 1;
+    return { status: 200, body: `traces got ${request?.body ?? ''}` };
+  });
+  deep.registerRoute('POST /admin/exec', () => {
+    hits['POST /admin/exec'] = (hits['POST /admin/exec'] ?? 0) + 1;
+    return { status: 200, body: 'executed' };
+  });
+  setTimeout(() => {
+    try {
+      const server = createServer((c) => c.end());
+      server.on('error', (e) => { ownListen = `refused: ${message(e)}`; });
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        ownListen = `listening on ${typeof address === 'object' && address ? address.port : address}`;
+      });
+    } catch (e) {
+      ownListen = `refused: ${message(e)}`;
+    }
+  }, 0);
+  deep.registerCheck('ext.inbound.report', async () => ({
+    outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+    failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ pid: process.pid, hits, ownListen }) }],
+  }));
+}
