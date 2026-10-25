@@ -1,0 +1,46 @@
+// A TypeScript test package (#348): it reports where it runs and what it could reach, through the check kind it
+// registers. probe.json (written by the test) may name a canary file outside the package, and ask it to query the
+// record. The report is the probe's one failure message, the JSON of what it saw (README, Readings: the probe).
+import { readFileSync } from 'node:fs';
+
+interface Probe { canary?: string; query?: boolean }
+const message = (e: unknown): string => String((e as Error)?.message ?? e);
+
+export default function (deep: any): void {
+  let probe: Probe = {};
+  try {
+    probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+  } catch {
+    // no settings: report only the process
+  }
+  const seen: Record<string, unknown> = { pid: process.pid };
+  if (probe.canary) {
+    try {
+      seen.canary = readFileSync(probe.canary, 'utf8');
+    } catch (e) {
+      seen.canary = null;
+      seen.canaryError = message(e);
+    }
+  }
+  deep.registerCheck('ext.probe.report', async () => {
+    if (probe.query) {
+      try {
+        const all: { kind: string }[] = await deep.record.query({});
+        seen.kinds = [...new Set(all.map((e) => e.kind))].sort();
+        seen.count = all.length;
+      } catch (e) {
+        seen.queryError = message(e);
+      }
+      try {
+        const asked: { kind: string }[] = await deep.record.query({ kinds: ['task.created'] });
+        seen.askedKinds = [...new Set(asked.map((e) => e.kind))].sort();
+      } catch (e) {
+        seen.askedError = message(e);
+      }
+    }
+    return {
+      outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify(seen) }],
+    };
+  });
+}

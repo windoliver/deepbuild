@@ -26,6 +26,11 @@ node node_modules/typescript/bin/tsc -p tests/acceptance/30/tsconfig.json   # ne
 
 - **`--no-file-parallelism`:** the files start real check runs through the supervisor, and AC12's number only
   means something with nothing else running.
+- **AC12 is slow.** Each `--pairs 300` bench run times at least 300 counted and plain pairs, about 3 to 4 minutes
+  at a plain run of about 320 ms. One test runs it once; the number runs it six times (a warm-up and five
+  readings), about 20 to 25 minutes, so give that file the machine alone. The default run, the perf lane's, is
+  short. To run only the number:
+  `node node_modules/vitest/vitest.mjs run --root tests/acceptance/30 budgets.test.ts -t "on the reference Mac"`.
 - **The environment:** `helpers.ts` takes `CLAUDE*`, `DEEP_*` and `AI_AGENT` out of the test process's
   environment, so the child Vitest uses its usual reporter. It sets `DH30_SHELL_FLAG=on`, the shell variable of
   AC1, and points `HOME` at a temp folder, so no run can touch the real `~/.deepbuild`.
@@ -137,8 +142,25 @@ From `CheckResult` (#314), the tests read these fields:
   - `benchmarks/budgets.json` gets a task `command-check-count` with the command
     `["node", "benchmarks/command-check.mjs"]`, and an `initialReason` naming #30
   - the task must be valid under `validateBudgets` against the merge base's file
-  - the bench prints one JSON line, `{"checkMs": <median of a counted run>, "plainMs": <median of the same run with counting left out>}`
-  - the under-1% judgment is made on five bench runs, by the design's timing rule, on the reference Mac only
+  - the bench takes one optional argument, `--pairs <n>`, the number of timed pairs. Run as the task names it,
+    with no argument, it is the perf lane's run, which `runTasks` times 42 times per preflight (a warm-up round and
+    20 rounds a side) and compares by p50 with the merge base's: it must exit 0 within the lane's 300 s per run
+    (`measureOnce`), and should stay short, a few pairs, so its p50 holds steady across preflights. With
+    `--pairs 300` it times at least 300 pairs, for AC12's number only. The test checks the default run's limit
+    and line, and the `--pairs 300` run's count
+  - either way the bench exits 0 and its last line of output is one JSON line, `{"checkMs": [...], "plainMs":
+    [...]}`: two arrays of equal length, at least 1 by default and at least `n` with `--pairs n`, of positive wall
+    times in ms. `checkMs[i]` is one command check run that
+    counts its tests and `plainMs[i]` the same run with counting left out, timed back to back, alternating which
+    of the two goes first from pair to pair. The bench may warm up first; only timed pairs are printed
+  - one `--pairs 300` run is one reading: the median of `checkMs[i] - plainMs[i]` as a percentage of the median of
+    `plainMs`. The test computes it from the pairs; the bench prints no summary of its own that the test trusts
+  - the under-1% judgment is made on five readings after a warm-up `--pairs 300` run, on the reference Mac only, by the
+    design's timing rule: PASS when all five are at most 1, FAIL when all five are over 1 by more than the margin,
+    otherwise INCONCLUSIVE. The margin is the larger of 5% and the five readings' spread (largest minus smallest),
+    both as fractions of the limit, as the perf lane's `judgeLimit` takes them. So readings 3.4, 2.6, 3.1, 2.9,
+    3.3 have a margin of 80%, and FAIL since all are over 1.8. `helpers.ts`'s `judgeTiming` divides the spread by
+    the smallest run instead, which suits a time but not an overhead that can read near zero, so AC12 doesn't use it
 - **`hosts` (AC18).** The telemetry listener must be reachable, or the silence proves nothing. So the check names
   it in `hosts`, and a control run (with `TELEMETRY_FORCE=1`) must reach it first.
 - **`seeded` (AC8).** `seeded` lists the seeded table whether or not it is a stand-in. The twin's entry for
@@ -169,7 +191,7 @@ expects that twin to fail the criterion's assertion. The twin's scenario must it
 | AC9 `#30.506a2ee0` | added tests run five times plus a month ahead | `added.test.ts` AC9 (2): six runs, only the month-ahead fails naming the test; the always-failing test fails all six | INCONCLUSIVE / FAIL (#29) | fails |
 | AC10 `#30.9c363cec` | `\|\| true` masked, never passes; bare fails | `mask.test.ts` AC10 (6): for pnpm (BLOCKED, no pnpm) and npm each, masked names the mask, bare fails with 2 tests, and the wrong program | INVALID naming the phrase, FAIL (#29) | fails |
 | AC11 `#30.ec919953` | read set lists prices.json, not unused.json | `reads.test.ts` AC11 (3): the run; two wrong programs | none | fails |
-| AC12 `#30.542330be` | counting adds under 1% vs the merge base | `budgets.test.ts` AC12 (3): budgets task valid against the merge base; bench runs; the number | the number fails BLOCKED off the reference Mac or INCONCLUSIVE when unfit | fails (no task, no bench) |
+| AC12 `#30.542330be` | counting adds under 1% vs the merge base | `budgets.test.ts` AC12 (4): budgets task valid against the merge base; default run within the lane's 300 s; `--pairs 300` prints 300+ pairs; the number on five paired readings, margin as a fraction of the limit | the number fails BLOCKED off the reference Mac or INCONCLUSIVE when unfit | fails (no task, no bench) |
 | AC13 `#30.e9d732fa` | record shows allowed variables | `hermetic.test.ts` AC13 (1): names only; every variable the process saw is listed | none | fails |
 | AC14 `#30.4df04268` | short plain values unscrubbed; place kept | `privacy.test.ts` AC14 (2): `src/cart.test.ts:30:5` and `localhost:3000` kept, 3 tests, failure at line 30; wrong program | the FAIL naming the line (#29) | fails |
 | AC15 `#30.c91cfcd8` | printed "12 passed" while 3 run records 3 | `record.test.ts` AC15 (1) | none | fails |
@@ -220,6 +242,31 @@ The criteria that name no twin (AC1, AC2, AC3, AC6, AC7, AC9, AC12, AC13, AC15) 
 - **#87, the timing check.** AC19's unflushed repeat fails BLOCKED.
 - **The reference Mac.** AC12's number counts only there, in a fit state. Elsewhere it fails BLOCKED, or
   INCONCLUSIVE when the machine isn't fit.
+- **AC12's dispute redraft (2026-10-24).** On the reference Mac (Mac15,12, fit), the first draft's bench, printing
+  the medians of 10 interleaved runs a side, gave readings of 3.774, -0.564, 2.928, 4.077 and 2.077: INCONCLUSIVE
+  with an 823% margin. Two faults made it unable to judge:
+  - one reading's noise (a standard deviation near 1.9 points) was larger than the 1-point limit;
+  - the margin divided the spread by the smallest reading, so a reading near zero made it unbounded and FAIL
+    unreachable.
+
+  The redraft keeps the issue's value (under 1%, counted against the same run with counting left out), the
+  budgets.json task and its validity against the merge base, the bench test and the reference-Mac gate. What
+  changed:
+  - the bench prints every pair instead of two medians, and AC12's number runs it as `--pairs 300`, while the
+    task's default run stays short for the perf lane (AC12's comparison, above). A first version of this redraft
+    put the 300 pairs in the default run; a second dispute the same day showed that breaks the frozen task (a 3 to 4
+    minute run near `measureOnce`'s 300 s limit, 42 runs a preflight, and a p50 far over the base's by its 0.5
+    margin), so the pair count moved to the argument;
+  - a reading is the median paired difference over the median plain run, computed by the test;
+  - the margin's spread is taken as a fraction of the limit, as the design's rule reads ("over it by more than
+    the margin") and as the perf lane's `judgeLimit` already computes it.
+
+  On the three readings the dispute reported, the new rule gives INCONCLUSIVE (margin 464%), FAIL for 3.83, 2.98,
+  2.84, 3.55, 3.54 (margin 99%, all over 1.99), and INCONCLUSIVE for 10.57, 3.43, 3.33, 4.17, 4.08. Scaling the
+  noisiest run's spread to 300 pairs gives a reading's standard deviation near 0.34 points, an estimate that
+  assumes independent pairs. At that noise, a simulated program adding 0.2% passed in about 95% of 100,000 trials
+  and was never FAIL, and one adding 3% failed in about 95% and never passed; the rest were INCONCLUSIVE. If the
+  real noise on the reference Mac is wider, the number reads INCONCLUSIVE more often; a 3% program passes only if all five readings land two points low.
 - **Tools this Mac lacks.** Each of these fails BLOCKED naming the tool:
   - Jest: AC3
   - pytest: AC3 and AC16

@@ -4,14 +4,15 @@
 // credential it presents in its first line, and every event takes its writer from that role.
 import { execFileSync } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { chmodSync, closeSync, mkdirSync, openSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { FEATURES, line, plantOf, refusal, Refused, ulid, type CoreOptions, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { FEATURES, line, plantOf, refusal, Refused, ulid, type CoreOptions, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
@@ -20,7 +21,7 @@ const MAX_LINE = 64 << 20;
 type Role = 'hook' | 'app' | 'cli' | 'mcp';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
-  ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
+  ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']], ['inbox.read', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -131,6 +132,8 @@ class Conn {
   name = '';
   session: string | null = null;
   parent: { pid: number; start: string } | undefined;
+  /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
+  peer: { pid: number; start: string } | undefined;
   first = true;
   done = false;
   queue: Promise<void> = Promise.resolve();
@@ -147,6 +150,9 @@ class Conn {
     this.sock.end();
   }
 }
+
+/** What the hub reads of a guard@1 entry in rules.json. */
+interface Guard { mode?: unknown; reason?: unknown; next_step?: unknown }
 
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
@@ -167,7 +173,8 @@ class Hub {
     const options: CoreOptions = { root: this.root.dir, clock, held: [this.token], ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
-      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}) };
+      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
+      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}) };
     const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
@@ -275,15 +282,50 @@ class Hub {
     if (this.plant === 'git-in-hook-handler') {
       try { execFileSync('git', ['rev-parse', '--show-toplevel'], { stdio: 'ignore' }); } catch { /* the plant only needs the call */ }
     }
+    // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
+    if (conn.done || !conn.sock.writable) return;
     // The acknowledgement and the reply in one write, which also ends the connection.
-    if (!conn.done && conn.sock.writable) {
-      conn.done = true;
-      conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + Hub.REPLY);
-    }
+    conn.done = true;
+    conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + this.reply(parsed.meta));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && parsed.meta.payloadWriter ? parsed.meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta: parsed.meta, writer });
+  }
+
+  /**
+   * The reply to a hook: deep-hook matched the call against every entry in rules.json, and the hub decides what
+   * each matched entry does. A matched entry in block mode denies a tool call before it runs, with its reason and
+   * next step; watch and warn are #304's.
+   */
+  private reply(meta: HookMeta): string {
+    if (meta.event !== 'PreToolUse' || !meta.matched.length) return Hub.REPLY;
+    const entries = this.rules();
+    const name = meta.matched.find((n) => entries[n]?.mode === 'block');
+    if (name === undefined) return Hub.REPLY;
+    const entry = entries[name]!;
+    const note = meta.notes?.[name] ? ` ${meta.notes[name]}` : '';
+    return line({ exit: 2, stdout: '', stderr: `DeepBuild blocked this: ${String(entry.reason)} ${String(entry.next_step)}${note} (guard ${name})\n` });
+  }
+
+  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined> };
+  /** The entries of rules.json, read again only when the file changes. */
+  private rules(): Record<string, Guard | undefined> {
+    const file = join(this.root.dir, 'rules.json');
+    let key = 'none';
+    try {
+      const s = statSync(file);
+      key = `${s.ino}:${s.size}:${s.mtimeMs}`;
+    } catch { /* no rules.json: no entries */ }
+    if (key !== this.rulesSeen.key) {
+      let entries: Record<string, Guard | undefined> = {};
+      try {
+        const parsed = JSON.parse(readFileSync(file, 'utf8')) as { entries?: unknown };
+        if (typeof parsed.entries === 'object' && parsed.entries !== null) entries = parsed.entries as Record<string, Guard | undefined>;
+      } catch { /* unreadable: deep-hook names it; the hub decides nothing from it */ }
+      this.rulesSeen = { key, entries };
+    }
+    return this.rulesSeen.entries;
   }
 
   private tokenMatches(token: unknown): boolean {
@@ -305,6 +347,8 @@ class Hub {
       }
       conn.role = value.hello;
       conn.name = value.hello;
+      const peer = value.peer;
+      if (isObj(peer) && Number.isSafeInteger(peer.pid) && typeof peer.start === 'string') conn.peer = { pid: peer.pid as number, start: peer.start };
       return conn.write({ role: conn.name });
     }
     if (value.hello === 'mcp') {
@@ -353,7 +397,7 @@ class Hub {
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after })));
       }
       default:
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
     }
   }
 
