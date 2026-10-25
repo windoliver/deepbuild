@@ -1,0 +1,44 @@
+{
+  "title": "lease.kind@1",
+  "description": "A resource kind the lease table grants (technical-design.md, Lease). The core declares its own; any plug-in declares more in its manifest, and a name belongs to the first that declares it.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*$",
+      "maxLength": 128,
+      "description": "The kind's name, such as port, cpu.slot or device.rig."
+    },
+    "match": {
+      "type": "string",
+      "pattern": "^(exact|glob|prefix|pool\\([1-9][0-9]{0,5}\\))$",
+      "maxLength": 16,
+      "description": "How two keys overlap, a closed list the kernel computes overlap from: exact keys when equal; globs when some path matches both; prefixes when one starts with the other; pool(n): at most n leases at once on a host."
+    },
+    "cap": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000,
+      "description": "At most this many of the kind's leases held at once on a host; a run past it is BLOCKED."
+    },
+    "cooldown": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds after a lease on a key ends before that key is leased again."
+    },
+    "cost": {
+      "type": "number",
+      "minimum": 0,
+      "description": "The kind's cost per lease, in its own unit."
+    }
+  },
+  "required": [
+    "name",
+    "match",
+    "cap",
+    "cooldown",
+    "cost"
+  ],
+  "additionalProperties": false
+}

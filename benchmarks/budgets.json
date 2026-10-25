@@ -384,6 +384,16 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #24 first measurement: the merge base has no deep inbox. One process seeds a heavy month of asks (20 sessions a day, five asks each; the first 29 days' asks closed at their defaults, the last day's 100 open), starts the hub on it and times five deep inbox runs after a warm-up, failing unless each lists every open ask; p50 includes the seeding and the hub's start. The issue's 300 ms stays in tests/acceptance/24/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "lease-grant",
+      "command": [
+        "node",
+        "benchmarks/lease.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #237 first measurement: the merge base has no lease table. One process opens a record and the lease table, grants 1,000 port leases one after another, refuses a second holder on each, then ends every holder and releases every lease, so p50 includes Node's start; the issue's 50 ms per grant stays in tests/acceptance/237/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }
