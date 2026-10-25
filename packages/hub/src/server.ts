@@ -180,7 +180,6 @@ class Hub {
   private stopping = false;
   /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
   private hooks = new Set<string>();
-  private static readonly REPLY = EMPTY_REPLY;
   readonly start = ulid(Date.now());
   private readonly helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES });
 
@@ -305,7 +304,7 @@ class Hub {
     // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); every
     // other hook gets the acknowledgement and the reply in one write, which also ends the connection.
     const ruled = this.reply(parsed.meta);
-    const before = ruled === Hub.REPLY && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    const before = ruled === EMPTY_REPLY && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const hold = before ? Date.now() + EXTENSION_HOLD_MS : null;
     if (hold === null) conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: parsed.meta.id, hold_until_ms: hold }));
@@ -334,10 +333,10 @@ class Hub {
    * next step; watch and warn are #304's.
    */
   private reply(meta: HookMeta): string {
-    if (meta.event !== 'PreToolUse' || !meta.matched.length) return Hub.REPLY;
+    if (meta.event !== 'PreToolUse' || !meta.matched.length) return EMPTY_REPLY;
     const entries = this.rules();
     const name = meta.matched.find((n) => entries[n]?.mode === 'block');
-    if (name === undefined) return Hub.REPLY;
+    if (name === undefined) return EMPTY_REPLY;
     const entry = entries[name]!;
     const note = meta.notes?.[name] ? ` ${meta.notes[name]}` : '';
     return line({ exit: 2, stdout: '', stderr: `DeepBuild blocked this: ${String(entry.reason)} ${String(entry.next_step)}${note} (guard ${name})\n` });
