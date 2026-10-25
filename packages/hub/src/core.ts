@@ -174,6 +174,9 @@ export class Core {
   private readonly timers: NodeJS.Timeout[] = [];
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
+  /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
+  private dropped = false;
+  private doubled = false;
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
 
@@ -354,6 +357,11 @@ export class Core {
     return done;
   }
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false): Promise<{ settled: Promise<void> }> {
+    // The planted wrong program answers the first PostToolUse it reads and appends nothing for it.
+    if (this.options.plant === 'drops-post-tool-use' && meta.event === 'PostToolUse' && !this.dropped) {
+      this.dropped = true;
+      return { settled: Promise.resolve() };
+    }
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
@@ -1235,6 +1243,12 @@ export class Core {
             failed = true;
             process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
           });
+          // The planted wrong program appends the first event it replays a second time, under a new ID.
+          if (this.options.plant === 'replay-appends-twice' && !this.doubled) {
+            this.doubled = true;
+            const again = ulid(Date.now());
+            await this.queue(() => this.handleHook(drafts.map((d) => ({ ...d, id: again })), { ...meta, id: again }, 'hook', true), true).then(({ settled }) => settled);
+          }
         } else if (parsed) {
           await skip(offset, parsed.kind === 'refused' ? `refused: ${parsed.error.code} at ${parsed.error.path || '/'}` : 'not a hook request');
         }

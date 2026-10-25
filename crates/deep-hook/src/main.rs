@@ -587,14 +587,20 @@ fn stall() -> Option<usize> {
 /// filesystem that stalls loses the spooled copy, never the 50 ms.
 const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
 
+/// How long after the hook's start deep-hook waits for a written line's sync. The line is in the spool already, and
+/// its sync runs on in a process of its own; waiting the whole SPOOL_DEADLINE for it left a hook started by a busy
+/// machine no time to exit within the 50 ms.
+const SYNC_DEADLINE: Duration = Duration::from_millis(25);
+
 /// How a spool on its own thread is going: its line written, then its sync done or failed.
 enum Spooling {
     Written,
     Done(io::Result<()>),
 }
 
-/// Spools on a thread of its own and waits for it only until SPOOL_DEADLINE after `start`, in steps (see
-/// sleep_until). Says whether a write that ran out of time had its line in the spool, so it will be replayed.
+/// Spools on a thread of its own and waits for its write only until SPOOL_DEADLINE after `start`, and for the
+/// sync of a written line only until SYNC_DEADLINE, in steps (see sleep_until). Says whether a write that ran out
+/// of time had its line in the spool, so it will be replayed.
 fn spool_by(request: String, id: &str, start: Instant) {
     let (tell, told) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -610,7 +616,12 @@ fn spool_by(request: String, id: &str, start: Instant) {
     let forever = false;
     let mut written = false;
     let result = loop {
-        let left = SPOOL_DEADLINE.saturating_sub(start.elapsed());
+        let due = if written {
+            SYNC_DEADLINE
+        } else {
+            SPOOL_DEADLINE
+        };
+        let left = due.saturating_sub(start.elapsed());
         let step = if forever {
             Duration::MAX
         } else {
