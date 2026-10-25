@@ -1,0 +1,311 @@
+From 9310907bf114afc3dfc1a3068eb7bd421dcbc033 Mon Sep 17 00:00:00 2001
+From: SophiaWJ <jingwangsophia@gmail.com>
+Date: Sun, 25 Oct 2026 15:51:58 -0700
+Subject: [PATCH 1/2] gpui: Composite 32BGRA paint_surface pixel buffers
+ premultiplied
+
+`paint_surface` took only 4:2:0 YCbCr video frames: the Metal renderer
+asserted the pixel format and drew them opaque, which is what screen
+sharing needs. A renderer that draws into an IOSurface-backed BGRA
+pixel buffer (a 3D view, a canvas drawn by wgpu or Metal) had no way to
+show that texture in place without copying it through memory first.
+
+Accept `kCVPixelFormatType_32BGRA` pixel buffers too. Their one plane is
+sampled texel for texel through a second surface pipeline whose blend
+has source factor one and destination factor one minus source alpha,
+because such a buffer holds color premultiplied by alpha: a texel with
+color and zero alpha, as a glow beyond an object's edge leaves behind,
+still adds its light to what is behind it. YCbCr surfaces are unchanged.
+
+The test renders a BGRA surface headlessly over the opaque black target
+and checks a half-covered red texel keeps its premultiplied value, where
+a straight-alpha blend halves it, and a zero-alpha green texel keeps its
+light, where dividing alpha out loses it.
+---
+ crates/gpui/src/window.rs               |   5 +
+ crates/gpui_apple/src/metal_renderer.rs | 186 +++++++++++++++++++++++-
+ crates/gpui_apple/src/shaders.metal     |  11 ++
+ 3 files changed, 198 insertions(+), 4 deletions(-)
+
+diff --git a/crates/gpui/src/window.rs b/crates/gpui/src/window.rs
+index 1214b03..605533a 100644
+--- a/crates/gpui/src/window.rs
++++ b/crates/gpui/src/window.rs
+@@ -5150,6 +5150,11 @@ impl Window {
+ 
+     /// Paint a surface into the scene for the next frame at the current z-index.
+     ///
++    /// The pixel buffer is either a 4:2:0 YCbCr video frame
++    /// (`kCVPixelFormatType_420YpCbCr8BiPlanarFullRange`), drawn opaque, or a
++    /// `kCVPixelFormatType_32BGRA` buffer whose color is premultiplied by its
++    /// alpha, composited over what is behind it.
++    ///
+     /// This method should only be called as part of the paint phase of element drawing.
+     #[cfg(any(target_os = "macos", target_os = "ios"))]
+     pub fn paint_surface(
+diff --git a/crates/gpui_apple/src/metal_renderer.rs b/crates/gpui_apple/src/metal_renderer.rs
+index e466205..0c51adc 100644
+--- a/crates/gpui_apple/src/metal_renderer.rs
++++ b/crates/gpui_apple/src/metal_renderer.rs
+@@ -19,7 +19,8 @@ use objc2_core_foundation::CFRetained;
+ use objc2_core_video::{
+     CVMetalTexture, CVMetalTextureCache, CVMetalTextureGetTexture, CVPixelBufferGetHeight,
+     CVPixelBufferGetHeightOfPlane, CVPixelBufferGetPixelFormatType, CVPixelBufferGetWidth,
+-    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
++    CVPixelBufferGetWidthOfPlane, kCVPixelFormatType_32BGRA,
++    kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, kCVReturnSuccess,
+ };
+ use parking_lot::Mutex;
+ 
+@@ -124,6 +125,9 @@ pub struct MetalRenderer {
+     monochrome_sprites_pipeline_state: metal::RenderPipelineState,
+     polychrome_sprites_pipeline_state: metal::RenderPipelineState,
+     surfaces_pipeline_state: metal::RenderPipelineState,
++    /// Draws 32BGRA surfaces, whose color is premultiplied by alpha, with
++    /// source factor one and destination factor one minus source alpha.
++    bgra_surfaces_pipeline_state: metal::RenderPipelineState,
+     unit_vertices: metal::Buffer,
+     #[allow(clippy::arc_with_non_send_sync)]
+     instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
+@@ -359,6 +363,16 @@ impl MetalRenderer {
+             "surface_fragment",
+             MTLPixelFormat::BGRA8Unorm,
+         );
++        // A BGRA surface's color is already premultiplied by its alpha, so it
++        // blends like a path sprite: source factor one, not source alpha.
++        let bgra_surfaces_pipeline_state = build_path_sprite_pipeline_state(
++            &device,
++            &library,
++            "bgra_surfaces",
++            "surface_vertex",
++            "bgra_surface_fragment",
++            MTLPixelFormat::BGRA8Unorm,
++        );
+ 
+         let command_queue = device.new_command_queue();
+         let supports_shared_storage = cfg!(target_os = "ios") || is_apple_gpu;
+@@ -399,6 +413,7 @@ impl MetalRenderer {
+             monochrome_sprites_pipeline_state,
+             polychrome_sprites_pipeline_state,
+             surfaces_pipeline_state,
++            bgra_surfaces_pipeline_state,
+             unit_vertices,
+             instance_buffer_pool,
+             sprite_atlas,
+@@ -1216,6 +1231,17 @@ impl MetalRenderer {
+                 DevicePixels::from(CVPixelBufferGetHeight(image_buffer) as i32),
+             );
+ 
++            if CVPixelBufferGetPixelFormatType(image_buffer) == kCVPixelFormatType_32BGRA {
++                self.draw_bgra_surface(
++                    image_buffer,
++                    texture_size,
++                    (first_surface + index) as u64,
++                    command_encoder,
++                );
++                command_encoder.set_render_pipeline_state(&self.surfaces_pipeline_state);
++                continue;
++            }
++
+             assert_eq!(
+                 CVPixelBufferGetPixelFormatType(image_buffer),
+                 kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+@@ -1274,6 +1300,59 @@ impl MetalRenderer {
+             );
+         }
+     }
++
++    /// Draws one 32BGRA surface. Its single plane is sampled texel for texel
++    /// and composited premultiplied, so a texel with color and zero alpha
++    /// still adds its light to what is behind it.
++    fn draw_bgra_surface(
++        &mut self,
++        image_buffer: &objc2_core_video::CVPixelBuffer,
++        texture_size: Size<DevicePixels>,
++        instance: u64,
++        command_encoder: &metal::RenderCommandEncoderRef,
++    ) {
++        let texture = unsafe {
++            let mut texture = ptr::null_mut();
++            let status = CVMetalTextureCache::create_texture_from_image(
++                None,
++                &self.core_video_texture_cache,
++                image_buffer,
++                None,
++                objc2_metal::MTLPixelFormat::BGRA8Unorm,
++                CVPixelBufferGetWidth(image_buffer),
++                CVPixelBufferGetHeight(image_buffer),
++                0,
++                ptr::NonNull::from(&mut texture),
++            );
++            assert_eq!(
++                status, kCVReturnSuccess,
++                "failed to create CoreVideo Metal texture"
++            );
++            CFRetained::<CVMetalTexture>::from_raw(
++                ptr::NonNull::new(texture).expect("CoreVideo returned a null texture"),
++            )
++        };
++        command_encoder.set_render_pipeline_state(&self.bgra_surfaces_pipeline_state);
++        command_encoder.set_vertex_bytes(
++            SurfaceInputIndex::TextureSize as u64,
++            mem::size_of_val(&texture_size) as u64,
++            &texture_size as *const Size<DevicePixels> as *const _,
++        );
++        command_encoder.set_fragment_texture(SurfaceInputIndex::YTexture as u64, unsafe {
++            let texture =
++                CVMetalTextureGetTexture(&texture).expect("CoreVideo returned no Metal texture");
++            Some(metal::TextureRef::from_ptr(
++                objc2::rc::Retained::as_ptr(&texture) as *mut _,
++            ))
++        });
++        command_encoder.draw_primitives_instanced_base_instance(
++            metal::MTLPrimitiveType::Triangle,
++            0,
++            6,
++            1,
++            instance,
++        );
++    }
+ }
+ 
+ fn new_command_encoder_for_texture<'a>(
+@@ -1702,11 +1781,110 @@ mod tests {
+     use super::*;
+     use objc2_core_foundation::{CFDictionary, CFType};
+     use objc2_core_video::{
+-        CVPixelBufferCreate, CVPixelBufferGetBaseAddressOfPlane,
+-        CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
+-        CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
++        CVPixelBufferCreate, CVPixelBufferGetBaseAddress, CVPixelBufferGetBaseAddressOfPlane,
++        CVPixelBufferGetBytesPerRow, CVPixelBufferGetBytesPerRowOfPlane,
++        CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags, CVPixelBufferUnlockBaseAddress,
++        kCVPixelBufferIOSurfacePropertiesKey,
+     };
+ 
++    /// A 32BGRA, IOSurface-backed pixel buffer of `width` × `height`, filled
++    /// by `texel(x, y) -> [b, g, r, a]`.
++    fn bgra_pixel_buffer(
++        width: usize,
++        height: usize,
++        texel: impl Fn(usize, usize) -> [u8; 4],
++    ) -> CFRetained<objc2_core_video::CVPixelBuffer> {
++        let attributes = CFDictionary::from_slices(
++            &[unsafe { kCVPixelBufferIOSurfacePropertiesKey }],
++            &[&*CFDictionary::<CFType, CFType>::empty()],
++        );
++        let mut image_buffer = ptr::null_mut();
++        assert_eq!(
++            unsafe {
++                CVPixelBufferCreate(
++                    None,
++                    width,
++                    height,
++                    kCVPixelFormatType_32BGRA,
++                    Some(attributes.as_opaque()),
++                    ptr::NonNull::from(&mut image_buffer),
++                )
++            },
++            kCVReturnSuccess
++        );
++        let image_buffer =
++            unsafe { CFRetained::from_raw(ptr::NonNull::new(image_buffer).unwrap()) };
++        unsafe {
++            assert_eq!(
++                CVPixelBufferLockBaseAddress(&image_buffer, CVPixelBufferLockFlags::empty()),
++                kCVReturnSuccess
++            );
++            let bytes = CVPixelBufferGetBaseAddress(&image_buffer).cast::<u8>();
++            let stride = CVPixelBufferGetBytesPerRow(&image_buffer);
++            let rows = slice::from_raw_parts_mut(bytes, stride * height);
++            for y in 0..height {
++                for x in 0..width {
++                    rows[y * stride + x * 4..][..4].copy_from_slice(&texel(x, y));
++                }
++            }
++            assert_eq!(
++                CVPixelBufferUnlockBaseAddress(&image_buffer, CVPixelBufferLockFlags::empty()),
++                kCVReturnSuccess
++            );
++        }
++        image_buffer
++    }
++
++    fn surface_scene(image_buffer: &CFRetained<objc2_core_video::CVPixelBuffer>) -> Scene {
++        let bounds = Bounds {
++            origin: Point::default(),
++            size: size(ScaledPixels(16.0), ScaledPixels(16.0)),
++        };
++        let mut scene = Scene::default();
++        scene.insert_primitive(PaintSurface {
++            order: 0,
++            bounds,
++            content_mask: ContentMask { bounds },
++            image_buffer: image_buffer.clone(),
++        });
++        scene.finish();
++        scene
++    }
++
++    #[test]
++    fn render_bgra_surface_premultiplied() {
++        // Left half: red at half coverage, premultiplied. Right half: no
++        // coverage, but green light, as a glow beyond an object's edge would
++        // leave in a premultiplied buffer.
++        let image_buffer = bgra_pixel_buffer(16, 16, |x, _| {
++            if x < 8 {
++                [0, 0, 64, 128]
++            } else {
++                [0, 200, 0, 0]
++            }
++        });
++        let scene = surface_scene(&image_buffer);
++
++        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
++        let image = renderer
++            .render_scene_to_image(&scene, size(DevicePixels(16), DevicePixels(16)))
++            .unwrap();
++        // The headless target clears to opaque black, so with source factor
++        // one each texel's premultiplied color arrives unchanged: a straight
++        // alpha blend would halve the red, and a compositor that divides
++        // alpha out would lose the green where alpha is zero.
++        for (x, _, image::Rgba([red, green, blue, alpha])) in image.enumerate_pixels() {
++            if x < 8 {
++                assert!(red.abs_diff(64) <= 2, "red {red} at x {x}");
++                assert_eq!((*green, *blue), (0, 0), "at x {x}");
++            } else {
++                assert!(green.abs_diff(200) <= 2, "green {green} at x {x}");
++                assert_eq!((*red, *blue), (0, 0), "at x {x}");
++            }
++            assert_eq!(*alpha, 255);
++        }
++    }
++
+     #[test]
+     fn render_core_video_surface() {
+         let attributes = CFDictionary::from_slices(
+diff --git a/crates/gpui_apple/src/shaders.metal b/crates/gpui_apple/src/shaders.metal
+index 2b52bb9..851c64b 100644
+--- a/crates/gpui_apple/src/shaders.metal
++++ b/crates/gpui_apple/src/shaders.metal
+@@ -899,6 +899,17 @@ fragment float4 surface_fragment(SurfaceFragmentInput input [[stage_in]],
+   return ycbcrToRGBTransform * ycbcr;
+ }
+ 
++// A 32BGRA surface holds color premultiplied by alpha. It is read texel for
++// texel (its size is the surface's bounds in device pixels) and its pipeline
++// blends with source factor one, so a texel's light shows even where its alpha
++// is zero.
++fragment float4 bgra_surface_fragment(SurfaceFragmentInput input [[stage_in]],
++                                      texture2d<float> bgra_texture
++                                      [[texture(SurfaceInputIndex_YTexture)]]) {
++  constexpr sampler texture_sampler(mag_filter::nearest, min_filter::nearest);
++  return bgra_texture.sample(texture_sampler, input.texture_position);
++}
++
+ float4 hsla_to_rgba(Hsla hsla) {
+   float h = hsla.h * 6.0; // Now, it's an angle but scaled in [0, 6) range
+   float s = hsla.s;
+-- 
+2.39.3 (Apple Git-146)
+

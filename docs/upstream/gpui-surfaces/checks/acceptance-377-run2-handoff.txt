@@ -1,0 +1,20 @@
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/377
+
+ ✓ handoff.test.ts (9 tests) 640843ms
+   ✓ #377.756c6dce the surface handoff passes parity/gpu/surface-handoff.scene against the copy path on this machine (9)
+     ✓ #377.756c6dce the fixture is the issue's: a 1936 × 1584 premultiplied BGRA frame with an alpha ramp, a grey ramp and a marker that moves every frame 4693ms
+     ✓ #377.756c6dce every frame of the fixture is pixel-identical to the copy path's: the same slot bytes and the same window, frame by frame 72517ms
+     ✓ #377.756c6dce captured from the window, the glow beyond the 3D object over the 2D page and the 50% pane match the f64 premultiplied over of the slot onto the page within one code value, on both paths 1683ms
+     ✓ #377.756c6dce a planted patch that divides alpha out (--planted divides_alpha) loses the glow and fails, naming the glow 983ms
+     ✓ #377.756c6dce over 10000 frames no slot is drawn into while on screen or released before GPUI's command buffer completes, as the fences record 212688ms
+     ✓ #377.756c6dce a planted handoff that releases a shown slot before GPUI's command buffer completes (--planted releases_before_completion) fails the fence record, naming the slot 12707ms
+     ✓ #377.756c6dce a resize every 50 frames and one forced device loss show no stale or torn frame, on the zero-copy path and against the copy path 82401ms
+     ✓ #377.756c6dce the conformance run: macOS passes every part of the fixture on this machine, keeps the zero-copy path, and health shows no handoff reading 136854ms
+     ✓ #377.756c6dce a platform that fails a part uses the copy path, capped at 30 fps at a render scale of 0.5, and health shows one reading naming each part that failed (--planted divides_alpha fails premultiplied) 108078ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  16:26:05
+   Duration  641.06s (tests 100%)
+

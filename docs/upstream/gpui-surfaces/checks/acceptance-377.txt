@@ -1,0 +1,14 @@
+tests/acceptance/377/ on the app's own build (vendored gpui-pre-apple, untouched by this change), October 25, 2026, Mac15,12 on battery, Low Power Mode ON (so budgets.test.ts skips as INCONCLUSIVE, by its own gate).
+
+Run 1 (acceptance-377-run1.txt): npx vitest run --root tests/acceptance/377 --no-file-parallelism
+  Test Files 1 failed | 9 passed (10); Tests 1 failed | 29 passed | 7 skipped (37); 1639 s.
+  The one failure: handoff.test.ts, the conformance run's `budget` part (handoff p95 <= 1 ms and UI p95 <= 0.1 ms
+  over the zero-copy run). It ran while the upstream gpui_apple builds and mutant runs of this task shared the
+  machine (load average 37-68 at the time) in Low Power Mode. Every pixel, fence, glow, card and planted-twin test passed.
+
+Run 2 (acceptance-377-run2-handoff.txt): npx vitest run --root tests/acceptance/377 --no-file-parallelism handoff
+  with nothing else of this task running (load average down to 5.65 by its end; Low Power Mode still on).
+  Test Files 1 passed (1); Tests 9 passed (9); 641 s. The conformance run passes every part, keeps zero_copy.
+
+Not re-run with Low Power Mode off: budgets.test.ts needs the owner to turn it off (a system setting) and rerun;
+that is a reading of the machine, not of this change, which touches no code the app builds.

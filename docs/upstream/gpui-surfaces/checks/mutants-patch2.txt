@@ -1,0 +1,10 @@
+=== mutant D: the completed handler reports nothing
+test metal_renderer::tests::report_the_surfaces_a_frame_samples ... FAILED
+thread 'metal_renderer::tests::report_the_surfaces_a_frame_samples' (78072252) panicked at crates/gpui_apple/src/metal_renderer.rs:2064:48:
+a Completed event: Timeout
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 5.08s
+=== mutant E: the BGRA path does not note the pixel buffer it samples
+test metal_renderer::tests::report_the_surfaces_a_frame_samples ... FAILED
+thread 'metal_renderer::tests::report_the_surfaces_a_frame_samples' (78073217) panicked at crates/gpui_apple/src/metal_renderer.rs:2053:48:
+a Committed event: Timeout
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 5.08s

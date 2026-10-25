@@ -1,0 +1,12 @@
+=== mutant A: the BGRA pipeline blends straight alpha (build_pipeline_state, source factor SourceAlpha)
+test metal_renderer::tests::render_bgra_surface_premultiplied ... FAILED
+thread 'metal_renderer::tests::render_bgra_surface_premultiplied' (78105357) panicked at crates/gpui_apple/src/metal_renderer.rs:1959:17:
+red 32 at x 0
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.30s
+=== mutant B: the planted twin, divides alpha out and blends straight alpha
+test metal_renderer::tests::render_bgra_surface_premultiplied ... FAILED
+thread 'metal_renderer::tests::render_bgra_surface_premultiplied' (78113736) panicked at crates/gpui_apple/src/metal_renderer.rs:1962:17:
+green 0 at x 8
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.89s
+=== mutant C: the base's draw_surfaces (no BGRA branch; the format assert)
+-[_MTLCommandEncoder dealloc]:131: failed assertion `Command encoder released without endEncoding'

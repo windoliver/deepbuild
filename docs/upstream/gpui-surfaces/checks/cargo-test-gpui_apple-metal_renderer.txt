@@ -1,0 +1,19 @@
+warning: failed to auto-clean cache data
+
+failed to clean entries from the global cache
+
+Caused by:
+  failed to remove file `/Users/sophiawj/.cargo/registry/src/github.com-1ecc6299db9ec823/pkg-config-0.3.19/Cargo.toml`
+
+Caused by:
+  Permission denied (os error 13)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.38s
+     Running unittests src/gpui_apple.rs (target/debug/deps/gpui_apple-bc3e57a0fca20238)
+
+running 3 tests
+test metal_renderer::tests::report_the_surfaces_a_frame_samples ... ok
+test metal_renderer::tests::render_bgra_surface_premultiplied ... ok
+test metal_renderer::tests::render_core_video_surface ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.08s
+

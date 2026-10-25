@@ -1,0 +1,213 @@
+From ed0575d911da54bd9cda269299b23c3c94b3583f Mon Sep 17 00:00:00 2001
+From: SophiaWJ <jingwangsophia@gmail.com>
+Date: Sun, 25 Oct 2026 15:54:07 -0700
+Subject: [PATCH 2/2] gpui: Report the surfaces each frame samples and when it
+ completes
+
+A renderer that hands `paint_surface` its pixel buffers, drawing into a
+few of them in turn, needs to know when GPUI's frame command buffer has
+finished reading one before it draws into it again or lets it go. Metal
+retains the texture for the command buffer's lifetime, but nothing told
+the producer which buffers a frame sampled, or when the frame was done.
+
+Add `metal_renderer::surface_reports`: one process-wide hook that gets,
+for every frame command buffer that samples at least one surface, a
+`Committed` event naming the pixel buffers it samples (by address) as
+`render_frame` returns it to its caller, which commits it, and a
+`Completed` event from the buffer's completed handler, with the GPU time
+the buffer took. Frames that sample no surface report nothing, so the
+hook costs nothing where `paint_surface` isn't used.
+
+The test installs the hook, renders a BGRA surface headlessly, and
+checks a `Committed` event names that pixel buffer alone and a
+`Completed` event follows for the same command buffer.
+---
+ crates/gpui_apple/src/metal_renderer.rs | 122 +++++++++++++++++++++++-
+ 1 file changed, 121 insertions(+), 1 deletion(-)
+
+diff --git a/crates/gpui_apple/src/metal_renderer.rs b/crates/gpui_apple/src/metal_renderer.rs
+index 0c51adc..45528fd 100644
+--- a/crates/gpui_apple/src/metal_renderer.rs
++++ b/crates/gpui_apple/src/metal_renderer.rs
+@@ -29,6 +29,56 @@ use std::{cell::Cell, ffi::c_void, mem, mem::MaybeUninit, ops::Range, ptr, slice
+ // Exported to metal
+ pub(crate) type PointF = gpui::Point<f32>;
+ 
++/// Reports, per frame command buffer, which `paint_surface` pixel buffers it
++/// samples and when it completes, so whoever produces those buffers can keep
++/// one alive, or refrain from drawing into it again, until the GPU is done
++/// reading it.
++///
++/// A frame that samples at least one surface reports `Committed` from
++/// `render_frame`, before its caller commits the command buffer, and
++/// `Completed` from the buffer's completed handler, on Metal's thread. Frames
++/// that sample no surface report nothing.
++pub mod surface_reports {
++    use std::sync::atomic::{AtomicU64, Ordering};
++    use std::sync::{Arc, RwLock};
++
++    /// One frame command buffer's report. `buffer` numbers the command buffer,
++    /// the same number in both events; each surface is its `CVPixelBuffer`'s
++    /// address.
++    #[derive(Clone, Debug, PartialEq, Eq)]
++    pub enum Event {
++        Committed {
++            buffer: u64,
++            surfaces: Vec<u64>,
++        },
++        /// The command buffer completed, having spent `gpu_ns` on the GPU.
++        Completed {
++            buffer: u64,
++            gpu_ns: u64,
++        },
++    }
++
++    pub type Hook = Arc<dyn Fn(Event) + Send + Sync>;
++
++    static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
++    static NEXT_BUFFER: AtomicU64 = AtomicU64::new(1);
++
++    /// Installs the one process-wide hook, replacing any earlier one.
++    pub fn set_hook(hook: Option<Hook>) {
++        *HOOK.write().unwrap_or_else(|e| e.into_inner()) = hook;
++    }
++
++    pub(super) fn next_buffer() -> u64 {
++        NEXT_BUFFER.fetch_add(1, Ordering::Relaxed)
++    }
++
++    pub(super) fn report(event: Event) {
++        if let Some(hook) = HOOK.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
++            hook(event);
++        }
++    }
++}
++
+ #[cfg(not(feature = "runtime_shaders"))]
+ const SHADERS_METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shaders.metallib"));
+ #[cfg(feature = "runtime_shaders")]
+@@ -128,6 +178,8 @@ pub struct MetalRenderer {
+     /// Draws 32BGRA surfaces, whose color is premultiplied by alpha, with
+     /// source factor one and destination factor one minus source alpha.
+     bgra_surfaces_pipeline_state: metal::RenderPipelineState,
++    /// The pixel buffers the frame being encoded samples, for `surface_reports`.
++    sampled_surfaces: Vec<u64>,
+     unit_vertices: metal::Buffer,
+     #[allow(clippy::arc_with_non_send_sync)]
+     instance_buffer_pool: Arc<Mutex<InstanceBufferPool>>,
+@@ -414,6 +466,7 @@ impl MetalRenderer {
+             polychrome_sprites_pipeline_state,
+             surfaces_pipeline_state,
+             bgra_surfaces_pipeline_state,
++            sampled_surfaces: Vec::new(),
+             unit_vertices,
+             instance_buffer_pool,
+             sprite_atlas,
+@@ -570,6 +623,7 @@ impl MetalRenderer {
+                 scene.surfaces.len(),
+             )
+         })?;
++        self.sampled_surfaces.clear();
+         let command_buffer = self.draw_primitives_to_texture(
+             scene,
+             &instance_bindings,
+@@ -580,10 +634,33 @@ impl MetalRenderer {
+ 
+         let instance_buffer_pool = self.instance_buffer_pool.clone();
+         let instance_buffer = Cell::new(Some(writer.finish()));
+-        let block = RcBlock::new(move |_: ptr::NonNull<AnyObject>| {
++        // Every caller commits the buffer it gets back, so the surfaces it
++        // samples are reported here, before its completed handler can run.
++        let reported_buffer = (!self.sampled_surfaces.is_empty()).then(|| {
++            let buffer = surface_reports::next_buffer();
++            surface_reports::report(surface_reports::Event::Committed {
++                buffer,
++                surfaces: mem::take(&mut self.sampled_surfaces),
++            });
++            buffer
++        });
++        let block = RcBlock::new(move |command_buffer: ptr::NonNull<AnyObject>| {
+             if let Some(instance_buffer) = instance_buffer.take() {
+                 instance_buffer_pool.lock().release(instance_buffer);
+             }
++            if let Some(buffer) = reported_buffer {
++                // SAFETY: Metal hands a completed handler the command buffer it
++                // completed; `GPUStartTime` and `GPUEndTime` are its
++                // `CFTimeInterval` (seconds as f64) properties.
++                let (start, end): (f64, f64) = unsafe {
++                    (
++                        objc2::msg_send![command_buffer.as_ref(), GPUStartTime],
++                        objc2::msg_send![command_buffer.as_ref(), GPUEndTime],
++                    )
++                };
++                let gpu_ns = ((end - start).max(0.0) * 1e9).round() as u64;
++                surface_reports::report(surface_reports::Event::Completed { buffer, gpu_ns });
++            }
+         });
+         // SAFETY: Both pointee types are opaque views of the same Objective-C block pointer ABI.
+         unsafe {
+@@ -1298,6 +1375,8 @@ impl MetalRenderer {
+                 1,
+                 (first_surface + index) as u64,
+             );
++            self.sampled_surfaces
++                .push(ptr::from_ref(&**image_buffer) as usize as u64);
+         }
+     }
+ 
+@@ -1352,6 +1431,8 @@ impl MetalRenderer {
+             1,
+             instance,
+         );
++        self.sampled_surfaces
++            .push(ptr::from_ref(image_buffer) as usize as u64);
+     }
+ }
+ 
+@@ -1949,4 +2030,43 @@ mod tests {
+             assert_eq!(*alpha, 255);
+         }
+     }
++
++    #[test]
++    fn report_the_surfaces_a_frame_samples() {
++        use surface_reports::Event;
++
++        let (sender, events) = std::sync::mpsc::channel();
++        surface_reports::set_hook(Some(Arc::new(move |event| {
++            sender.send(event).ok();
++        })));
++
++        let image_buffer = bgra_pixel_buffer(16, 16, |_, _| [0, 0, 0, 255]);
++        let address = ptr::from_ref(&*image_buffer) as usize as u64;
++        let scene = surface_scene(&image_buffer);
++        let mut renderer = MetalRenderer::new_headless(Arc::new(Mutex::new(Default::default())));
++        renderer
++            .render_scene_to_image(&scene, size(DevicePixels(16), DevicePixels(16)))
++            .unwrap();
++
++        // Other tests render surfaces of their own in parallel, so take the
++        // report for this pixel buffer and ignore the rest.
++        let timeout = std::time::Duration::from_secs(5);
++        let buffer = loop {
++            match events.recv_timeout(timeout).expect("a Committed event") {
++                Event::Committed { buffer, surfaces } if surfaces.contains(&address) => {
++                    assert_eq!(surfaces, vec![address]);
++                    break buffer;
++                }
++                _ => {}
++            }
++        };
++        loop {
++            match events.recv_timeout(timeout).expect("a Completed event") {
++                Event::Completed {
++                    buffer: completed, ..
++                } if completed == buffer => break,
++                _ => {}
++            }
++        }
++    }
+ }
+-- 
+2.39.3 (Apple Git-146)
+

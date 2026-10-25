@@ -1,0 +1,85 @@
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/github-issue-331-51c758/tests/acceptance/377
+
+ ❯ handoff.test.ts (9 tests | 1 failed) 1374136ms
+   ❯ #377.756c6dce the surface handoff passes parity/gpu/surface-handoff.scene against the copy path on this machine (9)
+     ✓ #377.756c6dce the fixture is the issue's: a 1936 × 1584 premultiplied BGRA frame with an alpha ramp, a grey ramp and a marker that moves every frame 5134ms
+     ✓ #377.756c6dce every frame of the fixture is pixel-identical to the copy path's: the same slot bytes and the same window, frame by frame 92270ms
+     ✓ #377.756c6dce captured from the window, the glow beyond the 3D object over the 2D page and the 50% pane match the f64 premultiplied over of the slot onto the page within one code value, on both paths 1403ms
+     ✓ #377.756c6dce a planted patch that divides alpha out (--planted divides_alpha) loses the glow and fails, naming the glow 952ms
+     ✓ #377.756c6dce over 10000 frames no slot is drawn into while on screen or released before GPUI's command buffer completes, as the fences record 256492ms
+     ✓ #377.756c6dce a planted handoff that releases a shown slot before GPUI's command buffer completes (--planted releases_before_completion) fails the fence record, naming the slot 6614ms
+     ✓ #377.756c6dce a resize every 50 frames and one forced device loss show no stale or torn frame, on the zero-copy path and against the copy path 32927ms
+     × #377.756c6dce the conformance run: macOS passes every part of the fixture on this machine, keeps the zero-copy path, and health shows no handoff reading 134739ms
+     ✓ #377.756c6dce a platform that fails a part uses the copy path, capped at 30 fps at a render scale of 0.5, and health shows one reading naming each part that failed (--planted divides_alpha fails premultiplied) 260063ms
+ ✓ plugin-redraft.test.ts (3 tests) 13879ms
+   ✓ #377.84a84b5e no plug-in or agent code path reaches the GPU or the window's drawing surface, checked by a plug-in fixture that tries (redraft) (3)
+     ✓ #377.84a84b5e the plug-in fixture's panel searches every global and module it can name and reaches no GPU or surface, while the GPU layer draws beside it 7176ms
+     ✓ #377.84a84b5e the plug-in's documents that try to hand the canvas pixels, a surface or a shader are refused or never drawn, and its plain description is drawn 1234ms
+     ✓ #377.84a84b5e a planted panel runtime that hands scripts the GPU layer (--planted exposes_gpu_to_panels) is caught by the fixture, naming the route 1018ms
+ ✓ blank.test.ts (4 tests) 11733ms
+   ✓ #377.5a0d84fc one blank guard runs before every image comparison the parity fixtures make (4)
+     ✓ #377.5a0d84fc a frame blank or black on either side makes the comparison BLOCKED with no other number, never PASS; two frames that draw nothing are BLOCKED 5622ms
+     ✓ #377.5a0d84fc your decision declaring a frame dark for the fixture, recorded once with its hash, lets it compare while its object-ID pass shows each kept item; an agent's dark declaration is refused 815ms
+     ✓ #377.5a0d84fc the parity fixtures' own comparisons run the guard: the handoff's conformance run on a scene where the GPU layer and its reference both draw nothing is BLOCKED, never PASS 792ms
+ ✓ budgets.test.ts (7 tests | 7 skipped) 2804ms
+ ✓ noop.test.ts (3 tests) 108864ms
+   ✓ #377.8131b7ba the noop lane runs the render-logic tests without a GPU (3)
+     ✓ #377.8131b7ba a lane named noop is in the local preflight's checks, and each of its commands passes 97483ms
+     ✓ #377.8131b7ba the GPU layer's device on wgpu's noop backend, ported from wgpu's noop.rs: a noop device only when asked for, and one that creates, writes and reads back a buffer 4979ms
+     ✓ #377.8131b7ba render logic on the noop backend is the default backend's (declared resources, pipeline keys, frames and their sizes and settling), and the noop backend makes no pixels 1150ms
+ ✓ encode.test.ts (3 tests) 81588ms
+   ✓ #377.6fcbd42e a frame's pixel hash is the same with 1 and 4 encode workers (1)
+     ✓ #377.6fcbd42e every frame of eight overlapping writer layers hashes the same with 4 encode workers as with 1 6528ms
+   ✓ #377.8ae4f399 with a test pool that finishes encodes in reverse and in 20 seeded random orders, every frame's hash equals the 1-worker run's; a planted submit-on-completion fails on the reverse order, naming the frame (2)
+     ✓ #377.8ae4f399 encodes finished in reverse, and in 20 seeded random orders, are still submitted in frame order by index, and every frame hashes as the 1-worker run 10968ms
+     ✓ #377.8ae4f399 a planted pool that submits on completion (--planted submits_on_completion) fails on the reverse order, naming the frame 992ms
+ ✓ deps.test.ts (1 test) 1567ms
+   ✓ #377.66576129 no game engine is a dependency of the app; the canvas draws with its own wgpu renderer (1)
+     ✓ #377.66576129 the GPU layer is our own crate on wgpu, and no game engine is in the app's, the GPU layer's or the binary's dependency tree; an engine planted under the app fails the check, naming it 1566ms
+ ✓ card.test.ts (2 tests) 14431ms
+   ✓ #377.30608b7b with a GPU-layer view under the card's slot, the card's interior pixels equal its isolated render on both paths; a patch that draws surfaces after GPUI's scene covers the card and fails (2)
+     ✓ #377.30608b7b on the zero-copy and the copy paths the card's interior in the window capture equals its isolated render, pixel for pixel 8150ms
+     ✓ #377.30608b7b a planted GPUI patch that draws surfaces after its scene (--planted draws_surfaces_after_scene) covers the card and fails 3185ms
+ ✓ device-loss.test.ts (1 test) 16326ms
+   ✓ #377.e281b005 a forced device loss in the middle of a scene rebuilds every declared GPU resource, and the next frame's pixel hash equals a clean start's (1)
+     ✓ #377.e281b005 losing the device at frame 120 of 240 rebuilds every declared resource on the new device, and frame 121 and every later frame hash as a clean start's 13460ms
+ ✓ settling.test.ts (4 tests) 10049ms
+   ✓ #377.6fcbd42e no canonical render, export or snapshot uses a frame that reports settling (4)
+     ✓ #377.6fcbd42e live frames report settling while the 4 MiB upload continues at 1 MiB a frame, and then hold exactly the texture 5125ms
+     ✓ #377.6fcbd42e a canonical render of frame 0 in a fresh process, and one asked for while live frames are still settling, both use the settled frame 830ms
+     ✓ #377.6fcbd42e a export render of frame 0 in a fresh process, and one asked for while live frames are still settling, both use the settled frame 638ms
+     ✓ #377.6fcbd42e a snapshot render of frame 0 in a fresh process, and one asked for while live frames are still settling, both use the settled frame 634ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  handoff.test.ts > #377.756c6dce the surface handoff passes parity/gpu/surface-handoff.scene against the copy path on this machine > #377.756c6dce the conformance run: macOS passes every part of the fixture on this machine, keeps the zero-copy path, and health shows no handoff reading
+AssertionError: every part passes on this machine: expected [ { part: 'budget', result: 'fail' } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "part": "budget",
++     "result": "fail",
++   },
++ ]
+
+ ❯ handoff.test.ts:189:93
+    187|     expect(c.platform).toBe(process.platform === 'darwin' ? 'macos' : …
+    188|     expect(c.parts.map((p) => p.part).sort(), 'the conformance run rep…
+    189|     expect(c.parts.filter((p) => p.result !== 'pass'), 'every part pas…
+       |                                                                                             ^
+    190|     expect(c.result).toBe('pass');
+    191|     expect(c.path).toBe('zero_copy');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 9 passed (10)
+      Tests  1 failed | 29 passed | 7 skipped (37)
+   Start at  15:54:11
+   Duration  1639.06s (tests 100%)
+
