@@ -28,10 +28,10 @@ What it carries:
   YCbCr pipeline bind after a BGRA surface fails it at the gray half. `surface_hook_may_replace_itself`
   fails (times out) when the hook is called under the lock. The two tests that install a hook take
   one test-only mutex, since the hook is process-wide and `cargo test` runs tests in parallel.
-- Reviewed in two rounds by fresh reviewers (this folder's PR). Round 1 found the hook called under
-  the lock, the report named for a commit it precedes and the pipeline switch untested; round 2
-  found the hook tests racing each other. Each fix is in the patch with a check that fails without
-  it.
+- Reviewed in three rounds by fresh reviewers (this folder's PR). Round 1 found the hook called
+  under the lock, the report named for a commit it precedes and the pipeline switch untested; round
+  2 found the hook tests racing each other; round 3 found nothing. Each fix is in the patch with a
+  check that fails without it.
 
 What it leaves out, on purpose: the planted twins `DividesAlpha` and `AfterScene` (#377's
 acceptance tests only), `gpu_ledger` and `ColorSpace::OklabExact` (#391, a separate offer), and
@@ -51,11 +51,11 @@ cargo test -p gpui_apple
 Zed's `CONTRIBUTING.md` asks for a discussion before feature code, a signed CLA, and a human
 author who understands the change and writes the PR description themself; it doesn't accept pull
 requests from autonomous agents. So the pull request is the owner's to open, from their fork;
-`PR-DRAFT.md` was the starting point for the description. The pull request is open as a draft
-from the owner's fork: https://github.com/zed-industries/zed/pull/66114 (`JingW6/zed`, branch
-`gpui-bgra-surfaces` at `e04839ec`, this patch on `347f171a`), linked from #711. If upstream
-takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only #391's exact gradient
-mode and the two planted twins.
+The pull request is open and ready for review from the owner's fork, with the CLA signed:
+https://github.com/zed-industries/zed/pull/66114 (`JingW6/zed`, branch `gpui-bgra-surfaces` at
+`e04839ec`, this patch on `347f171a`), linked from #711; `PR-DESCRIPTION.md` is its description
+as posted. If upstream takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only
+#391's exact gradient mode and the two planted twins.
 
 How it was opened, for a redo on a new base (sign the CLA at https://zed.dev/cla first):
 
@@ -70,7 +70,7 @@ cargo test -p gpui_apple                                  # 13 pass; attach the 
 git push -u fork gpui-bgra-surfaces
 gh pr create --repo zed-industries/zed --base main --head <you>:gpui-bgra-surfaces \
   --title "gpui_apple: premultiplied BGRA surfaces and per-frame surface reports" \
-  --body-file ../deepbuild/vendor/gpui-pre-apple/upstream/PR-DRAFT.md   # rewritten in your words
+  --body-file ../deepbuild/vendor/gpui-pre-apple/upstream/PR-DESCRIPTION.md   # in your words
 ```
 
 Then on windoliver/deepbuild#711: paste the PR link under criterion 1.
