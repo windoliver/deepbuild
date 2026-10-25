@@ -20,6 +20,9 @@ use std::{env, io};
 
 use deep_contracts::{parse, Value};
 
+mod matcher;
+mod shell;
+
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
 const ACK_BUDGET: Duration = Duration::from_millis(20);
@@ -112,7 +115,7 @@ fn quoted(text: &str) -> String {
 /// A guard entry from rules.json, as far as deep-hook acts on it with the hub away.
 struct Guard {
     name: String,
-    pattern: Option<String>,
+    pattern: String,
     fail_closed: bool,
     reason: String,
     next_step: String,
@@ -169,48 +172,46 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
     if !["watch", "warn", "block"].contains(&text("mode")?.as_str()) {
         return None;
     }
+    let pattern = text("match").filter(|m| matcher::known(m))?;
     Some(Guard {
         name: name.to_string(),
-        pattern: text("match")?.strip_prefix("shell:").map(str::to_string),
+        pattern,
         fail_closed: *fail_closed,
         reason: text("reason")?,
         next_step: text("next_step")?,
     })
 }
 
-/// The shell command a call runs: a Bash tool call's `tool_input.command`.
-fn command(payload: &Value) -> Option<&str> {
-    match (
-        member(payload, "tool_name"),
-        member(payload, "tool_input").and_then(|input| member(input, "command")),
-    ) {
-        (Some(Value::String(tool)), Some(Value::String(command))) if tool == "Bash" => {
-            Some(command)
-        }
+/// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
+/// path (Edit, MultiEdit, Write, NotebookEdit) or a patch's (Codex's apply_patch); None for any other tool.
+fn call(payload: &Value) -> Option<matcher::Call> {
+    let Some(Value::String(tool)) = member(payload, "tool_name") else {
+        return None;
+    };
+    let input = member(payload, "tool_input");
+    let field = |key: &str| match input.and_then(|i| member(i, key)) {
+        Some(Value::String(text)) => Some(text.as_str()),
         _ => None,
-    }
-}
-
-/// Whether `text` matches `glob` whole, where `*` matches any run of characters, spaces included.
-fn glob(glob: &[u8], text: &[u8]) -> bool {
-    let (mut g, mut t) = (0, 0);
-    let mut star: Option<(usize, usize)> = None;
-    while t < text.len() {
-        if g < glob.len() && glob[g] == b'*' {
-            star = Some((g, t));
-            g += 1;
-        } else if g < glob.len() && glob[g] == text[t] {
-            g += 1;
-            t += 1;
-        } else if let Some((sg, st)) = star {
-            g = sg + 1;
-            t = st + 1;
-            star = Some((sg, st + 1));
-        } else {
-            return false;
-        }
-    }
-    glob[g..].iter().all(|&c| c == b'*')
+    };
+    let (command, paths) = match tool.as_str() {
+        "Bash" => (Some(field("command")?), Vec::new()),
+        "Edit" | "MultiEdit" | "Write" => (None, vec![field("file_path")?.to_string()]),
+        "NotebookEdit" => (None, vec![field("notebook_path")?.to_string()]),
+        "apply_patch" => (None, matcher::patched(field("command")?)),
+        _ => return None,
+    };
+    let cwd = match member(payload, "cwd") {
+        Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
+        _ => None,
+    };
+    let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
+    Some(matcher::Call::new(
+        tool,
+        command,
+        &paths,
+        cwd.as_deref(),
+        &home,
+    ))
 }
 
 // ---- The exchange with the hub.
@@ -652,10 +653,29 @@ fn sleep_until(start: Instant, after: Duration) {
 
 fn forward(agent: &str, event: &str) -> ExitCode {
     let start = Instant::now();
+    // Guards hold a tool's call before it runs, so only a PreToolUse reads rules.json: no other hook waits on it.
+    // It is marked before the watchdog starts and before rules.json is read, then the call: until the call is read
+    // and matched, the watchdog doesn't let it through while a fail_closed entry is installed.
+    let ruling = event == "PreToolUse";
+    RULING.store(ruling, Ordering::SeqCst);
     watchdog(start);
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
     let id = ulid(now / 1_000_000);
+    let guards = if ruling { guards() } else { Ok(Vec::new()) };
+    // Guards that can't be read may hold a call: with the hub away it is denied, never let through unguarded.
+    match &guards {
+        Err(why) => {
+            let _ = DENIAL.set(format!(
+                "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry."
+            ));
+        }
+        Ok(guards) if !guards.iter().any(|g| g.fail_closed) => {
+            RULING.store(false, Ordering::SeqCst)
+        }
+        Ok(_) => {}
+    }
+    READ_RULES.store(true, Ordering::SeqCst);
     let mut input = String::new();
     let _ = io::stdin().read_to_string(&mut input);
     let parsed = parse(&input).ok();
@@ -665,48 +685,48 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     } else {
         quoted(&input)
     };
-    // Guards hold shell calls before they run, so only a shell PreToolUse reads rules.json: no other hook waits on it.
-    let called = parsed
-        .as_ref()
-        .and_then(command)
-        .filter(|_| event == "PreToolUse");
-    // Until the guards are read, a shell call the watchdog decides is denied: one of them may hold it.
-    let guards = if called.is_some() {
-        RULING.store(true, Ordering::SeqCst);
-        guards()
-    } else {
-        Ok(Vec::new())
-    };
-    // Guards that can't be read may hold a shell call: with the hub away it is denied, never let through unguarded.
-    if let Err(why) = &guards {
-        let _ = DENIAL.set(format!(
-            "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry."
-        ));
-    }
+    let called = parsed.as_ref().filter(|_| ruling).and_then(call);
     let guards = guards.unwrap_or_default();
-    let matched: Vec<&Guard> = guards
-        .iter()
-        .filter(|g| match (&g.pattern, called) {
-            (Some(pattern), Some(command)) => glob(pattern.as_bytes(), command.as_bytes()),
-            _ => false,
-        })
-        .collect();
+    let matched: Vec<(&Guard, matcher::Hit)> = match &called {
+        Some(call) => guards
+            .iter()
+            .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
+            .collect(),
+        None => Vec::new(),
+    };
     // With the hub away, a fail_closed entry the call matched still denies it.
-    if let Some(guard) = matched
-        .iter()
-        .find(|g| g.fail_closed && event == "PreToolUse")
-    {
+    if let Some((guard, hit)) = matched.iter().find(|(g, _)| g.fail_closed) {
+        let detail = hit
+            .detail
+            .as_deref()
+            .map(|d| format!(" {d}"))
+            .unwrap_or_default();
         let _ = DENIAL.set(format!(
-            "DeepBuild blocked this: {} {} (guard {}, which holds while the hub doesn't answer)",
+            "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
             guard.reason, guard.next_step, guard.name
         ));
     }
     RULED.store(true, Ordering::SeqCst);
     let names = matched
         .iter()
-        .map(|g| quoted(&g.name))
+        .map(|(g, _)| quoted(&g.name))
         .collect::<Vec<_>>()
         .join(",");
+    // What the matcher read of the call for an entry, so the hub's denial says it too.
+    let notes = matched
+        .iter()
+        .filter_map(|(g, hit)| {
+            hit.detail
+                .as_ref()
+                .map(|d| format!("{}:{}", quoted(&g.name), quoted(d)))
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let notes = if notes.is_empty() {
+        notes
+    } else {
+        format!(",\"notes\":{{{notes}}}")
+    };
     // At SessionStart, whether each billing key is set in the environment the agent gave this process.
     let billing = if event == "SessionStart" {
         let keys = BILLING_KEYS
@@ -736,7 +756,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             ""
         };
         format!(
-            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}],\"payload\":{payload}{billing}{f_test}}}\n",
+            "{{\"v\":1,\"agent\":{},\"event\":{},\"seq\":\"{seq}\",\"id\":\"{id}\",\"pid\":{},\"ppid\":{},\"matched\":[{names}]{notes},\"payload\":{payload}{billing}{f_test}}}\n",
             quoted(agent),
             quoted(event),
             std::process::id(),
@@ -768,8 +788,9 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     decide();
     // Before an acknowledgement the 50 ms run from the hook's start; after a hold the hub acknowledged ran out or
-    // broke, the spool's time runs from now, since the hook was already allowed to wait.
-    let from = if ACKED.load(Ordering::SeqCst) {
+    // broke, or past the watchdog's 50 ms while it waited for a fail_closed match, the spool's time runs from now,
+    // since the hook was already allowed to wait.
+    let from = if ACKED.load(Ordering::SeqCst) || start.elapsed() >= WATCHDOG {
         Instant::now()
     } else {
         start
@@ -790,11 +811,15 @@ static ACKED: AtomicBool = AtomicBool::new(false);
 static DECIDED: AtomicBool = AtomicBool::new(false);
 /// What a matched fail_closed entry prints when it denies the call with the hub away.
 static DENIAL: OnceLock<String> = OnceLock::new();
-/// Set once a shell call's PreToolUse is read, before its guards are; RULED once they are matched against it.
+/// Set at a PreToolUse until its call is read and matched (RULED), unless rules.json holds no fail_closed entry.
 static RULING: AtomicBool = AtomicBool::new(false);
 static RULED: AtomicBool = AtomicBool::new(false);
+/// Set once rules.json is read, before the call is.
+static READ_RULES: AtomicBool = AtomicBool::new(false);
 /// When, after the hook's start, the watchdog decides for a hook the hub hasn't acknowledged.
 const WATCHDOG: Duration = Duration::from_millis(48);
+/// How long, after the hook's start, the watchdog waits for a call a fail_closed entry may hold to be matched.
+const RULING_LIMIT: Duration = Duration::from_millis(500);
 
 /// Claims the decision for the hook; if the watchdog has it already, waits for the watchdog to end the process.
 fn decide() {
@@ -807,8 +832,8 @@ fn decide() {
 
 /// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
 /// disk under rules.json): at WATCHDOG it exits with the decision for the hub away, deny when a fail_closed entry
-/// has matched or a shell call's guards are still being read, and allow otherwise. That call isn't spooled; a turn of its tool calls then reads as not reaching
-/// the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
+/// has matched and allow otherwise; while rules.json or, with a fail_closed entry installed, the call is still being
+/// read or matched, it waits for that until RULING_LIMIT and then denies. That call isn't spooled; a turn of its tool calls then reads as not reaching the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
 fn watchdog(start: Instant) {
     if cfg!(feature = "plant-connect-timeout-only") {
         return;
@@ -819,16 +844,31 @@ fn watchdog(start: Instant) {
     }
     std::thread::spawn(move || {
         sleep_until(start, WATCHDOG);
+        // A call a fail_closed entry may hold is decided by its match, not the clock: the watchdog gives the hook
+        // until RULING_LIMIT to read the call and match it, and only past that denies it unchecked.
+        while RULING.load(Ordering::SeqCst)
+            && !RULED.load(Ordering::SeqCst)
+            && !ACKED.load(Ordering::SeqCst)
+            && start.elapsed() < RULING_LIMIT
+        {
+            std::thread::sleep(STEP);
+        }
         if ACKED.load(Ordering::SeqCst) || DECIDED.swap(true, Ordering::SeqCst) {
             return;
         }
+        // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
+        let ruled = RULED.load(Ordering::SeqCst);
         match DENIAL.get() {
             Some(denial) => {
                 eprintln!("{denial}");
                 std::process::exit(2)
             }
-            None if RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst) => {
-                eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 50 ms, with the hub not answering. Check that file, then retry.");
+            None if RULING.load(Ordering::SeqCst) && !ruled => {
+                if READ_RULES.load(Ordering::SeqCst) {
+                    eprintln!("DeepBuild blocked this: deep-hook couldn't read this call and check it against the guards that hold while the hub doesn't answer within 500 ms. Retry it.");
+                } else {
+                    eprintln!("DeepBuild blocked this: deep-hook couldn't read its guards in ~/.deepbuild/rules.json within 500 ms, with the hub not answering. Check that file, then retry.");
+                }
                 std::process::exit(2)
             }
             None => std::process::exit(0),
@@ -965,7 +1005,8 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{append, glob};
+    use super::append;
+    use super::shell::glob;
     use std::fs;
 
     #[test]
