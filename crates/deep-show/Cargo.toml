@@ -93,6 +93,9 @@ deep-canvas = { path = "../deep-canvas" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-gpu = { path = "../deep-gpu" }
+deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-marks-vello = { path = "../deep-marks-vello" }
 deep-text = { path = "../deep-text" }
 image = { version = "0.25", default-features = false, features = ["png"] }

@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad",
+    "digest": "1f2c227ce05ae6e0b5acf9d4e8aa5ecaa976f71cff09a11380cd63f3b3a66b52",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -50,6 +50,22 @@
   "motion": {
     "version": "1.0.0",
     "digest": "84bd75af638f525535c7e2b7f6d06056ad1ec067c095eda786f87881aaaa9ad1",
+    "verdict": "PASS",
+    "parts": {
+      "fixtures": "PASS",
+      "clean_rebuild": "PASS",
+      "patch_fuzz": "PASS",
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS"
+    }
+  },
+  "scene3d": {
+    "version": "1.0.0",
+    "digest": "239fc630015932310b96137a6efe02f2a2b23702809d733d9bf4fb5ba0da3013",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
