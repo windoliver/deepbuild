@@ -132,6 +132,8 @@ class Conn {
   name = '';
   session: string | null = null;
   parent: { pid: number; start: string } | undefined;
+  /** For a deep mcp, the folder it runs in: which known worktree's spec an unbound deep_search reads. */
+  cwd: string | undefined;
   /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
   peer: { pid: number; start: string } | undefined;
   first = true;
@@ -174,7 +176,8 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
-      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}) };
+      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}),
+      ...(process.env.DEEP_HUB_TEST_INDEX ? { index: process.env.DEEP_HUB_TEST_INDEX } : {}) };
     const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
@@ -358,6 +361,7 @@ class Hub {
       conn.role = 'mcp';
       conn.session = session;
       conn.parent = proved;
+      if (typeof value.cwd === 'string') conn.cwd = value.cwd;
       conn.name = session ? `mcp:${session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
@@ -397,7 +401,7 @@ class Hub {
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after })));
       }
       default:
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
     }
   }
 
@@ -434,7 +438,11 @@ function writeToken(root: Root): string {
 }
 
 /** `deep hub run [--root <folder>]`: the hub itself, in this process. Resolves only if it couldn't start. */
-export async function runHub(options: { root?: string }): Promise<number> {
+/**
+ * Runs the hub. In safe mode (`safe`) it loads no extension; the hub loads none yet in either mode, and the
+ * floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
+ */
+export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
@@ -457,7 +465,7 @@ export async function runHub(options: { root?: string }): Promise<number> {
   const hub = new Hub(root, writeToken(root), lock, plant, vfs);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
   await hub.open(clock);
-  process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start })}\n`);
+  process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);
   shedStartup();
   const headroom = process.env.DEEP_HUB_TEST_HEADROOM;
   if (headroom) {
