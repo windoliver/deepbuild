@@ -9,7 +9,7 @@ import { open, readFile, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { openAsks } from '@deepbuild/asks';
+import { AskRefused, openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
@@ -17,6 +17,7 @@ import { openRecord, RecordError, toJson, type Connection, type Event, type Even
 import { answers, composeKind, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { confirmYou } from './confirm.js';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
@@ -60,8 +61,25 @@ const isUnder = (path: string, dir: string) => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
 
-/** What a connection brings to a call: its role, the session it is bound to, and for deep mcp the process it serves. */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string } }
+/**
+ * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
+ * for the app or the CLI the process its hello named as its own.
+ */
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; peer?: { pid: number; start: string } }
+/** The asks core's refusal as the socket's error@2, with the code that fits what it names. */
+const asRefused = (error: unknown): unknown => {
+  if (!(error instanceof AskRefused)) return error;
+  const code = error.outcome ? 'not_found' : error.option ? 'enum' : error.field === 'writer' ? 'role' : 'type';
+  return new Refused(refusal(code, `/params/${error.option ? 'option' : error.field ?? 'ask'}`, error.message, error.option ?? error.ask ?? ''));
+};
+/** Every process's parent, from one `ps`: how the peer check walks up from a deep command to the agent above it. */
+const parents = (): Promise<Map<number, number>> => new Promise((done) => {
+  execFile('ps', ['-A', '-o', 'pid=,ppid='], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 16 << 20 }, (error, stdout) => {
+    const map = new Map<number, number>();
+    if (!error) for (const row of String(stdout).split('\n')) { const [pid, ppid] = row.trim().split(/\s+/).map(Number); if (pid && ppid) map.set(pid, ppid); }
+    done(map);
+  });
+});
 
 /**
  * A session as its own hooks established it: the agent process, its working folder and its transcript; and how
@@ -114,6 +132,7 @@ export class Core {
   private record!: RecordStore;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  private asks!: Asks;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
@@ -193,7 +212,7 @@ export class Core {
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
-    const asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
+    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
     const compose = this.compose = composeKind(join(this.root.dir, 'compose'));
     this.supervisor = await openSupervisor({
@@ -689,13 +708,14 @@ export class Core {
     if (method === 'mcp.call') {
       return this.queue(async () => this.bindCall(p, context)).then(({ tool, args, session }) => (tool === 'deep_claim' ? this.claim(session, args) : this.attach(session, args)));
     }
-    return this.queue(async () => undefined).then(() => this.dispatch(method, p));
+    return this.queue(async () => undefined).then(() => this.dispatch(method, p, context));
   }
-  private async dispatch(method: string, params: Obj): Promise<unknown> {
+  private async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health': return this.health();
       case 'events.read': return this.read(params);
-      case 'ask.answer': throw new Refused(refusal('not_found', '/params/ask', `No open ask ${String(params.ask)}; answer an ask the hub lists.`, params.ask));
+      case 'ask.answer': return this.answer(params, context);
+      case 'inbox.read': return this.inbox();
       case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
@@ -740,6 +760,79 @@ export class Core {
     const limit = Number.isSafeInteger(params.limit) && (params.limit as number) > 0 ? Math.min(params.limit as number, 1000) : 1000;
     const events = (await this.record.read({ after, limit })).map((e) => this.eventJson(e));
     return { log_pos: events.length ? events[events.length - 1]!.log_pos : after, events };
+  }
+
+  /** The open asks, as `deep inbox` lists them (#24): the inbox projection's rows, with each ask's question and options. */
+  private async inbox(): Promise<Obj> {
+    const open = (await this.asks.inbox()).filter((row) => row.status !== 'closed');
+    const rows = (await this.record.raw("SELECT id, question, options FROM asks WHERE status IN ('open', 'later')")) as { id: string; question: string | null; options: string | null }[];
+    const texts = new Map(rows.map((r) => [r.id, r]));
+    return {
+      asks: open.map((row) => {
+        const text = texts.get(row.ask.slice(4));
+        return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [] };
+      }),
+    };
+  }
+
+  /**
+   * Your answer to an ask from a control-token holder (#24). It counts only once the OS confirms you, never on the
+   * token or the peer check alone, and never from a deep command run inside an agent's process tree, which acts as
+   * that agent's session. Counted, the asks core records it and the core saves it as a decision for the ask's repo.
+   */
+  private async answer(params: Obj, context: CallContext): Promise<Obj> {
+    const { ask: handle, ...input } = params;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
+    const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = '${handle.slice(4)}' AND e.kind = 'ask.created'`)) as { session: string | null; project: string | null; data: string; status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
+    const answered = (): Promise<void> => this.asks.answer(this.connection(context.role === 'app' ? 'app' : 'cli'), handle, input).catch((error: unknown) => { throw asRefused(error); });
+    // A closed ask takes no answer: the asks core records the refusal, and there's nothing to confirm you for.
+    if (row.status !== 'open' && row.status !== 'later') {
+      await answered();
+      throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
+    }
+    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string }[] };
+    const chosen = ask.options.find((o) => o.id === input.option);
+    if (input.option !== undefined && !chosen) {
+      throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
+    }
+    // Saved for this repo, from the ask's own events, never wider than its card showed; with no repo, for its session.
+    const repo = (row.project ?? '').replace(/[^0-9A-Za-z]/g, '');
+    const session = (row.session ?? '').replace(/[^0-9A-Za-z]/g, '');
+    const scope = repo ? `repo:${repo}` : session ? `session:${session}` : undefined;
+    if (!scope) throw new Refused(refusal('unavailable', '/params/ask', `${handle} belongs to no repo or session, so its answer has no scope to be saved at; answer it on the question card.`, handle));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) {
+      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
+    }
+    const plant = this.options.plant;
+    if (plant !== 'answer-on-token' && plant !== 'answer-on-peer-check') {
+      const what = chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words';
+      const why = await confirmYou(`answer “${ask.question.slice(0, 120)}” with ${what}`, this.options.confirm);
+      if (why) {
+        throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
+      }
+    }
+    await answered();
+    const answer = chosen?.id ?? String(input.words);
+    await this.appendCore('decision.created', { key: ask.key, scope, answer, ask: handle });
+    return { ask: handle, answer, scope };
+  }
+
+  /**
+   * The peer check: the agent session whose process is above the caller's, by PID and start time as that session's
+   * hooks established them. It decides whose session a deep command acts as, never whether an answer counts.
+   */
+  private async agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
+    if (!peer || (await this.startOf(peer.pid, true)) !== peer.start) return undefined;
+    const up = await parents();
+    const seen = new Set<number>();
+    for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
+      seen.add(pid);
+      const session = [...this.sessions.values()].find((s) => s.pid === pid);
+      if (session && (await this.startOf(pid, true)) === session.start) return session.id;
+    }
+    return undefined;
   }
 
   /** Streams every event after `after` to the subscriber, then each one appended from then on. */

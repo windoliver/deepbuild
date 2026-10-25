@@ -1,0 +1,79 @@
+Acceptance tests for #24 on the base 8b98570 (origin/main: the hub of #16, the asks core of #318 and #319, no
+`deep inbox`), run on 2026-10-24 on an Apple silicon Mac that environmentProblem() read as a reference Mac on mains
+power (so the 30-day budget ran), Node 24.22.0, tmux 3.5a, after `npm ci` and `npm run build --workspaces`:
+
+  npx vitest run tests/acceptance/24
+  npx tsc -p tests/acceptance/24
+
+Trimmed to each failure's reason. No local path appears in what is kept (<repo> is the checkout).
+
+
+== npx vitest run tests/acceptance/24
+
+ ❯ tests/acceptance/24/plants.test.ts (3 tests | 3 failed) 8345ms
+ ❯ tests/acceptance/24/answer.test.ts (1 test | 1 failed) 8812ms
+ ❯ tests/acceptance/24/agents.test.ts (3 tests | 1 failed) 17888ms
+ ❯ tests/acceptance/24/confirm.test.ts (2 tests | 2 failed) 30656ms
+ ❯ tests/acceptance/24/budgets.test.ts (3 tests | 3 failed) 62612ms
+
+ Test Files  5 failed (5)
+      Tests  10 failed | 2 passed (12)
+
+FAIL  answer.test.ts   #24.4963284a an answer given in deep inbox answer is saved as a decision with its scope
+  AssertionError: deep inbox answer ask:01M5QNF706SF6B0TPKHNEBEFM7 decline exits 0: Unsupported command. Run deep
+  --help for available commands.
+  (Expected: the base has no `deep inbox`; the CLI exits 2.)
+
+FAIL  agents.test.ts   #24.4373d3bf deep inbox answer run in an agent's process tree answers nothing; the same command run by you does
+  AssertionError: deep inbox answer run in the agent's process tree exits 3 (not decided): Unsupported command. Run
+  deep --help for available commands.
+  (Expected: the same. The record check before it passed: the base answers nothing.)
+PASS  agents.test.ts   #24.4373d3bf the agent's deep mcp lists no tool that answers, and none of its tools answers an ask
+PASS  agents.test.ts   #24.4373d3bf an mcp connection to the hub can't call the answer, as a method or as a tool
+  (Expected: the base's deep mcp lists deep_status, deep_claim and deep_evidence, none of which answers, and #16's
+  role table already refuses ask.answer to an mcp connection. These two hold that as regression protection.)
+
+FAIL  budgets.test.ts  #24.bbe12971 deep inbox lists each open ask once, with its kind, session and age, and no closed ask
+  AssertionError: deep inbox exits 0: Unsupported command. Run deep --help for available commands.
+FAIL  budgets.test.ts  #24.bbe12971 the perf lane has the task deep-inbox-30d, a #24 first measurement, valid against
+                       the merge base's budgets, and it runs
+  AssertionError: benchmarks/budgets.json has a task deep-inbox-30d: expected undefined to be defined
+FAIL  budgets.test.ts  #24.bbe12971 deep inbox lists 30 days of asks in under 300 ms
+  AssertionError: deep inbox exits 0: Unsupported command. Run deep --help for available commands.
+  (Expected: no command and no perf-lane task. The 30-day test ran here, not skipped: the 3,000 asks were seeded
+  through the asks core and the hub started on them before the command failed, in about 52 s.)
+
+FAIL  confirm.test.ts  #24.71112e3b an authority answer typed by an agent through tmux send-keys, and one written to
+                       the socket with the control token, count only once the OS confirms you
+  AssertionError: deep inbox answer ask:01M5QNF7532HVJGC6B89W7JEZ6, with the OS confirmation cancelled, exits 3 (not
+  decided): Unsupported command. Run deep --help for available commands.
+  (Expected: the command the agent typed into your shell through tmux send-keys ran there and failed as unsupported;
+  the record check before it passed.)
+FAIL  confirm.test.ts  #24.b58ac6a6 answers to an exception, a definition and a taste ask written to the socket with
+                       the control token, the OS confirmation cancelled, save no decision and leave each ask open
+  AssertionError: ask ask:01M5QNFQAYHNSZMYW1AGF13S19 (exception): the hub refuses the answer as unconfirmed:
+  {"v":1,"id":"t24#1","error":{"code":"not_found","retryable":false,"remediation":"No open ask
+  ask:01M5QNFQAYHNSZMYW1AGF13S19; answer an ask the hub lists.","path":"/params/ask",...}}: expected 'not_found' to
+  be 'unconfirmed'
+  (Expected: the base hub answers every ask.answer with not_found.)
+
+FAIL  plants.test.ts   #24.71112e3b fails on a hub that counts a CLI answer on the peer check, naming the ask
+  AssertionError: expected [Function] to throw error matching /ask ask:[0-9A-Za-z]+ \(.*\) counted w…/ but got
+  'BLOCKED: the hub didn't start with DEEP_HUB_PLANT=answer-on-peer-check: …
+  Error: DEEP_HUB_PLANT=answer-on-peer-check names no planted program
+      at plantOf (file://<repo>/packages/hub/dist/wire.js:60:15)'
+FAIL  plants.test.ts   #24.71112e3b fails on a hub that counts a CLI answer on the control token alone, naming the ask
+  (the same, DEEP_HUB_PLANT=answer-on-token names no planted program)
+FAIL  plants.test.ts   #24.b58ac6a6 fails on a hub that saves an answer on the control token alone, naming the ask
+  (the same)
+  (Expected: the base has neither plant.)
+
+
+== npx tsc -p tests/acceptance/24
+
+(no output, exit 0: the tests import no code #24 adds; the surface is the deep commands, the socket and the seam.)
+
+
+== Not run
+
+No sample implementation was run, so the passing side of every test and each plant's failure are unverified.
