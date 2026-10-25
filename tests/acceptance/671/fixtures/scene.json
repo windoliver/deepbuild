@@ -1,0 +1,5106 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "Two hundred boxes under an orbiting camera",
+  "description": "Two test agents' document: 200 one-metre boxes in a 20 by 10 grid on a ground plane under a perspective camera that orbits once in 5 s, a beacon 1.5 m above box-02-01 for measuring, and in a writer layer of its own a 2D label anchored there.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "6s"
+  },
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "perspective",
+        "target": [
+          0,
+          0.5,
+          0
+        ],
+        "orbit": {
+          "azimuth": 0,
+          "elevation": 35,
+          "distance": 60
+        },
+        "fov": 40
+      }
+    },
+    "ground": {
+      "id": "ground",
+      "kind": "mark.box@1",
+      "name": "Ground plane",
+      "order": "a1",
+      "params": {
+        "size": [
+          44,
+          0.2,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -0.75,
+          -0.1,
+          -0.75
+        ]
+      }
+    },
+    "box-00-00": {
+      "id": "box-00-00",
+      "kind": "mark.box@1",
+      "name": "Box 0, 0",
+      "order": "b000",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-00-01": {
+      "id": "box-00-01",
+      "kind": "mark.box@1",
+      "name": "Box 0, 1",
+      "order": "b001",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-00-02": {
+      "id": "box-00-02",
+      "kind": "mark.box@1",
+      "name": "Box 0, 2",
+      "order": "b002",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-00-03": {
+      "id": "box-00-03",
+      "kind": "mark.box@1",
+      "name": "Box 0, 3",
+      "order": "b003",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-00-04": {
+      "id": "box-00-04",
+      "kind": "mark.box@1",
+      "name": "Box 0, 4",
+      "order": "b004",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-00-05": {
+      "id": "box-00-05",
+      "kind": "mark.box@1",
+      "name": "Box 0, 5",
+      "order": "b005",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-00-06": {
+      "id": "box-00-06",
+      "kind": "mark.box@1",
+      "name": "Box 0, 6",
+      "order": "b006",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-00-07": {
+      "id": "box-00-07",
+      "kind": "mark.box@1",
+      "name": "Box 0, 7",
+      "order": "b007",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-00-08": {
+      "id": "box-00-08",
+      "kind": "mark.box@1",
+      "name": "Box 0, 8",
+      "order": "b008",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-00-09": {
+      "id": "box-00-09",
+      "kind": "mark.box@1",
+      "name": "Box 0, 9",
+      "order": "b009",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -15,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-01-00": {
+      "id": "box-01-00",
+      "kind": "mark.box@1",
+      "name": "Box 1, 0",
+      "order": "b010",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-01-01": {
+      "id": "box-01-01",
+      "kind": "mark.box@1",
+      "name": "Box 1, 1",
+      "order": "b011",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-01-02": {
+      "id": "box-01-02",
+      "kind": "mark.box@1",
+      "name": "Box 1, 2",
+      "order": "b012",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-01-03": {
+      "id": "box-01-03",
+      "kind": "mark.box@1",
+      "name": "Box 1, 3",
+      "order": "b013",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-01-04": {
+      "id": "box-01-04",
+      "kind": "mark.box@1",
+      "name": "Box 1, 4",
+      "order": "b014",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-01-05": {
+      "id": "box-01-05",
+      "kind": "mark.box@1",
+      "name": "Box 1, 5",
+      "order": "b015",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-01-06": {
+      "id": "box-01-06",
+      "kind": "mark.box@1",
+      "name": "Box 1, 6",
+      "order": "b016",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-01-07": {
+      "id": "box-01-07",
+      "kind": "mark.box@1",
+      "name": "Box 1, 7",
+      "order": "b017",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-01-08": {
+      "id": "box-01-08",
+      "kind": "mark.box@1",
+      "name": "Box 1, 8",
+      "order": "b018",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-01-09": {
+      "id": "box-01-09",
+      "kind": "mark.box@1",
+      "name": "Box 1, 9",
+      "order": "b019",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -13.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-02-00": {
+      "id": "box-02-00",
+      "kind": "mark.box@1",
+      "name": "Box 2, 0",
+      "order": "b020",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-02-01": {
+      "id": "box-02-01",
+      "kind": "mark.box@1",
+      "name": "Box 2, 1",
+      "order": "b021",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-02-02": {
+      "id": "box-02-02",
+      "kind": "mark.box@1",
+      "name": "Box 2, 2",
+      "order": "b022",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-02-03": {
+      "id": "box-02-03",
+      "kind": "mark.box@1",
+      "name": "Box 2, 3",
+      "order": "b023",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-02-04": {
+      "id": "box-02-04",
+      "kind": "mark.box@1",
+      "name": "Box 2, 4",
+      "order": "b024",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-02-05": {
+      "id": "box-02-05",
+      "kind": "mark.box@1",
+      "name": "Box 2, 5",
+      "order": "b025",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-02-06": {
+      "id": "box-02-06",
+      "kind": "mark.box@1",
+      "name": "Box 2, 6",
+      "order": "b026",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-02-07": {
+      "id": "box-02-07",
+      "kind": "mark.box@1",
+      "name": "Box 2, 7",
+      "order": "b027",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-02-08": {
+      "id": "box-02-08",
+      "kind": "mark.box@1",
+      "name": "Box 2, 8",
+      "order": "b028",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-02-09": {
+      "id": "box-02-09",
+      "kind": "mark.box@1",
+      "name": "Box 2, 9",
+      "order": "b029",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-03-00": {
+      "id": "box-03-00",
+      "kind": "mark.box@1",
+      "name": "Box 3, 0",
+      "order": "b030",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-03-01": {
+      "id": "box-03-01",
+      "kind": "mark.box@1",
+      "name": "Box 3, 1",
+      "order": "b031",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-03-02": {
+      "id": "box-03-02",
+      "kind": "mark.box@1",
+      "name": "Box 3, 2",
+      "order": "b032",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-03-03": {
+      "id": "box-03-03",
+      "kind": "mark.box@1",
+      "name": "Box 3, 3",
+      "order": "b033",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-03-04": {
+      "id": "box-03-04",
+      "kind": "mark.box@1",
+      "name": "Box 3, 4",
+      "order": "b034",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-03-05": {
+      "id": "box-03-05",
+      "kind": "mark.box@1",
+      "name": "Box 3, 5",
+      "order": "b035",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-03-06": {
+      "id": "box-03-06",
+      "kind": "mark.box@1",
+      "name": "Box 3, 6",
+      "order": "b036",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-03-07": {
+      "id": "box-03-07",
+      "kind": "mark.box@1",
+      "name": "Box 3, 7",
+      "order": "b037",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-03-08": {
+      "id": "box-03-08",
+      "kind": "mark.box@1",
+      "name": "Box 3, 8",
+      "order": "b038",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-03-09": {
+      "id": "box-03-09",
+      "kind": "mark.box@1",
+      "name": "Box 3, 9",
+      "order": "b039",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -10.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-04-00": {
+      "id": "box-04-00",
+      "kind": "mark.box@1",
+      "name": "Box 4, 0",
+      "order": "b040",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-04-01": {
+      "id": "box-04-01",
+      "kind": "mark.box@1",
+      "name": "Box 4, 1",
+      "order": "b041",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-04-02": {
+      "id": "box-04-02",
+      "kind": "mark.box@1",
+      "name": "Box 4, 2",
+      "order": "b042",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-04-03": {
+      "id": "box-04-03",
+      "kind": "mark.box@1",
+      "name": "Box 4, 3",
+      "order": "b043",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-04-04": {
+      "id": "box-04-04",
+      "kind": "mark.box@1",
+      "name": "Box 4, 4",
+      "order": "b044",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-04-05": {
+      "id": "box-04-05",
+      "kind": "mark.box@1",
+      "name": "Box 4, 5",
+      "order": "b045",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-04-06": {
+      "id": "box-04-06",
+      "kind": "mark.box@1",
+      "name": "Box 4, 6",
+      "order": "b046",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-04-07": {
+      "id": "box-04-07",
+      "kind": "mark.box@1",
+      "name": "Box 4, 7",
+      "order": "b047",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-04-08": {
+      "id": "box-04-08",
+      "kind": "mark.box@1",
+      "name": "Box 4, 8",
+      "order": "b048",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-04-09": {
+      "id": "box-04-09",
+      "kind": "mark.box@1",
+      "name": "Box 4, 9",
+      "order": "b049",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -9,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-05-00": {
+      "id": "box-05-00",
+      "kind": "mark.box@1",
+      "name": "Box 5, 0",
+      "order": "b050",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-05-01": {
+      "id": "box-05-01",
+      "kind": "mark.box@1",
+      "name": "Box 5, 1",
+      "order": "b051",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-05-02": {
+      "id": "box-05-02",
+      "kind": "mark.box@1",
+      "name": "Box 5, 2",
+      "order": "b052",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-05-03": {
+      "id": "box-05-03",
+      "kind": "mark.box@1",
+      "name": "Box 5, 3",
+      "order": "b053",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-05-04": {
+      "id": "box-05-04",
+      "kind": "mark.box@1",
+      "name": "Box 5, 4",
+      "order": "b054",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-05-05": {
+      "id": "box-05-05",
+      "kind": "mark.box@1",
+      "name": "Box 5, 5",
+      "order": "b055",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-05-06": {
+      "id": "box-05-06",
+      "kind": "mark.box@1",
+      "name": "Box 5, 6",
+      "order": "b056",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-05-07": {
+      "id": "box-05-07",
+      "kind": "mark.box@1",
+      "name": "Box 5, 7",
+      "order": "b057",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-05-08": {
+      "id": "box-05-08",
+      "kind": "mark.box@1",
+      "name": "Box 5, 8",
+      "order": "b058",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-05-09": {
+      "id": "box-05-09",
+      "kind": "mark.box@1",
+      "name": "Box 5, 9",
+      "order": "b059",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -7.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-06-00": {
+      "id": "box-06-00",
+      "kind": "mark.box@1",
+      "name": "Box 6, 0",
+      "order": "b060",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-06-01": {
+      "id": "box-06-01",
+      "kind": "mark.box@1",
+      "name": "Box 6, 1",
+      "order": "b061",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-06-02": {
+      "id": "box-06-02",
+      "kind": "mark.box@1",
+      "name": "Box 6, 2",
+      "order": "b062",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-06-03": {
+      "id": "box-06-03",
+      "kind": "mark.box@1",
+      "name": "Box 6, 3",
+      "order": "b063",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-06-04": {
+      "id": "box-06-04",
+      "kind": "mark.box@1",
+      "name": "Box 6, 4",
+      "order": "b064",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-06-05": {
+      "id": "box-06-05",
+      "kind": "mark.box@1",
+      "name": "Box 6, 5",
+      "order": "b065",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-06-06": {
+      "id": "box-06-06",
+      "kind": "mark.box@1",
+      "name": "Box 6, 6",
+      "order": "b066",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-06-07": {
+      "id": "box-06-07",
+      "kind": "mark.box@1",
+      "name": "Box 6, 7",
+      "order": "b067",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-06-08": {
+      "id": "box-06-08",
+      "kind": "mark.box@1",
+      "name": "Box 6, 8",
+      "order": "b068",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-06-09": {
+      "id": "box-06-09",
+      "kind": "mark.box@1",
+      "name": "Box 6, 9",
+      "order": "b069",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -6,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-07-00": {
+      "id": "box-07-00",
+      "kind": "mark.box@1",
+      "name": "Box 7, 0",
+      "order": "b070",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-07-01": {
+      "id": "box-07-01",
+      "kind": "mark.box@1",
+      "name": "Box 7, 1",
+      "order": "b071",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-07-02": {
+      "id": "box-07-02",
+      "kind": "mark.box@1",
+      "name": "Box 7, 2",
+      "order": "b072",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-07-03": {
+      "id": "box-07-03",
+      "kind": "mark.box@1",
+      "name": "Box 7, 3",
+      "order": "b073",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-07-04": {
+      "id": "box-07-04",
+      "kind": "mark.box@1",
+      "name": "Box 7, 4",
+      "order": "b074",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-07-05": {
+      "id": "box-07-05",
+      "kind": "mark.box@1",
+      "name": "Box 7, 5",
+      "order": "b075",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-07-06": {
+      "id": "box-07-06",
+      "kind": "mark.box@1",
+      "name": "Box 7, 6",
+      "order": "b076",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-07-07": {
+      "id": "box-07-07",
+      "kind": "mark.box@1",
+      "name": "Box 7, 7",
+      "order": "b077",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-07-08": {
+      "id": "box-07-08",
+      "kind": "mark.box@1",
+      "name": "Box 7, 8",
+      "order": "b078",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-07-09": {
+      "id": "box-07-09",
+      "kind": "mark.box@1",
+      "name": "Box 7, 9",
+      "order": "b079",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -4.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-08-00": {
+      "id": "box-08-00",
+      "kind": "mark.box@1",
+      "name": "Box 8, 0",
+      "order": "b080",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-08-01": {
+      "id": "box-08-01",
+      "kind": "mark.box@1",
+      "name": "Box 8, 1",
+      "order": "b081",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-08-02": {
+      "id": "box-08-02",
+      "kind": "mark.box@1",
+      "name": "Box 8, 2",
+      "order": "b082",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-08-03": {
+      "id": "box-08-03",
+      "kind": "mark.box@1",
+      "name": "Box 8, 3",
+      "order": "b083",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-08-04": {
+      "id": "box-08-04",
+      "kind": "mark.box@1",
+      "name": "Box 8, 4",
+      "order": "b084",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-08-05": {
+      "id": "box-08-05",
+      "kind": "mark.box@1",
+      "name": "Box 8, 5",
+      "order": "b085",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-08-06": {
+      "id": "box-08-06",
+      "kind": "mark.box@1",
+      "name": "Box 8, 6",
+      "order": "b086",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-08-07": {
+      "id": "box-08-07",
+      "kind": "mark.box@1",
+      "name": "Box 8, 7",
+      "order": "b087",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-08-08": {
+      "id": "box-08-08",
+      "kind": "mark.box@1",
+      "name": "Box 8, 8",
+      "order": "b088",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-08-09": {
+      "id": "box-08-09",
+      "kind": "mark.box@1",
+      "name": "Box 8, 9",
+      "order": "b089",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-09-00": {
+      "id": "box-09-00",
+      "kind": "mark.box@1",
+      "name": "Box 9, 0",
+      "order": "b090",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-09-01": {
+      "id": "box-09-01",
+      "kind": "mark.box@1",
+      "name": "Box 9, 1",
+      "order": "b091",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-09-02": {
+      "id": "box-09-02",
+      "kind": "mark.box@1",
+      "name": "Box 9, 2",
+      "order": "b092",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-09-03": {
+      "id": "box-09-03",
+      "kind": "mark.box@1",
+      "name": "Box 9, 3",
+      "order": "b093",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-09-04": {
+      "id": "box-09-04",
+      "kind": "mark.box@1",
+      "name": "Box 9, 4",
+      "order": "b094",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-09-05": {
+      "id": "box-09-05",
+      "kind": "mark.box@1",
+      "name": "Box 9, 5",
+      "order": "b095",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-09-06": {
+      "id": "box-09-06",
+      "kind": "mark.box@1",
+      "name": "Box 9, 6",
+      "order": "b096",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-09-07": {
+      "id": "box-09-07",
+      "kind": "mark.box@1",
+      "name": "Box 9, 7",
+      "order": "b097",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-09-08": {
+      "id": "box-09-08",
+      "kind": "mark.box@1",
+      "name": "Box 9, 8",
+      "order": "b098",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-09-09": {
+      "id": "box-09-09",
+      "kind": "mark.box@1",
+      "name": "Box 9, 9",
+      "order": "b099",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-10-00": {
+      "id": "box-10-00",
+      "kind": "mark.box@1",
+      "name": "Box 10, 0",
+      "order": "b100",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-10-01": {
+      "id": "box-10-01",
+      "kind": "mark.box@1",
+      "name": "Box 10, 1",
+      "order": "b101",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-10-02": {
+      "id": "box-10-02",
+      "kind": "mark.box@1",
+      "name": "Box 10, 2",
+      "order": "b102",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-10-03": {
+      "id": "box-10-03",
+      "kind": "mark.box@1",
+      "name": "Box 10, 3",
+      "order": "b103",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-10-04": {
+      "id": "box-10-04",
+      "kind": "mark.box@1",
+      "name": "Box 10, 4",
+      "order": "b104",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-10-05": {
+      "id": "box-10-05",
+      "kind": "mark.box@1",
+      "name": "Box 10, 5",
+      "order": "b105",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-10-06": {
+      "id": "box-10-06",
+      "kind": "mark.box@1",
+      "name": "Box 10, 6",
+      "order": "b106",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-10-07": {
+      "id": "box-10-07",
+      "kind": "mark.box@1",
+      "name": "Box 10, 7",
+      "order": "b107",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-10-08": {
+      "id": "box-10-08",
+      "kind": "mark.box@1",
+      "name": "Box 10, 8",
+      "order": "b108",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-10-09": {
+      "id": "box-10-09",
+      "kind": "mark.box@1",
+      "name": "Box 10, 9",
+      "order": "b109",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-11-00": {
+      "id": "box-11-00",
+      "kind": "mark.box@1",
+      "name": "Box 11, 0",
+      "order": "b110",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-11-01": {
+      "id": "box-11-01",
+      "kind": "mark.box@1",
+      "name": "Box 11, 1",
+      "order": "b111",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-11-02": {
+      "id": "box-11-02",
+      "kind": "mark.box@1",
+      "name": "Box 11, 2",
+      "order": "b112",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-11-03": {
+      "id": "box-11-03",
+      "kind": "mark.box@1",
+      "name": "Box 11, 3",
+      "order": "b113",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-11-04": {
+      "id": "box-11-04",
+      "kind": "mark.box@1",
+      "name": "Box 11, 4",
+      "order": "b114",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-11-05": {
+      "id": "box-11-05",
+      "kind": "mark.box@1",
+      "name": "Box 11, 5",
+      "order": "b115",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-11-06": {
+      "id": "box-11-06",
+      "kind": "mark.box@1",
+      "name": "Box 11, 6",
+      "order": "b116",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-11-07": {
+      "id": "box-11-07",
+      "kind": "mark.box@1",
+      "name": "Box 11, 7",
+      "order": "b117",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-11-08": {
+      "id": "box-11-08",
+      "kind": "mark.box@1",
+      "name": "Box 11, 8",
+      "order": "b118",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-11-09": {
+      "id": "box-11-09",
+      "kind": "mark.box@1",
+      "name": "Box 11, 9",
+      "order": "b119",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-12-00": {
+      "id": "box-12-00",
+      "kind": "mark.box@1",
+      "name": "Box 12, 0",
+      "order": "b120",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-12-01": {
+      "id": "box-12-01",
+      "kind": "mark.box@1",
+      "name": "Box 12, 1",
+      "order": "b121",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-12-02": {
+      "id": "box-12-02",
+      "kind": "mark.box@1",
+      "name": "Box 12, 2",
+      "order": "b122",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-12-03": {
+      "id": "box-12-03",
+      "kind": "mark.box@1",
+      "name": "Box 12, 3",
+      "order": "b123",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-12-04": {
+      "id": "box-12-04",
+      "kind": "mark.box@1",
+      "name": "Box 12, 4",
+      "order": "b124",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-12-05": {
+      "id": "box-12-05",
+      "kind": "mark.box@1",
+      "name": "Box 12, 5",
+      "order": "b125",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-12-06": {
+      "id": "box-12-06",
+      "kind": "mark.box@1",
+      "name": "Box 12, 6",
+      "order": "b126",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-12-07": {
+      "id": "box-12-07",
+      "kind": "mark.box@1",
+      "name": "Box 12, 7",
+      "order": "b127",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-12-08": {
+      "id": "box-12-08",
+      "kind": "mark.box@1",
+      "name": "Box 12, 8",
+      "order": "b128",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-12-09": {
+      "id": "box-12-09",
+      "kind": "mark.box@1",
+      "name": "Box 12, 9",
+      "order": "b129",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-13-00": {
+      "id": "box-13-00",
+      "kind": "mark.box@1",
+      "name": "Box 13, 0",
+      "order": "b130",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-13-01": {
+      "id": "box-13-01",
+      "kind": "mark.box@1",
+      "name": "Box 13, 1",
+      "order": "b131",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-13-02": {
+      "id": "box-13-02",
+      "kind": "mark.box@1",
+      "name": "Box 13, 2",
+      "order": "b132",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-13-03": {
+      "id": "box-13-03",
+      "kind": "mark.box@1",
+      "name": "Box 13, 3",
+      "order": "b133",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-13-04": {
+      "id": "box-13-04",
+      "kind": "mark.box@1",
+      "name": "Box 13, 4",
+      "order": "b134",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-13-05": {
+      "id": "box-13-05",
+      "kind": "mark.box@1",
+      "name": "Box 13, 5",
+      "order": "b135",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-13-06": {
+      "id": "box-13-06",
+      "kind": "mark.box@1",
+      "name": "Box 13, 6",
+      "order": "b136",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-13-07": {
+      "id": "box-13-07",
+      "kind": "mark.box@1",
+      "name": "Box 13, 7",
+      "order": "b137",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-13-08": {
+      "id": "box-13-08",
+      "kind": "mark.box@1",
+      "name": "Box 13, 8",
+      "order": "b138",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-13-09": {
+      "id": "box-13-09",
+      "kind": "mark.box@1",
+      "name": "Box 13, 9",
+      "order": "b139",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          4.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-14-00": {
+      "id": "box-14-00",
+      "kind": "mark.box@1",
+      "name": "Box 14, 0",
+      "order": "b140",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-14-01": {
+      "id": "box-14-01",
+      "kind": "mark.box@1",
+      "name": "Box 14, 1",
+      "order": "b141",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-14-02": {
+      "id": "box-14-02",
+      "kind": "mark.box@1",
+      "name": "Box 14, 2",
+      "order": "b142",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-14-03": {
+      "id": "box-14-03",
+      "kind": "mark.box@1",
+      "name": "Box 14, 3",
+      "order": "b143",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-14-04": {
+      "id": "box-14-04",
+      "kind": "mark.box@1",
+      "name": "Box 14, 4",
+      "order": "b144",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-14-05": {
+      "id": "box-14-05",
+      "kind": "mark.box@1",
+      "name": "Box 14, 5",
+      "order": "b145",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-14-06": {
+      "id": "box-14-06",
+      "kind": "mark.box@1",
+      "name": "Box 14, 6",
+      "order": "b146",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-14-07": {
+      "id": "box-14-07",
+      "kind": "mark.box@1",
+      "name": "Box 14, 7",
+      "order": "b147",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-14-08": {
+      "id": "box-14-08",
+      "kind": "mark.box@1",
+      "name": "Box 14, 8",
+      "order": "b148",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-14-09": {
+      "id": "box-14-09",
+      "kind": "mark.box@1",
+      "name": "Box 14, 9",
+      "order": "b149",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          6,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-15-00": {
+      "id": "box-15-00",
+      "kind": "mark.box@1",
+      "name": "Box 15, 0",
+      "order": "b150",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-15-01": {
+      "id": "box-15-01",
+      "kind": "mark.box@1",
+      "name": "Box 15, 1",
+      "order": "b151",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-15-02": {
+      "id": "box-15-02",
+      "kind": "mark.box@1",
+      "name": "Box 15, 2",
+      "order": "b152",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-15-03": {
+      "id": "box-15-03",
+      "kind": "mark.box@1",
+      "name": "Box 15, 3",
+      "order": "b153",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-15-04": {
+      "id": "box-15-04",
+      "kind": "mark.box@1",
+      "name": "Box 15, 4",
+      "order": "b154",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-15-05": {
+      "id": "box-15-05",
+      "kind": "mark.box@1",
+      "name": "Box 15, 5",
+      "order": "b155",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-15-06": {
+      "id": "box-15-06",
+      "kind": "mark.box@1",
+      "name": "Box 15, 6",
+      "order": "b156",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-15-07": {
+      "id": "box-15-07",
+      "kind": "mark.box@1",
+      "name": "Box 15, 7",
+      "order": "b157",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-15-08": {
+      "id": "box-15-08",
+      "kind": "mark.box@1",
+      "name": "Box 15, 8",
+      "order": "b158",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-15-09": {
+      "id": "box-15-09",
+      "kind": "mark.box@1",
+      "name": "Box 15, 9",
+      "order": "b159",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          7.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-16-00": {
+      "id": "box-16-00",
+      "kind": "mark.box@1",
+      "name": "Box 16, 0",
+      "order": "b160",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-16-01": {
+      "id": "box-16-01",
+      "kind": "mark.box@1",
+      "name": "Box 16, 1",
+      "order": "b161",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-16-02": {
+      "id": "box-16-02",
+      "kind": "mark.box@1",
+      "name": "Box 16, 2",
+      "order": "b162",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-16-03": {
+      "id": "box-16-03",
+      "kind": "mark.box@1",
+      "name": "Box 16, 3",
+      "order": "b163",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-16-04": {
+      "id": "box-16-04",
+      "kind": "mark.box@1",
+      "name": "Box 16, 4",
+      "order": "b164",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-16-05": {
+      "id": "box-16-05",
+      "kind": "mark.box@1",
+      "name": "Box 16, 5",
+      "order": "b165",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-16-06": {
+      "id": "box-16-06",
+      "kind": "mark.box@1",
+      "name": "Box 16, 6",
+      "order": "b166",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-16-07": {
+      "id": "box-16-07",
+      "kind": "mark.box@1",
+      "name": "Box 16, 7",
+      "order": "b167",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-16-08": {
+      "id": "box-16-08",
+      "kind": "mark.box@1",
+      "name": "Box 16, 8",
+      "order": "b168",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-16-09": {
+      "id": "box-16-09",
+      "kind": "mark.box@1",
+      "name": "Box 16, 9",
+      "order": "b169",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          9,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-17-00": {
+      "id": "box-17-00",
+      "kind": "mark.box@1",
+      "name": "Box 17, 0",
+      "order": "b170",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-17-01": {
+      "id": "box-17-01",
+      "kind": "mark.box@1",
+      "name": "Box 17, 1",
+      "order": "b171",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-17-02": {
+      "id": "box-17-02",
+      "kind": "mark.box@1",
+      "name": "Box 17, 2",
+      "order": "b172",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-17-03": {
+      "id": "box-17-03",
+      "kind": "mark.box@1",
+      "name": "Box 17, 3",
+      "order": "b173",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-17-04": {
+      "id": "box-17-04",
+      "kind": "mark.box@1",
+      "name": "Box 17, 4",
+      "order": "b174",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-17-05": {
+      "id": "box-17-05",
+      "kind": "mark.box@1",
+      "name": "Box 17, 5",
+      "order": "b175",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-17-06": {
+      "id": "box-17-06",
+      "kind": "mark.box@1",
+      "name": "Box 17, 6",
+      "order": "b176",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-17-07": {
+      "id": "box-17-07",
+      "kind": "mark.box@1",
+      "name": "Box 17, 7",
+      "order": "b177",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-17-08": {
+      "id": "box-17-08",
+      "kind": "mark.box@1",
+      "name": "Box 17, 8",
+      "order": "b178",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-17-09": {
+      "id": "box-17-09",
+      "kind": "mark.box@1",
+      "name": "Box 17, 9",
+      "order": "b179",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          10.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-18-00": {
+      "id": "box-18-00",
+      "kind": "mark.box@1",
+      "name": "Box 18, 0",
+      "order": "b180",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-18-01": {
+      "id": "box-18-01",
+      "kind": "mark.box@1",
+      "name": "Box 18, 1",
+      "order": "b181",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-18-02": {
+      "id": "box-18-02",
+      "kind": "mark.box@1",
+      "name": "Box 18, 2",
+      "order": "b182",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-18-03": {
+      "id": "box-18-03",
+      "kind": "mark.box@1",
+      "name": "Box 18, 3",
+      "order": "b183",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-18-04": {
+      "id": "box-18-04",
+      "kind": "mark.box@1",
+      "name": "Box 18, 4",
+      "order": "b184",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-18-05": {
+      "id": "box-18-05",
+      "kind": "mark.box@1",
+      "name": "Box 18, 5",
+      "order": "b185",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-18-06": {
+      "id": "box-18-06",
+      "kind": "mark.box@1",
+      "name": "Box 18, 6",
+      "order": "b186",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-18-07": {
+      "id": "box-18-07",
+      "kind": "mark.box@1",
+      "name": "Box 18, 7",
+      "order": "b187",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-18-08": {
+      "id": "box-18-08",
+      "kind": "mark.box@1",
+      "name": "Box 18, 8",
+      "order": "b188",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-18-09": {
+      "id": "box-18-09",
+      "kind": "mark.box@1",
+      "name": "Box 18, 9",
+      "order": "b189",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          12,
+          0.5,
+          6
+        ]
+      }
+    },
+    "box-19-00": {
+      "id": "box-19-00",
+      "kind": "mark.box@1",
+      "name": "Box 19, 0",
+      "order": "b190",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          -7.5
+        ]
+      }
+    },
+    "box-19-01": {
+      "id": "box-19-01",
+      "kind": "mark.box@1",
+      "name": "Box 19, 1",
+      "order": "b191",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          -6
+        ]
+      }
+    },
+    "box-19-02": {
+      "id": "box-19-02",
+      "kind": "mark.box@1",
+      "name": "Box 19, 2",
+      "order": "b192",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          -4.5
+        ]
+      }
+    },
+    "box-19-03": {
+      "id": "box-19-03",
+      "kind": "mark.box@1",
+      "name": "Box 19, 3",
+      "order": "b193",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          -3
+        ]
+      }
+    },
+    "box-19-04": {
+      "id": "box-19-04",
+      "kind": "mark.box@1",
+      "name": "Box 19, 4",
+      "order": "b194",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          -1.5
+        ]
+      }
+    },
+    "box-19-05": {
+      "id": "box-19-05",
+      "kind": "mark.box@1",
+      "name": "Box 19, 5",
+      "order": "b195",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-19-06": {
+      "id": "box-19-06",
+      "kind": "mark.box@1",
+      "name": "Box 19, 6",
+      "order": "b196",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          1.5
+        ]
+      }
+    },
+    "box-19-07": {
+      "id": "box-19-07",
+      "kind": "mark.box@1",
+      "name": "Box 19, 7",
+      "order": "b197",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          3
+        ]
+      }
+    },
+    "box-19-08": {
+      "id": "box-19-08",
+      "kind": "mark.box@1",
+      "name": "Box 19, 8",
+      "order": "b198",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          4.5
+        ]
+      }
+    },
+    "box-19-09": {
+      "id": "box-19-09",
+      "kind": "mark.box@1",
+      "name": "Box 19, 9",
+      "order": "b199",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          13.5,
+          0.5,
+          6
+        ]
+      }
+    },
+    "beacon": {
+      "id": "beacon",
+      "kind": "mark.point@1",
+      "name": "Beacon over box 02-01",
+      "order": "c0",
+      "params": {
+        "size": 16,
+        "shape": "dot",
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -12,
+          2,
+          -6
+        ]
+      }
+    }
+  },
+  "channels": {
+    "orbit": {
+      "target": "items/cam/params/orbit/azimuth",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "5s",
+          "value": 360,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}
