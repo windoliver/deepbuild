@@ -1286,6 +1286,24 @@ export interface DecisionOverruled {
   evidence?: Array<string>;
 }
 
+/** default.undone@1 */
+export interface DefaultUndone {
+  v: 1;
+  id: string;
+  kind: "default.undone";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    deadline: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.drafted@1 */
 export interface DefinitionDrafted {
   v: 1;

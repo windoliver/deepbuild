@@ -269,6 +269,11 @@ export class Projector {
         if (e.kind === 'ask.answered' && typeof d.plan_hash === 'string') this.up('plans', { ask, answered_hash: d.plan_hash });
         break;
       }
+      case 'default.undone':
+        // Your undo, on the trusted path: a defaulted ask is open again, unanswered, until its new deadline.
+        if (e.writer !== 'core') break;
+        this.stmt("UPDATE asks SET status = 'open', outcome = 'unanswered', answered = NULL, answer = NULL, decision = NULL, deadline = ? WHERE id = ? AND status = 'defaulted'").run(int(d.deadline), bare(e.subject));
+        break;
       case 'ask.escalated':
       case 'ask.cancelled':
       case 'ask.moot':

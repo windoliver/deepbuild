@@ -229,6 +229,8 @@ export class Core {
     // never on how many arrived together, so a cut at any one can be replayed.
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
+    // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
+    this.record = streamed(this.record, () => this.stream());
     // A start that finds the last run still marked running records that run's stop as a crash.
     try {
       // A cursor whose transcript is gone has no session left to judge.
@@ -241,6 +243,10 @@ export class Core {
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined, home: this.root.dir });
+    // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
+    // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
+    const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
+    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick() : undefined)).catch(() => undefined), 1000));
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -334,7 +340,6 @@ export class Core {
     } finally {
       this.inflight.delete(appended);
     }
-    this.stream();
   }
   private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[] } = {}): Promise<void> {
     const ts = this.now();
@@ -751,6 +756,7 @@ export class Core {
       case 'evidence.read': return this.evidence(params);
       case 'ask.answer': return this.answer(params, context);
       case 'decision.overrule': return this.overrule(params, context);
+      case 'ask.undo': return this.undo(params, context);
       case 'device.pair': return this.pair(params);
       case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
@@ -867,7 +873,7 @@ export class Core {
     }
     if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
     const agent = await this.agentAbove(context.peer);
-    if (agent) {
+    if (agent && this.options.plant !== 'answer-inside-session') {
       throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
     }
     const plant = this.options.plant;
@@ -919,6 +925,18 @@ export class Core {
     const answer = chosen?.id ?? String(input.words);
     if (scope) await this.appendCore('decision.created', { key: ask.key, scope, answer, ask: handle });
     return { ask: handle, answer, scope };
+  }
+  /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
+  private async undo(params: Obj, context: CallContext): Promise<Obj> {
+    const handle = params.ask;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
+    const [row] = (await this.record.raw(`SELECT question, status FROM asks WHERE id = '${handle.slice(4)}'`)) as { question: string; status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
+    if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
+    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle);
+    await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
+    const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = '${handle.slice(4)}'`)) as { deadline: number }[];
+    return { ask: handle, deadline: open?.deadline ?? null };
   }
   /** decisions/:id/overrule: a saved decision taken out of force, on the trusted path alone. */
   private async overrule(params: Obj, context: CallContext): Promise<Obj> {
@@ -1702,6 +1720,26 @@ export class Core {
  * job is recorded and before anything of it starts; job.started, once a job's process is tracked and before its
  * prompt is written. Only tests set it.
  */
+/** The record, with its append replaced. */
+function withAppend(record: RecordStore, append: RecordStore['append']): RecordStore {
+  return new Proxy(record, {
+    get: (target, key) => {
+      if (key === 'append') return append;
+      const value = Reflect.get(target, key, target) as unknown;
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+}
+
+/** The record, calling `appended` after each append it took. */
+function streamed(record: RecordStore, appended: () => void): RecordStore {
+  return withAppend(record, async (connection, input) => {
+    const event = await record.append(connection, input);
+    appended();
+    return event;
+  });
+}
+
 function crashing(record: RecordStore, point: string): RecordStore {
   const jobs = new Set<string>();
   const append: RecordStore['append'] = async (connection, input) => {
@@ -1718,11 +1756,5 @@ function crashing(record: RecordStore, point: string): RecordStore {
     if ((point === 'job.recorded' && input.kind === 'job.recorded') || (point === 'job.started' && input.kind === 'process.tracked' && jobs.has(run))) process.kill(process.pid, 'SIGKILL');
     return event;
   };
-  return new Proxy(record, {
-    get: (target, key) => {
-      if (key === 'append') return append;
-      const value = Reflect.get(target, key, target) as unknown;
-      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
-    },
-  });
+  return withAppend(record, append);
 }
