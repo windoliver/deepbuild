@@ -1,0 +1,223 @@
+Base commit: 0b41a19 (origin/main, no implementation of #316)
+Command: npm ci; npm run build --workspaces (twice); cargo build --locked -q -p deep-hook; then NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/316 --no-file-parallelism --reporter=verbose   (node v24.22.0, the repo's .node-version; the same as npx vitest run --root tests/acceptance/316 --no-file-parallelism)
+Date: 2026-10-24  Node v24.22.0  vitest 5.0.5  darwin-arm64. The machine was heavily loaded by other worktree sessions' cargo and vitest runs; a first attempt was stopped (by its own PIDs) after its beforeAll cargo builds starved, and this is the second, complete run.
+Scope: criteria AC1-AC8. AC9 is corpus.test.ts, written by a separate blind job, and is not in this run.
+Exit code: 1
+Result: 5 files, 15 tests, 14 failed, 1 passed, 0 skipped.
+
+Why each test fails at the base:
+- Every test that installs the defaults (AC1 deny, AC2 x2, AC3 x2, AC4 x2, AC5 x2, AC6, AC7 x2, AC8 run) fails at
+  installDefaults: "crates/deep-hook/default-rules.json is missing". The base ships no default guard@1 entries, so
+  there is no first rules.json to install. This is the expected reason: #316 delivers the entries as that file.
+- AC8 (wrong program) fails with "the plant plant-paths-as-written did not build": cargo reports "the package
+  'deep-hook' does not contain this feature: plant-paths-as-written". The plant is code the implementer writes.
+- Three tests are allow-twins (AC3 ordinary write allowed, AC4 lsof/pgrep listing allowed, AC7 text-only mentions
+  allowed). At the base they fail only on the missing file: with any rules.json they would pass, since the base
+  denies nothing it doesn't glob-match. They stay as precision guards: once the defaults exist, a matcher that
+  denies too broadly fails them.
+
+The one test that passes at the base: AC1 "the entries are data, not compiled in: an empty rules.json lets pkill -f
+node through". #315's deep-hook already allows every call no entry matches. The test stays as the control showing
+the default rules come from rules.json and are not built into deep-hook (#316 Scope: "a rule you add needs no new
+deep-hook build"); a deep-hook with the rules compiled in fails it.
+
+Checked beside this run (not part of the suite): the base binary was run against a hand-written rules.json of
+#315-style `shell:<glob>` entries (shell:pkill *, shell:killall *, shell:git stash, shell:gh workflow run *,
+shell:sed -i *.claude/settings.json), all fail_closed, hub stopped, to show the base matcher, not only the missing
+file, fails the criteria:
+  ok    deny   pkill -f node
+  MISS  allow  env killall node                         (AC4: no unwrapping of wrappers)
+  MISS  allow  git -C /elsewhere status                 (AC2/AC6: no reading of where git is aimed)
+  MISS  allow  git stash pop                            (AC2: a glob for the whole command misses the variant)
+  MISS  allow  Edit of ~/.claude/settings.json          (AC3/AC8: only Bash commands are matched; Edit/Write never are)
+  MISS  allow  gh api …/dispatches                      (AC5: the other dispatch forms)
+  ok    allow  rg 'pkill' src/
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/316/tsconfig.json reports no errors.
+No implementation was run against the suite; no test has been seen to pass on a correct program.
+
+---- The run ----
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/316
+
+ × symlink.test.ts > AC8 #316.9404dfdb a symlinked config, its target, a .. path and a write through a fresh symlink are each denied naming deep_propose; a paths-as-written matcher fails > AC8 the real matcher denies all three reaches of the linked config, each naming deep_propose; an ordinary write is allowed 66ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × symlink.test.ts > AC8 #316.9404dfdb a symlinked config, its target, a .. path and a write through a fresh symlink are each denied naming deep_propose; a paths-as-written matcher fails > AC8 (wrong program) a matcher that matches only the listed paths as written lets all three through and fails, naming the path 0ms
+   → the plant plant-paths-as-written did not build: BLOCKED: cargo build --locked -q -p deep-hook --features plant-paths-as-written --target-dir <checkout>/target/plant-paths-as-written failed: error: the package 'deep-hook' does not contain this feature: plant-paths-as-written
+
+ × git.test.ts > AC2 #316.e0cba5a9 git stash and git -C <another worktree> status are blocked from a worktree session; git stash push -m <tag> and git in the own worktree are allowed > AC2 bare stash and cross-worktree git are denied; stash push and own-worktree git are allowed 25ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × git.test.ts > AC2 #316.e0cba5a9 git stash and git -C <another worktree> status are blocked from a worktree session; git stash push -m <tag> and git in the own worktree are allowed > AC2 git stash pop is also a bare-stash form, and is denied 25ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × git.test.ts > AC6 #316.6b7d29d2 git aimed at another checkout is blocked however it is aimed: cd first, --git-dir, --work-tree, GIT_DIR, read-only commands, and from subagents > AC6 every way of aiming git at the main checkout is denied and names it; own-worktree git is allowed 18ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × blocked.test.ts > AC1 #316.47a1dec1 with the hub stopped, pkill -f node is still blocked > AC1 the default entries deny pkill -f node and carry a reason and a next step; a normal command is allowed 24ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ✓ blocked.test.ts > AC1 #316.47a1dec1 with the hub stopped, pkill -f node is still blocked > AC1 the entries are data, not compiled in: an empty rules.json lets pkill -f node through 227ms
+ × blocked.test.ts > AC4 #316.85c1dfdf every kill form is blocked: killall, fuser -k, kill-port, lsof/pgrep into xargs or a loop, through wrappers and heredocs > AC4 each kill form is denied, carrying a reason and a next step 27ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × blocked.test.ts > AC4 #316.85c1dfdf every kill form is blocked: killall, fuser -k, kill-port, lsof/pgrep into xargs or a loop, through wrappers and heredocs > AC4 listing without a kill is allowed: lsof and pgrep on their own 38ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × blocked.test.ts > AC7 #316.aa88a9ae text that only mentions a blocked command is allowed > AC7 a search, a commit message and a heredoc written to a file are each allowed 48ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × blocked.test.ts > AC7 #316.aa88a9ae text that only mentions a blocked command is allowed > AC7 the same words that do run are still denied (the twin of the allowed set) 55ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × dispatch.test.ts > AC5 #316.b9fa0a58 workflow dispatch is blocked in every form; a rerun is allowed; an approval runs exactly the workflow, branch and inputs it showed > AC5 gh workflow run, gh api .../dispatches and curl .../dispatches are each denied; a rerun is allowed 14ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × dispatch.test.ts > AC5 #316.b9fa0a58 workflow dispatch is blocked in every form; a rerun is allowed; an approval runs exactly the workflow, branch and inputs it showed > AC5 the denial shows the workflow, branch and inputs, and running the shown dispatch hits exactly them 13ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × config.test.ts > AC3 #316.26d87d62 an agent's Edit, Write or sed -i of another agent's config or a skills folder is denied with the hub stopped, naming deep_propose > AC3 Edit of a settings file, Write of a config file, sed -i of a config, and Edit of a skill are each denied naming deep_propose 31ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ × config.test.ts > AC3 #316.26d87d62 an agent's Edit, Write or sed -i of another agent's config or a skills folder is denied with the hub stopped, naming deep_propose > AC3 an ordinary file write is allowed (the twin, so the rule is not denying every write) 45ms
+   → crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  blocked.test.ts > AC1 #316.47a1dec1 with the hub stopped, pkill -f node is still blocked > AC1 the default entries deny pkill -f node and carry a reason and a next step; a normal command is allowed
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ call blocked.test.ts:18:17
+ ❯ blocked.test.ts:33:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  blocked.test.ts > AC4 #316.85c1dfdf every kill form is blocked: killall, fuser -k, kill-port, lsof/pgrep into xargs or a loop, through wrappers and heredocs > AC4 each kill form is denied, carrying a reason and a next step
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ call blocked.test.ts:18:17
+ ❯ blocked.test.ts:59:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  blocked.test.ts > AC4 #316.85c1dfdf every kill form is blocked: killall, fuser -k, kill-port, lsof/pgrep into xargs or a loop, through wrappers and heredocs > AC4 listing without a kill is allowed: lsof and pgrep on their own
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ call blocked.test.ts:18:17
+ ❯ blocked.test.ts:63:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  blocked.test.ts > AC7 #316.aa88a9ae text that only mentions a blocked command is allowed > AC7 a search, a commit message and a heredoc written to a file are each allowed
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ call blocked.test.ts:18:17
+ ❯ blocked.test.ts:75:65
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  blocked.test.ts > AC7 #316.aa88a9ae text that only mentions a blocked command is allowed > AC7 the same words that do run are still denied (the twin of the allowed set)
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ call blocked.test.ts:18:17
+ ❯ blocked.test.ts:80:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  config.test.ts > AC3 #316.26d87d62 an agent's Edit, Write or sed -i of another agent's config or a skills folder is denied with the hub stopped, naming deep_propose > AC3 Edit of a settings file, Write of a config file, sed -i of a config, and Edit of a skill are each denied naming deep_propose
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world config.test.ts:19:17
+ ❯ config.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  config.test.ts > AC3 #316.26d87d62 an agent's Edit, Write or sed -i of another agent's config or a skills folder is denied with the hub stopped, naming deep_propose > AC3 an ordinary file write is allowed (the twin, so the rule is not denying every write)
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world config.test.ts:19:17
+ ❯ config.test.ts:47:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  dispatch.test.ts > AC5 #316.b9fa0a58 workflow dispatch is blocked in every form; a rerun is allowed; an approval runs exactly the workflow, branch and inputs it showed > AC5 gh workflow run, gh api .../dispatches and curl .../dispatches are each denied; a rerun is allowed
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world dispatch.test.ts:19:17
+ ❯ dispatch.test.ts:34:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  dispatch.test.ts > AC5 #316.b9fa0a58 workflow dispatch is blocked in every form; a rerun is allowed; an approval runs exactly the workflow, branch and inputs it showed > AC5 the denial shows the workflow, branch and inputs, and running the shown dispatch hits exactly them
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world dispatch.test.ts:19:17
+ ❯ dispatch.test.ts:51:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  git.test.ts > AC2 #316.e0cba5a9 git stash and git -C <another worktree> status are blocked from a worktree session; git stash push -m <tag> and git in the own worktree are allowed > AC2 bare stash and cross-worktree git are denied; stash push and own-worktree git are allowed
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world git.test.ts:19:17
+ ❯ git.test.ts:40:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  git.test.ts > AC2 #316.e0cba5a9 git stash and git -C <another worktree> status are blocked from a worktree session; git stash push -m <tag> and git in the own worktree are allowed > AC2 git stash pop is also a bare-stash form, and is denied
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world git.test.ts:19:17
+ ❯ git.test.ts:49:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  git.test.ts > AC6 #316.6b7d29d2 git aimed at another checkout is blocked however it is aimed: cd first, --git-dir, --work-tree, GIT_DIR, read-only commands, and from subagents > AC6 every way of aiming git at the main checkout is denied and names it; own-worktree git is allowed
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world git.test.ts:19:17
+ ❯ git.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  symlink.test.ts > AC8 #316.9404dfdb a symlinked config, its target, a .. path and a write through a fresh symlink are each denied naming deep_propose; a paths-as-written matcher fails > AC8 the real matcher denies all three reaches of the linked config, each naming deep_propose; an ordinary write is allowed
+Error: crates/deep-hook/default-rules.json is missing: the default guard@1 entries must ship as a file so deep-hook (the only evaluator) installs them as the first rules.json with no hub (#316 Scope). Base has none.
+ ❯ defaultRules helpers.ts:210:11
+
+ ❯ installDefaults helpers.ts:220:17
+ ❯ world symlink.test.ts:32:17
+ ❯ symlink.test.ts:66:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  symlink.test.ts > AC8 #316.9404dfdb a symlinked config, its target, a .. path and a write through a fresh symlink are each denied naming deep_propose; a paths-as-written matcher fails > AC8 (wrong program) a matcher that matches only the listed paths as written lets all three through and fails, naming the path
+Error: the plant plant-paths-as-written did not build: BLOCKED: cargo build --locked -q -p deep-hook --features plant-paths-as-written --target-dir <checkout>/target/plant-paths-as-written failed: error: the package 'deep-hook' does not contain this feature: plant-paths-as-written
+
+ ❯ symlink.test.ts:73:39
+     71|
+     72|   it('AC8 (wrong program) a matcher that matches only the listed paths…
+     73|     if (!PLANT.startsWith('/')) throw Error(`the plant plant-paths-as-…
+       |                                       ^
+     74|     const w = world();
+     75|     await expect(judge(PLANT, w)).rejects.toThrow(/must be denied|does…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  14 failed | 1 passed (15)
+   Start at  16:28:54
+   Duration  390.03s (tests 100%)
+

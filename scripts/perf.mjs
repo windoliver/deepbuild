@@ -4,7 +4,7 @@ import { copyFileSync, cpSync, existsSync, linkSync, lstatSync, mkdirSync, readd
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compare, fingerprint, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
+import { compare, fingerprint, judgeInstructions, judgeLimit, measure, measureOnce, validateBudgets, warm } from './benchmark.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = 'benchmarks/budgets.json';
@@ -13,6 +13,8 @@ const files = (args) => run('git', [...args, '-z']).split('\0').filter(Boolean);
 // BLOCKED: perf could not compare. FAIL: a measurement broke its budget.
 const blocked = (message, fix) => Object.assign(Error(message), { fix });
 const regressed = 'Restore the regressed budget; budgets are frozen once they reach main.';
+// Where every result's instructions retired came from; GNU time has no counter.
+const counter = process.platform === 'darwin' ? '/usr/bin/time -l: instructions retired' : null;
 // Each side's copy lives at the same path every run, in this user's cache directory under a name
 // for this checkout, with its Cargo builds kept beside it, so a preflight doesn't rebuild the
 // dependency tree cold (#594). The path has to stay put: Cargo doesn't rebuild a crate whose
@@ -206,7 +208,7 @@ try {
     baseline = checkRun(archive, allowance);
     if (baseline.status !== 0) throw blocked(`merge-base checks exited ${baseline.status}: ${baseline.output}`, 'Repair the checks on main; a failing merge base cannot be compared.');
   }
-  const reading = ({ elapsedMs, cpuMs, peakBytes }) => ({ elapsedMs, cpuMs, peakBytes });
+  const reading = ({ elapsedMs, cpuMs, peakBytes, instructions }) => ({ elapsedMs, cpuMs, peakBytes, instructions: instructions ?? null });
   const workloadBase = base?.preflight ? baseline : null;
   // The change's own test files, committed or not: preflight runs on the working tree.
   const changed = workloadBase ? [...new Set([
@@ -256,7 +258,7 @@ try {
       }
     });
     if (outcome && full) console.log(JSON.stringify({ task: 'preflight', baseCommit, ...outcome, samples: 1, current: reading(rest ?? observed), base: workloadBase && reading(workloadBase),
-      ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs }, fingerprint: fingerprint() }));
+      ...rest && { full: reading(observed), ownTests, ownTestsCpuMs: observed.cpuMs - rest.cpuMs }, counter, fingerprint: fingerprint() }));
   } catch (error) {
     verdicts.push(['FAIL', error.message, regressed]);
   }
@@ -279,6 +281,9 @@ try {
     const [now, then = null] = samples;
     const machine = fingerprint();
     const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine })]));
+    // Instructions retired don't move with load, so this comparison holds on any machine; it never
+    // changes a limit's verdict.
+    const instructions = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })));
     let outcome;
     try {
       // compare holds only the merge-base regression here; the limits are judged above.
@@ -286,7 +291,9 @@ try {
     } catch (error) {
       verdicts.push(['FAIL', error.message, regressed]);
     }
-    console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: now, base: then, fingerprint: machine, limits }));
+    console.log(JSON.stringify({ task: budget.id, baseCommit, ...outcome, current: now, base: then, counter, fingerprint: machine, limits, ...instructions && { instructions } }));
+    if (instructions?.status === 'FAIL') verdicts.push(['FAIL', `${budget.id}: instructions: ${instructions.reason}`, `Bring ${budget.id}'s instructions retired back within the margin of the merge base's.`]);
+    if (instructions?.status === 'INCONCLUSIVE') verdicts.push(['INCONCLUSIVE', `${budget.id}: instructions: ${instructions.reason}`, "Run perf on macOS, whose /usr/bin/time -l reports instructions retired."]);
     for (const [metric, { status, reason }] of Object.entries(limits)) {
       if (status === 'PASS') continue;
       const fix = status === 'BLOCKED' ? 'Repair the measured command so each run reports this metric.'
