@@ -204,6 +204,13 @@ describe('#349 the kit at install', () => {
     expect(await h.installed()).toEqual([]);
   }, 60_000);
 
+  it('an environment a package declares but registers only after its load returned is BLOCKED at install, naming it: the kit never ran, so it doesn\'t install', async () => {
+    const folder = pkgOf('test/late-env', "export default function (deep: any): void {\n  setTimeout(() => void deep.registerEnvironment('ext.late-env.local', { slot: 'environment@1', revision: 1, up: () => ({ id: 'x', port: 1, pid: 1 }), down: () => undefined }), 200);\n}\n", { environments: ['ext.late-env.local'] });
+    const h = await host(release(folder));
+    await expect(h.install({ from: folder, builtBy: null })).rejects.toThrow(/BLOCKED.*ext\.late-env\.local.*didn't register/);
+    expect(await h.installed()).toEqual([]);
+  }, 60_000);
+
   it('a package that registers an environment its manifest doesn\'t declare fails conformance, naming the environment', async () => {
     const folder = environment('test/undeclared-env', 'ext.undeclared-env.local', { environments: [] });
     const h = await host([]);

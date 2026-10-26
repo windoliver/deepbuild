@@ -442,17 +442,17 @@ class Host implements ExtensionHost {
     const declared = manifest.checks ?? [];
     const kitted = declared.filter((kind) => replaces.includes(kind));
     const environments = manifest.environments ?? [];
-    const what = [kitted.length ? `replaces ${kitted.join(', ')}` : '', environments.length ? `registers the environment ${environments.join(', ')}` : ''].filter(Boolean).join(' and ');
-    const kits = [kitted.length ? CHECK_KIND : '', environments.length ? ENVIRONMENT : ''].filter(Boolean).join(' and ');
+    const what = [kitted.length ? `replaces ${kitted.join(', ')}` : '', environments.length ? `registers the environment${environments.length > 1 ? 's' : ''} ${environments.join(', ')}` : ''].filter(Boolean).join(' and ');
+    const kits = `${[kitted.length ? CHECK_KIND : '', environments.length ? ENVIRONMENT : ''].filter(Boolean).join(' and ')}'s kit${kitted.length && environments.length ? 's' : ''}`;
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
     if (hub && (kitted.length || environments.length) && !this.isReady) {
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
+      throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, and the hub isn't ready; install it once it is`);
     }
     if (!hub && (kitted.length || environments.length)) {
       // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits}'s kit can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
+      throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     }
     if (!kitted.length && !environments.length) {
       rmSync(folder, { recursive: true, force: true });
@@ -485,11 +485,12 @@ class Host implements ExtensionHost {
         if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${kind} reads ${report.verdict} on ${CHECK_KIND}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
       }
       // Each environment the manifest declares: the kit brings it up on a lease and a checkout of the kit's own and
-      // takes it down, through the package's up and down; one it didn't register is BLOCKED, unrun.
+      // takes it down, through the package's up and down. One the package didn't register by the time its load
+      // returned is BLOCKED, unrun, and refuses the install: a registration that came later would fill the slot unkitted.
       const envKit = environments.length ? slotKits().find((k) => k.slot === ENVIRONMENT) as SlotKit<EnvironmentFill> | undefined : undefined;
       if (environments.length && !envKit) throw Error(`the conformance package ships no ${ENVIRONMENT} kit`);
       for (const name of environments) {
-        if (!ext.environments.includes(name)) { runs.push({ slot: ENVIRONMENT, fill: name, verdict: 'BLOCKED' }); continue; }
+        if (!ext.environments.includes(name)) throw Error(`BLOCKED: ${entry.id} declares the environment ${name} and didn't register it at install, so ${ENVIRONMENT}'s kit couldn't run; it isn't installed`);
         // The kit takes a promise from either step and bounds it; a handle is what the package's up answered with.
         const up = (spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string): Promise<unknown> => ext.ask!('env.up', { name, spec, lease, checkout });
         const down = (handle: EnvironmentHandle): Promise<unknown> => ext.ask!('env.down', { name, handle });
@@ -841,7 +842,7 @@ class Host implements ExtensionHost {
         return null;
       }
       case 'deep.registerEnvironment': {
-        // One environment fills the slot at a time (the hub-slot table: fills one), under a name its manifest declares.
+        // One package fills each environment name at a time (design, Composition), under a name its manifest declares.
         const [name] = args;
         if (typeof name !== 'string') throw Error('deep.registerEnvironment takes the environment\'s name first');
         if (!conformance) {
