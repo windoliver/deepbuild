@@ -6,25 +6,36 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod costs;
 mod evidence;
 mod frames;
 mod hub;
 mod kit;
 #[cfg(feature = "test-accent")]
 mod planted;
+mod scene3d;
 mod shared;
 mod snapshot;
 
-/// Every heap allocation the process makes, counted so the `frames` call can read how many the
-/// scheduler made in a frame (#387: "the scheduler allocates nothing per frame after warm-up").
+/// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
+/// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
+/// allocates nothing per frame after warm-up"). Outside it nothing is counted, so the kit's
+/// threads, which allocate on every core at once, don't all contend for one counter.
 struct Counting;
 
+static COUNTING_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static ALLOCATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn count() {
+    if COUNTING_ON.load(std::sync::atomic::Ordering::Relaxed) {
+        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
 
 // SAFETY: every call forwards to the system allocator unchanged; the counter is a relaxed atomic.
 unsafe impl std::alloc::GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        count();
         unsafe { std::alloc::System.alloc(layout) }
     }
 
@@ -33,12 +44,12 @@ unsafe impl std::alloc::GlobalAlloc for Counting {
     }
 
     unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        count();
         unsafe { std::alloc::System.alloc_zeroed(layout) }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
-        ALLOCATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        count();
         unsafe { std::alloc::System.realloc(ptr, layout, new_size) }
     }
 }
@@ -46,9 +57,14 @@ unsafe impl std::alloc::GlobalAlloc for Counting {
 #[global_allocator]
 static COUNTING: Counting = Counting;
 
-/// How many heap allocations the process has made.
-pub fn allocations() -> u64 {
-    ALLOCATIONS.load(std::sync::atomic::Ordering::Relaxed)
+/// What `f` returns and how many heap allocations the process made while it ran.
+pub fn count_allocations<T>(f: impl FnOnce() -> T) -> (T, u64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let before = ALLOCATIONS.load(Relaxed);
+    COUNTING_ON.store(true, Relaxed);
+    let out = f();
+    COUNTING_ON.store(false, Relaxed);
+    (out, ALLOCATIONS.load(Relaxed) - before)
 }
 
 use std::collections::BTreeMap;
@@ -238,6 +254,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "revisions" => return Some(Call::Revisions(doc()?)),
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "costs" => return Some(Call::Costs),
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
         "eval" => {
@@ -628,6 +645,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
             "every_digest_positive" => Planted::EveryDigestPositive,
             "checks_share_only" => Planted::ChecksShareOnly,
+            "estimates_on_this_machine" => Planted::EstimatesOnThisMachine,
             _ => return None,
         }),
     };
@@ -695,6 +713,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         commit: match input.get("commit") {
             None => None,
             Some(c) => Some(c.as_str()?.to_string()),
+        },
+        machine: match input.get("machine") {
+            None => None,
+            Some(m) => Some(m.as_object()?.clone()),
         },
     })
 }
@@ -788,11 +810,11 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-kit",
 ));
 
-/// The canvas modules this build compiles in: the shipped set's (R1's canvas laid out as the
+/// The canvas modules a build of `set` holds: the shipped set's (R1's canvas laid out as the
 /// text, look, marks2d and motion modules, #387; every build set holds them, since R1's kinds
-/// are what the core draws) and, under its `test-*` features, the #305 and #387 acceptance
-/// READMEs' test canvas modules.
-fn modules() -> Vec<Module> {
+/// are what the core draws; scene3d from R2, #378) and, under its `test-*` features, the #305
+/// and #387 acceptance READMEs' test canvas modules.
+fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
@@ -800,6 +822,12 @@ fn modules() -> Vec<Module> {
         deep_canvas_marks::modules::marks2d(),
         deep_canvas_motion::module::module(),
     ];
+    // Issue #378: scene3d joins R2's build set, registered through the seal from the start.
+    if set >= BuildSet::R2 {
+        out.push(deep_canvas_scene3d::module::module());
+        // Issue #380: the shipped effects, whose passes go into scene3d's frame.
+        out.push(deep_canvas_effects::module::module());
+    }
     #[cfg(feature = "test-accent")]
     out.push(planted::accent());
     #[cfg(feature = "test-peek")]
@@ -842,7 +870,7 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut registry = Registry::new(build_set());
-    for module in modules() {
+    for module in modules(build_set()) {
         registry = registry.with(module);
     }
     if let Some(StartPlanted::Seal(fault)) = planted {
@@ -968,7 +996,7 @@ mod tests {
         ];
         for (set, snapshot) in snapshots {
             let mut registry = Registry::new(set);
-            for module in modules() {
+            for module in modules(set) {
                 registry = registry.with(module);
             }
             let published = registry.seal().expect("the shipped set seals").schedule();

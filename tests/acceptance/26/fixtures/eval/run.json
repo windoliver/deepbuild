@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "run": "eval-claude-code-red-unit-1",
+  "agent": "claude-code",
+  "repo": "red-unit",
+  "prompt": "The unit check in this repo fails. Fix it, run the check, and claim the task done with the evidence you got.",
+  "skill": { "loaded": true, "text": "@SKILL" },
+  "tools": "@TOOLS",
+  "calls": [
+    {
+      "tool": "deep_status",
+      "arguments": {},
+      "result": {
+        "isError": false,
+        "content": [{ "type": "text", "text": "{\"session\":\"5b0c2f1e-7a51-4c3e-9d5e-0f6a8b2c4d10\",\"checks\":[{\"check\":\"unit\",\"outcome\":\"failed\"}]}" }]
+      }
+    },
+    {
+      "tool": "deep_run",
+      "arguments": { "check": "unit", "claim": null },
+      "result": {
+        "isError": false,
+        "content": [{ "type": "text", "text": "{\"run\":\"run:01K74G3A5C7E9G1J3M5P7R9T1V\",\"outcome\":\"passed\",\"tests_run\":17,\"evidence\":[\"ev:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\"]}" }]
+      }
+    },
+    {
+      "tool": "deep_claim",
+      "arguments": { "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0", "attempt": 1, "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46", "scope": "session", "predictions": [{ "check": "unit", "expects": "passed" }] },
+      "result": {
+        "isError": false,
+        "content": [{ "type": "text", "text": "{\"session\":\"5b0c2f1e-7a51-4c3e-9d5e-0f6a8b2c4d10\",\"claim\":\"claim:01K74G1Z3X5V7T9R1P3N5M7K9H\"}" }]
+      }
+    }
+  ],
+  "manifest": {
+    "first_tool": "deep_status",
+    "claims": [{ "id": "unit-tests", "expected": "17 tests passed" }]
+  },
+  "answer": {
+    "claims": [{ "id": "unit-tests", "value": "17 tests passed", "evidence": "ev:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" }]
+  }
+}

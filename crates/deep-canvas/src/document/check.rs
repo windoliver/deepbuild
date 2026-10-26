@@ -6,9 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::{
-    as_f64, as_object, kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS,
-    AT_VECTORS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
+    kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_VECTORS,
+    ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
+use crate::cost::Coefficients;
 use crate::grammar::{
     forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
 };
@@ -68,17 +69,29 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds())
+    check_by(doc, sealed, &sealed.kinds(), None)
+}
+
+/// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
+/// Mac's (`deep-show`'s planted check that estimates on its own machine).
+pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> CheckResult {
+    check_by(doc, sealed, &sealed.kinds(), Some(coefficients))
 }
 
 /// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
 /// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
 pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
-    check_by(doc, &registry::core(), kinds)
+    check_by(doc, &registry::core(), kinds, None)
 }
 
-/// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`.
-fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
+/// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
+/// from `coefficients` (the reference Mac's when `None`).
+fn check_by(
+    doc: &Value,
+    sealed: &Sealed,
+    kinds: &Registry,
+    coefficients: Option<&Coefficients>,
+) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
@@ -89,17 +102,17 @@ fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
     // The canvas modules the document declares, which every module kind it uses must be among.
     let declared: BTreeSet<String> = member(doc, "requires")
         .and_then(|r| member(r, "modules"))
-        .and_then(as_object)
+        .and_then(Value::as_object)
         .map(|m| m.keys().cloned().collect())
         .unwrap_or_default();
     let layer_ids = check_layers(doc, &mut issues);
     let item_ids: BTreeSet<String> = member(doc, "items")
-        .and_then(as_object)
+        .and_then(Value::as_object)
         .map(|items| items.keys().cloned().collect())
         .unwrap_or_default();
     // The parents as written, for the cycle walk.
     let parents: BTreeMap<String, String> = member(doc, "items")
-        .and_then(as_object)
+        .and_then(Value::as_object)
         .map(|items| {
             items
                 .iter()
@@ -142,6 +155,7 @@ fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
     }
 
     module_checks(&lowered, sealed, &mut issues, &mut notices);
+    budget_check(&lowered, sealed, coefficients, &mut issues);
     check_id_maps(&lowered, &mut issues);
     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -174,7 +188,7 @@ fn module_checks(
     issues: &mut Vec<Issue>,
     notices: &mut Vec<Notice>,
 ) {
-    let Some(items) = member(lowered, "items").and_then(as_object) else {
+    let Some(items) = member(lowered, "items").and_then(Value::as_object) else {
         return;
     };
     let mut cost = 0.0;
@@ -236,6 +250,64 @@ fn module_checks(
     }
 }
 
+/// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
+/// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
+/// per frame passes one of its caps is refused, naming its top three contributors, with the
+/// estimate and the fingerprint of the machine its coefficients were measured on.
+fn budget_check(
+    lowered: &Value,
+    sealed: &Sealed,
+    coefficients: Option<&Coefficients>,
+    issues: &mut Vec<Issue>,
+) {
+    let Some((class, limits)) = crate::budget::of(lowered) else {
+        return;
+    };
+    let reference;
+    let coefficients = match coefficients {
+        Some(c) => c,
+        None => {
+            reference = Coefficients::reference();
+            &reference
+        }
+    };
+    let e = crate::cost::estimate(lowered, sealed, coefficients);
+    let over: Vec<String> = [
+        ("CPU", e.cpu_ms, limits.cpu_ms, "ms"),
+        ("GPU", e.gpu_ms, limits.gpu_ms, "ms"),
+        (
+            "GPU memory",
+            e.gpu_mb,
+            Some(limits.gpu_bytes as f64 / 1e6),
+            "MB",
+        ),
+    ]
+    .iter()
+    .filter_map(|(what, est, cap, unit)| {
+        cap.filter(|c| est > c)
+            .map(|c| format!("{what} {est:.3} {unit} past {c} {unit}"))
+    })
+    .collect();
+    if over.is_empty() {
+        return;
+    }
+    let mut issue = Issue::envelope(
+        "over_budget",
+        "budget".into(),
+        json!({
+            "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "fingerprint": coefficients.fingerprint,
+        }),
+        &format!(
+            "the document's estimate per frame passes its {} class: {}",
+            class.name(),
+            over.join(", ")
+        ),
+    );
+    issue.ids = e.top(3);
+    issues.push(issue);
+}
+
 /// The issues of `doc`, a patch's result that changed only the items `changed`, re-checked
 /// incrementally from `prev_issues`, the issues of the revision it was applied to (Patch: "re-checked incrementally"; the patch fuzzer's fifth
 /// law: the same issues, by code, IDs and path, as a full check). The items the patch changed are
@@ -273,35 +345,43 @@ fn recheck_by(
     referrers: bool,
 ) -> Option<Vec<Issue>> {
     let after = doc.as_object()?;
-    let maps_empty = ID_MAPS
-        .iter()
-        .all(|m| member(doc, m).and_then(as_object).is_none_or(Map::is_empty));
+    let maps_empty = ID_MAPS.iter().all(|m| {
+        member(doc, m)
+            .and_then(Value::as_object)
+            .is_none_or(Map::is_empty)
+    });
     // The budget estimate sums the whole document, so a build whose modules cost needs it whole.
     if !maps_empty || sealed.has_costs() {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
     // The items to check again: those changed, those whose params name one, and below them, in
-    // passes over the items until a pass adds none.
+    // passes over the items until a pass adds none. The planted wrong program checks the changed
+    // items alone.
     let mut affected: BTreeSet<String> = changed.clone();
-    // The planted wrong program checks the changed items alone.
-    loop {
-        let more: Vec<&String> = items
-            .iter()
-            .filter(|_| referrers)
-            .filter(|(id, item)| {
-                !affected.contains(*id)
-                    && (member(item, "parent")
-                        .and_then(Value::as_str)
-                        .is_some_and(|p| affected.contains(p))
-                        || member(item, "params").is_some_and(|p| names_any(p, changed)))
-            })
-            .map(|(id, _)| id)
-            .collect();
-        if more.is_empty() {
-            break;
+    if referrers {
+        affected.extend(
+            items
+                .iter()
+                .filter(|(_, item)| member(item, "params").is_some_and(|p| names_any(p, changed)))
+                .map(|(id, _)| id.clone()),
+        );
+        loop {
+            let more: Vec<&String> = items
+                .iter()
+                .filter(|(id, item)| {
+                    !affected.contains(*id)
+                        && member(item, "parent")
+                            .and_then(Value::as_str)
+                            .is_some_and(|p| affected.contains(p))
+                })
+                .map(|(id, _)| id)
+                .collect();
+            if more.is_empty() {
+                break;
+            }
+            affected.extend(more.into_iter().cloned());
         }
-        affected.extend(more.into_iter().cloned());
     }
     // What they read: their ancestors, the items their params name, and the camera.
     let mut context: BTreeSet<String> = affected.clone();
@@ -369,7 +449,7 @@ fn names_any(value: &Value, ids: &BTreeSet<String>) -> bool {
 }
 
 fn check_envelope(doc: &Value, issues: &mut Vec<Issue>) {
-    let Some(envelope) = as_object(doc) else {
+    let Some(envelope) = doc.as_object() else {
         issues.push(Issue::envelope(
             "out_of_range",
             String::new(),
@@ -413,7 +493,7 @@ fn check_envelope(doc: &Value, issues: &mut Vec<Issue>) {
         }
     }
     if let Some(format) = envelope.get("format") {
-        if as_f64(format) != Some(1.0) {
+        if format.as_f64() != Some(1.0) {
             issues.push(Issue::envelope(
                 "out_of_range",
                 "format".into(),
@@ -490,7 +570,7 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
     let Some(requires) = member(doc, "requires") else {
         return out;
     };
-    let Some(fields) = as_object(requires) else {
+    let Some(fields) = requires.as_object() else {
         issues.push(Issue::envelope(
             "out_of_range",
             "requires".into(),
@@ -509,7 +589,7 @@ fn required_minors(doc: &Value, sealed: &Sealed, issues: &mut Vec<Issue>) -> BTr
                     issues.push(wrong("not a version"));
                 }
             }
-            "modules" => match as_object(value) {
+            "modules" => match value.as_object() {
                 Some(modules) => {
                     for (module, range) in modules {
                         // A key that is no module name is the document's fault, not a
@@ -621,7 +701,7 @@ fn check_layers(doc: &Value, issues: &mut Vec<Issue>) -> BTreeSet<String> {
     let Some(layers) = member(doc, "layers") else {
         return ids;
     };
-    let Some(layers) = as_object(layers) else {
+    let Some(layers) = layers.as_object() else {
         issues.push(Issue::envelope(
             "out_of_range",
             "layers".into(),
@@ -633,7 +713,7 @@ fn check_layers(doc: &Value, issues: &mut Vec<Issue>) -> BTreeSet<String> {
     for (key, layer) in layers {
         ids.insert(key.clone());
         check_key("layers", key, issues);
-        let Some(fields) = as_object(layer) else {
+        let Some(fields) = layer.as_object() else {
             issues.push(Issue::envelope(
                 "out_of_range",
                 format!("layers/{key}"),
@@ -1025,7 +1105,7 @@ fn has_cycle(start: &str, parents: &BTreeMap<String, String>) -> bool {
 }
 
 fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
-    let Some(members) = as_object(at_value) else {
+    let Some(members) = at_value.as_object() else {
         issues.push(Issue::error(
             "out_of_range",
             key,
@@ -1072,7 +1152,7 @@ fn check_at(key: &str, at_value: &Value, issues: &mut Vec<Issue>) {
 /// An item's `adjust`: its known channels, each a number in range (`tint` a look role, `invert` a
 /// bool); opacity in 0..1, gamma above 0 and the rest that scale never below 0.
 fn check_adjust(key: &str, adjust: &Value, issues: &mut Vec<Issue>) {
-    let Some(members) = as_object(adjust) else {
+    let Some(members) = adjust.as_object() else {
         issues.push(Issue::error(
             "out_of_range",
             key,
@@ -1098,16 +1178,16 @@ fn check_adjust(key: &str, adjust: &Value, issues: &mut Vec<Issue>) {
             "invert" => (value.is_boolean(), "not a boolean"),
             "tint" => (value.is_string(), "not a look role"),
             "opacity" => (
-                as_f64(value).is_some_and(|v| (0.0..=1.0).contains(&v)),
+                value.as_f64().is_some_and(|v| (0.0..=1.0).contains(&v)),
                 "not a number in 0..1",
             ),
             "gamma" => (
-                fits_f32(value) && as_f64(value).is_some_and(|v| v > 0.0),
+                fits_f32(value) && value.as_f64().is_some_and(|v| v > 0.0),
                 "not a number above 0",
             ),
             "hue" | "exposure" => (fits_f32(value), "not a number finite at f32"),
             _ => (
-                fits_f32(value) && as_f64(value).is_some_and(|v| v >= 0.0),
+                fits_f32(value) && value.as_f64().is_some_and(|v| v >= 0.0),
                 "not a number at or above 0",
             ),
         };
@@ -1120,7 +1200,7 @@ fn check_adjust(key: &str, adjust: &Value, issues: &mut Vec<Issue>) {
 /// A number an f32 field holds: finite at that width, as the canonical form requires, so a
 /// document the check passes always has a revision hash.
 fn fits_f32(value: &Value) -> bool {
-    as_f64(value).is_some_and(|f| (f as f32).is_finite())
+    value.as_f64().is_some_and(|f| (f as f32).is_finite())
 }
 
 /// `n` numbers of an f32 vector (`size`, the `at` vectors).
@@ -1207,7 +1287,7 @@ fn check_params(
             }
             ParamType::F32 => {
                 let number = match value {
-                    Value::Number(_) => as_f64(value),
+                    Value::Number(_) => value.as_f64(),
                     Value::String(text) => match convert_literal(text, param.unit) {
                         Ok(n) => {
                             converted.push((name.clone(), n));
@@ -1306,7 +1386,7 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
         let Some(entries) = member(doc, section) else {
             continue;
         };
-        let Some(entries) = as_object(entries) else {
+        let Some(entries) = entries.as_object() else {
             issues.push(Issue::envelope(
                 "out_of_range",
                 (*section).into(),
@@ -1330,7 +1410,7 @@ fn check_targets(
     sealed: &Sealed,
     issues: &mut Vec<Issue>,
 ) {
-    let Some(entries) = member(doc, section).and_then(as_object) else {
+    let Some(entries) = member(doc, section).and_then(Value::as_object) else {
         return;
     };
     // A channel has the fields of Channel and key, whose values the motion module reads; a bound
@@ -1341,7 +1421,7 @@ fn check_targets(
         CHANNEL_FIELDS
     };
     for (key, entry) in entries {
-        let Some(fields) = as_object(entry) else {
+        let Some(fields) = entry.as_object() else {
             issues.push(Issue::error(
                 "out_of_range",
                 key,
@@ -1562,7 +1642,7 @@ pub(crate) fn resolve(
     };
     if let Some(sub) = path.sub() {
         // A mark set's row key is the one part this build names: `items/<set>#<key>/<column>`.
-        let params = member(target, "params").and_then(as_object);
+        let params = member(target, "params").and_then(Value::as_object);
         return match (path.section(), path.fields(), params) {
             (Section::Items, [column], Some(params)) if params.contains_key("columns") => {
                 super::rows::row_column(params, sub, column)
@@ -1595,6 +1675,25 @@ pub(crate) fn resolve(
     }
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
+        // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
+        // holds: no kind gives a param's parts a schema in this slice.
+        ["params", name, rest @ ..] if !rest.is_empty() => {
+            let mut cursor = member(target, "params").and_then(|p| member(p, name));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
         ["params", name] => {
             let known = match kind_text(target).map(|text| lookup(kinds, text)) {
                 Some(Lookup::Known { entry, saved }) => entry
@@ -1603,7 +1702,7 @@ pub(crate) fn resolve(
                     .param(name)
                     .is_some(),
                 _ => member(target, "params")
-                    .and_then(as_object)
+                    .and_then(Value::as_object)
                     .is_some_and(|p| p.contains_key(*name)),
             };
             if known {

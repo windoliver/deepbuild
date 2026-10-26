@@ -55,6 +55,10 @@ function readEnvironment(folder: string): Environment {
 
 /** The port kind as `lease.kind@1` data: ports match by exact key. */
 const PORT_KIND = { name: 'port', match: 'exact', cap: 1000, cooldown: 0, cost: 0 } as const;
+/** A compose project's name, as `lease.kind@1` data: one stack's project at a time, by exact key. */
+const COMPOSE_KIND = { name: 'compose', match: 'exact', cap: 1000, cooldown: 0, cost: 0 } as const;
+/** env-local's resource kinds, as its manifest declares them in the kernel's lease table (#237). */
+export const leaseKinds = [PORT_KIND, COMPOSE_KIND];
 const HOSTS = ['127.0.0.1', '0.0.0.0', '::'];
 /** Whether lsof shows no listener on the port, on any address; a failed lsof is not proof, so not free. */
 const unlisted = (port: number): Promise<boolean> => new Promise((resolve) => {
@@ -244,7 +248,7 @@ export function composeKind(dir: string): ResourceKind & { dir: string; guarded:
     // The CLI and the plugin that run with the socket are kept from every run's writes, as the hub's own files are.
     dir, guarded: tools.guarded,
     ...(tools.docker ? { docker: tools.docker } : {}),
-    kind: 'compose', keys: Array.from({ length: 1000 }, (_, i) => `deep-c${String(i).padStart(3, '0')}`),
+    kind: COMPOSE_KIND.name, keys: Array.from({ length: COMPOSE_KIND.cap }, (_, i) => `deep-c${String(i).padStart(3, '0')}`),
     release: step('"$0" compose -p "$DEEP_RESOURCE_KEY" down -v -t 1 --remove-orphans'),
     check: step([
       'f="label=com.docker.compose.project=$DEEP_RESOURCE_KEY"',

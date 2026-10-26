@@ -1,0 +1,22 @@
+[package]
+name = "deep-effects-render"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #380: the effects module's render side on the GPU layer (#377). Each shipped operator's
+# WGSL, which the core writes from its checked steps, is validated by naga with every check and
+# no optional capability, compiled once per key, and run as a full-screen pass in its place in
+# the frame: glow's mip chain, the ground grid, the shadow filter over the core's shadow map,
+# sparks and the selection outline. Each pass is timed with wgpu-profiler.
+[dependencies]
+deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-gpu = { path = "../deep-gpu" }
+deep-scene3d-render = { path = "../deep-scene3d-render" }
+naga = { version = "30", default-features = false, features = ["wgsl-in"] }
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
+wgpu-profiler = "0.28"
+bytemuck = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

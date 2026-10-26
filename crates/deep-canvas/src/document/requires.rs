@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
 
-use super::{as_object, kind_text, member};
+use super::{kind_text, member};
 use crate::kinds::{lookup, parse_required, Lookup, Registry};
 
 /// `family.name@major.minor` for each kind of `registry` the items use, at the lowest minor that
 /// defines every param they set, sorted.
 pub fn derived_kinds(doc: &Value, registry: &Registry) -> Vec<String> {
     let mut minors: BTreeMap<String, u32> = BTreeMap::new();
-    let Some(items) = member(doc, "items").and_then(as_object) else {
+    let Some(items) = member(doc, "items").and_then(Value::as_object) else {
         return Vec::new();
     };
     for item in items.values() {
@@ -27,7 +27,7 @@ pub fn derived_kinds(doc: &Value, registry: &Registry) -> Vec<String> {
             continue;
         };
         let used = member(item, "params")
-            .and_then(as_object)
+            .and_then(Value::as_object)
             .map(|params| {
                 params
                     .keys()

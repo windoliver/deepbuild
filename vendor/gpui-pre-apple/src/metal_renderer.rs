@@ -88,13 +88,13 @@ pub mod gpu_surfaces {
     use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
     use std::sync::{Arc, RwLock};
 
-    /// A frame command buffer's report: the identity of each BGRA pixel buffer it samples (the
-    /// `CVPixelBuffer`'s address), when the buffer is committed, then its completion with the GPU
-    /// time it took.
+    /// A frame's report: the identity of each BGRA pixel buffer its command buffer samples (the
+    /// `CVPixelBuffer`'s address), once the buffer is encoded, then its completion with the GPU
+    /// time it took. `frame` numbers only the frames that sample a surface while a hook is set.
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Event {
-        Committed { buffer: u64, surfaces: Vec<u64> },
-        Completed { buffer: u64, gpu_ns: u64 },
+        Encoded { frame: u64, surfaces: Vec<u64> },
+        Completed { frame: u64, gpu_ns: u64 },
     }
 
     /// A planted wrong compositor, for the tests that must catch it.
@@ -112,7 +112,7 @@ pub mod gpu_surfaces {
 
     static HOOK: RwLock<Option<Hook>> = RwLock::new(None);
     static PLANTED: AtomicU8 = AtomicU8::new(Planted::None as u8);
-    static NEXT_BUFFER: AtomicU64 = AtomicU64::new(1);
+    static NEXT_FRAME: AtomicU64 = AtomicU64::new(1);
 
     pub fn set_hook(hook: Option<Hook>) {
         *HOOK.write().unwrap_or_else(|e| e.into_inner()) = hook;
@@ -130,12 +130,21 @@ pub mod gpu_surfaces {
         }
     }
 
-    pub(super) fn next_buffer() -> u64 {
-        NEXT_BUFFER.fetch_add(1, Ordering::SeqCst)
+    fn hook() -> Option<Hook> {
+        HOOK.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
+    pub(super) fn has_hook() -> bool {
+        hook().is_some()
+    }
+
+    pub(super) fn next_frame() -> u64 {
+        NEXT_FRAME.fetch_add(1, Ordering::SeqCst)
+    }
+
+    /// Calls the hook with the lock released, so the hook may replace itself.
     pub(super) fn report(event: Event) {
-        if let Some(hook) = HOOK.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        if let Some(hook) = hook() {
             hook(event);
         }
     }
@@ -708,22 +717,23 @@ impl MetalRenderer {
         gpu_ledger::committed();
         // DeepBuild patch (windoliver/deepbuild#377): every caller commits the buffer it gets back,
         // so the surfaces it samples are reported here, before its completed handler can run.
-        let surfaces_buffer = (!self.sampled_surfaces.is_empty()).then(|| {
-            let buffer = gpu_surfaces::next_buffer();
-            gpu_surfaces::report(gpu_surfaces::Event::Committed {
-                buffer,
-                surfaces: mem::take(&mut self.sampled_surfaces),
+        let surfaces_frame =
+            (!self.sampled_surfaces.is_empty() && gpu_surfaces::has_hook()).then(|| {
+                let frame = gpu_surfaces::next_frame();
+                gpu_surfaces::report(gpu_surfaces::Event::Encoded {
+                    frame,
+                    surfaces: mem::take(&mut self.sampled_surfaces),
+                });
+                frame
             });
-            buffer
-        });
         let block = RcBlock::new(move |buffer: ptr::NonNull<AnyObject>| {
             if let Some(instance_buffer) = instance_buffer.take() {
                 instance_buffer_pool.lock().release(instance_buffer);
             }
             // SAFETY: Metal hands a completed handler the command buffer it completed.
             let gpu_ns = gpu_ledger::completed(unsafe { buffer.as_ref() });
-            if let Some(buffer) = surfaces_buffer {
-                gpu_surfaces::report(gpu_surfaces::Event::Completed { buffer, gpu_ns });
+            if let Some(frame) = surfaces_frame {
+                gpu_surfaces::report(gpu_surfaces::Event::Completed { frame, gpu_ns });
             }
         });
         // SAFETY: Both pointee types are opaque views of the same Objective-C block pointer ABI.
@@ -1947,6 +1957,36 @@ mod tests {
         CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferLockBaseAddress, CVPixelBufferLockFlags,
         CVPixelBufferUnlockBaseAddress, kCVPixelBufferIOSurfacePropertiesKey,
     };
+    use std::time::Duration;
+
+    /// DeepBuild patch (windoliver/deepbuild#711): a hook may replace itself from inside a report,
+    /// since the renderer reports from Metal's completion thread and a stuck hook there would
+    /// stall every frame's completion.
+    #[test]
+    fn surface_hook_may_replace_itself() {
+        let replaced = Arc::new(Mutex::new(false));
+        gpu_surfaces::set_hook(Some(Arc::new({
+            let replaced = replaced.clone();
+            move |_| {
+                gpu_surfaces::set_hook(None);
+                *replaced.lock() = true;
+            }
+        })));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            gpu_surfaces::report(gpu_surfaces::Event::Completed {
+                frame: 0,
+                gpu_ns: 0,
+            });
+            sender.send(()).unwrap();
+        });
+        if receiver.recv_timeout(Duration::from_secs(5)).is_err() {
+            // The stuck thread holds the lock, so uninstalling the hook would hang too.
+            panic!("report deadlocked: the hook could not replace itself");
+        }
+        assert!(*replaced.lock());
+        gpu_surfaces::set_hook(None);
+    }
 
     #[test]
     fn render_core_video_surface() {

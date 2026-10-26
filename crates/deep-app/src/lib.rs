@@ -12,6 +12,7 @@ pub mod canvas;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+pub mod record;
 pub mod text;
 pub mod views;
 

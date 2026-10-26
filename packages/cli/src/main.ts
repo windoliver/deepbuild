@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, relative, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { exitCode, judge, type Verdict } from '@deepbuild/conformance';
-import { validate } from '@deepbuild/contracts';
-import { doctor as telemetryDoctor } from '@deepbuild/otlp';
+import type { Verdict } from '@deepbuild/conformance';
 import { replaySession } from '../../../adapters/index.mjs';
+// The conformance table, the contracts and the telemetry doctor load only in the commands that use them, so
+// `deep inbox` starts without them (#24's budget).
 
 const args = process.argv.slice(2);
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -57,7 +59,9 @@ function explain(session: string, json: boolean): number {
 // A recorded run result read by the one code table (#313): the file held to run.finished@1, its outcome
 // judged by that schema's enum, and the exit status 0, 1 or 3 by the verdict. A code the enum doesn't list,
 // a result the schema refuses, a file that isn't JSON and a pass that ran no tests are INVALID, never a pass.
-function run(path: string): number {
+async function run(path: string): Promise<number> {
+  const { exitCode, judge } = await import('@deepbuild/conformance');
+  const { validate } = await import('@deepbuild/contracts');
   const file = resolve(path);
   if (!existsSync(file)) {
     console.error(`deep run: no result at ${file}`);
@@ -101,7 +105,8 @@ function run(path: string): number {
 
 // The doctor's items, one per line: for a person, each named by its agent; with --json, one doctor.item@1
 // object per line with its item and agent. Any failing item exits 1, as the exit family's FAIL.
-function doctor(json: boolean): number {
+async function doctor(json: boolean): Promise<number> {
+  const { doctor: telemetryDoctor } = await import('@deepbuild/otlp');
   const agents: Record<string, string> = { 'claude-code': 'Claude Code' };
   const items = telemetryDoctor(process.env);
   for (const i of items) {
@@ -110,10 +115,39 @@ function doctor(json: boolean): number {
   return items.some((i) => i.level === 'fail') ? 1 : 0;
 }
 
+// `deep debug bundle`: the hub's logs, the versions and the doctor's items in one gzipped JSON file under
+// ~/.deepbuild/debug, readable only by you, its path printed last. Every text in it is scrubbed as evidence is,
+// with the control token among the values held, so no form of the token or of a secret-shaped string goes in
+// (#34's slice of #19's bundle).
+async function debugBundle(): Promise<number> {
+  const { scrubText } = await import('@deepbuild/evidence');
+  const { doctor: telemetryDoctor } = await import('@deepbuild/otlp');
+  const root = join(homedir(), '.deepbuild');
+  const token = existsSync(join(root, 'control.token')) ? readFileSync(join(root, 'control.token'), 'utf8').trim() : '';
+  const scrub = (text: string) => scrubText(text, { held: token ? [token] : [] });
+  const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? files(path) : [path];
+  }) : []);
+  const logs = Object.fromEntries(files(join(root, 'logs')).map((path) => [relative(root, path), scrub(readFileSync(path, 'utf8'))]));
+  const bundle = {
+    versions: { deepbuild: version(), node: process.version, platform: `${process.platform}-${process.arch}` },
+    doctor: telemetryDoctor(process.env).map((item) => JSON.parse(scrub(JSON.stringify(item))) as unknown),
+    logs,
+  };
+  const dir = join(root, 'debug');
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, `bundle-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`);
+  writeFileSync(path, gzipSync(JSON.stringify(bundle)), { mode: 0o600 });
+  chmodSync(path, 0o600);
+  console.log(path);
+  return 0;
+}
+
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n\nRepository skeleton.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor' && args.slice(1).every((arg) => arg === '--json') && args.length <= 2) {
-  process.exitCode = doctor(args.includes('--json'));
+  process.exitCode = await doctor(args.includes('--json'));
 } else if (args.length === 1 && args[0] === '--version') {
   console.log(version());
 } else if (args[0] === 'explain' && args[1] && args.slice(2).every((arg) => arg === '--json')) {
@@ -125,11 +159,16 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
 } else if (args[0] === 'env') {
   const { envCommand } = await import('@deepbuild/hub');
   process.exitCode = await envCommand(args.slice(1));
+} else if (args[0] === 'inbox') {
+  const { inboxCommand } = await import('@deepbuild/hub');
+  process.exitCode = await inboxCommand(args.slice(1));
 } else if (args.length === 1 && args[0] === 'mcp') {
   const { runMcp } = await import('@deepbuild/hub');
   process.exitCode = await runMcp();
+} else if (args.length === 2 && args[0] === 'debug' && args[1] === 'bundle') {
+  process.exitCode = await debugBundle();
 } else if (args[0] === 'run' && args[1] === '--result' && args[2] && args.length === 3) {
-  process.exitCode = run(args[2]);
+  process.exitCode = await run(args[2]);
 } else if (args[0] === 'run') {
   console.error('Usage: deep run --result <run.finished event file>');
   process.exitCode = 2;

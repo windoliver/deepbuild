@@ -1,0 +1,368 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "How the pump turns its flywheel",
+  "description": "An isometric pump: a piston rises and falls in its housing and a crank turns the flywheel once every two seconds; each part is labeled, with a leader to it.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "2s",
+    "loop": "wrap"
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "isometric",
+        "target": [
+          0,
+          1.2,
+          0
+        ],
+        "view_width": 9
+      }
+    },
+    "base": {
+      "id": "base",
+      "kind": "mark.box@1",
+      "name": "Base plate",
+      "order": "a1",
+      "params": {
+        "size": [
+          5,
+          0.4,
+          2.6
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.2,
+          0
+        ]
+      }
+    },
+    "housing": {
+      "id": "housing",
+      "kind": "mark.box@1",
+      "name": "Housing",
+      "order": "a2",
+      "params": {
+        "size": [
+          1.2,
+          1.6,
+          1.2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.2,
+          1.2,
+          0
+        ]
+      }
+    },
+    "piston": {
+      "id": "piston",
+      "kind": "mark.box@1",
+      "name": "Piston",
+      "order": "a3",
+      "params": {
+        "size": [
+          0.6,
+          0.8,
+          0.6
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.2,
+          2.4,
+          0
+        ]
+      }
+    },
+    "flywheel": {
+      "id": "flywheel",
+      "kind": "mark.cylinder@1",
+      "name": "Flywheel",
+      "order": "a4",
+      "params": {
+        "size": [
+          1.8,
+          0.3,
+          1.8
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.2,
+          1.5,
+          0
+        ],
+        "rot": [
+          90,
+          0,
+          0
+        ]
+      }
+    },
+    "crank": {
+      "id": "crank",
+      "kind": "mark.box@1",
+      "name": "Crank arm",
+      "order": "a5",
+      "params": {
+        "size": [
+          1.6,
+          0.2,
+          0.2
+        ],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          1.2,
+          1.5,
+          0.3
+        ]
+      }
+    },
+    "rod": {
+      "id": "rod",
+      "kind": "mark.line@1",
+      "name": "Connecting rod",
+      "order": "a6",
+      "params": {
+        "points": [
+          "piston",
+          "crank"
+        ],
+        "mode": "strip",
+        "width": 4,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "label-piston": {
+      "id": "label-piston",
+      "kind": "mark.text@1",
+      "name": "Piston label",
+      "order": "a7",
+      "params": {
+        "text": "Piston",
+        "font": "body",
+        "size": 0.4,
+        "size_space": "world",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -1.2,
+          3.6,
+          0
+        ]
+      }
+    },
+    "label-housing": {
+      "id": "label-housing",
+      "kind": "mark.text@1",
+      "name": "Housing label",
+      "order": "a8",
+      "params": {
+        "text": "Housing",
+        "font": "body",
+        "size": 0.4,
+        "size_space": "world",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3.2,
+          1.2,
+          0
+        ]
+      }
+    },
+    "label-flywheel": {
+      "id": "label-flywheel",
+      "kind": "mark.text@1",
+      "name": "Flywheel label",
+      "order": "a9",
+      "params": {
+        "text": "Flywheel",
+        "font": "body",
+        "size": 0.4,
+        "size_space": "world",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          2.2,
+          3,
+          0
+        ]
+      }
+    },
+    "leader-piston": {
+      "id": "leader-piston",
+      "kind": "mark.line@1",
+      "name": "Leader to the piston",
+      "order": "b0",
+      "params": {
+        "points": [
+          [
+            -1.2,
+            3.4,
+            0
+          ],
+          "piston"
+        ],
+        "mode": "strip",
+        "width": 1.5,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "leader-housing": {
+      "id": "leader-housing",
+      "kind": "mark.line@1",
+      "name": "Leader to the housing",
+      "order": "b1",
+      "params": {
+        "points": [
+          [
+            -2.6,
+            1.2,
+            0
+          ],
+          "housing"
+        ],
+        "mode": "strip",
+        "width": 1.5,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "leader-flywheel": {
+      "id": "leader-flywheel",
+      "kind": "mark.line@1",
+      "name": "Leader to the flywheel",
+      "order": "b2",
+      "params": {
+        "points": [
+          [
+            2,
+            2.8,
+            0
+          ],
+          "flywheel"
+        ],
+        "mode": "strip",
+        "width": 1.5,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    }
+  },
+  "channels": {
+    "turn": {
+      "target": "items/crank/at/rot/2",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 0,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "2s",
+          "value": 360,
+          "interp": "linear"
+        }
+      }
+    },
+    "stroke": {
+      "target": "items/piston/at/pos/1",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 2.4,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "1s",
+          "value": 1.9,
+          "interp": "linear"
+        },
+        "k2": {
+          "t": "2s",
+          "value": 2.4,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}

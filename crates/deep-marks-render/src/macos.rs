@@ -69,6 +69,8 @@ enum Draw {
         label: Label,
         origin: Point<Pixels>,
         color: Hsla,
+        /// text@1 `runs`: grapheme spans in their own colors.
+        runs: Vec<(std::ops::Range<usize>, Hsla)>,
     },
     /// A picture mapped onto `image_bounds` and shown inside `bounds`: an image mark, or a cached
     /// writer layer with everything under it over the whole view.
@@ -108,26 +110,14 @@ fn paint(draw: &Draw, view: Bounds<Pixels>, window: &mut Window) {
             mesh,
             offset,
             color,
-        } => {
-            let at = |p: [f32; 2]| point(px(p[0] + offset[0]), px(p[1] + offset[1]));
-            let mut triangles = mesh.triangles();
-            let Some(first) = triangles.next() else {
-                return;
-            };
-            let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
-            let mut path = Path::new(at(first[0]));
-            path.push_triangle((at(first[0]), at(first[1]), at(first[2])), solid);
-            for t in triangles {
-                path.push_triangle((at(t[0]), at(t[1]), at(t[2])), solid);
-            }
-            window.paint_path(path, *color);
-        }
+        } => deep_marks_gpui::paint(mesh, *offset, *color, window),
         Draw::Text {
             label,
             origin,
             color,
+            runs,
         } => {
-            deep_text_gpui::paint_label(view.origin + *origin, label, *color, window);
+            deep_text_gpui::paint_runs(view.origin + *origin, label, *color, runs, window);
         }
     }
 }
@@ -655,6 +645,8 @@ impl Renderer {
                     spec,
                     origin,
                     color,
+                    runs,
+                    ..
                 } => {
                     let Some(label) = label_of(spec) else {
                         return Err(refused("bad_font", &format!("items/{item}/params/font")));
@@ -663,6 +655,7 @@ impl Renderer {
                         label,
                         origin: point(px(origin[0] as f32), px(origin[1] as f32)),
                         color: hsla(*color),
+                        runs: runs.iter().map(|r| (r.from..r.to, hsla(r.color))).collect(),
                     });
                 }
                 Mark::Shape { item, .. } => return Err(gpui_lacks(item)),
@@ -1221,6 +1214,7 @@ fn status_draws(
                     label,
                     origin: point(px(origin[0] as f32), px(origin[1] as f32)),
                     color: hsla(color),
+                    runs: Vec::new(),
                 },
             },
             None,

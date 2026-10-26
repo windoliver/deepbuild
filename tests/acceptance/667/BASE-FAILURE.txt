@@ -1,0 +1,85 @@
+Acceptance tests for #667 on the base 7dcab7c (origin/main: #318, #319, #24, #26 and #34 merged, nothing of #667),
+run on 2026-10-25 at 11:40 on an Apple silicon Mac at load average 82 / 74 / 75, Node 24.22.0, after `npm ci` and
+`npm run build --workspaces`:
+
+  npx vitest run tests/acceptance/667
+  npx tsc -p tests/acceptance/667
+
+Trimmed to each test's outcome and its failing reason; handles and session IDs are this run's. No local path is kept.
+
+
+== npx tsc -p tests/acceptance/667
+
+No errors.
+
+
+== npx vitest run tests/acceptance/667
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  7 failed | 2 passed (9)
+   Duration  41.21s
+
+FAIL  raised.test.ts     AC1 #667.84442921 deep inbox lists the choice ask with its kind, session and age within a
+                         second of its append, and the stream frames it at the same log position
+  AssertionError: AC1 #667.84442921: the stream frames the choice ask ask:01M5T5V2ZYVJZHMY28HT028KPN (ask.created …)
+  at log_pos 4, where the record holds it: expected undefined to deeply equal [ '01M5T5V2ZYVJZHMY28HT028KPN', … ]
+  (Everything before it held: the ask.created carries a 4-hour deadline and the default sqlite; inbox.read before the
+  append reflected log_pos 3 without it and after it log_pos 4 or later with it; `deep inbox` started 6 ms after the
+  append listed it 56 ms later as `choice <session> 0s`, and no run started a second after the append missed it. The
+  base hub frames an event only when the hub itself appends: the asks core appends straight to the record, so the
+  ask.created deep_ask filed reached the consumer only seconds later, with the decision.created AC2's answer appended.)
+
+FAIL  raised.test.ts     AC2 #667.b25a1d05 deep inbox answer on the choice ask saves a decision with its scope, the
+                         ask leaves deep inbox, the stream shows it answered, and the session that raised it gets the
+                         answer once
+  AssertionError: AC2 #667.b25a1d05: the stream shows answer.refused ask:01M5T5V2ZYVJZHMY28HT028KPN at log_pos 8, as
+  the record holds it: expected [] to deeply equal [ [ …(2) ] ]
+  (Everything before it held: one ask.answered `files` via inbox, verified; one decision.created at
+  `session:f31c8876a21c41c39a4d6a3282781cac`, the scope `deep inbox answer` printed (deep_ask's asks carry no project);
+  the ask left `deep inbox`; ask.answered and decision.created framed at 6 and 7; the agent's deep_ask returned
+  {status: answered, answer: files}; a second answer exited 2, "closed as answered"; deep_wait still held files. The
+  refusal the asks core appended at 8 was never framed: the same missing flush as AC1.)
+
+PASS  authority.test.ts  AC3 #667.4014b343 the authority ask answered from inside the asking session's process tree is
+                         refused and stays open; by you with the OS confirmation it counts; with it cancelled it saves
+                         no decision and stays open
+  (Expected: #24's peer check and confirmation already hold. Kept as the checkpoint's regression protection, and
+  proven to fail on a wrong program only once the plant answer-inside-session exists; below.)
+
+FAIL  deadlines.test.ts  AC4 #667.ca2b4f95 past its deadline the unanswered choice ask takes its default, announced on
+                         the stream and recorded as defaulted, and an undo opens it again; the authority ask past its
+                         deadline takes no
+  AssertionError: AC4 #667.ca2b4f95: ask ask:01M5T5V2XVK8HGN22BB2QEXS7J (the choice ask) is still open 15 s past its
+  deadline 2026-10-25T22:40:50.107Z on the hub's clock: every ask ends by its deadline: expected 0 to be greater
+  than 0
+  (Expected: the base hub ticks the asks core only at its start and on a call into it, so with its clock started
+  20 s before the deadline nothing takes the default while it runs. Not reached: the stream's announcement,
+  `deep inbox undo` (the base CLI has none: usage, exit 2), and the authority ask's default.)
+
+PASS  fold.test.ts       AC5 #667.b1086458 the sixth open ask from one session lands inside one "this session keeps
+                         asking" exception in deep inbox, and answering that exception in bulk closes all six
+  (Expected: #319's fold and #24's inbox already hold, and the hub appends the decision.created after the bulk answer,
+  which flushes the stream. Regression protection.)
+
+FAIL  fold.test.ts       AC5 #667.b1086458 left unanswered past its deadline, the folded sixth ask takes its own
+                         default: a hub that lets the deadline pass with the ask still open fails, naming the ask
+  AssertionError: AC5 #667.b1086458: ask ask:01M5T5V662X47713G98J079ZSS (the sixth ask, folded into the exception) is
+  still open 15 s past its deadline 2026-10-25T22:40:53.442Z on the hub's clock: every ask ends by its deadline:
+  expected 0 to be greater than 0
+  (Expected: as AC4. `deep inbox` before the clock moved listed the five taste calls `shown`, one exception "This
+  session keeps asking: …" and the sixth, a choice, `folded`.)
+
+FAIL  plants.test.ts     AC3 #667.4014b343 fails on an inbox that counts an answer from a process inside the asking
+                         session's process tree (answer-inside-session), naming the criterion
+  AssertionError: expected [Function] to throw error matching /AC3 #667\.4014b343: ask ask:[0-9A-Za-…/ but got
+  'BLOCKED: the hub didn't start with DEEP_HUB_PLANT=answer-inside-session: … names no planted program'
+FAIL  plants.test.ts     AC4 #667.ca2b4f95 fails on a hub that skips the default at the deadline
+                         (skip-default-at-deadline), naming the criterion and the ask
+  AssertionError: … but got 'BLOCKED: the hub didn't start with DEEP_HUB_PLANT=skip-default-at-deadline: … names no
+  planted program'
+FAIL  plants.test.ts     AC5 #667.b1086458 fails on a hub that skips the default at the deadline
+                         (skip-default-at-deadline), naming the criterion and the ask
+  AssertionError: (the same)
+  (Expected: neither plant exists at the base, so the hub refuses to start and no message names the criterion.)
+
+Every test's processes were stopped by PID and its /tmp/dh667-* folder removed; none was left after the run.

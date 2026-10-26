@@ -406,4 +406,19 @@ describe('the learned layer', () => {
     expect(key()).not.toBe(before);
     await record.close();
   });
+
+  it("holds a step spec at load when a block rule's match is a form only deep-hook reads from a call: nothing unread passes", async () => {
+    // Failed on a loader that took a match it can't read against a command as no match, which loaded the spec.
+    const { record, S } = await world([said('m1', 'seed the shop, then run the journeys; never write .env')]);
+    const evidence = [{ at: `session:${S}#m1`, quote: 'seed the shop' }];
+    await apply(record, you, { layer: 'learned', target: 'step:shop-seed', diff: '+ run: npm run seed', evidence, scope: 'repo:shop', applied_by: 'you' });
+    await apply(record, you, { layer: 'learned', target: 'step:shop-notes', diff: '+ note: the journeys take four minutes', evidence, scope: 'repo:shop', applied_by: 'you' });
+    await apply(record, you, { layer: 'base', target: 'guard:no-env-write', diff: ['+ match: write:.env', '+ scope: all_repos', '+ mode: block', '+ reason: .env holds secrets.', '+ next_step: Ask the person.', '+ fail_closed: true'].join('\n'), evidence: [{ at: `session:${S}#m1`, quote: 'never write .env' }], scope: 'all', applied_by: 'you' });
+    const load = await record.loadLearned(S);
+    expect(load.held.map((h) => h.target)).toEqual(['step:shop-seed']);
+    expect(load.held[0]!.reason).toContain('no-env-write');
+    // A spec that runs nothing has no command for the rule to deny.
+    expect(load.loaded.map((e) => e.target)).toEqual(['step:shop-notes']);
+    await record.close();
+  });
 });

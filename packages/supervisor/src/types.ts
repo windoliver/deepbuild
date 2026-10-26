@@ -1,5 +1,6 @@
 // The supervisor's public shapes: the sandbox seam, host@1 and the supervisor itself (#236).
 import type { Asks } from '@deepbuild/asks';
+import type { LeaseTable } from '@deepbuild/leases';
 import type { RecordStore } from '@deepbuild/record';
 
 /** What a process may touch beyond the system's own runtime, each word enforced by the sandbox (Access). */
@@ -102,6 +103,12 @@ export interface SupervisorOptions {
   /** What your settings give an unblock ask. */
   settings: { asks: { unblock: { deadline_ms: number } } };
   resources?: ResourceKind[];
+  /**
+   * The kernel's lease table (#237). With one, every key a run takes is the table's lease, held by the core for the
+   * run, and the table's grant replaces the kind's own free check; the supervisor releases it, citing the
+   * process.ended events that prove the run's processes gone. Each kind must be declared in it.
+   */
+  leases?: LeaseTable;
   /** Paths no run may write, whatever its grant: the hub's record, and where agents read their hooks. One with
    * `except` leaves those folders under it to each run's own grant (the hub's jobs/ under its root). */
   guarded?: (string | { path: string; except: string[] })[];

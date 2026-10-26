@@ -4,6 +4,7 @@
 //! one. A capture is that renderer's image of the whole window.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,6 +38,15 @@ pub struct Paint {
     /// showed.
     pub ui_time: Duration,
     pub shown: Option<u64>,
+    /// A 3D view's 2D writer layers anchored to its items (#378), by the frame whose evaluated
+    /// data placed them: each present draws those of the `frame_seq` its shown slot carries.
+    pub overlays: BTreeMap<u64, Vec<OverlayPicture>>,
+    /// The frame latched last.
+    pub current: u64,
+    /// The planted composer that draws the current frame's 2D layers over whatever slot shows.
+    pub pairs_newest: bool,
+    /// A plug-in's panel script view in its header strip, `[x, y, w, h]` (#380).
+    pub panel: Option<(AnyView, [f32; 4])>,
     /// The page as one picture, made once per page and window size.
     picture: Option<(PageKey, Arc<RenderImage>)>,
 }
@@ -117,10 +127,34 @@ fn paint_view(p: &mut Paint, ui: &Ui, window: &mut Window) {
     p.ui_time += started.elapsed();
 }
 
+/// A 2D overlay's picture on a whole pixel of the view, its sub-pixel phase in its raster.
+pub struct OverlayPicture {
+    pub at: [i64; 2],
+    pub size: [u16; 2],
+    pub image: Arc<RenderImage>,
+}
+
+/// The 2D layers anchored to the view's items, from the evaluated data of `frame`.
+fn paint_overlays(p: &Paint, frame: u64, window: &mut Window) {
+    let Some(list) = p.overlays.get(&frame) else {
+        return;
+    };
+    for o in list {
+        let b = rect(
+            (i64::from(p.view[0]) + o.at[0]) as f32,
+            (i64::from(p.view[1]) + o.at[1]) as f32,
+            f32::from(o.size[0]),
+            f32::from(o.size[1]),
+        );
+        let _ = window.paint_image(b, b, Corners::default(), o.image.clone(), 0, false);
+    }
+}
+
 impl Render for Root {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let state = self.paint.clone();
         let card = self.paint.borrow().card.clone();
+        let panel = self.paint.borrow().panel.clone();
         div()
             .size_full()
             .relative()
@@ -136,10 +170,28 @@ impl Render for Root {
                             #[cfg(not(target_os = "macos"))]
                             let _ = ui;
                         }
+                        let paired = if p.pairs_newest {
+                            Some(p.current)
+                        } else {
+                            p.shown
+                        };
+                        if let Some(frame) = paired {
+                            paint_overlays(&p, frame, window);
+                        }
                     },
                 )
                 .size_full(),
             )
+            .children(panel.map(|(view, [x, y, w, h])| {
+                div()
+                    .absolute()
+                    .left(px(x))
+                    .top(px(y))
+                    .w(px(w))
+                    .h(px(h))
+                    .overflow_hidden()
+                    .child(view)
+            }))
             .children(card.map(|c| {
                 let [x, y, w, h] = c.rect;
                 div()
@@ -192,6 +244,10 @@ impl Win {
             waits_on_gpu: false,
             ui_time: Duration::ZERO,
             shown: None,
+            overlays: BTreeMap::new(),
+            current: 0,
+            pairs_newest: false,
+            panel: None,
             picture: None,
         }));
         let root = Root {
@@ -229,6 +285,16 @@ impl Win {
         self.paint.borrow_mut().ui_time = Duration::ZERO;
         // A forced frame request draws once, as the app's display link does.
         cx.present_frame(self.handle);
+    }
+
+    /// Runs `f` in the window, as a panel mounts in it.
+    pub fn update<T>(
+        &self,
+        cx: &mut HeadlessAppContext,
+        f: impl FnOnce(&mut Window, &mut gpui_kit::App) -> T,
+    ) -> Result<T, String> {
+        cx.update_window(self.handle, |_, window, cx| f(window, cx))
+            .map_err(|e| format!("no window: {e}"))
     }
 
     /// The renderer's image of the whole window, RGBA.

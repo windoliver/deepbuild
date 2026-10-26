@@ -1,0 +1,169 @@
+{
+  "title": "lease.acquired@2",
+  "description": "A lease was granted. It names the run whose recorded processes hold it open until proven gone, and the holder session's agent process by ID and start time, so the lease table opened on the log ends it on the same proof.",
+  "x-feeds": [
+    "leases"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 2,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "lease.acquired"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection, never the payload."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "object",
+          "properties": {
+            "host": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "host",
+            "kind",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "holder": {
+          "type": "string",
+          "pattern": "^(session:[0-9A-Za-z]+|hook|app|cli|core|mcp:[^\\s]+|ext:[^\\s]+)$",
+          "description": "A session, or a writer as the envelope writes one, such as a document prefix's.",
+          "maxLength": 8192
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "exclusive",
+            "shared"
+          ],
+          "x-closure": {
+            "closed": "each value is a state the record defines and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "expires": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Milliseconds since the Unix epoch."
+        },
+        "run": {
+          "type": "string",
+          "pattern": "^run:[0-9A-Za-z]+$",
+          "description": "A run: handle.",
+          "maxLength": 8192
+        },
+        "agent": {
+          "type": "object",
+          "description": "The holder session's agent process: once no process has its ID with its start time, the holder has ended.",
+          "properties": {
+            "pid": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647,
+              "description": "A process ID."
+            },
+            "start": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192,
+              "description": "Its start time as `ps -o lstart=` prints it under LC_ALL=C: how it is told apart from a reused ID."
+            }
+          },
+          "required": [
+            "pid",
+            "start"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "resource",
+        "holder",
+        "mode",
+        "expires"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

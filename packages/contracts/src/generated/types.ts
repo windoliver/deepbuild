@@ -1128,6 +1128,27 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** capability.refused@1 */
+export interface CapabilityRefused {
+  v: 1;
+  id: string;
+  kind: "capability.refused";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    broke: "grant" | "quota" | "schema";
+    clause: string;
+    digest: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** check.code@1 */
 export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
 
@@ -1158,6 +1179,32 @@ export interface ClaimMade {
     attempt: number;
     commit: string;
     scope: "session" | "child" | "task";
+  };
+  evidence?: Array<string>;
+}
+
+/** claim.made@2 */
+export interface ClaimMadeV2 {
+  v: 2;
+  id: string;
+  kind: "claim.made";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    attempt: number;
+    commit: string;
+    scope: "session" | "child" | "task";
+    predictions: Array<{
+      check: string;
+      expects: "passed" | "failed";
+      at: number;
+    }>;
   };
   evidence?: Array<string>;
 }
@@ -1238,6 +1285,42 @@ export interface DecisionCreated {
     scope: string;
     answer: string;
     ask: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** decision.overruled@1 */
+export interface DecisionOverruled {
+  v: 1;
+  id: string;
+  kind: "decision.overruled";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** default.undone@1 */
+export interface DefaultUndone {
+  v: 1;
+  id: string;
+  kind: "default.undone";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    deadline: number;
   };
   evidence?: Array<string>;
 }
@@ -1407,6 +1490,16 @@ export interface Error {
 /** error@2 */
 export interface ErrorV2 {
   code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+}
+
+/** error@3 */
+export interface ErrorV3 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large" | "fell_behind";
   retryable: boolean;
   remediation: string;
   path: string;
@@ -1604,6 +1697,39 @@ export interface HookRequestV2 {
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
+}
+
+/** hook.request@3 */
+export interface HookRequestV3 {
+  v: 1;
+  agent: string;
+  event: string;
+  seq: bigint;
+  id: string;
+  pid: number;
+  ppid: number;
+  matched: Array<string>;
+  notes?: { [key: string]: string };
+  payload: unknown;
+  late?: boolean;
+  billing?: { [key: string]: boolean };
+}
+
+/** hook.template@1 */
+export interface HookTemplate {
+  name: string;
+  hook: "session.start" | "tool.before" | "tool.after" | "prompt.submit" | "agent.stop";
+  text: string;
+  fields: { [key: string]: {
+    type: "handle";
+  } | {
+    type: "number";
+  } | {
+    type: "name";
+  } | {
+    type: "one_of";
+    values: Array<string>;
+  } };
 }
 
 /** hub.stopped@1 */
@@ -1953,6 +2079,36 @@ export interface LeaseAcquired {
   evidence?: Array<string>;
 }
 
+/** lease.acquired@2 */
+export interface LeaseAcquiredV2 {
+  v: 2;
+  id: string;
+  kind: "lease.acquired";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    run?: string;
+    agent?: {
+      pid: number;
+      start: string;
+    };
+  };
+  evidence?: Array<string>;
+}
+
 /** lease.denied@1 */
 export interface LeaseDenied {
   v: 1;
@@ -1978,6 +2134,15 @@ export interface LeaseDenied {
   evidence?: Array<string>;
 }
 
+/** lease.kind@1 */
+export interface LeaseKind {
+  name: string;
+  match: string;
+  cap: number;
+  cooldown: number;
+  cost: number;
+}
+
 /** lease.released@1 */
 export interface LeaseReleased {
   v: 1;
@@ -1999,6 +2164,32 @@ export interface LeaseReleased {
     holder: string;
     mode: "exclusive" | "shared";
     expires: number;
+  };
+  evidence?: Array<string>;
+}
+
+/** lease.released@2 */
+export interface LeaseReleasedV2 {
+  v: 2;
+  id: string;
+  kind: "lease.released";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    resource: {
+      host: string;
+      kind: string;
+      key: string;
+    };
+    holder: string;
+    mode: "exclusive" | "shared";
+    expires: number;
+    proof: Array<string>;
   };
   evidence?: Array<string>;
 }
@@ -2557,6 +2748,25 @@ export interface SessionEnd {
   log_pos?: number;
   data: {
     reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** session.gone@1 */
+export interface SessionGone {
+  v: 1;
+  id: string;
+  kind: "session.gone";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    pid: number;
+    start: string;
   };
   evidence?: Array<string>;
 }

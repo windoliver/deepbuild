@@ -1,0 +1,463 @@
+Base commit: 0954514 (origin/main, holding #316's matcher; no implementation of #317)
+Command: npm ci; npm run build --workspaces (twice); cargo build --locked -q -p deep-hook; then NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/317 --no-file-parallelism --reporter=verbose   (node v24.22.0, the repo's .node-version; the same as npx vitest run --root tests/acceptance/317 --no-file-parallelism)
+Date: 2026-10-25  Node v24.22.0  vitest 5.0.5  darwin-arm64, on a machine shared with other sessions.
+Exit code: 1
+Result: 4 files, 27 tests, 25 failed, 2 passed, 0 skipped. Duration 96 s.
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/317/tsconfig.json reports no errors.
+
+Why each test fails at the base (each is the expected reason: the base has no #317 entry, no repo entries file and
+no safe mode):
+- AC1 safe mode, and AC1 (wrong program): `deep hub run --safe` is refused with the usage text, so the hub can't
+  start in safe mode. Safe mode is the switch this suite defines (README); the base hub has none.
+- AC2 KMS: `aws kms create-key --profile shop-new-account ...` is allowed with the hub stopped (exit 0): no default
+  entry denies creating a cloud resource no standing rule covers.
+- AC2 Write of ~/.deepbuild/rules.json: allowed (exit 0). The base's config entry guards a repo's .deepbuild/ but
+  excepts ~/.deepbuild/, so nothing stops an agent writing rules.json.
+- AC3 the run: `./scripts/clean.sh` is allowed with the hub stopped, so the test ran it in its temp repo and
+  build-cache/ went from 4 to 0 files. The base is the fail-open deep-hook the criterion describes.
+- AC4 both: .deepbuild/rules.json (this repo's own entries) is missing; the base ships none.
+- AC5 stopped and up: `deep off` (the first call checked) is allowed in both. AC5 hub PID: `kill -9 <hub pid>` is
+  allowed with the hub up.
+- AC6 stopped, up, and next session: `deep hub use --root <dev>` is allowed in both (the next-session check is
+  never reached).
+- AC7: `rm ~/.deepbuild/rules.json` (the first call checked) is allowed.
+- AC8 stopped and up: `cat ~/.deepbuild/control.token` (the first call checked) is allowed in both.
+- AC9 stopped and up: `deep restore ~/backup` is allowed in both.
+- Every wrong-program test but AC1's and AC4's (AC3, AC5 x2, AC6, AC7, AC8, AC9) fails with "no shipped entry,
+  installed alone with the hub stopped, denies `<call>`: there is no entry to leave out, so the wrong program can't
+  be made". The wrong programs are built from the shipped defaults by leaving out the entries that hold the named
+  call (README, Wrong programs); at the base no entry holds it, so there is no wrong program to build and the test
+  fails rather than passing. AC1's fails on safe mode and AC4's on the missing repo entries file, as above.
+
+The two tests that pass at the base, and why they stay:
+- AC1 "the floor denies all three writes of the spec, naming deep_propose, stopped": #316's default config entry
+  already guards a repo's .deepbuild/ with the hub stopped and points to deep_propose. This half of the criterion
+  is not new behaviour at this base; the criterion's new part, the hub up in safe mode, fails above. It stays as
+  the guard that the floor keeps holding .deepbuild/ with the hub down once #317 reshapes the defaults.
+- AC2 "npm install of a package the plan does not name is allowed, and is recorded once the hub replays the spool":
+  #315's deep-hook allows a call no entry matches and spools it, and the hub replays it into the record. This is
+  the twin of AC2's denials (a dependency is allowed and recorded with the hub down); it stays as the precision
+  guard that fails a floor that denies a dependency the plan doesn't name, or that drops the call from the record.
+  In one earlier run of four on this loaded machine it failed (the record didn't hold the call within 20 s); the
+  wait is now 60 s and the failure prints deep-hook's own output. It passed in the other three runs and in this one.
+
+Checked beside this run (not part of the suite, file deleted after): a hand-made rules.json of the defaults plus
+one fail_closed entry in the base's own spelling (`run:deep off`, its next_step "Run it yourself: deep off"),
+to see the suite's machinery work on a program that does deny: all four forms of `deep off` were denied with the
+hub stopped and up, the denial carried the entry's reason and next step and named `deep off`, and `without`
+removed exactly that entry, after which the run failed naming `deep off`. Also checked: with the installed hub and
+a dev hub both up, a worktree session's SessionStart through deep-hook reached the installed hub's record and not
+the dev hub's. No implementation of #317 was run against the suite; no test has been seen to pass on a correct
+program.
+
+---- The run (the checkout's path shown as <checkout>) ----
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/317
+
+ × switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 every switch-off call is denied in every form, naming the command for you to run, stopped; the twins are allowed 186ms
+   → `deep off` with the hub stopped must be denied: exit 0 after 28.6 ms, stdout "", stderr "deep-hook: spooled 01M5S1GFYQ0PSGTF8ANGM85T5A, but its sync didn't finish within the hook's 50 ms\n"
+ × switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 every switch-off call is denied in every form, naming the command for you to run, up; the twins are allowed 2579ms
+   → `deep off` with the hub up must be denied: exit 0 after 10.7 ms, stdout "", stderr ""
+ × switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 with the hub up, kill -9 (or any signal) of the hub's PID is denied, naming the command, while kill of a PID the session started is allowed 2259ms
+   → `kill -9 597` with the hub up must be denied: exit 0 after 28.0 ms, stdout "", stderr ""
+ × switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 (wrong program) defaults that protect only rules.json let the sqlite3 write reach the ledger and fail, naming the call 1220ms
+   → no shipped entry, installed alone with the hub stopped, denies `sqlite3 ~/.deepbuild/ledger.db 'insert into events values (1)'`: there is no entry to leave out, so the wrong program can't be made
+ × switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 (wrong program) defaults without the deep off entry let the agent turn every gate watch-only and fail, naming the call 1553ms
+   → no shipped entry, installed alone with the hub stopped, denies `deep off`: there is no entry to leave out, so the wrong program can't be made
+ × switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 the agent's deep hub use is denied directly and through sh -c, naming the command, stopped 3745ms
+   → `deep hub use --root <dev>` with the hub stopped must be denied: exit 0 after 49.2 ms, stdout "", stderr "deep-hook: could not spool 01M5S1GSQXCB96TK8QZRM8HXXT within the hook's 50 ms\n"
+ × switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 the agent's deep hub use is denied directly and through sh -c, naming the command, up 4167ms
+   → `deep hub use --root <dev>` with the hub up must be denied: exit 0 after 22.7 ms, stdout "", stderr ""
+ × switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 after the denial, the worktree's next session reaches the installed hub, not the dev hub the agent started 3836ms
+   → `deep hub use --root <dev>` with the hub up must be denied: exit 0 after 49.4 ms, stdout "", stderr "deep-hook: could not spool 01M5S1H2C9GA1CZA02PFQC146T within the hook's 50 ms\n"
+ × switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 (wrong program) defaults without the deep hub use entry let the agent send its sessions to its dev hub and fail, naming the call 1936ms
+   → no shipped entry, installed alone with the hub stopped, denies `deep hub use --root <dev>`: there is no entry to leave out, so the wrong program can't be made
+ × switch-off.test.ts > AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails > AC9 deep restore is denied in every form, naming the command for you to run, stopped; git restore src/cart.ts and deep status are allowed 1022ms
+   → `deep restore ~/backup` with the hub stopped must be denied: exit 0 after 30.2 ms, stdout "", stderr "deep-hook: spooled 01M5S1H5JM387EGEFRKSN4RE28, but its sync didn't finish within the hook's 50 ms\n"
+ × switch-off.test.ts > AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails > AC9 deep restore is denied in every form, naming the command for you to run, up; git restore src/cart.ts and deep status are allowed 2834ms
+   → `deep restore ~/backup` with the hub up must be denied: exit 0 after 61.4 ms, stdout "", stderr "deep-hook: spooled 01M5S1H829FHEXAYF4WZN95FQ1, but its sync didn't finish within the hook's 50 ms\n"
+ × switch-off.test.ts > AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails > AC9 (wrong program) defaults without the deep restore entry let the call through and fail, naming the call 1178ms
+   → no shipped entry, installed alone with the hub stopped, denies `deep restore ~/backup`: there is no entry to leave out, so the wrong program can't be made
+ × home.test.ts > AC7 #317.ef09b629 hub stopped: rm, : >, mv over and ln -sf /dev/null onto ~/.deepbuild/rules.json are each denied, naming the command; an Edit/Write-only floor fails > AC7 each shell write of rules.json is denied, naming the command for you to run 160ms
+   → `rm ~/.deepbuild/rules.json` with the hub stopped must be denied: exit 0 after 32.6 ms, stdout "", stderr "deep-hook: spooled 01M5S1HJ73TMVZVFMGHJ0NJT9G, but its sync didn't finish within the hook's 50 ms\n"
+ × home.test.ts > AC7 #317.ef09b629 hub stopped: rm, : >, mv over and ln -sf /dev/null onto ~/.deepbuild/rules.json are each denied, naming the command; an Edit/Write-only floor fails > AC7 (wrong program) a floor that guards only Edit and Write of the file lets rm through and fails, naming the call 758ms
+   → no shipped entry, installed alone with the hub stopped, denies `rm ~/.deepbuild/rules.json`: there is no entry to leave out, so the wrong program can't be made
+ × home.test.ts > AC8 #317.632c7ebb hub stopped and up: Read, cat, cp and base64 of ~/.deepbuild/control.token, directly and through sh -c, are each denied, naming the file; a writes-only floor fails > AC8 every read of the control token is denied, naming the file, stopped; reading the wiki under ~/.deepbuild/ is allowed 253ms
+   → `cat ~/.deepbuild/control.token` with the hub stopped must be denied: exit 0 after 43.5 ms, stdout "", stderr "deep-hook: spooled 01M5S1HK2Y3RNCNGBJJT4S3MX2, but its sync didn't finish within the hook's 50 ms\n"
+ × home.test.ts > AC8 #317.632c7ebb hub stopped and up: Read, cat, cp and base64 of ~/.deepbuild/control.token, directly and through sh -c, are each denied, naming the file; a writes-only floor fails > AC8 every read of the control token is denied, naming the file, up; reading the wiki under ~/.deepbuild/ is allowed 3281ms
+   → `cat ~/.deepbuild/control.token` with the hub up must be denied: exit 0 after 35.4 ms, stdout "", stderr ""
+ × home.test.ts > AC8 #317.632c7ebb hub stopped and up: Read, cat, cp and base64 of ~/.deepbuild/control.token, directly and through sh -c, are each denied, naming the file; a writes-only floor fails > AC8 (wrong program) a floor that guards only writes under ~/.deepbuild/ lets the cat through and fails, naming the call 451ms
+   → no shipped entry, installed alone with the hub stopped, denies `cat ~/.deepbuild/control.token`: there is no entry to leave out, so the wrong program can't be made
+ ✓ floor.test.ts > AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails > AC1 the floor denies all three writes of the spec, naming deep_propose, stopped; an ordinary source edit is allowed 856ms
+ × floor.test.ts > AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails > AC1 the floor denies all three writes of the spec, naming deep_propose, safe; an ordinary source edit is allowed 911ms
+   → the hub didn't start (deep hub run --safe): Usage: deep hub run [--root <folder>]
+       deep hub start [--root <folder>]
+       deep hub status [--root <folder>]
+       deep hub stop --root <folder>
+
+ × floor.test.ts > AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails > AC1 (wrong program) a build whose floor leaves the .deepbuild/ guard to the done gate extension allows the Edit with the hub stopped and in safe mode, and fails 2005ms
+   → the hub didn't start (deep hub run --safe): Usage: deep hub run [--root <folder>]
+       deep hub start [--root <folder>]
+       deep hub status [--root <folder>]
+       deep hub stop --root <folder>
+
+ × floor.test.ts > AC4 #317.6536a48a in this repo an Edit, Write or sed -i of scripts/repo-rules.json or .mjs is denied with the hub stopped, naming deep_propose; scripts/lanes.mjs is allowed; a .deepbuild/-only guard fails > AC4 this repo's own entries deny all six writes, naming deep_propose; an Edit of scripts/lanes.mjs is allowed 1ms
+   → this repo's own guard@1 entries is missing at .deepbuild/rules.json (README, Where the entries live)
+ × floor.test.ts > AC4 #317.6536a48a in this repo an Edit, Write or sed -i of scripts/repo-rules.json or .mjs is denied with the hub stopped, naming deep_propose; scripts/lanes.mjs is allowed; a .deepbuild/-only guard fails > AC4 (wrong program) a guard that protects only .deepbuild/ lets the Edit of scripts/repo-rules.json through and fails 1ms
+   → this repo's own guard@1 entries is missing at .deepbuild/rules.json (README, Where the entries live)
+ × plan.test.ts > AC2 #317.5ca7ac42 hub stopped: a KMS key in an unnamed AWS account is denied with the reason, npm install of an unnamed package is allowed and recorded, and a write to rules.json is denied > AC2 creating a KMS key the plan does not name is denied carrying the reason; listing keys is allowed 476ms
+   → `aws kms create-key --profile shop-new-account --description 'orders key'` with the hub stopped must be denied: exit 0 after 153.4 ms, stdout "", stderr "deep-hook: could not spool 01M5S1JBRSVZXQNSF26YGDY5MY within the hook's 50 ms\n"
+ ✓ plan.test.ts > AC2 #317.5ca7ac42 hub stopped: a KMS key in an unnamed AWS account is denied with the reason, npm install of an unnamed package is allowed and recorded, and a write to rules.json is denied > AC2 npm install of a package the plan does not name is allowed, and is recorded once the hub replays the spool 3098ms
+ × plan.test.ts > AC2 #317.5ca7ac42 hub stopped: a KMS key in an unnamed AWS account is denied with the reason, npm install of an unnamed package is allowed and recorded, and a write to rules.json is denied > AC2 an agent's Write of ~/.deepbuild/rules.json is denied carrying the reason 268ms
+   → `Write ~/.deepbuild/rules.json` with the hub stopped must be denied: exit 0 after 62.4 ms, stdout "", stderr "deep-hook: could not spool 01M5S1JF6JNFYNW1NEG0FFXEBC within the hook's 50 ms\n"
+ × plan.test.ts > AC3 #317.451c838d hub stopped: an agent-written scripts/clean.sh that deletes the untracked build-cache/ is denied, naming why, and build-cache/ keeps its files; a fails-open deep-hook fails > AC3 running the script is denied, carrying the reason, and build-cache/ keeps every file; reading the script and listing the folder are allowed 5303ms
+   → `./scripts/clean.sh` was allowed with the hub stopped; it ran and build-cache/ went from 4 to 0 files
+ × plan.test.ts > AC3 #317.451c838d hub stopped: an agent-written scripts/clean.sh that deletes the untracked build-cache/ is denied, naming why, and build-cache/ keeps its files; a fails-open deep-hook fails > AC3 (wrong program) a deep-hook that fails open on the script runs it, empties build-cache/ and fails 3857ms
+   → no shipped entry, installed alone with the hub stopped, denies `./scripts/clean.sh`: there is no entry to leave out, so the wrong program can't be made
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  floor.test.ts > AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails > AC1 the floor denies all three writes of the spec, naming deep_propose, safe; an ordinary source edit is allowed
+Error: the hub didn't start (deep hub run --safe): Usage: deep hub run [--root <folder>]
+       deep hub start [--root <folder>]
+       deep hub status [--root <folder>]
+       deep hub stop --root <folder>
+
+ ❯ startHub helpers.ts:324:17
+    322|   });
+    323|   const r = await Promise.race([ready, exit, sleep(timeoutMs).then(() …
+    324|   if (!r) throw Error(`the hub didn't start (deep ${args.slice(1).join…
+       |                 ^
+    325|   return { ...r, home, root: o.root ?? rootOf(home), child, stderr: ()…
+    326| }
+ ❯ world helpers.ts:250:50
+ ❯ floor.test.ts:26:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/25]⎯
+
+ FAIL  floor.test.ts > AC1 #317.24a63675 an Edit, Write or sed -i of .deepbuild/done.yaml is denied with the hub stopped and in safe mode, naming deep_propose; a guard left to the done gate extension fails > AC1 (wrong program) a build whose floor leaves the .deepbuild/ guard to the done gate extension allows the Edit with the hub stopped and in safe mode, and fails
+Error: the hub didn't start (deep hub run --safe): Usage: deep hub run [--root <folder>]
+       deep hub start [--root <folder>]
+       deep hub status [--root <folder>]
+       deep hub stop --root <folder>
+
+ ❯ startHub helpers.ts:324:17
+    322|   });
+    323|   const r = await Promise.race([ready, exit, sleep(timeoutMs).then(() …
+    324|   if (!r) throw Error(`the hub didn't start (deep ${args.slice(1).join…
+       |                 ^
+    325|   return { ...r, home, root: o.root ?? rootOf(home), child, stderr: ()…
+    326| }
+ ❯ world helpers.ts:250:50
+ ❯ floor.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/25]⎯
+
+ FAIL  floor.test.ts > AC4 #317.6536a48a in this repo an Edit, Write or sed -i of scripts/repo-rules.json or .mjs is denied with the hub stopped, naming deep_propose; scripts/lanes.mjs is allowed; a .deepbuild/-only guard fails > AC4 this repo's own entries deny all six writes, naming deep_propose; an Edit of scripts/lanes.mjs is allowed
+Error: this repo's own guard@1 entries is missing at .deepbuild/rules.json (README, Where the entries live)
+ ❯ readRules helpers.ts:187:32
+    185| export interface Rules { v: number; entries: Record<string, Guard> }
+    186| function readRules(file: string, what: string): Rules {
+    187|   if (!existsSync(file)) throw Error(`${what} is missing at ${file.sli…
+       |                                ^
+    188|   const parsed = parseObject(readFileSync(file, 'utf8'));
+    189|   if (!parsed || typeof parsed.v !== 'number' || typeof parsed.entries…
+ ❯ repoRules helpers.ts:195:39
+ ❯ floor.test.ts:53:59
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/25]⎯
+
+ FAIL  floor.test.ts > AC4 #317.6536a48a in this repo an Edit, Write or sed -i of scripts/repo-rules.json or .mjs is denied with the hub stopped, naming deep_propose; scripts/lanes.mjs is allowed; a .deepbuild/-only guard fails > AC4 (wrong program) a guard that protects only .deepbuild/ lets the Edit of scripts/repo-rules.json through and fails
+Error: this repo's own guard@1 entries is missing at .deepbuild/rules.json (README, Where the entries live)
+ ❯ readRules helpers.ts:187:32
+    185| export interface Rules { v: number; entries: Record<string, Guard> }
+    186| function readRules(file: string, what: string): Rules {
+    187|   if (!existsSync(file)) throw Error(`${what} is missing at ${file.sli…
+       |                                ^
+    188|   const parsed = parseObject(readFileSync(file, 'utf8'));
+    189|   if (!parsed || typeof parsed.v !== 'number' || typeof parsed.entries…
+ ❯ repoRules helpers.ts:195:39
+ ❯ floor.test.ts:59:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/25]⎯
+
+ FAIL  home.test.ts > AC7 #317.ef09b629 hub stopped: rm, : >, mv over and ln -sf /dev/null onto ~/.deepbuild/rules.json are each denied, naming the command; an Edit/Write-only floor fails > AC7 each shell write of rules.json is denied, naming the command for you to run
+Error: `rm ~/.deepbuild/rules.json` with the hub stopped must be denied: exit 0 after 32.6 ms, stdout "", stderr "deep-hook: spooled 01M5S1HJ73TMVZVFMGHJ0NJT9G, but its sync didn't finish within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ home.test.ts:22:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/25]⎯
+
+ FAIL  home.test.ts > AC7 #317.ef09b629 hub stopped: rm, : >, mv over and ln -sf /dev/null onto ~/.deepbuild/rules.json are each denied, naming the command; an Edit/Write-only floor fails > AC7 (wrong program) a floor that guards only Edit and Write of the file lets rm through and fails, naming the call
+Error: no shipped entry, installed alone with the hub stopped, denies `rm ~/.deepbuild/rules.json`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ home.test.ts:26:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/25]⎯
+
+ FAIL  home.test.ts > AC8 #317.632c7ebb hub stopped and up: Read, cat, cp and base64 of ~/.deepbuild/control.token, directly and through sh -c, are each denied, naming the file; a writes-only floor fails > AC8 every read of the control token is denied, naming the file, stopped; reading the wiki under ~/.deepbuild/ is allowed
+Error: `cat ~/.deepbuild/control.token` with the hub stopped must be denied: exit 0 after 43.5 ms, stdout "", stderr "deep-hook: spooled 01M5S1HK2Y3RNCNGBJJT4S3MX2, but its sync didn't finish within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ home.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/25]⎯
+
+ FAIL  home.test.ts > AC8 #317.632c7ebb hub stopped and up: Read, cat, cp and base64 of ~/.deepbuild/control.token, directly and through sh -c, are each denied, naming the file; a writes-only floor fails > AC8 every read of the control token is denied, naming the file, up; reading the wiki under ~/.deepbuild/ is allowed
+Error: `cat ~/.deepbuild/control.token` with the hub up must be denied: exit 0 after 35.4 ms, stdout "", stderr ""
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ home.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/25]⎯
+
+ FAIL  home.test.ts > AC8 #317.632c7ebb hub stopped and up: Read, cat, cp and base64 of ~/.deepbuild/control.token, directly and through sh -c, are each denied, naming the file; a writes-only floor fails > AC8 (wrong program) a floor that guards only writes under ~/.deepbuild/ lets the cat through and fails, naming the call
+Error: no shipped entry, installed alone with the hub stopped, denies `cat ~/.deepbuild/control.token`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ home.test.ts:59:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/25]⎯
+
+ FAIL  plan.test.ts > AC2 #317.5ca7ac42 hub stopped: a KMS key in an unnamed AWS account is denied with the reason, npm install of an unnamed package is allowed and recorded, and a write to rules.json is denied > AC2 creating a KMS key the plan does not name is denied carrying the reason; listing keys is allowed
+Error: `aws kms create-key --profile shop-new-account --description 'orders key'` with the hub stopped must be denied: exit 0 after 153.4 ms, stdout "", stderr "deep-hook: could not spool 01M5S1JBRSVZXQNSF26YGDY5MY within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ plan.test.ts:24:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/25]⎯
+
+ FAIL  plan.test.ts > AC2 #317.5ca7ac42 hub stopped: a KMS key in an unnamed AWS account is denied with the reason, npm install of an unnamed package is allowed and recorded, and a write to rules.json is denied > AC2 an agent's Write of ~/.deepbuild/rules.json is denied carrying the reason
+Error: `Write ~/.deepbuild/rules.json` with the hub stopped must be denied: exit 0 after 62.4 ms, stdout "", stderr "deep-hook: could not spool 01M5S1JF6JNFYNW1NEG0FFXEBC within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ plan.test.ts:40:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/25]⎯
+
+ FAIL  plan.test.ts > AC3 #317.451c838d hub stopped: an agent-written scripts/clean.sh that deletes the untracked build-cache/ is denied, naming why, and build-cache/ keeps its files; a fails-open deep-hook fails > AC3 running the script is denied, carrying the reason, and build-cache/ keeps every file; reading the script and listing the folder are allowed
+Error: `./scripts/clean.sh` was allowed with the hub stopped; it ran and build-cache/ went from 4 to 0 files
+ ❯ judge plan.test.ts:74:13
+     72|     if (decision(ran) === 'allow') {
+     73|       await run('/bin/sh', ['-c', call.label], { cwd: s.repo, env: chi…
+     74|       throw Error(`\`${call.label}\` was allowed with the hub stopped;…
+       |             ^
+     75|     }
+     76|     if (decision(ran) !== 'deny') throw Error(`\`${call.label}\` must …
+ ❯ plan.test.ts:86:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/25]⎯
+
+ FAIL  plan.test.ts > AC3 #317.451c838d hub stopped: an agent-written scripts/clean.sh that deletes the untracked build-cache/ is denied, naming why, and build-cache/ keeps its files; a fails-open deep-hook fails > AC3 (wrong program) a deep-hook that fails open on the script runs it, empties build-cache/ and fails
+Error: no shipped entry, installed alone with the hub stopped, denies `./scripts/clean.sh`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ plan.test.ts:99:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/25]⎯
+
+ FAIL  switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 every switch-off call is denied in every form, naming the command for you to run, stopped; the twins are allowed
+Error: `deep off` with the hub stopped must be denied: exit 0 after 28.6 ms, stdout "", stderr "deep-hook: spooled 01M5S1GFYQ0PSGTF8ANGM85T5A, but its sync didn't finish within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/25]⎯
+
+ FAIL  switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 every switch-off call is denied in every form, naming the command for you to run, up; the twins are allowed
+Error: `deep off` with the hub up must be denied: exit 0 after 10.7 ms, stdout "", stderr ""
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:59:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/25]⎯
+
+ FAIL  switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 with the hub up, kill -9 (or any signal) of the hub's PID is denied, naming the command, while kill of a PID the session started is allowed
+Error: `kill -9 597` with the hub up must be denied: exit 0 after 28.0 ms, stdout "", stderr ""
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:66:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/25]⎯
+
+ FAIL  switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 (wrong program) defaults that protect only rules.json let the sqlite3 write reach the ledger and fail, naming the call
+Error: no shipped entry, installed alone with the hub stopped, denies `sqlite3 ~/.deepbuild/ledger.db 'insert into events values (1)'`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ switch-off.test.ts:71:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/25]⎯
+
+ FAIL  switch-off.test.ts > AC5 #317.fdb52438 an agent cannot switch DeepBuild off from its shell, with the hub stopped and up, directly and through sh -c, nohup and a heredoc; the twins are allowed; rules.json-only defaults and a missing deep off entry fail > AC5 (wrong program) defaults without the deep off entry let the agent turn every gate watch-only and fail, naming the call
+Error: no shipped entry, installed alone with the hub stopped, denies `deep off`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ switch-off.test.ts:77:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/25]⎯
+
+ FAIL  switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 the agent's deep hub use is denied directly and through sh -c, naming the command, stopped
+Error: `deep hub use --root <dev>` with the hub stopped must be denied: exit 0 after 49.2 ms, stdout "", stderr "deep-hook: could not spool 01M5S1GSQXCB96TK8QZRM8HXXT within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:94:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/25]⎯
+
+ FAIL  switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 the agent's deep hub use is denied directly and through sh -c, naming the command, up
+Error: `deep hub use --root <dev>` with the hub up must be denied: exit 0 after 22.7 ms, stdout "", stderr ""
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:94:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/25]⎯
+
+ FAIL  switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 after the denial, the worktree's next session reaches the installed hub, not the dev hub the agent started
+Error: `deep hub use --root <dev>` with the hub up must be denied: exit 0 after 49.4 ms, stdout "", stderr "deep-hook: could not spool 01M5S1H2C9GA1CZA02PFQC146T within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:102:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/25]⎯
+
+ FAIL  switch-off.test.ts > AC6 #317.b03220bf deep hub use --root <folder> is denied with the hub stopped and up, directly and through sh -c, naming the command; the next session still reaches the installed hub; a missing entry fails > AC6 (wrong program) defaults without the deep hub use entry let the agent send its sessions to its dev hub and fail, naming the call
+Error: no shipped entry, installed alone with the hub stopped, denies `deep hub use --root <dev>`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ switch-off.test.ts:113:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/25]⎯
+
+ FAIL  switch-off.test.ts > AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails > AC9 deep restore is denied in every form, naming the command for you to run, stopped; git restore src/cart.ts and deep status are allowed
+Error: `deep restore ~/backup` with the hub stopped must be denied: exit 0 after 30.2 ms, stdout "", stderr "deep-hook: spooled 01M5S1H5JM387EGEFRKSN4RE28, but its sync didn't finish within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:124:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/25]⎯
+
+ FAIL  switch-off.test.ts > AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails > AC9 deep restore is denied in every form, naming the command for you to run, up; git restore src/cart.ts and deep status are allowed
+Error: `deep restore ~/backup` with the hub up must be denied: exit 0 after 61.4 ms, stdout "", stderr "deep-hook: spooled 01M5S1H829FHEXAYF4WZN95FQ1, but its sync didn't finish within the hook's 50 ms\n"
+ ❯ expectDenied helpers.ts:271:41
+    269|     const ran = await decide(w, call);
+    270|     const at = `\`${call.label}\` ${hubWords(w.mode)}`;
+    271|     if (decision(ran) !== 'deny') throw Error(`${at} must be denied: $…
+       |                                         ^
+    272|     if (!carriesReasonNextStep(ran, w.rules)) throw Error(`${at}: the …
+    273|     const naming = call.naming?.(w);
+ ❯ switch-off.test.ts:124:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/25]⎯
+
+ FAIL  switch-off.test.ts > AC9 #317.80848a53 deep restore ~/backup is denied with the hub stopped and up, directly and through sh -c, nohup and a heredoc, naming the command; git restore and deep status are allowed; a missing entry fails > AC9 (wrong program) defaults without the deep restore entry let the call through and fail, naming the call
+Error: no shipped entry, installed alone with the hub stopped, denies `deep restore ~/backup`: there is no entry to leave out, so the wrong program can't be made
+ ❯ without helpers.ts:296:30
+    294|     if (decision(await decide(w, probe)) === 'deny') removed.push(name…
+    295|   }
+    296|   if (!removed.length) throw Error(`no shipped entry, installed alone …
+       |                              ^
+    297|   const entries = Object.fromEntries(Object.entries(rules.entries).fil…
+    298|   return { rules: { v: rules.v, entries }, removed };
+ ❯ switch-off.test.ts:129:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/25]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  25 failed | 2 passed (27)
+   Start at  01:05:32
+   Duration  95.92s (tests 99%)
+

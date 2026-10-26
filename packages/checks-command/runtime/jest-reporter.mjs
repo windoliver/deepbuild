@@ -42,7 +42,6 @@ export default class DeepCheckJestReporter {
     this.filter = globalConfig?.testNamePattern;
   }
 
-
   // The runner's preload moves the clock of the processes it loads into; Jest runs each test file in a context with
   // a Date of its own, so a run whose clock should be ahead can't pass.
   onRunStart() {

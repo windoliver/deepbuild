@@ -1,0 +1,546 @@
+Base commit: 6173ee0 ("Merge pull request #718 from windoliver/claude/issue-24-inbox")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/378 --no-file-parallelism
+Run in a worktree at the base commit holding only these test files (untracked), the repo's node_modules from npm ci, and
+deep-gpu and deep-show built at the base (cargo build --locked --bin deep-gpu --bin deep-show, with the same two
+environment variables, so the suite's own builds reuse them).
+Every test fails for the expected reason, at a named assertion:
+- 15 tests drive `deep-gpu run` with the view3d call, which the base answers {"code":"bad_input","reason":"unknown call"};
+  they fail at "<the run> was answered, not refused".
+- 6 tests first start `deep-gpu run --planted <name>` with a name this issue adds (pairs_newest_slot, forward_z,
+  encodes_every_frame twice, encodes_twice, skips_encode); the base answers {"ok":false,"code":"bad_input"} and exits 2,
+  so they fail at "deep-gpu run [--backend noop] --planted <name> exited 0". The replays_after_add tests run a clean
+  or reference run first and fail there.
+- The 2 figure tests (deep-show) fail at "deep_show call 1 is presented" and "the deep_show call is presented": the base
+  refuses the figure with module_missing at items/base/kind: mark.box@1 (no scene3d kinds are registered). The second
+  test first runs its dependency check (no web-view crate in deep-show's or deep-app's tree, and its wry twin), which
+  holds at the base, then fails at the deep_show call.
+This Mac (Apple Silicon, arm64) draws on Metal, so no test failed as INCONCLUSIVE.
+Date: 2026-10-24  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (the checkout's toolchain)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/378
+
+ ❯ figure.test.ts (2 tests | 2 failed) 7583ms
+   ❯ #378.6ab4aece a skill's figure (an isometric machine with labeled parts and motion) renders natively through deep_show, with no web view (2)
+     × #378.6ab4aece deep_show presents the figure with no error, and its render-back snapshots are drawn, show the motion and repeat exactly, from a process that loads no web engine 1332ms
+     × #378.6ab4aece drawn in the window, every part and every label of the figure is on screen at its box, each label's box holding type, from a process that loads no web engine and a build with no web-view crate 2148ms
+ ❯ replay.test.ts (5 tests | 5 failed) 4351ms
+   ❯ #378.9e1f580f unchanged draw lists replay: 2,000 boxes in 40 batches orbited for 10 s encode each batch once, in the first frame; a move or a recolor encodes nothing again, an add encodes only its batch again; planted workers fail (5)
+     × #378.9e1f580f counted on the noop lane: frame 0 encodes the 40 batches, one per row of 50 boxes; no later frame encodes again, after the move and the recolor included; the add encodes only row 29's batch, with the new box 2170ms
+     × #378.9e1f580f a planted worker that encodes every batch each frame (--planted encodes_every_frame) fails the count, naming the frame 18ms
+     × #378.9e1f580f a planted worker that keeps replaying after the add (--planted replays_after_add) fails the count, naming the batch 106ms
+     × #378.9e1f580f on this machine's GPU every frame of the orbit, before and after the move, the recolor and the add, equals by pixel hash a run that encodes every draw each frame, and every box is in view 142ms
+     × #378.9e1f580f on the GPU, the planted worker that keeps replaying after the add (--planted replays_after_add) leaves the new box out of the frame, and the frames after the add differ from the every-draw run, naming the frame and the batch 17ms
+ ❯ thin.test.ts (1 test | 1 failed) 3751ms
+   ❯ #378.cbedd951 a 3D line requested at 0.25 px draws at one pixel with its alpha scaled to 0.25, within 5% (1)
+     × #378.cbedd951 the 0.25 px line covers its one row at 0.25 within 5% in every column, the 0.5 px line at 0.5, and neither spreads to the rows beside it; the check fails the 1 px and 0.5 px lines as 0.25 px lines 2077ms
+ ❯ move.test.ts (2 tests | 2 failed) 3912ms
+   ❯ #378.f24f1923 a move updates one instance record and rebuilds no mesh (2)
+     × #378.f24f1923 counted on the noop lane, the move writes exactly one instance record and builds no mesh; the check fails a doctored reply that rebuilds or rewrites on the move, naming the frame 2077ms
+     × #378.f24f1923 on the GPU, the moved frame equals by pixel hash a fresh run of the document with the box already moved, and differs from the frame before it 253ms
+ ❯ wire.test.ts (2 tests | 2 failed) 3835ms
+   ❯ #378.9c0b9845 a wire with per-point width draws in strip, segment and loop modes, and a label set to stay upright stays upright while the camera orbits (2)
+     × #378.9c0b9845 the wire draws exactly its mode's segments in strip, segments and loop modes, each as thick as its two points' widths interpolated; each wire fails the other modes' checks 2097ms
+     × #378.9c0b9845 while the camera orbits at 90° a second, the upright label stays level, keeps its size and reading, and is cos 60° of the camera-facing label's height; the camera-facing label fails the upright check 119ms
+ ❯ depth.test.ts (2 tests | 2 failed) 3835ms
+   ❯ #378.29d4b8e6 a fixture with surfaces 0.5 m apart at 5 km shows no depth fighting, and no part of the city is clipped by a far plane (2)
+     × #378.29d4b8e6 in the object-ID target and the final frame, each near face wins over the face 0.5 m behind it in both draw orders, and the post at 1.5 m and every block out to 24.6 km draw at their projected places 2117ms
+     × #378.29d4b8e6 a planted forward-Z depth buffer with a far plane at 10 km (--planted forward_z) fights at 5 km and clips the farthest blocks, and the check names them 18ms
+ ❯ anchor.test.ts (2 tests | 2 failed) 6111ms
+   ❯ #378.c16ba7c3 while a camera orbits at 90° a second, a 2D marker anchored to a 3D point stays within 0.5 px of it in a capture of every presented frame, and presentation feedback reports the frame_seq the shown slot carries; a planted composer that pairs the newest slot with the current 2D layers fails, naming the frame (2)
+     × #378.c16ba7c3 with slots held back, the marker stays within 0.5 px of the point in every presented frame, and each present's frame_seq is the frame its slot shows 3623ms
+     × #378.c16ba7c3 a planted composer that pairs the newest slot with the current 2D layers (--planted pairs_newest_slot) fails, naming the frame 50ms
+ ❯ tone.test.ts (7 tests | 7 failed) 30042ms
+   ❯ #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass (7)
+     × #378.a263a507 under none, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and none applied to the linear target, within one code value 7073ms
+     × #378.a263a507 under filmic, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and filmic applied to the linear target, within one code value 186ms
+     × #378.a263a507 under agx, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and agx applied to the linear target, within one code value 144ms
+     × #378.a263a507 under neutral, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and neutral applied to the linear target, within one code value 140ms
+     × #378.a263a507 the fixture holds a linear 0.5 reaching the encode: under none at the unit exposure the 188 band's pixels are 188 in the clean run 149ms
+     × #378.a263a507 a planted output that encodes twice (--planted encodes_twice) reads 223 where a linear 0.5 reaches the encode, not 188, and fails, naming the pass 21ms
+     × #378.a263a507 a planted output that doesn't encode (--planted skips_encode) reads 128 where a linear 0.5 reaches the encode, not 188, and fails, naming the pass 18ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  anchor.test.ts > #378.c16ba7c3 while a camera orbits at 90° a second, a 2D marker anchored to a 3D point stays within 0.5 px of it in a capture of every presented frame, and presentation feedback reports the frame_seq the shown slot carries; a planted composer that pairs the newest slot with the current 2D layers fails, naming the frame > #378.c16ba7c3 with slots held back, the marker stays within 0.5 px of the point in every presented frame, and each present's frame_seq is the frame its slot shows
+AssertionError: the clean run, latency 0 was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ presents anchor.test.ts:33:13
+ ❯ anchor.test.ts:56:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  anchor.test.ts > #378.c16ba7c3 while a camera orbits at 90° a second, a 2D marker anchored to a 3D point stays within 0.5 px of it in a capture of every presented frame, and presentation feedback reports the frame_seq the shown slot carries; a planted composer that pairs the newest slot with the current 2D layers fails, naming the frame > #378.c16ba7c3 a planted composer that pairs the newest slot with the current 2D layers (--planted pairs_newest_slot) fails, naming the frame
+AssertionError: deep-gpu run --planted pairs_newest_slot exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:141:140
+    139|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    140|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    141|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    142|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    143|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ presents anchor.test.ts:32:19
+ ❯ anchor.test.ts:74:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  depth.test.ts > #378.29d4b8e6 a fixture with surfaces 0.5 m apart at 5 km shows no depth fighting, and no part of the city is clipped by a far plane > #378.29d4b8e6 in the object-ID target and the final frame, each near face wins over the face 0.5 m behind it in both draw orders, and the post at 1.5 m and every block out to 24.6 km draw at their projected places
+AssertionError: the city-depth fixture was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ draw depth.test.ts:91:13
+ ❯ depth.test.ts:115:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  depth.test.ts > #378.29d4b8e6 a fixture with surfaces 0.5 m apart at 5 km shows no depth fighting, and no part of the city is clipped by a far plane > #378.29d4b8e6 a planted forward-Z depth buffer with a far plane at 10 km (--planted forward_z) fights at 5 km and clips the farthest blocks, and the check names them
+AssertionError: deep-gpu run --planted forward_z exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:141:140
+    139|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    140|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    141|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    142|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    143|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ draw depth.test.ts:90:19
+ ❯ depth.test.ts:122:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  figure.test.ts > #378.6ab4aece a skill's figure (an isometric machine with labeled parts and motion) renders natively through deep_show, with no web view > #378.6ab4aece deep_show presents the figure with no error, and its render-back snapshots are drawn, show the motion and repeat exactly, from a process that loads no web engine
+AssertionError: deep_show call 1 is presented: {"rev":1,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/base/kind: mark.box@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}],"issues_evidence":"7b87079eef611aacb3d174c240893e019773f803355d35cecb4a09f4c58da011","snapshots":[],"outcome":"refused","core":"core@0.0.0","set_digest":"7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented figure.test.ts:47:93
+     45|
+     46| function presented(reply: JsonObject, what: string): void {
+     47|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+       |                                                                                             ^
+     48|   const errors = ((reply['issues'] ?? []) as JsonObject[]).filter((i) …
+     49|   expect(errors, `${what} carries no error issue`).toEqual([]);
+ ❯ figure.test.ts:118:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  figure.test.ts > #378.6ab4aece a skill's figure (an isometric machine with labeled parts and motion) renders natively through deep_show, with no web view > #378.6ab4aece drawn in the window, every part and every label of the figure is on screen at its box, each label's box holding type, from a process that loads no web engine and a build with no web-view crate
+AssertionError: the deep_show call is presented: {"rev":1,"issues":[{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/base/kind: mark.box@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}],"issues_evidence":"7b87079eef611aacb3d174c240893e019773f803355d35cecb4a09f4c58da011","snapshots":[],"outcome":"refused","core":"core@0.0.0","set_digest":"7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented figure.test.ts:47:93
+     45|
+     46| function presented(reply: JsonObject, what: string): void {
+     47|   expect(reply['outcome'], `${what} is presented: ${JSON.stringify(rep…
+       |                                                                                             ^
+     48|   const errors = ((reply['issues'] ?? []) as JsonObject[]).filter((i) …
+     49|   expect(errors, `${what} carries no error issue`).toEqual([]);
+ ❯ figure.test.ts:155:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  move.test.ts > #378.f24f1923 a move updates one instance record and rebuilds no mesh > #378.f24f1923 counted on the noop lane, the move writes exactly one instance record and builds no mesh; the check fails a doctored reply that rebuilds or rewrites on the move, naming the frame
+AssertionError: the move fixture on noop was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ move.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  move.test.ts > #378.f24f1923 a move updates one instance record and rebuilds no mesh > #378.f24f1923 on the GPU, the moved frame equals by pixel hash a fresh run of the document with the box already moved, and differs from the frame before it
+AssertionError: the move fixture was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ move.test.ts:61:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  replay.test.ts > #378.9e1f580f unchanged draw lists replay: 2,000 boxes in 40 batches orbited for 10 s encode each batch once, in the first frame; a move or a recolor encodes nothing again, an add encodes only its batch again; planted workers fail > #378.9e1f580f counted on the noop lane: frame 0 encodes the 40 batches, one per row of 50 boxes; no later frame encodes again, after the move and the recolor included; the add encodes only row 29's batch, with the new box
+AssertionError: the orbit on noop was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ orbit replay.test.ts:39:13
+ ❯ replay.test.ts:90:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  replay.test.ts > #378.9e1f580f unchanged draw lists replay: 2,000 boxes in 40 batches orbited for 10 s encode each batch once, in the first frame; a move or a recolor encodes nothing again, an add encodes only its batch again; planted workers fail > #378.9e1f580f a planted worker that encodes every batch each frame (--planted encodes_every_frame) fails the count, naming the frame
+AssertionError: deep-gpu run --backend noop --planted encodes_every_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:141:140
+    139|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    140|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    141|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    142|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    143|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ orbit replay.test.ts:37:19
+ ❯ replay.test.ts:96:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  replay.test.ts > #378.9e1f580f unchanged draw lists replay: 2,000 boxes in 40 batches orbited for 10 s encode each batch once, in the first frame; a move or a recolor encodes nothing again, an add encodes only its batch again; planted workers fail > #378.9e1f580f a planted worker that keeps replaying after the add (--planted replays_after_add) fails the count, naming the batch
+AssertionError: the orbit on noop was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ orbit replay.test.ts:39:13
+ ❯ replay.test.ts:101:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  replay.test.ts > #378.9e1f580f unchanged draw lists replay: 2,000 boxes in 40 batches orbited for 10 s encode each batch once, in the first frame; a move or a recolor encodes nothing again, an add encodes only its batch again; planted workers fail > #378.9e1f580f on this machine's GPU every frame of the orbit, before and after the move, the recolor and the add, equals by pixel hash a run that encodes every draw each frame, and every box is in view
+AssertionError: the orbit was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ orbit replay.test.ts:39:13
+ ❯ replay.test.ts:111:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  replay.test.ts > #378.9e1f580f unchanged draw lists replay: 2,000 boxes in 40 batches orbited for 10 s encode each batch once, in the first frame; a move or a recolor encodes nothing again, an add encodes only its batch again; planted workers fail > #378.9e1f580f on the GPU, the planted worker that keeps replaying after the add (--planted replays_after_add) leaves the new box out of the frame, and the frames after the add differ from the every-draw run, naming the frame and the batch
+AssertionError: deep-gpu run --planted encodes_every_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:141:140
+    139|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    140|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    141|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    142|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    143|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ orbit replay.test.ts:37:19
+ ❯ replay.test.ts:126:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  thin.test.ts > #378.cbedd951 a 3D line requested at 0.25 px draws at one pixel with its alpha scaled to 0.25, within 5% > #378.cbedd951 the 0.25 px line covers its one row at 0.25 within 5% in every column, the 0.5 px line at 0.5, and neither spreads to the rows beside it; the check fails the 1 px and 0.5 px lines as 0.25 px lines
+AssertionError: the thin-lines fixture was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ thin.test.ts:46:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 under none, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and none applied to the linear target, within one code value
+AssertionError: the clean run, none at EV100 -0.2630 was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ compare tone.test.ts:35:13
+ ❯ tone.test.ts:51:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 under filmic, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and filmic applied to the linear target, within one code value
+AssertionError: the clean run, filmic at EV100 -0.2630 was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ compare tone.test.ts:35:13
+ ❯ tone.test.ts:51:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 under agx, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and agx applied to the linear target, within one code value
+AssertionError: the clean run, agx at EV100 -0.2630 was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ compare tone.test.ts:35:13
+ ❯ tone.test.ts:51:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 under neutral, at both exposures, every pixel of the final frame is the CPU's sRGB encoding of exposure and neutral applied to the linear target, within one code value
+AssertionError: the clean run, neutral at EV100 -0.2630 was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ compare tone.test.ts:35:13
+ ❯ tone.test.ts:51:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 the fixture holds a linear 0.5 reaching the encode: under none at the unit exposure the 188 band's pixels are 188 in the clean run
+AssertionError: the clean run, none at EV100 -0.2630 was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ compare tone.test.ts:35:13
+ ❯ tone.test.ts:60:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 a planted output that encodes twice (--planted encodes_twice) reads 223 where a linear 0.5 reaches the encode, not 188, and fails, naming the pass
+AssertionError: deep-gpu run --planted encodes_twice exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:141:140
+    139|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    140|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    141|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    142|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    143|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ compare tone.test.ts:34:19
+ ❯ tone.test.ts:68:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  tone.test.ts > #378.a263a507 in a 3D writer layer under each tone map, with the finish at identity, every 8-bit pixel of the final frame equals within one code value the CPU's sRGB encoding of the look's exposure and tone map applied to the same frame's linear target read back; a planted output that encodes twice or not at all fails, naming the pass > #378.a263a507 a planted output that doesn't encode (--planted skips_encode) reads 128 where a linear 0.5 reaches the encode, not 188, and fails, naming the pass
+AssertionError: deep-gpu run --planted skips_encode exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:141:140
+    139|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    140|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    141|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    142|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    143|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ compare tone.test.ts:34:19
+ ❯ tone.test.ts:68:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  wire.test.ts > #378.9c0b9845 a wire with per-point width draws in strip, segment and loop modes, and a label set to stay upright stays upright while the camera orbits > #378.9c0b9845 the wire draws exactly its mode's segments in strip, segments and loop modes, each as thick as its two points' widths interpolated; each wire fails the other modes' checks
+AssertionError: the wires fixture was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ wire.test.ts:110:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  wire.test.ts > #378.9c0b9845 a wire with per-point width draws in strip, segment and loop modes, and a label set to stay upright stays upright while the camera orbits > #378.9c0b9845 while the camera orbits at 90° a second, the upright label stays level, keeps its size and reading, and is cos 60° of the camera-facing label's height; the camera-facing label fails the upright check
+AssertionError: the upright fixture was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ view3Reply helpers.ts:185:103
+    183| export function view3Reply(reply: JsonObject, what = 'the view3d call'…
+    184|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    185|   expect(reply['code'], `${what} was answered, not refused: ${JSON.str…
+       |                                                                                                       ^
+    186|   const frames = arr(reply['frames'], `${what}: frames`).map((v, i): F…
+    187|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ wire.test.ts:123:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  23 failed (23)
+   Start at  22:31:45
+   Duration  64.40s (tests 100%)
+

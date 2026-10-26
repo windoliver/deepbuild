@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { moreRuns, runsNeeded } from './runs.js';
 import type {
-  CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo,
+  CheckResult, ClaimCheck, ClaimInput, Contradiction, Depth, Failure, FixTask, OpenItem, OpenItemScope, PointsTo, Prediction,
   Requirement, RequirementOutcome, Result, Run, RunOutcome, SendBack, Verdict, VerdictAsk, VerdictKey,
 } from './types.js';
 
@@ -111,16 +111,18 @@ class Selection {
   /** Run IDs whose records differ, by check: none of those records counts, whichever arrived first. */
   readonly conflicts = new Map<string, Map<string, Set<RunOutcome>>>();
   constructor(private readonly claim: ClaimInput) {
-    const byId = new Map<string, Map<string, Run>>();
+    const byId = new Map<string, Run[]>();
     for (const r of claim.runs) {
-      const copies = byId.get(r.run) ?? new Map<string, Run>();
-      copies.set(canonical(r), r);
-      byId.set(r.run, copies);
+      const records = byId.get(r.run);
+      if (records) records.push(r);
+      else byId.set(r.run, [r]);
     }
     this.runs = [];
-    for (const [id, copies] of byId) {
-      if (copies.size === 1) { this.runs.push(...copies.values()); continue; }
-      for (const r of copies.values()) {
+    for (const [id, records] of byId) {
+      // Only a run ID with more than one record is compared, by content: identical copies are one record.
+      const copies = records.length === 1 ? records : [...new Map(records.map((r) => [canonical(r), r])).values()];
+      if (copies.length === 1) { this.runs.push(copies[0]!); continue; }
+      for (const r of copies) {
         const byCheck = this.conflicts.get(r.check) ?? new Map<string, Set<RunOutcome>>();
         byCheck.set(id, (byCheck.get(id) ?? new Set<RunOutcome>()).add(r.outcome));
         this.conflicts.set(r.check, byCheck);
@@ -421,23 +423,22 @@ export function verdict(claim: ClaimInput): Verdict {
     asks.push({ kind: 'authority', question: `Approve ${approve} as the check for ${reqs.join(', ')}?`, req: reqs.length === 1 ? reqs[0]! : null, check: approve });
   }
   const outcomes: Result[] = [...judged.map((j) => j.result.outcome), ...requirements.map((r) => r.outcome)];
+  /** The claim itself is INVALID: its reason goes first, with an open item naming what closes it. */
+  const invalid = (why: string, evidence: string): void => {
+    outcomes.push('INVALID');
+    reasons.unshift(why);
+    const scope = { repo: claim.repo, task: claim.task, req: null };
+    const text = `INVALID: ${why}`;
+    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence, depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+  };
   const badState = (claim.state ?? []).filter((d) => !HEX64.test(d));
   if (badState.length) {
-    outcomes.push('INVALID');
-    const why = `state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`;
-    reasons.unshift(why);
-    const scope = { repo: claim.repo, task: claim.task, req: null };
-    const text = `INVALID: ${why}`;
-    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'state digests as sha256 hex from the workspace\'s state sources', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+    invalid(`state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`,
+      'state digests as sha256 hex from the workspace\'s state sources');
   }
   if (!claim.checks.length) {
-    outcomes.push('INVALID');
     const reqs = claim.requirements.map((q) => q.req);
-    const why = `no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`;
-    reasons.unshift(why);
-    const scope = { repo: claim.repo, task: claim.task, req: null };
-    const text = `INVALID: ${why}`;
-    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'a check selected for the claim', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+    invalid(`no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`, 'a check selected for the claim');
   } else if (!claim.requirements.length && claim.checks.every((c) => c.source === 'own')) {
     // With no requirement to cover, the claim itself is what its checks cover, and the agent's own never pass it.
     const passed = judged.find((j) => j.result.outcome === 'PASS');
@@ -616,8 +617,15 @@ export function staleReason(v: Verdict, commit: string, state?: readonly string[
  * past its end, can't be shown to follow any prediction.
  */
 function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradiction[] {
+  return predictionContradictions(claim.predictions ?? [], judged.map((j) => ({ check: j.check.check, runs: j.runs })));
+}
+/** The same rule over a claim's predictions and each check's counted runs, for a reader without a verdict, as deep_status. */
+export function predictionContradictions(
+  predictions: readonly Prediction[],
+  checks: readonly { check: string; runs: readonly Pick<Run, 'run' | 'outcome' | 'started' | 'ended'>[] }[],
+): Contradiction[] {
   const span = new Map<string, { first: number; last: number }>();
-  for (const p of claim.predictions ?? []) {
+  for (const p of predictions) {
     // A prediction with no time can't be placed before or after anything; it hides nothing the others show.
     if (!Number.isFinite(p.at)) continue;
     const key = `${p.check}\0${p.expects}`;
@@ -626,9 +634,9 @@ function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradic
     else { at.first = Math.min(at.first, p.at); at.last = Math.max(at.last, p.at); }
   }
   const out: Contradiction[] = [];
-  for (const j of judged) {
+  for (const j of checks) {
     const expected = (['passed', 'failed'] as const).flatMap((expects) => {
-      const at = span.get(`${j.check.check}\0${expects}`);
+      const at = span.get(`${j.check}\0${expects}`);
       return at ? [{ expects, ...at }] : [];
     });
     if (!expected.length) continue;
@@ -636,9 +644,9 @@ function contradictions(claim: ClaimInput, judged: readonly Judged[]): Contradic
       if (r.outcome !== 'passed' && r.outcome !== 'failed' && r.outcome !== 'overran') continue;
       const began = r.started === undefined ? undefined : Math.min(r.started, r.ended);
       for (const { expects, first, last } of expected) {
-        if (began === undefined || last >= began) out.push({ check: j.check.check, run: r.run, predicted: expects, outcome: r.outcome, late: true });
+        if (began === undefined || last >= began) out.push({ check: j.check, run: r.run, predicted: expects, outcome: r.outcome, late: true });
         if (began !== undefined && first < began && (r.outcome === 'passed') !== (expects === 'passed')) {
-          out.push({ check: j.check.check, run: r.run, predicted: expects, outcome: r.outcome, late: false });
+          out.push({ check: j.check, run: r.run, predicted: expects, outcome: r.outcome, late: false });
         }
       }
     }

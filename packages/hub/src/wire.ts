@@ -1,5 +1,5 @@
 // What crosses the socket and the threads: every socket line is one JSON object with `v`, and every refusal
-// is error@2's shape. Shared by the main thread, the parser workers and the core.
+// is error@3's shape. Shared by the main thread, the parser workers and the core.
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 
@@ -7,18 +7,24 @@ export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
 export const FEATURES: readonly string[] = [];
 
-/** error@2: one refusal. */
+/** error@3: one refusal. */
 export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
+const actualText = (actual: unknown): string => (typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? String(actual));
 export function refusal(code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refusal {
-  const text = typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? String(actual);
-  return { code, retryable, remediation, path, actual: text.slice(0, 8192), evidence: [] };
+  return { code, retryable, remediation, path, actual: actualText(actual).slice(0, 8192), evidence: [] };
 }
-/** A refusal thrown through the core or the server, carried to the reply line as is. */
+/**
+ * A refusal thrown through the core or the server, carried to the reply line as is. `whole` is the refused value
+ * before the cut, for a reply to an agent, whose `actual` is scrubbed whole before it is cut.
+ */
 export class Refused extends Error {
-  constructor(readonly refusal: Refusal) {
+  constructor(readonly refusal: Refusal, readonly whole?: string) {
     super(refusal.remediation);
   }
 }
+/** A refusal that keeps the whole refused value beside the cut one. */
+export const refuse = (code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refused =>
+  new Refused(refusal(code, path, remediation, actual, retryable), actualText(actual));
 
 /** One socket line: the object with the protocol version first; a bigint (a seq) is written as its decimal string. */
 export const line = (o: object): string => `${JSON.stringify({ v: VERSION, ...o }, (_, v: unknown) => (typeof v === 'bigint' ? v.toString() : v))}\n`;
@@ -36,12 +42,12 @@ export const startOf = (pid: number): Promise<string | undefined> => new Promise
 });
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID at `ms`: 48 bits of time, 80 random. */
-export function ulid(ms: number): string {
+/** A ULID at `ms`: 48 bits of time, then 80 bits, random or the 20 hex digits given. */
+export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string {
   let out = '';
   let time = BigInt(Math.max(0, Math.floor(ms)));
   for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${randomBytes(10).toString('hex')}`);
+  let random = BigInt(`0x${hex}`);
   let tail = '';
   for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
   return out + tail;
@@ -67,6 +73,10 @@ export interface HookMeta {
   toolUse?: string;
   /** For a PreToolUse of a deep_* tool: the tool, and the RFC 8785 digest of its input, which a deep mcp call binds by. */
   stamp?: { tool: string; digest: string };
+  /** The guard entries in rules.json the call matched, by name, as deep-hook read them. */
+  matched: string[];
+  /** What deep-hook read of the call for a matched entry, by name, shown with that entry's denial. */
+  notes?: Record<string, string>;
   /** A spooled call deep-hook let through because the hub was late, and the guard entries it matched. */
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
@@ -83,18 +93,32 @@ export type Plant =
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project'
-  | 'stops-at-first-bad-line' | 'remove-spool-after-normal';
+  | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
+  | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
+  | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
   'env-kills-by-port', 'env-leases-port-again', 'env-holds-lease-for-helper', 'compose-default-project',
-  'stops-at-first-bad-line', 'remove-spool-after-normal',
+  'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
+  'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
+  'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
   if (!PLANTS.includes(value)) throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
   return value as Plant;
 }
+
+/** What the agent gets of the extensions' joined tool.before reply (#350): their denies and their context blocks. */
+export interface ExtensionReply { denies: { extension: string; reason: string }[]; context: { extension: string; text: string }[] }
+/** How long each extension's tool.before handler has to reply; past it, it is recorded as failed and its reply dropped. */
+export const EXTENSION_HOOK_MS = 500;
+/**
+ * The hold the hub acknowledges for a hook some extension handles: the handlers' deadline, the host's grace for the
+ * trip back, and room for the core's answer to cross to the socket. A reply past it is the hook's fail-open one.
+ */
+export const EXTENSION_HOLD_MS = EXTENSION_HOOK_MS + 500;
 
 /** The test VFS's settings, from DEEP_HUB_TEST_VFS. */
 export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string }
@@ -114,4 +138,8 @@ export interface CoreOptions {
   leaseMs?: number;
   /** Where the hub kills itself in a stack process's start, from DEEP_HUB_TEST_CRASH; only tests set it. */
   crash?: 'start-recorded' | 'spawned';
+  /** The file that stands for the OS confirming you, from DEEP_HUB_TEST_CONFIRM; only tests set it. */
+  confirm?: string;
+  /** A module whose default export returns the index@1 fill deep_search reads the wiki through, from DEEP_HUB_TEST_INDEX; only tests set it. */
+  index?: string;
 }

@@ -172,6 +172,29 @@ fn the_marks_module_refuses_a_patch_it_cannot_draw_and_counts_what_one_costs() {
 }
 
 #[test]
+fn a_patchs_cost_delta_is_the_cost_models_change_in_cpu_time() {
+    // #379: the rect's CPU from the build's coefficients, added by its create and taken back by
+    // its delete.
+    let create = alpha(
+        1,
+        0,
+        json!([{"op": "create", "item": {"id": "alpha.box", "kind": "rect@1", "name": "Box", "order": "a2",
+        "params": {"box": [0, 0, 10, 10], "paint": {"fill": {"role": "ink"}}}}}]),
+    );
+    let delete = alpha(2, 1, json!([{"op": "delete", "id": "alpha.box"}]));
+    let r = run(vec![create, delete], json!({}));
+    assert_eq!(r[0]["outcome"], json!("applied"), "{}", r[0]);
+    assert_eq!(r[1]["outcome"], json!("applied"), "{}", r[1]);
+    let added = r[0]["cost_delta"]["cpu_ms"].as_f64().unwrap();
+    let taken = r[1]["cost_delta"]["cpu_ms"].as_f64().unwrap();
+    assert!(added > 0.0, "a new rect costs CPU: {}", r[0]["cost_delta"]);
+    assert!(
+        (added + taken).abs() < 1e-12,
+        "its delete takes back what its create added: {added} and {taken}"
+    );
+}
+
+#[test]
 fn a_results_issues_stop_at_the_read_cap_with_truncated() {
     let orphans: Vec<Value> = (0..300)
         .map(|i| json!({"op": "create", "item": {"id": format!("alpha.o{i}"), "kind": "rect@1", "name": "O", "order": "a2",

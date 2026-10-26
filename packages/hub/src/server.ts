@@ -4,23 +4,33 @@
 // credential it presents in its first line, and every event takes its writer from that role.
 import { execFileSync } from 'node:child_process';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { chmodSync, closeSync, mkdirSync, openSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
+import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { FEATURES, line, plantOf, refusal, Refused, ulid, type CoreOptions, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type ExtensionReply, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
 const MAX_LINE = 64 << 20;
+/**
+ * A consumer more than this many frames behind is cut off with fell_behind, never dropped silently (#34): the
+ * socket holds at most this many of its frames, and one that takes none of them for STALL_MS while more wait is cut.
+ */
+const BEHIND = 10_000;
+const STALL_MS = 100;
 
 type Role = 'hook' | 'app' | 'cli' | 'mcp';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   ['hub.health', ['app', 'cli']], ['events.read', ['app', 'cli']], ['stream.subscribe', ['app', 'cli']], ['ask.answer', ['app', 'cli']],
+  // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
+  ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
+  ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -29,29 +39,49 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['windows.report', ['app', 'cli', 'hook']],
 ]);
 
+/** How long before an acknowledged hold the extensions' reply must be on the socket, so it reaches deep-hook in time. */
+const HOLD_MARGIN = 100;
+/** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
+const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
+
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
+/**
+ * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
+ * as deep-hook's own denials are; context goes as Claude Code reads it, each block labelled with its extension. An
+ * agent with no context channel gets only the denies.
+ */
+function agentReply(agent: string, reply: ExtensionReply): string {
+  if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
+  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return EMPTY_REPLY;
+  const additionalContext = reply.context.map((b) => `[${b.extension}] ${b.text}`).join('\n');
+  return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
+}
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
 interface CoreLink {
   post(message: CoreMessage & { op: 'hook' | 'unsubscribe' }): void;
   request(request: CoreRequest): Promise<unknown>;
-  /** Resolves once the record is open, the spool replayed and in-flight runs recovered. */
-  started: Promise<void>;
+  /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
+  started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
 interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; close(): Promise<void> }
 
-function coreWorker(options: CoreOptions, onFrame: (sub: string, event: Obj) => void, onFatal: (why: string) => void): CoreLink {
+/** A frame from the core: its event's JSON text. */
+type OnFrame = (sub: string, event: string) => void;
+
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
-  let started!: () => void;
-  const ready = new Promise<void>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: Obj; message?: string; result?: unknown; error?: Refusal }) => {
+  let started!: (v: { hooks: string[] }) => void;
+  const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
-    if (m.op === 'started') return started();
+    if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
     pending.delete(m.n!);
@@ -70,11 +100,11 @@ function coreWorker(options: CoreOptions, onFrame: (sub: string, event: Obj) => 
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: (sub: string, event: Obj) => void, onFatal: (why: string) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame);
-  const started = core.started();
+  const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
     started,
@@ -131,6 +161,10 @@ class Conn {
   name = '';
   session: string | null = null;
   parent: { pid: number; start: string } | undefined;
+  /** For a deep mcp, the folder it runs in: which known worktree's spec an unbound deep_search reads. */
+  cwd: string | undefined;
+  /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
+  peer: { pid: number; start: string } | undefined;
   first = true;
   done = false;
   queue: Promise<void> = Promise.resolve();
@@ -148,18 +182,27 @@ class Conn {
   }
 }
 
+/**
+ * One subscription: how many of its frames the socket holds and hasn't taken, the frames waiting beyond those,
+ * and since when it has taken none.
+ */
+interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
+/** What the hub reads of a guard@1 entry in rules.json. */
+interface Guard { mode?: unknown; reason?: unknown; next_step?: unknown }
+
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
   private readonly conns = new Set<Conn>();
-  private readonly subs = new Map<string, { conn: Conn; id: unknown }>();
+  private readonly subs = new Map<string, Sub>();
   private core!: CoreLink;
   private parsers!: Parsers;
   private ids = 0;
   private ino = 0;
   private stopping = false;
+  /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
+  private hooks = new Set<string>();
   readonly start = ulid(Date.now());
   private readonly helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES });
-  private static readonly REPLY = line({ exit: 0, stdout: '', stderr: '' });
 
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {}
 
@@ -167,8 +210,19 @@ class Hub {
     const options: CoreOptions = { root: this.root.dir, clock, held: [this.token], ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
-      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}) };
-    const frame = (sub: string, event: Obj) => { const s = this.subs.get(sub); s?.conn.write({ id: s.id, event }); };
+      ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
+      ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}),
+      ...(process.env.DEEP_HUB_TEST_INDEX ? { index: process.env.DEEP_HUB_TEST_INDEX } : {}) };
+    const frame = (sub: string, event: string) => {
+      const s = this.subs.get(sub);
+      if (!s || s.conn.done) return;
+      const text = `{"v":${VERSION},"id":${JSON.stringify(s.id)},"event":${event}}\n`;
+      if (s.queued < BEHIND) return this.send(sub, s, text);
+      s.held.push(text);
+      s.watch ??= setInterval(() => {
+        if (s.next < s.held.length && Date.now() - s.since > STALL_MS) this.cut(sub, s);
+      }, STALL_MS / 5);
+    };
     const fatal = (why: string) => {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
@@ -194,7 +248,7 @@ class Hub {
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
-    await this.core.started;
+    this.hooks = new Set((await this.core.started).hooks);
   }
 
   private accept(sock: net.Socket): void {
@@ -212,13 +266,42 @@ class Hub {
     sock.on('close', () => {
       conn.done = true;
       this.conns.delete(conn);
-      for (const sub of conn.subs) {
-        this.subs.delete(sub);
-        this.core.post({ op: 'unsubscribe', sub });
-      }
+      for (const sub of conn.subs) this.unsubscribe(conn, sub);
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
     sock.write(this.helloLine);
+  }
+
+  private unsubscribe(conn: Conn, sub: string): void {
+    const s = this.subs.get(sub);
+    if (s?.watch) clearInterval(s.watch);
+    conn.subs.delete(sub);
+    this.subs.delete(sub);
+    this.core.post({ op: 'unsubscribe', sub });
+  }
+  /** Hands the socket one frame; each frame it takes lets a held one through. */
+  private send(sub: string, s: Sub, text: string): void {
+    // Since the socket last took a frame, or since it was handed one with none waiting.
+    if (s.queued++ === 0) s.since = Date.now();
+    s.conn.sock.write(text, () => {
+      s.queued--;
+      s.since = Date.now();
+      if (this.subs.get(sub) !== s || s.next === s.held.length) return;
+      const next = s.held[s.next++]!;
+      if (s.next === s.held.length) {
+        s.held = [];
+        s.next = 0;
+        clearInterval(s.watch);
+        s.watch = undefined;
+      }
+      this.send(sub, s, next);
+    });
+  }
+  /** Cut off, never dropped silently: after the frames the socket holds, the consumer resumes from its last log_pos. */
+  private cut(sub: string, s: Sub): void {
+    this.unsubscribe(s.conn, sub);
+    s.held = [];
+    s.conn.write({ id: s.id, error: refusal('fell_behind', '', `This consumer fell more than ${BEHIND} frames behind; subscribe again after the last log_pos you hold.`, s.queued) });
   }
 
   /** Frames lines: each newline ends one, however the bytes arrived. */
@@ -260,6 +343,11 @@ class Hub {
     }
     if (conn.done) return;
     const value = parsed.value;
+    // A browser Origin means a web page: refused, whatever credential the line carries, so no page can reach the hub.
+    if ('origin' in value || 'Origin' in value) {
+      conn.write({ id: value.id ?? null, error: refusal('credential', '/origin', 'The hub serves no web page: connect from the app or the CLI, without a browser Origin.', value.origin ?? value.Origin) });
+      return conn.end();
+    }
     if (first && 'hello' in value) return this.hello(conn, value);
     // A first line with no credential makes the connection a hook connection, which may call no method.
     if (first) {
@@ -277,13 +365,66 @@ class Hub {
     }
     // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
     if (conn.done || !conn.sock.writable) return;
-    // The acknowledgement and the reply in one write, which also ends the connection.
     conn.done = true;
-    conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + Hub.REPLY);
+    // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); every
+    // other hook gets the acknowledgement and the reply in one write, which also ends the connection.
+    const ruled = this.reply(parsed.meta);
+    const before = ruled === EMPTY_REPLY && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    const hold = before ? Date.now() + EXTENSION_HOLD_MS : null;
+    if (hold === null) conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + ruled);
+    else conn.sock.write(line({ ack: parsed.meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && parsed.meta.payloadWriter ? parsed.meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta: parsed.meta, writer });
+    if (hold !== null) void this.extensionReply(conn, parsed.meta, before!.data, hold);
+  }
+
+  /**
+   * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
+   * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
+   */
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
+    const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
+    const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply) : EMPTY_REPLY);
+  }
+
+  /**
+   * The reply to a hook: deep-hook matched the call against every entry in rules.json, and the hub decides what
+   * each matched entry does. A matched entry in block mode denies a tool call before it runs, with its reason and
+   * next step; watch and warn are #304's.
+   */
+  private reply(meta: HookMeta): string {
+    if (meta.event !== 'PreToolUse' || !meta.matched.length) return EMPTY_REPLY;
+    const entries = this.rules();
+    const name = meta.matched.find((n) => entries[n]?.mode === 'block');
+    if (name === undefined) return EMPTY_REPLY;
+    const entry = entries[name]!;
+    const note = meta.notes?.[name] ? ` ${meta.notes[name]}` : '';
+    return line({ exit: 2, stdout: '', stderr: `DeepBuild blocked this: ${String(entry.reason)} ${String(entry.next_step)}${note} (guard ${name})\n` });
+  }
+
+  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined> };
+  /** The entries of rules.json, read again only when the file changes. */
+  private rules(): Record<string, Guard | undefined> {
+    const file = join(this.root.dir, 'rules.json');
+    let key = 'none';
+    try {
+      const s = statSync(file);
+      key = `${s.ino}:${s.size}:${s.mtimeMs}`;
+    } catch { /* no rules.json: no entries */ }
+    if (key !== this.rulesSeen.key) {
+      let entries: Record<string, Guard | undefined> = {};
+      try {
+        const parsed = JSON.parse(readFileSync(file, 'utf8')) as { entries?: unknown };
+        if (typeof parsed.entries === 'object' && parsed.entries !== null) entries = parsed.entries as Record<string, Guard | undefined>;
+      } catch { /* unreadable: deep-hook names it; the hub decides nothing from it */ }
+      this.rulesSeen = { key, entries };
+    }
+    return this.rulesSeen.entries;
   }
 
   private tokenMatches(token: unknown): boolean {
@@ -305,6 +446,8 @@ class Hub {
       }
       conn.role = value.hello;
       conn.name = value.hello;
+      const peer = value.peer;
+      if (isObj(peer) && Number.isSafeInteger(peer.pid) && typeof peer.start === 'string') conn.peer = { pid: peer.pid as number, start: peer.start };
       return conn.write({ role: conn.name });
     }
     if (value.hello === 'mcp') {
@@ -314,6 +457,7 @@ class Hub {
       conn.role = 'mcp';
       conn.session = session;
       conn.parent = proved;
+      if (typeof value.cwd === 'string') conn.cwd = value.cwd;
       conn.name = session ? `mcp:${session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
@@ -348,12 +492,23 @@ class Hub {
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         conn.subs.add(sub);
-        this.subs.set(sub, { conn, id });
+        this.subs.set(sub, { conn, id, queued: 0, held: [], next: 0, since: Date.now() });
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
-        return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after })));
+        // The reply is the stream's first frame: it carries the start ID, so a consumer that sees a new one redoes its reads.
+        return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after, start: this.start })));
       }
       default:
-        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}) } }));
+        if (method === 'events.read') {
+          // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
+          return void this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => {
+            const { log_pos, events } = result as { log_pos: number; events: string };
+            if (!conn.done && conn.sock.writable) conn.sock.write(`{"v":${VERSION},"id":${JSON.stringify(id)},"result":{"start":${JSON.stringify(this.start)},"log_pos":${log_pos},"events":${events}}}\n`);
+          }, (error: unknown) => reply(Promise.reject(error)));
+        }
+        if (READS.has(method)) {
+          return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }).then((result) => ({ start: this.start, ...(result as Obj) })));
+        }
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, session: conn.session, ...(conn.parent ? { parent: conn.parent } : {}), ...(conn.cwd ? { cwd: conn.cwd } : {}), ...(conn.peer ? { peer: conn.peer } : {}) } }));
     }
   }
 
@@ -390,7 +545,11 @@ function writeToken(root: Root): string {
 }
 
 /** `deep hub run [--root <folder>]`: the hub itself, in this process. Resolves only if it couldn't start. */
-export async function runHub(options: { root?: string }): Promise<number> {
+/**
+ * Runs the hub. In safe mode (`safe`) it loads no extension; the hub loads none yet in either mode, and the
+ * floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
+ */
+export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   const plant = plantOf(process.env.DEEP_HUB_PLANT);
   const vfs = process.env.DEEP_HUB_TEST_VFS ? (JSON.parse(process.env.DEEP_HUB_TEST_VFS) as VfsSettings) : undefined;
   // Both read at one moment, so with no test clock the hub's is the wall clock exactly.
@@ -413,7 +572,7 @@ export async function runHub(options: { root?: string }): Promise<number> {
   const hub = new Hub(root, writeToken(root), lock, plant, vfs);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
   await hub.open(clock);
-  process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start })}\n`);
+  process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);
   shedStartup();
   const headroom = process.env.DEEP_HUB_TEST_HEADROOM;
   if (headroom) {
