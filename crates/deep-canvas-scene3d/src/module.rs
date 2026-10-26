@@ -131,6 +131,28 @@ fn register(r: &mut Registrar) {
         &[],
         "",
     );
+    // The key light (Light and the light policy): it shines along its local −Z, shades the solids
+    // and, with `shadow`, casts the shadow map.
+    r.kind(
+        Entry {
+            family: "light",
+            name: "sun",
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: vec![
+                    param("illuminance", ParamType::Json, json!(10_000)),
+                    param("shadow", ParamType::Json, json!(false)),
+                    param("angle", ParamType::Json, json!(0.53)),
+                    json_param("color"),
+                    param("priority", ParamType::Json, json!(0)),
+                ],
+            }],
+            migrations: Vec::new(),
+        },
+        &[],
+        "",
+    );
     r.pass(GEOMETRY_PASS, "geometry");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it

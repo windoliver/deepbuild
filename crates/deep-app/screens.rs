@@ -36,7 +36,8 @@ mod screens {
     }
 
     fn open(cx: &mut HeadlessAppContext, agent: Option<&str>) -> AnyWindowHandle {
-        let runtime = gpui_shell::components::new_isolated_runtime().expect("panel runtime");
+        // The app's runtime: its component registry holds the canvas a panel draws its lines with.
+        let runtime = deep_app::new_runtime().expect("panel runtime");
         let dir = agent.map(|agent| {
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("panels")

@@ -110,20 +110,7 @@ fn paint(draw: &Draw, view: Bounds<Pixels>, window: &mut Window) {
             mesh,
             offset,
             color,
-        } => {
-            let at = |p: [f32; 2]| point(px(p[0] + offset[0]), px(p[1] + offset[1]));
-            let mut triangles = mesh.triangles();
-            let Some(first) = triangles.next() else {
-                return;
-            };
-            let solid = (point(0., 1.), point(0., 1.), point(0., 1.));
-            let mut path = Path::new(at(first[0]));
-            path.push_triangle((at(first[0]), at(first[1]), at(first[2])), solid);
-            for t in triangles {
-                path.push_triangle((at(t[0]), at(t[1]), at(t[2])), solid);
-            }
-            window.paint_path(path, *color);
-        }
+        } => deep_marks_gpui::paint(mesh, *offset, *color, window),
         Draw::Text {
             label,
             origin,

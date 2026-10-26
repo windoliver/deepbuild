@@ -811,6 +811,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     // Issue #378: scene3d joins R2's build set, registered through the seal from the start.
     if set >= BuildSet::R2 {
         out.push(deep_canvas_scene3d::module::module());
+        // Issue #380: the shipped effects, whose passes go into scene3d's frame.
+        out.push(deep_canvas_effects::module::module());
     }
     #[cfg(feature = "test-accent")]
     out.push(planted::accent());

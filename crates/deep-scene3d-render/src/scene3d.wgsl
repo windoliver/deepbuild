@@ -87,7 +87,10 @@ fn mesh_vs(
 @fragment
 fn mesh_fs(in: MeshOut) -> Targets {
     let n = normalize(in.normal);
-    let lit = 0.45 + 0.55 * max(dot(n, frame.light.xyz), 0.0);
+    let facing = max(dot(n, frame.light.xyz), 0.0);
+    // A sun (w > 0) lights by its illuminance over an ambient quarter; with none, the view's own
+    // key light.
+    let lit = select(0.45 + 0.55 * facing, 0.25 + 0.75 * frame.light.w * facing, frame.light.w > 0.0);
     return Targets(vec4<f32>(paint(in.color) * lit, 1.0), in.pick);
 }
 
