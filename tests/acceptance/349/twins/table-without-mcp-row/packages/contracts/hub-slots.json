@@ -1,0 +1,131 @@
+[
+  {
+    "method": "deep.registerCheck",
+    "variant": null,
+    "interface": "check.kind@1",
+    "digest": "d1:c505f1d8c1d2822a08035ba38996ecc7def244746128eadd3970a4d32261a7c7",
+    "fills": "one per kind",
+    "kit": "check.kind@1",
+    "planted": [
+      "crashed-suite",
+      "past-deadline",
+      "dropped-output",
+      "type-error-as-assertion"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerResolver",
+    "variant": null,
+    "interface": "resolver@1",
+    "digest": "d1:adba671cf74b49f34d64d8322135fbb688b4e7f09fb327573d7b6526df285d5e",
+    "fills": "many",
+    "kit": "resolver@1",
+    "planted": [
+      "unnamed-decision",
+      "names-revoked",
+      "names-other-kind",
+      "names-other-repo"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerSource",
+    "variant": "stream",
+    "interface": "source@1",
+    "digest": "d1:ea5f6252ff3d4f86689faa64745cbc74aa95c81c2c8519252c9abe374858afa5",
+    "fills": "many",
+    "kit": "source@1",
+    "planted": [
+      "skips-first-after-resume"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerSource",
+    "variant": "polled",
+    "interface": "reading.source@1",
+    "digest": "d1:f70ff4887d5b9338ef5f0fcb1b899b7918f6cb82ec07f8898bf078b30b659256",
+    "fills": "many",
+    "kit": "reading.source@1",
+    "planted": [
+      "cache-as-of"
+    ],
+    "since": "R2"
+  },
+  {
+    "method": "deep.registerEnvironment",
+    "variant": null,
+    "interface": "environment@1",
+    "digest": "d1:48ba4dbb744544a375119c35611d9604b45571dd7bb9e4175ac0e2b327c29c49",
+    "fills": "one",
+    "kit": "environment@1",
+    "planted": [
+      "ready-before-health",
+      "unleased-port",
+      "leaves-grandchild",
+      "starts-in-worktree"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerView",
+    "variant": null,
+    "interface": "panel@1",
+    "digest": "d1:0a380a57076edb88bc1fbc220c1c2923ccc0fa8e38b479b70be50f087e163c04",
+    "fills": "many",
+    "kit": "panel@1",
+    "planted": [
+      "reaches-network",
+      "runs-a-program",
+      "moves-focus-unasked",
+      "draws-outside",
+      "covers-the-card"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerAdapter",
+    "variant": null,
+    "interface": "adapter@1",
+    "digest": "d1:4e0d640ec6672203f39b19735570959c0f3e85fec9adba47f3e51064699857a8",
+    "fills": "one per agent",
+    "kit": "adapter@1",
+    "planted": [
+      "duplicate-event-id",
+      "event-after-stop",
+      "answer-to-other-session",
+      "steer-outlives-interrupt",
+      "acknowledged-without-sign"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerRoute",
+    "variant": null,
+    "interface": "route@1",
+    "digest": "d1:543a4508e5e475127e89473e980554ba457ae9f02016628a94a48fbdb5295013",
+    "fills": "many",
+    "kit": "route@1",
+    "planted": [
+      "no-status",
+      "answers-any-method",
+      "get-changes-state"
+    ],
+    "since": "R1"
+  },
+  {
+    "method": "deep.registerAction",
+    "variant": null,
+    "interface": "action@1",
+    "digest": "d1:75a9e696330abf608143363373cf008e3ad64498e5882e423c5eeebecf5326f3",
+    "fills": "many",
+    "kit": "action@1",
+    "planted": [
+      "declares-write",
+      "input-not-a-schema",
+      "output-not-json"
+    ],
+    "since": "R2"
+  }
+]
