@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "profile": "chart",
+  "title": "Checks run per day",
+  "description": "A bar chart of the checks the week's sessions ran, one bar a day, on a 2D camera you move.",
+  "size": [800, 450],
+  "camera": "cam",
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "axis": {
+      "id": "axis", "kind": "rect@1", "name": "Axis", "order": "a1",
+      "params": { "box": [0, 0, 700, 2], "paint": { "fill": { "role": "ink" } } },
+      "at": { "pos": [60, 380, 0] }
+    },
+    "bar-mon": {
+      "id": "bar-mon", "kind": "rect@1", "name": "Monday", "order": "a2",
+      "params": { "box": [0, 0, 60, 120], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [100, 260, 0] }
+    },
+    "bar-tue": {
+      "id": "bar-tue", "kind": "rect@1", "name": "Tuesday", "order": "a3",
+      "params": { "box": [0, 0, 60, 200], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [210, 180, 0] }
+    },
+    "bar-wed": {
+      "id": "bar-wed", "kind": "rect@1", "name": "Wednesday", "order": "a4",
+      "params": { "box": [0, 0, 60, 160], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [320, 220, 0] }
+    },
+    "bar-thu": {
+      "id": "bar-thu", "kind": "rect@1", "name": "Thursday", "order": "a5",
+      "params": { "box": [0, 0, 60, 240], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [430, 140, 0] }
+    },
+    "bar-fri": {
+      "id": "bar-fri", "kind": "rect@1", "name": "Friday", "order": "a6",
+      "params": { "box": [0, 0, 60, 280], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [540, 100, 0] }
+    },
+    "bar-sat": {
+      "id": "bar-sat", "kind": "rect@1", "name": "Saturday", "order": "a7",
+      "params": { "box": [0, 0, 60, 80], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [650, 300, 0] }
+    }
+  }
+}

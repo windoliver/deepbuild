@@ -1,0 +1,46 @@
+{
+  "parts": [
+    {
+      "id": "postgres", "kind": "database", "name": "Postgres",
+      "files": [
+        "db/schema.sql",
+        "db/seeds.sql",
+        "db/migrations/0001_init.sql",
+        "db/migrations/0002_accounts.sql",
+        "db/migrations/0003_products.sql",
+        "db/migrations/0004_orders.sql",
+        "db/migrations/0005_payments.sql",
+        "db/migrations/0006_sessions.sql",
+        "db/migrations/0007_add_refunds.sql",
+        "db/migrations/0008_audit_log.sql",
+        "db/migrations/0009_coupons.sql",
+        "db/migrations/0010_users_email_index.sql",
+        "db/migrations/0011_webhooks.sql",
+        "db/README.md"
+      ]
+    },
+    { "id": "api", "kind": "service", "name": "API", "files": ["api/src/main.rs", "api/src/orders.rs", "api/src/refunds.rs", "api/Cargo.toml"] },
+    { "id": "web", "kind": "app", "name": "Web", "files": ["web/src/App.tsx", "web/src/Checkout.tsx", "web/package.json"] }
+  ],
+  "rows": [
+    { "id": "postgres.orders", "kind": "table", "parent": "postgres", "level": "postgres", "name": "orders", "holds": "One row per order: its account, status, total and when it was placed", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.users", "kind": "table", "parent": "postgres", "level": "postgres", "name": "users", "holds": "One row per person who signs in: email, name and password hash", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "postgres.carts", "kind": "table", "parent": "postgres", "level": "postgres", "name": "carts", "holds": "Open carts: the account and when it was last touched", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.refunds", "kind": "table", "parent": "postgres", "level": "postgres", "name": "refunds", "holds": "Money sent back: the payment, the amount and why", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "postgres.accounts", "kind": "table", "parent": "postgres", "level": "postgres", "name": "accounts", "holds": "One row per customer account: its plan and when it opened", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.products", "kind": "table", "parent": "postgres", "level": "postgres", "name": "products", "holds": "The catalog: name, price and stock per product", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.coupons", "kind": "table", "parent": "postgres", "level": "postgres", "name": "coupons", "holds": "Discount codes: the code, its percentage and its expiry", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.sessions", "kind": "table", "parent": "postgres", "level": "postgres", "name": "sessions", "holds": "Signed-in sessions: the user, the token's hash and its expiry", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "postgres.line_items", "kind": "table", "parent": "postgres", "level": "postgres", "name": "line_items", "holds": "One row per product in an order, with quantity and price", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.payments", "kind": "table", "parent": "postgres", "level": "postgres", "name": "payments", "holds": "Card charges: the order, the amount and the processor's reference", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.audit_log", "kind": "table", "parent": "postgres", "level": "postgres", "name": "audit_log", "holds": "Who changed what and when, one row per admin action", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.invoices", "kind": "table", "parent": "postgres", "level": "postgres", "name": "invoices", "holds": "Monthly invoices: the account, the period and the amount due", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "postgres.orders.id", "kind": "column", "parent": "postgres.orders", "level": "postgres.orders", "name": "id", "holds": "The order's key", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "postgres.orders.status", "kind": "column", "parent": "postgres.orders", "level": "postgres.orders", "name": "status", "holds": "placed, paid, shipped or refunded", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "postgres.orders.total", "kind": "column", "parent": "postgres.orders", "level": "postgres.orders", "name": "total", "holds": "The order's total in cents", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } },
+    { "id": "api.post_orders", "kind": "endpoint", "parent": "api", "level": "api", "name": "POST /orders", "holds": "Places an order from the cart", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "api.post_refunds", "kind": "endpoint", "parent": "api", "level": "api", "name": "POST /refunds", "holds": "Refunds a payment", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": true, "priority": 0 } },
+    { "id": "web.checkout", "kind": "screen", "parent": "web", "level": "web", "name": "Checkout", "holds": "The cart, the address and the pay button", "facts": { "needs_you": false, "sent_back": false, "failing": false, "lacks_proof": false, "touched": false, "changed": false, "priority": 0 } }
+  ],
+  "checks": []
+}
