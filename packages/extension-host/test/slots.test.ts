@@ -192,6 +192,25 @@ describe('#349 the kit at install', () => {
     await expect(h.install({ from: folder, builtBy: null })).rejects.toThrow(/BLOCKED.*journey/);
     expect(await h.installed()).toEqual([]);
   }, 60_000);
+
+  // #331 AC4's slot: an environment is kitted at install as a replaced kind is, and only in the hub.
+  const environment = (id: string, name: string, fields: Record<string, unknown> = {}): string =>
+    pkgOf(id, `export default function (deep: any): void {\n  deep.registerEnvironment('${name}', { slot: 'environment@1', revision: 1, up: () => ({ id: 'x', port: 1, pid: 1 }), down: () => undefined });\n}\n`, { environments: [name], ...fields });
+
+  it('an environment a package the sandbox would run declares is BLOCKED at install, naming it: environment@1\'s kit can\'t run there, so it doesn\'t install', async () => {
+    const folder = environment('test/sandboxed-env', 'ext.sandboxed-env.local');
+    const h = await host([]);
+    await expect(h.install({ from: folder, builtBy: null })).rejects.toThrow(/BLOCKED.*environment ext\.sandboxed-env\.local/);
+    expect(await h.installed()).toEqual([]);
+  }, 60_000);
+
+  it('a package that registers an environment its manifest doesn\'t declare fails conformance, naming the environment', async () => {
+    const folder = environment('test/undeclared-env', 'ext.undeclared-env.local', { environments: [] });
+    const h = await host([]);
+    const c = await h.check(await h.install({ from: folder, builtBy: null }));
+    expect(c.passed).toBe(false);
+    expect(c.reasons.join('\n')).toMatch(/registers the environment ext\.undeclared-env\.local, which its manifest doesn't declare/);
+  }, 60_000);
 });
 
 describe('#349 a session whose owner is gone', () => {
