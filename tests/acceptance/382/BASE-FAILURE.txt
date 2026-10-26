@@ -1,0 +1,441 @@
+Base commit: ab61bea ("Merge pull request #748 from windoliver/claude/issue-745-315-redraft")
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/382 --no-file-parallelism
+  (run through ./node_modules/.bin/vitest with --reporter=verbose, since the rtk hook's vitest parser refuses the
+  bare npx form on this machine; same binary, same arguments otherwise)
+Run in the blind job's worktree at the base, holding only these test files (untracked) and node_modules from npm ci.
+deep-gpu builds at the base (cargo build --locked --bin deep-gpu, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), so every
+test fails at a named assertion past the build: 18 failed, 6 passed.
+- The new calls (`host`, `guard`) answer {"code":"bad_input","reason":"unknown call"}; each planted name
+  (guard_to_grey, guard_half_distance, guard_everywhere, host_keeps_document_look, host_cache_by_doc_id, host_check_once)
+  is refused at startup ({"ok":false,"code":"bad_input"}, exit 2); `view3d` reads no status fields and carries no
+  `status` report ("status is an object, got undefined"), and refuses nothing for a data role near a status color
+  ("expected [ …(3) ] to deeply equal []": not refused, no role, no state).
+- The six tests that pass at the base are the suite's own fixture checks, not criterion proofs (README: Criteria to
+  tests, "holds at the base"): five hold this suite's colors to its OKLab math with no binary (0.02, 0.05, 0.11,
+  0.12 and 0.08 from the status colors; the sampler's determinism), and one draws the AC2 fixture with no binding
+  through the base's `view3d` and finds the pixels within the distance that the guard must later move (the fixture
+  tries). A doctored color table or sampler fails them; they catch nothing about the implementation.
+Date: 2026-10-25  macOS 14.7.7, Apple M3  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (the checkout's toolchain)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/382
+
+ ✓ guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 the sampler is deterministic from seed 382 and the named pixels sit 0.05 and 0.12 from fail 612ms
+ × guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 a pixel 0.05 from fail lands 0.10 from it within 0.002 along the line, one 0.12 away keeps its value 1739ms
+   → the guard call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 of 10,000 seeded pixels near each status color none ends within the distance, and pixels_moved counts them 149ms
+   → the guard call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 a planted guard that maps to grey passes the seeded test and fails the first, naming the pixel 36ms
+   → deep-gpu run --planted guard_to_grey exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ✓ art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b the data color sits 0.02 OKLab from the fail red by this suite's OKLab math 1ms
+ × art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b played on its own, the film keeps the data color unchanged, runs no status guard and shows no legend 1784ms
+   → the art film played alone: status is an object, got undefined: expected false to be true // Object.is equality
+ × art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b a planted guard that runs everywhere fails the film played alone, naming what it moved or showed 12ms
+   → deep-gpu run --planted guard_everywhere exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ × art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b the same film shown on a return card is refused naming the data role and the status color 120ms
+   → expected [ …(3) ] to deeply equal []
+ × art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b the same film given one status binding is refused naming the data role and the status color 143ms
+   → expected [ …(3) ] to deeply equal []
+ ✓ guard-pixels.test.ts > #382.1b194e8e wherever status can show, no operator pixel ends within the status distance of a status color > #382.1b194e8e the roles sit 0.11 from fail, pass and running, so the look passes its check and the shading crosses the distance 1ms
+ ✓ guard-pixels.test.ts > #382.1b194e8e wherever status can show, no operator pixel ends within the status distance of a status color > #382.1b194e8e the fixture tries: the same film with no binding, played alone, has pixels within the distance 1961ms
+ × guard-pixels.test.ts > #382.1b194e8e wherever status can show, no operator pixel ends within the status distance of a status color > #382.1b194e8e with a status binding, the guard moves every operator pixel off the status colors and the mark draws exact 218ms
+   → the fixture that tries: status is an object, got undefined: expected false to be true // Object.is equality
+ × guard-pixels.test.ts > #382.1b194e8e wherever status can show, no operator pixel ends within the status distance of a status color > #382.1b194e8e a planted guard that keeps only half the distance fails, naming pixels 16ms
+   → deep-gpu run --planted guard_half_distance exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ ✓ card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 the two reds and the two lamps sit where the test needs them, by this suite's OKLab math 1ms
+ × card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 on the card the binding shows in the card look's fail color under one legend at the card's distance 1753ms
+   → the document on a return card was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 a planted host that keeps the document's own look fails, naming the mark's color 15ms
+   → deep-gpu run --planted host_keeps_document_look exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ × card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 the data distance is the card's: a lamp 0.08 from the card's fail passes alone and is refused on the card 156ms
+   → the document alone: status is an object, got undefined: expected false to be true // Object.is equality
+ ✓ host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 the spill role sits 0.05 from fail, so the host's check must refuse revision 3 1ms
+ × host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through lod_open: revision 2 misses the cache and shows from frame 3, revision 3 is checked and refused 1747ms
+   → the lod_open host was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through lod_open: a planted host that keys its cache by document ID fails, naming the frame 13ms
+   → deep-gpu run --planted host_cache_by_doc_id exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ × host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through lod_open: a planted host that checks only the first revision fails, naming the missing checks 10ms
+   → deep-gpu run --planted host_check_once exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ × host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through sheet_cell: revision 2 misses the cache and shows from frame 3, revision 3 is checked and refused 119ms
+   → the sheet_cell host was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+ × host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through sheet_cell: a planted host that keys its cache by document ID fails, naming the frame 12ms
+   → deep-gpu run --planted host_cache_by_doc_id exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ × host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through sheet_cell: a planted host that checks only the first revision fails, naming the missing checks 11ms
+   → deep-gpu run --planted host_check_once exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b played on its own, the film keeps the data color unchanged, runs no status guard and shows no legend
+AssertionError: the art film played alone: status is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:42:96
+     40| }
+     41| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     42|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     43|   return value as JsonObject;
+     44| }
+ ❯ statusOf helpers.ts:366:13
+ ❯ playedAlone art-film.test.ts:35:18
+ ❯ art-film.test.ts:68:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b a planted guard that runs everywhere fails the film played alone, naming what it moved or showed
+AssertionError: deep-gpu run --planted guard_everywhere exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:144:139
+    142|   const name = `${BIN} ${args.join(' ')}`;
+    143|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    144|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    145|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    146|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:153:3
+ ❯ playedAlone art-film.test.ts:34:26
+ ❯ art-film.test.ts:75:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b the same film shown on a return card is refused naming the data role and the status color
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the art film on a return card: not refused with status_distance: {\"code\":\"bad_input\",\"reason\":\"unknown call\"}",
++   "the art film on a return card: the refusal names role undefined, not lamp",
++   "the art film on a return card: the refusal names the status color undefined, not fail",
++ ]
+
+ ❯ art-film.test.ts:84:89
+     82|     const path = writeJson(out(), 'art-film.json', film('art-film-382'…
+     83|     const reply = run1(bin, out(), { call: 'host', kind: 'return_card'…
+     84|     expect(distanceRefusal(reply, 'lamp', 'fail', 'the art film on a r…
+       |                                                                                         ^
+     85|   }, 1_800_000);
+     86|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  art-film.test.ts > #382.1baf9f5b an art film alone keeps a data color 0.02 from fail; on a card or with a binding it is refused > #382.1baf9f5b the same film given one status binding is refused naming the data role and the status color
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the art film with one status binding: not refused with status_distance: {\"frames\":[{\"frame\":0,\"frame_seq\":0,\"pixel_hash\":\"b671bc443c6bee46adccc4370a48e75a546cbbe240d2579c9ebccd01e39dbb8e\"}],\"passes\":[{\"name\":\"scene3d.geometry\",\"reads\":[],\"writes\":[\"linear\",\"ids\",\"depth\"]},{\"name\":\"scene3d.output\",\"reads\":[\"linear\"],\"writes\":[\"final\"]}]}",
++   "the art film with one status binding: the refusal names role undefined, not lamp",
++   "the art film with one status binding: the refusal names the status color undefined, not fail",
++ ]
+
+ ❯ art-film.test.ts:92:96
+     90|     const bound = writeJson(out(), 'art-film-bound.json', film('art-fi…
+     91|     const reply = run1(bin, out(), { call: 'view3d', doc: bound, look:…
+     92|     expect(distanceRefusal(reply, 'lamp', 'fail', 'the art film with o…
+       |                                                                                                ^
+     93|     // A check that refuses every bound document fails here: the lamp …
+     94|     const far = answered(run1(bin, out(), { call: 'view3d', doc: bound…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 on the card the binding shows in the card look's fail color under one legend at the card's distance
+AssertionError: the document on a return card was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:162:79
+    160| export function answered(reply: JsonObject, what: string): JsonObject {
+    161|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    162|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    163|   return reply;
+    164| }
+ ❯ onCard card-look.test.ts:35:17
+ ❯ card-look.test.ts:76:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 a planted host that keeps the document's own look fails, naming the mark's color
+AssertionError: deep-gpu run --planted host_keeps_document_look exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:144:139
+    142|   const name = `${BIN} ${args.join(' ')}`;
+    143|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    144|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    145|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    146|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:153:3
+ ❯ onCard card-look.test.ts:35:26
+ ❯ card-look.test.ts:82:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  card-look.test.ts > #382.ad26ea13 a document with its own fail red, on a return card, takes the card's fail color, legend and distance > #382.ad26ea13 the data distance is the card's: a lamp 0.08 from the card's fail passes alone and is refused on the card
+AssertionError: the document alone: status is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:42:96
+     40| }
+     41| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     42|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     43|   return value as JsonObject;
+     44| }
+ ❯ statusOf helpers.ts:366:13
+ ❯ card-look.test.ts:92:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 a pixel 0.05 from fail lands 0.10 from it within 0.002 along the line, one 0.12 away keeps its value
+AssertionError: the guard call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:162:79
+    160| export function answered(reply: JsonObject, what: string): JsonObject {
+    161|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    162|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    163|   return reply;
+    164| }
+ ❯ guard guard-line.test.ts:53:17
+ ❯ guard-line.test.ts:120:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 of 10,000 seeded pixels near each status color none ends within the distance, and pixels_moved counts them
+AssertionError: the guard call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:162:79
+    160| export function answered(reply: JsonObject, what: string): JsonObject {
+    161|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    162|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    163|   return reply;
+    164| }
+ ❯ guard guard-line.test.ts:53:17
+ ❯ guard-line.test.ts:127:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  guard-line.test.ts > #382.5bb38907 the guard moves a pixel along the OKLab line from the nearest status color to the distance > #382.5bb38907 a planted guard that maps to grey passes the seeded test and fails the first, naming the pixel
+AssertionError: deep-gpu run --planted guard_to_grey exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:144:139
+    142|   const name = `${BIN} ${args.join(' ')}`;
+    143|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    144|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    145|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    146|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:153:3
+ ❯ guard guard-line.test.ts:53:26
+ ❯ guard-line.test.ts:134:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  guard-pixels.test.ts > #382.1b194e8e wherever status can show, no operator pixel ends within the status distance of a status color > #382.1b194e8e with a status binding, the guard moves every operator pixel off the status colors and the mark draws exact
+AssertionError: the fixture that tries: status is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:42:96
+     40| }
+     41| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     42|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     43|   return value as JsonObject;
+     44| }
+ ❯ statusOf helpers.ts:366:13
+ ❯ guarded guard-pixels.test.ts:33:18
+ ❯ guard-pixels.test.ts:72:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  guard-pixels.test.ts > #382.1b194e8e wherever status can show, no operator pixel ends within the status distance of a status color > #382.1b194e8e a planted guard that keeps only half the distance fails, naming pixels
+AssertionError: deep-gpu run --planted guard_half_distance exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:144:139
+    142|   const name = `${BIN} ${args.join(' ')}`;
+    143|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    144|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    145|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    146|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:153:3
+ ❯ guarded guard-pixels.test.ts:32:26
+ ❯ guard-pixels.test.ts:78:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through lod_open: revision 2 misses the cache and shows from frame 3, revision 3 is checked and refused
+AssertionError: the lod_open host was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:162:79
+    160| export function answered(reply: JsonObject, what: string): JsonObject {
+    161|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    162|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    163|   return reply;
+    164| }
+ ❯ hostRun host-revision.test.ts:32:17
+ ❯ revisions host-revision.test.ts:47:29
+ ❯ host-revision.test.ts:94:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through lod_open: a planted host that keys its cache by document ID fails, naming the frame
+ FAIL  host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through sheet_cell: a planted host that keys its cache by document ID fails, naming the frame
+AssertionError: deep-gpu run --planted host_cache_by_doc_id exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:144:139
+    142|   const name = `${BIN} ${args.join(' ')}`;
+    143|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    144|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    145|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    146|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:153:3
+ ❯ hostRun host-revision.test.ts:32:26
+ ❯ revisions host-revision.test.ts:47:29
+ ❯ host-revision.test.ts:99:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through lod_open: a planted host that checks only the first revision fails, naming the missing checks
+ FAIL  host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through sheet_cell: a planted host that checks only the first revision fails, naming the missing checks
+AssertionError: deep-gpu run --planted host_check_once exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:144:139
+    142|   const name = `${BIN} ${args.join(' ')}`;
+    143|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    144|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    145|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    146|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:153:3
+ ❯ hostRun host-revision.test.ts:32:26
+ ❯ revisions host-revision.test.ts:47:29
+ ❯ host-revision.test.ts:104:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+ FAIL  host-revision.test.ts > #382.90bd5f67 a new revision shown through level-of-detail open or a sheet cell misses the host's caches and reruns its check > #382.90bd5f67 through sheet_cell: revision 2 misses the cache and shows from frame 3, revision 3 is checked and refused
+AssertionError: the sheet_cell host was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:162:79
+    160| export function answered(reply: JsonObject, what: string): JsonObject {
+    161|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    162|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    163|   return reply;
+    164| }
+ ❯ hostRun host-revision.test.ts:32:17
+ ❯ revisions host-revision.test.ts:47:29
+ ❯ host-revision.test.ts:94:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/18]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  18 failed | 6 passed (24)
+   Start at  23:54:35
+   Duration  15.44s (tests 99%)
+
