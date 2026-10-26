@@ -9,18 +9,17 @@
 //! by `size`; a cylinder's axis is +Y.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
-use deep_canvas::camera::{screen_basis, Offsets, Spec, Vec3};
+use deep_canvas::camera::{screen_basis, Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
 use deep_canvas::ops::{cos, rad, sin, sqrt, tan};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
-use deep_text::{Role, Shaper};
+use deep_text::Role;
 use serde_json::{Map, Value};
-use vello_cpu::Resources;
 
-use crate::label::{mask, Mask};
+pub use crate::label::Labels;
+use crate::label::{AtlasPage, Glyph, WORLD_EM_PX};
 use crate::look::Look3;
 
 /// Why a document can't be drawn: a closed-list code and the path it names.
@@ -46,6 +45,9 @@ pub const KINDS: [&str; 6] = [
     "mark.point@1",
     "mark.text@1",
 ];
+
+/// The 2D overlay a 3D writer layer's anchor places, drawn by scene3d too.
+pub const OVERLAY: &str = "overlay.frame@1";
 
 /// Whether an item of `kind` (its text, `family.name@major`) is one of scene3d's marks.
 pub fn is_3d(kind: &str) -> bool {
@@ -114,10 +116,15 @@ pub enum Facing {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Label {
     pub id: String,
-    /// The mask's key: the text and its font role.
-    pub key: (String, String),
-    pub mask: Arc<Mask>,
+    pub text: String,
+    pub role: Role,
+    /// The shaped run's glyphs, each with its place in the core's atlas.
+    pub glyphs: Vec<Glyph>,
+    /// The run's box, in px of the size it was shaped at.
+    pub bounds: [f64; 2],
     pub pos: Vec3,
+    /// One em: the label's size, in m with `world`, else in px.
+    pub em: f64,
     /// The quad's width and height, in m with `world`, else in px.
     pub quad: [f64; 2],
     pub world: bool,
@@ -325,39 +332,6 @@ impl Camera {
     }
 }
 
-/// Labels' masks, shaped and rasterized once per text and font role.
-pub struct Labels {
-    shaper: Shaper,
-    resources: Resources,
-    masks: BTreeMap<(String, String), Arc<Mask>>,
-}
-
-impl Default for Labels {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Labels {
-    pub fn new() -> Self {
-        Labels {
-            shaper: Shaper::new(),
-            resources: Resources::new(),
-            masks: BTreeMap::new(),
-        }
-    }
-
-    fn get(&mut self, text: &str, role: Role) -> Arc<Mask> {
-        let key = (text.to_string(), role.name().to_string());
-        if let Some(m) = self.masks.get(&key) {
-            return m.clone();
-        }
-        let m = Arc::new(mask(&mut self.shaper, &mut self.resources, text, role));
-        self.masks.insert(key, m.clone());
-        m
-    }
-}
-
 /// The key light (Light and the light policy: `light.sun`): the unit direction toward it, its
 /// illuminance in lx and whether it casts the shadow.
 #[derive(Clone, Debug, PartialEq)]
@@ -390,9 +364,11 @@ pub struct Scene {
     /// The first sun in item order, which shades the solids and casts the shadow.
     pub sun: Option<Sun>,
     pub others: Vec<Other>,
+    /// The core's glyph atlas pages the labels' glyphs sample, by page number.
+    pub pages: Vec<AtlasPage>,
 }
 
-fn num(v: Option<&Value>) -> Option<f64> {
+pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|x| x.is_finite())
 }
 
@@ -405,7 +381,7 @@ fn vec3(v: Option<&Value>) -> Option<Vec3> {
 }
 
 /// A size: three numbers, or one for all three.
-fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
+pub(crate) fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
     match v {
         None | Some(Value::Null) => Some(default),
         Some(Value::Number(n)) => {
@@ -417,9 +393,9 @@ fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
 }
 
 /// `x ↦ R·S·x + T` as rows of a 3×4 matrix.
-type Affine3 = [[f64; 4]; 3];
+pub(crate) type Affine3 = [[f64; 4]; 3];
 
-fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
+pub(crate) fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
     let mut out = [[0.0; 4]; 3];
     for (r, row) in out.iter_mut().enumerate() {
         for (c, cell) in row.iter_mut().enumerate() {
@@ -455,6 +431,11 @@ fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
     let pos = vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]);
     let rot = vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]);
     let sc = size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]);
+    local_of(pos, rot, sc, extra_scale)
+}
+
+/// [`local`] from the numbers themselves.
+pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Affine3 {
     let (cx, sx) = (cos(rad(rot[0])), sin(rad(rot[0])));
     let (cy, sy) = (cos(rad(rot[1])), sin(rad(rot[1])));
     let (cz, sz) = (cos(rad(rot[2])), sin(rad(rot[2])));
@@ -629,7 +610,20 @@ fn camera(
         code: r.code,
         path: r.path,
     })?;
-    let pose = spec.pose(&rig, &Offsets::default());
+    let mut cam = posed(&spec, &rig, &Offsets::default(), size);
+    near_far(
+        &mut cam,
+        num(params.get("near")),
+        num(params.get("far")),
+        bounds.iter().copied(),
+    );
+    Ok(cam)
+}
+
+/// The camera `spec` and `rig` pose under `offsets` on a frame of `size` px, before its near
+/// and far.
+pub(crate) fn posed(spec: &Spec, rig: &Rig, offsets: &Offsets, size: [f64; 2]) -> Camera {
+    let pose = spec.pose(rig, offsets);
     let perspective = !pose.flat && pose.fov > 0.0;
     let wider = size[0].max(size[1]);
     let scale = if perspective {
@@ -639,7 +633,7 @@ fn camera(
     };
     let forward = normalize(sub(pose.target, pose.position));
     let (right, up) = screen_basis(forward);
-    let mut cam = Camera {
+    Camera {
         size,
         eye: pose.position,
         right,
@@ -654,31 +648,47 @@ fn camera(
         roll: [cos(rad(pose.roll)), sin(rad(pose.roll))],
         near: 0.1,
         far: 1.0,
-    };
-    let depths: Vec<f64> = bounds.iter().map(|p| cam.to_view(*p)[2]).collect();
-    let lo = depths.iter().copied().fold(f64::INFINITY, f64::min);
-    let hi = depths.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    }
+}
+
+/// The camera's near and far: as authored, else from the depths of `bounds`.
+pub(crate) fn near_far(
+    cam: &mut Camera,
+    near: Option<f64>,
+    far: Option<f64>,
+    bounds: impl Iterator<Item = Vec3>,
+) {
+    let (lo, hi) = bounds
+        .map(|p| cam.to_view(p)[2])
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), d| {
+            (lo.min(d), hi.max(d))
+        });
     let (lo, hi) = if lo.is_finite() && hi.is_finite() {
         (lo, hi)
     } else {
         (0.1, 1.0)
     };
     let pad = 0.01 * (hi - lo) + 1.0;
-    cam.near = match num(params.get("near")) {
+    cam.near = match near {
         Some(n) if n > 0.0 => n,
-        _ if perspective => (lo / 2.0).clamp(0.01, 1.0),
+        _ if cam.perspective => (lo / 2.0).clamp(0.01, 1.0),
         _ => lo - pad,
     };
-    cam.far = match num(params.get("far")) {
+    cam.far = match far {
         Some(f) if f > cam.near => f,
         _ => hi + pad,
     };
-    Ok(cam)
 }
 
 /// What one item contributes to the bounds the camera's near and far come from.
 fn corners(model: &Affine3) -> Vec<Vec3> {
     let mut out = Vec::with_capacity(8);
+    corners_into(model, &mut out);
+    out
+}
+
+/// [`corners`], pushed onto `out`.
+pub(crate) fn corners_into(model: &Affine3, out: &mut Vec<Vec3>) {
     for x in [-0.5, 0.5] {
         for y in [-0.5, 0.5] {
             for z in [-0.5, 0.5] {
@@ -686,7 +696,6 @@ fn corners(model: &Affine3) -> Vec<Vec3> {
             }
         }
     }
-    out
 }
 
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`.
@@ -833,17 +842,27 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         params.get("size_space").and_then(Value::as_str) == Some("world");
                     let size =
                         num(params.get("size")).unwrap_or(if world_space { 0.25 } else { 13.0 });
-                    let mask = labels.get(text, role);
-                    let [we, he] = mask.ems();
+                    // A screen-size label's run is a 2D text's of that text, font and size.
+                    let run_size = if world_space {
+                        WORLD_EM_PX
+                    } else {
+                        size as f32
+                    };
+                    let (run_box, glyphs) = labels.run(text, role, run_size);
+                    let shaped_at = glyphs.first().map_or(run_size, |g| g.size);
+                    let to_em = size / f64::from(shaped_at);
                     let m = world(&items, id);
                     let pos = origin(&m);
                     bounds.push(pos);
                     layer.labels.push(Label {
                         id: id.clone(),
-                        key: (text.to_string(), role.name().to_string()),
-                        mask,
+                        text: text.to_string(),
+                        role,
+                        glyphs,
+                        bounds: run_box,
                         pos,
-                        quad: [we * size, he * size],
+                        em: size,
+                        quad: [run_box[0] * to_em, run_box[1] * to_em],
                         world: world_space,
                         facing,
                         axes: [
@@ -853,7 +872,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         color: paint(look, params, &path)?,
                     });
                 }
-                "overlay.frame@1" => overlay_items.push((layer_id.clone(), id.clone())),
+                OVERLAY => overlay_items.push((layer_id.clone(), id.clone())),
                 "light.sun@1" if sun.is_none() => {
                     // It shines along its local −Z, glTF's convention for lights.
                     let m = world(&items, id);
@@ -898,6 +917,23 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         &cam_path,
     )?;
 
+    // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
+    // starts it over and places them all again.
+    labels.begin();
+    for pass in 0..2 {
+        for l in layers.iter_mut().flat_map(|layer| layer.labels.iter_mut()) {
+            let em_px = if l.world {
+                l.em * camera.px_per_m(camera.to_view(l.pos)[2])
+            } else {
+                l.em
+            };
+            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px);
+        }
+        if pass == 1 || !labels.make_room() {
+            break;
+        }
+    }
+
     let mut overlays = Vec::new();
     for (layer, id) in overlay_items {
         overlays.push(overlay(&items, &layer, &id, &camera, look)?);
@@ -910,6 +946,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         overlays,
         sun,
         others,
+        pages: labels.pages(),
     })
 }
 

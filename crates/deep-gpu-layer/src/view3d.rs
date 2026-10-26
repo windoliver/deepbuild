@@ -8,9 +8,10 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use deep_canvas::document::{apply_ops, writer_layer, Writing};
+use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate, Labels};
+use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
 use deep_effects_render::frame::{self as fx, Effects};
 use deep_gpu::device::Backend;
 use deep_gpu::encode::Pool;
@@ -57,6 +58,10 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// Report each label's glyphs and the atlas pages they sample (#381).
+    labels: bool,
+    /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
+    clicks: Vec<(u64, [f64; 2])>,
 }
 
 fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -131,6 +136,17 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .flatten()
         .filter_map(Value::as_u64)
         .collect();
+    let mut clicks = Vec::new();
+    for c in call["clicks"].as_array().into_iter().flatten() {
+        let at = c["at"]
+            .as_array()
+            .filter(|a| a.len() == 2)
+            .and_then(|a| Some([a[0].as_f64()?, a[1].as_f64()?]));
+        let (Some(frame), Some(at)) = (c["frame"].as_u64(), at) else {
+            return Err(bad("a click is {frame, at: [x, y]}"));
+        };
+        clicks.push((frame, at));
+    }
     Ok(Args {
         doc,
         look,
@@ -153,6 +169,8 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        labels: call["labels"].as_bool().unwrap_or(false),
+        clicks,
     })
 }
 
@@ -195,6 +213,43 @@ fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPic
     })
 }
 
+/// What a click at `at` view px picks in a frame (canvas primitives: Selection, Spatial index):
+/// the topmost 2D overlay whose shapes cover it, else the item the object-ID target holds there,
+/// else nothing.
+fn pick(
+    scene: &deep_canvas_scene3d::scene::Scene,
+    ids: &[u8],
+    picks: &[(String, u32)],
+    size: [u32; 2],
+    at: [f64; 2],
+) -> Option<String> {
+    use deep_canvas_scene3d::scene::Shape2;
+    for o in scene.overlays.iter().rev() {
+        let Some([ox, oy]) = o.origin else { continue };
+        let [x, y] = [at[0] - ox, at[1] - oy];
+        let hit = o.shapes.iter().any(|s| match s {
+            Shape2::Circle { center, r, .. } => (x - center[0]).hypot(y - center[1]) <= *r,
+            Shape2::Rect { rect, .. } => {
+                (rect[0]..=rect[0] + rect[2]).contains(&x)
+                    && (rect[1]..=rect[1] + rect[3]).contains(&y)
+            }
+        });
+        if hit {
+            return Some(o.id.clone());
+        }
+    }
+    let [x, y] = [at[0].floor(), at[1].floor()];
+    if x < 0.0 || y < 0.0 || x >= f64::from(size[0]) || y >= f64::from(size[1]) {
+        return None;
+    }
+    let i = (y as usize * size[0] as usize + x as usize) * 4;
+    let p = u32::from_le_bytes(ids.get(i..i + 4)?.try_into().ok()?);
+    picks
+        .iter()
+        .find(|(_, v)| *v == p)
+        .map(|(id, _)| id.clone())
+}
+
 pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new_with_quality(
@@ -216,6 +271,40 @@ pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, 
     )
     .map_err(|e| refused("not_written", e.to_string()))?;
     Ok(name)
+}
+
+/// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,
+/// each written as an 8-bit grayscale PNG of its alpha named by its SHA-256.
+fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
+    let mut labels = Vec::new();
+    let mut sampled = BTreeSet::new();
+    for l in scene.layers.iter().flat_map(|layer| &layer.labels) {
+        let glyphs: Vec<Value> = l
+            .glyphs
+            .iter()
+            .map(|g| {
+                let atlas = g.atlas.map(|a| {
+                    sampled.insert(a.page);
+                    json!({"page": a.page, "x": a.x, "y": a.y, "w": a.w, "h": a.h, "raster": g.raster})
+                });
+                json!({
+                    "font": format!("crates/deep-text/fonts/{}", g.file), "size": g.size, "id": g.id,
+                    "x": g.x, "y": g.y, "grapheme": g.grapheme, "atlas": atlas,
+                })
+            })
+            .collect();
+        labels.push(json!({"item": l.id, "glyphs": glyphs}));
+    }
+    let mut pages = Vec::new();
+    for page in sampled {
+        let bytes = &scene.pages[page as usize].bytes;
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(bytes, PAGE, PAGE, image::ExtendedColorType::L8)
+            .map_err(|e| refused("not_written", e.to_string()))?;
+        pages.push(json!({"page": page, "png": write_named(out, &png, "png")?}));
+    }
+    Ok((json!(labels), json!(pages)))
 }
 
 /// What the render thread answers for one frame.
@@ -249,6 +338,12 @@ fn planted3(p: Option<Planted>) -> Planted3 {
 fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut args = parse(call)?;
     let noop = app.backend == Backend::Noop;
+    if noop && !args.clicks.is_empty() {
+        return Err(refused(
+            "bad_input",
+            "a click reads the object-ID target, which the noop backend doesn't draw",
+        ));
+    }
     let planted = planted3(app.planted);
     let path = app.decision.path;
     let size = args.size;
@@ -302,6 +397,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         p.ui = Some(ui.clone());
     }
     let mut labels = Labels::new();
+    labels.fixed_em = app.planted == Some(Planted::LabelMask);
     let mut frames = Vec::new();
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
@@ -337,6 +433,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             );
             lock(&fx).settings = settings;
             let (fx2, profiler2) = (fx.clone(), profiler.clone());
+            let label_report = if args.labels {
+                Some(labels_json(&scene, out)?)
+            } else {
+                None
+            };
             if let Some(win) = app.window.as_ref().filter(|_| args.window.is_some()) {
                 let pictures = scene.overlays.iter().filter_map(overlay_picture).collect();
                 let mut p = win.paint.borrow_mut();
@@ -349,8 +450,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 args.latency[(n as usize) % args.latency.len()]
             };
             let capture = args.capture.wants(n);
-            let read_targets = capture && wants_targets && !noop;
+            let clicks: Vec<[f64; 2]> = args
+                .clicks
+                .iter()
+                .filter(|(f, _)| *f == n)
+                .map(|(_, at)| *at)
+                .collect();
+            let read_targets = (capture && wants_targets || !clicks.is_empty()) && !noop;
             let look = args.look.clone();
+            let evaluated = scene.clone();
             let drawn = app
                 .worker
                 .call(move |state| -> Result<Drawn, String> {
@@ -481,6 +589,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     frame.insert("window".into(), json!(name));
                 }
             }
+            if let Some((labels, pages)) = label_report {
+                frame.insert("labels".into(), labels);
+                frame.insert("pages".into(), pages);
+            }
             if args.counts {
                 let c = &drawn.counts;
                 let encoded: Vec<Value> = c
@@ -496,6 +608,17 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if let Some((gpu_ms, passes)) = &drawn.timing {
                 frame.insert("gpu_ms".into(), json!(gpu_ms));
                 frame.insert("passes_ms".into(), json!(passes));
+            }
+            if !clicks.is_empty() {
+                let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
+                let answered: Vec<Value> = clicks
+                    .iter()
+                    .map(|at| {
+                        let p = ids.and_then(|ids| pick(&evaluated, ids, &drawn.picks, size, *at));
+                        json!({"at": at, "pick": p})
+                    })
+                    .collect();
+                frame.insert("clicks".into(), json!(answered));
             }
             frames.push(Value::Object(frame));
         }

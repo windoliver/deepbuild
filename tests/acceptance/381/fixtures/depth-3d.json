@@ -1,0 +1,151 @@
+{
+  "format": 1,
+  "id": "depth-381",
+  "profile": "scene",
+  "title": "Labels in depth",
+  "description": "Four labels in screen size under a still orthographic camera: AVATAR at 13 px twice, Tower Yard at 24 px and AVATAR in the mono role, each facing the camera.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "orbit": {
+          "azimuth": 0,
+          "elevation": 0,
+          "distance": 20
+        },
+        "view_width": 16
+      }
+    },
+    "avatar-13": {
+      "id": "avatar-13",
+      "kind": "mark.text@1",
+      "layer": "main",
+      "name": "Label AVATAR",
+      "order": "a1",
+      "params": {
+        "text": "AVATAR",
+        "font": "body",
+        "size": 13,
+        "size_space": "screen",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "label-a"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          1.5,
+          0
+        ]
+      }
+    },
+    "avatar-13-again": {
+      "id": "avatar-13-again",
+      "kind": "mark.text@1",
+      "layer": "main",
+      "name": "Label AVATAR",
+      "order": "a2",
+      "params": {
+        "text": "AVATAR",
+        "font": "body",
+        "size": 13,
+        "size_space": "screen",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "label-b"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          1.5,
+          0
+        ]
+      }
+    },
+    "tower-24": {
+      "id": "tower-24",
+      "kind": "mark.text@1",
+      "layer": "main",
+      "name": "Label Tower Yard",
+      "order": "a3",
+      "params": {
+        "text": "Tower Yard",
+        "font": "body",
+        "size": 24,
+        "size_space": "screen",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "label-a"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -3,
+          -1.5,
+          0
+        ]
+      }
+    },
+    "avatar-mono": {
+      "id": "avatar-mono",
+      "kind": "mark.text@1",
+      "layer": "main",
+      "name": "Label AVATAR",
+      "order": "a4",
+      "params": {
+        "text": "AVATAR",
+        "font": "mono",
+        "size": 13,
+        "size_space": "screen",
+        "facing": "camera",
+        "paint": {
+          "fill": {
+            "role": "label-b"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          3,
+          -1.5,
+          0
+        ]
+      }
+    }
+  }
+}
