@@ -1,0 +1,11 @@
+{
+  "name": "status",
+  "hook": "tool.before",
+  "text": "{handle} has {count} checks still open, said {who} ({state})",
+  "fields": {
+    "handle": { "type": "handle" },
+    "count": { "type": "number" },
+    "who": { "type": "name" },
+    "state": { "type": "one_of", "values": ["open", "held"] }
+  }
+}

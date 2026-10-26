@@ -36,7 +36,7 @@ const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filte
 const matches = (claim: Claim, query: string): boolean => { const have = new Set(words(claim.text)); return words(query).every((w) => have.has(w)); };
 const byClaim = (hits: Hit[]): Hit[] => [...hits].sort((a, b) => (a.claim < b.claim ? -1 : a.claim > b.claim ? 1 : 0));
 /** The hits the rules ask for: every matching claim, cited, in claim order. */
-export const expectedHits = (claims: Claim[], query: string): Hit[] => byClaim(claims.filter((c) => matches(c, query)).map((c) => ({ claim: c.id, page: c.page, quote: c.text, source: c.source })));
+const expectedHits = (claims: Claim[], query: string): Hit[] => byClaim(claims.filter((c) => matches(c, query)).map((c) => ({ claim: c.id, page: c.page, quote: c.text, source: c.source })));
 
 /** The reference index; `plantedWith` plants one fault in it. */
 function reference(fault: 'none' | 'keeps-dropped' | 'sourceless' | 'stale-upsert' | 'noop-rebuild' = 'none'): IndexFill {

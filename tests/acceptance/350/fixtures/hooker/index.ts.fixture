@@ -1,0 +1,27 @@
+// A test package from outside DeepBuild's signed release (#350 AC3), in one of three roles probe.json names:
+// - context: after `delay` ms, adds the `ctx` block
+// - deny: after `delay` ms, denies with the `why` template
+// - late: answers its first call after `first` ms (past the hook's deadline) and every later one after `next` ms,
+//   each with the `late` block naming its call's number, so a late reply taken for a later request shows
+import { readFileSync } from 'node:fs';
+
+interface Probe { role: 'context' | 'deny' | 'late'; delay?: number; first?: number; next?: number }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export default function (deep: any): void {
+  let call = 0;
+  deep.on('tool.before', async () => {
+    const n = ++call;
+    if (probe.role === 'context') {
+      await sleep(probe.delay ?? 0);
+      return { context: { template: 'ctx', values: { handle: 'task:01K74FX2B4D6F8H0K2M4P6R8T0', count: 7 } } };
+    }
+    if (probe.role === 'deny') {
+      await sleep(probe.delay ?? 0);
+      return { deny: { template: 'why', values: { handle: 'claim:01K74G1Z3X5V7T9R1P3N5M7K9H' } } };
+    }
+    await sleep(n === 1 ? probe.first ?? 0 : probe.next ?? 0);
+    return { context: { template: 'late', values: { count: n } } };
+  });
+}

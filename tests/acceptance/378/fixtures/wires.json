@@ -1,0 +1,210 @@
+{
+  "format": 1,
+  "id": "wires-378",
+  "profile": "scene",
+  "title": "One wire in three modes",
+  "description": "The same six points with per-point widths of 6, 18, 6, 18, 6 and 30 px, drawn as a strip, as segments and as a loop.",
+  "size": [
+    800,
+    600
+  ],
+  "camera": "cam",
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "position": [
+          0,
+          0,
+          10
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "view_width": 20
+      }
+    },
+    "wire-strip": {
+      "id": "wire-strip",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Wire as a strip",
+      "order": "a1",
+      "params": {
+        "points": [
+          [
+            -6,
+            4.75,
+            0
+          ],
+          [
+            -3,
+            6.75,
+            0
+          ],
+          [
+            0,
+            4.75,
+            0
+          ],
+          [
+            3,
+            6.75,
+            0
+          ],
+          [
+            6,
+            4.75,
+            0
+          ],
+          [
+            0,
+            2.75,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": [
+          6,
+          18,
+          6,
+          18,
+          6,
+          30
+        ],
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "wire"
+          }
+        }
+      }
+    },
+    "wire-segments": {
+      "id": "wire-segments",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Wire as segments",
+      "order": "a2",
+      "params": {
+        "points": [
+          [
+            -6,
+            0,
+            0
+          ],
+          [
+            -3,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            6,
+            0,
+            0
+          ],
+          [
+            0,
+            -2,
+            0
+          ]
+        ],
+        "mode": "segments",
+        "width": [
+          6,
+          18,
+          6,
+          18,
+          6,
+          30
+        ],
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "wire"
+          }
+        }
+      }
+    },
+    "wire-loop": {
+      "id": "wire-loop",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Wire as a loop",
+      "order": "a3",
+      "params": {
+        "points": [
+          [
+            -6,
+            -4.75,
+            0
+          ],
+          [
+            -3,
+            -2.75,
+            0
+          ],
+          [
+            0,
+            -4.75,
+            0
+          ],
+          [
+            3,
+            -2.75,
+            0
+          ],
+          [
+            6,
+            -4.75,
+            0
+          ],
+          [
+            0,
+            -6.75,
+            0
+          ]
+        ],
+        "mode": "loop",
+        "width": [
+          6,
+          18,
+          6,
+          18,
+          6,
+          30
+        ],
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "wire"
+          }
+        }
+      }
+    }
+  }
+}

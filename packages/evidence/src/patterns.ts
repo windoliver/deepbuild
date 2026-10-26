@@ -32,7 +32,7 @@ export function loadRules(): Rule[] {
 }
 
 /** Converts the RE2 syntax gitleaks uses. A `(?i)` region is spelled out letter by letter. */
-export function goToJs(go: string): string {
+function goToJs(go: string): string {
   let out = '';
   let fold = false;
   const outer: boolean[] = [];

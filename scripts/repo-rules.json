@@ -89,6 +89,10 @@
         "deep-gpu": {
           "spec": "* path=../deep-gpu",
           "why": "Issue #377: the GPU layer, whose views the window shows in place (gpu_view)."
+        },
+        "deep-marks-gpui": {
+          "spec": "* path=../deep-marks-gpui",
+          "why": "Issue #380: the session line is a stroke of the canvas's marks, never a path the view paints itself."
         }
       },
       "dev-dependencies": {
@@ -306,6 +310,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #237: the hub holds the kernel's one lease table, opened on its record, with env-local's kinds declared in it, and the supervisor leases every run's keys through it."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
@@ -318,9 +326,17 @@
           "spec": "0.0.0",
           "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #26: deep_status reports a run that disagrees with deep_claim's prediction by the verdict engine's own contradiction rule."
+        },
         "better-sqlite3": {
           "spec": "13.0.3",
           "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #26: deep_run and deep_ask read the checks a repo's .deepbuild/done.yaml names, with the parser env-local already reads that file with."
         }
       }
     },
@@ -358,9 +374,25 @@
           "spec": "0.0.0",
           "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #237: given the kernel's lease table, the supervisor takes each run's keys through it and releases them citing the processes it proved gone."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
+        }
+      }
+    },
+    "packages/leases/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #237: a declared kind is checked against the lease.kind@1 schema."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #237: the lease table's state is a function of the record: grants, stale marks and releases are appended to it, and holders' ends and the supervisor's proofs are read from it."
         }
       }
     },
@@ -397,6 +429,22 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #390: the deep-text CLI's JSON lines; already in the workspace tree."
+        },
+        "parley_engine": {
+          "spec": "^0.12",
+          "why": "Issue #381: the analysis parley's layout runs (UAX #14 opportunities, UAX #29 graphemes, UAX #9 levels), read for the conformance files; already in parley's tree."
+        },
+        "parley_data": {
+          "spec": "^0.12",
+          "why": "Issue #381: the character properties parley's analysis reads (mandatory breaks, bidi classes); already in parley's tree."
+        },
+        "icu_properties": {
+          "spec": "^2.3",
+          "why": "Issue #381: the bidi class names rule X9 removes; already in parley's tree."
+        },
+        "icu_segmenter": {
+          "spec": "^2.3",
+          "why": "Issue #381: UAX #14 at Unicode 17.0.0 (its `unstable` 17.0 state machine), fed to parley's layout through its line-break override, since parley's own call still runs 15.1's rules; already in parley's tree."
         }
       }
     },
@@ -537,6 +585,10 @@
         "vello_cpu": {
           "spec": "^0.3",
           "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
+        },
+        "deep-marks-gpui": {
+          "spec": "* path=../deep-marks-gpui",
+          "why": "Issue #380: paints a path mark's mesh, shared with the app's line."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -639,6 +691,22 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #138: the canvas conformance kit runs each case headless on wgpu's noop backend, which makes no pixels, so a probe that needs them reads BLOCKED there; already in the lockfile."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the scene3d canvas module in R2 builds, and 3D revisions evaluated for render-back and the window."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #378: the app's GPU device a 3D revision renders back on."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #378: 3D writer layers drawn natively for render-back snapshots and the window."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #380: the effects module joins R2's build set beside scene3d."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -764,6 +832,10 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #377: the shipped canvas modules the plug-in's documents are checked in."
         },
+        "deep-canvas-test-modules": {
+          "spec": "* path=../deep-canvas-test-modules",
+          "why": "Issue #379: the test canvas module test.gpu, whose texture, mesh and burn the meter's acceptance tests draw; optional, under the test-meter feature, so no shipped build holds it."
+        },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #377: the headless window, the page, the view and the question card the handoff is captured from."
@@ -791,12 +863,140 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #377: the test render module's pipelines and passes, on the GPU layer's device."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the view3d call evaluates a document's 3D writer layers and its anchored overlays at each frame's t."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #378: scene3d's render module, which the view3d call draws through a GPU-layer view."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #380: the operators, check_operator and op calls read the shipped library and its check."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #380: the effects drawn in view3d frames, and the reference and golden calls."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #380: view3d's timings come from wgpu-profiler, as the criterion says."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
+        }
+      }
+    },
+    "crates/deep-canvas-scene3d/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #378: the registry it registers through, the camera it evaluates and the ops module its math goes through."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #378: a document's channels evaluated at t, so a figure's parts and an orbiting camera move."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #378: the one shaper, which shapes a label once per string."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #378: documents, looks and kind entries."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #378: a label's coverage mask and an anchored overlay's picture, rasterized on the CPU."
+        }
+      }
+    },
+    "crates/deep-scene3d-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the evaluated scene, look and passes it draws."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #378: the GPU layer's device, encode jobs and render-module interface it draws through."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #378: instance records and uniforms written to GPU buffers."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #378: pipelines, render bundles that replay, and the linear, object-ID and depth targets."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #380: times scene3d's own passes (shadow map, geometry, output) in the same frame as the effects."
+        }
+      }
+    },
+    "crates/deep-canvas-effects/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #380: the registry the effects module registers its passes and fixture through, and the core's ops for its constants."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #380: GPU operators are JSON documents (gpu.step@1); the check reads them and the shipped library writes them."
+        }
+      }
+    },
+    "crates/deep-effects-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #380: the operator check, the WGSL the core writes and the CPU reference interpreter."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #380: the GPU layer's device and encode jobs the effect passes run as."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #380: scene3d's post hook, which hands the effects its linear, depth, ID and shadow-map targets."
+        },
+        "naga": {
+          "spec": "^30",
+          "why": "Issue #380: validates each operator's WGSL with every check and no optional capability before wgpu sees it."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #380: the effect passes' pipelines, bind groups and storage buffers."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #380: the criterion names it: per-pass GPU timestamps for the frame budget."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #380: operator inputs and the frame uniform written to GPU buffers."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #380: operators and their parameters as JSON."
+        }
+      }
+    },
+    "crates/deep-marks-gpui/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #380: the stroke and fill tessellation a mark's mesh comes from."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #380: the window a mark's mesh is painted into, as one GPUI path."
         }
       }
     }

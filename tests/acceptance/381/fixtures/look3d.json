@@ -1,0 +1,79 @@
+{
+  "id": "depth-381",
+  "format": 1,
+  "basis": "physical",
+  "license": "Apache-2.0",
+  "description": "The #381 acceptance look for labels in depth: #378's acceptance look (the clean look's status map and fonts, a black ground, tone map none at the exposure whose scale is 1, the finish at identity, no deband) with only the roles these fixtures paint.",
+  "palette": {
+    "black": "#000000",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "lagoon": "#1aa3c8",
+    "red": "#ff0000",
+    "green": "#00ff00"
+  },
+  "roles": {
+    "ground": "black",
+    "ink": "graphite",
+    "muted": "slate",
+    "accent": "lagoon",
+    "label-a": "red",
+    "label-b": "green"
+  },
+  "themes": {
+    "light": {},
+    "dark": {}
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "tone_map": "none",
+  "exposure": -0.2630344058337938,
+  "finish": [],
+  "deband": "none"
+}

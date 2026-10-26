@@ -13,7 +13,7 @@ import type { Case, CaseResult, Declared, Driven, Fake, FakeProof, FamilyName, F
 const FACTS_OPERATIONS = ['readUsage', 'classifyStop', 'skills'] as const;
 
 /** A refusal in error@1's shape at a pointer into the fill. */
-const refuse = (code: string, path: string, actual: unknown, remediation: string): ContractError =>
+export const refuse = (code: string, path: string, actual: unknown, remediation: string): ContractError =>
   new ContractError({ code, retryable: false, remediation, path, actual: typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? '', evidence: [] });
 
 /** Refuses a fill the contract can't load, at the field that fails, before any case runs. */
@@ -160,7 +160,8 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
 }
 
 const PRECEDENCE: Verdict[] = ['FAIL', 'BLOCKED', 'INVALID', 'INCONCLUSIVE', 'PASS'];
-const worst = (verdicts: Verdict[]): Verdict => (verdicts.length ? PRECEDENCE.find((v) => verdicts.includes(v))! : 'INCONCLUSIVE');
+/** The verdict that decides a run: the first of PRECEDENCE among its verdicts; none is INCONCLUSIVE. */
+export const worst = (verdicts: Verdict[]): Verdict => (verdicts.length ? PRECEDENCE.find((v) => verdicts.includes(v))! : 'INCONCLUSIVE');
 
 /** The fakes that mishandle an item the case declares. */
 const fakesOf = (kit: Kit, c: Case): Fake[] => kit.fakes.filter((f) =>

@@ -1,0 +1,15 @@
+// A first-party test package (#350 AC4), loaded from the release in the hub, so every load runs in this one
+// process: each load registers a tool.before handler and an action. Every call of any load's handler counts on one
+// counter in the process, so a handler a disabled load left behind shows as more than one count per hook.
+const g = globalThis as any;
+
+export default function (deep: any): void {
+  deep.on('tool.before', async () => {
+    g.__dh350CycleHubCalls = (g.__dh350CycleHubCalls ?? 0) + 1;
+    return { context: `cyclehub handler calls so far: ${g.__dh350CycleHubCalls}` };
+  });
+  deep.registerAction('ext.cyclehub.ping', { declares: 'read', input: { type: 'object' } }, async () => {
+    g.__dh350CycleHubPings = (g.__dh350CycleHubPings ?? 0) + 1;
+    return { pings: g.__dh350CycleHubPings };
+  });
+}

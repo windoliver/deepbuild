@@ -1,0 +1,8 @@
+// B (#350 AC9), from outside DeepBuild's signed release, sandboxed: it provides the reading `ext.b.feed@1`, whose
+// value is `{ n }`, the number of reads it has answered. FEED is the same schema the test digests for A's use.
+const FEED = { type: 'object', properties: { n: { type: 'integer' } }, required: ['n'], additionalProperties: false };
+
+export default function (deep: any): void {
+  let n = 0;
+  deep.provide('ext.b.feed@1', 'reading', FEED, async () => ({ n: ++n }));
+}

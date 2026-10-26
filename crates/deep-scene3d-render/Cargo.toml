@@ -1,0 +1,20 @@
+[package]
+name = "deep-scene3d-render"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #378: scene3d's render module on the GPU layer (#377). Each 3D writer layer is a batch:
+# its instance records live in buffers written only where a record changed, and its draws are
+# recorded once into a render bundle that replays every frame while its draw key (the pipelines,
+# bind groups and buffers it binds, by resource, and its draws with their counts) holds. Depth is
+# reversed Z with an infinite far plane; an object-ID target carries each item's pick ID; one
+# output pass applies the look's exposure and tone map and encodes sRGB into the slot.
+[dependencies]
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-gpu = { path = "../deep-gpu" }
+bytemuck = { version = "1", features = ["derive"] }
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
+wgpu-profiler = "0.28"

@@ -1,0 +1,37 @@
+// A test package of actions (#350 AC4, AC5, AC7), loaded in the sandbox or, from the release, in the hub:
+// - where: says which target the host handed it and which version of the package ran, and how many calls this load
+//   took; appends the event its input carries, if any (its effect on state)
+// - scoped: appends its input's `before` event, waits `wait` ms, appends its `after` event: two calls of the
+//   extension's own across an await
+// - bump: input `{ count: integer }` and nothing else; says how many times it ran
+// - slow: waits until the file its input names exists (a hub package can read it), then appends its input's event
+//   and says which version ran
+import { existsSync, readFileSync } from 'node:fs';
+
+const VERSION: string = JSON.parse(readFileSync(new URL('./deepbuild.json', import.meta.url), 'utf8')).version;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const read = (input: object) => ({ declares: 'read', input });
+
+export default function (deep: any): void {
+  let calls = 0;
+  let bumps = 0;
+  deep.registerAction('ext.acts.where', read({ type: 'object' }), async (input: any, ctx: any) => {
+    calls++;
+    if (input?.event) await deep.record.append(input.event);
+    return { target: ctx?.target ?? null, version: VERSION, calls };
+  });
+  deep.registerAction('ext.acts.scoped', read({ type: 'object' }), async (input: any) => {
+    await deep.record.append(input.before);
+    await sleep(input.wait);
+    await deep.record.append(input.after);
+    return { done: input.after.data.title };
+  });
+  deep.registerAction('ext.acts.bump', read({
+    type: 'object', properties: { count: { type: 'integer' } }, required: ['count'], additionalProperties: false,
+  }), async (input: any) => ({ count: input.count, bumps: ++bumps }));
+  deep.registerAction('ext.acts.slow', read({ type: 'object' }), async (input: any) => {
+    while (!existsSync(input.go)) await sleep(20);
+    await deep.record.append(input.event);
+    return { from: VERSION };
+  });
+}

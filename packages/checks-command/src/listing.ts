@@ -124,6 +124,8 @@ export function unrun(listed: Listed[], ran: Seen[], left: Left[], filters: Filt
   const nodeIn = patterns('--test-name-pattern');
   const nodeOut = patterns('--test-skip-pattern');
   const tags = filters.some((f) => f.option === '--tags-filter');
+  // A listed test is looked for only among the runs and leavings of its own file.
+  const leftIn = byFile(left);
   const chosen = (l: Listed): boolean => {
     if (!l.names) return !names.some((p) => !p.test(l.test));
     const all = nodeNames(l.names);
@@ -132,16 +134,16 @@ export function unrun(listed: Listed[], ran: Seen[], left: Left[], filters: Filt
   // The tests that ran, by file and by name; and those that could be a listed test's parametrized cases (`test_x[1]`)
   // by the name before their first `[`, which is the listed test's own name, or the start of it where that holds a `[`.
   const base = (test: string): string => test.slice(0, test.indexOf('['));
-  const byFile = new Map<string | null, { byName: Map<string, Seen[]>; cases: Map<string, Seen[]> }>();
+  const ranBy = new Map<string | null, { byName: Map<string, Seen[]>; cases: Map<string, Seen[]> }>();
   const push = (into: Map<string, Seen[]>, key: string, r: Seen): void => { const same = into.get(key); if (same) same.push(r); else into.set(key, [r]); };
   for (const r of ran) {
-    let same = byFile.get(r.file);
-    if (!same) byFile.set(r.file, (same = { byName: new Map(), cases: new Map() }));
+    let same = ranBy.get(r.file);
+    if (!same) ranBy.set(r.file, (same = { byName: new Map(), cases: new Map() }));
     push(same.byName, r.test, r);
     if (r.test.includes('[')) push(same.cases, base(r.test), r);
   }
   const ranListed = (l: Listed): boolean => {
-    const same = byFile.get(l.file);
+    const same = ranBy.get(l.file);
     if (!same) return false;
     const at = (r: Seen): boolean => r.line === undefined || r.line === l.line;
     return (same.byName.get(l.names?.at(-1) ?? l.test)?.some(at) ?? false)
@@ -149,5 +151,15 @@ export function unrun(listed: Listed[], ran: Seen[], left: Left[], filters: Filt
   };
   return listed.filter((l) => !ranListed(l)
     && chosen(l) && !(tags && l.tagged) && !linesOf(l, filters)?.every((n) => n !== l.line)
-    && !left.some((x) => x.file === l.file && (runs(l, x.test) || l.test.startsWith(`${x.test}::`)) && named(x.filter)));
+    && !leftIn.get(l.file)?.some((x) => (runs(l, x.test) || l.test.startsWith(`${x.test}::`)) && named(x.filter)));
+}
+/** Runs or leavings grouped by the file each names. */
+function byFile<T extends { file: string | null }>(items: T[]): Map<string | null, T[]> {
+  const by = new Map<string | null, T[]>();
+  for (const item of items) {
+    const group = by.get(item.file);
+    if (group) group.push(item);
+    else by.set(item.file, [item]);
+  }
+  return by;
 }
