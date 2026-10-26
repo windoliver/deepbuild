@@ -722,9 +722,9 @@ test("the change runs on what its own lock installs, so a package its worktree's
   assert.notEqual(result.status, 0, show(result));
 });
 
-// StrykerJS killed by the lane's own cap (spawnSync's timeout) leaves no report, no stdout and no stderr. That is
-// a BLOCKED mutation lane naming the signal, never a TypeError from reading the mutants it didn't write.
-test('a StrykerJS run that dies by a signal with no report makes the mutation lane BLOCKED, naming the signal', (t) => {
+// A scene whose node_modules/.bin/stryker is `body`, a script Node runs in StrykerJS's place: the scene's .bin is a
+// link to this checkout's, replaced by a folder of links to everything but stryker.
+function fakeStryker(t, body) {
   const source = 'packages/calc/src/calc.ts';
   const scene = repo(t, {
     issues: { [ISSUE]: ['Adds'] },
@@ -738,18 +738,34 @@ test('a StrykerJS run that dies by a signal with no report makes the mutation la
       message: `Add total\n\nPart of #${ISSUE}`,
     }],
   });
-  // The scene's node_modules/.bin is a link to this checkout's: replace it with a folder of links, all but stryker.
   const bin = join(scene.cwd, 'node_modules/.bin');
   const realBin = join(root, 'node_modules/.bin');
   rmSync(bin);
   mkdirSync(bin);
   for (const entry of readdirSync(realBin)) if (entry !== 'stryker') symlinkSync(join(realBin, entry), join(bin, entry));
-  writeFileSync(join(bin, 'stryker'), "process.kill(process.pid, 'SIGTERM');\nsetTimeout(() => undefined, 10_000);\n");
+  writeFileSync(join(bin, 'stryker'), body);
+  return scene;
+}
+
+// StrykerJS killed by the lane's own cap (spawnSync's timeout) leaves no report, no stdout and no stderr. That is
+// a BLOCKED mutation lane naming the signal, never a TypeError from reading the mutants it didn't write.
+test('a StrykerJS run that dies by a signal with no report makes the mutation lane BLOCKED, naming the signal', (t) => {
+  const scene = fakeStryker(t, "process.kill(process.pid, 'SIGTERM');\nsetTimeout(() => undefined, 10_000);\n");
   const result = proof(scene, ['mutation']);
   assert.equal(result.status, 1, show(result));
   assert.ok(!result.out.includes('TypeError'), show(result));
   const blocked = problems(result, 'mutation');
   assert.ok(blocked.some((found) => /^BLOCKED mutation: StrykerJS could not run .*SIGTERM.*no report/.test(found)), show(result));
+});
+
+// A StrykerJS the lane itself stops, for flooding its output past spawnSync's maxBuffer, dies by the same SIGTERM
+// as the cap: the lane names the reason spawnSync gives (ENOBUFS here, ETIMEDOUT for the cap), so the two read apart.
+test('a StrykerJS run stopped for its output names why, apart from the lane\'s own cap', (t) => {
+  const scene = fakeStryker(t, 'const chunk = Buffer.alloc(1 << 24);\n(function flood() { while (process.stdout.write(chunk)); process.stdout.once(\'drain\', flood); })();\n');
+  const result = proof(scene, ['mutation']);
+  assert.equal(result.status, 1, show(result));
+  const blocked = problems(result, 'mutation');
+  assert.ok(blocked.some((found) => /^BLOCKED mutation: StrykerJS could not run .*killed by SIGTERM \(ENOBUFS\).*no report/.test(found)), show(result));
 });
 
 // A run folder the lane can't remove (a child still writing in it, a file it can't delete) must not replace the
