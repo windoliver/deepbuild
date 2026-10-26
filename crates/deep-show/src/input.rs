@@ -215,8 +215,46 @@ impl Hub<'_> {
     /// The panel's scope over the revisions it shows and compares against.
     fn state(&self, panel: &str) -> Value {
         match (self.scopes.get(panel), self.panel_document(panel)) {
-            (Some(s), Some((doc, before))) => s.scope.to_json(&doc, before.as_ref()),
+            (Some(s), Some((doc, before))) => {
+                s.scope
+                    .to_json(&doc, before.as_ref(), &self.scenario.verdicts)
+            }
             _ => Value::Null,
+        }
+    }
+
+    /// `view`: the panel's view drawn by render-back, as a PNG in the evidence store: the
+    /// revision it shows with what it hides invisible and its lens's colors, never saved.
+    pub fn view(&mut self, panel: &str) -> Value {
+        if let Err(e) = self.panel_scope(panel) {
+            return e;
+        }
+        let (Some(s), Some((doc, before))) = (self.scopes.get(panel), self.panel_document(panel))
+        else {
+            return refused("not_presented");
+        };
+        let shown = crate::shared::drawable(&s.scope.view_document(&doc, before.as_ref()));
+        let drawn = match self.renderer.prepare(
+            shown.as_object().expect("a document is an object"),
+            0,
+            &self.look.light,
+            self.look.status.as_ref(),
+            &self.record(),
+            &self.scenario.evidence,
+        ) {
+            Ok(d) => d,
+            Err(u) => return json!({"code": u.code, "path": u.path}),
+        };
+        let [w, h] = drawn.frame.size;
+        let size = [
+            w.round().clamp(1.0, 8192.0) as u16,
+            h.round().clamp(1.0, 8192.0) as u16,
+        ];
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let png = crate::snapshot::png(self.renderer.raster(&drawn, size, Some(ground)), size);
+        match crate::evidence::put(&self.scenario.evidence, &png) {
+            Ok(sha) => json!({"snapshot": {"sha256": sha, "w": size[0], "h": size[1]}}),
+            Err(_) => refused("not_written"),
         }
     }
 

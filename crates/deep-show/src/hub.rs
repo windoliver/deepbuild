@@ -294,6 +294,8 @@ pub enum Call {
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
+    View(String),
     /// The parity suite's manifest (#138).
     Manifest,
     /// The check catalog (#138).
@@ -356,6 +358,9 @@ pub struct Scenario {
     pub window: Option<[f64; 2]>,
     /// The display the window is on, px: full screen fills it (#383).
     pub display: Option<[f64; 2]>,
+    /// The record's verdicts by ID, each as `verdict.made` writes it, its `key` naming the
+    /// record states it read (#383: what a change to a selected value would make stale).
+    pub verdicts: Map<String, Value>,
     pub card: Option<Card>,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
@@ -754,6 +759,7 @@ impl<'a> Hub<'a> {
             Call::Input { panel, event } => self.input(panel, event),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::View(panel) => self.view(panel),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
