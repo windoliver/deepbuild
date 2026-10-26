@@ -437,17 +437,35 @@ pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Aff
     m
 }
 
-/// An item's world transform, without its size: its evaluated `at`, which the motion evaluator
-/// has already composed over its parents' (child-of parenting), so they aren't added again.
+/// An item's world transform, without its size: its parents' composed over its own, in 3D. The
+/// items carry their own transforms (`Program::evaluate_local`): motion's child-of parenting
+/// turns a child only about z, and composed here again it would add the parent twice.
 fn world(items: &Map<String, Value>, id: &str) -> Affine3 {
-    match items.get(id) {
+    let mut m = match items.get(id) {
         Some(item) => local(item, [1.0; 3]),
-        None => [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-        ],
+        None => {
+            return [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+            ]
+        }
+    };
+    let mut seen = vec![id.to_string()];
+    let mut at = items
+        .get(id)
+        .and_then(|i| i.get("parent"))
+        .and_then(Value::as_str);
+    while let Some(p) = at {
+        if seen.iter().any(|s| s == p) {
+            break;
+        }
+        let Some(parent) = items.get(p) else { break };
+        m = matmul(&local(parent, [1.0; 3]), &m);
+        seen.push(p.to_string());
+        at = parent.get("parent").and_then(Value::as_str);
     }
+    m
 }
 
 fn origin(m: &Affine3) -> Vec3 {
@@ -670,7 +688,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         path: r.path,
     })?;
     let mut state = program.state();
-    program.evaluate(t, eval::Validity::Full, &mut state);
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
     let items = eval::items(map, &program, &state);
     let size = match map
         .get("size")
@@ -1107,15 +1125,28 @@ mod tests {
                 "child": child,
             }
         });
-        let scene = evaluate(&doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
-        let placed = scene
-            .layers
-            .iter()
-            .flat_map(|l| &l.solids)
-            .find(|s| s.id == "child")
-            .expect("the child is drawn");
-        // The evaluated `at` already holds the parent's position; adding it again puts the
-        // child at x = 11.
-        assert_eq!(origin(&placed.model), [6.0, 0.0, 0.0]);
+        let child_at = |doc: &Value| {
+            let scene = evaluate(doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
+            let placed = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .find(|s| s.id == "child")
+                .expect("the child is drawn")
+                .model;
+            origin(&placed)
+        };
+        // Adding the parent twice puts the child at x = 11.
+        assert_eq!(child_at(&doc), [6.0, 0.0, 0.0]);
+        // A parent turned a quarter about y carries the child's offset round with it, in 3D:
+        // the child is 1 m from the parent along z, not along x as a turn about z alone leaves it.
+        let mut turned = doc.clone();
+        turned["items"]["parent"]["at"]["rot"] = json!([0, 90, 0]);
+        let [x, y, z] = child_at(&turned);
+        assert!(
+            (x - 5.0).abs() < 1e-9 && y.abs() < 1e-9 && (z.abs() - 1.0).abs() < 1e-9,
+            "the child at {:?}",
+            [x, y, z]
+        );
     }
 }
