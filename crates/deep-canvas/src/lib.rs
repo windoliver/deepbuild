@@ -19,3 +19,4 @@ pub mod schedule;
 pub mod scope;
 pub mod session;
 pub mod show;
+pub mod template;

@@ -46,6 +46,8 @@ pub enum Planted {
     EncodesEveryFrame,
     ReplaysAfterAdd,
     PairsNewestSlot,
+    /// #381's: labels shaped at a fixed em for masks of their own, nothing in the atlas.
+    LabelMask,
     /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
     LoadsEverything,
     SlowGpuFrame,
@@ -67,6 +69,7 @@ impl Planted {
             "encodes_every_frame" => Planted::EncodesEveryFrame,
             "replays_after_add" => Planted::ReplaysAfterAdd,
             "pairs_newest_slot" => Planted::PairsNewestSlot,
+            "label_mask" => Planted::LabelMask,
             "loads_everything" => Planted::LoadsEverything,
             "slow_gpu_frame" => Planted::SlowGpuFrame,
             _ => return None,

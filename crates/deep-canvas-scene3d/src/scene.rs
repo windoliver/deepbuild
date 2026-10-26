@@ -9,18 +9,17 @@
 //! by `size`; a cylinder's axis is +Y.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use deep_canvas::camera::{screen_basis, Offsets, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
 use deep_canvas::ops::{cos, rad, sin, sqrt, tan};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
-use deep_text::{Role, Shaper};
+use deep_text::Role;
 use serde_json::{Map, Value};
-use vello_cpu::Resources;
 
-use crate::label::{mask, Mask};
+pub use crate::label::Labels;
+use crate::label::{AtlasPage, Glyph, WORLD_EM_PX};
 use crate::look::Look3;
 
 /// Why a document can't be drawn: a closed-list code and the path it names.
@@ -46,6 +45,9 @@ pub const KINDS: [&str; 6] = [
     "mark.point@1",
     "mark.text@1",
 ];
+
+/// The 2D overlay a 3D writer layer's anchor places, drawn by scene3d too.
+pub const OVERLAY: &str = "overlay.frame@1";
 
 /// Whether an item of `kind` (its text, `family.name@major`) is one of scene3d's marks.
 pub fn is_3d(kind: &str) -> bool {
@@ -114,10 +116,15 @@ pub enum Facing {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Label {
     pub id: String,
-    /// The mask's key: the text and its font role.
-    pub key: (String, String),
-    pub mask: Arc<Mask>,
+    pub text: String,
+    pub role: Role,
+    /// The shaped run's glyphs, each with its place in the core's atlas.
+    pub glyphs: Vec<Glyph>,
+    /// The run's box, in px of the size it was shaped at.
+    pub bounds: [f64; 2],
     pub pos: Vec3,
+    /// One em: the label's size, in m with `world`, else in px.
+    pub em: f64,
     /// The quad's width and height, in m with `world`, else in px.
     pub quad: [f64; 2],
     pub world: bool,
@@ -325,39 +332,6 @@ impl Camera {
     }
 }
 
-/// Labels' masks, shaped and rasterized once per text and font role.
-pub struct Labels {
-    shaper: Shaper,
-    resources: Resources,
-    masks: BTreeMap<(String, String), Arc<Mask>>,
-}
-
-impl Default for Labels {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Labels {
-    pub fn new() -> Self {
-        Labels {
-            shaper: Shaper::new(),
-            resources: Resources::new(),
-            masks: BTreeMap::new(),
-        }
-    }
-
-    fn get(&mut self, text: &str, role: Role) -> Arc<Mask> {
-        let key = (text.to_string(), role.name().to_string());
-        if let Some(m) = self.masks.get(&key) {
-            return m.clone();
-        }
-        let m = Arc::new(mask(&mut self.shaper, &mut self.resources, text, role));
-        self.masks.insert(key, m.clone());
-        m
-    }
-}
-
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -367,6 +341,8 @@ pub struct Scene {
     /// The 3D writer layers that draw something, in layer order.
     pub layers: Vec<Layer3>,
     pub overlays: Vec<Overlay>,
+    /// The core's glyph atlas pages the labels' glyphs sample, by page number.
+    pub pages: Vec<AtlasPage>,
 }
 
 fn num(v: Option<&Value>) -> Option<f64> {
@@ -793,17 +769,27 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         params.get("size_space").and_then(Value::as_str) == Some("world");
                     let size =
                         num(params.get("size")).unwrap_or(if world_space { 0.25 } else { 13.0 });
-                    let mask = labels.get(text, role);
-                    let [we, he] = mask.ems();
+                    // A screen-size label's run is a 2D text's of that text, font and size.
+                    let run_size = if world_space {
+                        WORLD_EM_PX
+                    } else {
+                        size as f32
+                    };
+                    let (run_box, glyphs) = labels.run(text, role, run_size);
+                    let shaped_at = glyphs.first().map_or(run_size, |g| g.size);
+                    let to_em = size / f64::from(shaped_at);
                     let m = world(&items, id);
                     let pos = origin(&m);
                     bounds.push(pos);
                     layer.labels.push(Label {
                         id: id.clone(),
-                        key: (text.to_string(), role.name().to_string()),
-                        mask,
+                        text: text.to_string(),
+                        role,
+                        glyphs,
+                        bounds: run_box,
                         pos,
-                        quad: [we * size, he * size],
+                        em: size,
+                        quad: [run_box[0] * to_em, run_box[1] * to_em],
                         world: world_space,
                         facing,
                         axes: [
@@ -813,7 +799,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                         color: paint(look, params, &path)?,
                     });
                 }
-                "overlay.frame@1" => overlay_items.push((layer_id.clone(), id.clone())),
+                OVERLAY => overlay_items.push((layer_id.clone(), id.clone())),
                 _ => {}
             }
         }
@@ -839,6 +825,23 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         &cam_path,
     )?;
 
+    // Each label's glyphs from the atlas at its size on screen; a frame that found the atlas full
+    // starts it over and places them all again.
+    labels.begin();
+    for pass in 0..2 {
+        for l in layers.iter_mut().flat_map(|layer| layer.labels.iter_mut()) {
+            let em_px = if l.world {
+                l.em * camera.px_per_m(camera.to_view(l.pos)[2])
+            } else {
+                l.em
+            };
+            labels.place(&l.text, l.role, &mut l.glyphs, l.bounds, em_px);
+        }
+        if pass == 1 || !labels.make_room() {
+            break;
+        }
+    }
+
     let mut overlays = Vec::new();
     for (layer, id) in overlay_items {
         overlays.push(overlay(&items, &layer, &id, &camera, look)?);
@@ -849,6 +852,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         ground: look.ground,
         layers,
         overlays,
+        pages: labels.pages(),
     })
 }
 

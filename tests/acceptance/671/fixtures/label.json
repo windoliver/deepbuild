@@ -1,0 +1,95 @@
+{
+  "format": 1,
+  "profile": "scene",
+  "title": "Two hundred boxes under an orbiting camera",
+  "description": "Two test agents' document: 200 one-metre boxes in a 20 by 10 grid on a ground plane under a perspective camera that orbits once in 5 s, a beacon 1.5 m above box-02-01 for measuring, and in a writer layer of its own a 2D label anchored there.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "transport": {
+    "span": "6s"
+  },
+  "requires": {
+    "modules": {
+      "scene3d": "^1"
+    }
+  },
+  "items": {
+    "tag-frame": {
+      "id": "tag-frame",
+      "kind": "frame@1",
+      "name": "Label frame",
+      "order": "a0",
+      "params": {
+        "box": [
+          0,
+          0,
+          48,
+          40
+        ]
+      }
+    },
+    "tag": {
+      "id": "tag",
+      "kind": "rect@1",
+      "name": "Label tag",
+      "order": "a1",
+      "parent": "tag-frame",
+      "params": {
+        "box": [
+          0,
+          0,
+          48,
+          16
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "pin": {
+      "id": "pin",
+      "kind": "circle@1",
+      "name": "Label pin",
+      "order": "a2",
+      "parent": "tag-frame",
+      "params": {
+        "center": [
+          24,
+          32
+        ],
+        "r": 3,
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      }
+    },
+    "label": {
+      "id": "label",
+      "kind": "overlay.frame@1",
+      "name": "Label on box 02-01",
+      "order": "a3",
+      "params": {
+        "frame": "tag-frame",
+        "anchor": {
+          "item": "box-02-01",
+          "point": [
+            0,
+            1.5,
+            0
+          ]
+        },
+        "offset": [
+          -24,
+          -32
+        ]
+      }
+    }
+  }
+}
