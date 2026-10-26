@@ -1,0 +1,90 @@
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/opening-issues-review-f43df6/tests/acceptance/331
+
+ ❯ install.test.ts (5 tests | 5 failed) 80ms
+   ❯ AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install, naming the route, the port, the process or the worktree (5)
+     × AC4 installing the planted environment ready-before-health through deep.registerEnvironment is refused at install by environment@1, naming the health route 47ms
+     × AC4 installing the planted environment unleased-port through deep.registerEnvironment is refused at install by environment@1, naming the port 3ms
+     × AC4 installing the planted environment leaves-grandchild through deep.registerEnvironment is refused at install by environment@1, naming the process by PID 2ms
+     × AC4 installing the planted environment starts-in-worktree through deep.registerEnvironment is refused at install by environment@1, naming the worktree it started in, by path 1ms
+     × AC4 env-local, registered through deep.registerEnvironment, installs with environment@1 passed on Installed.kits 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  install.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install, naming the route, the port, the process or the worktree > AC4 installing the planted environment ready-before-health through deep.registerEnvironment is refused at install by environment@1, naming the health route
+AssertionError: the planted environment ready-before-health installed (kits: []); environment@1 must refuse it at install
+ ❯ install.test.ts:98:16
+     96|       try {
+     97|         const installed = await host.install({ from: plants[name], bui…
+     98|         expect.fail(`the planted environment ${name} installed (kits: …
+       |                ^
+     99|       } catch (error) {
+    100|         if ((error as Error).message.startsWith('the planted environme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  install.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install, naming the route, the port, the process or the worktree > AC4 installing the planted environment unleased-port through deep.registerEnvironment is refused at install by environment@1, naming the port
+AssertionError: the planted environment unleased-port installed (kits: []); environment@1 must refuse it at install
+ ❯ install.test.ts:98:16
+     96|       try {
+     97|         const installed = await host.install({ from: plants[name], bui…
+     98|         expect.fail(`the planted environment ${name} installed (kits: …
+       |                ^
+     99|       } catch (error) {
+    100|         if ((error as Error).message.startsWith('the planted environme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  install.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install, naming the route, the port, the process or the worktree > AC4 installing the planted environment leaves-grandchild through deep.registerEnvironment is refused at install by environment@1, naming the process by PID
+AssertionError: the planted environment leaves-grandchild installed (kits: []); environment@1 must refuse it at install
+ ❯ install.test.ts:98:16
+     96|       try {
+     97|         const installed = await host.install({ from: plants[name], bui…
+     98|         expect.fail(`the planted environment ${name} installed (kits: …
+       |                ^
+     99|       } catch (error) {
+    100|         if ((error as Error).message.startsWith('the planted environme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  install.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install, naming the route, the port, the process or the worktree > AC4 installing the planted environment starts-in-worktree through deep.registerEnvironment is refused at install by environment@1, naming the worktree it started in, by path
+AssertionError: the planted environment starts-in-worktree installed (kits: []); environment@1 must refuse it at install
+ ❯ install.test.ts:98:16
+     96|       try {
+     97|         const installed = await host.install({ from: plants[name], bui…
+     98|         expect.fail(`the planted environment ${name} installed (kits: …
+       |                ^
+     99|       } catch (error) {
+    100|         if ((error as Error).message.startsWith('the planted environme…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  install.test.ts > AC4 #331.5c02ca8a env-local passes environment@1, whose four planted environments each fail it at install, naming the route, the port, the process or the worktree > AC4 env-local, registered through deep.registerEnvironment, installs with environment@1 passed on Installed.kits
+AssertionError: the install ran environment@1's kit on env-local: []: expected [] to deep equally contain { slot: 'environment@1', …(2) }
+
+- Expected:
+{
+  "fill": "local",
+  "slot": "environment@1",
+  "verdict": "PASS",
+}
+
++ Received:
+[]
+
+ ❯ install.test.ts:112:121
+    110|     const { host, local } = await world();
+    111|     const installed = await host.install({ from: local, builtBy: null …
+    112|     expect(installed.kits ?? [], `the install ran environment@1's kit …
+       |                                                                                                                         ^
+    113|     expect((await host.installed()).map((p) => p.id)).toContain('deepb…
+    114|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  13:27:38
+   Duration  268ms (tests 39%, import 38%, transform 22%, worker 1%)
+
