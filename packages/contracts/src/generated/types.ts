@@ -1183,6 +1183,32 @@ export interface ClaimMade {
   evidence?: Array<string>;
 }
 
+/** claim.made@2 */
+export interface ClaimMadeV2 {
+  v: 2;
+  id: string;
+  kind: "claim.made";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    attempt: number;
+    commit: string;
+    scope: "session" | "child" | "task";
+    predictions: Array<{
+      check: string;
+      expects: "passed" | "failed";
+      at: number;
+    }>;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.sent_back@1 */
 export interface ClaimSentBack {
   v: 1;
@@ -1259,6 +1285,42 @@ export interface DecisionCreated {
     scope: string;
     answer: string;
     ask: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** decision.overruled@1 */
+export interface DecisionOverruled {
+  v: 1;
+  id: string;
+  kind: "decision.overruled";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** default.undone@1 */
+export interface DefaultUndone {
+  v: 1;
+  id: string;
+  kind: "default.undone";
+  subject: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    deadline: number;
   };
   evidence?: Array<string>;
 }
@@ -1428,6 +1490,16 @@ export interface Error {
 /** error@2 */
 export interface ErrorV2 {
   code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+}
+
+/** error@3 */
+export interface ErrorV3 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large" | "fell_behind";
   retryable: boolean;
   remediation: string;
   path: string;

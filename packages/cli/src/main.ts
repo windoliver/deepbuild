@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, relative, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import type { Verdict } from '@deepbuild/conformance';
 import { replaySession } from '../../../adapters/index.mjs';
@@ -113,8 +115,37 @@ async function doctor(json: boolean): Promise<number> {
   return items.some((i) => i.level === 'fail') ? 1 : 0;
 }
 
+// `deep debug bundle`: the hub's logs, the versions and the doctor's items in one gzipped JSON file under
+// ~/.deepbuild/debug, readable only by you, its path printed last. Every text in it is scrubbed as evidence is,
+// with the control token among the values held, so no form of the token or of a secret-shaped string goes in
+// (#34's slice of #19's bundle).
+async function debugBundle(): Promise<number> {
+  const { scrubText } = await import('@deepbuild/evidence');
+  const { doctor: telemetryDoctor } = await import('@deepbuild/otlp');
+  const root = join(homedir(), '.deepbuild');
+  const token = existsSync(join(root, 'control.token')) ? readFileSync(join(root, 'control.token'), 'utf8').trim() : '';
+  const scrub = (text: string) => scrubText(text, { held: token ? [token] : [] });
+  const files = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? files(path) : [path];
+  }) : []);
+  const logs = Object.fromEntries(files(join(root, 'logs')).map((path) => [relative(root, path), scrub(readFileSync(path, 'utf8'))]));
+  const bundle = {
+    versions: { deepbuild: version(), node: process.version, platform: `${process.platform}-${process.arch}` },
+    doctor: telemetryDoctor(process.env).map((item) => JSON.parse(scrub(JSON.stringify(item))) as unknown),
+    logs,
+  };
+  const dir = join(root, 'debug');
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const path = join(dir, `bundle-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`);
+  writeFileSync(path, gzipSync(JSON.stringify(bundle)), { mode: 0o600 });
+  chmodSync(path, 0o600);
+  console.log(path);
+  return 0;
+}
+
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n\nRepository skeleton.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor' && args.slice(1).every((arg) => arg === '--json') && args.length <= 2) {
   process.exitCode = await doctor(args.includes('--json'));
 } else if (args.length === 1 && args[0] === '--version') {
@@ -134,6 +165,8 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
 } else if (args.length === 1 && args[0] === 'mcp') {
   const { runMcp } = await import('@deepbuild/hub');
   process.exitCode = await runMcp();
+} else if (args.length === 2 && args[0] === 'debug' && args[1] === 'bundle') {
+  process.exitCode = await debugBundle();
 } else if (args[0] === 'run' && args[1] === '--result' && args[2] && args.length === 3) {
   process.exitCode = await run(args[2]);
 } else if (args[0] === 'run') {

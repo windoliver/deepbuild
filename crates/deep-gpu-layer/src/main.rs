@@ -10,6 +10,7 @@ mod frames;
 mod plugin;
 mod reference;
 mod scene;
+mod view3d;
 mod window;
 mod worker;
 
@@ -37,6 +38,13 @@ pub enum Planted {
     WaitsOnGpu,
     CompilesOnUiThread,
     ExposesGpuToPanels,
+    /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
+    ForwardZ,
+    EncodesTwice,
+    SkipsEncode,
+    EncodesEveryFrame,
+    ReplaysAfterAdd,
+    PairsNewestSlot,
 }
 
 impl Planted {
@@ -49,6 +57,12 @@ impl Planted {
             "waits_on_gpu" => Planted::WaitsOnGpu,
             "compiles_on_ui_thread" => Planted::CompilesOnUiThread,
             "exposes_gpu_to_panels" => Planted::ExposesGpuToPanels,
+            "forward_z" => Planted::ForwardZ,
+            "encodes_twice" => Planted::EncodesTwice,
+            "skips_encode" => Planted::SkipsEncode,
+            "encodes_every_frame" => Planted::EncodesEveryFrame,
+            "replays_after_add" => Planted::ReplaysAfterAdd,
+            "pairs_newest_slot" => Planted::PairsNewestSlot,
             _ => return None,
         })
     }
@@ -232,6 +246,7 @@ impl App {
             Some("declare_dark") => compare::declare(self, call),
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, call),
+            Some("view3d") => view3d::call(self, out, call),
             _ => refused("bad_input", "unknown call"),
         }
     }

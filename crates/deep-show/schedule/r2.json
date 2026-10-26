@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad",
+  "set_digest": "1f2c227ce05ae6e0b5acf9d4e8aa5ecaa976f71cff09a11380cd63f3b3a66b52",
   "phases": {
     "validate": [
       {
