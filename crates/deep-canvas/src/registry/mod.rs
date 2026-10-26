@@ -886,9 +886,7 @@ impl Sealed {
             .iter()
             .flat_map(|m| m.shapes.kinds.iter())
             .find(|k| {
-                k.entry.full_name() == full
-                    && k.entry.version(major).is_some()
-                    && !k.draws_as.is_empty()
+                k.entry.is(&full) && k.entry.version(major).is_some() && !k.draws_as.is_empty()
             })
             .map(|k| k.draws_as.as_str())
     }
@@ -899,7 +897,7 @@ impl Sealed {
         self.modules
             .iter()
             .flat_map(|m| m.shapes.kinds.iter())
-            .find(|k| k.entry.full_name() == full && k.entry.version(major).is_some())
+            .find(|k| k.entry.is(&full) && k.entry.version(major).is_some())
             .and_then(|k| k.draw)
     }
 
@@ -912,7 +910,7 @@ impl Sealed {
             .iter()
             .flat_map(|m| m.shapes.kinds.iter())
             .map(|k| &k.entry)
-            .find(|e| e.full_name() == full)?;
+            .find(|e| e.is(&full))?;
         if saved >= entry.current().major {
             return None;
         }
@@ -969,12 +967,7 @@ impl Sealed {
     pub fn module_of_kind(&self, full_name: &str) -> Option<&str> {
         self.modules
             .iter()
-            .find(|m| {
-                m.shapes
-                    .kinds
-                    .iter()
-                    .any(|k| k.entry.full_name() == full_name)
-            })
+            .find(|m| m.shapes.kinds.iter().any(|k| k.entry.is(full_name)))
             .map(|m| m.name.as_str())
     }
 
@@ -983,7 +976,7 @@ impl Sealed {
     pub(crate) fn missing_for_kind(&self, kind_name: &str) -> Option<String> {
         let full = kind_name.split('@').next().unwrap_or(kind_name);
         for m in &self.modules {
-            if m.shapes.kinds.iter().any(|k| k.entry.full_name() == full) {
+            if m.shapes.kinds.iter().any(|k| k.entry.is(full)) {
                 return self.left_out_kinds.get(full).cloned();
             }
         }

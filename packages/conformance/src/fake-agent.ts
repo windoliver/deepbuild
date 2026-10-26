@@ -40,7 +40,7 @@ const section = (readBy: string, conformance: string, rest: JsonObject = {}): Js
 const payload = (required: Record<string, string>, optional: Record<string, string> = {}): JsonObject => ({ required: { session_id: 'string', hook_event_name: 'string', ...required }, optional: { prompt_id: 'string', agent_id: 'string', ...optional } });
 
 /** The fake agent's facts (adapter.facts@1): one version, the hooks it fires, and how each maps. */
-export function fakeFacts(): JsonValue {
+function fakeFacts(): JsonValue {
   return {
     schema: 'adapter.facts@1',
     versions: [VERSION],

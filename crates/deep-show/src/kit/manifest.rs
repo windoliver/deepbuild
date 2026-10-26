@@ -396,11 +396,10 @@ fn strings_in(v: &Value, path: String, out: &mut Vec<(String, String)>) {
 /// keyword.
 fn looks_like_code(text: &str) -> bool {
     const MARKS: [char; 9] = ['(', ')', '{', '}', ';', '=', '^', '*', '+'];
-    if text.contains(MARKS) || text.contains("=>") {
-        return true;
-    }
-    text.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-        .any(|w| ["fn", "function", "return", "let", "const", "var", "lambda"].contains(&w))
+    text.contains(MARKS)
+        || text
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .any(|w| ["fn", "function", "return", "let", "const", "var", "lambda"].contains(&w))
 }
 
 impl<'a> Hub<'a> {

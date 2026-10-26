@@ -12,7 +12,7 @@ import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type ExtensionReply, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
@@ -39,19 +39,33 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['windows.report', ['app', 'cli', 'hook']],
 ]);
 
+/** How long before an acknowledged hold the extensions' reply must be on the socket, so it reaches deep-hook in time. */
+const HOLD_MARGIN = 100;
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
 const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
+/**
+ * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
+ * as deep-hook's own denials are; context goes as Claude Code reads it, each block labelled with its extension. An
+ * agent with no context channel gets only the denies.
+ */
+function agentReply(agent: string, reply: ExtensionReply): string {
+  if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
+  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return EMPTY_REPLY;
+  const additionalContext = reply.context.map((b) => `[${b.extension}] ${b.text}`).join('\n');
+  return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
+}
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
 interface CoreLink {
   post(message: CoreMessage & { op: 'hook' | 'unsubscribe' }): void;
   request(request: CoreRequest): Promise<unknown>;
-  /** Resolves once the record is open, the spool replayed and in-flight runs recovered. */
-  started: Promise<void>;
+  /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
+  started: Promise<{ hooks: string[] }>;
   close(): Promise<void>;
 }
 interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; close(): Promise<void> }
@@ -63,11 +77,11 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
-  let started!: () => void;
-  const ready = new Promise<void>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal }) => {
+  let started!: (v: { hooks: string[] }) => void;
+  const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
-    if (m.op === 'started') return started();
+    if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
     pending.delete(m.n!);
@@ -90,7 +104,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
   const core = new Core(options, onFrame);
-  const started = core.started();
+  const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
     started,
@@ -185,9 +199,10 @@ class Hub {
   private ids = 0;
   private ino = 0;
   private stopping = false;
+  /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
+  private hooks = new Set<string>();
   readonly start = ulid(Date.now());
   private readonly helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES });
-  private static readonly REPLY = line({ exit: 0, stdout: '', stderr: '' });
 
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {}
 
@@ -233,7 +248,7 @@ class Hub {
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
-    await this.core.started;
+    this.hooks = new Set((await this.core.started).hooks);
   }
 
   private accept(sock: net.Socket): void {
@@ -350,13 +365,31 @@ class Hub {
     }
     // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
     if (conn.done || !conn.sock.writable) return;
-    // The acknowledgement and the reply in one write, which also ends the connection.
     conn.done = true;
-    conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + this.reply(parsed.meta));
+    // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); every
+    // other hook gets the acknowledgement and the reply in one write, which also ends the connection.
+    const ruled = this.reply(parsed.meta);
+    const before = ruled === EMPTY_REPLY && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    const hold = before ? Date.now() + EXTENSION_HOLD_MS : null;
+    if (hold === null) conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + ruled);
+    else conn.sock.write(line({ ack: parsed.meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && parsed.meta.payloadWriter ? parsed.meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta: parsed.meta, writer });
+    if (hold !== null) void this.extensionReply(conn, parsed.meta, before!.data, hold);
+  }
+
+  /**
+   * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
+   * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
+   */
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
+    const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
+    const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply) : EMPTY_REPLY);
   }
 
   /**
@@ -365,10 +398,10 @@ class Hub {
    * next step; watch and warn are #304's.
    */
   private reply(meta: HookMeta): string {
-    if (meta.event !== 'PreToolUse' || !meta.matched.length) return Hub.REPLY;
+    if (meta.event !== 'PreToolUse' || !meta.matched.length) return EMPTY_REPLY;
     const entries = this.rules();
     const name = meta.matched.find((n) => entries[n]?.mode === 'block');
-    if (name === undefined) return Hub.REPLY;
+    if (name === undefined) return EMPTY_REPLY;
     const entry = entries[name]!;
     const note = meta.notes?.[name] ? ` ${meta.notes[name]}` : '';
     return line({ exit: 2, stdout: '', stderr: `DeepBuild blocked this: ${String(entry.reason)} ${String(entry.next_step)}${note} (guard ${name})\n` });

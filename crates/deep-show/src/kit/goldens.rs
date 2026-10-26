@@ -120,7 +120,7 @@ pub fn render(hub: &Hub<'_>, doc: &Value, backend: &str, t: i64) -> Render {
     match backend {
         "noop" => {
             // The noop device runs the frame's device work and returns no pixels.
-            let _ = gpu::noop_device();
+            gpu::noop_device();
             return Render::Blocked(if gpu_only { "gpu pixels" } else { "pixels" });
         }
         "vello_cpu" if gpu_only => return Render::Blocked("gpu pixels"),

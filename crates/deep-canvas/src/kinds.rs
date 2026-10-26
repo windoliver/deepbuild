@@ -101,6 +101,18 @@ impl Entry {
         }
     }
 
+    /// Whether this is the kind `full_name` names, compared in place: lookups run per item, so
+    /// nothing is allocated.
+    pub(crate) fn is(&self, full_name: &str) -> bool {
+        if self.family.is_empty() {
+            return self.name == full_name;
+        }
+        full_name
+            .strip_prefix(self.family)
+            .and_then(|rest| rest.strip_prefix('.'))
+            == Some(self.name)
+    }
+
     /// The build's version of the kind (its highest major).
     pub fn current(&self) -> &Version {
         // An entry always has at least one version: the registry below builds it so.
@@ -158,17 +170,7 @@ impl Registry {
 
     /// The entry named `family.name`, if any.
     pub fn entry(&self, full_name: &str) -> Option<&Entry> {
-        // `family.name` compared in place: lookups run per item, so nothing is allocated.
-        let named = |e: &&Entry| {
-            if e.family.is_empty() {
-                return e.name == full_name;
-            }
-            full_name
-                .strip_prefix(e.family)
-                .and_then(|rest| rest.strip_prefix('.'))
-                == Some(e.name)
-        };
-        self.entries.iter().find(named)
+        self.entries.iter().find(|e| e.is(full_name))
     }
 
     /// This registry as an earlier build had it: each `family.name@major.minor` in `pins` at
@@ -178,7 +180,7 @@ impl Registry {
         let mut out = self.clone();
         for pin in pins {
             let (name, major, minor) = parse_required(pin)?;
-            let entry = out.entries.iter_mut().find(|e| e.full_name() == name)?;
+            let entry = out.entries.iter_mut().find(|e| e.is(&name))?;
             let version = entry.versions.iter_mut().find(|v| v.major == major)?;
             if minor > version.minor {
                 return None;

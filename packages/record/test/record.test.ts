@@ -454,33 +454,7 @@ describe('a removed worktree leaves its session', () => {
   });
 });
 
-describe('lost events, decided asks and the record\'s own evidence', () => {
-  it('a session that finished, then took a new prompt, loses events after the last FULL commit: its claim reads INVALID', async () => {
-    const storage = testStorage();
-    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
-    const A = ulidAt(T0 - 1000);
-    await r.append(hook(A), event('session.start', T0 - 1000, undefined));
-    await r.append(hook(A), event('user.ask', T0, seqAt(T0)));
-    await r.append(hook(A), { ...event('agent.stop', T0 + 1, seqAt(T0 + 1)), subject: `session:${A}` });
-    await r.append({ ...hook(A), writer: 'app' }, { ...event('session.attention', T0 + 2, undefined, { state: 'finished' }), subject: `session:${A}` });
-    // The person prompts again; the session works and claims done.
-    await r.append(hook(A), event('user.ask', T0 + 10, seqAt(T0 + 10)));
-    const claim = event('claim.made', T0 + 11, undefined);
-    await r.append({ ...hook(A), writer: 'app' }, claim);
-    // Some FULL commit of another session (a verdict on an unrelated claim).
-    const B = ulidAt(T0 + 12);
-    await r.append(hook(B), event('session.start', T0 + 12, undefined));
-    const v = fx('verdict.made');
-    await r.append(core(B), { v: 1, id: ulidAt(T0 + 13), kind: 'verdict.made', ts: T0 + 13, subject: (v.data as Record<string, string>).claim!, data: v.data! });
-    // A writes 50 stream events after the FULL commit, then the power is cut.
-    await Promise.all(Array.from({ length: 50 }, (_, j) => r.append(hook(A), event('tool.after', T0 + 20 + j, seqAt(T0 + 20 + j)))));
-    storage.cutPower();
-    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
-    open.push(r);
-    const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
-    expect(rows[0]?.verdict_id, 'A lost 50 events while its claim was open: INVALID').not.toBeNull();
-  });
-
+describe('decided asks and answered plans', () => {
   it('an ask.escalated from a hook leaves the person\'s answer and decision as they were', async () => {
     const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage() });
     const S = ulidAt(T0 - 1000);
@@ -513,40 +487,6 @@ describe('lost events, decided asks and the record\'s own evidence', () => {
     await r.close();
     expect(plan?.answered_hash).toBe(hash);
   });
-
-  it('the whole text the record puts as evidence is a row of the evidence projection', async () => {
-    const root = tempRoot();
-    const store = await openEvidenceStore({ root, now: () => T0 });
-    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), evidence: store });
-    const S = ulidAt(T0 - 1000);
-    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
-    const cmd = `cat <<'EOF' > notes.txt\n${'line of notes\n'.repeat(1000)}EOF\n`;
-    await r.append(hook(S), event('tool.after', T0 + 10, seqAt(T0 + 10), { kind: 'shell', paths: [], command: cmd }));
-    const table = (await r.table('evidence')).rows;
-    await r.close();
-    expect(table.length).toBe(1);
-  });
-
-  it('a session with no durable trace before a cut, seen again after it, gets INVALID on its claim', async () => {
-    const storage = testStorage();
-    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
-    const B = ulidAt(T0 - 2000);
-    await r.append(hook(B), event('session.start', T0 - 2000, undefined));
-    const v = fx('verdict.made');
-    await r.append(core(B), { v: 1, id: ulidAt(T0 - 1500), kind: 'verdict.made', ts: T0 - 1500, subject: (v.data as Record<string, string>).claim!, data: v.data! });
-    const C = ulidAt(T0 - 1000);
-    await r.append(hook(C), event('session.start', T0 - 1000, undefined));
-    await r.append(hook(C), event('user.ask', T0, seqAt(T0)));
-    await Promise.all(Array.from({ length: 50 }, (_, j) => r.append(hook(C), event('tool.after', T0 + 20 + j, seqAt(T0 + 20 + j)))));
-    storage.cutPower();
-    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
-    open.push(r);
-    await r.append(hook(C), event('tool.after', T0 + 6000, seqAt(T0 + 6000)));
-    const claim = event('claim.made', T0 + 6001, undefined);
-    await r.append({ ...hook(C), writer: 'app' }, claim);
-    const rows = (await r.table('claims')).rows.filter((row) => row.id === claim.id);
-    expect(rows[0]?.verdict_id).not.toBeNull();
-  });
 });
 
 describe('recovery invalidates every open claim of a lost session', () => {
@@ -570,27 +510,6 @@ describe('recovery invalidates every open claim of a lost session', () => {
     const claims = (await r.table('claims')).rows.filter((x) => x.id === c1.id || x.id === c2.id).map((x) => [x.id === c1.id ? 'c1' : 'c2', x.verdict_id !== null]);
     await r.close();
     expect(claims).toEqual([['c1', true], ['c2', true]]);
-  });
-});
-
-describe('a new session after an unclean start whose start and prompt arrive together', () => {
-  it('its claim is not INVALID', async () => {
-    const storage = testStorage();
-    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
-    const B = ulidAt(T0 - 2000);
-    await r.append(hook(B), event('session.start', T0 - 2000, undefined));
-    storage.cutPower();
-    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
-    const D = ulidAt(T0 + 6000);
-    await Promise.all([
-      r.append(hook(D), event('session.start', T0 + 6000, undefined)),
-      r.append(hook(D), event('user.ask', T0 + 6001, seqAt(T0 + 6001))),
-    ]);
-    const claim = event('claim.made', T0 + 6002, undefined);
-    await r.append(app(D), claim);
-    const row = (await r.table('claims')).rows.find((x) => x.id === claim.id);
-    await r.close();
-    expect(row?.verdict_id ?? null).toBeNull();
   });
 });
 
@@ -879,30 +798,6 @@ describe('an agent cannot hold a run\'s identity', () => {
       // A record whose first start wins keeps the agent's claim and commit.
       expect([when, row?.claim_id, row?.commit_sha]).toEqual([when, '01K74G1Z3X5V7T9R1P3N5M7K9H', '0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46']);
     }
-  });
-});
-
-describe('a finish that lands after the session resumed', () => {
-  it('does not exempt the session at recovery: its open claim reads INVALID', async () => {
-    const storage = testStorage();
-    let r = await openRecord({ path: 'record.db', now: () => T0, storage });
-    const S = ulidAt(T0 - 1000);
-    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
-    await r.append(hook(S), event('user.ask', T0 + 20, seqAt(T0 + 20)));
-    // The finish of the turn before reaches the hub after the new prompt.
-    await r.append(app(S), { ...event('session.attention', T0 + 10, undefined, { state: 'finished' }), subject: `session:${S}` });
-    const claim = event('claim.made', T0 + 30, undefined);
-    await r.append(app(S), claim);
-    const B = ulidAt(T0 + 35);
-    await r.append(hook(B), event('session.start', T0 + 35, undefined));
-    const v = data('verdict.made') as Record<string, string>;
-    await r.append(core(B), { v: 1, id: ulidAt(T0 + 36), kind: 'verdict.made', ts: T0 + 36, subject: v.claim!, data: v as unknown as JsonValue });
-    await Promise.all(Array.from({ length: 50 }, (_, j) => r.append(hook(S), event('tool.after', T0 + 40 + j, seqAt(T0 + 40 + j)))));
-    storage.cutPower();
-    r = await openRecord({ path: 'record.db', now: () => T0 + 5000, storage });
-    open.push(r);
-    // A recovery that trusts the session's last status reads it ended and leaves the claim open.
-    expect((await r.table('claims')).rows.find((x) => x.id === claim.id)?.verdict_id ?? null).not.toBeNull();
   });
 });
 

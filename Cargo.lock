@@ -1719,6 +1719,7 @@ version = "0.0.0"
 dependencies = [
  "block2 0.6.2",
  "deep-gpu",
+ "deep-marks-gpui",
  "deep-text-gpui",
  "gpui-kit",
  "gpui-pre-apple",
@@ -1743,6 +1744,14 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "unicode-normalization",
+]
+
+[[package]]
+name = "deep-canvas-effects"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "serde_json",
 ]
 
 [[package]]
@@ -1813,6 +1822,20 @@ name = "deep-contracts"
 version = "0.0.0"
 
 [[package]]
+name = "deep-effects-render"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "deep-canvas-effects",
+ "deep-gpu",
+ "deep-scene3d-render",
+ "naga 30.0.1",
+ "serde_json",
+ "wgpu 30.0.1",
+ "wgpu-profiler",
+]
+
+[[package]]
 name = "deep-gpu"
 version = "0.0.0"
 dependencies = [
@@ -1832,10 +1855,12 @@ dependencies = [
  "bytemuck",
  "deep-app",
  "deep-canvas",
+ "deep-canvas-effects",
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-scene3d",
  "deep-canvas-test-modules",
+ "deep-effects-render",
  "deep-gpu",
  "deep-replica",
  "deep-scene3d-render",
@@ -1846,6 +1871,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "wgpu 30.0.1",
+ "wgpu-profiler",
 ]
 
 [[package]]
@@ -1856,12 +1882,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-marks-gpui"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas-marks",
+ "gpui-kit",
+]
+
+[[package]]
 name = "deep-marks-render"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-marks-gpui",
  "deep-marks-vello",
  "deep-replica",
  "deep-text",
@@ -1903,6 +1938,7 @@ dependencies = [
  "deep-canvas-scene3d",
  "deep-gpu",
  "wgpu 30.0.1",
+ "wgpu-profiler",
 ]
 
 [[package]]
@@ -1910,6 +1946,7 @@ name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "deep-canvas-effects",
  "deep-canvas-graph",
  "deep-canvas-marks",
  "deep-canvas-motion",
@@ -10039,6 +10076,17 @@ checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
 dependencies = [
  "naga 30.0.1",
  "wgpu-types 30.0.1",
+]
+
+[[package]]
+name = "wgpu-profiler"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a15a635a2a2ec0b9787589f17dbbffaa7960e779bcf0348a67f73c3e7665f9eb"
+dependencies = [
+ "parking_lot",
+ "thiserror 2.0.21",
+ "wgpu 30.0.1",
 ]
 
 [[package]]

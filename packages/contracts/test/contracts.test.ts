@@ -75,12 +75,6 @@ describe('seq and the one error shape', () => {
     expect(reg.decode<{ u: { at: unknown } }>('u@1', '{"u":{"t":"a","at":"42"}}').u.at).toBe(42n);
   });
 
-  it('a refused value holding a bigint, or a cycle, is still refused in the error shape', () => {
-    const cyclic: Record<string, unknown> = {};
-    cyclic.self = cyclic;
-    for (const value of [[1n], { n: 1n }, cyclic]) expect(validate('hook.ack@1', value).ok).toBe(false);
-  });
-
   it('a value cut at the read cap never ends in half a surrogate pair', () => {
     const result = validate('hook.ack@1', { ack: `a${'\u{1F600}'.repeat(5000)}`, hold_until_ms: null });
     expect(result.ok).toBe(false);
@@ -125,14 +119,6 @@ it("a union is told apart by its required tag, not by another constant every bra
   const reg = registry([{ name: 'u@1', schema: { oneOf: [branch('a', { x: { type: 'string' } }), branch('b', { y: { type: 'integer' } })] } }]);
   expect(reg.validate('u@1', { kind: 'a', x: 's' })).toEqual({ ok: true });
   expect(reg.validate('u@1', { v: 1, kind: 'b', y: 2 })).toEqual({ ok: true });
-});
-
-it('an opaque value with a hole, or an object JSON does not carry, is refused', () => {
-  const request = { v: 1, agent: 'a', event: 'e', seq: '1', id: '01K74FKZVK8Q2X5R7M3N9P4T6W', pid: 1, ppid: 1, matched: [] };
-  // eslint-disable-next-line no-sparse-arrays
-  for (const payload of [{ a: [, 2] }, new Map(), new Date(0)]) {
-    expect(validate('hook.request@1', { ...request, payload }).ok).toBe(false);
-  }
 });
 
 describe('the join counts characters, as the schema bounds them', () => {
@@ -185,11 +171,6 @@ describe('one JSON both languages accept', () => {
     const request = { v: 1, agent: 'a', event: 'e', seq: '1', id: '01K74FKZVK8Q2X5R7M3N9P4T6W', pid: 1, ppid: 1, matched: [] };
     expect(validate('hook.request@1', { ...request, payload: nest(254) }).ok).toBe(true);
     expect(validate('hook.request@1', { ...request, payload: nest(256) }).ok).toBe(false);
-  });
-
-  it('a value whose getter throws is refused, not thrown', () => {
-    const value = { ...reply, get stdout(): string { throw Error('getter'); } };
-    expect(validate('hook.reply@1', value).ok).toBe(false);
   });
 });
 

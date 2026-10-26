@@ -138,6 +138,9 @@ pub fn carried_state(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
         let n = steps_of(stepper, f);
         let entries = entries_of(&f.sidecar);
         let truth = straight(stepper, n, &entries);
+        // A seek is held to the step hashes and occurrences, not the checkpoints.
+        let mut want = truth.clone();
+        want.checkpoints.clear();
         for c in stepper.checkpoints.iter().filter(|c| **c <= n) {
             run.declared += 1;
             let mut case = Case::new(format!("{}#seek{c}", f.name), Verdict::Pass)
@@ -149,9 +152,7 @@ pub fn carried_state(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
             let mut state = (stepper.restore)(cp);
             let mut seek = Trace::default();
             play(stepper, &mut state, *c, n, &entries, None, &mut seek);
-            seek.checkpoints.retain(|_, _| false);
-            let mut want = truth.clone();
-            want.checkpoints.retain(|_, _| false);
+            seek.checkpoints.clear();
             if let Some(step) = first_differing(&want, &seek, *c) {
                 let fl = failure(
                     "step_hash",

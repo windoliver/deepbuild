@@ -10,7 +10,7 @@ import { planted } from './planted.js';
 import { isObject } from './types.js';
 import type { Case, Delivery, Fake, Fill, Flag, Harness, Kit, Operation, PlantedEntry } from './types.js';
 
-export const KIT_NAME = 'adapter@1';
+const KIT_NAME = 'adapter@1';
 const REVISION = 1;
 const SESSION = 'sess_01';
 
@@ -22,7 +22,7 @@ export const HARNESS = {
   wrongUnsupported: (operation: Operation, surface: string, reply: { operation: string; surface: string }): string => `${operation} is listed unsupported on ${surface}, but the reply names ${reply.operation} on ${reply.surface}`,
   noKind: (kind: string): string => `no ${kind} event mapped`,
 };
-export const CODES = {
+const CODES = {
   rule: (id: string): string => `rule:${id}`,
   flag: (flag: Flag): string => `flag:${flag}`,
   operation: (operation: Operation): string => `operation:${operation}`,
