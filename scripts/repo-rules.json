@@ -1035,6 +1035,18 @@
           "why": "Issue #380: the window a mark's mesh is painted into, as one GPUI path."
         }
       }
+    },
+    "packages/wiki/package.json": {
+      "dependencies": {
+        "@deepbuild/extension-host": {
+          "spec": "0.0.0",
+          "why": "Issue #355: a claim from a repo file is known from the repo only in a project you trust, read through openTrust, the one trust decision the core holds."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #355: the wiki's claims are learned changes in the record, whose quotes, scope and rollback the core checks; sources are read through record.resolve and kept with record.keep."
+        }
+      }
     }
   },
   "allowedFindings": [

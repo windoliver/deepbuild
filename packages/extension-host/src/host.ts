@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import { runKit, slotKits } from '@deepbuild/conformance';
-import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotKit } from '@deepbuild/conformance';
+import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { Supervisor } from '@deepbuild/supervisor';
@@ -129,6 +129,8 @@ export interface ExtensionHost {
   disable(id: string): Promise<void>;
   /** The adapters loaded extensions registered. */
   adapters(): Promise<{ name: string; extension: string; caps: AdapterCaps }[]>;
+  /** The index a loaded package registered in place of the shipped one, if any (#355). */
+  index(): { name: string; extension: string; fill: IndexFill } | undefined;
   /** The adapter that owns the session: the one that gates it; null before any adapter bound it. */
   owner(session: string): Promise<{ adapter: string } | null>;
   /** An answer for a session: the owning adapter delivers it by a route its flags allow now, or it waits for one. */
@@ -170,6 +172,18 @@ const ENDS_SESSION = 'SessionEnd';
 const KIT_GRACE_MS = 5_000;
 const CHECK_KIND = 'check.kind@1';
 const ENVIRONMENT = 'environment@1';
+/** The wiki's index slot (#355): one fill, a package's that replaces the shipped index. */
+const INDEX = 'index@1';
+const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
+/** An index@1 fill as the host reaches it in the package: each call answered over the package's side. */
+export interface IndexFill extends SlotFill {
+  slot: 'index@1';
+  revision: number;
+  rebuild(claims: { id: string; page: string; source: string; text: string }[]): Promise<unknown>;
+  upsert(claims: { id: string; page: string; source: string; text: string }[]): Promise<unknown>;
+  search(query: string): Promise<{ claim: string; page: string; quote: string; source: string }[]>;
+  dropSource(source: string): Promise<unknown>;
+}
 
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
@@ -198,6 +212,8 @@ interface Ext {
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
+  /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
+  index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
   hubBound: boolean;
   /** How to take its resolver back from the asks core, once it registered one. */
@@ -444,7 +460,13 @@ class Host implements ExtensionHost {
     const environments = manifest.environments ?? [];
     const what = [kitted.length ? `replaces ${kitted.join(', ')}` : '', environments.length ? `registers the environment${environments.length > 1 ? 's' : ''} ${environments.join(', ')}` : ''].filter(Boolean).join(' and ');
     const kits = `${[kitted.length ? CHECK_KIND : '', environments.length ? ENVIRONMENT : ''].filter(Boolean).join(' and ')}'s kit${kitted.length && environments.length ? 's' : ''}`;
+    // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
+    const indexed = replaces.includes(INDEX);
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
+    if (hub && indexed && !this.isReady) {
+      rmSync(folder, { recursive: true, force: true });
+      throw Error(`BLOCKED: ${entry.id} replaces ${INDEX}, whose kit runs its code in the hub, and the hub isn't ready; install it once it is`);
+    }
     if (hub && (kitted.length || environments.length) && !this.isReady) {
       rmSync(folder, { recursive: true, force: true });
       throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, and the hub isn't ready; install it once it is`);
@@ -454,11 +476,11 @@ class Host implements ExtensionHost {
       rmSync(folder, { recursive: true, force: true });
       throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
     }
-    if (!kitted.length && !environments.length) {
+    if (!kitted.length && !environments.length && !indexed) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
-    const ext = this.ext(entry, folder, manifest, digest, 'hub', 'conformance');
+    const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'conformance');
     const runs: KitRun[] = [];
     try {
       await this.start(ext);
@@ -499,6 +521,15 @@ class Host implements ExtensionHost {
         runs.push({ slot: ENVIRONMENT, fill: name, verdict: report.verdict });
         const failed = report.cases.find((c) => c.outcome !== 'PASS');
         if (report.verdict !== 'PASS') throw Error(`${entry.id}'s environment ${name} reads ${report.verdict} on ${ENVIRONMENT}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+      }
+      if (indexed) {
+        const kit = slotKits().find((k) => k.slot === INDEX) as SlotKit<IndexFill> | undefined;
+        if (!kit) throw Error(`the conformance package ships no ${INDEX} kit`);
+        if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
+        const report = await runKit(kit, this.indexFill(ext), { parts: ['fixed'] });
+        runs.push({ slot: INDEX, fill: ext.index.name, verdict: report.verdict });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
       }
     } finally {
       await ext.stop?.();
@@ -893,6 +924,18 @@ class Host implements ExtensionHost {
         ext.adapters.add(name);
         return null;
       }
+      case 'deep.registerIndex': {
+        const [name, fill] = args as [unknown, { slot?: unknown; revision?: unknown } | null | undefined];
+        if (typeof name !== 'string' || !INDEX_NAME.test(name)) throw Error(`deep.registerIndex takes the index's name first, not ${JSON.stringify(name)}`);
+        if (fill?.slot !== INDEX || !Number.isSafeInteger(fill.revision) || (fill.revision as number) < 1) throw Error(`deep.registerIndex: ${name} declares itself an ${INDEX} fill, with the kit revision it was built against`);
+        // One index fills the slot: a package's, only by replacing the shipped one, and only one package's at a time.
+        if (!(ext.manifest.replaces ?? []).includes(INDEX)) throw Error(`deep.registerIndex: ${id}'s manifest doesn't replace ${INDEX}, the one index deep_search reads`);
+        if (ext.index && ext.index.name !== name) throw Error(`deep.registerIndex: ${id} already registered the index ${ext.index.name}`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e.index && e !== ext);
+        if (owner) throw Error(`${INDEX} is already filled by ${owner.entry.id}`);
+        ext.index = { name, revision: fill.revision as number };
+        return null;
+      }
       case 'deep.registerRoute': {
         const [route] = args;
         if (typeof route !== 'string' || !ROUTE.test(route)) throw Error(`deep.registerRoute takes "<METHOD> <path>", not ${JSON.stringify(route)}`);
@@ -1210,6 +1253,20 @@ class Host implements ExtensionHost {
       if (b.waiting.length) throw Error(`session ${session} ended with ${b.waiting.length} answer(s) waiting for a route that never opened: ${b.waiting.map((w) => w.ask).join(', ')}`);
     }
     return { adapter: name, events };
+  }
+  index(): { name: string; extension: string; fill: IndexFill } | undefined {
+    const ext = [...this.exts.values()].find((e) => e.index && e.live);
+    return ext && { name: ext.index!.name, extension: ext.entry.id, fill: (ext.index!.fill ??= this.indexFill(ext)) };
+  }
+  /** The package's index, each call asked of its side within the call deadline. */
+  private indexFill(ext: Ext): IndexFill {
+    const { name, revision } = ext.index!;
+    const call = (op: string, ...args: unknown[]): Promise<unknown> => this.ask(ext, CALL_MS, `index ${name}`, 'index', { name, op, args });
+    return {
+      slot: INDEX, revision,
+      rebuild: (claims) => call('rebuild', claims), upsert: (claims) => call('upsert', claims), dropSource: (source) => call('dropSource', source),
+      search: (query) => call('search', query) as ReturnType<IndexFill['search']>,
+    };
   }
   async adapters(): Promise<{ name: string; extension: string; caps: AdapterCaps }[]> {
     return [...this.adapterFills].map(([name, { ext, caps }]) => ({ name, extension: ext.entry.id, caps: structuredClone(caps) }));

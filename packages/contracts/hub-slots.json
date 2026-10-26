@@ -127,6 +127,21 @@
     "since": "R1"
   },
   {
+    "method": "deep.registerIndex",
+    "variant": null,
+    "interface": "index@1",
+    "digest": "d1:185cc96668f9cf977018695e5b935a923cde07bc2ca8d4f119b362a8cf35c523",
+    "fills": "one",
+    "kit": "index@1",
+    "planted": [
+      "keeps-dropped-source",
+      "sourceless-hit",
+      "stale-after-upsert",
+      "rebuild-is-a-no-op"
+    ],
+    "since": "R1"
+  },
+  {
     "method": "deep.registerAction",
     "variant": null,
     "interface": "action@1",
