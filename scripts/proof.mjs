@@ -64,7 +64,9 @@ try {
   if (!(error instanceof Blocked)) throw error;
   for (const lane of lanes) say('BLOCKED', lane, error.message, 'Fetch main so the merge base exists: git fetch origin main');
 } finally {
-  removeTemporaries();
+  // A cleanup failure is printed, never thrown: it would replace the lanes' own result.
+  const left = removeTemporaries();
+  if (left) print(`cleanup: ${left}`);
 }
 process.exitCode = failed ? 1 : 0;
 

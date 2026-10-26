@@ -209,19 +209,12 @@ it("a resolver's committed answer, sent again to a reopened ledger, reports its 
 it('your yes, landing before the ledger records what the ask means, still starts the run, here and in a reopened ledger', async () => {
   // You answer the ask the moment it shows, before the ledger appends its spend.asked.
   const quick: Asks = {
+    ...asks,
     raise: async (connection, source, ask, plan) => {
       const handle = await asks.raise(connection, source, ask, plan);
       await yes(handle);
       return handle;
     },
-    answer: (connection, ask, input) => asks.answer(connection, ask, input),
-    tick: () => asks.tick(),
-    card: (ask) => asks.card(ask),
-    needsYou: () => asks.needsYou(),
-    holds: (session, step) => asks.holds(session, step),
-    authorized: (ask, hash) => asks.authorized(ask, hash),
-    later: (connection, ask, until) => asks.later(connection, ask, until),
-    inbox: () => asks.inbox(),
   };
   const answering = await openLedger({ record, asks: quick, now, price });
   const r = run('a', 'windoliver/deepbuild#77');

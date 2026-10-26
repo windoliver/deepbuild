@@ -1,0 +1,28 @@
+{
+  "title": "adapter@1",
+  "description": "An adapter: one per agent, its facts, its capability flags and what it names unsupported; delivery and every core rule choose a route from the flags, never from the agent name.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "adapter@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "The agent it covers, as every event names it."
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "name"
+  ],
+  "additionalProperties": false
+}

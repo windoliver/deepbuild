@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "core",
-  "set_digest": "7809a7455e87d1968f245a7d9db6e2445b8d216e06f84a37d58105bd3b6e6bad",
+  "set_digest": "4bda62c5c8c8a6d1a20ef9fc2af6d0736503e8ec3b1c669a27bbfa3a2c911df3",
   "phases": {
     "validate": [
       {
@@ -16,20 +16,6 @@
           "core.lowered"
         ],
         "per": "item"
-      }
-    ],
-    "plan": [
-      {
-        "operator": "motion.compile",
-        "module": "motion",
-        "version": "1.0.0",
-        "reads": [
-          "refs"
-        ],
-        "writes": [
-          "motion.program"
-        ],
-        "per": "document"
       }
     ],
     "items": [
@@ -46,6 +32,18 @@
         "per": "item"
       },
       {
+        "operator": "core.status",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "core.status"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "core.transform",
         "module": "core",
         "version": "0.0.0",
@@ -54,32 +52,6 @@
         ],
         "writes": [
           "core.transform"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "look.palette",
-        "module": "look",
-        "version": "1.0.0",
-        "reads": [
-          "look"
-        ],
-        "writes": [
-          "look.palette"
-        ],
-        "per": "document"
-      },
-      {
-        "operator": "motion.channels",
-        "module": "motion",
-        "version": "1.0.0",
-        "reads": [
-          "motion.program",
-          "t"
-        ],
-        "writes": [
-          "motion.at",
-          "motion.fields"
         ],
         "per": "item"
       },
@@ -95,6 +67,19 @@
           "core.world"
         ],
         "per": "item"
+      },
+      {
+        "operator": "look.palette",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "look.palette",
+          "look.status"
+        ],
+        "per": "document"
       },
       {
         "operator": "text.counter",
@@ -143,32 +128,27 @@
     ],
     "extract": [
       {
-        "operator": "marks2d.frame",
-        "module": "marks2d",
+        "operator": "text.status",
+        "module": "text",
         "version": "1.0.0",
         "reads": [
           "refs",
           "reading",
           "core.world",
           "core.fields",
-          "text.counter",
-          "text.run",
-          "text.animated",
-          "look.palette"
+          "core.status",
+          "table:text.fonts"
         ],
         "writes": [
-          "marks2d.frame"
+          "text.status"
         ],
         "per": "document"
       }
     ]
   },
   "contributions": {
-    "core.fields": [
-      "motion.fields"
-    ],
-    "core.transform": [
-      "motion.at"
+    "core.status": [
+      "look.status"
     ]
   }
 }

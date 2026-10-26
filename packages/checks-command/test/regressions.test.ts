@@ -7,7 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -17,6 +17,7 @@ import { openRecord, type RecordStore } from '../../record/src/index.js';
 import { openSupervisor, type Supervisor } from '../../supervisor/src/index.js';
 import { runAddedTests, runCommandCheck, type CommandCheck } from '../src/index.js';
 import { listSource } from '../src/listing.js';
+import { under } from '../src/report.js';
 import { absent, hiddenChild, maskIn, untraced } from '../src/shell.js';
 
 const REPO = fileURLToPath(new URL('../../../', import.meta.url));
@@ -90,6 +91,16 @@ test('leaves a child', () => {
     for (const until = Date.now() + 5_000; alive(pid) && Date.now() < until;) await new Promise((resolve) => setTimeout(resolve, 50));
     expect(alive(pid), `the child ${pid} the run left is still running`).toBe(false);
   }, 180_000);
+
+  it('a test named by the credential alone, no longer than the value, is scrubbed from the attempts and failures', async () => {
+    // The runner skips scrubbing texts too short to hold any value: a text exactly as long as the value isn't one.
+    const checkout = project({ 'a.test.ts': `test('${SECRET}', () => { expect(1).toBe(2); });\n` });
+    const r = await runCommandCheck(check(checkout, { secrets: { SHOP_KEY: SECRET } }));
+    expect(r.testsRun).toBe(1);
+    expect(JSON.stringify(r), 'the credential, anywhere in the run record').not.toContain(SECRET);
+    expect(r.attempts.map((a) => a.test)).toEqual(['[REDACTED]']);
+    expect(r.failures.map((f) => f.test)).toEqual(['[REDACTED]']);
+  }, 60_000);
 
   it('a suite that skips every test and writes a pass into the runner\'s report, wherever it can find it, is never counted', async () => {
     const checkout = project({
@@ -864,4 +875,25 @@ describe('Jest', () => {
     expect(runs[5]!.outcome).toBe('failed');
     expect(runs[5]!.failures.map((f) => f.message).join('\n')).toMatch(/clock wasn't moved ahead: Jest/);
   }, 600_000);
+});
+
+describe('paths under the checkout', () => {
+  it('a path is placed under the checkout as resolving it would place it, whether it is read as it is or resolved', () => {
+    // The placing `under` gave every path before its fast path for a plain absolute path below the checkout: an absolute
+    // path not below the checkout's own text is outside it, and any other is resolved. The fast path has to agree.
+    const resolved = (checkout: string, path: string): string | null => {
+      if (isAbsolute(path) && !path.startsWith(checkout + sep)) return null;
+      const rel = relative(checkout, resolve(checkout, path));
+      return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel.split(sep).join('/') : null;
+    };
+    const segment = fc.constantFrom('src', 'node_modules', 'cart.test.ts', '.hidden', '...', '.', '..', '', 'a b', 'x.y');
+    const path = fc.tuple(fc.constantFrom('/repo', '/repo/', '/repository', '/other', '', 'src', '/repo/src'), fc.array(segment, { maxLength: 5 }), fc.constantFrom('', '/'))
+      .map(([head, segments, tail]) => [head, ...segments].join('/') + tail);
+    fc.assert(fc.property(fc.constantFrom('/repo', '/repo/src'), path, (checkout, p) => {
+      expect(under(checkout, p), `under(${checkout}, ${p})`).toBe(resolved(checkout, p));
+    }), { numRuns: 2_000 });
+    expect(under('/repo', '/repo/node_modules/vitest/dist/index.js')).toBe('node_modules/vitest/dist/index.js');
+    expect(under('/repo', '/repo/src/../etc/passwd')).toBe('etc/passwd');
+    expect(under('/repo', '/repo/../etc/passwd')).toBeNull();
+  });
 });

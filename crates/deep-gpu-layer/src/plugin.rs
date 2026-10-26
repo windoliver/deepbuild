@@ -36,8 +36,9 @@ fn entry(dir: &Path, planted: Option<(&str, &str)>) -> Result<PathBuf, String> {
     Ok(to)
 }
 
-/// The shipped build's canvas modules, sealed, as `deep_show` checks a writer's document in it.
-fn shipped() -> Option<Sealed> {
+/// The shipped build's canvas modules, sealed, as `deep_show` checks a writer's document in it;
+/// a host checks a revision in the same set (#382).
+pub(crate) fn shipped() -> Option<Sealed> {
     [
         deep_canvas_marks::modules::text(),
         deep_canvas_marks::modules::look(),

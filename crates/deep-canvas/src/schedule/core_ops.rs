@@ -43,6 +43,9 @@ pub fn register(r: &mut Registrar) {
     for array in CHECKED {
         r.array(array, "list", "document", "geometry", "extract");
     }
+    // The status map every status mark draws from (The status-color rule): the look's roles, and
+    // the state colors and glyphs the look module contributes.
+    r.array("core.status", "status", "document", "shading", "items");
     r.operator("lower", "validate", &["self"], &["core.lowered"])
         .run(lower);
     r.operator("transform", "items", &["core.lowered"], &["core.transform"])
@@ -56,6 +59,10 @@ pub fn register(r: &mut Registrar) {
         &["core.world"],
     )
     .run(world);
+    r.operator("status", "items", &["look"], &["core.status"])
+        .document()
+        .applies(has_status)
+        .run(status);
     r.fixture("board", board(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],
@@ -128,6 +135,24 @@ fn lower(v: &mut View<'_>) -> Result<(), OpError> {
         out["params"] = json!({});
     }
     v.write("core.lowered", Val::json(out))
+}
+
+/// A document with a status binding.
+pub fn has_status(doc: &Value, _: &str, _: &Value) -> bool {
+    doc.get("status_bindings")
+        .and_then(Value::as_object)
+        .is_some_and(|b| !b.is_empty())
+}
+
+/// The status map's base: the look's roles, which a status mark's label ink is chosen from. The
+/// look module contributes its state colors and glyphs as `map`; with none, a mark has no glyph.
+fn status(v: &mut View<'_>) -> Result<(), OpError> {
+    let roles: Map<String, Value> = v
+        .look()?
+        .iter()
+        .map(|(role, value)| (role.clone(), value.clone()))
+        .collect();
+    v.write("core.status", Val::json(json!({"roles": roles})))
 }
 
 /// The item's own transform, every member of `at` with `pos`, `rot` and `scale` three numbers

@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "e679ca2882e668a399b2919d9245f307914d4ac05b5d4695854f47045c820476",
+  "set_digest": "8de4fe3c4e23a22e7d10ece734b44375f934307520bac3186e31b816173aafd5",
   "phases": {
     "validate": [
       {
@@ -46,6 +46,18 @@
         "per": "item"
       },
       {
+        "operator": "core.status",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "core.status"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "core.transform",
         "module": "core",
         "version": "0.0.0",
@@ -65,7 +77,8 @@
           "look"
         ],
         "writes": [
-          "look.palette"
+          "look.palette",
+          "look.status"
         ],
         "per": "document"
       },
@@ -93,6 +106,54 @@
         ],
         "writes": [
           "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.scale",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.scale"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "graph.layout",
+        "module": "graph",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "graph.layout"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "record.salience",
+        "module": "record",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "record.level"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "sheet.place",
+        "module": "sheet",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "sheet.placed"
         ],
         "per": "item"
       },
@@ -160,12 +221,32 @@
           "marks2d.frame"
         ],
         "per": "document"
+      },
+      {
+        "operator": "text.status",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "reading",
+          "core.world",
+          "core.fields",
+          "core.status",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "text.status"
+        ],
+        "per": "document"
       }
     ]
   },
   "contributions": {
     "core.fields": [
       "motion.fields"
+    ],
+    "core.status": [
+      "look.status"
     ],
     "core.transform": [
       "motion.at"

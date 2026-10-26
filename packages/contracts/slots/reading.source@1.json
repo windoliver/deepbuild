@@ -1,0 +1,35 @@
+{
+  "title": "reading.source@1",
+  "description": "A reading source, polled or over one MCP tool counted as read: readings with their unit, source and as-of time.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "reading.source@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "variant": {
+      "type": "string",
+      "enum": [
+        "polled",
+        "mcp"
+      ],
+      "x-closure": {
+        "closed": "each value is a variant the hub-slot table rows and the kit judges, so a value outside the list has no meaning",
+        "reopens": "a new major of this interface",
+        "mark": "exhaustive"
+      }
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "variant"
+  ],
+  "additionalProperties": false
+}

@@ -67,13 +67,14 @@ pub struct Row {
     pub fixture: String,
 }
 
-/// The fix a code carries: its module's catalog's, else the core's.
+/// The fix a code carries: its module's catalog's, else that of the module that catalogs it (a
+/// code two modules raise through one reader, such as a scale's), else the core's.
 pub fn fix_of(hub: &Hub<'_>, module: &str, code: &str) -> String {
-    hub.startup
-        .sealed
-        .modules
+    let modules = &hub.startup.sealed.modules;
+    let own = modules
         .iter()
-        .filter(|m| m.name == module || module.is_empty())
+        .filter(|m| m.name == module || module.is_empty());
+    own.chain(modules.iter())
         .flat_map(|m| m.shapes.catalog.iter())
         .find(|c| c.code == code)
         .map(|c| c.fix.clone())
@@ -169,12 +170,21 @@ pub fn accepted(sealed: &deep_canvas::registry::Sealed, f: &Entry) -> bool {
 /// past f64's range, and, when the check found no error, what its operators can't evaluate and
 /// what the renderer can't draw.
 pub fn raised(hub: &mut Hub<'_>, doc: &Value) -> Vec<Value> {
+    raised_with(hub, doc, None)
+}
+
+/// What a document raises read against `readings`, a fixture's own record, when it has one.
+fn raised_with(
+    hub: &mut Hub<'_>,
+    doc: &Value,
+    readings: Option<&std::collections::BTreeMap<String, Value>>,
+) -> Vec<Value> {
     let result = check_in(doc, &hub.startup.sealed);
     let mut issues: Vec<Value> = result.issues.iter().map(|i| i.to_json()).collect();
     issues.extend(result.notices.iter().map(|n| n.to_json()));
     issues.extend(overflows(doc).iter().map(|i| i.to_json()));
     if !issues.iter().any(|i| i["severity"] == "error") {
-        let (op_issues, drawing) = hub.probe(doc, 0, true);
+        let (op_issues, drawing) = hub.probe(doc, 0, true, readings);
         for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
             let mut issue = op_issue(i);
             issue.fix = fix_of(hub, &i.module, i.code);
@@ -211,7 +221,11 @@ pub fn fixture_issues(hub: &mut Hub<'_>, f: &Entry) -> Vec<Value> {
             .unwrap_or_default();
     }
     let doc = stamped(&f.document);
-    raised(hub, &doc)
+    let readings = f
+        .record
+        .as_ref()
+        .map(|r| super::instance::readings(Some(r)));
+    raised_with(hub, &doc, readings.as_ref())
 }
 
 /// Compares the codes raised with those named: the case passes only on exactly them; under the

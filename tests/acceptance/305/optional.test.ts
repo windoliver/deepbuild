@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DOC, EMPTY, bItem, board, check, currentHash, moduleMissing, moduleMissingFailures, operators, requires, revisionsOf, run, scenario, sealed, show,
+  DOC, bItem, board, check, moduleMissing, operators, requires, run, scenario, sealed, show,
   sorted, startOutcome, startupRefusal, theSnapshot, useBuilds, useEvidence, type Build, type JsonObject,
 } from './helpers.ts';
 
@@ -11,13 +11,11 @@ const builds = useBuilds([CORE_B, CORE_AB, CORE_B_REQUIRES_A]);
 const evidence = useEvidence();
 
 const B_BOX = [40, 40, 120, 80];
-/** A board of `test.b@1` that leaves `echo` unset: it doesn't use the feature that reads `test.a`. */
-const B_PLAIN = board('Module b, plain', [bItem('b-1', B_BOX, 'a0')], requires({ 'test.b': '^1' }));
 /** The same item with `echo` set: the feature `test.b.echo`, which reads `test.a.value`, evaluates. */
 const B_ECHO = board('Module b, echoing a', [bItem('b-1', B_BOX, 'a0', 3)], requires({ 'test.b': '^1' }));
 
-// Alpha's deep_show calls go on DOC.a in one layer: the empty board, then B_PLAIN (b-1 created), then
-// B_ECHO (the same ID, changed): nothing is dropped, so no `removes` is needed. `deep show --check`
+// Alpha's deep_show calls go on DOC.a in one layer (the plain and echo boards' first draft is replaced
+// by optional-redraft.test.ts, #388). `deep show --check`
 // is another writer (your shell), so its revisions go on DOC.b.
 const CHECK = (document: JsonObject): JsonObject => check(document, { doc: DOC.b });
 
@@ -37,26 +35,6 @@ describe('#305.a15bd49b a test canvas module b marking a optional seals without 
     expect(both.arrays['test.a.value']?.['owner'], 'and the array test.a.value owned by test.a').toBe('test.a');
     expect(both.core, 'the core is the same').toBe(without.core);
     expect(both.set_digest, 'the module-set digest is another one with test.a in the build').not.toBe(without.set_digest);
-  }, 120_000);
-
-  it('#305.a15bd49b in core,test-b a document with echo set is refused with module_missing naming test.a at items/b-1/params/echo, nothing naming test.b, and its check is BLOCKED; one without echo draws and its check passes', () => {
-    const { replies } = run(builds.bin(CORE_B), scenario(evidence(), [
-      show(EMPTY, { pixels: true }), show(B_PLAIN, { pixels: true }), revisionsOf(DOC.a), show(B_ECHO, { pixels: true }), revisionsOf(DOC.a),
-      CHECK(B_PLAIN), CHECK(B_ECHO),
-    ]));
-    const [empty, plain, before, echo, after, plainCheck, echoCheck] = replies as [JsonObject, JsonObject, JsonObject, JsonObject, JsonObject, JsonObject, JsonObject];
-
-    const blank = theSnapshot(empty, 'the empty board');
-    const drawn = theSnapshot(plain, 'the board of test.b@1 without echo');
-    expect(drawn.sha256, 'the board without echo draws: its snapshot is not the empty board\'s').not.toBe(blank.sha256);
-    expect(plainCheck['result'], 'its check passes').toBe('PASS');
-
-    expect(moduleMissingFailures(echo, 'test.a', false, 'the echo board\'s reply'), 'the board with echo set is refused with module_missing naming test.a, no snapshot').toEqual([]);
-    const named = moduleMissing(echo, 'test.a');
-    expect(named.map((i) => [i.path, i.ids]), 'the issue sits on the field the left-out operator evaluates, items/b-1/params/echo, with ids [b-1]').toContainEqual(['items/b-1/params/echo', ['b-1']]);
-    expect(moduleMissing(echo, 'test.b'), 'nothing names test.b, which the build holds').toEqual([]);
-    expect(currentHash(after), 'no revision became current: the board without echo stays current, by hash').toBe(currentHash(before));
-    expect(moduleMissingFailures(echoCheck, 'test.a', true, 'the echo board\'s check'), 'the check of the board with echo set is BLOCKED, with module_missing naming test.a').toEqual([]);
   }, 120_000);
 
   it('#305.a15bd49b in core,test-a,test-b the same document with echo set is presented, with a snapshot', () => {

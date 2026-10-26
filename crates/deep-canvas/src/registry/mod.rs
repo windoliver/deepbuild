@@ -134,10 +134,13 @@ impl BuildSet {
     }
 }
 
+/// The canvas modules every build set holds: a status mark needs text's shaper and look's status
+/// map (Registry and seal: `build_set`), so a build that leaves one out is refused at startup.
+pub const CORE_MODULES: [&str; 2] = ["look", "text"];
+
 /// The canvas modules the design names, with the build set each first appears in, so a kind
 /// family of a module this build lacks is refused with `module_missing` and never `unknown_kind`
-/// (technical design: Canvas modules, the module table). R1's canvas code stays the core's own
-/// until #137 lays it out as canvas modules.
+/// (technical design: Canvas modules, the module table).
 const KNOWN_MODULES: &[(&str, BuildSet)] = &[
     ("text", BuildSet::Core),
     ("look", BuildSet::Core),
@@ -841,21 +844,10 @@ impl Sealed {
         self.module(name).is_some()
     }
 
-    /// True when this build holds `name`: a registered module, or one of the core's and R1's
-    /// own (a KNOWN_MODULES entry at Core or R1), which no build registers apart until #137
-    /// lays it out.
-    fn held(&self, name: &str) -> bool {
-        self.has(name) || core_held(name)
-    }
-
-    /// True when the module and its version satisfy `range`. A module of the core's and R1's
-    /// own code (a KNOWN_MODULES entry at Core or R1), which no build registers apart until #137
-    /// lays it out, is held by every build at whatever range a document asks.
+    /// True when the module and its version satisfy `range`.
     pub(crate) fn satisfies(&self, name: &str, range: &Range) -> bool {
-        match self.module(name) {
-            Some(m) => range.matches(m.version) || self.migrates_from(m, range),
-            None => self.held(name),
-        }
+        self.module(name)
+            .is_some_and(|m| range.matches(m.version) || self.migrates_from(m, range))
     }
 
     /// A document saved against an earlier major of a module whose kinds migrate: the
@@ -880,7 +872,7 @@ impl Sealed {
     /// The missing module that keeps `module`'s `operator` out of the plan: the module itself
     /// when the build lacks it, else the optional dependency the operator reads.
     pub(crate) fn missing_for(&self, module: &str, operator: &str) -> Option<String> {
-        if !self.held(module) {
+        if !self.has(module) {
             return Some(module.to_string());
         }
         self.left_out.get(&format!("{module}.{operator}")).cloned()
@@ -988,12 +980,11 @@ impl Sealed {
                 return self.left_out_kinds.get(full).cloned();
             }
         }
-        // The core's and R1's modules are the core's own code until #137 lays them out, so
-        // their kinds are never missing here; a later module's family is, when it is absent.
-        let family = full.split('.').next().unwrap_or(full);
+        // A core kind (`text@1`, `rect@1`) has no family to name a module by.
+        let (family, _) = full.split_once('.')?;
         KNOWN_MODULES
             .iter()
-            .find(|(name, set)| *set > BuildSet::R1 && *name == family && !self.has(name))
+            .find(|(name, _)| *name == family && !self.has(name))
             .map(|(name, _)| name.to_string())
     }
 }
@@ -1073,7 +1064,6 @@ impl Registry {
                 }
                 let required = !d.optional || self.fault == Some(Fault::EveryDependencyRequired);
                 match self.modules.iter().find(|o| o.manifest.name == *dep) {
-                    None if core_held(dep) => {}
                     None if required => {
                         return Err(SealError::new(
                             "missing_dependency",
@@ -1612,7 +1602,6 @@ impl Registry {
                                 ));
                             }
                         }
-                        None if core_held(p.module) && declares(&self.modules, name, p.module) => {}
                         None if missing.is_some_and(|set| set.contains(p.module)) => {}
                         None => {
                             return Err(SealError::new(
@@ -2211,15 +2200,6 @@ pub(crate) fn well_named(name: &str) -> bool {
         && name
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.')
-}
-
-/// True when `name` is one of the core's and R1's own modules (a KNOWN_MODULES entry at Core or
-/// R1), which no build registers apart until #137 lays it out: every build holds it, at any
-/// range, for a manifest's `depends_on` and a document's `requires.modules` alike.
-fn core_held(name: &str) -> bool {
-    KNOWN_MODULES
-        .iter()
-        .any(|(known, set)| *known == name && *set <= BuildSet::R1)
 }
 
 /// True when `name`'s manifest names `dep` in `depends_on`; every module reads the core's own.
@@ -2970,13 +2950,21 @@ mod tests {
     }
 
     #[test]
-    fn the_cores_own_modules_satisfy_any_range() {
-        let sealed = core();
+    fn a_build_holds_only_the_modules_it_registers() {
+        // R1's canvas is canvas modules (#388): nothing is held without registering.
         let caret = Range::parse("^1").unwrap();
+        let sealed = core();
+        assert!(!sealed.satisfies("text", &caret));
+        assert!(!sealed.satisfies("marks2d", &caret));
+        let sealed = Registry::new(BuildSet::Core)
+            .with(Module {
+                manifest: manifest("text", &[]),
+                register: |_| {},
+            })
+            .seal()
+            .unwrap();
         assert!(sealed.satisfies("text", &caret));
-        assert!(sealed.satisfies("marks2d", &caret));
         assert!(!sealed.satisfies("logic", &caret));
-        assert!(!sealed.satisfies("b", &caret));
     }
 
     #[test]
@@ -3878,15 +3866,24 @@ mod tests {
     }
 
     #[test]
-    fn a_manifest_may_depend_on_the_cores_own_modules() {
-        assert!(Registry::new(BuildSet::Core)
+    fn a_manifest_depends_on_r1_modules_only_where_the_build_registers_them() {
+        let err = Registry::new(BuildSet::Core)
             .with(Module {
                 manifest: manifest("c", &[("text", false), ("marks2d", false)]),
                 register: |_| {},
             })
             .seal()
-            .is_ok());
-        // A param the core's own module evaluates resolves when the manifest declares it.
+            .unwrap_err();
+        assert_eq!(err.code, "missing_dependency");
+        fn measure(r: &mut Registrar) {
+            r.array("text.w", "f64", "item", "geometry", "items");
+            r.operator("measure", "items", &["self"], &["text.w"]);
+        }
+        let text = || Module {
+            manifest: manifest("text", &[]),
+            register: measure,
+        };
+        // A param the text module evaluates resolves when the manifest declares it.
         fn text_evaluates(r: &mut Registrar) {
             let mut entry = thing();
             entry.versions[0].params.push(crate::kinds::Param {
@@ -3903,6 +3900,7 @@ mod tests {
             r.kind(entry, &[], "rect@1");
         }
         assert!(Registry::new(BuildSet::Core)
+            .with(text())
             .with(Module {
                 manifest: manifest("c", &[("text", false)]),
                 register: text_evaluates,
@@ -3910,6 +3908,7 @@ mod tests {
             .seal()
             .is_ok());
         let err = Registry::new(BuildSet::Core)
+            .with(text())
             .with(Module {
                 manifest: manifest("c", &[]),
                 register: text_evaluates,
@@ -3967,9 +3966,12 @@ mod tests {
     }
 
     #[test]
-    fn the_cores_own_modules_leave_no_param_missing() {
+    fn a_module_the_build_lacks_is_the_param_s_missing_one() {
         let sealed = core();
-        assert_eq!(sealed.missing_for("motion", "ease"), None);
+        assert_eq!(
+            sealed.missing_for("motion", "ease").as_deref(),
+            Some("motion")
+        );
         assert_eq!(sealed.missing_for("logic", "run").as_deref(), Some("logic"));
     }
 
