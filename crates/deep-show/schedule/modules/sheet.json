@@ -1,0 +1,20 @@
+{
+  "module": "sheet",
+  "phases": {
+    "items": [
+      {
+        "operator": "sheet.place",
+        "module": "sheet",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "sheet.placed"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

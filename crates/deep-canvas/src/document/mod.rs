@@ -1074,8 +1074,13 @@ mod tests {
             "requires/kinds/0",
         );
         assert!(check(&with(json!({"kinds": ["other.kind@7.2"]}))).ok);
-        // The core's own modules (text, and R1's marks2d) are held by every build.
-        assert!(check(&with(json!({"modules": {"text": "^1", "marks2d": "^1"}}))).ok);
+        // R1's canvas is canvas modules (#388): a build holds text or marks2d only when it
+        // registers them, and the core's own set registers none.
+        issue(
+            &with(json!({"modules": {"marks2d": "^1"}})),
+            "module_missing",
+            "requires/modules/marks2d",
+        );
         let full = with(json!({
             "core": "1.2.3",
             "kinds": ["test.slab@3.1"],

@@ -29,6 +29,18 @@
         "per": "item"
       },
       {
+        "operator": "core.status",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "core.status"
+        ],
+        "per": "document"
+      },
+      {
         "operator": "core.transform",
         "module": "core",
         "version": "0.0.0",

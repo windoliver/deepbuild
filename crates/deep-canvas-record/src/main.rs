@@ -4,38 +4,11 @@
 
 use std::io::{self, BufRead, Write};
 
-use deep_canvas_record::{level, Hold, Item, Options, RANK};
+use deep_canvas_record::{item, level, Hold, Options};
 use serde_json::{json, Value};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
-}
-
-fn item(value: &Value) -> Option<Item> {
-    let id = value
-        .get("id")?
-        .as_str()
-        .filter(|s| !s.is_empty())?
-        .to_string();
-    let facts = value.get("facts")?;
-    let mut flags = [false; 6];
-    for (flag, key) in flags.iter_mut().zip(RANK) {
-        *flag = facts.get(key)?.as_bool()?;
-    }
-    let priority = match facts.get("priority") {
-        None => 0,
-        Some(p) => i16::try_from(p.as_i64()?).ok()?,
-    };
-    let file = match value.get("file") {
-        None => false,
-        Some(f) => f.as_bool()?,
-    };
-    Some(Item {
-        id,
-        facts: flags,
-        priority,
-        file,
-    })
 }
 
 fn level_line(input: &Value) -> Option<Value> {

@@ -46,6 +46,25 @@
         ],
         "per": "item"
       }
+    ],
+    "extract": [
+      {
+        "operator": "text.status",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "reading",
+          "core.world",
+          "core.fields",
+          "core.status",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "text.status"
+        ],
+        "per": "document"
+      }
     ]
   },
   "contributions": {}

@@ -61,6 +61,50 @@ pub struct Status {
     pub min_distance: f64,
 }
 
+impl Status {
+    /// The map as the core's `core.status` array holds it, which the look module contributes.
+    pub fn to_json(&self) -> Value {
+        let colors: Map<String, Value> = self
+            .colors
+            .iter()
+            .map(|(s, c)| (s.to_string(), json!(c)))
+            .collect();
+        let glyphs: Map<String, Value> = self
+            .glyphs
+            .iter()
+            .map(|(s, g)| (s.to_string(), json!(g)))
+            .collect();
+        json!({"colors": colors, "glyphs": glyphs, "core_min_px": self.core_min_px,
+               "outline": self.outline, "min_distance": self.min_distance})
+    }
+
+    /// The map back from `to_json`'s form; `None` unless every state has a color and a glyph.
+    pub fn from_json(v: &Value) -> Option<Status> {
+        let mut colors = BTreeMap::new();
+        let mut glyphs = BTreeMap::new();
+        for state in STATES {
+            let c: Vec<u8> = v["colors"][state]
+                .as_array()?
+                .iter()
+                .map(|x| x.as_u64().and_then(|x| u8::try_from(x).ok()))
+                .collect::<Option<_>>()?;
+            colors.insert(state, <[u8; 3]>::try_from(c.as_slice()).ok()?);
+            glyphs.insert(state, v["glyphs"][state].as_str()?.to_string());
+        }
+        let outline = match &v["outline"] {
+            Value::Array(o) => Some((o.first()?.as_f64()?, o.get(1)?.as_str()?.to_string())),
+            _ => None,
+        };
+        Some(Status {
+            colors,
+            glyphs,
+            core_min_px: v["core_min_px"].as_f64()?,
+            outline,
+            min_distance: v["min_distance"].as_f64()?,
+        })
+    }
+}
+
 /// A resolved look: each theme's roles, and the status map when the look has one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Look {

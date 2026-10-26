@@ -2173,8 +2173,11 @@ fn build(
         let adjust = Adjust::read(item, palette, id)?;
         let mut marks: Vec<Mark> = match kind {
             // A scale, a mask and a group draw nothing themselves, and a camera is the view a
-            // document is seen through, not a mark (#378: a 3D figure's camera).
-            "scale@1" | "mask@1" | "group@1" | "camera@1" => continue,
+            // document is seen through, not a mark (#378: a 3D figure's camera). A graph, a
+            // salience level and a sheet are the graph, record and sheet modules' (#388), which
+            // lay them out and draw nothing yet.
+            "scale@1" | "mask@1" | "group@1" | "camera@1" | "graph@1" | "salience@1"
+            | "sheet@1" => continue,
             "star@1" => {
                 let p = |k: &str| num(params.get(k));
                 let star = Star {

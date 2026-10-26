@@ -6,6 +6,10 @@
 //! verdict change, and arrivals that would change it wait as "N new". Files show only at the
 //! evidence level.
 
+pub mod module;
+
+use serde_json::Value;
+
 /// The record facts salience ranks by, in the rank list's order.
 pub const RANK: [&str; 6] = [
     "needs_you",
@@ -174,4 +178,33 @@ pub fn level(items: &[Item], options: &Options, hold: Option<&Hold>) -> Level {
         line: sentence(&rest),
     });
     Level { shown, fold, new }
+}
+
+/// Reads `{id, facts: {needs_you, sent_back, failing, lacks_proof, touched, changed}, priority?,
+/// file?}`.
+pub fn item(value: &Value) -> Option<Item> {
+    let id = value
+        .get("id")?
+        .as_str()
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let facts = value.get("facts")?;
+    let mut flags = [false; 6];
+    for (flag, key) in flags.iter_mut().zip(RANK) {
+        *flag = facts.get(key)?.as_bool()?;
+    }
+    let priority = match facts.get("priority") {
+        None => 0,
+        Some(p) => i16::try_from(p.as_i64()?).ok()?,
+    };
+    let file = match value.get("file") {
+        None => false,
+        Some(f) => f.as_bool()?,
+    };
+    Some(Item {
+        id,
+        facts: flags,
+        priority,
+        file,
+    })
 }
