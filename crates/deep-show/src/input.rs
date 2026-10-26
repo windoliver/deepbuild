@@ -2,7 +2,8 @@
 //! panel presents. Each panel's canvas has one scope; the input router gives every input a serial;
 //! a frame at vsync v draws what was current at its latch, v − lead: the revision and the camera
 //! the latest input before it left (Frame clock and scheduler; Frame callback and presentation
-//! feedback).
+//! feedback). A view scrubbed back in time shows the revision current then, and a view comparing
+//! shows the revision it compares against as before.
 
 use deep_canvas::scope::{self, Event, Phase, Scope};
 use serde_json::{json, Value};
@@ -10,10 +11,20 @@ use serde_json::{json, Value};
 use crate::hub::{Hub, Planted};
 use crate::shared::FLICKS;
 
-/// A panel's scope and the camera after each input, by the time it arrived.
+/// What a frame draws besides the revision: the camera, and the view controls that choose the
+/// revision and what it hides.
+#[derive(Clone, PartialEq)]
+struct Seen {
+    camera: Value,
+    time: Option<i64>,
+    compare: Option<u64>,
+    hidden: Vec<String>,
+}
+
+/// A panel's scope and what it drew after each input, by the time it arrived.
 pub struct PanelScope {
     scope: Scope,
-    cameras: Vec<(i64, Value)>,
+    seen: Vec<(i64, Seen)>,
 }
 
 fn point(v: &Value) -> Option<[f64; 2]> {
@@ -59,6 +70,10 @@ pub fn event(v: &Value) -> Option<Event> {
             }
         }
         "text" => Event::Text(v.get("text")?.as_str()?.to_string()),
+        "control" => Event::Control {
+            control: v.get("control")?.as_str()?.to_string(),
+            value: v.get("value")?.clone(),
+        },
         _ => return None,
     })
 }
@@ -77,13 +92,54 @@ impl Hub<'_> {
             .map(|(d, _)| d.clone())
     }
 
-    /// The current revision a panel shows.
-    fn panel_document(&self, panel: &str) -> Option<Value> {
-        let doc = self.panel_doc(panel)?;
-        match self.shared.get(&doc) {
-            Some(s) => Some(s.doc.clone()),
-            None => self.current(&doc).map(|r| r.doc.clone()),
+    /// A document's revision `rev`, as it was.
+    fn revision(&self, doc: &str, rev: u64) -> Option<Value> {
+        match self.shared.get(doc) {
+            Some(s) => {
+                let k = s.revs.iter().position(|r| r.rev == rev)?;
+                Some(s.at(k).0.into_owned())
+            }
+            None => self
+                .revisions
+                .get(doc)?
+                .iter()
+                .find(|r| r.rev == rev)
+                .map(|r| r.doc.clone()),
         }
+    }
+
+    /// The revision of a document current at `t`.
+    fn rev_at(&self, doc: &str, t: i64) -> Option<u64> {
+        self.currents(doc)
+            .into_iter()
+            .filter(|(at, _)| *at <= t)
+            .map(|(_, r)| r)
+            .max()
+    }
+
+    /// The revision a panel shows now: live, or as of the time its view is scrubbed to; and the
+    /// one it compares against.
+    fn panel_document(&self, panel: &str) -> Option<(Value, Option<Value>)> {
+        let doc = self.panel_doc(panel)?;
+        let s = self.scopes.get(panel).map(|s| &s.scope);
+        let t = s.and_then(Scope::time).unwrap_or(self.now);
+        let shown = self.revision(&doc, self.rev_at(&doc, t)?)?;
+        let before = s
+            .and_then(Scope::compare)
+            .and_then(|rev| self.revision(&doc, rev));
+        Some((shown, before))
+    }
+
+    /// What the panel's scope draws now.
+    fn seen(&self, panel: &str) -> Option<Seen> {
+        let (doc, _) = self.panel_document(panel)?;
+        let s = &self.scopes.get(panel)?.scope;
+        Some(Seen {
+            camera: s.pose().to_json(),
+            time: s.time(),
+            compare: s.compare(),
+            hidden: s.hidden(&doc),
+        })
     }
 
     /// The panel's scope, made on first use from the revision it shows.
@@ -95,7 +151,7 @@ impl Hub<'_> {
                 .get(panel)
                 .ok_or_else(|| refused("unknown_panel"))?
                 .rect;
-            let doc = self
+            let (doc, _) = self
                 .panel_document(panel)
                 .ok_or_else(|| refused("not_presented"))?;
             let display = self
@@ -113,42 +169,61 @@ impl Hub<'_> {
             };
             let scope = Scope::new(&doc, rect, display, planted)
                 .map_err(|r| json!({"code": r.code, "path": r.path}))?;
-            let cameras = vec![(0, scope.pose().to_json())];
-            self.scopes
-                .insert(panel.to_string(), PanelScope { scope, cameras });
+            self.scopes.insert(
+                panel.to_string(),
+                PanelScope {
+                    scope,
+                    seen: Vec::new(),
+                },
+            );
+            let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
+            if let Some(s) = self.scopes.get_mut(panel) {
+                s.seen.push((0, first));
+            }
         }
         Ok(self.scopes.get_mut(panel).expect("inserted above"))
     }
 
     /// `input`: one hardware input to a panel's canvas.
     pub fn input(&mut self, panel: &str, event: &Event) -> Value {
-        let Some(doc) = self.panel_document(panel) else {
+        if let Err(e) = self.panel_scope(panel) {
+            return e;
+        }
+        let Some((doc, _)) = self.panel_document(panel) else {
             return refused("not_presented");
         };
         self.serial += 1;
         let (serial, now) = (self.serial, self.now);
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
-        let s = match self.panel_scope(panel) {
-            Ok(s) => s,
-            Err(e) => return e,
+        let done = match self.scopes.get_mut(panel) {
+            Some(s) => s.scope.input(&doc, now, serial, event),
+            None => return refused("unknown_panel"),
         };
-        let done = s.scope.input(&doc, now, serial, event);
-        if !late {
-            s.cameras.push((now, s.scope.pose().to_json()));
+        let seen = self.seen(panel);
+        if let (false, Some(seen), Some(s)) = (late, seen, self.scopes.get_mut(panel)) {
+            s.seen.push((now, seen));
         }
         json!({
             "serial": serial,
-            "state": s.scope.to_json(),
+            "state": self.state(panel),
             "picks": done.picks,
             "commits": done.commits.iter().map(|g| json!({"gesture": g})).collect::<Vec<_>>(),
         })
     }
 
+    /// The panel's scope over the revisions it shows and compares against.
+    fn state(&self, panel: &str) -> Value {
+        match (self.scopes.get(panel), self.panel_document(panel)) {
+            (Some(s), Some((doc, before))) => s.scope.to_json(&doc, before.as_ref()),
+            _ => Value::Null,
+        }
+    }
+
     /// `scope`: a panel's scope, with no input.
     pub fn scope_reply(&mut self, panel: &str) -> Value {
         match self.panel_scope(panel) {
-            Ok(s) => json!({"state": s.scope.to_json()}),
+            Ok(_) => json!({"state": self.state(panel)}),
             Err(e) => e,
         }
     }
@@ -169,7 +244,9 @@ impl Hub<'_> {
     }
 
     /// `presented`: every frame presented for a panel's document up to now. A frame presents at
-    /// a vsync when what its latch sees, the revision and the camera, differs from the last one.
+    /// a vsync when what its latch sees, the revision, the camera and the view, differs from the
+    /// last one. A scrubbed view draws the revision current at its time; a comparing view names
+    /// its before.
     pub fn presented(&mut self, panel: &str) -> Value {
         let Some(clock) = self.scenario.clock else {
             return refused("no_clock");
@@ -179,8 +256,8 @@ impl Hub<'_> {
         };
         let currents = self.currents(&doc);
         let now = self.now;
-        let cameras = match self.panel_scope(panel) {
-            Ok(s) => s.cameras.clone(),
+        let seen = match self.panel_scope(panel) {
+            Ok(s) => s.seen.clone(),
             Err(e) => return e,
         };
         let period = FLICKS / clock.refresh_hz;
@@ -191,26 +268,36 @@ impl Hub<'_> {
             0
         };
         let mut frames = Vec::new();
-        let mut last: Option<(u64, &Value)> = None;
+        let mut last: Option<(u64, &Seen)> = None;
         let mut k = 1;
         while k * period <= now {
             let vsync = k * period;
             let latch = vsync - clock.lead;
             k += 1;
-            let rev = currents
-                .iter()
-                .filter(|(at, _)| *at + late <= latch)
-                .map(|(_, r)| *r)
-                .max();
-            let camera = cameras.iter().rev().find(|(at, _)| *at <= latch);
-            let (Some(rev), Some((_, camera))) = (rev, camera) else {
+            let Some((_, view)) = seen.iter().rev().find(|(at, _)| *at <= latch) else {
                 continue;
             };
-            if last.is_some_and(|(r, c)| r == rev && c == camera) {
+            let shows = view.time.unwrap_or(latch);
+            let rev = currents
+                .iter()
+                .filter(|(at, _)| *at + late <= shows)
+                .map(|(_, r)| *r)
+                .max();
+            let Some(rev) = rev else {
+                continue;
+            };
+            if last.is_some_and(|(r, v)| r == rev && v == view) {
                 continue;
             }
-            last = Some((rev, camera));
-            frames.push(json!({"vsync": vsync, "rev": rev, "camera": camera}));
+            last = Some((rev, view));
+            let mut frame = json!({"vsync": vsync, "rev": rev, "camera": view.camera});
+            if let Some(before) = view.compare {
+                frame["before"] = json!(before);
+            }
+            if !view.hidden.is_empty() {
+                frame["hidden"] = json!(view.hidden);
+            }
+            frames.push(frame);
         }
         json!({"frames": frames})
     }
