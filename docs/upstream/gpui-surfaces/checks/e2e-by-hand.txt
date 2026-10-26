@@ -1,0 +1,16 @@
+Manual end-to-end run, October 25, 2026, on the app's own build (target/debug/deep-gpu, the vendored gpui-pre-apple), driven by hand with one JSON scenario per process and the captured windows looked at.
+
+Scenario 1: deep-gpu run; calls: frames(page alone, layer:false, capture every), frames(zero_copy, capture every), frames(copy, capture every), health. Reply:
+{"ok":true,"replies":[{"frames":[{"frame":0,"size":[1936,1584],"path":"zero_copy","pixel_hash":null,"settling":false,"window":"46ceadaf042ed2b26a83ba264cbc3682a91056e615348786656bc5159740d4b3","window_hash":"ad0306d11a1f6078a3b61d965a2502297dd75bfb6310f0248fddde299aeb3f7b"}],"device_losses":0},{"frames":[{"frame":0,"size":[1936,1584],"path":"zero_copy","pixel_hash":"025345febd0a2e5ceaadedaa4da18a2b9b8d861b7aeba826413a4d45daf846ab","settling":false,"window":"506edea7a458c583412949a97ef977c3a0ec33b730aeccc7595fa2bbffbcd947","window_hash":"cdcfc70bc3f3789e72505e40b1a51f1e2d0c01f30cd2ea27bfaeaaff4a2a2f30"}],"device_losses":0},{"frames":[{"frame":0,"size":[1936,1584],"path":"copy","pixel_hash":"025345febd0a2e5ceaadedaa4da18a2b9b8d861b7aeba826413a4d45daf846ab","settling":false,"window":"506edea7a458c583412949a97ef977c3a0ec33b730aeccc7595fa2bbffbcd947","window_hash":"cdcfc70bc3f3789e72505e40b1a51f1e2d0c01f30cd2ea27bfaeaaff4a2a2f30"}],"device_losses":0},{"readings":[]}]}
+
+Scenario 2: deep-gpu run --planted divides_alpha; calls: frames(zero_copy, capture every). Reply:
+{"ok":true,"replies":[{"frames":[{"frame":0,"size":[1936,1584],"path":"zero_copy","pixel_hash":"025345febd0a2e5ceaadedaa4da18a2b9b8d861b7aeba826413a4d45daf846ab","settling":false,"window":"4034771cb00512b9882ee72ab8b01818ca5167251fb8b3eac80583d799ee600b","window_hash":"4a9c331e3d14bc5dbd4ceb74151aaaa52daf8647be0d76a4eac1a24b0486c448"}],"device_losses":0}]}
+
+What the three captures show (1936 x 1584, looked at by eye):
+- page alone (46ceadaf...png): the 2D page's checkerboard, nothing else.
+- zero_copy window (506edea7...png): over the checkerboard, the alpha ramp fading in from the left, the grey ramp, the red object
+  with its warm glow spreading over the checkerboard around it, the 50% blue pane showing the checkerboard through it, the magenta
+  marker line. The copy path's window has the same file hash (window_hash cdcfc70b...), so the two paths are pixel-identical.
+- planted divides_alpha window (4034771c...png): the same frame, but the glow around the red object is gone; the bare
+  checkerboard shows right up to the red square. The window hash differs (4a9c331e...).
+health after the good run: no readings (the zero-copy handoff is in use with nothing to report).
