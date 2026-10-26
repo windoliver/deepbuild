@@ -1,7 +1,3 @@
-# The upstream pull request description, as posted on zed-industries/zed#66114
-
-Title: gpui_apple: premultiplied BGRA surfaces and per-frame surface reports
-
 ## Summary
 
 `Window::paint_surface` takes only 4:2:0 YCbCr video frames today: the Metal renderer asserts the pixel format. An app that renders 3D or effects with its own device (wgpu on Metal, in our case) and wants to show the result in place has no zero-copy path into a GPUI window; copying a 1936 × 1584 frame through memory costs about 6.7 ms against 0.8 ms for an IOSurface handoff on an M3 Pro.
@@ -15,7 +11,7 @@ The `paint_surface` doc names both formats.
 
 ## Testing
 
-`cargo test -p gpui_apple` adds `render_bgra_surface_premultiplied`: a 16 × 16 BGRA IOSurface, left half red at half alpha, right half green at alpha zero, beside the existing gray YCbCr surface in the same batch, rendered headless; the pixels and both reports are checked. Swapping the BGRA pipeline to the straight-alpha `build_pipeline_state` fails it (the alpha-zero half goes black); dropping the `sampled_surfaces.push` fails it (no report); dropping the YCbCr pipeline bind fails it (the gray half is drawn with the BGRA shader). `surface_hook_may_replace_itself` checks a hook can uninstall itself from inside a report. `cargo clippy -p gpui_apple --all-targets -- -D warnings` and `cargo fmt --check` pass.
+`cargo test -p gpui_apple` adds `render_bgra_surface_premultiplied`: a 16 × 16 BGRA IOSurface, left half red at half alpha, right half green at alpha zero, beside the existing gray YCbCr surface in the same batch, rendered headless; the pixels and both reports are checked. Swapping the BGRA pipeline to the straight-alpha `build_pipeline_state` fails it (the alpha-zero half goes black); dropping the `sampled_surfaces.push` fails it (no report); dropping the YCbCr pipeline bind fails it (the gray half is drawn with the BGRA shader). `surface_hook_may_replace_itself` checks a hook can uninstall itself from inside a report, and `set_hook_drops_the_old_hook_outside_the_lock` that replacing a hook drops the old one with the lock released. `gpui_macos::metal_renderer` re-exports `gpu_surfaces` beside the renderer's other items, so a gpui user can reach it (second commit, from a review pass). `cargo clippy -p gpui_apple --all-targets -- -D warnings` and `cargo fmt --check` pass.
 
 Manually tested on macOS 14.6 (MacBook Air, M3): our app's GPU layer draws a 1936 × 1584 premultiplied BGRA frame with an alpha ramp, a grey ramp and a glow into IOSurface-backed slots and shows them through `paint_surface`, releasing each slot on `Completed`; the window capture matches the copy path's pixel for pixel, and a planted straight-alpha compositor loses the glow where alpha is zero.
 
@@ -30,3 +26,4 @@ Disclosure: the code and this description were prepared with Claude Code and rev
 Release Notes:
 
 - N/A
+

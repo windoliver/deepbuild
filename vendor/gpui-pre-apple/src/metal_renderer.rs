@@ -114,8 +114,14 @@ pub mod gpu_surfaces {
     static PLANTED: AtomicU8 = AtomicU8::new(Planted::None as u8);
     static NEXT_FRAME: AtomicU64 = AtomicU64::new(1);
 
+    /// Installs the hook that receives every report, replacing any earlier one, or removes it.
+    /// The earlier hook is dropped with the lock released, so what it captured may use these
+    /// functions as it drops.
     pub fn set_hook(hook: Option<Hook>) {
-        *HOOK.write().unwrap_or_else(|e| e.into_inner()) = hook;
+        let mut guard = HOOK.write().unwrap_or_else(|e| e.into_inner());
+        let old = std::mem::replace(&mut *guard, hook);
+        drop(guard);
+        drop(old);
     }
 
     pub fn plant(planted: Planted) {
@@ -1986,6 +1992,31 @@ mod tests {
         }
         assert!(*replaced.lock());
         gpu_surfaces::set_hook(None);
+    }
+
+    /// DeepBuild patch (windoliver/deepbuild#711): replacing the hook drops the old one outside
+    /// the lock, so whatever it captured may use the hook functions as it drops.
+    #[test]
+    fn set_hook_drops_the_old_hook_outside_the_lock() {
+        struct AsksOnDrop;
+        impl Drop for AsksOnDrop {
+            fn drop(&mut self) {
+                gpu_surfaces::has_hook();
+            }
+        }
+        let asks = AsksOnDrop;
+        gpu_surfaces::set_hook(Some(Arc::new(move |_| {
+            let _ = &asks;
+        })));
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            gpu_surfaces::set_hook(None);
+            sender.send(()).unwrap();
+        });
+        if receiver.recv_timeout(Duration::from_secs(5)).is_err() {
+            panic!("set_hook deadlocked: the old hook was dropped under the lock");
+        }
+        assert!(!gpu_surfaces::has_hook());
     }
 
     #[test]
