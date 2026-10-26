@@ -20,6 +20,7 @@ use std::io::Write;
 use std::path::Path;
 use std::rc::Rc;
 
+use deep_canvas::cost::Coefficients;
 use deep_canvas::document::{
     apply_ops, canonical_in, check_in, recheck, rollback, store_migrations, touched_in, Issue,
     Patched, Writing, ID_MAPS,
@@ -35,7 +36,7 @@ use sha2::{Digest, Sha256};
 
 use crate::evidence;
 use crate::frames::unfit_issue;
-use crate::hub::{diff_reply, Body, Call, Hub, PatchCall, Planted, Show, Via};
+use crate::hub::{diff_reply, Body, Call, Hub, Include, PatchCall, Planted, Show, Via};
 use crate::snapshot::Unfit;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
@@ -234,9 +235,11 @@ pub fn writer_of_text(text: &str) -> Option<Writer> {
     })
 }
 
-/// Whether this build knows a kind: the marks module draws it, or the kernel registers it.
+/// Whether this build knows a kind: the marks module or scene3d draws it, or the kernel registers it.
 pub fn knows(kind: &str) -> bool {
     deep_canvas_marks::scene::KINDS.contains(&kind)
+        || deep_canvas_scene3d::scene::is_3d(kind)
+        || kind == deep_canvas_scene3d::scene::OVERLAY
         || !matches!(lookup(&registry(), kind), Lookup::UnknownKind)
 }
 
@@ -887,7 +890,12 @@ impl Hub<'_> {
             return Outcome::Refused(refusals);
         }
         // The marks module checks what the patch wrote, and counts what it costs.
-        let cost = match marks_check(&shared.doc, &patched.before, &self.look.light) {
+        let cost = match marks_check(
+            &shared.doc,
+            &patched.before,
+            &self.look.light,
+            &self.startup.sealed,
+        ) {
             Ok(cost) => cost,
             Err(issue) => {
                 take_back(shared, &patched);
@@ -1271,7 +1279,9 @@ impl Hub<'_> {
         let unreadable = unreadable_handles(&doc, |h| self.can_read(&writer, h));
         issues.extend(unreadable.into_iter().filter(|i| i.ids.iter().any(mine)));
         let mut drawn = None;
-        if !issues.iter().any(|i| i.severity == "error") {
+        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
+        let three = deep_canvas_scene3d::scene::has_3d(&doc);
+        if !three && !issues.iter().any(|i| i.severity == "error") {
             let shown = drawable(&doc);
             match self.renderer.prepare(
                 shown.as_object().expect("a document is an object"),
@@ -1343,6 +1353,10 @@ impl Hub<'_> {
             diff_reply(diff, &mut reply);
         }
         let visible = panel.visible;
+        if three && visible && show.include.iter().any(|i| matches!(i, Include::Pixels)) {
+            let shown = self.shared[&show.doc].doc.clone();
+            self.pending3d = Some(self.draw3d(&shown, show.t, show.size));
+        }
         self.present(show, visible, drawn.as_ref(), reply)
     }
 
@@ -1826,12 +1840,14 @@ fn marks(doc: &Value, items: &Map<String, Value>, palette: &Palette) -> Result<i
 /// they read (their ancestors, the items their params name, and those other maps target), so a
 /// patch the module can't draw is refused as a whole revision is, unless the item couldn't be
 /// drawn before either.
-/// A 2D mark lights nothing, so `lights` is 0; this build has no time or memory model for 2D
-/// marks yet, so `cpu_ms`, `gpu_ms` and `gpu_mb` read 0 until the meter's cost model (#379) lands.
+/// A 2D mark lights nothing, so `lights` is 0; `cpu_ms`, `gpu_ms` and `gpu_mb` are the cost
+/// model's estimate (#379) of the items it wrote as they are now, less as they were, from the
+/// build's coefficients.
 fn marks_check(
     doc: &Value,
     before: &BTreeMap<String, Option<Value>>,
     palette: &Palette,
+    sealed: &Sealed,
 ) -> Result<Value, Box<Issue>> {
     let draws_kind = |item: &Value| item["kind"].as_str().is_some_and(knows);
     let mut context = referenced(doc);
@@ -1886,7 +1902,34 @@ fn marks_check(
         (Err(e), Err(old)) if e == old => 0,
         (Err(Refused { code, path }), _) => return Err(Box::new(unfit_issue(code, path.clone()))),
     };
-    Ok(json!({"cpu_ms": 0, "gpu_ms": 0, "vertices": vertices, "lights": 0, "gpu_mb": 0}))
+    let coefficients = Coefficients::reference();
+    let estimate = |items: Map<String, Value>| {
+        // The document's envelope with only these items: the rest of its items never enter.
+        let mut subset: Map<String, Value> = doc
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(k, _)| k.as_str() != "items")
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        subset.insert("items".into(), Value::Object(items));
+        deep_canvas::cost::estimate(&Value::Object(subset), sealed, &coefficients)
+    };
+    let written = |at: &dyn Fn(&str) -> Option<Value>| -> Map<String, Value> {
+        before
+            .keys()
+            .filter_map(|id| Some((id.clone(), at(id)?)))
+            .collect()
+    };
+    let now_cost = estimate(written(&|id| doc["items"].get(id).cloned()));
+    let was_cost = estimate(written(&|id| before[id].clone()));
+    Ok(json!({
+        "cpu_ms": now_cost.cpu_ms - was_cost.cpu_ms,
+        "gpu_ms": now_cost.gpu_ms - was_cost.gpu_ms,
+        "vertices": vertices,
+        "lights": 0,
+        "gpu_mb": now_cost.gpu_mb - was_cost.gpu_mb,
+    }))
 }
 
 /// Drops every entry of an ID map that `layer` owns, from `doc` and from `owners`.

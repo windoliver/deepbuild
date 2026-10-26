@@ -7,8 +7,8 @@ import type { JsonValue } from '@deepbuild/contracts';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Db } from './storage.js';
 
-/** The base: a change of layer `learned` aimed at any of these is refused. */
-const BASE = ['kernel:', 'invariant:', 'spec:', 'check:', 'decision:', 'rule:'];
+/** The base: a change of layer `learned` aimed at any of these is refused. A guard rule you add is `guard:<name>`. */
+const BASE = ['kernel:', 'invariant:', 'spec:', 'check:', 'decision:', 'rule:', 'guard:'];
 /** The learned layer's closed list of targets: wiki claims, start-slice entries, rules DeepBuild offers, extension patches, playbooks, step specs, how definitions are drafted, compositions. */
 const LEARNED = ['wiki:', 'slice:', 'offer:', 'ext:', 'playbook:', 'step:', 'drafting:', 'composition:'];
 /** The local-first rule: it applies a change to the session it came from, and no further. */
@@ -158,6 +158,69 @@ function caughtABug(db: Db, check: string): boolean {
   return false;
 }
 
+/** The targets whose lines are `<field>: <value>`: what a step runs and checks, and what an extension may reach. */
+const STEPS = ['step:', 'playbook:', 'composition:'];
+const STEP_FIELDS = new Set(['run', 'check', 'assert', 'verify', 'mode', 'note']);
+const VERIFICATION = new Set(['check', 'assert', 'verify']);
+const GRANT = new Set(['grant.words', 'grant.hosts', 'grant.paths']);
+const GUARD_FIELD = /^guard\.[^.\s]+\.(match|scope|mode|reason|next_step|fail_closed)$/;
+/** Each order runs from the narrowest to the widest permission mode, and from the weakest to the strongest guard. */
+const MODES = ['plan', 'default', 'acceptEdits', 'bypassPermissions'];
+const STRENGTH: Record<string, string[]> = { mode: ['watch', 'warn', 'block'], fail_closed: ['false', 'true'] };
+/** Flags known to switch verification off, in a line a change adds to any target. */
+const VERIFY_OFF: [RegExp, string][] = [
+  [/(^|\s)--insecure(?=[\s=]|$)/, '--insecure'],
+  [/\bcurl\b[^|;&\n]*?\s-[A-Za-z]*k[A-Za-z]*(?=\s|$)/, 'curl -k'],
+  [/\bNODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['"]?0/, 'NODE_TLS_REJECT_UNAUTHORIZED=0'],
+  [/\bGIT_SSL_NO_VERIFY\b/, 'GIT_SSL_NO_VERIFY'],
+  [/\bverify\s*=\s*False\b/, 'verify=False'],
+];
+interface Field { line: string; field: string | undefined; value: string }
+const fieldsOf = (lines: string[]): Field[] => lines.map((line) => {
+  const m = /^([^\s:]+): ?(.*)$/.exec(line);
+  return { line, field: m?.[1], value: m?.[2] ?? '' };
+});
+
+/**
+ * Whether a learned change's diff loosens safety, read from its structure: a flag that switches verification off,
+ * a verification step removed or narrowed, a grant or a permission mode widened, a guard's coverage lowered, or a
+ * field the classifier doesn't know inside a step or an extension. Such a change counts as aimed at the base, so
+ * it is held for you whatever its replay shows, its reason quoting the clause that loosens.
+ */
+export function loosens(target: string, diff: string): string | undefined {
+  const say = (line: string, why: string): string => `${clip(target, 200)} is held for you: "${clip(line, 4000)}" ${why}`;
+  const added = linesOf(diff, '+');
+  for (const line of added) for (const [flag, name] of VERIFY_OFF) if (flag.test(line)) return say(line, `switches verification off (${name})`);
+  const step = STEPS.some((p) => target.startsWith(p));
+  if (!step && !target.startsWith('ext:')) return undefined;
+  const plus = fieldsOf(added);
+  const minus = fieldsOf(linesOf(diff, '-'));
+  for (const { line, field } of [...plus, ...minus]) {
+    const known = field !== undefined && (step ? STEP_FIELDS.has(field) : field === 'note' || GRANT.has(field) || GUARD_FIELD.test(field));
+    if (!known) return say(line, 'changes a field the classifier does not know, which counts as loosening');
+  }
+  for (const { line, field, value } of minus) {
+    if (plus.some((p) => p.line === line)) continue;
+    if (step && VERIFICATION.has(field!)) return say(line, 'removes or narrows a verification step');
+    const guard = step ? undefined : GUARD_FIELD.exec(field!)?.[1];
+    if (guard === 'match' || guard === 'scope') return say(line, "lowers a guard's coverage");
+    const order = guard ? STRENGTH[guard] : undefined;
+    if (order) {
+      const next = plus.find((p) => p.field === field);
+      if (!next || order.indexOf(next.value) < order.indexOf(value)) return say(next?.line ?? line, "lowers a guard's coverage");
+    }
+  }
+  for (const { line, field, value } of plus) {
+    if (!step && GRANT.has(field!)) return say(line, 'widens a grant');
+    if (step && field === 'mode') {
+      const was = MODES.indexOf(minus.find((m) => m.field === 'mode')?.value ?? 'default');
+      const now = MODES.indexOf(value);
+      if (now < 0 || now > was) return say(line, 'widens a permission mode');
+    }
+  }
+  return undefined;
+}
+
 /**
  * The layer's judgment of a learned change from the record alone, as the projection makes it at the change's
  * place in the log: undefined when it is in force, or refused or held with a reason naming the target, the
@@ -205,7 +268,8 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
       if (caughtABug(db, dropped.trim())) return { outcome: 'held', reason: `${target} would drop ${dropped.trim()}, a check that once caught a real bug` };
     }
   }
-  return undefined;
+  const loosening = loosens(target, change.diff);
+  return loosening === undefined ? undefined : { outcome: 'held', reason: loosening };
 }
 
 /**
@@ -377,6 +441,76 @@ export function startSlice(db: Db, session: string): SliceEntry[] {
     if (scopes.has(textOf(d.scope))) slice.push({ target: `decision:${d.id}`, text: textOf(d.answer) });
   }
   return slice;
+}
+
+export interface HeldAtLoad { target: string; reason: string }
+export interface LearnedLoad { loaded: SliceEntry[]; held: HeldAtLoad[] }
+
+/** A glob as deep-hook's matcher reads one: `*` any run, the rest matched whole. */
+const globMatches = (pattern: string, text: string): boolean =>
+  new RegExp(`^${pattern.split('*').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 's').test(text);
+/** The programs a plain command line runs, each with its words: split at `&&`, `||`, `;` and `|`, past assignments and the wrappers deep-hook looks through. */
+function runsOf(command: string): string[][] {
+  return command.split(/&&|\|\||[;|]/).map((part) => {
+    const words = part.trim().split(/\s+/).filter((w) => w !== '');
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0]!)) words.shift();
+    if (['env', 'command', 'exec', 'nohup', 'sudo', 'xargs'].includes(words[0] ?? '')) words.shift();
+    else if (words[0] === 'timeout') words.splice(0, 2);
+    return words;
+  }).filter((words) => words.length > 0);
+}
+/**
+ * Whether a guard's `match` reads a command a step runs, as deep-hook's matcher reads a plain command line: its
+ * `shell:` and `run:` forms. Undefined for a form only deep-hook can read from a call (a write, a kill, an effect).
+ */
+function matchesCommand(match: string, command: string): boolean | undefined {
+  const cut = match.indexOf(':');
+  const rest = match.slice(cut + 1);
+  if (match.startsWith('shell:')) return globMatches(rest, command);
+  if (!match.startsWith('run:')) return undefined;
+  const [program, ...wanted] = rest.trim().split(/\s+/);
+  return runsOf(command).some(([first, ...args]) => {
+    if (!globMatches(program!.toLowerCase(), first!.split('/').pop()!.toLowerCase())) return false;
+    const plain = args.filter((a) => !a.startsWith('-'));
+    let next = 0;
+    return wanted.every((want) => (want.startsWith('-') ? args.some((a) => globMatches(want, a)) : next < plain.length && globMatches(want, plain[next++]!)));
+  });
+}
+
+/**
+ * What a session loads of the learned step specs, playbooks and compositions in force whose scope covers it,
+ * each checked against the guard rules in force now, so a rule added after a spec applied still holds it. One
+ * that runs a command a `block` rule denies, or that a rule this check can't read might deny, stays out of the
+ * session and shows as held, naming the rule. Read from the record as it is now, as the start slice is.
+ */
+export function loadLearned(db: Db, session: string): LearnedLoad {
+  const row = db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
+  const scopes = new Set([`session:${session}`, 'all', ...(row?.project_id ? [`repo:${row.project_id}`] : [])]);
+  const inForce = (where: string): SliceEntry[] =>
+    fold(db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ${where} ORDER BY log_pos`).all() as FoldRow[], (scope) => scopes.has(scope));
+  const guards = inForce("layer = 'base' AND target LIKE 'guard:%'").map(({ target, text }) => {
+    const fields = new Map(fieldsOf(text.split('\n')).map((f) => [f.field, f.value]));
+    return { name: target.slice('guard:'.length), match: fields.get('match') ?? '', mode: fields.get('mode'), reason: fields.get('reason') ?? '' };
+  }).filter((g) => g.mode === 'block');
+  const out: LearnedLoad = { loaded: [], held: [] };
+  for (const entry of inForce(`layer = 'learned' AND (${STEPS.map((p) => `target LIKE '${p}%'`).join(' OR ')})`)) {
+    const commands = fieldsOf(entry.text.split('\n')).filter((f) => f.field === 'run' || f.field === 'verify').map((f) => f.value);
+    let reason: string | undefined;
+    for (const guard of guards) {
+      for (const command of commands) {
+        const hit = matchesCommand(guard.match, command);
+        if (hit === false) continue;
+        reason = hit
+          ? `${entry.target} runs "${clip(command, 2000)}", which the guard rule ${guard.name} denies: ${clip(guard.reason, 2000)}`
+          : `${entry.target} runs "${clip(command, 2000)}", and the guard rule ${guard.name} matches "${clip(guard.match, 2000)}", which only deep-hook reads from a call, so it is held until you look`;
+        break;
+      }
+      if (reason) break;
+    }
+    if (reason) out.held.push({ target: entry.target, reason });
+    else out.loaded.push(entry);
+  }
+  return out;
 }
 
 /** The learned changes a rollback compensates, newest first: one in force, or every one in force since a time; never the base. */

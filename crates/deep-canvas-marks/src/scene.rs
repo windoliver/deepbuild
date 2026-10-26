@@ -259,6 +259,73 @@ pub enum ImageSampling {
     Cubic,
 }
 
+/// A styled span of a text's one shaped run (`runs: [{from, to, role}]`): graphemes `[from, to)`
+/// painted in `role`. It changes no glyph, so the run is shaped once and kerns across it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextRun {
+    pub from: usize,
+    pub to: usize,
+    pub role: String,
+    pub color: Rgb,
+}
+
+/// The role and color a text's grapheme is painted in: its run's, else the item's.
+pub fn run_paint<'a>(
+    runs: &'a [TextRun],
+    grapheme: usize,
+    role: Option<&'a str>,
+    color: Rgb,
+) -> (Option<&'a str>, Rgb) {
+    runs.iter()
+        .find(|r| (r.from..r.to).contains(&grapheme))
+        .map_or((role, color), |r| (Some(r.role.as_str()), r.color))
+}
+
+/// A text's runs. This build's runs set only `role`; a run's other fields (font, weight, size,
+/// style, tracking, shift, lines) are R6's, refused `module_missing`.
+fn text_runs(
+    palette: &Palette,
+    params: &Map<String, Value>,
+    path: &str,
+) -> Result<Vec<TextRun>, Refused> {
+    let Some(list) = params.get("runs") else {
+        return Ok(Vec::new());
+    };
+    let Some(list) = list.as_array().filter(|l| l.len() <= 1024) else {
+        return refuse("bad_doc", format!("{path}/params/runs"));
+    };
+    let mut out = Vec::with_capacity(list.len());
+    for (i, run) in list.iter().enumerate() {
+        let at = format!("{path}/params/runs/{i}");
+        let Some(fields) = run.as_object() else {
+            return refuse("bad_doc", at);
+        };
+        if let Some(field) = fields
+            .keys()
+            .find(|k| !["from", "to", "role"].contains(&k.as_str()))
+        {
+            return refuse("module_missing", format!("{at}/{field}"));
+        }
+        let index = |k: &str| fields.get(k).and_then(Value::as_u64).map(|n| n as usize);
+        let (Some(from), Some(to)) = (index("from"), index("to")) else {
+            return refuse("bad_doc", at);
+        };
+        if from >= to {
+            return refuse("out_of_range", format!("{at}/to"));
+        }
+        let Some(Value::String(name)) = fields.get("role") else {
+            return refuse("bad_doc", format!("{at}/role"));
+        };
+        out.push(TextRun {
+            from,
+            to,
+            color: role(palette, fields.get("role"), &format!("{at}/role"))?,
+            role: name.clone(),
+        });
+    }
+    Ok(out)
+}
+
 /// What a text mark is shaped from: `text@1`'s text, font role, size, weight, box width and
 /// alignment.
 #[derive(Clone, Debug, PartialEq)]
@@ -393,7 +460,12 @@ pub enum Mark {
         item: String,
         spec: TextSpec,
         origin: [f64; 2],
+        /// The look role the item's fill names (`None` for a mark set's or an axis's labels,
+        /// colored from their encodings), and its color.
+        role: Option<String>,
         color: Rgb,
+        /// Spans of the one shaped run painted in their own roles.
+        runs: Vec<TextRun>,
     },
     /// An image by its asset's sha256, decoded once by whoever draws it.
     Image {
@@ -445,8 +517,10 @@ impl Mark {
     fn adjust(&mut self, a: &Adjust) {
         match self {
             Mark::Rect { fill, .. } => fill.adjust(a),
-            Mark::Circle { color, .. } | Mark::Path { color, .. } | Mark::Text { color, .. } => {
-                *color = a.rgb(*color)
+            Mark::Circle { color, .. } | Mark::Path { color, .. } => *color = a.rgb(*color),
+            Mark::Text { color, runs, .. } => {
+                *color = a.rgb(*color);
+                runs.iter_mut().for_each(|r| r.color = a.rgb(r.color));
             }
             Mark::Shape { fill, stroke, .. } => {
                 fill.iter_mut().for_each(|(f, _)| f.adjust(a));
@@ -553,11 +627,16 @@ impl Mark {
                 spec,
                 origin,
                 color: c,
+                runs,
                 ..
             } => {
                 k.text("text").key(&spec.key());
                 k.number(origin[0]).number(origin[1]);
                 color(k, c);
+                for r in runs {
+                    k.int(r.from as i64).int(r.to as i64);
+                    color(k, &r.color);
+                }
             }
             Mark::Image {
                 asset,
@@ -1410,7 +1489,7 @@ fn bound_ids(doc: &Map<String, Value>, items: &Map<String, Value>) -> Result<Vec
         }
     }
     for (id, item) in items {
-        if counter_of(item).is_some() {
+        if counter_of(item).is_some() || template_of(item).is_some() {
             ids.push(id.clone());
         }
     }
@@ -1423,6 +1502,10 @@ fn counter_of(item: &Value) -> Option<&Map<String, Value>> {
     item.get("params")?.get("text")?.get("counter")?.as_object()
 }
 
+pub(crate) fn template_of(item: &Value) -> Option<&str> {
+    item.get("params")?.get("template")?.as_str()
+}
+
 /// What one item shows when a bound value's text targets it or it is a counter, its numbers
 /// written as `locale` writes them; `None` for any other item. A counter's own format wins
 /// over its bound value's.
@@ -1433,6 +1516,18 @@ pub fn bound_text(
     record: &Record,
     locale: &str,
 ) -> Result<Option<Shown>, Refused> {
+    if let Some(template) = template_of(item) {
+        // A template shows each slot's value at its own precision (Text `text@1`, `template`).
+        let text = deep_canvas::template::expand(&Value::Object(doc.clone()), template)
+            .or_else(|_| refuse("ref_unresolved", format!("items/{id}/params/template")))?;
+        return Ok(Some(Shown {
+            bound: "template".into(),
+            text,
+            stale: false,
+            age: None,
+            changes_at: None,
+        }));
+    }
     let empty = Map::new();
     let bound = doc
         .get("bound_values")
@@ -2067,8 +2162,9 @@ fn build(
         let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
         let adjust = Adjust::read(item, palette, id)?;
         let mut marks: Vec<Mark> = match kind {
-            // A scale, a mask and a group draw nothing themselves.
-            "scale@1" | "mask@1" | "group@1" => continue,
+            // A scale, a mask and a group draw nothing themselves, and a camera is the view a
+            // document is seen through, not a mark (#378: a 3D figure's camera).
+            "scale@1" | "mask@1" | "group@1" | "camera@1" => continue,
             "star@1" => {
                 let p = |k: &str| num(params.get(k));
                 let star = Star {
@@ -2315,6 +2411,8 @@ fn build(
                             Some(&color_role),
                             &format!("{path}/params/paint/fill/role"),
                         )?,
+                        role: color_role.as_str().map(str::to_string),
+                        runs: text_runs(palette, params, &path)?,
                     }
                 }
                 _ => return refuse("module_missing", format!("{path}/kind: {kind}")),

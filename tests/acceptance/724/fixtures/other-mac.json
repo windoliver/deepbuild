@@ -1,0 +1,9 @@
+{
+  "model": "Mac15,12",
+  "chip": "Apple M3",
+  "memoryBytes": 17179869184,
+  "power": "battery",
+  "lowPowerMode": true,
+  "thermalState": "fair",
+  "macosBuild": "25F71"
+}

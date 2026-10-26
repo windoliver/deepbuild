@@ -19,8 +19,8 @@ console.log('Warming builds (not timed)');
 warm(root);
 try {
   // Lane output streams as it runs, so a measurement that breaks never hides what ran.
-  const { elapsedMs, cpuMs, peakBytes, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
-  observation = { elapsedMs, cpuMs, peakBytes, status };
+  const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
+  observation = { elapsedMs, cpuMs, peakBytes, instructions, status };
   checkStatus = status === 0 ? 0 : 1;
 } catch (error) {
   console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);

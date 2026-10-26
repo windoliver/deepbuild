@@ -1779,6 +1779,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-canvas-scene3d"
+version = "0.0.0"
+dependencies = [
+ "deep-canvas",
+ "deep-canvas-motion",
+ "deep-text",
+ "serde_json",
+ "vello_cpu",
+]
+
+[[package]]
 name = "deep-canvas-sheet"
 version = "0.0.0"
 dependencies = [
@@ -1821,8 +1832,11 @@ dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-canvas-scene3d",
+ "deep-canvas-test-modules",
  "deep-gpu",
  "deep-replica",
+ "deep-scene3d-render",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-shell",
@@ -1880,15 +1894,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-scene3d-render"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "deep-canvas-scene3d",
+ "deep-gpu",
+ "wgpu 30.0.1",
+]
+
+[[package]]
 name = "deep-show"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
  "deep-canvas-marks",
  "deep-canvas-motion",
+ "deep-canvas-scene3d",
  "deep-canvas-test-modules",
+ "deep-gpu",
  "deep-marks-vello",
  "deep-replica",
+ "deep-scene3d-render",
  "deep-text",
  "deep-text-gpui",
  "gpui-kit",
@@ -1904,7 +1931,11 @@ name = "deep-text"
 version = "0.0.0"
 dependencies = [
  "fearless_simd",
+ "icu_properties",
+ "icu_segmenter",
  "parley",
+ "parley_data",
+ "parley_engine",
  "serde_json",
  "vello_cpu",
 ]
