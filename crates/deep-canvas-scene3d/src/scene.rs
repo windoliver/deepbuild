@@ -886,7 +886,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                             .unwrap_or(false),
                     });
                 }
-                "light.sun@1" => {}
+                "light.sun@1" | "camera@1" => {}
                 _ => others.push(Other {
                     id: id.clone(),
                     kind: kind.to_string(),

@@ -5,16 +5,20 @@
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use serde_json::{json, Value};
 
-/// The shipped passes and the place each goes into, in frame order.
+pub const GRID: &str = "effects.grid";
+pub const SHADOW: &str = "effects.shadow";
+pub const SPARKS: &str = "effects.particles";
+pub const OUTLINE: &str = "effects.outline";
+pub const GLOW: &str = "effects.glow";
+
+/// The passes the shipped operators run as, each timed in the frame under its name, and the place
+/// each goes into, in frame order: glow's whole chain is one pass in the bloom place.
 pub const PASSES: &[(&str, &str)] = &[
-    ("grid.ground@1", "effects"),
-    ("shadow.resolve@1", "effects"),
-    ("particles.sparks@1", "effects"),
-    ("outline.select@1", "effects"),
-    ("glow.down_karis@1", "bloom"),
-    ("glow.down@1", "bloom"),
-    ("glow.up@1", "bloom"),
-    ("glow.mix@1", "bloom"),
+    (GRID, "effects"),
+    (SHADOW, "effects"),
+    (SPARKS, "effects"),
+    (OUTLINE, "effects"),
+    (GLOW, "bloom"),
 ];
 
 fn manifest() -> Manifest {

@@ -76,11 +76,7 @@ pub struct PassInfo {
     pub operator: Option<&'static str>,
 }
 
-pub const GRID: &str = "effects.grid";
-pub const SHADOW: &str = "effects.shadow";
-pub const SPARKS: &str = "effects.particles";
-pub const OUTLINE: &str = "effects.outline";
-pub const GLOW: &str = "effects.glow";
+pub use deep_canvas_effects::module::{GLOW, GRID, OUTLINE, SHADOW, SPARKS};
 
 pub struct Effects {
     pub settings: Settings,
