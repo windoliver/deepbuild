@@ -1,14 +1,17 @@
 //! `deep-text <subcommand>`: JSON lines in, one JSON line out per input line, in order, exit 0; a
 //! line that can't be read, or holds a number that isn't finite, a size that isn't above zero, a
 //! weight outside 1..=1000 or a negative box side, answers `{"ok":false,"code":"bad_input"}`.
-//! Subcommands: `fit` (the fit check of one Text item against its widest string) and `fonts` (the
-//! bundled faces by role).
+//! Subcommands: `fit` (the fit check of one Text item against its widest string), `fonts` (the
+//! bundled faces by role), and `breaks`, `graphemes` and `bidi` (issue #381: the shaper's UAX #14
+//! line-break opportunities, UAX #29 grapheme ends and UAX #9 levels and visual order, as code point
+//! offsets). `breaks` takes `planted: "space_breaker"` and `bidi` `planted: "logical_arabic"`, the
+//! acceptance suite's wrong programs.
 
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
-use deep_text::{Align, Role, Shaper, Spec, FACES};
+use deep_text::{unicode, Align, Dir, Role, Shaper, Spec, FACES};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
@@ -139,6 +142,78 @@ fn fonts_line() -> Value {
     json!({"ok": true, "fonts": fonts})
 }
 
+/// The planted field: absent, or the one name a subcommand knows.
+fn planted<'a>(input: &'a Map<String, Value>, name: &str) -> Option<Option<&'a str>> {
+    match input.get("planted") {
+        None | Some(Value::Null) => Some(None),
+        Some(Value::String(p)) if p == name => Some(Some(p)),
+        Some(_) => None,
+    }
+}
+
+fn breaks_line(input: &Map<String, Value>) -> Value {
+    let (Some(text), Some(plant)) = (
+        input.get("text").and_then(Value::as_str),
+        planted(input, "space_breaker"),
+    ) else {
+        return bad_input();
+    };
+    let breaks = if plant.is_some() {
+        // The wrong breaker: after each run of spaces, and at the end, nowhere else.
+        let chars: Vec<char> = text.chars().collect();
+        (1..=chars.len())
+            .filter(|&k| k == chars.len() || (chars[k - 1] == ' ' && chars[k] != ' '))
+            .collect()
+    } else {
+        unicode::breaks(text)
+    };
+    json!({"ok": true, "breaks": breaks})
+}
+
+fn graphemes_line(input: &Map<String, Value>) -> Value {
+    match input.get("text").and_then(Value::as_str) {
+        Some(text) => json!({"ok": true, "breaks": unicode::graphemes(text)}),
+        None => bad_input(),
+    }
+}
+
+/// True for a character in one of the Arabic blocks.
+fn arabic(c: char) -> bool {
+    matches!(u32::from(c), 0x0600..=0x06ff | 0x0750..=0x077f | 0x0870..=0x08ff | 0xfb50..=0xfdff
+        | 0xfe70..=0xfeff | 0x10ec0..=0x10eff | 0x1ee00..=0x1eeff)
+}
+
+fn bidi_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
+    let dir = match input.get("dir").and_then(Value::as_str) {
+        Some("auto") => Dir::Auto,
+        Some("ltr") => Dir::Ltr,
+        Some("rtl") => Dir::Rtl,
+        _ => return bad_input(),
+    };
+    let (Some(text), Some(plant)) = (
+        input.get("text").and_then(Value::as_str),
+        planted(input, "logical_arabic"),
+    ) else {
+        return bad_input();
+    };
+    let mut bidi = shaper.bidi(text, dir);
+    if plant.is_some() {
+        // The wrong layout: each run of Arabic at an odd level drawn in logical order.
+        let chars: Vec<char> = text.chars().collect();
+        let odd_arabic = |i: usize| arabic(chars[i]) && bidi.levels[i].is_some_and(|l| l % 2 == 1);
+        let mut start = 0;
+        while start < bidi.order.len() {
+            let mut end = start;
+            while end < bidi.order.len() && odd_arabic(bidi.order[end]) {
+                end += 1;
+            }
+            bidi.order[start..end].sort_unstable();
+            start = end.max(start + 1);
+        }
+    }
+    json!({"ok": true, "paragraph": bidi.paragraph, "levels": bidi.levels, "order": bidi.order})
+}
+
 fn main() {
     let command = std::env::args().nth(1).unwrap_or_default();
     let mut shaper = Shaper::new();
@@ -151,6 +226,9 @@ fn main() {
             Ok(Value::Object(input)) => match command.as_str() {
                 "fit" => fit_line(&mut shaper, &input),
                 "fonts" => fonts_line(),
+                "breaks" => breaks_line(&input),
+                "graphemes" => graphemes_line(&input),
+                "bidi" => bidi_line(&mut shaper, &input),
                 _ => refused("bad_command"),
             },
             _ => bad_input(),

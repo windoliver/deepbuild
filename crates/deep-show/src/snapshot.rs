@@ -305,12 +305,14 @@ impl Renderer {
                 spec,
                 origin,
                 color: c,
+                runs,
+                ..
             } => {
                 // The text module's run, shaped once for its spec, as the scheduler keeps it;
                 // an animated text's units each lifted and faded.
                 if let Some(run) = drawn.runs.get(item).filter(|r| r.spec == *spec) {
                     let units = drawn.animated.get(item).map(Vec::as_slice);
-                    self.glyphs(ctx, &run.shaped, *origin, *c, at, units);
+                    self.glyphs(ctx, &run.shaped, *origin, (*c, runs), at, units);
                     return;
                 }
                 let align = match spec.align {
@@ -321,25 +323,20 @@ impl Renderer {
                 let Some(role) = Role::parse(&spec.font) else {
                     return;
                 };
-                self.text(
-                    ctx,
-                    &Spec {
-                        text: &spec.text,
-                        role,
-                        size: spec.size as f32,
-                        weight: spec.weight,
-                        line_height: None,
-                        width: spec.width.map(|w| w as f32),
-                        max_lines: None,
-                        align,
-                        bound: spec.bound,
-                        tabular: spec.bound,
-                        mask: false,
-                    },
-                    *origin,
-                    *c,
-                    at,
-                );
+                let shaped = self.shaper.shape(&Spec {
+                    text: &spec.text,
+                    role,
+                    size: spec.size as f32,
+                    weight: spec.weight,
+                    line_height: None,
+                    width: spec.width.map(|w| w as f32),
+                    max_lines: None,
+                    align,
+                    bound: spec.bound,
+                    tabular: spec.bound,
+                    mask: false,
+                });
+                self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
             Mark::Image {
                 asset,
@@ -401,23 +398,25 @@ impl Renderer {
         at: Affine,
     ) {
         let shaped = self.shaper.shape(spec);
-        self.glyphs(ctx, &shaped, origin, c, at, None);
+        self.glyphs(ctx, &shaped, origin, (c, &[]), at, None);
     }
 
-    /// A shaped run's glyphs at `origin` (its top left); with `units`, each glyph lifted and
-    /// faded by its unit's `[lift, opacity]`.
+    /// A shaped run's glyphs at `origin` (its top left), each in its run's color or the text's;
+    /// with `units`, each glyph lifted and faded by its unit's `[lift, opacity]`.
     fn glyphs(
         &mut self,
         ctx: &mut RenderContext,
         shaped: &deep_text::Shaped,
         origin: [f64; 2],
-        c: Rgb,
+        (c, runs): (Rgb, &[scene::TextRun]),
         at: Affine,
         units: Option<&[[f64; 2]]>,
     ) {
+        let paint = |g: &deep_text::Glyph| scene::run_paint(runs, g.grapheme, None, c).1;
         if let Some(units) = units {
             for (g, unit) in shaped.glyphs.iter().zip(units) {
                 let [lift, opacity] = *unit;
+                let c = paint(g);
                 let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
                 ctx.set_paint(AlphaColor::from_rgba8(c[0], c[1], c[2], alpha));
                 ctx.set_transform(at * Affine::translate((origin[0], origin[1] + lift)));
@@ -435,7 +434,6 @@ impl Renderer {
             ctx.set_transform(at);
             return;
         }
-        ctx.set_paint(color(c));
         ctx.set_transform(at * Affine::translate((origin[0], origin[1])));
         let mut start = 0;
         while start < shaped.glyphs.len() {
@@ -446,8 +444,10 @@ impl Renderer {
                     g.font.data.id() == first.font.data.id()
                         && g.font.index == first.font.index
                         && g.size == first.size
+                        && paint(g) == paint(first)
                 })
                 .count();
+            ctx.set_paint(color(paint(first)));
             let glyphs = shaped.glyphs[start..start + run]
                 .iter()
                 .map(|g| vello_cpu::Glyph {
