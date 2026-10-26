@@ -433,6 +433,22 @@
         "serde_json": {
           "spec": "^1",
           "why": "Issue #390: the deep-text CLI's JSON lines; already in the workspace tree."
+        },
+        "parley_engine": {
+          "spec": "^0.12",
+          "why": "Issue #381: the analysis parley's layout runs (UAX #14 opportunities, UAX #29 graphemes, UAX #9 levels), read for the conformance files; already in parley's tree."
+        },
+        "parley_data": {
+          "spec": "^0.12",
+          "why": "Issue #381: the character properties parley's analysis reads (mandatory breaks, bidi classes); already in parley's tree."
+        },
+        "icu_properties": {
+          "spec": "^2.3",
+          "why": "Issue #381: the bidi class names rule X9 removes; already in parley's tree."
+        },
+        "icu_segmenter": {
+          "spec": "^2.3",
+          "why": "Issue #381: UAX #14 at Unicode 17.0.0 (its `unstable` 17.0 state machine), fed to parley's layout through its line-break override, since parley's own call still runs 15.1's rules; already in parley's tree."
         }
       }
     },
@@ -811,6 +827,10 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #377: the shipped canvas modules the plug-in's documents are checked in."
+        },
+        "deep-canvas-test-modules": {
+          "spec": "* path=../deep-canvas-test-modules",
+          "why": "Issue #379: the test canvas module test.gpu, whose texture, mesh and burn the meter's acceptance tests draw; optional, under the test-meter feature, so no shipped build holds it."
         },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
