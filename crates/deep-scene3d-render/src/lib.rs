@@ -33,6 +33,17 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 
 const SHADER: &str = include_str!("scene3d.wgsl");
 const OUTPUT: &str = include_str!("output.wgsl");
+const BUSY: &str = include_str!("busy.wgsl");
+
+/// The frame's GPU time, from timestamps the device writes at the start of the geometry pass and
+/// the end of the output pass (#383).
+struct Timer {
+    set: wgpu::QuerySet,
+    resolve: wgpu::Buffer,
+    read: wgpu::Buffer,
+    /// ns per timestamp tick.
+    period: f64,
+}
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -47,6 +58,8 @@ pub struct Planted {
     pub encodes_every_frame: bool,
     /// A batch keeps replaying its old encoding after its draw key changed.
     pub replays_after_add: bool,
+    /// #383: every frame adds a pass that keeps the GPU busy for at least 10 ms.
+    pub slow_gpu_frame: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -253,6 +266,10 @@ pub struct Renderer {
     order: Vec<String>,
     ground: [f64; 4],
     counts: Counts,
+    /// On a device that writes timestamps.
+    timer: Option<Timer>,
+    /// The planted slow_gpu_frame twin's pipeline.
+    busy: Option<wgpu::RenderPipeline>,
 }
 
 fn decode(c: u8) -> f64 {
@@ -504,6 +521,66 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let timer = d
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY)
+            .then(|| {
+                let buffer = |label, usage| {
+                    d.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some(label),
+                        size: 16,
+                        usage,
+                        mapped_at_creation: false,
+                    })
+                };
+                Timer {
+                    set: d.create_query_set(&wgpu::QuerySetDescriptor {
+                        label: Some("scene3d timestamps"),
+                        ty: wgpu::QueryType::Timestamp,
+                        count: 2,
+                    }),
+                    resolve: buffer(
+                        "scene3d timestamps",
+                        wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                    ),
+                    read: buffer(
+                        "scene3d timestamps read",
+                        wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    ),
+                    period: f64::from(device.queue.get_timestamp_period()),
+                }
+            });
+        let busy = planted.slow_gpu_frame.then(|| {
+            let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("scene3d busy"),
+                source: wgpu::ShaderSource::Wgsl(BUSY.into()),
+            });
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("scene3d busy"),
+                layout: None,
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("busy_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("busy_fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        });
         Renderer {
             planted,
             epoch: device.epoch,
@@ -527,6 +604,8 @@ impl Renderer {
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
             counts: Counts::default(),
+            timer,
+            busy,
         }
     }
 
@@ -953,6 +1032,8 @@ impl Renderer {
         );
         let [r, g, b, a] = self.ground;
         let clear_depth = if self.planted.forward_z { 1.0 } else { 0.0 };
+        let timer = self.timer.as_ref().map(|t| t.set.clone());
+        let start = timer.clone();
         let geometry: Job = Box::new(move |encoder| {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(GEOMETRY_PASS),
@@ -984,6 +1065,11 @@ impl Renderer {
                     }),
                     stencil_ops: None,
                 }),
+                timestamp_writes: start.as_ref().map(|set| wgpu::RenderPassTimestampWrites {
+                    query_set: set,
+                    beginning_of_pass_write_index: Some(0),
+                    end_of_pass_write_index: None,
+                }),
                 ..Default::default()
             });
             pass.execute_bundles(bundles.iter());
@@ -993,10 +1079,10 @@ impl Renderer {
             self.output_pipeline.clone(),
             t.output_bind.clone(),
         );
+        let busy = self.busy.clone();
         let output: Job = Box::new(move |encoder| {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(OUTPUT_PASS),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            let attachment = || {
+                [Some(wgpu::RenderPassColorAttachment {
                     view: &slot,
                     resolve_target: None,
                     depth_slice: None,
@@ -1004,17 +1090,65 @@ impl Renderer {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
-                })],
-                ..Default::default()
-            });
-            pass.set_pipeline(&pipeline);
-            pass.set_bind_group(0, &bind, &[]);
-            pass.draw(0..3, 0..1);
+                })]
+            };
+            if let Some(busy) = &busy {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("scene3d busy"),
+                    color_attachments: &attachment(),
+                    ..Default::default()
+                });
+                pass.set_pipeline(busy);
+                pass.draw(0..3, 0..1);
+            }
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(OUTPUT_PASS),
+                    color_attachments: &attachment(),
+                    timestamp_writes: timer.as_ref().map(|set| wgpu::RenderPassTimestampWrites {
+                        query_set: set,
+                        beginning_of_pass_write_index: None,
+                        end_of_pass_write_index: Some(1),
+                    }),
+                    ..Default::default()
+                });
+                pass.set_pipeline(&pipeline);
+                pass.set_bind_group(0, &bind, &[]);
+                pass.draw(0..3, 0..1);
+            }
         });
         vec![
             (GEOMETRY_PASS.into(), geometry),
             (OUTPUT_PASS.into(), output),
         ]
+    }
+
+    /// The last frame's GPU time in ms, from the start of its geometry pass to the end of its
+    /// output pass; `None` on a device that writes no timestamps. Call once the frame is done:
+    /// Metal writes a pass's samples as its command buffer completes, so they are resolved after.
+    pub fn gpu_ms(&self, device: &Device) -> Option<f64> {
+        let t = self.timer.as_ref()?;
+        let mut encoder = device.device.create_command_encoder(&Default::default());
+        encoder.resolve_query_set(&t.set, 0..2, &t.resolve, 0);
+        encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, 16);
+        device.queue.submit([encoder.finish()]);
+        let (tx, rx) = mpsc::channel();
+        t.read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
+        if !matches!(rx.recv(), Ok(Ok(()))) {
+            return None;
+        }
+        let ticks = {
+            let data = t.read.slice(..).get_mapped_range().ok()?;
+            let at = |i: usize| {
+                u64::from_le_bytes(data[i * 8..i * 8 + 8].try_into().unwrap_or_default())
+            };
+            at(1).saturating_sub(at(0))
+        };
+        t.read.unmap();
+        Some(ticks as f64 * t.period / 1e6)
     }
 
     /// The frame's linear target as little-endian f32 RGBA and its object-ID target as each

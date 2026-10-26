@@ -86,8 +86,11 @@ impl Device {
                         ..Default::default()
                     }))
                     .map_err(|e| format!("no GPU adapter: {e}"))?;
+                // Timestamps where the GPU writes them, so a frame's GPU time is measured on the
+                // device (#383).
                 pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                     label: Some("deep-gpu"),
+                    required_features: adapter.features() & wgpu::Features::TIMESTAMP_QUERY,
                     ..Default::default()
                 }))
                 .map_err(|e| format!("no GPU device: {e}"))?
@@ -114,5 +117,21 @@ impl Device {
 
     pub fn is_lost(&self) -> bool {
         self.lost.load(Ordering::SeqCst)
+    }
+
+    /// The GPU memory the device holds now, as Metal measures it (`currentAllocatedSize`);
+    /// `None` on a device that doesn't say.
+    pub fn allocated_bytes(&self) -> Option<u64> {
+        #[cfg(target_os = "macos")]
+        {
+            use objc2_metal::MTLDevice as _;
+            // SAFETY: the raw device is only read, while wgpu's device keeps it alive.
+            let hal = unsafe { self.device.as_hal::<wgpu::hal::api::Metal>() }?;
+            Some(hal.raw_device().currentAllocatedSize() as u64)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            None
+        }
     }
 }

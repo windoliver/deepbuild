@@ -16,5 +16,6 @@ pub mod ops;
 pub mod registry;
 pub mod render;
 pub mod schedule;
+pub mod scope;
 pub mod session;
 pub mod show;

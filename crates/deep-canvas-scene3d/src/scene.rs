@@ -653,8 +653,9 @@ fn camera(
     Ok(cam)
 }
 
-/// What one item contributes to the bounds the camera's near and far come from.
-fn corners(model: &Affine3) -> Vec<Vec3> {
+/// A solid's eight corners in the world: what it contributes to the bounds the camera's near and
+/// far come from, and what a view projects to tell whether it is on screen (#383).
+pub fn corners(model: &Affine3) -> Vec<Vec3> {
     let mut out = Vec::with_capacity(8);
     for x in [-0.5, 0.5] {
         for y in [-0.5, 0.5] {

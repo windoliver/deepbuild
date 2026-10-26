@@ -9,6 +9,7 @@
 mod evidence;
 mod frames;
 mod hub;
+mod input;
 mod kit;
 #[cfg(feature = "test-accent")]
 mod planted;
@@ -237,6 +238,14 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     };
     match name {
         "revisions" => return Some(Call::Revisions(doc()?)),
+        "input" => {
+            return Some(Call::Input {
+                panel: c.get("panel")?.as_str()?.to_string(),
+                event: input::event(c.get("event")?)?,
+            })
+        }
+        "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
+        "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
         "fixtures" => return Some(Call::Fixtures),
@@ -559,6 +568,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             Some([r[2], r[3]])
         }
     };
+    let display = match input.get("display") {
+        None => None,
+        Some(d) => {
+            let r = rect(Some(&json!([0, 0, d.get(0)?, d.get(1)?])))?;
+            Some([r[2], r[3]])
+        }
+    };
     let card = match input.get("card") {
         None => None,
         Some(c) => Some(Card {
@@ -629,6 +645,13 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
             "every_digest_positive" => Planted::EveryDigestPositive,
             "checks_share_only" => Planted::ChecksShareOnly,
+            "line_scroll_pans" => Planted::LineScrollPans,
+            "commit_every_move" => Planted::CommitEveryMove,
+            "pick_mid_gesture" => Planted::PickMidGesture,
+            "drag_shows_on_release" => Planted::DragShowsOnRelease,
+            "patch_shows_a_frame_late" => Planted::PatchShowsAFrameLate,
+            "full_screen_only_3d" => Planted::FullScreenOnly3d,
+            "esc_to_root" => Planted::EscToRoot,
             _ => return None,
         }),
     };
@@ -673,6 +696,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         record,
         claims,
         window,
+        display,
         card,
         fault,
         planted,
