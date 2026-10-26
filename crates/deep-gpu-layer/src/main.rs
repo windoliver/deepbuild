@@ -1,17 +1,25 @@
-//! `deep-gpu run [--backend noop] [--planted <name>]` (issue #377; tests/acceptance/377/README.md,
-//! The surface under test): one JSON scenario per stdin line, `{"out": dir, "calls": [Call]}`,
-//! answered with one line `{"ok": true, "replies": [Reply]}`. Every call of a run uses one app: one
-//! GPU (one wgpu device), one headless window, and each scene's session from call to call.
+//! `deep-gpu run [--backend noop] [--withhold timestamps] [--planted <name>]` (issue #377;
+//! tests/acceptance/377/README.md, The surface under test; #379 adds the meter's calls,
+//! tests/acceptance/379/README.md): one JSON scenario per stdin line, `{"out": dir, "calls":
+//! [Call]}`, answered with one line `{"ok": true, "replies": [Reply]}`. Every call of a run uses one
+//! app: one GPU (one wgpu device), one headless window, and each scene's session from call to call.
 
+#[cfg(feature = "test-meter")]
+mod allocations;
 mod compare;
 mod compile;
 mod conformance;
 mod effects;
 mod frames;
 mod golden;
+mod live;
+mod liveview;
 mod plugin;
 mod reference;
 mod scene;
+#[cfg(feature = "test-meter")]
+mod testgpu;
+mod timing;
 mod view3d;
 mod window;
 mod worker;
@@ -20,7 +28,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::Arc;
 
-use deep_gpu::device::{Backend, Gpu};
+use deep_gpu::device::{Backend, Gpu, Withheld};
 use deep_gpu::guard::Declarations;
 use deep_gpu::surface::Path;
 use gpui_kit::HeadlessAppContext;
@@ -58,6 +66,19 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #379's wrong programs (tests/acceptance/379/README.md: Planted programs).
+    SumsPassIntervals,
+    AllocatesPerFrame,
+    CompilesAtSwap,
+    ChargesFirstHolder,
+    KeepsUnreadResults,
+    FormulaCount,
+    StepsOnFirstSlowFrame,
+    SkipsARung,
+    StepsEveryWriter,
+    SharesMeterWithWorker,
+    /// #381's: labels shaped at a fixed em for masks of their own, nothing in the atlas.
+    LabelMask,
 }
 
 impl Planted {
@@ -86,6 +107,17 @@ impl Planted {
             "pass_off_by_two" => Planted::PassOffByTwo,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
+            "sums_pass_intervals" => Planted::SumsPassIntervals,
+            "allocates_per_frame" => Planted::AllocatesPerFrame,
+            "compiles_at_swap" => Planted::CompilesAtSwap,
+            "charges_first_holder" => Planted::ChargesFirstHolder,
+            "keeps_unread_results" => Planted::KeepsUnreadResults,
+            "formula_count" => Planted::FormulaCount,
+            "steps_on_first_slow_frame" => Planted::StepsOnFirstSlowFrame,
+            "skips_a_rung" => Planted::SkipsARung,
+            "steps_every_writer" => Planted::StepsEveryWriter,
+            "shares_meter_with_worker" => Planted::SharesMeterWithWorker,
+            "label_mask" => Planted::LabelMask,
             _ => return None,
         })
     }
@@ -278,10 +310,50 @@ impl App {
             Some("cross_gpu") => effects::cross_gpu(self, call),
             Some("golden") => golden::golden(self, out, call),
             Some("decide") => golden::decide(self, call),
+            Some("live") => live::call(self, out, call),
+            Some("canonical") => live::canonical(self, call),
+            Some("adapter") => timing::adapter(self),
+            Some("tick") => timing::tick(self, call),
+            #[cfg(feature = "test-meter")]
+            Some("allocate") => allocations::allocate(self, call),
+            #[cfg(feature = "test-meter")]
+            Some("release") => allocations::release(self, call),
             _ => refused("bad_input", "unknown call"),
         }
     }
 }
+
+/// The counting allocator (issue #379, `test-meter` builds only): every allocation is offered to
+/// the core's count, which keeps only the frame path's own.
+#[cfg(feature = "test-meter")]
+struct Counting;
+
+#[cfg(feature = "test-meter")]
+// SAFETY: every call passes straight to the system allocator.
+unsafe impl std::alloc::GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        deep_gpu::alloc::note();
+        unsafe { std::alloc::System.alloc(layout) }
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+        deep_gpu::alloc::note();
+        unsafe { std::alloc::System.alloc_zeroed(layout) }
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, size: usize) -> *mut u8 {
+        deep_gpu::alloc::note();
+        unsafe { std::alloc::System.realloc(ptr, layout, size) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(ptr, layout) }
+    }
+}
+
+#[cfg(feature = "test-meter")]
+#[global_allocator]
+static COUNTING: Counting = Counting;
 
 fn bad_input() -> ! {
     println!("{}", json!({"ok": false, "code": "bad_input"}));
@@ -293,7 +365,7 @@ fn main() {
     if args.next().as_deref() != Some("run") {
         bad_input();
     }
-    let (mut backend, mut planted) = (Backend::Gpu, None);
+    let (mut backend, mut planted, mut withheld) = (Backend::Gpu, None, Withheld::default());
     while let Some(a) = args.next() {
         match a.as_str() {
             "--backend" => match args.next().as_deref() {
@@ -303,6 +375,10 @@ fn main() {
             "--planted" => match args.next().as_deref().and_then(Planted::parse) {
                 Some(p) => planted = Some(p),
                 None => bad_input(),
+            },
+            "--withhold" => match args.next().as_deref() {
+                Some("timestamps") => withheld.timestamps = true,
+                _ => bad_input(),
             },
             _ => bad_input(),
         }
@@ -318,6 +394,7 @@ fn main() {
     }
     let worker = match Worker::start(
         backend,
+        withheld,
         planted == Some(Planted::SubmitsOnCompletion),
         planted == Some(Planted::ReleasesBeforeCompletion),
     ) {

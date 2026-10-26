@@ -83,6 +83,7 @@ impl How {
             access_log: true,
             shuffle: self.shuffle,
             planted: self.planted.clone(),
+            timing: None,
         }
     }
 }
