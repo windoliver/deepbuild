@@ -568,7 +568,9 @@ pub fn mark_set(
                     bound: false,
                 },
                 origin: at,
+                role: None,
                 color,
+                runs: Vec::new(),
             }),
             _ => return refuse("out_of_range", format!("{path}/mark")),
         }
@@ -725,7 +727,9 @@ pub fn axis(
                 bound: false,
             },
             origin,
+            role: None,
             color,
+            runs: Vec::new(),
         });
     }
     Ok(marks)
