@@ -1058,6 +1058,126 @@ mod tests {
             deep_canvas::registry::Semver::parse(deep_canvas::registry::CORE_VERSION).is_some()
         );
     }
+
+    /// #383's view controls on a shared board an agent adds to: scrubbing the record's time back
+    /// shows the revision current then, picked and drawn as it was; compare against revision 0
+    /// names what changed, the changed lens colors by it, and no control writes a revision.
+    #[test]
+    fn a_scrubbed_view_shows_the_revision_current_then_and_compare_names_what_changed() {
+        let startup = Startup {
+            sealed: deep_canvas::registry::core(),
+            seal_ms: 0.0,
+            steps_by_name: false,
+            test_build: false,
+        };
+        let evidence = std::env::temp_dir().join(format!("deep-383-view-{}", std::process::id()));
+        let doc = "01JB383V00000000000000000A";
+        let rect = |id: &str, x: u32| {
+            json!({"id": id, "kind": "rect@1", "layer": "alpha-main", "name": id, "order": "a1",
+                "params": {"box": [x, 100, 40, 40]}})
+        };
+        let seed = json!({
+            "format": 1, "profile": "board", "title": "View", "size": [640, 360],
+            "description": "A shared board an agent adds boxes to, scrubbed and compared.",
+            "layers": {"alpha-main": {"writer": "agent:t", "title": "Alpha", "order": "a1"}},
+            "items": {"a": rect("a", 20)},
+        });
+        let add = |id: &str, n: u32, x: u32, base: u32| {
+            json!({"call": "deep_show", "session": "s", "doc": doc, "patch": {
+                "patch": format!("01JB383V0000000000000000P{n}"), "doc": doc, "base": base,
+                "reason": "add a box", "ops": [{"op": "create", "item": rect(id, x)}],
+            }})
+        };
+        // A 60 Hz clock with no lead: frame k presents at k × 11,760,000 flicks.
+        const FRAME: i64 = 11_760_000;
+        let event =
+            |t: i64, e: Value| json!({"call": "input", "panel": "main", "at": t, "event": e});
+        let control = |t: i64, c: &str, v: Value| {
+            event(t, json!({"type": "control", "control": c, "value": v}))
+        };
+        // Box c, which only revision 2 holds, sits at page (200, 100) to (240, 140); the default
+        // camera shows the 640 u page across the 800 px panel, so its centre (220, 120) is at
+        // panel px (275, 225).
+        let on_c = [275.0, 225.0];
+        let click = |t: i64| {
+            [
+                event(t, json!({"type": "down", "pos": on_c})),
+                event(t + 1, json!({"type": "up", "pos": on_c})),
+            ]
+        };
+        let mut calls = vec![
+            json!({"call": "scope", "panel": "main", "at": 0}),
+            add("b", 1, 100, 0),
+            add("c", 2, 200, 1),
+        ];
+        calls[1]["at"] = json!(10 * FRAME);
+        calls[2]["at"] = json!(20 * FRAME);
+        calls.push(control(30 * FRAME, "time", json!(15 * FRAME)));
+        calls.extend(click(31 * FRAME));
+        calls.push(control(40 * FRAME, "time", Value::Null));
+        calls.extend(click(41 * FRAME));
+        calls.push(control(50 * FRAME, "compare", json!(0)));
+        calls.push(control(51 * FRAME, "lens", json!("changed")));
+        calls.push(json!({"call": "presented", "panel": "main", "at": 60 * FRAME}));
+        calls.push(json!({"call": "revisions", "doc": doc, "at": 61 * FRAME}));
+        let scenario = json!({
+            "evidence": evidence.to_string_lossy(),
+            "sessions": {"s": {"thread": "t", "name": "Claude Code: t", "process": {"pid": 4100, "start": 1000}}},
+            "processes": [{"pid": 1, "ppid": 0, "start": 0}],
+            "panels": {"main": {"rect": [0, 0, 800, 600]}},
+            "docs": {doc: {"panel": "main", "document": seed}},
+            "clock": {"refresh_hz": 60, "lead": 0, "check": 5},
+            "calls": calls,
+        });
+        let out = answer("run", &startup, &scenario.to_string());
+        let _ = std::fs::remove_dir_all(&evidence);
+        let r = &out["replies"];
+        assert_eq!(out["ok"], json!(true), "{out}");
+        // Scrubbed to between the two patches, the view shows revision 1, which has no c, so a
+        // click where c is selects nothing; live again, the same click selects c. Each control
+        // committed once.
+        assert_eq!(r[3]["state"]["view"]["time"], json!(15 * FRAME));
+        assert_eq!(r[3]["commits"].as_array().map(Vec::len), Some(1));
+        assert_eq!(r[5]["state"]["selection"], json!([]));
+        assert_eq!(r[8]["state"]["selection"], json!(["c"]));
+        // Live again, then compared with revision 0: b and c were added, a is the same.
+        assert_eq!(
+            r[9]["state"]["changed"],
+            json!({"b": "added", "c": "added"})
+        );
+        let key = &r[10]["state"]["lens"]["key"];
+        assert_eq!(key["a"], json!("same"));
+        assert_eq!(key["c"], json!("added"));
+        // The frames drew revision 2 live, went back to revision 1 while scrubbed, and returned.
+        let revs: Vec<u64> = r[11]["frames"]
+            .as_array()
+            .expect("frames")
+            .iter()
+            .filter_map(|f| f["rev"].as_u64())
+            .collect();
+        let back = revs
+            .iter()
+            .position(|&v| v == 2)
+            .expect("revision 2 is drawn");
+        assert!(
+            revs[back..].contains(&1),
+            "the scrubbed view draws revision 1 again: {revs:?}"
+        );
+        assert_eq!(revs.last(), Some(&2), "and the live one after: {revs:?}");
+        let before: Vec<&Value> = r[11]["frames"]
+            .as_array()
+            .expect("frames")
+            .iter()
+            .filter_map(|f| f.get("before"))
+            .collect();
+        assert_eq!(
+            before.last(),
+            Some(&&json!(0)),
+            "a comparing frame names its before"
+        );
+        // No view control wrote a revision: the board still has its three.
+        assert_eq!(r[12]["revisions"].as_array().map(Vec::len), Some(3));
+    }
 }
 
 /// The seal's planted twin from the arguments after the command: none, or

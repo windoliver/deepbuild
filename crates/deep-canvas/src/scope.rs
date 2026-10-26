@@ -7,9 +7,12 @@
 //! starts, never mid-gesture, and commits once, on the input that ends it. Only navigation (a
 //! double-click, ⌘K, Esc) frames the camera, never a click. In a flat view an item is its
 //! `params.box`; in 3D it is the box of its `params.size` about its position, picked by the
-//! nearest face under the pointer. Every canvas draws a full-screen
-//! button; Esc leaves full screen before it backs out of a level. All of it is session state:
-//! the document is never written.
+//! nearest face under the pointer. Every canvas draws a full-screen button; Esc ends isolation,
+//! then leaves full screen, then backs out a level. Its view controls filter items out by kind
+//! or writer, isolate one, pick a lens (provenance by writer, or how each item changed), scrub
+//! the record's time and compare against an earlier revision; the caller hands it the revision
+//! the view shows and the one compared against. All of it is session state: the document is
+//! never written.
 
 use serde_json::{json, Map, Value};
 
@@ -75,6 +78,70 @@ pub enum Event {
         cmd: bool,
     },
     Text(String),
+    /// An entry on one of the canvas's view controls (Scope and input classes: view class), the
+    /// value `null` to clear it: `filter` `{kinds, writers}`, `isolate` an item ID, `lens`
+    /// `writer` or `changed`, `time` the flicks the view shows the record as of, `compare` the
+    /// revision shown as before.
+    Control {
+        control: String,
+        value: Value,
+    },
+}
+
+/// What a lens colors each shown item by: the writer whose layer holds it (provenance), or how
+/// it changed since the revision compared against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Lens {
+    Writer,
+    Changed,
+}
+
+/// The view controls' state: session state, never written to the document.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct View {
+    /// Kinds and writers the filter hides.
+    kinds: Vec<String>,
+    writers: Vec<String>,
+    /// The item isolation keeps, with its parents and children; everything else is hidden.
+    isolate: Option<String>,
+    lens: Option<Lens>,
+    /// The record's time the view shows, in flicks; live without one.
+    time: Option<i64>,
+    /// The revision compared against, shown as before.
+    compare: Option<u64>,
+}
+
+/// How each item differs between two revisions, by ID.
+fn diff(before: &Value, after: &Value) -> Map<String, Value> {
+    let items = |d: &Value| {
+        member(d, "items")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let (a, b) = (items(before), items(after));
+    let mut out = Map::new();
+    for (id, item) in &b {
+        let how = match a.get(id) {
+            None => "added",
+            Some(was) if was != item => "changed",
+            Some(_) => continue,
+        };
+        out.insert(id.clone(), json!(how));
+    }
+    for id in a.keys().filter(|id| !b.contains_key(*id)) {
+        out.insert(id.clone(), json!("removed"));
+    }
+    out
+}
+
+/// The writer whose layer holds `item`, as the document's `layers` name it.
+fn writer_of<'a>(doc: &'a Value, item: &Value) -> Option<&'a str> {
+    let layer = member(item, "layer").and_then(Value::as_str)?;
+    member(doc, "layers")
+        .and_then(|l| member(l, layer))
+        .and_then(|l| member(l, "writer"))
+        .and_then(Value::as_str)
 }
 
 /// What one input did: the hit tests it ran and the serials of the gestures it committed.
@@ -143,6 +210,7 @@ pub struct Scope {
     press: Option<Press>,
     /// The last click: when, where and on what, for a double-click.
     last_click: Option<(i64, [f64; 2], Hit)>,
+    view: View,
     planted: Planted,
 }
 
@@ -302,8 +370,116 @@ impl Scope {
             palette: None,
             press: None,
             last_click: None,
+            view: View::default(),
             planted,
         })
+    }
+
+    /// The record's time the view shows, flicks, or `None` while it's live: which revision the
+    /// caller hands the scope.
+    pub fn time(&self) -> Option<i64> {
+        self.view.time
+    }
+
+    /// The revision the view compares against, shown as before.
+    pub fn compare(&self) -> Option<u64> {
+        self.view.compare
+    }
+
+    /// The items the view hides: those the filter names by kind or writer, and outside an
+    /// isolated item, its parents and its children, by ID. The document keeps them all.
+    pub fn hidden(&self, doc: &Value) -> Vec<String> {
+        let Some(items) = member(doc, "items").and_then(Value::as_object) else {
+            return Vec::new();
+        };
+        let parent = |id: &str| {
+            items
+                .get(id)
+                .and_then(|i| member(i, "parent"))
+                .and_then(Value::as_str)
+        };
+        // Whether `id` is `of` or nested under it.
+        let under = |id: &str, of: &str| {
+            let mut at = Some(id);
+            let mut steps = 0;
+            while let Some(a) = at.filter(|_| steps <= items.len()) {
+                if a == of {
+                    return true;
+                }
+                at = parent(a);
+                steps += 1;
+            }
+            false
+        };
+        items
+            .iter()
+            .filter(|(id, item)| {
+                if member(item, "kind").and_then(Value::as_str) == Some("camera@1") {
+                    return false;
+                }
+                let kind = member(item, "kind").and_then(Value::as_str).unwrap_or("");
+                let filtered = self.view.kinds.iter().any(|k| k == kind)
+                    || writer_of(doc, item)
+                        .is_some_and(|w| self.view.writers.iter().any(|x| x == w));
+                let outside = self
+                    .view
+                    .isolate
+                    .as_deref()
+                    .is_some_and(|keep| !under(id, keep) && !under(keep, id));
+                filtered || outside
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    /// The items a press or ⌘K can reach: every target the view doesn't hide.
+    fn shown_targets(&self, doc: &Value) -> Vec<Target> {
+        let hidden = self.hidden(doc);
+        let mut all = targets(doc, self.rig.flat);
+        all.retain(|t| !hidden.contains(&t.id));
+        all
+    }
+
+    /// An entry on a view control; `false` when the value isn't one the control takes.
+    fn control(&mut self, control: &str, value: &Value) -> bool {
+        let strings = |v: Option<&Value>| -> Option<Vec<String>> {
+            match v {
+                None | Some(Value::Null) => Some(Vec::new()),
+                Some(v) => v
+                    .as_array()?
+                    .iter()
+                    .map(|s| s.as_str().map(str::to_string))
+                    .collect(),
+            }
+        };
+        match (control, value) {
+            ("filter", Value::Null) => {
+                self.view.kinds.clear();
+                self.view.writers.clear();
+            }
+            ("filter", Value::Object(f)) => {
+                let (Some(kinds), Some(writers)) =
+                    (strings(f.get("kinds")), strings(f.get("writers")))
+                else {
+                    return false;
+                };
+                self.view.kinds = kinds;
+                self.view.writers = writers;
+            }
+            ("isolate", Value::Null) => self.view.isolate = None,
+            ("isolate", Value::String(id)) => self.view.isolate = Some(id.clone()),
+            ("lens", Value::Null) => self.view.lens = None,
+            ("lens", Value::String(l)) if l == "writer" => self.view.lens = Some(Lens::Writer),
+            ("lens", Value::String(l)) if l == "changed" => self.view.lens = Some(Lens::Changed),
+            ("time", Value::Null) => self.view.time = None,
+            ("time", v) if v.as_i64().is_some_and(|t| t >= 0) => self.view.time = v.as_i64(),
+            ("compare", Value::Null) => self.view.compare = None,
+            ("compare", v) if v.as_u64().is_some() => self.view.compare = v.as_u64(),
+            _ => return false,
+        }
+        true
     }
 
     pub fn pose(&self) -> Pose {
@@ -376,7 +552,7 @@ impl Scope {
         if !within(self.rect(), p) {
             return Hit::Empty;
         }
-        let all = targets(doc, self.rig.flat);
+        let all = self.shown_targets(doc);
         if self.rig.flat {
             let c = self.content(p, &self.offsets);
             return all
@@ -473,9 +649,10 @@ impl Scope {
         ];
     }
 
-    /// Esc: closes the palette, else leaves full screen, else backs out one level.
+    /// Esc: closes the palette, else ends isolation, else leaves full screen, else backs out one
+    /// level.
     fn back(&mut self) {
-        if self.palette.take().is_some() {
+        if self.palette.take().is_some() || self.view.isolate.take().is_some() {
             return;
         }
         if self.planted.esc_to_root {
@@ -628,7 +805,7 @@ impl Scope {
                     ("k", true) => self.palette = Some(String::new()),
                     ("Return", _) => {
                         if let Some(query) = self.palette.take() {
-                            let all = targets(doc, self.rig.flat);
+                            let all = self.shown_targets(doc);
                             let found = all
                                 .iter()
                                 .find(|t| t.name == query)
@@ -648,12 +825,58 @@ impl Scope {
                     query.push_str(text);
                 }
             }
+            Event::Control { control, value } => {
+                if self.control(control, value) {
+                    commit(&mut done);
+                }
+            }
         }
         done
     }
 
-    pub fn to_json(&self) -> Value {
+    /// The scope's state over `doc`, the revision it shows, and `before`, the one it compares
+    /// against: what the view hides, how each item changed, and the key the lens colors by.
+    pub fn to_json(&self, doc: &Value, before: Option<&Value>) -> Value {
+        let changed = before.map(|b| diff(b, doc));
+        let hidden = self.hidden(doc);
+        let lens = self.view.lens.map(|lens| {
+            let items = member(doc, "items").and_then(Value::as_object);
+            let key: Map<String, Value> = items
+                .into_iter()
+                .flatten()
+                .filter(|(id, item)| {
+                    !hidden.contains(id)
+                        && member(item, "kind").and_then(Value::as_str) != Some("camera@1")
+                })
+                .map(|(id, item)| {
+                    let v = match lens {
+                        Lens::Writer => json!(writer_of(doc, item)),
+                        Lens::Changed => changed
+                            .as_ref()
+                            .and_then(|c| c.get(id).cloned())
+                            .unwrap_or(json!("same")),
+                    };
+                    (id.clone(), v)
+                })
+                .collect();
+            let by = match lens {
+                Lens::Writer => "writer",
+                Lens::Changed => "changed",
+            };
+            json!({"by": by, "key": key})
+        });
+        let view = &self.view;
         json!({
+            "view": {
+                "filter": (!view.kinds.is_empty() || !view.writers.is_empty())
+                    .then(|| json!({"kinds": view.kinds, "writers": view.writers})),
+                "isolate": view.isolate,
+                "time": view.time,
+                "compare": view.compare,
+            },
+            "hidden": hidden,
+            "changed": changed,
+            "lens": lens,
             "camera": self.pose().to_json(),
             "rect": self.rect(),
             "full_screen": self.full_screen,
@@ -771,5 +994,133 @@ mod tests {
         assert_ne!(after.azimuth, before.azimuth, "the drag turns");
         assert_eq!(after.target, before.target, "about the target, which stays");
         assert_eq!(done.commits, [3], "one commit, on the release");
+    }
+
+    /// A flat board, page = panel (800 × 450): you wrote `note`; alpha wrote `region`, which
+    /// holds `box`, and `line`.
+    fn board() -> Value {
+        let item = |id: &str, kind: &str, layer: &str, x: f64, parent: Option<&str>| {
+            let mut i = json!({"id": id, "kind": kind, "layer": layer, "name": id, "order": "a1",
+                "params": {"box": [x, 100.0, 100.0, 100.0]}});
+            if let Some(p) = parent {
+                i["parent"] = json!(p);
+            }
+            i
+        };
+        json!({
+            "format": 1, "profile": "board", "size": [800, 450],
+            "layers": {"you-main": {"writer": "you:you"}, "alpha-main": {"writer": "agent:alpha"}},
+            "items": {
+                "note": item("note", "text@1", "you-main", 0.0, None),
+                "region": item("region", "frame@1", "alpha-main", 200.0, None),
+                "box": item("box", "rect@1", "alpha-main", 210.0, Some("region")),
+                "line": item("line", "rect@1", "alpha-main", 500.0, None),
+            }
+        })
+    }
+
+    fn set(s: &mut Scope, doc: &Value, control: &str, value: Value) -> Done {
+        let event = Event::Control {
+            control: control.into(),
+            value,
+        };
+        s.input(doc, 0, 9, &event)
+    }
+
+    #[test]
+    fn a_filter_hides_by_kind_or_writer_and_what_it_hides_cant_be_picked() {
+        let doc = board();
+        let mut s = Scope::new(
+            &doc,
+            [0.0, 0.0, 800.0, 450.0],
+            [1600.0, 900.0],
+            Planted::default(),
+        )
+        .expect("the board reads");
+        click(&mut s, &doc, 0, [550.0, 150.0]);
+        assert_eq!(s.selection, ["line"], "shown, it's picked");
+        let done = set(&mut s, &doc, "filter", json!({"writers": ["agent:alpha"]}));
+        assert_eq!(done.commits, [9], "a control entry commits once");
+        assert_eq!(s.hidden(&doc), ["box", "line", "region"]);
+        click(&mut s, &doc, 2000 * MS, [550.0, 150.0]);
+        assert!(s.selection.is_empty(), "hidden, it isn't");
+        set(&mut s, &doc, "filter", json!({"kinds": ["text@1"]}));
+        assert_eq!(s.hidden(&doc), ["note"]);
+        set(&mut s, &doc, "filter", Value::Null);
+        assert!(s.hidden(&doc).is_empty());
+        let refused = set(&mut s, &doc, "lens", json!("taste"));
+        assert!(
+            refused.commits.is_empty(),
+            "a value the control doesn't take commits nothing"
+        );
+    }
+
+    #[test]
+    fn isolation_keeps_an_item_with_its_parents_and_children_and_esc_ends_it_first() {
+        let doc = board();
+        let mut s = Scope::new(
+            &doc,
+            [0.0, 0.0, 800.0, 450.0],
+            [1600.0, 900.0],
+            Planted::default(),
+        )
+        .expect("the board reads");
+        set(&mut s, &doc, "isolate", json!("region"));
+        assert_eq!(
+            s.hidden(&doc),
+            ["line", "note"],
+            "region and the box it holds stay"
+        );
+        set(&mut s, &doc, "isolate", json!("box"));
+        assert_eq!(
+            s.hidden(&doc),
+            ["line", "note"],
+            "isolating the child keeps its parent"
+        );
+        s.full_screen = true;
+        let esc = Event::Key {
+            key: "Escape".into(),
+            cmd: false,
+        };
+        s.input(&doc, 0, 10, &esc);
+        assert!(s.hidden(&doc).is_empty(), "the first Esc ends isolation");
+        assert!(s.full_screen, "and only that");
+        s.input(&doc, 0, 11, &esc);
+        assert!(!s.full_screen, "the next leaves full screen");
+    }
+
+    #[test]
+    fn the_writer_lens_keys_each_shown_item_by_its_layers_writer() {
+        let doc = board();
+        let mut s = Scope::new(
+            &doc,
+            [0.0, 0.0, 800.0, 450.0],
+            [1600.0, 900.0],
+            Planted::default(),
+        )
+        .expect("the board reads");
+        set(&mut s, &doc, "lens", json!("writer"));
+        set(&mut s, &doc, "filter", json!({"kinds": ["text@1"]}));
+        let state = s.to_json(&doc, None);
+        assert_eq!(state["lens"]["by"], json!("writer"));
+        assert_eq!(
+            state["lens"]["key"],
+            json!({"region": "agent:alpha", "box": "agent:alpha", "line": "agent:alpha"}),
+            "a hidden item has no key"
+        );
+        let mut later = doc.clone();
+        later["items"]["line"]["params"]["box"][0] = json!(520.0);
+        later["items"]
+            .as_object_mut()
+            .expect("items")
+            .remove("note");
+        set(&mut s, &doc, "lens", json!("changed"));
+        let state = s.to_json(&later, Some(&doc));
+        assert_eq!(
+            state["changed"],
+            json!({"line": "changed", "note": "removed"})
+        );
+        assert_eq!(state["lens"]["key"]["line"], json!("changed"));
+        assert_eq!(state["lens"]["key"]["box"], json!("same"));
     }
 }
