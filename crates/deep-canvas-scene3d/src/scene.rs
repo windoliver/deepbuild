@@ -456,33 +456,17 @@ fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
     m
 }
 
-/// An item's world transform: its parents' composed over its own, without its size.
+/// An item's world transform, without its size: its evaluated `at`, which the motion evaluator
+/// has already composed over its parents' (child-of parenting), so they aren't added again.
 fn world(items: &Map<String, Value>, id: &str) -> Affine3 {
-    let mut m = match items.get(id) {
+    match items.get(id) {
         Some(item) => local(item, [1.0; 3]),
-        None => {
-            return [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-            ]
-        }
-    };
-    let mut seen = vec![id.to_string()];
-    let mut at = items
-        .get(id)
-        .and_then(|i| i.get("parent"))
-        .and_then(Value::as_str);
-    while let Some(p) = at {
-        if seen.iter().any(|s| s == p) {
-            break;
-        }
-        let Some(parent) = items.get(p) else { break };
-        m = matmul(&local(parent, [1.0; 3]), &m);
-        seen.push(p.to_string());
-        at = parent.get("parent").and_then(Value::as_str);
+        None => [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ],
     }
-    m
 }
 
 fn origin(m: &Affine3) -> Vec3 {
