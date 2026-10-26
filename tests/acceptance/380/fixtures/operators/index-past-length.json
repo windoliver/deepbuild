@@ -1,0 +1,37 @@
+{
+  "id": "scatter",
+  "kind": "compute",
+  "origin": "shipped",
+  "about": "A compute operator over 16 elements that writes element 20 of its storage output, whose declared count is 16: an index past a declared length.",
+  "inputs": {},
+  "steps": {
+    "v": {
+      "op": "const@1",
+      "args": {
+        "value": 1.0
+      }
+    },
+    "pick": {
+      "op": "write@1",
+      "args": {
+        "buf": "out",
+        "i": 20,
+        "v": "v"
+      }
+    }
+  },
+  "outputs": {
+    "out": {
+      "storage": {
+        "type": "f32",
+        "count": 16
+      }
+    }
+  },
+  "elements": 16,
+  "workgroup": 64,
+  "determinism": "same_machine",
+  "cost": {
+    "ns_per_element": 0.1
+  }
+}
