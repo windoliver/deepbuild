@@ -783,5 +783,41 @@
         "decision": "none"
       }
     }
+  },
+  {
+    "source": "secret.pasted",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "A key was pasted into this session's chat (message m3), so the agent and its provider have seen it. Rotate it?",
+        "options": [
+          {
+            "id": "rotated",
+            "label": "I rotated it",
+            "decision": "none"
+          },
+          {
+            "id": "later",
+            "label": "Not now",
+            "decision": "none"
+          }
+        ],
+        "recommended": "rotated",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "later",
+        "provisional": false,
+        "owner": "you",
+        "key": "3f1c2b7d9e0a4c6b8d2e4f6a1b3c5d7e9f0a2b4c6d8e0f1a3b5c7d9e1f2a4b6c",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
   }
 ]
