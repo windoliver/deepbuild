@@ -6,13 +6,15 @@
 //! scroll's or a pinch's begin, changes and end, or a key press; it hit-tests only where it
 //! starts, never mid-gesture, and commits once, on the input that ends it. Only navigation (a
 //! double-click, ⌘K, Esc) frames the camera, never a click. In a flat view an item is its
-//! `params.box`; in 3D a solid is the box of its `params.size` about its position, picked by
-//! the nearest face under the pointer, and a line or a point is hit within a few px of it. Every canvas draws a full-screen button; Esc ends isolation,
-//! then leaves full screen, then backs out a level. Its view controls filter items out by kind
-//! or writer, isolate one, pick a lens (provenance by writer, or how each item changed), scrub
-//! the record's time and compare against an earlier revision; the caller hands it the revision
-//! the view shows and the one compared against. All of it is session state: the document is
-//! never written.
+//! `params.box` (a text item's `{w, h}` from its position); in 3D a solid is the box of its
+//! `params.size` about its position, picked by the nearest face under the pointer, and a line or
+//! a point is hit within a few px of it. Every canvas draws a full-screen button; Esc ends
+//! isolation, then leaves full screen, then backs out a level. Its view controls filter items out
+//! by kind or writer, isolate one, pick a lens (provenance by writer, or how each item changed),
+//! scrub the record's time, compare against an earlier revision and pause the transport at a
+//! playhead; the caller hands it the revision the view shows and the one compared against. A
+//! shift-click toggles an item in the selection, and a point and ask reads what the pointer is
+//! on (issue #384). All of it is session state: the document is never written.
 
 use serde_json::{json, Map, Value};
 
@@ -60,7 +62,12 @@ pub enum Phase {
 /// One hardware input to the canvas, positions in window px.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
-    Down([f64; 2]),
+    /// The primary button pressed; with `toggle` (shift held) a click adds the item it hits to
+    /// the selection, or takes it out, keeping the rest (Selection: `mode: toggle`).
+    Down {
+        pos: [f64; 2],
+        toggle: bool,
+    },
     Up([f64; 2]),
     Move([f64; 2]),
     Scroll {
@@ -81,7 +88,7 @@ pub enum Event {
     /// An entry on one of the canvas's view controls (Scope and input classes: view class), the
     /// value `null` to clear it: `filter` `{kinds, writers}`, `isolate` an item ID, `lens`
     /// `writer` or `changed`, `time` the flicks the view shows the record as of, `compare` the
-    /// revision shown as before.
+    /// revision shown as before, `playhead` the flicks the transport is paused at.
     Control {
         control: String,
         value: Value,
@@ -109,6 +116,8 @@ struct View {
     time: Option<i64>,
     /// The revision compared against, shown as before.
     compare: Option<u64>,
+    /// The transport's playhead, paused at this time in flicks; playing without one.
+    playhead: Option<i64>,
 }
 
 /// How each item differs between two revisions, by ID.
@@ -142,6 +151,52 @@ fn writer_of<'a>(doc: &'a Value, item: &Value) -> Option<&'a str> {
         .and_then(|l| member(l, layer))
         .and_then(|l| member(l, "writer"))
         .and_then(Value::as_str)
+}
+
+/// How exactly a point and ask's pointer hit (Selection): an item by ID, a place on an item, or
+/// only a region of the frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Precision {
+    Id,
+    Geometry,
+    Region,
+}
+
+impl Precision {
+    pub fn name(self) -> &'static str {
+        match self {
+            Precision::Id => "id",
+            Precision::Geometry => "geometry",
+            Precision::Region => "region",
+        }
+    }
+}
+
+/// What a point and ask points at: the item, how exactly, the region meant, and the text of a
+/// text item under the pointer, exactly as the document holds it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pointed {
+    pub id: Option<String>,
+    pub precision: Precision,
+    /// `[x, y, w, h]`.
+    pub region: Option<[f64; 4]>,
+    pub quote: Option<String>,
+}
+
+/// The side of the region a point and ask sends about the pointer, in the frame's units.
+const REGION: f64 = 16.0;
+
+/// The region a point and ask sends about the point `c`: a square of [`REGION`] centred on it,
+/// moved and cut to lie within `within` (`[x, y, w, h]`).
+pub fn region_about(c: [f64; 2], within: [f64; 4]) -> [f64; 4] {
+    let side = |i: usize| {
+        let (lo, len) = (within[i], within[i + 2]);
+        let w = REGION.min(len.max(0.0));
+        let start = (c[i] - w / 2.0).clamp(lo, lo + len - w);
+        (start, w)
+    };
+    let ((x, w), (y, h)) = (side(0), side(1));
+    [x, y, w, h]
 }
 
 /// What one input did: the hit tests it ran and the serials of the gestures it committed.
@@ -241,6 +296,8 @@ struct Press {
     dragging: bool,
     /// The second press of a double-click.
     double: bool,
+    /// Shift held: the click toggles what it hits in the selection.
+    toggle: bool,
 }
 
 /// A level flown into: its item, and the offsets Esc gives back.
@@ -296,12 +353,19 @@ fn targets(doc: &Value, flat: bool) -> Vec<Target> {
         .filter_map(|(id, item)| {
             let params = member(item, "params");
             let bounds = if flat {
-                let b = params
-                    .and_then(|p| member(p, "box"))
-                    .and_then(Value::as_array)?;
-                let n = |i: usize| b.get(i).and_then(Value::as_f64);
+                let b = params.and_then(|p| member(p, "box"))?;
                 let at = pos(item).unwrap_or([0.0; 3]);
-                Bounds::Rect([at[0] + n(0)?, at[1] + n(1)?, n(2)?, n(3)?])
+                match b.as_array() {
+                    Some(b) => {
+                        let n = |i: usize| b.get(i).and_then(Value::as_f64);
+                        Bounds::Rect([at[0] + n(0)?, at[1] + n(1)?, n(2)?, n(3)?])
+                    }
+                    // A text item's box, `{w, h}` from its position.
+                    None => {
+                        let n = |k: &str| member(b, k).and_then(Value::as_f64);
+                        Bounds::Rect([at[0], at[1], n("w")?, n("h")?])
+                    }
+                }
             } else {
                 if member(item, "kind").and_then(Value::as_str) == Some("camera@1") {
                     return None;
@@ -460,6 +524,74 @@ impl Scope {
     /// The revision the view compares against, shown as before.
     pub fn compare(&self) -> Option<u64> {
         self.view.compare
+    }
+
+    /// The time the transport is paused at, flicks, or `None` while it plays.
+    pub fn playhead(&self) -> Option<i64> {
+        self.view.playhead
+    }
+
+    /// The selected IDs (Selection: `ids`).
+    pub fn selection(&self) -> &[String] {
+        &self.selection
+    }
+
+    /// What a point and ask at `p` (window px) points at in `doc` (Selection): the topmost item
+    /// under the pointer by ID with a text item's text as its quote, a place on an image, which
+    /// holds no IDs, as the image and a region on it, or with no item under it a region of the
+    /// page alone. A region is in page u, about the pointer and within what it lies on.
+    pub fn point(&self, doc: &Value, p: [f64; 2]) -> Pointed {
+        let item = match self.hit(doc, p) {
+            Hit::Item(id) => member(doc, "items")
+                .and_then(|i| member(i, &id))
+                .map(|i| (id, i)),
+            _ => None,
+        };
+        let at = self.rig.flat.then(|| self.content(p, &self.offsets));
+        let Some((id, item)) = item else {
+            let page = [0, 1].map(|i| {
+                member(doc, "size")
+                    .and_then(|s| s.get(i))
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+            });
+            return Pointed {
+                id: None,
+                precision: Precision::Region,
+                region: at.map(|c| region_about(c, [0.0, 0.0, page[0], page[1]])),
+                quote: None,
+            };
+        };
+        let kind = member(item, "kind").and_then(Value::as_str).unwrap_or("");
+        let text = || {
+            member(item, "params")
+                .and_then(|p| member(p, "text"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
+        match (kind, at) {
+            ("image@1", Some(c)) => {
+                let bounds = targets(doc, true)
+                    .into_iter()
+                    .find(|t| t.id == id)
+                    .and_then(|t| match t.bounds {
+                        Bounds::Rect(r) => Some(r),
+                        _ => None,
+                    });
+                Pointed {
+                    id: Some(id),
+                    precision: Precision::Geometry,
+                    region: bounds.map(|r| region_about(c, r)),
+                    quote: None,
+                }
+            }
+            _ => Pointed {
+                id: Some(id),
+                precision: Precision::Id,
+                region: None,
+                quote: (kind == "text@1").then(text).flatten(),
+            },
+        }
     }
 
     /// The items the view hides: those the filter names by kind or writer, and outside an
@@ -626,6 +758,10 @@ impl Scope {
             ("time", v) if v.as_i64().is_some_and(|t| t >= 0) => self.view.time = v.as_i64(),
             ("compare", Value::Null) => self.view.compare = None,
             ("compare", v) if v.as_u64().is_some() => self.view.compare = v.as_u64(),
+            ("playhead", Value::Null) => self.view.playhead = None,
+            ("playhead", v) if v.as_i64().is_some_and(|t| t >= 0) => {
+                self.view.playhead = v.as_i64()
+            }
             _ => return false,
         }
         true
@@ -822,10 +958,21 @@ impl Scope {
     }
 
     /// A click on what the press hit: the button toggles full screen; an item is selected and
-    /// its panel opens; empty space clears both. The camera never moves.
-    fn click(&mut self, hit: &Hit) {
+    /// its panel opens; empty space clears both. With `toggle` an item joins the selection, or
+    /// leaves it, and empty space keeps it. The camera never moves.
+    fn click(&mut self, hit: &Hit, toggle: bool) {
         match hit {
             Hit::Button => self.full_screen = !self.full_screen,
+            Hit::Item(id) if toggle => {
+                match self.selection.iter().position(|s| s == id) {
+                    Some(i) => {
+                        self.selection.remove(i);
+                    }
+                    None => self.selection.push(id.clone()),
+                }
+                self.details = Some(id.clone());
+            }
+            Hit::Empty if toggle => {}
             Hit::Item(id) => {
                 self.selection = vec![id.clone()];
                 self.details = Some(id.clone());
@@ -857,7 +1004,7 @@ impl Scope {
         let mut done = Done::default();
         let commit = |done: &mut Done| done.commits.push(serial);
         match event {
-            Event::Down(p) => {
+            Event::Down { pos: p, toggle } => {
                 let hit = self.hit(doc, *p);
                 done.picks = 1;
                 self.hover = match &hit {
@@ -879,6 +1026,7 @@ impl Scope {
                     hit,
                     dragging: false,
                     double,
+                    toggle: *toggle,
                 });
             }
             Event::Move(p) => match self.press.as_mut() {
@@ -922,7 +1070,7 @@ impl Scope {
                         }
                         self.last_click = None;
                     } else {
-                        self.click(&press.hit);
+                        self.click(&press.hit, press.toggle);
                         self.last_click = Some((t, *p, press.hit));
                     }
                 }
@@ -1030,6 +1178,7 @@ impl Scope {
                 "isolate": view.isolate,
                 "time": view.time,
                 "compare": view.compare,
+                "playhead": view.playhead,
             },
             "hidden": hidden,
             "changed": changed,
@@ -1089,7 +1238,15 @@ mod tests {
     }
 
     fn click(s: &mut Scope, doc: &Value, t: i64, p: [f64; 2]) {
-        s.input(doc, t, 1, &Event::Down(p));
+        s.input(
+            doc,
+            t,
+            1,
+            &Event::Down {
+                pos: p,
+                toggle: false,
+            },
+        );
         s.input(doc, t + 60 * MS, 2, &Event::Up(p));
     }
 
@@ -1145,7 +1302,15 @@ mod tests {
         let doc = scene();
         let mut s = scope(&doc);
         let before = s.pose();
-        s.input(&doc, 0, 1, &Event::Down([700.0, 300.0]));
+        s.input(
+            &doc,
+            0,
+            1,
+            &Event::Down {
+                pos: [700.0, 300.0],
+                toggle: false,
+            },
+        );
         s.input(&doc, 16 * MS, 2, &Event::Move([760.0, 300.0]));
         let done = s.input(&doc, 32 * MS, 3, &Event::Up([760.0, 300.0]));
         let after = s.pose();

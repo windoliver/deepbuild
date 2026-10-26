@@ -23,7 +23,7 @@ struct Seen {
 
 /// A panel's scope and what it drew after each input, by the time it arrived.
 pub struct PanelScope {
-    scope: Scope,
+    pub(crate) scope: Scope,
     seen: Vec<(i64, Seen)>,
 }
 
@@ -41,9 +41,21 @@ pub fn event(v: &Value) -> Option<Event> {
         "end" => Some(Phase::End),
         _ => None,
     };
+    let mods = || -> Option<Vec<&str>> {
+        match v.get("mods") {
+            None => Some(Vec::new()),
+            Some(m) => m.as_array()?.iter().map(Value::as_str).collect(),
+        }
+    };
     Some(match v.get("type")?.as_str()? {
-        "down" => Event::Down(pos()?),
-        "up" => Event::Up(pos()?),
+        "down" => Event::Down {
+            pos: pos()?,
+            toggle: mods()?.contains(&"shift"),
+        },
+        "up" => {
+            mods()?;
+            Event::Up(pos()?)
+        }
         "move" => Event::Move(pos()?),
         "scroll" => Event::Scroll {
             phase: phase()?,
@@ -55,20 +67,10 @@ pub fn event(v: &Value) -> Option<Event> {
             pos: pos()?,
             scale: v.get("scale")?.as_f64()?,
         },
-        "key" => {
-            let mods = match v.get("mods") {
-                None => Vec::new(),
-                Some(m) => m
-                    .as_array()?
-                    .iter()
-                    .map(Value::as_str)
-                    .collect::<Option<Vec<_>>>()?,
-            };
-            Event::Key {
-                key: v.get("key")?.as_str()?.to_string(),
-                cmd: mods.contains(&"cmd"),
-            }
-        }
+        "key" => Event::Key {
+            key: v.get("key")?.as_str()?.to_string(),
+            cmd: mods()?.contains(&"cmd"),
+        },
         "text" => Event::Text(v.get("text")?.as_str()?.to_string()),
         "control" => Event::Control {
             control: v.get("control")?.as_str()?.to_string(),
@@ -84,7 +86,7 @@ fn refused(code: &str) -> Value {
 
 impl Hub<'_> {
     /// The document a panel shows, by ID.
-    fn panel_doc(&self, panel: &str) -> Option<String> {
+    pub(crate) fn panel_doc(&self, panel: &str) -> Option<String> {
         self.scenario
             .docs
             .iter()
@@ -93,7 +95,7 @@ impl Hub<'_> {
     }
 
     /// A document's revision `rev`, as it was.
-    fn revision(&self, doc: &str, rev: u64) -> Option<Value> {
+    pub(crate) fn revision(&self, doc: &str, rev: u64) -> Option<Value> {
         match self.shared.get(doc) {
             Some(s) => {
                 let k = s.revs.iter().position(|r| r.rev == rev)?;
@@ -109,7 +111,7 @@ impl Hub<'_> {
     }
 
     /// The revision of a document current at `t`.
-    fn rev_at(&self, doc: &str, t: i64) -> Option<u64> {
+    pub(crate) fn rev_at(&self, doc: &str, t: i64) -> Option<u64> {
         self.currents(doc)
             .into_iter()
             .filter(|(at, _)| *at <= t)
@@ -119,7 +121,7 @@ impl Hub<'_> {
 
     /// The revision a panel shows now: live, or as of the time its view is scrubbed to; and the
     /// one it compares against.
-    fn panel_document(&self, panel: &str) -> Option<(Value, Option<Value>)> {
+    pub(crate) fn panel_document(&self, panel: &str) -> Option<(Value, Option<Value>)> {
         let doc = self.panel_doc(panel)?;
         let s = self.scopes.get(panel).map(|s| &s.scope);
         let t = s.and_then(Scope::time).unwrap_or(self.now);
@@ -143,7 +145,7 @@ impl Hub<'_> {
     }
 
     /// The panel's scope, made on first use from the revision it shows.
-    fn panel_scope(&mut self, panel: &str) -> Result<&mut PanelScope, Value> {
+    pub(crate) fn panel_scope(&mut self, panel: &str) -> Result<&mut PanelScope, Value> {
         if !self.scopes.contains_key(panel) {
             let rect = self
                 .scenario
@@ -234,28 +236,41 @@ impl Hub<'_> {
             return refused("not_presented");
         };
         let shown = crate::shared::drawable(&s.scope.view_document(&doc, before.as_ref()));
-        let drawn = match self.renderer.prepare(
-            shown.as_object().expect("a document is an object"),
-            0,
-            &self.look.light,
-            self.look.status.as_ref(),
-            &self.record(),
-            &self.scenario.evidence,
-        ) {
-            Ok(d) => d,
-            Err(u) => return json!({"code": u.code, "path": u.path}),
-        };
+        match self.snapshot(&shown, 0, None) {
+            Ok(snap) => json!({"snapshot": snap}),
+            Err(e) => e,
+        }
+    }
+
+    /// A document drawn by render-back at `t`, at `size` or its own, as a PNG in the evidence
+    /// store: `{sha256, w, h}`.
+    pub(crate) fn snapshot(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: Option<[u16; 2]>,
+    ) -> Result<Value, Value> {
+        let drawn = self
+            .renderer
+            .prepare(
+                doc.as_object().expect("a document is an object"),
+                t,
+                &self.look.light,
+                self.look.status.as_ref(),
+                &self.record(),
+                &self.scenario.evidence,
+            )
+            .map_err(|u| json!({"code": u.code, "path": u.path}))?;
         let [w, h] = drawn.frame.size;
-        let size = [
+        let size = size.unwrap_or([
             w.round().clamp(1.0, 8192.0) as u16,
             h.round().clamp(1.0, 8192.0) as u16,
-        ];
+        ]);
         let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
         let png = crate::snapshot::png(self.renderer.raster(&drawn, size, Some(ground)), size);
-        match crate::evidence::put(&self.scenario.evidence, &png) {
-            Ok(sha) => json!({"snapshot": {"sha256": sha, "w": size[0], "h": size[1]}}),
-            Err(_) => refused("not_written"),
-        }
+        crate::evidence::put(&self.scenario.evidence, &png)
+            .map(|sha| json!({"sha256": sha, "w": size[0], "h": size[1]}))
+            .map_err(|_| refused("not_written"))
     }
 
     /// `scope`: a panel's scope, with no input.
@@ -267,7 +282,7 @@ impl Hub<'_> {
     }
 
     /// Each revision of a panel's document and the time it became current, in order.
-    fn currents(&self, doc: &str) -> Vec<(i64, u64)> {
+    pub(crate) fn currents(&self, doc: &str) -> Vec<(i64, u64)> {
         match self.shared.get(doc) {
             Some(s) => s
                 .revs
