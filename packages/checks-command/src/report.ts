@@ -170,8 +170,10 @@ export function goTest(stdout: string, checkout: string): Reported {
     if (e.Action === 'output' && typeof e.Output === 'string') output.set(key(e), (output.get(key(e)) ?? '') + e.Output);
     if (e.Action === 'pass' || e.Action === 'fail') ended.set(key(e), e);
   }
-  const names = [...ended.values()].map((e) => key(e));
-  const leaves = [...ended.values()].filter((e) => !names.some((n) => n.startsWith(`${key(e)}/`)));
+  // A test is a parent when another's key goes on past its own with a `/`: each key's prefixes before a `/`.
+  const parents = new Set([...ended.keys()].flatMap((n) => [...n.matchAll(/\//g)].map((m) => n.slice(0, m.index))));
+  const leaves = [...ended.values()].filter((e) => !parents.has(key(e)));
+  const failed = new Set(leaves.filter((t) => t.Action === 'fail').map((t) => t.Package));
   const ran: Ran[] = [];
   const failures: Failure[] = [];
   for (const e of leaves) {
@@ -190,7 +192,7 @@ export function goTest(stdout: string, checkout: string): Reported {
   }
   // A package that failed with no test failing in it didn't build or set up: its own failure, unplaced.
   for (const e of events) {
-    if (typeof e.Test === 'string' || e.Action !== 'fail' || leaves.some((t) => t.Package === e.Package && t.Action === 'fail')) continue;
+    if (typeof e.Test === 'string' || e.Action !== 'fail' || failed.has(e.Package)) continue;
     failures.push(failure(checkout, e.Package as string, null, { name: null, message: `package ${e.Package as string} failed`, stack: null }));
   }
   return { ran, failures, malformed: 0 };

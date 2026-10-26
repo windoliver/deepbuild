@@ -1,0 +1,33 @@
+{
+  "plugin": "test.box-grid",
+  "about": "The #380 plug-in fixture: a test plug-in that describes a 3D scene of a box on the ground grid, lit by a sun that casts its shadow, under a look with glow (bloom with tone mapping) and the ground grid; a red bar runs past the panel's right edge; and it asks its writer connection to open a GPU device.",
+  "documents": [
+    {
+      "name": "box-grid",
+      "tries": "nothing: a 3D scene described as data, which the canvas draws in the plug-in's panel",
+      "document": {
+        "format": 1,
+        "profile": "scene",
+        "title": "A box on the ground grid",
+        "description": "A lamp box standing on a floor on the ground grid, lit by a sun that casts its shadow, with glow; a red bar runs off past the right edge.",
+        "size": [640, 360],
+        "camera": "cam",
+        "requires": { "modules": { "scene3d": "^1" } },
+        "items": {
+          "cam": { "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": { "projection": "perspective", "position": [3, 3.2, 5.5], "target": [0, 0.4, 0], "fov": 40, "near": 0.1 } },
+          "floor": { "id": "floor", "kind": "mark.box@1", "name": "Floor", "order": "a1", "params": { "size": [12, 0.1, 12], "paint": { "fill": { "role": "floor" } } }, "at": { "pos": [0, -0.05, 0] } },
+          "lamp": { "id": "lamp", "kind": "mark.box@1", "name": "Lamp", "order": "a2", "params": { "size": [1, 1, 1], "paint": { "fill": { "role": "lamp" } } }, "at": { "pos": [0, 0.5, 0] } },
+          "spill": { "id": "spill", "kind": "mark.box@1", "name": "Bar past the edge", "order": "a3", "params": { "size": [6, 0.3, 0.3], "paint": { "fill": { "role": "spill" } } }, "at": { "pos": [4.2, 0.15, -2.0] } },
+          "sun": { "id": "sun", "kind": "light.sun@1", "name": "Sun", "order": "a4", "params": { "illuminance": 3.141592653589793, "shadow": true, "angle": 0.53 }, "at": { "rot": [-55, -40, 0] } }
+        }
+      }
+    }
+  ],
+  "requests": [
+    {
+      "name": "open-device",
+      "tries": "to open a GPU device through its writer connection",
+      "request": { "call": "gpu.request_device", "args": { "power_preference": "high_performance" } }
+    }
+  ]
+}

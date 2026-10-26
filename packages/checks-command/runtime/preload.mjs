@@ -18,9 +18,10 @@ const reporter = (name) => fileURLToPath(new URL(name, import.meta.url));
 // tool's default one.
 const vitest = entry.endsWith('/vitest/vitest.mjs');
 const jest = /\/jest(-cli)?\/bin\/jest\.js$/.test(entry);
-// Only Vitest 5 has the module cache option; an earlier one refuses it, and has no such cache to turn off.
-const major = (() => { try { return Number(JSON.parse(readFileSync(new URL('package.json', `file://${entry}`), 'utf8')).version.split('.')[0]); } catch { return NaN; } })();
-if (vitest && !(major < 5)) process.argv.push('--no-fsModuleCache');
+// Only Vitest 5 has the module cache option; an earlier one refuses it, and has no such cache to turn off. Only
+// Vitest's own process reads its version.
+const major = () => { try { return Number(JSON.parse(readFileSync(new URL('package.json', `file://${entry}`), 'utf8')).version.split('.')[0]); } catch { return NaN; } };
+if (vitest && !(major() < 5)) process.argv.push('--no-fsModuleCache');
 if (jest) process.argv.push('--watchman=false', '--no-cache');
 // Vitest gets its reporter as a data: URL of the runner's file, which Vite imports natively: by its path, Vite
 // transforms it afresh on every run (the module cache is off), several ms of each run's time.

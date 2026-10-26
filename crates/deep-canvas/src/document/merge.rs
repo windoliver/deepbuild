@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use serde_json::{json, Map, Value};
 
 use super::requires::write_required_kinds;
-use super::{as_object, member, ID_MAPS};
+use super::{member, ID_MAPS};
 use crate::kinds::Registry;
 
 /// A merge's outcome.
@@ -40,9 +40,9 @@ fn pick<'a>(
 pub fn merge(base: &Value, a: &Value, b: &Value, registry: &Registry) -> Merged {
     let empty = Map::new();
     let (fb, fa, fbb) = (
-        as_object(base).unwrap_or(&empty),
-        as_object(a).unwrap_or(&empty),
-        as_object(b).unwrap_or(&empty),
+        base.as_object().unwrap_or(&empty),
+        a.as_object().unwrap_or(&empty),
+        b.as_object().unwrap_or(&empty),
     );
     let mut conflicts = Vec::new();
     let mut out = Map::new();
@@ -64,9 +64,9 @@ pub fn merge(base: &Value, a: &Value, b: &Value, registry: &Registry) -> Merged 
             continue;
         }
         let (mb, ma, mbb) = (
-            fb.get(key).and_then(as_object).unwrap_or(&empty),
-            fa.get(key).and_then(as_object).unwrap_or(&empty),
-            fbb.get(key).and_then(as_object).unwrap_or(&empty),
+            fb.get(key).and_then(Value::as_object).unwrap_or(&empty),
+            fa.get(key).and_then(Value::as_object).unwrap_or(&empty),
+            fbb.get(key).and_then(Value::as_object).unwrap_or(&empty),
         );
         let ids: BTreeSet<&String> = mb.keys().chain(ma.keys()).chain(mbb.keys()).collect();
         let mut merged = Map::new();

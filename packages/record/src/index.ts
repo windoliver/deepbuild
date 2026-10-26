@@ -556,7 +556,7 @@ class SqliteRecord implements RecordStore {
    */
   private resumes(items: readonly Prepared[]): boolean {
     const ended = this.db.prepare("SELECT 1 FROM sessions WHERE id = ? AND status IN ('finished', 'failed')");
-    return items.some((p) => p.input.kind === 'user.ask' && p.session !== null && p.session !== undefined && ended.get(p.session) !== undefined);
+    return items.some((p) => p.input.kind === 'user.ask' && p.session !== null && ended.get(p.session) !== undefined);
   }
 
   /** Writes the events in one commit of the durability asked for; a claim from a session that lost events gets its verdict at once. */
