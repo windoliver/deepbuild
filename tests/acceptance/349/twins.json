@@ -1,0 +1,10 @@
+{
+  "#349.68572cba": ["passed-without-results"],
+  "#349.009ae072": ["routes-by-name"],
+  "#349.27abd805": ["refusals-unrecorded", "applied-but-never-handed"],
+  "#349.e98531fc": ["kit-skipped-at-install"],
+  "#349.2eb6c029": ["lanes-without-slots-check", "kit-and-planted-unchecked"],
+  "#349.77853dd0": ["both-adapters-deliver", "plants-ignored"],
+  "#349.70f6262e": ["refusals-unrecorded", "plants-ignored"],
+  "#349.b8d8858e": ["table-without-mcp-row", "slots-check-from-table", "polled-row-problem-names-mcp"]
+}
