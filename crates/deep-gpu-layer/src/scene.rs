@@ -549,7 +549,7 @@ impl RenderModule for SceneModule {
             .map(|(k, color)| (k, compile_named(d, k, color).1))
             .collect();
         if let Some(t) = &self.texture {
-            self.pending_upload = Some((texels.clone(), t.clone()));
+            self.pending_upload = Some((texels, t.clone()));
         }
         self.built = Some(Built {
             epoch: device.epoch,

@@ -38,37 +38,30 @@ const BILLING_KEYS: &[&str] = &[
 ];
 
 /// The features this build supports; the request carries only those the hub lists too.
-fn features() -> &'static [&'static str] {
-    if cfg!(feature = "plant-f-test") {
-        &["f_test"]
-    } else {
-        &[]
-    }
-}
+const FEATURES: &[&str] = if cfg!(feature = "plant-f-test") {
+    &["f_test"]
+} else {
+    &[]
+};
 
 fn home() -> PathBuf {
     PathBuf::from(env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
 }
 
+/// The setting `section.key` in ~/.deepbuild/config.json.
+fn setting(section: &str, key: &str) -> Option<Value> {
+    let config = parse(&fs::read_to_string(home().join("config.json")).ok()?).ok()?;
+    member(member(&config, section)?, key).cloned()
+}
+
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
 fn address() -> PathBuf {
-    let configured = read_json(home().join("config.json")).and_then(|config| {
-        member(&config, "hub")
-            .and_then(|hub| member(hub, "address"))
-            .cloned()
-    });
-    match configured {
+    match setting("hub", "address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
             PathBuf::from(&address[5..])
         }
         _ => home().join("hub.sock"),
     }
-}
-
-fn read_json(path: PathBuf) -> Option<Value> {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|text| parse(&text).ok())
 }
 
 fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
@@ -316,20 +309,18 @@ fn exchange(
     let Ok(hello_value) = parse(hello.trim_end()) else {
         return (None, down, hello);
     };
-    let listed: Vec<String> = match member(&hello_value, "features") {
-        Some(Value::Array(items)) => items
-            .iter()
-            .filter_map(|f| match f {
-                Value::String(s) => Some(s.clone()),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
+    let listed = match member(&hello_value, "features") {
+        Some(Value::Array(items)) => items.as_slice(),
+        _ => &[],
     };
-    let on: Vec<&str> = features()
+    let on: Vec<&str> = FEATURES
         .iter()
         .copied()
-        .filter(|f| listed.iter().any(|l| l == f))
+        .filter(|f| {
+            listed
+                .iter()
+                .any(|l| matches!(l, Value::String(s) if s == f))
+        })
         .collect();
     let request = line(&on);
     // Past the deadline already, the request isn't sent: the spooled copy, marked late, is the one recorded.
@@ -958,15 +949,7 @@ fn statusline() -> ExitCode {
                 .spawn();
         }
     }
-    let command = fs::read_to_string(home().join("config.json"))
-        .ok()
-        .and_then(|text| parse(&text).ok())
-        .and_then(|config| {
-            member(&config, "statusline")
-                .and_then(|s| member(s, "yours"))
-                .cloned()
-        });
-    let Some(Value::String(command)) = command else {
+    let Some(Value::String(command)) = setting("statusline", "yours") else {
         return ExitCode::SUCCESS;
     };
     let Ok(mut child) = yours(&command).stdin(Stdio::piped()).spawn() else {

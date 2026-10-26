@@ -124,7 +124,8 @@ interface Waiting {
 /** Each record's decision queue, shared by every ledger opened on it. */
 const QUEUES = new WeakMap<RecordStore, Promise<unknown>>();
 
-const left = (b: Budget): number => b.cap - b.spent - [...b.reserved.values()].reduce((sum, m) => sum + m, 0);
+const reservedOf = (b: Budget): number => [...b.reserved.values()].reduce((sum, m) => sum + m, 0);
+const left = (b: Budget): number => b.cap - b.spent - reservedOf(b);
 /** What's left for one run: the room your yes holds for it is its own. */
 const roomFor = (b: Budget, run: string): number => left(b) + (b.held.has(run) ? b.reserved.get(run)! : 0);
 const sameInputs = (check: string, inputs: string): string => `${check}\u0000${inputs}`;
@@ -264,10 +265,9 @@ class BudgetLedger implements Ledger {
       await this.sync();
       const b = this.budgets.get(id);
       if (!b) throw new BudgetRefused(`${String(id)} is no budget`, { budget: id });
-      const reserved = [...b.reserved.values()].reduce((sum, m) => sum + m, 0);
       return {
         budget: b.id, scope: { ...b.scope }, cap_usd: usd(b.cap), ends: b.ends,
-        reserved_usd: usd(reserved), spent_usd: usd(b.spent), left_usd: usd(left(b)),
+        reserved_usd: usd(reservedOf(b)), spent_usd: usd(b.spent), left_usd: usd(left(b)),
         reservations: [...b.reserved].map(([r, m]) => ({ run: r, usd: usd(m) })),
       };
     });
@@ -444,7 +444,7 @@ function checkRun(input: RunRequest): RunRequest {
   if (!isText(input.check) || !isText(input.issue)) throw new BudgetRefused(`${run} names its check and its issue`, { run });
   if (typeof input.inputs !== 'string' || !SHA256.test(input.inputs)) throw new BudgetRefused(`${run}'s inputs are named by their SHA-256`, { run });
   if (input.resource !== undefined && !isText(input.resource)) throw new BudgetRefused(`${run}'s resource is named by its key`, { run });
-  return input.resource === undefined ? { run, check: input.check, inputs: input.inputs, issue: input.issue } : { run, check: input.check, inputs: input.inputs, issue: input.issue, resource: input.resource };
+  return { run, check: input.check, inputs: input.inputs, issue: input.issue, ...(input.resource === undefined ? {} : { resource: input.resource }) };
 }
 
 /** The ledger as a plain object of its methods, so a caller can wrap or spread it. */
