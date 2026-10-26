@@ -127,18 +127,14 @@ pub fn canonical(value: &Value) -> Vec<u8> {
         .unwrap_or_else(|_| serde_json::to_vec(value).unwrap_or_default())
 }
 
-/// A value with −0 stored as +0 everywhere, as a revision is checked (Content key: canonical
+/// Stores −0 as +0 everywhere in `value`, as a revision is checked (Content key: canonical
 /// params). Every other number is kept as written.
-pub fn without_negative_zero(value: &Value) -> Value {
+fn without_negative_zero(value: &mut Value) {
     match value {
-        Value::Number(n) if n.as_f64() == Some(0.0) && n.is_f64() => json!(0),
-        Value::Array(list) => Value::Array(list.iter().map(without_negative_zero).collect()),
-        Value::Object(map) => Value::Object(
-            map.iter()
-                .map(|(k, v)| (k.clone(), without_negative_zero(v)))
-                .collect(),
-        ),
-        other => other.clone(),
+        Value::Number(n) if n.as_f64() == Some(0.0) && n.is_f64() => *value = json!(0),
+        Value::Array(list) => list.iter_mut().for_each(without_negative_zero),
+        Value::Object(map) => map.values_mut().for_each(without_negative_zero),
+        _ => {}
     }
 }
 
@@ -1004,7 +1000,7 @@ impl Session {
     /// (operator, item) the last revision had, stamps the items whose content changed, and
     /// runs the check phases. Returns their issues.
     pub fn load(&mut self, s: &mut Scheduler<'_>, doc: &Value) -> Vec<OpIssue> {
-        let mut next = compile(s, doc);
+        let mut next = compile(s, doc, self.loaded.as_ref());
         let epoch = self.bump();
         if self.group_run.len() != s.sealed.ops.len() {
             self.group_run = vec![0; s.sealed.ops.len()];
@@ -1279,7 +1275,7 @@ impl Session {
         scratch.mode = Mode::Clean;
         scratch.t = t;
         scratch.group_run = vec![0; s.sealed.ops.len()];
-        scratch.loaded = Some(compile(s, doc));
+        scratch.loaded = Some(compile(s, doc, None));
         if let Some(hook) = s.look_hook {
             hook(&scratch.look);
         }
@@ -1802,8 +1798,9 @@ impl Shuffle {
 }
 
 /// The ID and depth of each item, its parent's index, its order key and its key from its
-/// canonical bytes (with −0 as +0 and every number normalized).
-fn items_of(doc: &Value) -> (Vec<Item>, BTreeMap<String, usize>) {
+/// canonical bytes (with −0 as +0 and every number normalized). An item `was`, the last
+/// revision, holds as it is keeps that revision's value and key, which its bytes would give again.
+fn items_of(doc: &Value, was: Option<&Loaded>) -> (Vec<Item>, BTreeMap<String, usize>) {
     let empty = serde_json::Map::new();
     let map = doc
         .get("items")
@@ -1820,10 +1817,20 @@ fn items_of(doc: &Value) -> (Vec<Item>, BTreeMap<String, usize>) {
         .iter()
         .map(|id| {
             let value = &map[id.as_str()];
+            let kept = was
+                .and_then(|o| o.index.get(id.as_str()).map(|k| &o.items[*k]))
+                .filter(|o| written_alike(&o.value, value));
+            let (shared, key) = match kept {
+                Some(o) => (Arc::clone(&o.value), o.key),
+                None => (
+                    Arc::new(value.clone()),
+                    Hasher::new("self").bytes(&canonical(value)).finish(),
+                ),
+            };
             Item {
                 id: (*id).clone(),
-                value: Arc::new(value.clone()),
-                key: Hasher::new("self").bytes(&canonical(value)).finish(),
+                value: shared,
+                key,
                 changed_at: [0; CLASSES.len()],
                 parent: value
                     .get("parent")
@@ -1853,19 +1860,39 @@ fn items_of(doc: &Value) -> (Vec<Item>, BTreeMap<String, usize>) {
     (items, index)
 }
 
-/// Compiles a checked revision into its plan: the nodes each kept operator has, their reads
-/// bound, and the order they visit in.
-fn compile(s: &Scheduler<'_>, doc: &Value) -> Loaded {
-    let doc = without_negative_zero(doc);
-    let (items, index) = items_of(&doc);
-    let mut envelope = doc.clone();
-    if let Some(map) = envelope.as_object_mut() {
-        // The document's ID is where it lives, not what it holds.
-        map.remove("id");
+/// Whether two values are equal and write their keys in the same order: `==` on a map ignores
+/// the order, which the kept value would carry into what reads it.
+fn written_alike(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Object(x), Value::Object(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .zip(y)
+                    .all(|((j, v), (k, w))| j == k && written_alike(v, w))
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(v, w)| written_alike(v, w))
+        }
+        _ => a == b,
     }
-    let doc_key = Hasher::new("document")
-        .bytes(&canonical(&envelope))
-        .finish();
+}
+
+/// Compiles a checked revision into its plan: the nodes each kept operator has, their reads
+/// bound, and the order they visit in. `was` is the revision it follows, if any.
+fn compile(s: &Scheduler<'_>, doc: &Value, was: Option<&Loaded>) -> Loaded {
+    let mut doc = doc.clone();
+    without_negative_zero(&mut doc);
+    let (items, index) = items_of(&doc, was);
+    // The document's ID is where it lives, not what it holds: the key reads the document without
+    // it, and it goes back in its place after.
+    let id = doc.as_object_mut().and_then(|map| {
+        let at = map.keys().position(|k| k == "id")?;
+        Some((at, map.shift_remove("id")?))
+    });
+    let doc_key = Hasher::new("document").bytes(&canonical(&doc)).finish();
+    if let (Some((at, id)), Some(map)) = (id, doc.as_object_mut()) {
+        map.shift_insert(at, "id".into(), id);
+    }
     let seed = doc.get("seed").cloned().unwrap_or(Value::Null);
     let mut assets = BTreeSet::new();
     for item in &items {

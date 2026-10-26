@@ -1,0 +1,5 @@
+// z-notes (#350 AC8), first-party, loaded from the release in the hub: its tool.before handler adds one block of
+// free text. Its ID sorts after the outside packages' `acme/a` and `acme/b`, so only the group rule keeps it whole.
+export default function (deep: any): void {
+  deep.on('tool.before', async () => ({ context: 'z-notes: the release notes for this repo live in docs/notes.md' }));
+}

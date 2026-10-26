@@ -42,12 +42,12 @@ export const startOf = (pid: number): Promise<string | undefined> => new Promise
 });
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-/** A ULID at `ms`: 48 bits of time, 80 random. */
-export function ulid(ms: number): string {
+/** A ULID at `ms`: 48 bits of time, then 80 bits, random or the 20 hex digits given. */
+export function ulid(ms: number, hex = randomBytes(10).toString('hex')): string {
   let out = '';
   let time = BigInt(Math.max(0, Math.floor(ms)));
   for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let random = BigInt(`0x${randomBytes(10).toString('hex')}`);
+  let random = BigInt(`0x${hex}`);
   let tail = '';
   for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(random & 31n)] + tail; random >>= 5n; }
   return out + tail;
@@ -109,6 +109,16 @@ export function plantOf(value: string | undefined): Plant | undefined {
   if (!PLANTS.includes(value)) throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
   return value as Plant;
 }
+
+/** What the agent gets of the extensions' joined tool.before reply (#350): their denies and their context blocks. */
+export interface ExtensionReply { denies: { extension: string; reason: string }[]; context: { extension: string; text: string }[] }
+/** How long each extension's tool.before handler has to reply; past it, it is recorded as failed and its reply dropped. */
+export const EXTENSION_HOOK_MS = 500;
+/**
+ * The hold the hub acknowledges for a hook some extension handles: the handlers' deadline, the host's grace for the
+ * trip back, and room for the core's answer to cross to the socket. A reply past it is the hook's fail-open one.
+ */
+export const EXTENSION_HOLD_MS = EXTENSION_HOOK_MS + 500;
 
 /** The test VFS's settings, from DEEP_HUB_TEST_VFS. */
 export interface VfsSettings { points?: string; cutAfter?: number; syncDelayMs?: number; refuse?: string }

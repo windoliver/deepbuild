@@ -95,6 +95,9 @@ pub struct Device {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub backend: Backend,
+    /// The adapter's name and driver, for a run's environment fingerprint (#380); `None` on the
+    /// noop backend.
+    pub adapter: Option<wgpu::AdapterInfo>,
     /// Bumped on every device the app opens; a resource built at an older epoch is gone.
     pub epoch: u64,
     /// The adapter's name, as the platform gives it.
@@ -110,6 +113,7 @@ impl Device {
             | wgpu::Features::TIMESTAMP_QUERY_INSIDE_PASSES;
         let mut features = wgpu::Features::empty();
         let mut name = String::from("noop");
+        let mut info = None;
         let (device, queue) = match backend {
             Backend::Noop => wgpu::Device::noop(&wgpu::DeviceDescriptor::default()),
             Backend::Gpu => {
@@ -127,6 +131,7 @@ impl Device {
                     features = adapter.features() & wanted;
                 }
                 name = adapter.get_info().name;
+                info = Some(adapter.get_info());
                 pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                     label: Some("deep-gpu"),
                     required_features: features,
@@ -150,6 +155,7 @@ impl Device {
             device,
             queue,
             backend,
+            adapter: info,
             epoch,
             name,
             timestamps,

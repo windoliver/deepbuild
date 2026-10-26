@@ -1,0 +1,18 @@
+[package]
+name = "deep-canvas-effects"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #380: the effects canvas module. GPU operators as data: a typed graph of steps from the
+# core's closed op table, checked (closed ops, types, a DAG, fixed repeat counts, kind rules,
+# limits, determinism, cost) before anything reaches the GPU, and written as WGSL by the core.
+# The shipped library (glow, shadows, selection outlines, the ground grid, particles) is built
+# from the same steps and runs the same check. Each graph also runs on the CPU in f64 through the
+# ops module, which is every shipped pass's reference. Nothing here touches the GPU:
+# `deep-effects-render` validates the WGSL with naga and runs it on wgpu.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

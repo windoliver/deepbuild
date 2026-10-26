@@ -17,3 +17,4 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-gpu = { path = "../deep-gpu" }
 bytemuck = { version = "1", features = ["derive"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
+wgpu-profiler = "0.28"

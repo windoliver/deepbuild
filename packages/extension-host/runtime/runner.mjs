@@ -23,7 +23,7 @@ if (entry === 'main') {
   child.on('exit', () => socket.end());
 } else {
   let wire;
-  const side = extensionSide((method, params) => wire.call(method, params), async (deep, params) => {
+  const side = extensionSide((method, params, scope) => wire.call(method, params, scope), async (deep, params) => {
     const url = pathToFileURL(join(folder, 'index.ts')).href;
     // The host strips index.ts's types and sends the source, so this process needn't load a TypeScript stripper;
     // the module keeps its own URL, so what it reads beside itself is still its own folder's.

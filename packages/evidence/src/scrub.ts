@@ -79,7 +79,8 @@ export function scrub(text: Buffer, values: readonly string[], patterns = true):
   for (let i = 2; i < text.length; i++) {
     key = (key << 8 | FOLD[text[i]!]!) & 0xffffff;
     if (!bits[slot(key)]) continue;
-    for (const needle of keywords.get(key) ?? []) if (needle.match(text, i - 2, latin) > 0) hits.push([i - 2, needle.rules!]);
+    // Keywords only start the pattern pass.
+    if (patterns) for (const needle of keywords.get(key) ?? []) if (needle.match(text, i - 2, latin) > 0) hits.push([i - 2, needle.rules!]);
     for (const needle of byValue.get(key) ?? []) { const end = needle.match(text, i - 2, latin); if (end > 0) masks.push([i - 2, end]); }
   }
   for (const form of short) for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) masks.push([at, at + form.length]);

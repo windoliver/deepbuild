@@ -8,14 +8,14 @@
 // cover; it launches only the bytes it verified. Its record is a function of the event log, so a hub that
 // crashes finds every job it recorded and never runs one twice.
 import { execFile } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { chmodSync, createReadStream, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync, type Stats } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
 import type { Outcome } from '@deepbuild/budget';
 import type { JsonValue } from '@deepbuild/contracts';
-import type { Connection, Event, EventInput } from '@deepbuild/record';
+import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
 import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
@@ -41,12 +41,6 @@ const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-function ulid(ms: number): string {
-  let time = '';
-  for (let t = ms, i = 0; i < 10; i++, t = Math.floor(t / 32)) time = CROCKFORD[t % 32] + time;
-  return time + Array.from(randomBytes(16), (b) => CROCKFORD[b % 32]).join('');
-}
 const readJson = (path: string): unknown => {
   try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return undefined; }
 };
@@ -129,6 +123,8 @@ interface Job {
   resultAt?: number;
   outputAt: number;
   endedAt?: number;
+  /** Resolves once its process has ended and `endedAt` is set. */
+  exited?: Promise<void>;
   reserved: boolean;
   budgetAt?: number;
   /** The ledger's ask for its budget, whatever it waits on now. */
@@ -434,13 +430,10 @@ class LocalRunner implements Runner {
     return { binary };
   }
 
-  private factsCache = new Map<Agent, Facts>();
+  private readonly factsCache = new Map<Agent, Facts>();
   private facts(agent: Agent): Facts {
     let facts = this.factsCache.get(agent);
-    if (!facts) {
-      facts = JSON.parse(readFileSync(AGENTS[agent]!.facts, 'utf8')) as Facts;
-      this.factsCache.set(agent, facts);
-    }
+    if (!facts) this.factsCache.set(agent, (facts = JSON.parse(readFileSync(AGENTS[agent]!.facts, 'utf8')) as Facts));
     return facts;
   }
   private covers(facts: Facts, version: string): boolean {
@@ -759,7 +752,7 @@ class LocalRunner implements Runner {
     if (this.o.plant === 'records-launched-model') job.answered = launched;
     if (job.spec.deadline_ms) job.timers.push(setTimeout(() => void this.stop(job, 'timed_out'), job.spec.deadline_ms));
     if (job.spec.output_timeout_ms) this.watchQuiet(job, job.spec.output_timeout_ms);
-    void this.o.supervisor.wait(job.rec.job).then(() => {
+    job.exited = this.o.supervisor.wait(job.rec.job).then(() => {
       job.endedAt ??= Date.now();
       void this.settle(job, job.resultAt ?? job.endedAt);
     }, () => undefined);
@@ -770,11 +763,9 @@ class LocalRunner implements Runner {
     const text = job.decoder.write(chunk);
     job.stdout += text;
     job.outputAt = Date.now();
-    job.pending += text;
-    let i: number;
-    while ((i = job.pending.indexOf('\n')) >= 0) {
-      const line = job.pending.slice(0, i);
-      job.pending = job.pending.slice(i + 1);
+    const lines = (job.pending + text).split('\n');
+    job.pending = lines.pop()!;
+    for (const line of lines) {
       let e: Obj;
       try { e = JSON.parse(line) as Obj; } catch { continue; }
       if (!isObj(e)) continue;
@@ -840,7 +831,10 @@ class LocalRunner implements Runner {
   private settle(job: Job, from: number): Promise<void> {
     job.settling ??= (async () => {
       const until = from + GRACE_MS;
-      while (Date.now() < until && (job.endedAt === undefined || groupAlive(job.rec.pgid))) await sleep(POLL_MS);
+      while (Date.now() < until && (job.endedAt === undefined || groupAlive(job.rec.pgid))) {
+        // Woken as its process ends too: a group gone with it isn't held a poll longer.
+        await Promise.race([sleep(POLL_MS), ...(job.endedAt === undefined && job.exited ? [job.exited] : [])]);
+      }
       if (job.rec.state !== 'running' || job.ending) return;
       job.ending = true;
       const alive = await groupMembers(job.rec.pgid);
@@ -998,10 +992,7 @@ const folded = (path: string): string => path.normalize('NFC').replace(/[\u200B-
 const alivePid = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
 };
-const groupAlive = (pgid: number | undefined): boolean => {
-  if (!pgid) return false;
-  try { process.kill(-pgid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
-};
+const groupAlive = (pgid: number | undefined): boolean => !!pgid && alivePid(-pgid);
 function ps(args: string[]): Promise<string> {
   return new Promise((resolve) => execFile('/bin/ps', args, { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } }, (_e, stdout) => resolve(stdout ?? '')));
 }

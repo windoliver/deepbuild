@@ -89,6 +89,10 @@
         "deep-gpu": {
           "spec": "* path=../deep-gpu",
           "why": "Issue #377: the GPU layer, whose views the window shows in place (gpu_view)."
+        },
+        "deep-marks-gpui": {
+          "spec": "* path=../deep-marks-gpui",
+          "why": "Issue #380: the session line is a stroke of the canvas's marks, never a path the view paints itself."
         }
       },
       "dev-dependencies": {
@@ -581,6 +585,10 @@
         "vello_cpu": {
           "spec": "^0.3",
           "why": "Issue #373: goldens and snapshots of 2D marks render with Vello CPU, its f32 pipeline at the scalar SIMD level, the same bytes on every platform; already in the tree through deep-text."
+        },
+        "deep-marks-gpui": {
+          "spec": "* path=../deep-marks-gpui",
+          "why": "Issue #380: paints a path mark's mesh, shared with the app's line."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -695,6 +703,10 @@
         "deep-scene3d-render": {
           "spec": "* path=../deep-scene3d-render",
           "why": "Issue #378: 3D writer layers drawn natively for render-back snapshots and the window."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #380: the effects module joins R2's build set beside scene3d."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -859,6 +871,18 @@
         "deep-scene3d-render": {
           "spec": "* path=../deep-scene3d-render",
           "why": "Issue #378: scene3d's render module, which the view3d call draws through a GPU-layer view."
+        },
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #380: the operators, check_operator and op calls read the shipped library and its check."
+        },
+        "deep-effects-render": {
+          "spec": "* path=../deep-effects-render",
+          "why": "Issue #380: the effects drawn in view3d frames, and the reference and golden calls."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #380: view3d's timings come from wgpu-profiler, as the criterion says."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -909,6 +933,70 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #378: pipelines, render bundles that replay, and the linear, object-ID and depth targets."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #380: times scene3d's own passes (shadow map, geometry, output) in the same frame as the effects."
+        }
+      }
+    },
+    "crates/deep-canvas-effects/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #380: the registry the effects module registers its passes and fixture through, and the core's ops for its constants."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #380: GPU operators are JSON documents (gpu.step@1); the check reads them and the shipped library writes them."
+        }
+      }
+    },
+    "crates/deep-effects-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-effects": {
+          "spec": "* path=../deep-canvas-effects",
+          "why": "Issue #380: the operator check, the WGSL the core writes and the CPU reference interpreter."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #380: the GPU layer's device and encode jobs the effect passes run as."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #380: scene3d's post hook, which hands the effects its linear, depth, ID and shadow-map targets."
+        },
+        "naga": {
+          "spec": "^30",
+          "why": "Issue #380: validates each operator's WGSL with every check and no optional capability before wgpu sees it."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #380: the effect passes' pipelines, bind groups and storage buffers."
+        },
+        "wgpu-profiler": {
+          "spec": "^0.28",
+          "why": "Issue #380: the criterion names it: per-pass GPU timestamps for the frame budget."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #380: operator inputs and the frame uniform written to GPU buffers."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #380: operators and their parameters as JSON."
+        }
+      }
+    },
+    "crates/deep-marks-gpui/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #380: the stroke and fill tessellation a mark's mesh comes from."
+        },
+        "gpui-kit": {
+          "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
+          "why": "Issue #380: the window a mark's mesh is painted into, as one GPUI path."
         }
       }
     }

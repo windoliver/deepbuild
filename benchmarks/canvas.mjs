@@ -197,6 +197,41 @@ function passTimes(dir, doc) {
   return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, median(v)]));
 }
 
+// The shipped effects' passes (issue #380), each writing its own linear target: bytes per pixel from that
+// Rgba16Float target, and glow's from its mix target and its half-resolution chain.
+const EFFECT_BYTES = { 'effects.grid': 8, 'effects.shadow': 8, 'effects.particles': 8, 'effects.outline': 8, 'effects.glow': 11 };
+const EFFECTS_LOOK = join(root, 'tests', 'acceptance', '380', 'fixtures', 'look.json');
+
+/** A lamp on a floor under a casting sun, with sparks, the ground grid, bloom and the lamp selected. */
+function effectsDoc(size) {
+  const box = (id, order, dims, pos, role) => ({ id, kind: 'mark.box@1', name: id, order, layer: 'main', params: { size: dims, paint: { fill: { role } } }, at: { pos } });
+  const items = {
+    cam: { id: 'cam', kind: 'camera@1', name: 'Camera', order: 'a0', layer: 'main', params: { projection: 'perspective', target: [0, 0.4, 0], orbit: { azimuth: 30, elevation: 25, distance: 7 }, fov: 40, near: 0.1 } },
+    floor: box('floor', 'a1', [12, 0.1, 12], [0, -0.05, 0], 'floor'),
+    lamp: box('lamp', 'a2', [1, 1, 1], [0, 0.5, 0], 'lamp'),
+    sun: { id: 'sun', kind: 'light.sun@1', name: 'Sun', order: 'a9', layer: 'main', params: { illuminance: Math.PI, shadow: true }, at: { rot: [-55, -40, 0] } },
+    sparks: { id: 'sparks', kind: 'particles@1', name: 'Sparks', order: 'b0', layer: 'main', at: { pos: [0, 1.05, 0] },
+      params: { count: 2048, emit: { anchor: 'lamp', shape: 'point', rate: 1200, span: 10 }, life: [0.8, 1.6], motion: { ballistic: { v0: [2, 4], gravity: [0, -9.8, 0], drag: 0.2 } },
+        size: 3, opacity: 1, color: [{ at: 0, role: 'spark-a' }, { at: 1, role: 'spark-b' }], draw: 'dot' } },
+  };
+  return { format: 1, id: 'bench-effects', profile: 'scene', title: 'Effects', description: 'The #380 effects bench document.', size, camera: 'cam',
+    requires: { modules: { scene3d: '^1', effects: '^1' } }, transport: { span: '10s' }, layers: { main: { writer: 'agent-a', title: 'Main', order: 'a0' } }, items };
+}
+
+/** Each effects pass's median GPU time in ns over frames 11 to 60 of `view3d` at `size`, as wgpu-profiler times it. */
+function effectTimes(dir, size) {
+  const doc = join(dir, `effects-${size[0]}.json`);
+  writeFileSync(doc, JSON.stringify(effectsDoc(size)));
+  const look = { ...JSON.parse(readFileSync(EFFECTS_LOOK, 'utf8')), bloom: { intensity: 0.3, radius: 0.85 },
+    ground_3d: { kind: 'grid', height: 0.001, spacing: 1, major_every: 5, width: 1, fade: 'auto', roles: { minor: 'grid-minor', major: 'grid-major', axis: 'grid-axis' } } };
+  const [answer] = run('deep-gpu', 'run', [JSON.stringify({ out: dir, calls: [{ call: 'view3d', doc, look, size, frames: 60, fps: 60, selection: ['lamp'], timings: true }] })]);
+  const reply = answer.replies?.[0];
+  if (!reply?.frames || reply.code) throw Error(`deep-gpu view3d answered ${JSON.stringify(answer).slice(0, 1500)}`);
+  const by = {};
+  for (const f of reply.frames.slice(10)) for (const [name, ms] of Object.entries(f.passes_ms ?? {})) (by[name] ??= []).push(ms * 1e6);
+  return Object.fromEntries(Object.entries(by).map(([k, v]) => [k, median(v)]));
+}
+
 workloads.costs = () => {
   const write = process.argv.includes('--write');
   const machine = fingerprint();
@@ -211,7 +246,7 @@ workloads.costs = () => {
   if (!measured?.terms) throw Error(`deep-show costs answered ${JSON.stringify(answer).slice(0, 1500)}`);
   const declared = JSON.parse(readFileSync(COSTS, 'utf8'));
   const terms = { ...measured.terms };
-  for (const [pass, bytes] of Object.entries(PASS_BYTES)) terms[pass] = { ...(declared.terms[pass] ?? {}), bytes_per_px: bytes };
+  for (const [pass, bytes] of Object.entries({ ...PASS_BYTES, ...EFFECT_BYTES })) terms[pass] = { ...(declared.terms[pass] ?? {}), bytes_per_px: bytes };
   if (process.platform === 'darwin') {
     const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
     try {
@@ -222,6 +257,12 @@ workloads.costs = () => {
         const perPx = Math.max((large[pass] - small[pass]) / (1024 * 1024 - 256 * 256), 0.0001);
         const perVertex = Math.max((many[pass] - small[pass]) / ((64 - 8) * 24), 0);
         terms[pass] = { ns_per_px: Number(perPx.toFixed(4)), ...(perVertex >= 0.01 ? { ns_per_vertex: Number(perVertex.toFixed(2)) } : {}), bytes_per_px: PASS_BYTES[pass] };
+      }
+      const fxSmall = effectTimes(dir, [256, 256]);
+      const fxLarge = effectTimes(dir, [1024, 1024]);
+      for (const pass of Object.keys(EFFECT_BYTES)) {
+        const perPx = Math.max((fxLarge[pass] - fxSmall[pass]) / (1024 * 1024 - 256 * 256), 0.0001);
+        terms[pass] = { ns_per_px: Number(perPx.toFixed(4)), bytes_per_px: EFFECT_BYTES[pass] };
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });

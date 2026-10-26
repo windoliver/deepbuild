@@ -8,6 +8,7 @@
 //! target and writes the slot.
 
 mod mesh;
+pub mod shadow;
 
 use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
@@ -35,16 +36,8 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 const SHADER: &str = include_str!("scene3d.wgsl");
 const OUTPUT: &str = include_str!("output.wgsl");
 const BUSY: &str = include_str!("busy.wgsl");
-
-/// The frame's GPU time, from timestamps the device writes at the start of the geometry pass and
-/// the end of the output pass (#383).
-struct Timer {
-    set: wgpu::QuerySet,
-    resolve: wgpu::Buffer,
-    read: wgpu::Buffer,
-    /// ns per timestamp tick.
-    period: f64,
-}
+/// The pass that draws the key light's shadow map, in the frame's shadows place.
+pub const SHADOW_PASS: &str = "scene3d.shadow";
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,6 +65,68 @@ pub struct Counts {
     pub replayed: u32,
     pub instances_written: u32,
     pub meshes_built: u32,
+}
+
+/// The key light's direction, toward the light: what the solids are shaded by and what casts the
+/// shadow map.
+pub const LIGHT: [f64; 3] = [0.35, 0.8, 0.5];
+
+/// What a frame hands the passes another render module adds between scene3d's geometry and its
+/// output (issue #380: the effects chain and bloom): the 3D targets, the camera, and the key
+/// light's shadow map when that module asked for it.
+pub struct PostFrame<'a> {
+    pub size: [u32; 2],
+    pub linear: &'a wgpu::TextureView,
+    pub depth: &'a wgpu::TextureView,
+    pub ids: &'a wgpu::TextureView,
+    pub shadow: Option<&'a wgpu::TextureView>,
+    /// World to clip, column-major (reversed Z, no far plane).
+    pub clip: [f64; 16],
+    pub eye: [f64; 3],
+    pub near: f64,
+    /// World to the shadow map's clip space, column-major (depth 0 nearest the light).
+    pub light_clip: Option<[f64; 16]>,
+    /// Each item's pick ID.
+    pub picks: &'a BTreeMap<String, u32>,
+}
+
+/// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
+pub type Profiler = Arc<Mutex<wgpu_profiler::GpuProfiler>>;
+
+/// Runs `f`, which records one render pass, with that pass's timestamps going to `profiler`
+/// under `label` when one is set.
+pub fn timed(
+    profiler: &Option<Profiler>,
+    label: &'static str,
+    encoder: &mut wgpu::CommandEncoder,
+    f: impl FnOnce(&mut wgpu::CommandEncoder, Option<wgpu::RenderPassTimestampWrites<'_>>),
+) {
+    match profiler {
+        Some(p) => {
+            let p = lock(p);
+            let q = p.begin_pass_query(label, encoder);
+            f(encoder, q.render_pass_timestamp_writes());
+            p.end_query(encoder, q);
+        }
+        None => f(encoder, None),
+    }
+}
+
+/// Passes between geometry and output, with the targets they read.
+pub trait Post: Send {
+    /// The passes it may add to the frame, each into its place, for the frame's plan.
+    fn passes(&self) -> Vec<Pass> {
+        Vec::new()
+    }
+    /// Whether this frame draws the key light's shadow map.
+    fn shadows(&self) -> bool;
+    /// The passes' encodes, in frame order, and the linear target the output pass reads in place
+    /// of the geometry's.
+    fn jobs(
+        &mut self,
+        device: &Device,
+        frame: &PostFrame<'_>,
+    ) -> (Vec<(String, Job)>, Option<wgpu::TextureView>);
 }
 
 #[repr(C)]
@@ -281,6 +336,19 @@ struct Targets {
     output_bind: wgpu::BindGroup,
 }
 
+/// The key light's shadow map and what draws it.
+struct Shadow {
+    pipeline: wgpu::RenderPipeline,
+    buffer: wgpu::Buffer,
+    bind: wgpu::BindGroup,
+    view: Option<wgpu::TextureView>,
+    /// This frame's light clip matrix, column-major.
+    clip: Option<[f64; 16]>,
+}
+
+/// A camera as the effects read it: world to clip (column-major), the eye and the near plane.
+pub type Camera = ([f64; 16], [f64; 3], f64);
+
 pub struct Renderer {
     planted: Planted,
     epoch: u64,
@@ -303,10 +371,12 @@ pub struct Renderer {
     order: Vec<String>,
     ground: [f64; 4],
     counts: Counts,
-    /// On a device that writes timestamps.
-    timer: Option<Timer>,
     /// The planted slow_gpu_frame twin's pipeline.
     busy: Option<wgpu::RenderPipeline>,
+    shadow: Shadow,
+    /// This frame's camera: world to clip (column-major), the eye and the near plane.
+    camera: Camera,
+    pub profiler: Option<Profiler>,
 }
 
 fn decode(c: u8) -> f64 {
@@ -593,6 +663,51 @@ impl Renderer {
                 Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
             ],
         );
+        // The shadow map: the solids' vertex stage under the light's clip matrix, depth only,
+        // nearest the light kept.
+        let shadow_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(SHADOW_PASS),
+            layout: Some(&draw_layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("mesh_vs"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: 24,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &MESH_VERTEX,
+                    }),
+                    Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
+                ],
+            },
+            primitive: Default::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: shadow::FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        });
+        let light_buffer = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("scene3d light"),
+            size: std::mem::size_of::<FrameUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let light_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("scene3d light"),
+            layout: &frame_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+        });
         let output_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(OUTPUT_PASS),
             layout: Some(&output_pipeline_layout),
@@ -618,35 +733,6 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
-        let timer = d
-            .features()
-            .contains(wgpu::Features::TIMESTAMP_QUERY)
-            .then(|| {
-                let buffer = |label, usage| {
-                    d.create_buffer(&wgpu::BufferDescriptor {
-                        label: Some(label),
-                        size: 16,
-                        usage,
-                        mapped_at_creation: false,
-                    })
-                };
-                Timer {
-                    set: d.create_query_set(&wgpu::QuerySetDescriptor {
-                        label: Some("scene3d timestamps"),
-                        ty: wgpu::QueryType::Timestamp,
-                        count: 2,
-                    }),
-                    resolve: buffer(
-                        "scene3d timestamps",
-                        wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
-                    ),
-                    read: buffer(
-                        "scene3d timestamps read",
-                        wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                    ),
-                    period: f64::from(device.queue.get_timestamp_period()),
-                }
-            });
         let busy = planted.slow_gpu_frame.then(|| {
             let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("scene3d busy"),
@@ -745,8 +831,16 @@ impl Renderer {
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
             counts: Counts::default(),
-            timer,
             busy,
+            shadow: Shadow {
+                pipeline: shadow_pipeline,
+                buffer: light_buffer,
+                bind: light_bind,
+                view: None,
+                clip: None,
+            },
+            camera: ([0.0; 16], [0.0; 3], 0.1),
+            profiler: None,
         }
     }
 
@@ -795,11 +889,18 @@ impl Renderer {
             LINEAR,
             attach | wgpu::TextureUsages::TEXTURE_BINDING,
         );
-        let ids = texture("scene3d ids", IDS, attach);
+        // Effects read the object-ID and depth targets after geometry.
+        let ids = texture(
+            "scene3d ids",
+            IDS,
+            attach | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
         let depth = texture(
             "scene3d depth",
             DEPTH,
-            wgpu::TextureUsages::RENDER_ATTACHMENT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         );
         let linear_view = linear.create_view(&Default::default());
         let output_bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -887,10 +988,28 @@ impl Renderer {
                 clip[c][r] = *v as f32;
             }
         }
+        let mut camera = [0.0; 16];
+        for (r, row) in rows.iter().enumerate() {
+            for (c, v) in row.iter().enumerate() {
+                camera[c * 4 + r] = *v;
+            }
+        }
+        self.camera = (camera, cam.eye, cam.near);
+        // A sun shades the solids by its direction and illuminance (w: E ÷ π, the radiance a white
+        // surface facing it reflects); with none, the view's own key light, w 0.
+        let (toward, w) = match &scene.sun {
+            Some(s) => (s.toward, s.illuminance / std::f64::consts::PI),
+            None => (LIGHT, 0.0),
+        };
         let light = {
-            let l = [0.35f64, 0.8, 0.5];
+            let l = toward;
             let n = (l[0] * l[0] + l[1] * l[1] + l[2] * l[2]).sqrt();
-            [(l[0] / n) as f32, (l[1] / n) as f32, (l[2] / n) as f32, 0.0]
+            [
+                (l[0] / n) as f32,
+                (l[1] / n) as f32,
+                (l[2] / n) as f32,
+                w as f32,
+            ]
         };
         let frame = FrameUniform {
             clip,
@@ -909,6 +1028,24 @@ impl Renderer {
                 .queue
                 .write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame))
         });
+        self.shadow.clip = scene
+            .sun
+            .as_ref()
+            .filter(|s| s.shadow)
+            .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
+        if let Some(m) = self.shadow.clip {
+            let mut light_frame = frame;
+            for c in 0..4 {
+                for r in 0..4 {
+                    light_frame.clip[c][r] = m[c * 4 + r] as f32;
+                }
+            }
+            deep_gpu::alloc::outside(|| {
+                device
+                    .queue
+                    .write_buffer(&self.shadow.buffer, 0, bytemuck::bytes_of(&light_frame))
+            });
+        }
         let (map, white, contrast) = match look.tone_map {
             ToneMap::Agx { white, contrast } => (2, white, contrast),
             other => (other.code(), 16.29, 1.25),
@@ -1139,9 +1276,97 @@ impl Renderer {
         &self.counts
     }
 
-    /// The frame's two passes, each one encode: the geometry pass replays every batch into the
-    /// targets, and the output pass writes `slot`.
-    pub fn jobs(&self, slot: &wgpu::TextureView) -> Vec<(String, Job)> {
+    /// The key light's shadow map: the solids of every batch drawn depth-only from the light.
+    fn shadow_job(&mut self, device: &Device) -> Option<Job> {
+        self.shadow.clip?;
+        let view = self
+            .shadow
+            .view
+            .get_or_insert_with(|| {
+                device
+                    .device
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: Some(SHADOW_PASS),
+                        size: wgpu::Extent3d {
+                            width: shadow::SIZE,
+                            height: shadow::SIZE,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: shadow::FORMAT,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_SRC,
+                        view_formats: &[],
+                    })
+                    .create_view(&Default::default())
+            })
+            .clone();
+        let pipeline = self.shadow.pipeline.clone();
+        let bind = self.shadow.bind.clone();
+        let mut draws = Vec::new();
+        for id in &self.order {
+            for (shape, set) in &self.batches[id].solids {
+                if let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) {
+                    draws.push((
+                        mesh.vertices.clone(),
+                        mesh.indices.clone(),
+                        mesh.count,
+                        buffer.clone(),
+                        set.len(),
+                    ));
+                }
+            }
+        }
+        let profiler = self.profiler.clone();
+        Some(Box::new(move |encoder| {
+            timed(
+                &profiler,
+                SHADOW_PASS,
+                encoder,
+                |encoder, timestamp_writes| {
+                    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some(SHADOW_PASS),
+                        color_attachments: &[],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(1.0),
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        timestamp_writes,
+                        ..Default::default()
+                    });
+                    pass.set_pipeline(&pipeline);
+                    pass.set_bind_group(0, &bind, &[]);
+                    for (vertices, indices, count, instances, n) in &draws {
+                        pass.set_vertex_buffer(0, vertices.slice(..));
+                        pass.set_vertex_buffer(1, instances.slice(..));
+                        pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..*count, 0, 0..*n);
+                    }
+                },
+            );
+        }))
+    }
+
+    /// The frame's passes, each one encode: the geometry pass replays every batch into the
+    /// targets, `post`'s passes (with the shadow map before geometry when it asks) read them, and
+    /// the output pass writes `slot` from the linear target `post` hands it, else geometry's.
+    pub fn jobs(
+        &mut self,
+        device: &Device,
+        slot: &wgpu::TextureView,
+        post: Option<&mut dyn Post>,
+    ) -> Vec<(String, Job)> {
+        let shadow = match post.as_deref() {
+            Some(p) if p.shadows() => self.shadow_job(device),
+            _ => None,
+        };
         let Some(t) = self.targets.as_ref() else {
             return Vec::new();
         };
@@ -1156,29 +1381,62 @@ impl Renderer {
             t.depth_view.clone(),
         );
         let (ground, clear_depth) = (self.ground, self.clear_depth());
-        let timer = self.timer.as_ref().map(|t| t.set.clone());
-        let start = timer.clone();
+        let profiler = self.profiler.clone();
         let geometry: Job = Box::new(move |encoder| {
-            geometry_pass(
-                encoder,
-                [&linear, &ids, &depth],
-                ground,
-                clear_depth,
-                bundles.iter(),
-                start.as_ref().map(|set| wgpu::RenderPassTimestampWrites {
-                    query_set: set,
-                    beginning_of_pass_write_index: Some(0),
-                    end_of_pass_write_index: None,
-                }),
-            );
+            timed(&profiler, GEOMETRY_PASS, encoder, |encoder, timestamps| {
+                geometry_pass(
+                    encoder,
+                    [&linear, &ids, &depth],
+                    ground,
+                    clear_depth,
+                    bundles.iter(),
+                    timestamps,
+                )
+            })
         });
-        let (slot, pipeline, bind) = (
-            slot.clone(),
-            self.output_pipeline.clone(),
-            t.output_bind.clone(),
-        );
+        let mut jobs: Vec<(String, Job)> = Vec::new();
+        if let Some(s) = shadow {
+            jobs.push((SHADOW_PASS.into(), s));
+        }
+        jobs.push((GEOMETRY_PASS.into(), geometry));
+        let mut bind = t.output_bind.clone();
+        if let Some(post) = post {
+            let frame = PostFrame {
+                size: t.size,
+                linear: &t.linear_view,
+                depth: &t.depth_view,
+                ids: &t.ids_view,
+                shadow: self.shadow.view.as_ref().filter(|_| post.shadows()),
+                clip: self.camera.0,
+                eye: self.camera.1,
+                near: self.camera.2,
+                light_clip: self.shadow.clip,
+                picks: &self.picks,
+            };
+            let (more, source) = post.jobs(device, &frame);
+            jobs.extend(more);
+            if let Some(view) = source {
+                bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("scene3d output"),
+                    layout: &self.output_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: self.tone_buffer.as_entire_binding(),
+                        },
+                    ],
+                });
+            }
+        }
+        let (slot, pipeline) = (slot.clone(), self.output_pipeline.clone());
+        let profiler = self.profiler.clone();
         let busy = self.busy.clone();
         let output: Job = Box::new(move |encoder| {
+            // The planted slow frame's pass, inside the frame's span of timed passes.
             if let Some(busy) = &busy {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("scene3d busy"),
@@ -1196,50 +1454,28 @@ impl Renderer {
                 pass.set_pipeline(busy);
                 pass.draw(0..3, 0..1);
             }
-            output_pass(
-                encoder,
-                &slot,
-                &pipeline,
-                &bind,
-                timer.as_ref().map(|set| wgpu::RenderPassTimestampWrites {
-                    query_set: set,
-                    beginning_of_pass_write_index: None,
-                    end_of_pass_write_index: Some(1),
-                }),
-            );
+            timed(&profiler, OUTPUT_PASS, encoder, |encoder, timestamps| {
+                output_pass(encoder, &slot, &pipeline, &bind, timestamps)
+            })
         });
-        vec![
-            (GEOMETRY_PASS.into(), geometry),
-            (OUTPUT_PASS.into(), output),
-        ]
+        jobs.push((OUTPUT_PASS.into(), output));
+        jobs
     }
 
-    /// The last frame's GPU time in ms, from the start of its geometry pass to the end of its
-    /// output pass; `None` on a device that writes no timestamps. Call once the frame is done:
-    /// Metal writes a pass's samples as its command buffer completes, so they are resolved after.
-    pub fn gpu_ms(&self, device: &Device) -> Option<f64> {
-        let t = self.timer.as_ref()?;
-        let mut encoder = device.device.create_command_encoder(&Default::default());
-        encoder.resolve_query_set(&t.set, 0..2, &t.resolve, 0);
-        encoder.copy_buffer_to_buffer(&t.resolve, 0, &t.read, 0, 16);
-        device.queue.submit([encoder.finish()]);
-        let (tx, rx) = mpsc::channel();
-        t.read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
-        if !matches!(rx.recv(), Ok(Ok(()))) {
-            return None;
-        }
-        let ticks = {
-            let data = t.read.slice(..).get_mapped_range().ok()?;
-            let at = |i: usize| {
-                u64::from_le_bytes(data[i * 8..i * 8 + 8].try_into().unwrap_or_default())
-            };
-            at(1).saturating_sub(at(0))
-        };
-        t.read.unmap();
-        Some(ticks as f64 * t.period / 1e6)
+    /// The last frame's depth target and, when one was drawn, the key light's shadow map, as
+    /// passes between geometry and output read them.
+    pub fn depth_and_shadow(&self) -> Option<(&wgpu::Texture, Option<&wgpu::Texture>)> {
+        let t = self.targets.as_ref()?;
+        Some((
+            t.depth_view.texture(),
+            self.shadow.view.as_ref().map(|v| v.texture()),
+        ))
+    }
+
+    /// The last frame's camera (world to clip, column-major; the eye; the near plane) and its
+    /// light clip matrix.
+    pub fn camera(&self) -> (Camera, Option<[f64; 16]>) {
+        (self.camera, self.shadow.clip)
     }
 
     fn clear_depth(&self) -> f64 {
@@ -1429,7 +1665,7 @@ fn geometry_pass<'a>(
                 view: depth,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(clear_depth as f32),
-                    store: wgpu::StoreOp::Discard,
+                    store: wgpu::StoreOp::Store,
                 }),
                 stencil_ops: None,
             }),
@@ -1474,6 +1710,8 @@ pub struct Shared {
     pub next: Option<(Arc<Scene>, Look3)>,
     pub renderer: Option<Renderer>,
     pub planted: Planted,
+    /// Passes another render module adds between geometry and output.
+    pub post: Option<Box<dyn Post>>,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -1487,6 +1725,7 @@ impl Module3 {
             next: None,
             renderer: None,
             planted,
+            post: None,
         }));
         (
             Module3 {
@@ -1520,6 +1759,57 @@ impl RenderModule for Module3 {
     }
 
     fn passes(&self) -> Vec<Pass> {
+        let s = lock(&self.shared);
+        let Some(post) = s.post.as_ref() else {
+            return self.own_passes();
+        };
+        let mut passes = self.own_passes();
+        passes.push(Pass {
+            name: SHADOW_PASS.into(),
+            place: "shadows",
+            order: 0,
+            reads: Vec::new(),
+            writes: vec!["shadow"],
+            resolution: Resolution::Full,
+            ns_per_px: 0.05,
+            determinism: Determinism::SameMachine,
+        });
+        passes.extend(post.passes());
+        passes
+    }
+
+    fn build(&mut self, device: &Device) -> Result<(), String> {
+        let mut s = lock(&self.shared);
+        let planted = s.planted;
+        s.renderer = Some(Renderer::new(device, planted));
+        Ok(())
+    }
+
+    fn built_on(&self) -> Option<u64> {
+        lock(&self.shared).renderer.as_ref().map(Renderer::epoch)
+    }
+
+    fn layers(&mut self, device: &Device, target: &Target) -> Vec<(String, Job)> {
+        let mut s = lock(&self.shared);
+        let Some((scene, look)) = s.next.clone() else {
+            return Vec::new();
+        };
+        let Shared { renderer, post, .. } = &mut *s;
+        let Some(renderer) = renderer.as_mut() else {
+            return Vec::new();
+        };
+        renderer.prepare(device, &scene, &look);
+        renderer.jobs(
+            device,
+            &target.view,
+            post.as_deref_mut().map(|p| p as &mut dyn Post),
+        )
+    }
+}
+
+impl Module3 {
+    /// scene3d's own passes: geometry and the output.
+    fn own_passes(&self) -> Vec<Pass> {
         vec![
             Pass {
                 name: GEOMETRY_PASS.into(),
@@ -1543,29 +1833,6 @@ impl RenderModule for Module3 {
             },
         ]
     }
-
-    fn build(&mut self, device: &Device) -> Result<(), String> {
-        let mut s = lock(&self.shared);
-        let planted = s.planted;
-        s.renderer = Some(Renderer::new(device, planted));
-        Ok(())
-    }
-
-    fn built_on(&self) -> Option<u64> {
-        lock(&self.shared).renderer.as_ref().map(Renderer::epoch)
-    }
-
-    fn layers(&mut self, device: &Device, target: &Target) -> Vec<(String, Job)> {
-        let mut s = lock(&self.shared);
-        let Some((scene, look)) = s.next.clone() else {
-            return Vec::new();
-        };
-        let Some(renderer) = s.renderer.as_mut() else {
-            return Vec::new();
-        };
-        renderer.prepare(device, &scene, &look);
-        renderer.jobs(&target.view)
-    }
 }
 
 /// Draws one frame offscreen on `device` (a snapshot): BGRA8 bytes, rows top-down; `None` on a
@@ -1575,6 +1842,7 @@ pub fn draw_offscreen(
     renderer: &mut Renderer,
     scene: &Scene,
     look: &Look3,
+    post: Option<&mut dyn Post>,
 ) -> Option<Vec<u8>> {
     let size = scene.size;
     let texture = device.device.create_texture(&wgpu::TextureDescriptor {
@@ -1593,7 +1861,7 @@ pub fn draw_offscreen(
     });
     renderer.prepare(device, scene, look);
     let mut encoder = device.device.create_command_encoder(&Default::default());
-    for (_, job) in renderer.jobs(&texture.create_view(&Default::default())) {
+    for (_, job) in renderer.jobs(device, &texture.create_view(&Default::default()), post) {
         job(&mut encoder);
     }
     device.queue.submit([encoder.finish()]);
