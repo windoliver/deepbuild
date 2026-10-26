@@ -1,0 +1,360 @@
+Acceptance tests for #20, run on the base commit 14561af (origin/main; no implementation of #20).
+
+Command:  PATH=~/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/20 --no-file-parallelism
+          (with CLAUDECODE and AI_AGENT unset and NO_COLOR=1, after npm ci and npm run build --workspaces)
+Node:     v24.22.0
+Vitest:   5.0.5 darwin-arm64
+Date:     2026-10-26
+Machine:  Mac15,7 (Apple M3 Pro, 36 GB), on battery, 1-minute load about 36 on 12 cores
+
+Result: 8 of 8 files fail, 20 of 20 collected tests fail, nothing passes and nothing is skipped.
+
+Why each fails, all for the expected reason (the surface the README names doesn't exist at this base):
+- 18 tests fail on `Cannot find module '.../packages/archive/src/index.ts'`: the archive package doesn't exist.
+  copies.test.ts (AC1 x1, AC2 x1), quiet.test.ts (AC3 x2), secrets.test.ts (AC4 x2, AC5 x1), ci.test.ts (AC6 x1),
+  readback.test.ts (AC8 x2), retention.test.ts (AC9 x3), growth.test.ts (AC10 x2) and the three budget numbers in
+  budgets.test.ts (AC7 x3: live sessions, 30 days on disk, 1 GB backlog). The budget tests load the archive before
+  any machine check, so they fail here rather than skip, whatever the machine. The three wrong-program tests (AC9 x2,
+  AC10 x1) fail the same way: each runs the criterion's scenario on the real archive before the twin.
+- budgets.test.ts, the perf lane (AC7 x2): benchmarks/budgets.json is valid against the merge base's but holds no
+  task naming #20 that runs benchmarks/archive.mjs ("expected [] to have a length of 3 but got +0"; "the archive has
+  perf-lane tasks to run: expected 0 to be greater than 0").
+
+Checked apart from this run, on a scratch copy outside the repo (nothing in it is kept): the test machinery works at
+this base. The copy-once twin leaves `session:<id>#m40` refused, "not at its handle", and a second linked copy of the
+grown session makes the same learned change applied and the sessions row name it (AC10's reading); the hub started on
+day 32 removes an uncited day-0 file, keeps a copy a transcript.archived event in its record links, and removes one
+whose link is only in a ledger of its own (AC9's reading and its second twin); the fake forge serves the runs list,
+a job's log through its 302 and a valid run-log zip, and 404s after expire (AC6); the scrub leaves the CI logs and the
+numbered messages unchanged; one generated 5 MB session (with its half-size copy) comes to about 4.5 GB a month plain,
+1.0 GB with gzip and 0.4 GB with zstd (AC7's size budget discriminates).
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/20/tsconfig.json exits 2 with 2 errors, both the
+missing surface:
+  tests/acceptance/20/helpers.ts(21,46): error TS2307: Cannot find module '../../../packages/archive/src/index.ts' or its corresponding type declarations.
+  tests/acceptance/20/helpers.ts(260,114): error TS2307: Cannot find module '../../../packages/archive/src/index.ts' or its corresponding type declarations.
+Against a stub packages/archive/src/index.ts declaring exactly the README's surface (in the scratch copy), the same
+tsc run exits 0.
+
+---- vitest output (home paths redacted to ~) ----
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20
+
+ ❯ budgets.test.ts (5 tests | 5 failed) 94ms
+   ❯ AC7 #20.1e107583 budgets, compared with the merge base in the local preflight (2)
+     × AC7 the perf lane has the archive's three tasks, one per budget, each a #20 first measurement running benchmarks/archive.mjs, valid against the merge base's budgets 85ms
+     × AC7 each of the archive's perf-lane tasks runs and exits 0 1ms
+   ❯ AC7 #20.1e107583 the issue's numbers (3)
+     × AC7 archiving keeps up with 10 live sessions at under 1% of a core: a pass each minute brings all ten current, at under 0.6 s of CPU 4ms
+     × AC7 30 days of transcripts compress to under 2 GB: two days of a heavy month (20 sessions a day, each copied at half and at its full 5 MB) on disk, times 15 2ms
+     × AC7 a 1 GB backlog (200 sessions of 5 MB) archives in under 5 minutes 1ms
+ ❯ retention.test.ts (3 tests | 3 failed) 181ms
+   ❯ AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it (3)
+     × AC9 a session archived on day 0 and deleted by its agent on day 1: on day 32, after the hub's retention pass, its one event and its one evidence file remain and read back 59ms
+     × AC9 (wrong program) an archive that writes only to its own folder leaves no evidence file and no event, and fails this test naming the session 36ms
+     × AC9 (wrong program) an archive whose copies the evidence retention removes (its link kept in a ledger of its own) loses the copy by day 32, and fails this test naming the session 53ms
+ ❯ secrets.test.ts (3 tests | 3 failed) 410ms
+   ❯ AC4 #20.0567345d a planted fake key in a user message opens a rotate ask and is redacted in the archive (2)
+     × AC4 a github-pat key pasted in a user message: one open rotate ask for the session, which doesn't quote the key, and an archived copy that reads back redacted, with the key nowhere in the record 78ms
+     × AC4 the same key asks once: a second pass and a later copy of the grown session, the key still in it, open no second rotate ask 161ms
+   ❯ AC5 #20.c93e8478 a secret DeepBuild holds by handle, pasted as plain text with no recognizable pattern, is scrubbed from the archived copy (1)
+     × AC5 a held value, one plain lower-case word no pattern finds, pasted into a user message, is scrubbed from the archived copy by value 61ms
+ ❯ growth.test.ts (2 tests | 2 failed) 432ms
+   ❯ AC10 #20.7a50eb28 a transcript archived at 10 lines that grows to 50 is archived again, and session:<id>#m40 resolves through the newest copy (2)
+     × AC10 the session at 10 lines, then at 50: two copies with their own events, the record links the newest, and #m40 resolves 142ms
+     × AC10 (wrong program) an archive that copies once leaves #m40 unresolved: the quote is refused as not at its handle, and this test fails naming the handle 124ms
+ ❯ quiet.test.ts (2 tests | 2 failed) 460ms
+   ❯ AC3 #20.e13bfd0e stopping capture for a day raises the alert (2)
+     × AC3 capture stops after hour 3 while the agent keeps working: no alert 20 hours on, an archive.quiet event naming the source and its last capture by 25 hours on 121ms
+     × AC3 the same 28 hours with capture going on every hour raise no alert 126ms
+ ❯ copies.test.ts (2 tests | 2 failed) 332ms
+   ❯ AC1 #20.eb5dbec4 a transcript deleted by its agent still exists in the archive (1)
+     × AC1 a Claude Code, a Codex and a new adapter's transcript, each archived from the folder its facts name, deleted by its agent, still read back from the archive through the record 179ms
+   ❯ AC2 #20.9b0ff45e re-running the archive copies nothing new (1)
+     × AC2 a second pass, and a fresh archive on the reopened record and store (a restart), copy nothing new: no copy event and no write to the store 102ms
+ ❯ readback.test.ts (2 tests | 2 failed) 278ms
+   ❯ AC8 #20.2fe357c5 each archived copy is read back and matched by size and SHA-256, and the source's size and SHA-256 before redaction are on its event (2)
+     × AC8 three sessions, one with a key the redaction removes: each transcript.archived event carries its source's size and SHA-256 before redaction, and its copy reads back with the size and hash of the redacted text 121ms
+     × AC8 a copy that lands corrupted on disk (the store said stored) is read back, found not to match, and no transcript.archived event names it 88ms
+ ❯ ci.test.ts (1 test | 1 failed) 194ms
+   ❯ AC6 #20.91899638 a CI run's log and result are copied before the forge's retention deletes them, and read back intact (1)
+     × AC6 a failed run of two jobs is copied while the forge holds it; after the forge's retention deletes it, its result and both jobs' logs read back intact from the archive 119ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC7 #20.1e107583 budgets, compared with the merge base in the local preflight > AC7 the perf lane has the archive's three tasks, one per budget, each a #20 first measurement running benchmarks/archive.mjs, valid against the merge base's budgets
+AssertionError: budgets.json has a #20 task for each of the three budgets (live sessions, 30 days, 1 GB backlog): expected [] to have a length of 3 but got +0
+
+- Expected
++ Received
+
+- 3
++ 0
+
+ ❯ budgets.test.ts:77:136
+     75|     validateBudgets(current, JSON.parse(execFileSync('git', ['show', `…
+     76|     const tasks = archiveTasks();
+     77|     expect(tasks.map((t) => t.id), 'budgets.json has a #20 task for ea…
+       |                                                                                                                                        ^
+     78|   });
+     79|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/20]⎯
+
+ FAIL  budgets.test.ts > AC7 #20.1e107583 budgets, compared with the merge base in the local preflight > AC7 each of the archive's perf-lane tasks runs and exits 0
+AssertionError: the archive has perf-lane tasks to run: expected 0 to be greater than 0
+ ❯ budgets.test.ts:82:68
+     80|   it("AC7 each of the archive's perf-lane tasks runs and exits 0", () …
+     81|     const tasks = archiveTasks();
+     82|     expect(tasks.length, 'the archive has perf-lane tasks to run').toB…
+       |                                                                    ^
+     83|     for (const task of tasks) {
+     84|       const [cmd, ...args] = task.command;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/20]⎯
+
+ FAIL  budgets.test.ts > AC7 #20.1e107583 the issue's numbers > AC7 archiving keeps up with 10 live sessions at under 1% of a core: a pass each minute brings all ten current, at under 0.6 s of CPU
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ budgets.test.ts:93:5
+     91| describe(`AC7 ${AC[7]} the issue's numbers`, () => {
+     92|   it("AC7 archiving keeps up with 10 live sessions at under 1% of a co…
+     93|     await archiveModule();
+       |     ^
+     94|     if (problem) ctx.skip(`INCONCLUSIVE (not measured: ${problem})`);
+     95|     // Ten sessions an hour in (1 MB each), each gaining a line every …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/20]⎯
+
+ FAIL  budgets.test.ts > AC7 #20.1e107583 the issue's numbers > AC7 30 days of transcripts compress to under 2 GB: two days of a heavy month (20 sessions a day, each copied at half and at its full 5 MB) on disk, times 15
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ budgets.test.ts:130:5
+    128|
+    129|   it('AC7 30 days of transcripts compress to under 2 GB: two days of a…
+    130|     await archiveModule();
+       |     ^
+    131|     if (process.platform !== 'darwin') ctx.skip(`INCONCLUSIVE (not mea…
+    132|     const w = await openWorld();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/20]⎯
+
+ FAIL  budgets.test.ts > AC7 #20.1e107583 the issue's numbers > AC7 a 1 GB backlog (200 sessions of 5 MB) archives in under 5 minutes
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ budgets.test.ts:166:5
+    164|
+    165|   it('AC7 a 1 GB backlog (200 sessions of 5 MB) archives in under 5 mi…
+    166|     await archiveModule();
+       |     ^
+    167|     if (problem) ctx.skip(`INCONCLUSIVE (not measured: ${problem})`);
+    168|     const backlog = tempDir('backlog');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/20]⎯
+
+ FAIL  ci.test.ts > AC6 #20.91899638 a CI run's log and result are copied before the forge's retention deletes them, and read back intact > AC6 a failed run of two jobs is copied while the forge holds it; after the forge's retention deletes it, its result and both jobs' logs read back intact from the archive
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ ci.test.ts:24:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/20]⎯
+
+ FAIL  copies.test.ts > AC1 #20.eb5dbec4 a transcript deleted by its agent still exists in the archive > AC1 a Claude Code, a Codex and a new adapter's transcript, each archived from the folder its facts name, deleted by its agent, still read back from the archive through the record
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ copies.test.ts:23:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/20]⎯
+
+ FAIL  copies.test.ts > AC2 #20.9b0ff45e re-running the archive copies nothing new > AC2 a second pass, and a fresh archive on the reopened record and store (a restart), copy nothing new: no copy event and no write to the store
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ copies.test.ts:53:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/20]⎯
+
+ FAIL  growth.test.ts > AC10 #20.7a50eb28 a transcript archived at 10 lines that grows to 50 is archived again, and session:<id>#m40 resolves through the newest copy > AC10 the session at 10 lines, then at 50: two copies with their own events, the record links the newest, and #m40 resolves
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ grow growth.test.ts:30:19
+ ❯ growth.test.ts:69:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/20]⎯
+
+ FAIL  growth.test.ts > AC10 #20.7a50eb28 a transcript archived at 10 lines that grows to 50 is archived again, and session:<id>#m40 resolves through the newest copy > AC10 (wrong program) an archive that copies once leaves #m40 unresolved: the quote is refused as not at its handle, and this test fails naming the handle
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ grow growth.test.ts:30:19
+ ❯ growth.test.ts:78:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/20]⎯
+
+ FAIL  quiet.test.ts > AC3 #20.e13bfd0e stopping capture for a day raises the alert > AC3 capture stops after hour 3 while the agent keeps working: no alert 20 hours on, an archive.quiet event naming the source and its last capture by 25 hours on
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ quiet.test.ts:35:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/20]⎯
+
+ FAIL  quiet.test.ts > AC3 #20.e13bfd0e stopping capture for a day raises the alert > AC3 the same 28 hours with capture going on every hour raise no alert
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ quiet.test.ts:73:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/20]⎯
+
+ FAIL  readback.test.ts > AC8 #20.2fe357c5 each archived copy is read back and matched by size and SHA-256, and the source's size and SHA-256 before redaction are on its event > AC8 three sessions, one with a key the redaction removes: each transcript.archived event carries its source's size and SHA-256 before redaction, and its copy reads back with the size and hash of the redacted text
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ readback.test.ts:22:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/20]⎯
+
+ FAIL  readback.test.ts > AC8 #20.2fe357c5 each archived copy is read back and matched by size and SHA-256, and the source's size and SHA-256 before redaction are on its event > AC8 a copy that lands corrupted on disk (the store said stored) is read back, found not to match, and no transcript.archived event names it
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ readback.test.ts:60:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/20]⎯
+
+ FAIL  retention.test.ts > AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it > AC9 a session archived on day 0 and deleted by its agent on day 1: on day 32, after the hub's retention pass, its one event and its one evidence file remain and read back
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ retained retention.test.ts:38:19
+ ❯ retention.test.ts:72:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/20]⎯
+
+ FAIL  retention.test.ts > AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it > AC9 (wrong program) an archive that writes only to its own folder leaves no evidence file and no event, and fails this test naming the session
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ retained retention.test.ts:38:19
+ ❯ retention.test.ts:76:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/20]⎯
+
+ FAIL  retention.test.ts > AC9 #20.5b690079 each archived transcript is one evidence file by hash with one transcript.archived event, and both remain 31 days after the agent deleted it > AC9 (wrong program) an archive whose copies the evidence retention removes (its link kept in a ledger of its own) loses the copy by day 32, and fails this test naming the session
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ retained retention.test.ts:38:19
+ ❯ retention.test.ts:83:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/20]⎯
+
+ FAIL  secrets.test.ts > AC4 #20.0567345d a planted fake key in a user message opens a rotate ask and is redacted in the archive > AC4 a github-pat key pasted in a user message: one open rotate ask for the session, which doesn't quote the key, and an archived copy that reads back redacted, with the key nowhere in the record
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ secrets.test.ts:36:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/20]⎯
+
+ FAIL  secrets.test.ts > AC4 #20.0567345d a planted fake key in a user message opens a rotate ask and is redacted in the archive > AC4 the same key asks once: a second pass and a later copy of the grown session, the key still in it, open no second rotate ask
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ secrets.test.ts:60:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/20]⎯
+
+ FAIL  secrets.test.ts > AC5 #20.c93e8478 a secret DeepBuild holds by handle, pasted as plain text with no recognizable pattern, is scrubbed from the archived copy > AC5 a held value, one plain lower-case word no pattern finds, pasted into a user message, is scrubbed from the archived copy by value
+Error: Cannot find module 'file://~/dev/claude-worktrees/doneright/github-issue-20-33c238/packages/archive/src/index.ts' imported from ~/dev/claude-worktrees/doneright/github-issue-20-33c238/tests/acceptance/20/helpers.ts
+ ❯ openArchiveOn helpers.ts:264:27
+    262| /** Opens the archive on a world, over every adapter's folders, with t…
+    263| export async function openArchiveOn(w: World, o: { held?: readonly str…
+    264|   const { openArchive } = await archiveModule();
+       |                           ^
+    265|   const options: ArchiveOptions = {
+    266|     record: w.record, evidence: w.archiveStore, asks: w.asks, adapters…
+ ❯ secrets.test.ts:85:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/20]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  20 failed (20)
+   Start at  14:22:15
+   Duration  4.44s (tests 66%, import 23%, transform 11%, worker 1%)
+
+    Isolate  8 workers spawned · ~91ms startup each (spawn + environment, per file)
+             at least ~636ms faster with isolate: false — reuses workers across files instead of one per file
+
