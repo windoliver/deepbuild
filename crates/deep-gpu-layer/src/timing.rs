@@ -197,6 +197,17 @@ impl Spin {
     }
 }
 
+/// The next trial's loop count: the last one scaled toward `target` from the `ns` it took, by
+/// at most 16, and always at least one more.
+fn grown(loops: u32, ns: f64, target: f64) -> u32 {
+    let grow = if ns > 0.0 {
+        (target / ns).clamp(1.0, 16.0)
+    } else {
+        16.0
+    };
+    ((f64::from(loops) * grow) as u32).max(loops + 1)
+}
+
 /// `{"call": "tick", "gpu_ms"}`: a submission sized, from short trial runs, to take about
 /// `gpu_ms` of GPU time.
 pub fn tick(app: &mut App, call: &Value) -> Value {
@@ -222,8 +233,7 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
             if ns > target * 0.8 {
                 break;
             }
-            let grow = if ns > 0.0 { (target / ns).clamp(1.0, 16.0) } else { 16.0 };
-            loops = ((f64::from(loops) * grow) as u32).max(loops + 1);
+            loops = grown(loops, ns, target);
         }
         match spin.run(&device, loops) {
             Some((ticks, wall)) => json!({
@@ -232,4 +242,20 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
             None => refused("no_read_back", "the timestamps didn't map"),
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::grown;
+
+    /// Timestamps that read zero grow the trial sixteenfold each time; eight trials from 64
+    /// loops pass the u32 maximum, where the count saturates instead of overflowing.
+    #[test]
+    fn zero_ticks_saturate_the_loop_count() {
+        let mut loops = 64u32;
+        for _ in 0..8 {
+            loops = grown(loops, 0.0, 50e6);
+        }
+        assert_eq!(loops, u32::MAX);
+    }
 }
