@@ -54,8 +54,11 @@ author who understands the change and writes the PR description themself; it doe
 requests from autonomous agents. So the pull request is the owner's to open, from their fork;
 The pull request is open and ready for review from the owner's fork, with the CLA signed:
 https://github.com/zed-industries/zed/pull/66114 (`JingW6/zed`, branch `gpui-bgra-surfaces` at
-`e04839ec`, this patch on `347f171a`), linked from #711; `PR-DESCRIPTION.md` is its description
-as posted. If upstream takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only
+`2fbb21f1`, this patch rebased on `08cbb88`, zed main of 2026-10-25, with the identical diff;
+`cargo fmt --check`, clippy and the 13 `gpui_apple` tests pass there), linked from #711;
+`PR-DESCRIPTION.md` is its description as posted. GitHub reports it MERGEABLE; its merge state is
+BLOCKED only for the maintainer review zed requires, and its test, bundling and nix workflows wait
+on a maintainer approving a first-time contributor's runs. If upstream takes it, `vendor/gpui-pre-apple` moves back toward upstream and keeps only
 #391's exact gradient mode and the two planted twins.
 
 How it was opened, for a redo on a new base (sign the CLA at https://zed.dev/cla first):
