@@ -10,11 +10,16 @@
           "look"
         ],
         "writes": [
-          "look.palette"
+          "look.palette",
+          "look.status"
         ],
         "per": "document"
       }
     ]
   },
-  "contributions": {}
+  "contributions": {
+    "core.status": [
+      "look.status"
+    ]
+  }
 }

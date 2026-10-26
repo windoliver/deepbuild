@@ -427,18 +427,26 @@ function fold(rows: readonly FoldRow[], covers: (scope: string) => boolean): Sli
   return [...entries].filter(([, lines]) => lines.length).map(([target, lines]) => ({ target, text: lines.join('\n') }));
 }
 
+/** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them (a stored scope is already so, by its schema). */
+const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
+/** Whether a scope covers a session: everywhere, the session, or the project its session.start was recorded under. */
+function coversSession(db: Db, session: string): (scope: string) => boolean {
+  const row = db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
+  const scopes = new Set([`session:${letters(session)}`, 'all', ...(row?.project_id ? [`repo:${letters(row.project_id)}`] : [])]);
+  return (scope) => scopes.has(scope);
+}
+
 /**
  * What a session reads at its start, and at each prompt for the rules you typed: every rule you typed, the
  * learned start-slice entries in force whose scope covers it, and every decision whose scope covers it. Read
  * from the record as it is now, so a rule you type reaches every open session at its next prompt.
  */
 export function startSlice(db: Db, session: string): SliceEntry[] {
-  const row = db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
-  const scopes = new Set([`session:${session}`, 'all', ...(row?.project_id ? [`repo:${row.project_id}`] : [])]);
+  const covers = coversSession(db, session);
   const rows = db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ((layer = 'base' AND target LIKE 'rule:%') OR (layer = 'learned' AND target LIKE 'slice:%')) ORDER BY log_pos`).all() as FoldRow[];
-  const slice = fold(rows, (scope) => scopes.has(scope));
+  const slice = fold(rows, covers);
   for (const d of db.prepare("SELECT id, scope, answer FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string; scope: string | null; answer: string | null }[]) {
-    if (scopes.has(textOf(d.scope))) slice.push({ target: `decision:${d.id}`, text: textOf(d.answer) });
+    if (covers(textOf(d.scope))) slice.push({ target: `decision:${d.id}`, text: textOf(d.answer) });
   }
   return slice;
 }
@@ -484,10 +492,9 @@ function matchesCommand(match: string, command: string): boolean | undefined {
  * session and shows as held, naming the rule. Read from the record as it is now, as the start slice is.
  */
 export function loadLearned(db: Db, session: string): LearnedLoad {
-  const row = db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
-  const scopes = new Set([`session:${session}`, 'all', ...(row?.project_id ? [`repo:${row.project_id}`] : [])]);
+  const covers = coversSession(db, session);
   const inForce = (where: string): SliceEntry[] =>
-    fold(db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ${where} ORDER BY log_pos`).all() as FoldRow[], (scope) => scopes.has(scope));
+    fold(db.prepare(`SELECT target, scope, diff FROM learned_layer WHERE ${IN_FORCE} AND ${where} ORDER BY log_pos`).all() as FoldRow[], covers);
   const guards = inForce("layer = 'base' AND target LIKE 'guard:%'").map(({ target, text }) => {
     const fields = new Map(fieldsOf(text.split('\n')).map((f) => [f.field, f.value]));
     return { name: target.slice('guard:'.length), match: fields.get('match') ?? '', mode: fields.get('mode'), reason: fields.get('reason') ?? '' };

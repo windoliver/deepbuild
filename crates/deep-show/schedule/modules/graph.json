@@ -1,0 +1,20 @@
+{
+  "module": "graph",
+  "phases": {
+    "items": [
+      {
+        "operator": "graph.layout",
+        "module": "graph",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "graph.layout"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

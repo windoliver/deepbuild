@@ -246,6 +246,14 @@
     },
     "packages/extension-host/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #349: adapter.caps@1's flags and the hook.request line shape, which deep.registerAdapter is held to and host.hook maps a session's hooks through; routes come from the flags, never the name."
+        },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #349: the asks core a deep.registerResolver is forwarded to, whose gate applies or refuses its answers, and the Delivery an adapter delivers by a route its flags allow."
+        },
         "@deepbuild/conformance": {
           "spec": "0.0.0",
           "why": "Issue #348: the check.kind@1 spec and result shapes a registered check runner takes and returns through host.runCheck."
@@ -620,6 +628,10 @@
     },
     "crates/deep-canvas-graph/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #388: the graph canvas module's manifest, register call and operator view on the scheduler."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #394: the deep-graph CLI's JSON lines and the layout memory it reads and writes. Already in the workspace tree."
@@ -628,6 +640,10 @@
     },
     "crates/deep-canvas-record/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #388: the record canvas module's manifest, register call and operator view on the scheduler."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #394: the deep-salience CLI's JSON lines. Already in the workspace tree."
@@ -652,6 +668,18 @@
     },
     "crates/deep-show/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-graph": {
+          "spec": "* path=../deep-canvas-graph",
+          "why": "Issue #388: the graph canvas module, in the r1 build set and up."
+        },
+        "deep-canvas-record": {
+          "spec": "* path=../deep-canvas-record",
+          "why": "Issue #388: the record canvas module, in the r1 build set and up."
+        },
+        "deep-canvas-sheet": {
+          "spec": "* path=../deep-canvas-sheet",
+          "why": "Issue #388: the sheet canvas module, in the r1 build set and up."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #393: the document check, canonical revision hash, and the show module that stamps a writer's layer, diffs whole revisions and caps a reply's issues."
@@ -839,6 +867,10 @@
         "deep-canvas-test-modules": {
           "spec": "* path=../deep-canvas-test-modules",
           "why": "Issue #379: the test canvas module test.gpu, whose texture, mesh and burn the meter's acceptance tests draw; optional, under the test-meter feature, so no shipped build holds it."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #382: the shaper and glyph atlas the status layer's marks and legend are rasterized from, exact before the status colors composite them."
         },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",

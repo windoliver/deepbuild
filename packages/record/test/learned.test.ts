@@ -422,3 +422,22 @@ describe('the learned layer', () => {
     await record.close();
   });
 });
+
+// The hub saves your inbox answer with a session scope in letters and digits (session:<id stripped>), as its handles
+// hold session IDs; the start slice compared the ID as recorded, so a decision saved for a dashed session ID never
+// reached that session's start.
+describe('the start slice holds every decision whose scope covers the session, as the hub writes the scope', () => {
+  it('a decision scoped session:<letters and digits of a dashed session ID> is in that session\'s start slice and no other\'s', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'deep-learned-'));
+    roots.push(root);
+    const record = await openRecord({ path: join(root, 'record.db'), now: () => T0 });
+    const S = 'claude-0001-abcd';
+    const other = 'claude-0002-abcd';
+    for (const session of [S, other]) await record.append({ writer: 'hook', actor: 'you', scope: 'you', session, project: 'shop' }, { v: 1, id: ulidAt(T0), kind: 'session.start', ts: T0, data: { agent: 'claude-code', worktree: '~/src/shop', branch: 'main', thread: session } });
+    const D = ulidAt(T0 + 500);
+    await record.append({ ...core, session: S }, { v: 1, id: D, kind: 'decision.created', ts: T0 + 500, data: { key: 'a'.repeat(64), scope: 'session:claude0001abcd', answer: 'approve the push to staging', ask: `ask:${ulidAt(T0 + 400)}` } });
+    expect((await record.startSlice(S)).find((e) => e.target === `decision:${D}`)?.text).toBe('approve the push to staging');
+    expect((await record.startSlice(other)).map((e) => e.target)).not.toContain(`decision:${D}`);
+    await record.close();
+  });
+});

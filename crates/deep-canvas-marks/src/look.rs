@@ -61,6 +61,50 @@ pub struct Status {
     pub min_distance: f64,
 }
 
+impl Status {
+    /// The map as the core's `core.status` array holds it, which the look module contributes.
+    pub fn to_json(&self) -> Value {
+        let colors: Map<String, Value> = self
+            .colors
+            .iter()
+            .map(|(s, c)| (s.to_string(), json!(c)))
+            .collect();
+        let glyphs: Map<String, Value> = self
+            .glyphs
+            .iter()
+            .map(|(s, g)| (s.to_string(), json!(g)))
+            .collect();
+        json!({"colors": colors, "glyphs": glyphs, "core_min_px": self.core_min_px,
+               "outline": self.outline, "min_distance": self.min_distance})
+    }
+
+    /// The map back from `to_json`'s form; `None` unless every state has a color and a glyph.
+    pub fn from_json(v: &Value) -> Option<Status> {
+        let mut colors = BTreeMap::new();
+        let mut glyphs = BTreeMap::new();
+        for state in STATES {
+            let c: Vec<u8> = v["colors"][state]
+                .as_array()?
+                .iter()
+                .map(|x| x.as_u64().and_then(|x| u8::try_from(x).ok()))
+                .collect::<Option<_>>()?;
+            colors.insert(state, <[u8; 3]>::try_from(c.as_slice()).ok()?);
+            glyphs.insert(state, v["glyphs"][state].as_str()?.to_string());
+        }
+        let outline = match &v["outline"] {
+            Value::Array(o) => Some((o.first()?.as_f64()?, o.get(1)?.as_str()?.to_string())),
+            _ => None,
+        };
+        Some(Status {
+            colors,
+            glyphs,
+            core_min_px: v["core_min_px"].as_f64()?,
+            outline,
+            min_distance: v["min_distance"].as_f64()?,
+        })
+    }
+}
+
 /// A resolved look: each theme's roles, and the status map when the look has one.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Look {
@@ -240,15 +284,23 @@ fn fonts(def: &Map<String, Value>, bundled: &[&str]) -> Result<(), Refusal> {
     Ok(())
 }
 
-/// Resolves a look@1 definition and holds it to the status guard; `bundled` lists the font files
-/// the build ships.
-pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
-    let Value::Object(def) = def else {
-        return Err(Refusal::Bad(String::new()));
-    };
-    if def.get("legend").is_some_and(|l| l != "auto") {
-        return Err(Refusal::Bad("legend".into()));
-    }
+/// The nearest status color within `min_distance` of `color` (in OKLab), with its distance: the
+/// status color a data color clashes with (The status-color rule).
+pub fn clash(color: Rgb, status: &Status) -> Option<(&'static str, f64)> {
+    let at = lab(color);
+    status
+        .colors
+        .iter()
+        .map(|(s, c)| (*s, delta(at, lab(*c))))
+        .filter(|(_, d)| *d < status.min_distance)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// A look@1 definition's status map (`status`, `status_treatment`, `min_distance`), held to the
+/// guard's own rules: one glyph per state, each different and none the attention glyph; every
+/// state a color and a glyph; a finite non-negative distance (0.10 when unset). It reads nothing
+/// of the palette, so a host's status map and a document's roles can be checked apart.
+pub fn status_map(def: &Map<String, Value>) -> Result<Status, Refusal> {
     let glyph_map = object(
         def.get("status_treatment").and_then(|t| t.get("glyph")),
         "status_treatment/glyph",
@@ -271,7 +323,6 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
             return Err(Refusal::GlyphShared([a, "attention"]));
         }
     }
-    fonts(def, bundled)?;
     let treatment = def.get("status_treatment");
     let core_min_px = match treatment.and_then(|t| t.get("core_min_px")) {
         None => 4.0,
@@ -316,6 +367,24 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
         status.colors.insert(state, color);
         status.glyphs.insert(state, g.to_string());
     }
+    Ok(status)
+}
+
+/// Resolves a look@1 definition and holds it to the status guard; `bundled` lists the font files
+/// the build ships.
+pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
+    let Value::Object(def) = def else {
+        return Err(Refusal::Bad(String::new()));
+    };
+    if def.get("legend").is_some_and(|l| l != "auto") {
+        return Err(Refusal::Bad("legend".into()));
+    }
+    let status = status_map(def)?;
+    fonts(def, bundled)?;
+    let attention = object(def.get("attention_treatment"), "attention_treatment")?;
+    let attention_glyph = attention
+        .and_then(|a| a.get("glyph"))
+        .and_then(Value::as_str);
     let (light, dark) = (theme(def, "light")?, theme(def, "dark")?);
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         let named = |role: &str, path: &str| {
@@ -361,13 +430,9 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
         }
     }
     // Data colors keep the look's distance from every status color; the ground sits behind them.
-    // Each color goes to OKLab once, not once per pair.
-    let states: Vec<(&'static str, Oklab)> =
-        status.colors.iter().map(|(s, c)| (*s, lab(*c))).collect();
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         for (role, color) in palette.iter().filter(|(r, _)| *r != "ground") {
-            let at = lab(*color);
-            if let Some((state, _)) = states.iter().find(|(_, s)| delta(at, *s) < min) {
+            if let Some((state, _)) = clash(*color, &status) {
                 return Err(Refusal::Distance {
                     theme: name,
                     role: role.clone(),

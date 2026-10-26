@@ -959,7 +959,7 @@ impl<'a> Hub<'a> {
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
         {
-            let (op_issues, drawing) = self.probe(doc, show.t, visible);
+            let (op_issues, drawing) = self.probe(doc, show.t, visible, None);
             for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
                 issues.push(op_issue(i));
             }
@@ -1077,6 +1077,7 @@ impl<'a> Hub<'a> {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         let mut snapshot_taken = !wants_pixels;
         let drawn3d = self.pending3d.take();
+        let three = drawn3d.is_some();
         if !visible {
             reply.insert("outcome".into(), json!("not_presented"));
             reply.insert("reason".into(), json!("hidden"));
@@ -1116,10 +1117,13 @@ impl<'a> Hub<'a> {
                     let png = snapshot::png(rgba, size);
                     match evidence::put(&self.scenario.evidence, &png) {
                         Ok(sha) => {
-                            reply.insert(
-                                "snapshots".into(),
-                                json!([{"sha256": sha, "w": size[0], "h": size[1]}]),
-                            );
+                            // A 3D frame's status marks are scene3d's; a 2D one's carry
+                            // their text snapshot (The status-color rule).
+                            let entry = match drawn.filter(|_| !three) {
+                                Some(d) => snapshot::entry(&sha, d, size),
+                                None => json!({"sha256": sha, "w": size[0], "h": size[1]}),
+                            };
+                            reply.insert("snapshots".into(), json!([entry]));
                             snapshot_taken = true;
                             reply.insert("outcome".into(), json!("presented"));
                         }

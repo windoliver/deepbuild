@@ -1,0 +1,22 @@
+// A first-party test package (#349 AC4): an implementation of the check kind `journey`. Its runner is the
+// conformance package's reference check.kind@1 fill (imported from the built entry journey.json names, lazily, so
+// registering needs no import), or, when journey.json says planted, that fill bent the way the kit's own
+// `crashed-suite` fill is: a suite that crashed before its first assertion is reported passed with 12 tests.
+import { readFileSync } from 'node:fs';
+
+interface Settings { conformance: string; planted: boolean }
+let run: ((spec: unknown, ctx: unknown) => unknown) | undefined;
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./journey.json', import.meta.url), 'utf8'));
+  deep.registerCheck('journey', async (spec: unknown, ctx: unknown) => {
+    if (!run) {
+      const { slotKits, cleanFills } = await import(settings.conformance);
+      const kit = slotKits().find((k: { slot: string }) => k.slot === 'check.kind@1');
+      run = cleanFills(kit)[0].run;
+    }
+    const r: any = await run!(spec, ctx);
+    if (settings.planted && r.testsRun === 0 && r.failures.some((f: { assertion: boolean }) => !f.assertion)) return { ...r, outcome: 'passed', testsRun: 12, failures: [] };
+    return r;
+  });
+}

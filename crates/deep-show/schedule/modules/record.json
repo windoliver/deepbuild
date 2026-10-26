@@ -1,0 +1,20 @@
+{
+  "module": "record",
+  "phases": {
+    "items": [
+      {
+        "operator": "record.salience",
+        "module": "record",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "record.level"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}

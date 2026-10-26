@@ -9,6 +9,11 @@
 // When an ask shows (#319): in your batches, up to the day's cap, or at once when its deadline would pass
 // before the next batch or its session is held on it; each showing is an ask.batched the core appends. The
 // values the rules leave open come from your config.json, overridden key by key by a repo's done.yaml.
+//
+// Resolvers (#349): an extension's resolver may answer an ask for you, but only by naming a decision you saved
+// (decision.created, from your answer on the trusted path) that is active, of the ask's kind (its key) and at a scope
+// that covers the ask's session. The gate is here, never in the resolver: anything else is refused, kept as a
+// refusal (in memory, read back through `refusals`) naming the resolver and the decision, and the ask goes on to you.
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,6 +48,18 @@ export interface Delivery {
   provisional: boolean;
   undoes: string | null;
 }
+/** A resolver's answer: the option it chooses and what covers the ask, a decision handle (`decision:<ULID>`), or null for nothing. */
+export interface ResolverAnswer { answer: string; because: string | null }
+/** What a resolver is asked: the card, the session the ask was raised in, its question class and its session's repo (null when unknown). */
+export type ResolverAsk = Card & { session: string; key: string; repo: string | null };
+export type Resolver = (ask: ResolverAsk) => ResolverAnswer | undefined | Promise<ResolverAnswer | undefined>;
+/** One refusal the core made of a resolver's answer. */
+export interface Refusal { ask: string; resolver: string; decision: string | null; reason: string }
+/** The planted wrong core the criteria name; tests only: it applies any answer naming a decision that exists. */
+export type AsksPlant = 'decision-exists-only';
+/** The scopes a decision is saved at: this session, its repo, or everywhere. */
+export type DecisionScope = 'session' | 'repo' | 'all';
+
 /** What the question card shows for one ask. */
 export interface Card {
   ask: string;
@@ -78,6 +95,7 @@ export interface AsksOptions {
   deliver: (delivery: Delivery) => void;
   /** Your ~/.deepbuild folder: its config.json holds your own settings. Left out, nothing is declared. */
   home?: string;
+  plant?: AsksPlant;
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
 export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'closed';
@@ -109,6 +127,14 @@ export interface Asks {
   undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
   inbox(): Promise<InboxRow[]>;
+  /** The core consults each resolver on every ask raised, before the ask reaches you; returns how to drop it. */
+  registerResolver(name: string, resolver: Resolver): () => void;
+  /** Your answer to a closed ask, saved as a decision at a scope, on the trusted path: its handle. */
+  saveDecision(connection: Connection, ask: string, scope: DecisionScope): Promise<string>;
+  /** Revokes a decision on the trusted path: a decision.revoked event naming it; it covers nothing from then on. */
+  revokeDecision(connection: Connection, decision: string): Promise<void>;
+  /** The refusals the core made of resolvers' answers for an ask, in order. */
+  refusals(ask: string): Promise<Refusal[]>;
 }
 
 /** What setup drafts into your config.json (design: the done.yaml asks block). */
@@ -254,6 +280,8 @@ const FOLD_SOURCE = 'asks.fold';
 /** Where the core drafts a request for the owner of a block that isn't yours. */
 const REQUEST_SOURCE = 'request.draft';
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
+/** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
+const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 const ANSWER_FIELDS = new Set(['option', 'words', 'plan_hash', 'token']);
 const PROVISIONAL_KINDS = new Set(['taste', 'choice']);
@@ -309,6 +337,9 @@ interface Ask {
 /** Batches every `every` ms since the epoch, showing at most `cap` asks a UTC day. */
 interface Batches { every: number; cap: number }
 
+/** A decision you saved: what it answers (its ask's key), where (its scope), with which option, and whether it still holds. */
+interface HeldDecision { handle: string; key: string; scope: string; answer: string; ask: string; state: 'active' | 'revoked' }
+
 const CLOSING: Readonly<Record<string, string>> = {
   'ask.answered': 'answered', 'ask.defaulted': 'defaulted', 'ask.escalated': 'escalated', 'ask.cancelled': 'cancelled',
   'ask.superseded': 'superseded', 'ask.moot': 'moot',
@@ -316,7 +347,7 @@ const CLOSING: Readonly<Record<string, string>> = {
 
 class AsksCore implements Asks {
   private cursor = 0;
-  private readonly sessions = new Map<string, { thread: string; worktree: string }>();
+  private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null }>();
   private readonly asks = new Map<string, Ask>();
   /** Each thread's asks, open or closed, in log order. */
   private readonly threads = new Map<string, Ask[]>();
@@ -331,6 +362,12 @@ class AsksCore implements Asks {
   private readonly read = new Map<string, Obj>();
   /** Each block someone else owns, by handle, and the request drafted for it. */
   private readonly requested = new Map<string, string>();
+  /** The decisions the record holds, by handle. */
+  private readonly decisions = new Map<string, HeldDecision>();
+  /** The resolvers registered, in order, by name. */
+  private readonly resolvers = new Map<string, Resolver>();
+  /** The refusals made of resolvers' answers, by ask handle. */
+  private readonly refused = new Map<string, Refusal[]>();
 
   constructor(private readonly options: AsksOptions) {}
 
@@ -345,7 +382,20 @@ class AsksCore implements Asks {
     return next;
   }
 
-  raise(connection: Connection, source: string, raised: unknown, plan?: PlanInput): Promise<string> {
+  async raise(connection: Connection, source: string, raised: unknown, plan?: PlanInput): Promise<string> {
+    const { handle, fresh } = await this.raiseNow(connection, source, raised, plan);
+    // The resolvers go first, outside the core's lock, so one that reads the core as it answers doesn't wait on
+    // itself: one that names a decision covering the ask answers it for you before it shows. Showing is a separate
+    // step, so a tick in between may show the ask first; a question already open settles like any tick would.
+    if (fresh) await this.consult(handle, connection);
+    await this.exclusive(async () => {
+      await this.sync();
+      await this.settle();
+    });
+    return handle;
+  }
+  /** The ask's record: validated, appended and read back, under the lock; `fresh` is false for a question already open in its thread. */
+  private raiseNow(connection: Connection, source: string, raised: unknown, plan?: PlanInput): Promise<{ handle: string; fresh: boolean }> {
     return this.exclusive(async () => {
       await this.sync();
       const row = askSources().find((r) => r.source === source);
@@ -400,7 +450,7 @@ class AsksCore implements Asks {
       const thread = this.threadOf(connection.session);
       const same = this.openIn(thread).find((a) => a.data.kind === data.kind && normalize(a.data.question as string) === normalize(data.question as string)
         && sha256Hex(canonicalize(a.data.pinned_to!)) === sha256Hex(canonicalize(data.pinned_to!)) && (a.plan?.hash ?? null) === ((proposed?.hash as string | undefined) ?? null));
-      if (same) return same.handle;
+      if (same) return { handle: same.handle, fresh: false };
       // Past the threshold drafted at setup, the thread's further asks fold into one exception. It's raised first,
       // so the log alone says which asks it holds: each one created while it's open.
       const foldAt = this.settingsFor(connection.session).fold;
@@ -416,8 +466,7 @@ class AsksCore implements Asks {
       const ask = this.asks.get(id)!;
       // A provisional taste call or choice goes on with the recommended option at once.
       if (data.provisional) this.hand(ask, data.recommended as string, null, true, null);
-      await this.settle();
-      return ask.handle;
+      return { handle: ask.handle, fresh: true };
     });
   }
 
@@ -593,6 +642,137 @@ class AsksCore implements Asks {
       const approval = ask?.closed?.outcome === 'answered' ? ask.approval : undefined;
       return approval?.decision === 'allow' && approval.hash === planHash ? approval.token : null;
     });
+  }
+
+  registerResolver(name: string, resolver: Resolver): () => void {
+    if (typeof name !== 'string' || !name) throw new AskRefused('a resolver registers under a name', { field: 'name' });
+    if (typeof resolver !== 'function') throw new AskRefused(`${name}'s resolver is a function`, { field: 'resolver' });
+    this.resolvers.set(name, resolver);
+    return () => { if (this.resolvers.get(name) === resolver) this.resolvers.delete(name); };
+  }
+
+  saveDecision(connection: Connection, handle: string, scope: DecisionScope): Promise<string> {
+    return this.exclusive(async () => {
+      await this.sync();
+      if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a decision is saved only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const ask = this.asks.get(bare(handle));
+      if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+      const answer = ask.closed?.outcome === 'answered' ? ask.closed.answer : undefined;
+      if (answer === undefined || !ask.options.some((o) => o.id === answer)) throw new AskRefused(`${ask.handle} wasn't answered with an option, so there is no decision to save`, { ask: ask.handle });
+      let at: string;
+      if (scope === 'all') at = 'all';
+      else if (scope === 'session') {
+        if (!ask.session) throw new AskRefused(`${ask.handle} was raised in no session`, { field: 'scope', ask: ask.handle });
+        at = `session:${letters(ask.session)}`;
+      } else {
+        const repo = this.repoOf(ask.session);
+        if (repo === null) throw new AskRefused(`${ask.handle}'s session started in no repo the record knows`, { field: 'scope', ask: ask.handle });
+        at = `repo:${repo}`;
+      }
+      const now = this.options.now();
+      const id = ulid(now);
+      await this.options.record.append(this.core(connection), { v: 1, id, kind: 'decision.created', subject: ask.handle, ts: now, data: { key: String(ask.data.key), scope: at, answer, ask: ask.handle } });
+      await this.sync();
+      return `decision:${id}`;
+    });
+  }
+
+  revokeDecision(connection: Connection, handle: string): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a decision is revoked only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const decision = this.decisions.get(handle);
+      if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
+      if (decision.state === 'revoked') throw new AskRefused(`${handle} is already revoked or overruled`, { field: 'decision' });
+      const now = this.options.now();
+      await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.revoked', subject: handle, ts: now, data: { decision: handle } });
+      await this.sync();
+    });
+  }
+
+  refusals(handle: string): Promise<Refusal[]> {
+    return this.exclusive(async () => {
+      await this.sync();
+      return (this.refused.get(handle.startsWith('ask:') ? handle : `ask:${handle}`) ?? []).map((r) => ({ ...r }));
+    });
+  }
+
+  /**
+   * The repo a session started in, as a scope names it: the project its session.start was recorded under, in letters
+   * and digits, as the hub writes it when it saves your inbox answer (`repo:<project>`); with no project, an ID derived
+   * from its worktree. Null when the record knows neither.
+   */
+  private repoOf(session: string | undefined): string | null {
+    const started = session ? this.sessions.get(session) : undefined;
+    if (!started) return null;
+    const project = started.project === null ? '' : letters(started.project);
+    return project || sha256Hex(new TextEncoder().encode(started.worktree));
+  }
+
+  /**
+   * Whether a decision's scope covers an ask: everywhere, its session, or its session's repo. A session scope names
+   * the session in letters and digits, as the hub writes it; one written with the ID as recorded reads the same.
+   */
+  private covers(decision: HeldDecision, ask: Ask): boolean {
+    if (decision.scope === 'all') return true;
+    if (decision.scope.startsWith('session:')) return ask.session !== '' && letters(decision.scope.slice('session:'.length)) === letters(ask.session);
+    const repo = this.repoOf(ask.session);
+    return repo !== null && decision.scope === `repo:${repo}`;
+  }
+
+  /**
+   * Each resolver in turn, outside the lock, until one's answer is applied under it. An answer is applied only when
+   * it names a decision that is active, of the ask's kind (its key) and at a scope covering the ask's session, and
+   * chooses that decision's option; anything else is refused, naming the resolver and the decision, and the ask goes
+   * on to you. An ask closed meanwhile takes no answer.
+   */
+  private async consult(handle: string, connection: Connection): Promise<void> {
+    // With no resolver there is nothing to ask, and no card (its diff of the worktree) to build.
+    if (!this.resolvers.size) return;
+    const asked = await this.exclusive(async (): Promise<ResolverAsk | null> => {
+      await this.sync();
+      const ask = this.asks.get(bare(handle));
+      return !ask || ask.closed ? null : { ...(await this.cardOf(ask)), session: ask.session, key: String(ask.data.key), repo: this.repoOf(ask.session) };
+    });
+    if (!asked) return;
+    for (const [name, resolver] of [...this.resolvers]) {
+      const refuse = (decision: string | null, reason: string): void => {
+        this.refused.set(handle, [...(this.refused.get(handle) ?? []), { ask: handle, resolver: name, decision, reason }]);
+      };
+      let answer: unknown;
+      try {
+        answer = await resolver(structuredClone(asked));
+      } catch (error) {
+        refuse(null, `${name} failed on ${handle}: ${(error as Error)?.message ?? String(error)}`);
+        continue;
+      }
+      // Nothing, from a resolver in the hub (undefined) or over the wire (null): the ask goes on.
+      if (answer === undefined || answer === null) continue;
+      if (!isObj(answer) || typeof answer.answer !== 'string') { refuse(null, `${name} answered ${handle} with no option`); continue; }
+      const named = typeof answer.because === 'string' ? answer.because : null;
+      if (named === null) { refuse(null, `${name} answered ${handle} without naming a decision that covers it`); continue; }
+      const chosen = answer.answer;
+      const applied = await this.exclusive(async () => {
+        await this.sync();
+        const ask = this.asks.get(bare(handle));
+        if (!ask || ask.closed) return true;
+        const decision = this.decisions.get(named);
+        if (!decision) { refuse(named, `${name} named ${named}, which the record holds no decision for`); return false; }
+        if (this.options.plant !== 'decision-exists-only') {
+          if (decision.state !== 'active') { refuse(named, `${name} named ${named}, which was revoked`); return false; }
+          if (decision.key !== ask.data.key) { refuse(named, `${name} named ${named}, a decision of another kind than ${handle}'s`); return false; }
+          if (!this.covers(decision, ask)) { refuse(named, `${name} named ${named}, whose scope ${decision.scope} doesn't cover ${handle}'s session`); return false; }
+        }
+        const option = ask.options.find((o) => o.id === chosen);
+        if (!option || option.id !== decision.answer) { refuse(named, `${name} answered ${chosen}, not what ${named} decided (${decision.answer})`); return false; }
+        const now = this.options.now();
+        await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.applied', subject: handle, ts: now, data: { decision: named, ask: handle } });
+        await this.sync();
+        this.hand(ask, option.id, null, false, option.decision);
+        return true;
+      });
+      if (applied) return;
+    }
   }
 
   private core(connection: Connection): Connection {
@@ -809,7 +989,7 @@ class AsksCore implements Asks {
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     switch (e.kind) {
       case 'session.start':
-        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree) });
+        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
         return;
       case 'ask.created': {
         const thread = this.threadOf(e.session);
@@ -843,6 +1023,16 @@ class AsksCore implements Asks {
         // The plan an ask shows is the first one proposed for it; your yes binds that one.
         const ask = this.asks.get(bare(String(d.ask)));
         if (ask && !ask.plan && e.writer === 'core') ask.plan = { hash: String(d.hash), steps: d.steps as unknown as PlanStep[] };
+        return;
+      }
+      case 'decision.created':
+        if (e.writer === 'core') this.decisions.set(`decision:${e.id}`, { handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active' });
+        return;
+      // Revoked or overruled (#667) on the trusted path: it covers nothing from then on.
+      case 'decision.revoked':
+      case 'decision.overruled': {
+        const decision = e.writer === 'core' ? this.decisions.get(String(d.decision)) : undefined;
+        if (decision) decision.state = 'revoked';
         return;
       }
       case 'decision.applied':
@@ -1053,5 +1243,6 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
+    registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
   };
 }

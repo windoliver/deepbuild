@@ -1,0 +1,8 @@
+// A first-party test package (#349 AC1): its check runner answers every run with whatever the file runner.json
+// names holds at that moment, so the test can hand the core a passed run without its results, then a complete one.
+import { readFileSync } from 'node:fs';
+
+export default function (deep: any): void {
+  const { file } = JSON.parse(readFileSync(new URL('./runner.json', import.meta.url), 'utf8')) as { file: string };
+  deep.registerCheck('ext.test-runner.result', async () => JSON.parse(readFileSync(file, 'utf8')));
+}
