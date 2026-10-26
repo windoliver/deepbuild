@@ -2,6 +2,7 @@
 //! reads (`hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock), presents
 //! the control token as the app, and calls the hub's methods. Every line both ways is one JSON object with `v`.
 
+use std::collections::VecDeque;
 use std::io::{self, BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -48,6 +49,10 @@ pub struct HubClient {
     /// The hub's hello: its start ID and the features it lists.
     pub hello: Value,
     ids: u64,
+    /// Lines that came while a call waited for its reply, such as stream frames, in the order they came.
+    pending: VecDeque<Value>,
+    /// What a read that timed out had of its line so far.
+    partial: String,
 }
 
 impl HubClient {
@@ -60,6 +65,8 @@ impl HubClient {
             writer,
             hello: Value::Null,
             ids: 0,
+            pending: VecDeque::new(),
+            partial: String::new(),
         };
         client.hello = client.read()?;
         if client.hello.get("hello").and_then(Value::as_str) != Some("deep-hub") {
@@ -72,16 +79,42 @@ impl HubClient {
     }
 
     fn read(&mut self) -> Result<Value, HubError> {
-        let mut line = String::new();
-        if self.reader.read_line(&mut line)? == 0 {
-            return Err(HubError::Protocol("the hub closed the connection".into()));
+        self.read_within(Duration::from_secs(10))?
+            .ok_or_else(|| HubError::Io(io::ErrorKind::TimedOut.into()))
+    }
+
+    /// The next line within `timeout`, or None when none came; a line cut by the timeout is kept for the next read.
+    fn read_within(&mut self, timeout: Duration) -> Result<Option<Value>, HubError> {
+        self.writer
+            .set_read_timeout(Some(timeout.max(Duration::from_millis(1))))?;
+        match self.reader.read_line(&mut self.partial) {
+            Ok(0) => return Err(HubError::Protocol("the hub closed the connection".into())),
+            Ok(_) => {}
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
+                return Ok(None)
+            }
+            Err(e) => return Err(e.into()),
         }
+        let line = std::mem::take(&mut self.partial);
         let value: Value = serde_json::from_str(line.trim_end())
             .map_err(|e| HubError::Protocol(format!("{e}: {line}")))?;
         if value.get("v").and_then(Value::as_u64) != Some(1) {
             return Err(HubError::Protocol(format!("a line without v: 1: {line}")));
         }
-        Ok(value)
+        Ok(Some(value))
+    }
+
+    /// The next line that answered no call, such as a stream frame, within `timeout`.
+    pub fn next(&mut self, timeout: Duration) -> Result<Option<Value>, HubError> {
+        match self.pending.pop_front() {
+            Some(line) => Ok(Some(line)),
+            None => self.read_within(timeout),
+        }
     }
 
     fn send(&mut self, message: Value) -> Result<(), HubError> {
@@ -114,6 +147,7 @@ impl HubClient {
         loop {
             let line = self.read()?;
             if line.get("id").and_then(Value::as_str) != Some(id.as_str()) {
+                self.pending.push_back(line);
                 continue;
             }
             if let Some(error) = line.get("error") {

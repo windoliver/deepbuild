@@ -171,6 +171,11 @@ pub struct View {
     render_done: Vec<Option<Instant>>,
     times: Vec<Option<Times>>,
     rebuilds: u64,
+    /// The latency fault fixture: the next render's slot is held, and per slot whether it's held
+    /// and whether its `gpu_done` came while it was.
+    hold_next: bool,
+    held: Vec<bool>,
+    done_while_held: Vec<bool>,
 }
 
 impl View {
@@ -208,6 +213,9 @@ impl View {
             done_tx,
             done_rx,
             rebuilds: 0,
+            hold_next: false,
+            held: vec![false; n],
+            done_while_held: vec![false; n],
             config,
         })
     }
@@ -305,6 +313,8 @@ impl View {
         let Some((slot, stale)) = lock(&self.ui.ring).begin(frame) else {
             return Ok(None);
         };
+        self.held[slot] = std::mem::take(&mut self.hold_next);
+        self.done_while_held[slot] = false;
         let size = self.config.size;
         if stale || self.storage[slot].as_ref().is_none_or(|s| s.size() != size) {
             self.reallocate(slot)?;
@@ -381,7 +391,11 @@ impl View {
                         render_done,
                         ready: Instant::now(),
                     });
-                    lock(&self.ui.ring).gpu_done(slot);
+                    if self.held[slot] {
+                        self.done_while_held[slot] = true;
+                    } else {
+                        lock(&self.ui.ring).gpu_done(slot);
+                    }
                 }
             }
         }
@@ -408,6 +422,20 @@ impl View {
             && start.elapsed() < Duration::from_secs(10)
         {
             std::thread::sleep(Duration::from_micros(50));
+        }
+    }
+
+    /// A fault fixture (#378's `latency`): the next frame's slot is held not ready, its
+    /// `gpu_done` withheld from the ring, until [`View::release`].
+    pub fn hold_next(&mut self) {
+        self.hold_next = true;
+    }
+
+    /// Ends a hold: a slot whose GPU work already finished turns ready now.
+    pub fn release(&mut self, slot: usize) {
+        self.held[slot] = false;
+        if std::mem::take(&mut self.done_while_held[slot]) {
+            lock(&self.ui.ring).gpu_done(slot);
         }
     }
 

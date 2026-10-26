@@ -34,12 +34,148 @@
       "fail_closed": true
     },
     "no-agent-config-write": {
-      "match": "write:~/.claude/settings.json ~/.claude/settings.local.json ~/.claude.json ~/.claude/skills/* ~/.claude/plugins/* ~/.codex/config.toml ~/.codex/hooks.json ~/.codex/skills/* ~/.agents/skills/* ~/.cursor/mcp.json ~/.cursor/hooks.json .claude/settings.json .claude/settings.local.json .mcp.json .claude/skills/* .codex/config.toml .codex/hooks.json .agents/skills/* .cursor/mcp.json .cursor/hooks.json .deepbuild/* !~/.deepbuild/*",
+      "match": "write:~/.claude/settings.json ~/.claude/settings.local.json ~/.claude.json ~/.claude/skills/* ~/.claude/plugins/* ~/.codex/config.toml ~/.codex/hooks.json ~/.codex/skills/* ~/.agents/skills/* ~/.cursor/mcp.json ~/.cursor/hooks.json .claude/settings.json .claude/settings.local.json .mcp.json .claude/skills/* .codex/config.toml .codex/hooks.json .agents/skills/* .cursor/mcp.json .cursor/hooks.json",
       "scope": "all_repos",
       "mode": "block",
-      "reason": "An agent's hook, MCP, permission, plugin and skill config, and a repository's .deepbuild/, change only by your decision, never by an agent's write.",
+      "reason": "An agent's hook, MCP, permission, plugin and skill config change only by your decision, never by an agent's write.",
       "next_step": "Propose the change with deep_propose instead.",
       "fail_closed": true
+    },
+    "no-deepbuild-spec-write": {
+      "match": "write:.deepbuild/* !~/.deepbuild/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "A repository's .deepbuild/ holds its spec and definition of done, which change only by your decision, never by an agent's write, whatever done gate is installed.",
+      "next_step": "Propose the change with deep_propose instead.",
+      "fail_closed": true
+    },
+    "no-deep-off": {
+      "match": "run:deep off",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "`deep off` turns every gate watch-only: it switches DeepBuild off or around it, so it takes effect only once the OS confirms you, never from an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-deep-on": {
+      "match": "run:deep on",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "`deep on` turns the gates back from watch-only: it switches DeepBuild off or around it, so it takes effect only once the OS confirms you, never from an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-deep-hub-stop": {
+      "match": "hub:stop",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "`deep hub stop` of the installed hub stops what checks every call: it switches DeepBuild off or around it, so it takes effect only once the OS confirms you, never from an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you. A dev hub's `deep hub stop --root <its folder>` stays allowed.",
+      "fail_closed": true
+    },
+    "no-deep-hub-use": {
+      "match": "run:deep hub use",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "`deep hub use` sends this worktree's sessions to another hub: it switches DeepBuild off or around it, so it takes effect only once the OS confirms you, never from an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-deep-setup-undo": {
+      "match": "run:deep setup --undo",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "`deep setup --undo` removes DeepBuild's hooks and guards: it switches DeepBuild off or around it, so it takes effect only once the OS confirms you, never from an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-deep-restore": {
+      "match": "run:deep restore",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "`deep restore` puts an older record back over the verdicts and decisions made since: it switches DeepBuild off or around it, so it takes effect only once the OS confirms you, never from an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-hub-service-stop": {
+      "match": "hub:service",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Stopping or unloading the hub's login service switches DeepBuild off, so only you do it, never an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-hub-service-write": {
+      "match": "write:~/Library/LaunchAgents/com.deepbuild.hub.plist ~/.config/systemd/user/deepbuild-hub.service",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "The hub's login service file decides whether the hub runs, so only DeepBuild's setup or you change it, never an agent's write.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-hub-kill": {
+      "match": "kill:hub",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "Signalling the hub's process switches DeepBuild off, so only you do it, never an agent's call.",
+      "next_step": "If you mean it, run that command yourself in your own terminal, where the OS confirms you.",
+      "fail_closed": true
+    },
+    "no-deepbuild-home-write": {
+      "match": "write:~/.deepbuild ~/.deepbuild/* !~/.deepbuild/workspaces/*",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "~/.deepbuild holds DeepBuild's record, rules and settings, the ledger and rules.json included, which change only through DeepBuild or by you, never by an agent's write, whether by a file tool, the shell or a database client.",
+      "next_step": "If the change is yours to make, run that command yourself in your own terminal; to change a rule, propose it with deep_propose.",
+      "fail_closed": true
+    },
+    "no-control-token-read": {
+      "match": "read:~/.deepbuild/control.token",
+      "scope": "all_repos",
+      "mode": "block",
+      "reason": "~/.deepbuild/control.token is the CLI's credential to the hub, so an agent never reads it, by any tool.",
+      "next_step": "Run the deep command you need yourself in your own terminal.",
+      "fail_closed": true
+    },
+    "no-unnamed-cloud-resource": {
+      "match": "effect:cloud-resource",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it.",
+      "next_step": "Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up.",
+      "fail_closed": true
+    },
+    "no-unknown-reach-delete": {
+      "match": "effect:unknown-reach-delete",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stage them first or ask you.",
+      "next_step": "Delete the paths by name, or ask the person to run it, or retry once the hub is up.",
+      "fail_closed": true
+    },
+    "record-new-dependency": {
+      "match": "effect:dependency",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "A dependency the plan doesn't name is a decision: recorded, and answered by your standing rule or asked.",
+      "next_step": "Name the dependency in the plan, or say why it is needed.",
+      "fail_closed": false
+    },
+    "record-new-service": {
+      "match": "effect:service",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "A service the plan doesn't name is a decision: recorded, and answered by your standing rule or asked.",
+      "next_step": "Name the service in the plan, or say why it is needed.",
+      "fail_closed": false
+    },
+    "record-new-top-level-folder": {
+      "match": "effect:top-level-folder",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "A top-level folder the plan doesn't name is a decision: recorded, and answered by your standing rule or asked.",
+      "next_step": "Name the folder in the plan, or say why it is needed.",
+      "fail_closed": false
     }
   }
 }

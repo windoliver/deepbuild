@@ -1,12 +1,13 @@
-// `deep inbox` and `deep inbox answer` (#24): your open asks, and your answer to one, through the hub's socket as
-// the cli role. An answer counts only once the OS confirms you, which the hub asks for; run inside an agent's
-// process tree, the command acts as that agent's session, and no agent answers.
+// `deep inbox`, `deep inbox answer` (#24) and `deep inbox undo` (#667): your open asks, your answer to one, and the
+// undo of a default, through the hub's socket as the cli role. An answer or an undo counts only once the OS confirms
+// you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
+// agent answers.
 import { readFileSync } from 'node:fs';
 import { call, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
-const USAGE = 'Usage: deep inbox\n       deep inbox answer <ask> <option>';
+const USAGE = 'Usage: deep inbox\n       deep inbox answer <ask> <option>\n       deep inbox undo <ask>';
 /** Refusals of what you typed: nothing ran. */
 const USAGE_CODES = new Set(['handle_syntax', 'not_found', 'enum']);
 /** Refusals that leave the answer undecided: not confirmed, an agent's command, or a hub that couldn't. */
@@ -20,10 +21,11 @@ function age(ms: number): string {
   return `${Math.max(0, Math.floor(ms / 1000))}s`;
 }
 
-/** `deep inbox [answer <ask> <option>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
+/** `deep inbox [answer <ask> <option> | undo <ask>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
 export async function inboxCommand(args: readonly string[]): Promise<number> {
   const answering = args[0] === 'answer';
-  if (answering ? args.length !== 3 : args.length !== 0) {
+  const undoing = args[0] === 'undo';
+  if (answering ? args.length !== 3 : undoing ? args.length !== 2 : args.length !== 0) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
@@ -31,12 +33,14 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
   let reply: Reply;
   try {
     const token = readFileSync(at.token, 'utf8').trim();
-    // Only an answer is judged by the peer check, so only an answer pays for the `ps` that names this process.
+    // Only an answer or an undo is judged by the peer check, so only they pay for the `ps` that names this process.
+    const peer = answering || undoing ? { pid: process.pid, start: (await startOf(process.pid)) ?? '' } : undefined;
     reply = answering
-      ? await call(hubAddress().path, token, 'ask.answer', { ask: args[1], option: args[2] }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' })
+      ? await call(hubAddress().path, token, 'ask.answer', { ask: args[1], option: args[2] }, peer)
+      : undoing ? await call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer)
       : await call(hubAddress().path, token, 'inbox.read', {});
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}${answering ? `; ${args[1]} stays open` : ''}\n`);
+    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}${answering ? `; ${args[1]} stays open` : undoing ? `; ${args[1]} keeps its default` : ''}\n`);
     return 3;
   }
   if ('error' in reply) {
@@ -47,7 +51,12 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
     process.stdout.write(`${String(reply.result.ask)} answered ${String(reply.result.answer)}, saved as a decision for ${String(reply.result.scope)}\n`);
     return 0;
   }
-  const rows = reply.result.asks as Row[];
+  if (undoing) {
+    process.stdout.write(`${String(reply.result.ask)} is open again, its default undone; it waits until ${new Date(Number(reply.result.deadline)).toISOString()}\n`);
+    return 0;
+  }
+  // The hub's inbox holds every ask; the list is the open ones.
+  const rows = (reply.result.asks as Row[]).filter((r) => r.status !== 'closed');
   if (!rows.length) process.stdout.write('No open asks.\n');
   for (const r of rows) process.stdout.write(`${r.ask}  ${r.kind}  ${r.session}  ${age(r.age)}  ${r.status}  ${r.question}  [${r.options.join(' | ')}]\n`);
   return 0;
