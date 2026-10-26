@@ -125,5 +125,19 @@
       "get-changes-state"
     ],
     "since": "R1"
+  },
+  {
+    "method": "deep.registerAction",
+    "variant": null,
+    "interface": "action@1",
+    "digest": "d1:75a9e696330abf608143363373cf008e3ad64498e5882e423c5eeebecf5326f3",
+    "fills": "many",
+    "kit": "action@1",
+    "planted": [
+      "declares-write",
+      "input-not-a-schema",
+      "output-not-json"
+    ],
+    "since": "R2"
   }
 ]

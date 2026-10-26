@@ -1128,6 +1128,27 @@ export interface AskSuperseded {
   evidence?: Array<string>;
 }
 
+/** capability.refused@1 */
+export interface CapabilityRefused {
+  v: 1;
+  id: string;
+  kind: "capability.refused";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    call: string;
+    broke: "grant" | "quota" | "schema";
+    clause: string;
+    digest: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** check.code@1 */
 export type CheckCode = "exit_masked" | "no_tests_ran" | "crashed_before_first_assertion" | "reported_after_deadline" | "output_dropped" | "type_error_as_assertion";
 
@@ -1710,6 +1731,23 @@ export interface HookRequestV3 {
   payload: unknown;
   late?: boolean;
   billing?: { [key: string]: boolean };
+}
+
+/** hook.template@1 */
+export interface HookTemplate {
+  name: string;
+  hook: "session.start" | "tool.before" | "tool.after" | "prompt.submit" | "agent.stop";
+  text: string;
+  fields: { [key: string]: {
+    type: "handle";
+  } | {
+    type: "number";
+  } | {
+    type: "name";
+  } | {
+    type: "one_of";
+    values: Array<string>;
+  } };
 }
 
 /** hub.stopped@1 */

@@ -126,7 +126,11 @@ function compile(root: Schema): Check {
         };
       }
       case 'object':
-        return isObject(schema.properties) ? record(schema) : map(schema);
+        if (isObject(schema.properties)) return record(schema);
+        if (isObject(schema.propertyNames)) return map(schema);
+        // An object that lists neither fields nor keys, such as an action's `{ "type": "object" }`, is any object
+        // (the lint keeps these out of the published schemas).
+        return record({ ...schema, properties: {}, ...(schema.additionalProperties === undefined ? { additionalProperties: true } : {}) });
       default:
         throw Error(`not a closed node type: ${type}`);
     }

@@ -1,0 +1,33 @@
+{
+  "title": "action@1",
+  "description": "An action a package registers, deep.registerAction(name, { declares, input }, fn): named as its manifest lists it, declaring read, change or send, with the input JSON Schema the host checks before fn runs.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "action@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z0-9_.-]+$",
+      "description": "The action, ext.<plugin>.<name>, as the package's manifest lists it."
+    },
+    "declares": {
+      "enum": ["read", "change", "send"],
+      "description": "What the action does: reads, changes something, or sends outside."
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "name",
+    "declares"
+  ],
+  "additionalProperties": false
+}
