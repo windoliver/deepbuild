@@ -74,6 +74,11 @@ const FIXED = { LANG: 'en_US.UTF-8', TZ: 'UTC', CI: 'true' };
 /** The Node the hub runs on, and its package managers: a run's own bin folder links these, never the folder's other programs. */
 const NODE_BIN = dirname(process.execPath);
 const TOOLS = ['node', 'npm', 'npx'];
+/** Each tool's real file, found once: the hub's Node doesn't move while it runs. */
+let toolFiles: [string, string][] | undefined;
+const tools = (): [string, string][] => (toolFiles ??= TOOLS.flatMap((tool) => (existsSync(join(NODE_BIN, tool)) ? [[tool, realpathSync(join(NODE_BIN, tool))]] : [])));
+/** The temp folder's real path, read once: a folder made inside it has its real path already. */
+let tempRoot: string | undefined;
 /** Where a run's programs are: its own bin folder, then the system's. */
 const SYSTEM = ['/usr/bin', '/bin', '/usr/sbin', '/sbin'];
 const pathOf = (bin: string): string => [bin, ...SYSTEM].join(':');
@@ -206,12 +211,16 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
 
   // The run's own folder, its temp folder: its home, its programs, and the evidence files its processes write (where
   // check.kind@1's erases-evidence case looks for them: a suite that alters them is found out by their trailers).
-  const temp = realpathSync(mkdtempSync(join(tmpdir(), 'deep-check-')));
+  // Named by the run, whose handle is unique while the hub runs, so no random name is drawn; a folder a crash left
+  // with that name makes the plain mkdir fail, and a random one is drawn then.
+  const root = (tempRoot ??= realpathSync(tmpdir()));
+  let temp = join(root, `deep-check-${run.replace(/[^A-Za-z0-9._-]/g, '-')}`);
+  try { mkdirSync(temp); } catch { temp = mkdtempSync(join(root, 'deep-check-')); }
   let kill: NodeJS.Timeout | undefined;
   try {
     const bin = join(temp, 'bin');
     mkdirSync(bin);
-    for (const tool of TOOLS) if (existsSync(join(NODE_BIN, tool))) symlinkSync(realpathSync(join(NODE_BIN, tool)), join(bin, tool));
+    for (const [tool, real] of tools()) symlinkSync(real, join(bin, tool));
     const { roots, refused } = linkPrograms(spec.runner, checkout, bin);
     const PATH = pathOf(bin);
     const go = GO_TEST.test(spec.runner);
@@ -224,7 +233,9 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     if (gone !== null) return { run: result('missing', { failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: `${gone} isn't on the run's PATH` }] }), ran: [] };
     const hidden = plant === 'exit-code-only' ? null : untraced(spec.runner, checkout, PATH, { writable: [checkout, temp] });
     if (hidden !== null) return { run: result('uncounted', { mask: `untraced ${hidden}` }), ran: [] };
-    const work = mkdtempSync(join(temp, 'deep-check-run-'));
+    // The run's folder is its own already: the evidence files' folder inside it needs no second random name.
+    const work = join(temp, 'deep-check-run-evidence');
+    mkdirSync(work);
     const files = { reads: join(work, 'reads.txt'), spawns: join(work, 'spawns.jsonl'), node: join(work, 'report.jsonl'), vitest: join(work, 'vitest.jsonl') };
     mkdirSync(join(temp, 'home'));
     const token = randomBytes(24).toString('base64url');
@@ -265,14 +276,16 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     check.stop?.addEventListener('abort', onStop);
     let exit: Exit | null = null;
     let failed: string | null = null;
+    let stopping: Promise<void> = Promise.resolve();
     try {
       const s = await started;
       if (s.status === 'started') {
         // The deadline counts from the process's start, not from the wait for its sandbox or a lease.
         timer = setTimeout(() => halt('deadline'), Math.max(1, check.deadline));
         exit = await host.wait(run);
-        // Nothing the run started outlives it: what it left running is stopped through host@1 too.
-        await host.signal(run, 'SIGKILL').catch(() => undefined);
+        // Nothing the run started outlives it: what it left running is stopped through host@1 too, while the output,
+        // whole once the process closed, is scrubbed; the evidence files are read only once that stop is done.
+        stopping = host.signal(run, 'SIGKILL').catch(() => undefined);
       } else failed = `BLOCKED: no ${s.kind} free`;
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
@@ -282,7 +295,18 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     }
 
     // Everything kept of the run, scrubbed by value of everything it was given that marks a secret, the output before its digest.
-    const scrub = (text: string): string => scrubValues(String(text), { env: { ...check.env, ...secrets }, held: [...Object.values(secrets), token] });
+    const marks = { env: { ...check.env, ...secrets }, held: [...Object.values(secrets), token] };
+    // No text with fewer bytes than the shortest printed form of any value can hold one: raw, or base64 after 0, 1
+    // or 2 leading bytes (the URL form is longer than raw). Most test names are shorter, and are kept as they are.
+    const shortest = (value: string): number => {
+      const n = Buffer.byteLength(value);
+      return Math.min(n, ...[0, 1, 2].map((lead) => Math.floor((8 * (lead + n)) / 6) - Math.ceil((8 * lead) / 6)));
+    };
+    const floor = Math.min(...[...marks.held, ...Object.values(marks.env)].filter(Boolean).map(shortest));
+    const scrub = (text: string): string => {
+      const s = String(text);
+      return s.length < floor && Buffer.byteLength(s) < floor ? s : scrubValues(s, marks);
+    };
     const scrubbed = (r: CommandRun): CommandRun => ({
       ...r, mask: r.mask === null ? null : scrub(r.mask), evidence: r.evidence.map(scrub), attempts: r.attempts.map((a) => ({ ...a, test: scrub(a.test) })),
       failures: r.failures.map((f) => ({ ...f, test: scrub(f.test), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
@@ -292,6 +316,7 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     const stderr = scrub(Buffer.concat(chunks.stderr).toString('utf8'));
     const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
     const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`] };
+    await stopping;
     if (failed !== null) return done('missing', { ...ended, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: null, assertion: false, message: failed }] }, []);
 
     // The evidence files are the runner's, but the run could write them: a line no reporter wrote that breaks a

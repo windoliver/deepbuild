@@ -125,14 +125,31 @@ export function unrun(listed: Listed[], ran: Seen[], left: Left[], filters: Filt
   const nodeOut = patterns('--test-skip-pattern');
   const tags = filters.some((f) => f.option === '--tags-filter');
   // A listed test is looked for only among the runs and leavings of its own file.
-  const ranIn = byFile(ran);
   const leftIn = byFile(left);
   const chosen = (l: Listed): boolean => {
     if (!l.names) return !names.some((p) => !p.test(l.test));
     const all = nodeNames(l.names);
     return (!nodeIn.length || nodeIn.some((p) => all.some((n) => p.test(n)))) && !nodeOut.some((p) => all.some((n) => p.test(n)));
   };
-  return listed.filter((l) => !ranIn.get(l.file)?.some((r) => runs(l, r.test) && (r.line === undefined || r.line === l.line))
+  // The tests that ran, by file and by name; and those that could be a listed test's parametrized cases (`test_x[1]`)
+  // by the name before their first `[`, which is the listed test's own name, or the start of it where that holds a `[`.
+  const base = (test: string): string => test.slice(0, test.indexOf('['));
+  const ranBy = new Map<string | null, { byName: Map<string, Seen[]>; cases: Map<string, Seen[]> }>();
+  const push = (into: Map<string, Seen[]>, key: string, r: Seen): void => { const same = into.get(key); if (same) same.push(r); else into.set(key, [r]); };
+  for (const r of ran) {
+    let same = ranBy.get(r.file);
+    if (!same) ranBy.set(r.file, (same = { byName: new Map(), cases: new Map() }));
+    push(same.byName, r.test, r);
+    if (r.test.includes('[')) push(same.cases, base(r.test), r);
+  }
+  const ranListed = (l: Listed): boolean => {
+    const same = ranBy.get(l.file);
+    if (!same) return false;
+    const at = (r: Seen): boolean => r.line === undefined || r.line === l.line;
+    return (same.byName.get(l.names?.at(-1) ?? l.test)?.some(at) ?? false)
+      || (same.cases.get(l.test.includes('[') ? base(l.test) : l.test)?.some((r) => runs(l, r.test) && at(r)) ?? false);
+  };
+  return listed.filter((l) => !ranListed(l)
     && chosen(l) && !(tags && l.tagged) && !linesOf(l, filters)?.every((n) => n !== l.line)
     && !leftIn.get(l.file)?.some((x) => (runs(l, x.test) || l.test.startsWith(`${x.test}::`)) && named(x.filter)));
 }
