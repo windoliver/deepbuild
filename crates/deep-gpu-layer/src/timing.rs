@@ -226,24 +226,25 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
         let spin = Spin::new(&device);
         let target = gpu_ms * 1e6;
         let mut loops = 64u32;
-        let mut ticks = 0;
+        // The last trial: its loop count and the ticks it read.
+        let mut tried = (loops, 0u64);
         for _ in 0..8 {
-            let Some((t, _)) = spin.run(&device, loops) else {
+            let Some((ticks, _)) = spin.run(&device, loops) else {
                 return refused("no_read_back", "the timestamps didn't map");
             };
-            ticks = t;
+            tried = (loops, ticks);
             let ns = ticks as f64 * period;
             if ns > target * 0.8 {
                 break;
             }
             loops = grown(loops, ns, target);
         }
-        // Timestamps that still read zero at the largest trial can't size a submission; the
-        // call says so rather than reporting a zero interval.
-        if ticks == 0 {
+        // Timestamps that still read zero at the last trial can't size a submission; the call
+        // says so, naming that trial, rather than reporting a zero interval.
+        if tried.1 == 0 {
             return refused(
                 "no_timestamps",
-                format!("the pass timestamps read zero at {loops} loops"),
+                format!("the pass timestamps read zero at {} loops", tried.0),
             );
         }
         match spin.run(&device, loops) {
