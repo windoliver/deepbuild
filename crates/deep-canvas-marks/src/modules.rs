@@ -190,7 +190,8 @@ fn is_bound_text(doc: &Value, id: &str, item: &Value) -> bool {
         .and_then(|p| p.get("text"))
         .and_then(|t| t.get("counter"))
         .is_some();
-    is_text(doc, id, item) && (bound || counter)
+    let template = scene::template_of(item).is_some();
+    is_text(doc, id, item) && (bound || counter || template)
 }
 
 fn is_animated(doc: &Value, id: &str, item: &Value) -> bool {

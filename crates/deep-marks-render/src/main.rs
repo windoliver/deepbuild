@@ -5,7 +5,8 @@
 //! The surface is the #391 acceptance README's, with #392's added: `check` and `look` (on every
 //! platform), looks by ID or as look@1, status states, readings with their as-of time, replay and
 //! frame captures; and #373's: `raster` and `geometry` (on every platform), R2's 2D marks drawn by
-//! Vello CPU, and `check` with a look adding the marks2d module's own check.
+//! Vello CPU, and `check` with a look adding the marks2d module's own check; and #381's: `raster`
+//! answers each text@1 item's shown string and glyphs (`texts`), and takes `shapes_spans_apart`.
 //!
 //! A document's view is drawn headless with GPUI's offscreen Metal renderer through GPUI's own
 //! frame path, and only when the frame clock arms a frame: at the session's first frame, at a new
@@ -280,12 +281,13 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     }
     let (look, _) = look?;
     if command == "raster" {
-        let (planted, encoded_luma) = match input.get("planted") {
-            None => (Planted::None, false),
+        let (planted, encoded_luma, spans_apart) = match input.get("planted") {
+            None => (Planted::None, false, false),
             Some(Value::String(p)) if p == "arc_closed_along_chord" => {
-                (Planted::ArcClosedAlongChord, false)
+                (Planted::ArcClosedAlongChord, false, false)
             }
-            Some(Value::String(p)) if p == "mask_encoded_luma" => (Planted::None, true),
+            Some(Value::String(p)) if p == "mask_encoded_luma" => (Planted::None, true, false),
+            Some(Value::String(p)) if p == "shapes_spans_apart" => (Planted::None, false, true),
             Some(_) => return None,
         };
         let request = raster::Request {
@@ -300,6 +302,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             store: store(input.get("store"))?,
             planted,
             encoded_luma,
+            spans_apart,
             look,
         };
         let checked = check(&request.doc, Some(&request.look));

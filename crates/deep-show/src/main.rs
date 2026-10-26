@@ -6,12 +6,14 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod costs;
 mod evidence;
 mod frames;
 mod hub;
 mod kit;
 #[cfg(feature = "test-accent")]
 mod planted;
+mod scene3d;
 mod shared;
 mod snapshot;
 
@@ -252,6 +254,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "revisions" => return Some(Call::Revisions(doc()?)),
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "costs" => return Some(Call::Costs),
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
         "eval" => {
@@ -642,6 +645,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
             "every_digest_positive" => Planted::EveryDigestPositive,
             "checks_share_only" => Planted::ChecksShareOnly,
+            "estimates_on_this_machine" => Planted::EstimatesOnThisMachine,
             _ => return None,
         }),
     };
@@ -709,6 +713,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         commit: match input.get("commit") {
             None => None,
             Some(c) => Some(c.as_str()?.to_string()),
+        },
+        machine: match input.get("machine") {
+            None => None,
+            Some(m) => Some(m.as_object()?.clone()),
         },
     })
 }
@@ -802,11 +810,11 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-kit",
 ));
 
-/// The canvas modules this build compiles in: the shipped set's (R1's canvas laid out as the
+/// The canvas modules a build of `set` holds: the shipped set's (R1's canvas laid out as the
 /// text, look, marks2d and motion modules, #387; every build set holds them, since R1's kinds
-/// are what the core draws) and, under its `test-*` features, the #305 and #387 acceptance
-/// READMEs' test canvas modules.
-fn modules() -> Vec<Module> {
+/// are what the core draws; scene3d from R2, #378) and, under its `test-*` features, the #305
+/// and #387 acceptance READMEs' test canvas modules.
+fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
@@ -814,6 +822,10 @@ fn modules() -> Vec<Module> {
         deep_canvas_marks::modules::marks2d(),
         deep_canvas_motion::module::module(),
     ];
+    // Issue #378: scene3d joins R2's build set, registered through the seal from the start.
+    if set >= BuildSet::R2 {
+        out.push(deep_canvas_scene3d::module::module());
+    }
     #[cfg(feature = "test-accent")]
     out.push(planted::accent());
     #[cfg(feature = "test-peek")]
@@ -856,7 +868,7 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut registry = Registry::new(build_set());
-    for module in modules() {
+    for module in modules(build_set()) {
         registry = registry.with(module);
     }
     if let Some(StartPlanted::Seal(fault)) = planted {
@@ -982,7 +994,7 @@ mod tests {
         ];
         for (set, snapshot) in snapshots {
             let mut registry = Registry::new(set);
-            for module in modules() {
+            for module in modules(set) {
                 registry = registry.with(module);
             }
             let published = registry.seal().expect("the shipped set seals").schedule();

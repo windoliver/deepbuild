@@ -15,7 +15,8 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
-use deep_canvas::document::{canonical_in, check_in, Issue};
+use deep_canvas::cost::Coefficients;
+use deep_canvas::document::{canonical_in, check_costed, check_in, Issue};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::schedule::{
@@ -78,6 +79,9 @@ pub enum Planted {
     UndoReorderMintsKey,
     /// #138: order keys are drawn when a patch applies, not from its base.
     ApplyTimeOrderKeys,
+    /// #379: the check estimates with coefficients for the machine it runs on, not the
+    /// reference Mac's.
+    EstimatesOnThisMachine,
     /// #138: the incremental check after a patch skips the items that refer to what it touched.
     IncrementalCheckSkipsReferrers,
     /// #138: a stale patch rebases when no path it writes changed since its base.
@@ -214,6 +218,8 @@ pub struct PatchCall {
 }
 
 pub enum Call {
+    /// #379: the cost model's micro-benchmark.
+    Costs,
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -349,6 +355,8 @@ pub struct Scenario {
     pub environment: Map<String, Value>,
     /// The commit this run renders at (#138); the checkout's HEAD without it.
     pub commit: Option<String>,
+    /// The machine the hub runs on, its environment fingerprint (#379); this machine without it.
+    pub machine: Option<Map<String, Value>>,
 }
 
 /// One revision of a document (Revision).
@@ -382,6 +390,32 @@ pub struct Hub<'a> {
     pub sessions: BTreeMap<String, DocSession>,
     /// Panels a `panel` call showed or hid.
     pub panels_shown: BTreeMap<String, bool>,
+    /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
+    /// is none.
+    pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// A 3D revision's snapshot drawn for the call being presented, with its size.
+    pub pending3d: Option<Result<Raster, ()>>,
+}
+
+/// A snapshot's straight RGBA and its size.
+pub type Raster = (Vec<u8>, [u16; 2]);
+
+/// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
+/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
+    let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
+        Some(m) => m.to_string(),
+        None => std::process::Command::new("sysctl")
+            .args(["-n", "hw.model"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default(),
+    };
+    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
+        1.0
+    } else {
+        1.6
+    }
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -417,6 +451,7 @@ impl<'a> Hub<'a> {
                 access_log: startup.test_build,
                 shuffle: scenario.shuffle,
                 planted,
+                timing: None,
             },
         );
         #[cfg(feature = "test-accent")]
@@ -436,7 +471,40 @@ impl<'a> Hub<'a> {
             sched,
             sessions: BTreeMap::new(),
             panels_shown: BTreeMap::new(),
+            gpu3: None,
+            pending3d: None,
         }
+    }
+
+    /// The GPU 3D revisions draw on, opened on first use.
+    pub fn gpu3(&mut self) -> Option<&mut crate::scene3d::Gpu3> {
+        self.gpu3
+            .get_or_insert_with(crate::scene3d::Gpu3::open)
+            .as_mut()
+    }
+
+    /// A revision holding 3D writer layers at `t`, at `size` or its own: its RGBA and size.
+    pub(crate) fn draw3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: Option<[u16; 2]>,
+    ) -> Result<Raster, ()> {
+        let size = size.unwrap_or_else(|| {
+            let s = |i: usize| {
+                doc["size"][i]
+                    .as_f64()
+                    .unwrap_or(1.0)
+                    .round()
+                    .clamp(1.0, 8192.0) as u16
+            };
+            [s(0), s(1)]
+        });
+        let palette = self.look.light.clone();
+        let gpu = self.gpu3().ok_or(())?;
+        gpu.draw(doc, t, &palette, size)
+            .map(|(rgba, _)| (rgba, size))
+            .map_err(|_| ())
     }
 
     /// Whether a panel is on screen: as the scenario set it, or as a `panel` call left it.
@@ -595,6 +663,7 @@ impl<'a> Hub<'a> {
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Costs => crate::costs::measure(self.startup),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -784,7 +853,14 @@ impl<'a> Hub<'a> {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
-                let mut issues = check_in(&doc, &self.startup.sealed).issues;
+                let mut issues = match self.scenario.planted {
+                    Some(Planted::EstimatesOnThisMachine) => {
+                        let coefficients = Coefficients::reference()
+                            .scaled(machine_factor(self.scenario.machine.as_ref()));
+                        check_costed(&doc, &self.startup.sealed, &coefficients).issues
+                    }
+                    _ => check_in(&doc, &self.startup.sealed).issues,
+                };
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
@@ -902,11 +978,16 @@ impl<'a> Hub<'a> {
             session.load(&mut self.sched, &doc);
         }
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
-        let drawn = if visible && wants_pixels {
+        // A revision with 3D writer layers renders back on the GPU (#378).
+        let three = visible && wants_pixels && deep_canvas_scene3d::scene::has_3d(&doc);
+        let drawn = if visible && wants_pixels && !three {
             self.live_drawn(&show.doc, show.t)
         } else {
             None
         };
+        if three {
+            self.pending3d = Some(self.draw3d(&doc, show.t, show.size));
+        }
         self.present(show, visible, drawn.as_ref(), reply)
     }
 
@@ -944,26 +1025,40 @@ impl<'a> Hub<'a> {
     ) -> Value {
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         let mut snapshot_taken = !wants_pixels;
+        let drawn3d = self.pending3d.take();
         if !visible {
             reply.insert("outcome".into(), json!("not_presented"));
             reply.insert("reason".into(), json!("hidden"));
         } else if wants_pixels {
-            let drawn = drawn.expect("a revision with no error was drawn");
             match self.settle() {
                 Err(()) => {
                     reply.insert("outcome".into(), json!("not_presented"));
                     reply.insert("reason".into(), json!("timeout"));
                 }
                 Ok(()) => {
-                    let size = show.size.unwrap_or_else(|| {
-                        let [w, h] = drawn.frame.size;
-                        [
-                            w.round().clamp(1.0, 8192.0) as u16,
-                            h.round().clamp(1.0, 8192.0) as u16,
-                        ]
-                    });
-                    let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                    let mut rgba = self.renderer.raster(drawn, size, Some(ground));
+                    let pixels = match drawn3d {
+                        Some(drawn3d) => drawn3d.ok(),
+                        None => {
+                            let drawn = drawn.expect("a revision with no error was drawn");
+                            let size = show.size.unwrap_or_else(|| {
+                                let [w, h] = drawn.frame.size;
+                                [
+                                    w.round().clamp(1.0, 8192.0) as u16,
+                                    h.round().clamp(1.0, 8192.0) as u16,
+                                ]
+                            });
+                            let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+                            Some((self.renderer.raster(drawn, size, Some(ground)), size))
+                        }
+                    };
+                    let Some((mut rgba, size)) = pixels else {
+                        reply.insert("outcome".into(), json!("not_presented"));
+                        reply.insert("reason".into(), json!("timeout"));
+                        if show.check {
+                            reply.insert("result".into(), json!(self.verdict(show, false)));
+                        }
+                        return Value::Object(reply);
+                    };
                     if self.scenario.planted == Some(Planted::SeedsNoiseFromClock) {
                         clock_noise(&mut rgba);
                     }

@@ -10,6 +10,9 @@ use std::path::{Component, Path, PathBuf};
 /// How deep shells, substitutions and evals nest before the reader reads no further in.
 const DEPTH: usize = 12;
 
+/// The largest script file the reader reads.
+const SCRIPT: u64 = 256 * 1024;
+
 /// The programs that look processes up by name or port: a kill fed from one of them kills by name.
 const LOOKUPS: &[&str] = &["pgrep", "pidof", "lsof", "fuser", "ps", "pstree"];
 
@@ -28,6 +31,10 @@ pub struct Run {
     pub cwd: Option<PathBuf>,
     /// The files its redirections write.
     pub writes: Vec<PathBuf>,
+    /// The files its redirections read.
+    pub reads: Vec<PathBuf>,
+    /// Whether it is one a script file runs, read from the file: what a script reaches can change before it runs.
+    pub scripted: bool,
     /// Whether what it reads on stdin, or one of its arguments, comes from a lookup by name or port.
     pub looked_up: bool,
 }
@@ -37,6 +44,8 @@ pub struct Arg {
     /// The word after quote removal; None when it holds a value the line can't know.
     pub text: Option<String>,
     pub looked_up: bool,
+    /// Whether it is a pattern the shell expands, such as `build/*`.
+    pub glob: bool,
 }
 
 impl Run {
@@ -76,6 +85,7 @@ pub fn runs(line: &str, cwd: Option<&Path>, home: &Path) -> Vec<Run> {
         stdin: Stdin::default(),
         depth: 0,
         links: Vec::new(),
+        scripted: false,
     };
     reader.script(line, &mut ctx);
     reader.runs
@@ -112,6 +122,7 @@ fn spelled(line: &str, cwd: Option<&Path>) -> Vec<Run> {
             .map(|w| Arg {
                 text: Some(w.clone()),
                 looked_up: false,
+                glob: false,
             })
             .collect(),
         cwd: cwd.map(Path::to_path_buf),
@@ -812,6 +823,8 @@ struct Ctx {
     depth: usize,
     /// Links the line makes before it writes through them: `ln -s <target> <link>`.
     links: Vec<(PathBuf, PathBuf)>,
+    /// Whether this is the text of a script file the line runs.
+    scripted: bool,
 }
 
 impl Ctx {
@@ -1098,21 +1111,24 @@ impl Reader {
     /// The redirections after a compound command: its writes, and what its heredocs run.
     fn after(&mut self, cur: &mut Cursor, ctx: &mut Ctx) {
         let mut writes = Vec::new();
+        let mut reads = Vec::new();
         while let Some(Tok::Redir { op, target, body }) = cur.peek() {
             self.redirection(
                 op,
                 target,
                 body.as_ref(),
                 ctx,
-                &mut writes,
+                (&mut writes, &mut reads),
                 &mut ctx.stdin.clone(),
             );
             cur.i += 1;
         }
-        if !writes.is_empty() {
+        if !writes.is_empty() || !reads.is_empty() {
             self.runs.push(Run {
                 cwd: ctx.cwd.clone(),
                 writes,
+                reads,
+                scripted: ctx.scripted,
                 ..Run::default()
             });
         }
@@ -1124,10 +1140,15 @@ impl Reader {
         target: &[Part],
         body: Option<&Body>,
         ctx: &Ctx,
-        writes: &mut Vec<PathBuf>,
+        (writes, reads): (&mut Vec<PathBuf>, &mut Vec<PathBuf>),
         stdin: &mut Stdin,
     ) {
         let value = self.value(target, ctx);
+        if matches!(op, "<" | "<>") {
+            if let Some(path) = value.text.as_deref().and_then(|t| ctx.path(t)) {
+                reads.push(path);
+            }
+        }
         match op {
             ">" | ">>" | ">|" | "&>" | "&>>" | "<>" => {
                 if let Some(path) = value.text.as_deref().and_then(|t| ctx.path(t)) {
@@ -1187,18 +1208,21 @@ impl Reader {
         }
         let argv: Vec<Val> = words[k..].iter().map(|w| self.value(w, ctx)).collect();
         let mut writes = Vec::new();
+        let mut reads = Vec::new();
         let mut stdin = ctx.stdin.clone();
         for (op, target, body) in redirs {
-            self.redirection(op, target, body, ctx, &mut writes, &mut stdin);
+            self.redirection(op, target, body, ctx, (&mut writes, &mut reads), &mut stdin);
         }
         if argv.is_empty() {
             for (name, value) in assigned {
                 ctx.vars.insert(name, value);
             }
-            if !writes.is_empty() {
+            if !writes.is_empty() || !reads.is_empty() {
                 self.runs.push(Run {
                     cwd: ctx.cwd.clone(),
                     writes,
+                    reads,
+                    scripted: ctx.scripted,
                     ..Run::default()
                 });
             }
@@ -1211,7 +1235,7 @@ impl Reader {
                 .filter_map(|(name, value)| value.text.clone().map(|t| (name.clone(), t))),
         );
         let printed = printed(&argv, &stdin);
-        self.resolve(argv.clone(), env, ctx, stdin, writes);
+        self.resolve(argv.clone(), env, ctx, stdin, (writes, reads));
         self.builtin(&argv, ctx);
         printed
     }
@@ -1324,7 +1348,7 @@ impl Reader {
         mut env: Vec<(String, String)>,
         ctx: &Ctx,
         stdin: Stdin,
-        writes: Vec<PathBuf>,
+        (writes, reads): (Vec<PathBuf>, Vec<PathBuf>),
     ) {
         let mut cwd = ctx.cwd.clone();
         let mut looked_up = stdin.looked_up;
@@ -1621,7 +1645,7 @@ impl Reader {
                             env.clone(),
                             ctx,
                             Stdin::default(),
-                            Vec::new(),
+                            (Vec::new(), Vec::new()),
                         );
                         n = end;
                     }
@@ -1679,6 +1703,14 @@ impl Reader {
                     if let Some(script) = stdin.script.clone() {
                         self.shell(&script, ctx, &cwd, &env, Stdin::default());
                     }
+                } else if let Some(file) = text(k) {
+                    self.file(&file, ctx, &cwd, &env);
+                }
+                break;
+            }
+            if is("source") || is(".") {
+                if let Some(file) = text(0) {
+                    self.file(&file, ctx, &cwd, &env);
                 }
                 break;
             }
@@ -1700,12 +1732,17 @@ impl Reader {
             break;
         }
         let Some(first) = argv.get(i) else { return };
+        // A program named by its path may be a script: what it runs is read from the file.
+        if let Some(path) = first.text.as_deref().filter(|t| t.contains('/')) {
+            self.file(path, ctx, &cwd, &env);
+        }
         let (program, glob) = program(first);
         let args: Vec<Arg> = argv[i + 1..]
             .iter()
             .map(|v| Arg {
                 text: v.text.clone(),
                 looked_up: v.looked_up,
+                glob: v.glob,
             })
             .collect();
         let looked_up = looked_up || first.looked_up || args.iter().any(|a| a.looked_up);
@@ -1716,8 +1753,38 @@ impl Reader {
             env,
             cwd,
             writes,
+            reads,
+            scripted: ctx.scripted,
             looked_up,
         });
+    }
+
+    /// Reads the script file `name` the line runs, in `cwd` with `env`, as a shell started by this line: a text
+    /// file of at most SCRIPT bytes, with no `#!` line or one that names a shell.
+    fn file(&mut self, name: &str, ctx: &Ctx, cwd: &Option<PathBuf>, env: &[(String, String)]) {
+        let mut at = ctx.clone();
+        at.cwd = cwd.clone();
+        let Some(path) = at.path(name) else { return };
+        let Ok(meta) = fs::metadata(&path) else {
+            return;
+        };
+        if !meta.is_file() || meta.len() > SCRIPT {
+            return;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
+            return;
+        };
+        if let Some(line) = text.strip_prefix("#!").and_then(|t| t.lines().next()) {
+            let shells = ["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash"];
+            if !line
+                .split_whitespace()
+                .any(|w| shells.contains(&w.rsplit('/').next().unwrap_or(w)))
+            {
+                return;
+            }
+        }
+        at.scripted = true;
+        self.shell(&text, &at, cwd, env, Stdin::default());
     }
 
     /// What a builtin changes for the commands after it: `cd`, `pushd`, `export`, `unset`, `ln -s`.

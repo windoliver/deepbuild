@@ -237,6 +237,28 @@
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-stream",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "stream"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #34 first measurement: the merge base's hub has no App API stream with start IDs. One process starts the hub on a temp home, subscribes as the app and sends 1,000 PreToolUse requests, timing each from its write to the app's frame for its event; the issue's 50 ms p95 stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-history",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "history"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "otlp-receive-20k-spans",
       "command": [
         "node",
@@ -394,6 +416,99 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #237 first measurement: the merge base has no lease table. One process opens a record and the lease table, grants 1,000 port leases one after another, refuses a second holder on each, then ends every holder and releases every lease, so p50 includes Node's start; the issue's 50 ms per grant stays in tests/acceptance/237/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-mcp-30d",
+      "command": [
+        "node",
+        "benchmarks/mcp.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #26 first measurement: the merge base's deep mcp has no deep_open_item or deep_search. One process seeds a heavy month (20 sessions a day, five asks each with the first saved as a decision, and an open item), starts the hub on it, binds a deep mcp to a session through hooks from its own children, and times 40 deep_status, 40 deep_open_item and 20 deep_search calls after a warm-up round, failing on any error; p50 includes the seeding and the hub's start. The issue's 100 ms, 300 ms and 80 MB stay in tests/acceptance/26/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-costs",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "costs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no cost model. The micro-benchmark of every shipped primitive: one process times each operator the shipped build seals over three generated boards through `deep-show run`'s costs call, and scene3d's two passes by their timestamps on the device through `deep-gpu`'s live window at two sizes and two box counts, printing the measured terms beside the build's coefficients (crates/deep-canvas/costs.json, which `--write` replaces on a reference Mac); p50 includes Node's and the binaries' start. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-class-core-view",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "class",
+        "core_view"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the core_view class's fixture (benchmarks/canvas/core_view.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-class-data-view",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "class",
+        "data_view"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the data_view class's fixture (benchmarks/canvas/data_view.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-class-figure",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "class",
+        "figure"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the figure class's fixture (benchmarks/canvas/figure.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-class-work-product",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "class",
+        "work_product"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the work_product class's fixture (benchmarks/canvas/work_product.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-class-showpiece",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "class",
+        "showpiece"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the showpiece class's fixture (benchmarks/canvas/showpiece.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "canvas-class-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "class",
+        "export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the export class's fixture (benchmarks/canvas/export.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

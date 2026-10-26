@@ -37,6 +37,8 @@ pub struct Request {
     pub planted: Planted,
     /// #373 AC6's wrong program: a luminance mask that reads encoded luma.
     pub encoded_luma: bool,
+    /// #381 AC4's wrong program: each span a text's runs cut is shaped on its own.
+    pub spans_apart: bool,
 }
 
 /// A rect, rounded when `radius` is above 0.
@@ -74,13 +76,64 @@ struct Painter<'a> {
     store: Option<&'a std::path::Path>,
     scopes: Scopes,
     zoom: f64,
+    spans_apart: bool,
+    /// Each text@1 item drawn: what it shows and its glyphs.
+    texts: Map<String, Value>,
+}
+
+/// The planted run: each span the runs cut the text into shaped on its own, the pieces set side
+/// by side, so nothing kerns across a span's edge.
+fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_text::Shaped {
+    let text = label.text.as_str();
+    let starts = deep_text::unicode::grapheme_starts(text);
+    let mut cuts: Vec<usize> = runs
+        .iter()
+        .flat_map(|r| [r.from, r.to])
+        .chain([0, starts.len()])
+        .filter(|&g| g <= starts.len())
+        .collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    let byte = |g: usize| starts.get(g).copied().unwrap_or(text.len());
+    let mut out = deep_text::Shaped {
+        shown: text.to_string(),
+        ..deep_text::Shaped::default()
+    };
+    for pair in cuts.windows(2) {
+        let piece = deep_text_gpui::shape(&deep_text_gpui::Label {
+            text: text[byte(pair[0])..byte(pair[1])].to_string(),
+            ..label.clone()
+        });
+        for g in piece.glyphs {
+            out.glyphs.push(deep_text::Glyph {
+                x: g.x + out.width,
+                grapheme: g.grapheme + pair[0],
+                ..g
+            });
+        }
+        out.width += piece.width;
+    }
+    out
 }
 
 impl Painter<'_> {
     fn text(&mut self, label: &deep_text_gpui::Label, origin: [f64; 2], color: Rgb) {
         let shaped = deep_text_gpui::shape(label);
-        self.ctx.set_paint(solid(color));
+        self.glyphs(&shaped, origin, (None, color), &[]);
+    }
+
+    /// A shaped run's glyphs at `origin`, each in its run's role or the text's.
+    fn glyphs(
+        &mut self,
+        shaped: &deep_text::Shaped,
+        origin: [f64; 2],
+        (role, color): (Option<&str>, Rgb),
+        runs: &[scene::TextRun],
+    ) -> Vec<Value> {
+        let mut out = Vec::with_capacity(shaped.glyphs.len());
         for g in &shaped.glyphs {
+            let (role, color) = scene::run_paint(runs, g.grapheme, role, color);
+            self.ctx.set_paint(solid(color));
             let glyph = vello_cpu::Glyph {
                 id: g.id,
                 x: g.x + origin[0] as f32,
@@ -91,7 +144,14 @@ impl Painter<'_> {
                 .font_size(g.size)
                 .hint(false)
                 .fill_glyphs(std::iter::once(glyph));
+            let font =
+                deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
+            out.push(json!({
+                "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
+                "grapheme": g.grapheme, "role": role,
+            }));
         }
+        out
     }
 
     fn mark(&mut self, mark: &Mark) -> Result<(), Value> {
@@ -154,11 +214,23 @@ impl Painter<'_> {
                 item,
                 spec,
                 origin,
+                role,
                 color,
+                runs,
             } => {
                 let label = label_of(spec)
                     .ok_or_else(|| refused("bad_font", &format!("items/{item}/params/font")))?;
-                self.text(&label, *origin, *color);
+                let shaped = if self.spans_apart && !runs.is_empty() {
+                    shaped_apart(&label, runs)
+                } else {
+                    deep_text_gpui::shape(&label)
+                };
+                let glyphs = self.glyphs(&shaped, *origin, (role.as_deref(), *color), runs);
+                // A text@1 item's own text; a mark set's or an axis's labels are `<id>#…`.
+                if !item.contains('#') {
+                    self.texts
+                        .insert(item.clone(), json!({"shown": spec.text, "glyphs": glyphs}));
+                }
             }
             Mark::Image {
                 item,
@@ -269,6 +341,8 @@ fn draw(req: &Request) -> Result<Value, Value> {
         store: req.store.as_deref(),
         scopes: Scopes::new(req.encoded_luma),
         zoom,
+        spans_apart: req.spans_apart,
+        texts: Map::new(),
     };
     p.ctx.set_transform(Affine::scale(zoom));
     p.ctx.set_paint(solid(frame.ground));
@@ -291,7 +365,9 @@ fn draw(req: &Request) -> Result<Value, Value> {
     image
         .save_with_format(&req.out, image::ImageFormat::Png)
         .map_err(|_| refused("not_written", &req.out))?;
-    Ok(json!({"ok": true, "width": w, "height": h, "offscreen": p.scopes.offscreen}))
+    Ok(json!({
+        "ok": true, "width": w, "height": h, "offscreen": p.scopes.offscreen, "texts": p.texts,
+    }))
 }
 
 /// Every look role a document names, in black: geometry needs the outline, never its colors.

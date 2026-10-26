@@ -16,14 +16,20 @@ name = "deep-gpu"
 path = "src/main.rs"
 
 # The test encode pool, which finishes encodes in the order a call asks for; no shipped build has it.
+# `test-meter` (#379) adds the meter's stubs (a stub meter and a stub battery), the counting
+# allocator, the test writer and the test canvas module `test.gpu`; no shipped build has them.
 [features]
 test-pool = ["deep-gpu/test-pool"]
+test-meter = ["dep:deep-canvas-test-modules"]
 
 [dependencies]
 deep-gpu = { path = "../deep-gpu" }
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
+deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-app = { path = "../deep-app" }
 deep-replica = { path = "../deep-replica" }
 bytemuck = { version = "1", features = ["derive"] }

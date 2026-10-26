@@ -67,7 +67,7 @@ async function world(options: { safe?: boolean; release?: ReleaseEntry[]; ready?
   const home = join(dir, 'home');
   /** A host on this home: after the first, a restart of the hub. */
   const again = async (): Promise<ExtensionHost> => {
-    const h = await openExtensionHost({ record, supervisor: supervising, trust: trusting, home, now: Date.now, safe: options.safe, release: options.release ?? [] });
+    const h = await openExtensionHost({ record, supervisor: supervising, trust: trusting, home, now: Date.now, ...(options.safe !== undefined ? { safe: options.safe } : {}), release: options.release ?? [] });
     closing.push(h);
     if (options.ready !== false) await h.ready();
     return h;
@@ -281,7 +281,7 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     expect((await h.load(p)).status).toBe('loaded');
     const { address } = await h.turnOn('test/route', ['POST /hi']);
     const [hostname, port] = address.split(':');
-    const answered = new Promise<{ status?: number; body: string }>((resolve, reject) => {
+    const answered = new Promise<{ status?: number | undefined; body: string }>((resolve, reject) => {
       const req = request({ hostname, port: Number(port), method: 'POST', path: '/hi', headers: { 'content-length': '2' } }, (res) => {
         let body = '';
         res.on('data', (c: Buffer) => { body += c.toString(); });
@@ -368,7 +368,7 @@ process.stdin.once('data', () => process.stdout.write(JSON.stringify(read ? { js
     return { hostname: hostname!, port: Number(port) };
   }
   /** POSTs `body` to /hi, `length` its declared length; its answer, or its error's code. */
-  const post = (to: { hostname: string; port: number }, body: string, length = Buffer.byteLength(body), end = true): Promise<{ status?: number; body: string; error?: string }> =>
+  const post = (to: { hostname: string; port: number }, body: string, length = Buffer.byteLength(body), end = true): Promise<{ status?: number | undefined; body: string; error?: string }> =>
     new Promise((resolve) => {
       const req = request({ ...to, method: 'POST', path: '/hi', headers: { 'content-length': String(length) } }, (res) => {
         let text = '';

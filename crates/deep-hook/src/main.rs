@@ -183,7 +183,8 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
 }
 
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
-/// path (Edit, MultiEdit, Write, NotebookEdit) or a patch's (Codex's apply_patch); None for any other tool.
+/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch);
+/// None for any other tool.
 fn call(payload: &Value) -> Option<matcher::Call> {
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
@@ -193,11 +194,17 @@ fn call(payload: &Value) -> Option<matcher::Call> {
         Some(Value::String(text)) => Some(text.as_str()),
         _ => None,
     };
-    let (command, paths) = match tool.as_str() {
-        "Bash" => (Some(field("command")?), Vec::new()),
-        "Edit" | "MultiEdit" | "Write" => (None, vec![field("file_path")?.to_string()]),
-        "NotebookEdit" => (None, vec![field("notebook_path")?.to_string()]),
-        "apply_patch" => (None, matcher::patched(field("command")?)),
+    let (command, paths, read) = match tool.as_str() {
+        "Bash" => (Some(field("command")?), Vec::new(), false),
+        "Edit" | "MultiEdit" | "Write" => (None, vec![field("file_path")?.to_string()], false),
+        "NotebookEdit" => (None, vec![field("notebook_path")?.to_string()], false),
+        "apply_patch" => (None, matcher::patched(field("command")?), false),
+        "Read" => (None, vec![field("file_path")?.to_string()], true),
+        "Grep" => (
+            None,
+            field("path").map(str::to_string).into_iter().collect(),
+            true,
+        ),
         _ => return None,
     };
     let cwd = match member(payload, "cwd") {
@@ -208,9 +215,10 @@ fn call(payload: &Value) -> Option<matcher::Call> {
     Some(matcher::Call::new(
         tool,
         command,
-        &paths,
+        (&paths, read),
         cwd.as_deref(),
         &home,
+        &address(),
     ))
 }
 

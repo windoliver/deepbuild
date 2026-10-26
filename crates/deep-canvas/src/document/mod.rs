@@ -33,7 +33,8 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_in, check_with, duration, recheck, recheck_skipping_referrers, CheckResult,
+    check, check_costed, check_in, check_with, duration, recheck, recheck_skipping_referrers,
+    CheckResult,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
@@ -1325,6 +1326,40 @@ mod tests {
             "controls/slider/value/deeper",
             "controls/slider/range/5",
             "controls/slider/range/x",
+        ] {
+            assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
+        }
+    }
+
+    #[test]
+    fn a_step_inside_a_param_resolves_only_where_a_value_is() {
+        // A camera's `orbit/azimuth` is a part of its `orbit` param (#671); no kind gives a
+        // param's parts a schema, so each step must reach a value the item holds.
+        let mut doc = base();
+        let mut cam = item("cam", "main", Value::Null);
+        cam["params"] = json!({"orbit": {"azimuth": 0, "elevation": 35}, "target": [0, 0.5, 0]});
+        doc["items"] = json!({"cam": cam});
+        let refused = |target: &str| {
+            let mut doc = doc.clone();
+            doc["channels"] = json!({"c": {"target": target}});
+            let result = check(&doc);
+            result
+                .issues
+                .iter()
+                .find(|i| i.path == "channels/c/target")
+                .map(|i| i.code)
+        };
+        for target in [
+            "items/cam/params/orbit/azimuth",
+            "items/cam/params/target/1",
+        ] {
+            assert_eq!(refused(target), None, "{target}");
+        }
+        for target in [
+            "items/cam/params/orbit/roll",
+            "items/cam/params/orbit/azimuth/deeper",
+            "items/cam/params/target/3",
+            "items/cam/params/fov/x",
         ] {
             assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
         }

@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "claim.made",
+  "writer": "mcp:5b0c2f1e7a514c3e9d5e0f6a8b2c4d10",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "attempt": 1,
+    "commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+    "scope": "session",
+    "predictions": [
+      {
+        "check": "unit",
+        "expects": "passed",
+        "at": 1760013451123
+      }
+    ]
+  }
+}

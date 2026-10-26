@@ -105,6 +105,8 @@ export interface Asks {
   authorized(ask: string, planHash: string): Promise<string | null>;
   /** Later, on the trusted path: hides the ask until `until`, never past its deadline. */
   later(connection: Connection, ask: string, until: number): Promise<void>;
+  /** Undo, on the trusted path: a defaulted ask opens again, waiting as long as it first did. */
+  undo(connection: Connection, ask: string): Promise<void>;
   /** Every ask in the record, open or closed, with its status, owner and age. */
   inbox(): Promise<InboxRow[]>;
 }
@@ -553,6 +555,24 @@ class AsksCore implements Asks {
     });
   }
 
+  undo(connection: Connection, handle: string): Promise<void> {
+    return this.exclusive(async () => {
+      await this.sync();
+      if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`an undo counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
+      const ask = this.asks.get(bare(handle));
+      if (!ask) throw new AskRefused(`${handle} is no ask`, { ask: handle });
+      // Only a default is undone: an answer stands, and an open ask has nothing to undo.
+      if (ask.closed?.outcome !== 'defaulted') {
+        throw new AskRefused(ask.closed ? `${ask.handle} closed as ${ask.closed.outcome}, not by its default` : `${ask.handle} is open; there's no default to undo`, { ask: ask.handle, ...(ask.closed ? { outcome: ask.closed.outcome, closed_at: ask.closed.at } : {}) });
+      }
+      const now = this.options.now();
+      const deadline = now + (ask.data.deadline as number) - ask.created;
+      await this.options.record.append(this.core({ ...connection, ...ask.who }), { v: 1, id: ulid(now), kind: 'default.undone', subject: ask.handle, ts: now, data: { deadline } });
+      await this.sync();
+      await this.settle();
+    });
+  }
+
   inbox(): Promise<InboxRow[]> {
     return this.exclusive(async () => {
       await this.sync();
@@ -844,6 +864,13 @@ class AsksCore implements Asks {
         if (request && !request.closed) request.pending.moot ??= d;
         return;
       }
+      case 'default.undone':
+        // Open again, still shown, with the new deadline the undo gave it; it no longer waits in an exception.
+        if (!target || target.closed?.outcome !== 'defaulted' || e.writer !== 'core' || typeof d.deadline !== 'number') return;
+        delete target.closed;
+        delete target.folded;
+        target.data = { ...target.data, deadline: d.deadline };
+        return;
       case 'ask.batched': {
         if (e.writer !== 'core' || !Array.isArray(d.asks)) return;
         const shown = d.asks.flatMap((item) => {
@@ -1025,6 +1052,6 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
   return {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
-    later: core.later.bind(core), inbox: core.inbox.bind(core),
+    later: core.later.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core),
   };
 }
