@@ -1,0 +1,28 @@
+// A first-party test package (#355 AC4): an index for the wiki, registered with deep.registerIndex. It is a keyword
+// index in memory, as index@1's reference fill is, bent by index.json's `fault`: `keeps-dropped-source` still
+// returns a claim after dropSource of its only source; `sourceless-hit` returns hits with no source; `none` is sound.
+import { readFileSync } from 'node:fs';
+
+interface Claim { id: string; page: string; source: string; text: string }
+const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+export default function (deep: any): void {
+  const { fault } = JSON.parse(readFileSync(new URL('./index.json', import.meta.url), 'utf8')) as { fault: 'none' | 'keeps-dropped-source' | 'sourceless-hit' };
+  const claims = new Map<string, Claim>();
+  deep.registerIndex('test-index', {
+    slot: 'index@1',
+    revision: 1,
+    rebuild(next: Claim[]) { claims.clear(); for (const c of next) claims.set(c.id, c); },
+    upsert(next: Claim[]) { for (const c of next) claims.set(c.id, c); },
+    search(query: string) {
+      const wanted = words(query);
+      return [...claims.values()]
+        .filter((c) => { const have = new Set(words(c.text)); return wanted.every((w) => have.has(w)); })
+        .map((c) => ({ claim: c.id, page: c.page, quote: c.text, source: fault === 'sourceless-hit' ? '' : c.source }));
+    },
+    dropSource(source: string) {
+      if (fault === 'keeps-dropped-source') return;
+      for (const [id, c] of claims) if (c.source === source) claims.delete(id);
+    },
+  });
+}

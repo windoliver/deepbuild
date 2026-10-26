@@ -209,6 +209,26 @@
     }
   },
   {
+    "method": "deep.registerIndex",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.record.append",
     "variants": null,
     "since": "R1",
