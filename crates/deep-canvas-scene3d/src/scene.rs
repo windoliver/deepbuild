@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 
-use deep_canvas::camera::{screen_basis, Offsets, Spec, Vec3};
+use deep_canvas::camera::{screen_basis, Offsets, Rig, Spec, Vec3};
 use deep_canvas::kinds::with_defaults;
 use deep_canvas::ops::{cos, rad, sin, sqrt, tan};
 use deep_canvas_motion::eval;
@@ -345,7 +345,7 @@ pub struct Scene {
     pub pages: Vec<AtlasPage>,
 }
 
-fn num(v: Option<&Value>) -> Option<f64> {
+pub(crate) fn num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64).filter(|x| x.is_finite())
 }
 
@@ -358,7 +358,7 @@ fn vec3(v: Option<&Value>) -> Option<Vec3> {
 }
 
 /// A size: three numbers, or one for all three.
-fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
+pub(crate) fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
     match v {
         None | Some(Value::Null) => Some(default),
         Some(Value::Number(n)) => {
@@ -370,9 +370,9 @@ fn size3(v: Option<&Value>, default: Vec3) -> Option<Vec3> {
 }
 
 /// `x ↦ R·S·x + T` as rows of a 3×4 matrix.
-type Affine3 = [[f64; 4]; 3];
+pub(crate) type Affine3 = [[f64; 4]; 3];
 
-fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
+pub(crate) fn matmul(a: &Affine3, b: &Affine3) -> Affine3 {
     let mut out = [[0.0; 4]; 3];
     for (r, row) in out.iter_mut().enumerate() {
         for (c, cell) in row.iter_mut().enumerate() {
@@ -408,6 +408,11 @@ fn local(item: &Value, extra_scale: Vec3) -> Affine3 {
     let pos = vec3(at.and_then(|a| a.get("pos"))).unwrap_or([0.0; 3]);
     let rot = vec3(at.and_then(|a| a.get("rot"))).unwrap_or([0.0; 3]);
     let sc = size3(at.and_then(|a| a.get("scale")), [1.0; 3]).unwrap_or([1.0; 3]);
+    local_of(pos, rot, sc, extra_scale)
+}
+
+/// [`local`] from the numbers themselves.
+pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Affine3 {
     let (cx, sx) = (cos(rad(rot[0])), sin(rad(rot[0])));
     let (cy, sy) = (cos(rad(rot[1])), sin(rad(rot[1])));
     let (cz, sz) = (cos(rad(rot[2])), sin(rad(rot[2])));
@@ -566,7 +571,20 @@ fn camera(
         code: r.code,
         path: r.path,
     })?;
-    let pose = spec.pose(&rig, &Offsets::default());
+    let mut cam = posed(&spec, &rig, &Offsets::default(), size);
+    near_far(
+        &mut cam,
+        num(params.get("near")),
+        num(params.get("far")),
+        bounds.iter().copied(),
+    );
+    Ok(cam)
+}
+
+/// The camera `spec` and `rig` pose under `offsets` on a frame of `size` px, before its near
+/// and far.
+pub(crate) fn posed(spec: &Spec, rig: &Rig, offsets: &Offsets, size: [f64; 2]) -> Camera {
+    let pose = spec.pose(rig, offsets);
     let perspective = !pose.flat && pose.fov > 0.0;
     let wider = size[0].max(size[1]);
     let scale = if perspective {
@@ -576,7 +594,7 @@ fn camera(
     };
     let forward = normalize(sub(pose.target, pose.position));
     let (right, up) = screen_basis(forward);
-    let mut cam = Camera {
+    Camera {
         size,
         eye: pose.position,
         right,
@@ -591,32 +609,48 @@ fn camera(
         roll: [cos(rad(pose.roll)), sin(rad(pose.roll))],
         near: 0.1,
         far: 1.0,
-    };
-    let depths: Vec<f64> = bounds.iter().map(|p| cam.to_view(*p)[2]).collect();
-    let lo = depths.iter().copied().fold(f64::INFINITY, f64::min);
-    let hi = depths.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    }
+}
+
+/// The camera's near and far: as authored, else from the depths of `bounds`.
+pub(crate) fn near_far(
+    cam: &mut Camera,
+    near: Option<f64>,
+    far: Option<f64>,
+    bounds: impl Iterator<Item = Vec3>,
+) {
+    let (lo, hi) = bounds
+        .map(|p| cam.to_view(p)[2])
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), d| {
+            (lo.min(d), hi.max(d))
+        });
     let (lo, hi) = if lo.is_finite() && hi.is_finite() {
         (lo, hi)
     } else {
         (0.1, 1.0)
     };
     let pad = 0.01 * (hi - lo) + 1.0;
-    cam.near = match num(params.get("near")) {
+    cam.near = match near {
         Some(n) if n > 0.0 => n,
-        _ if perspective => (lo / 2.0).clamp(0.01, 1.0),
+        _ if cam.perspective => (lo / 2.0).clamp(0.01, 1.0),
         _ => lo - pad,
     };
-    cam.far = match num(params.get("far")) {
+    cam.far = match far {
         Some(f) if f > cam.near => f,
         _ => hi + pad,
     };
-    Ok(cam)
 }
 
 /// A solid's eight corners in the world: what it contributes to the bounds the camera's near and
 /// far come from, and what a view projects to tell whether it is on screen (#383).
 pub fn corners(model: &Affine3) -> Vec<Vec3> {
     let mut out = Vec::with_capacity(8);
+    corners_into(model, &mut out);
+    out
+}
+
+/// [`corners`], pushed onto `out`.
+pub(crate) fn corners_into(model: &Affine3, out: &mut Vec<Vec3>) {
     for x in [-0.5, 0.5] {
         for y in [-0.5, 0.5] {
             for z in [-0.5, 0.5] {
@@ -624,7 +658,6 @@ pub fn corners(model: &Affine3) -> Vec<Vec3> {
             }
         }
     }
-    out
 }
 
 /// Evaluates `doc` at `t` (flicks) on a frame of its `size`.

@@ -454,7 +454,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     let shared = lock(&s.shared);
                     let r = shared.renderer.as_ref().ok_or("no renderer")?;
                     Ok(Drawn {
-                        timed: timings.then(|| (r.gpu_ms(&device), device.allocated_bytes())),
+                        timed: timings
+                            .then(|| (r.gpu_ms(&device), deep_gpu::memory::allocated(&device))),
                         slot: drawn.slot,
                         counts: r.counts().clone(),
                         picks: r.picks().iter().map(|(k, v)| (k.clone(), *v)).collect(),

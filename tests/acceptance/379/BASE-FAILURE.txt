@@ -1,0 +1,1165 @@
+Base commit: d122341 ("Merge pull request #737 from windoliver/feat/667-ask-checkpoint")
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/379 --no-file-parallelism
+Run in a worktree at the base commit holding only these test files (untracked), the repo's node_modules from npm ci, and
+deep-gpu and deep-show built at the base (cargo build --locked --bin deep-gpu --bin deep-show, with the same two
+environment variables, so the suite's own builds reuse them).
+Every one of the 47 tests fails for the expected reason, at a named assertion:
+- 23 tests use the `test-meter` build of deep-gpu (the stub meter, the stub battery, the test writer, the test module's
+  kinds, the counting allocator, and the planted programs run on it); cargo answers "none of the selected packages
+  contains this feature: test-meter", so they fail at "the binary builds: cargo build --locked --bin deep-gpu
+  --features test-meter". (Three of ladder.test.ts's tests share one heading in the list below.)
+- 11 tests drive the shipped deep-gpu with this issue's calls (`adapter`, `tick`, `live`), which the base answers
+  {"code":"bad_input","reason":"unknown call"}; they fail at "<the call> is answered, not refused". In stubs.test.ts
+  that is the shipped build's plain `live` call, made before the stub field is refused, so a fence can't pass on a
+  base that refuses every `live` call.
+- 2 tests start `deep-gpu run --withhold timestamps` and 1 starts `deep-gpu run --planted compiles_at_swap`; the base
+  answers {"ok":false,"code":"bad_input"} and exits 2, so they fail at "exited 0" / "starts and exits 0".
+- 4 tests (estimate.test.ts) drive deep-show: the base presents the five-path board over its class (no over_budget
+  refusal: "the document over its class is refused"), refuses the scenario carrying `planted:
+  "estimates_on_this_machine"` with bad_input ("deep-show run refused the scenario"), and its registry has no
+  `passes` ("registry: passes … is an object, got undefined").
+- 6 tests (perf-lane.test.ts) read the perf lane: budgets.json has no canvas-class-* task ("budgets.json has the task
+  canvas-class-core-view"), and benchmarks/canvas.mjs has no `class` or `judge` mode ("Unknown task class",
+  "Unknown task judge"), so they fail at "exits 0".
+This Mac is a Mac15,7 (a reference Mac, Apple Silicon) and draws on Metal, so no test failed as INCONCLUSIVE.
+Date: 2026-10-25  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (the checkout's toolchain)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/379
+
+ ❯ meter.test.ts (7 tests | 7 failed) 4392ms
+   ❯ #379.6d4d0202 the meter's pass timings (7)
+     × #379.6d4d0202 a frame's GPU time is the time its passes cover (3.5 ms), never their sum (4.5 ms); each pass is charged after earlier passes end, and a fused pass splits by its declared shares (stub meter, noop) 6ms
+     × #379.6d4d0202 a planted meter that sums pass intervals reports 4.5 ms and fails the covered-time check, naming the frame 2ms
+     × #379.6d4d0202 the proof records this Mac's timestamp features, and withholding them at device creation gives an adapter without them 2089ms
+     × #379.6d4d0202 with timestamps every pass's GPU time comes from them, and the frame's GPU time is the time its passes cover (Metal) 109ms
+     × #379.6d4d0202 on an adapter without timestamps the meter reports CPU encode time, marked as the fallback (Metal, timestamps withheld) 14ms
+     × #379.6d4d0202 the timestamp tick agrees with the wall time of a waited submission (Metal) 107ms
+     × #379.6d4d0202 with two writers on the reference Mac where only one is over its share, only that one steps down 12ms
+ ❯ reasons.test.ts (6 tests | 6 failed) 3367ms
+   ❯ #379.2299cd3b every ladder change records its reason, and the meter shows it (1)
+     × #379.2299cd3b initial, frame health, you, headroom and battery: each change records why, and the meter's rows show each writer's rung and reason 9ms
+   ❯ #379.2299cd3b a stub battery discharging at 25% steps the live view down one rung and stops it climbing (2)
+     × #379.2299cd3b the control: at 80% the view dropped for frame health climbs one rung 120 frames after the view changes 2ms
+     × #379.2299cd3b at 25% from frame 200 the view steps down one rung (battery) and never climbs, the view change at 300 included 2ms
+   ❯ #379.2299cd3b a change compiles the new rung's pipelines off-screen first, so no frame during the switch exceeds its class's frame time (3)
+     × #379.2299cd3b your change to internal_scale_down compiles its pipelines off the UI thread before it takes effect, and every frame of the switch draws (Metal) 2034ms
+     × #379.2299cd3b a planted ladder that compiles the new rung's pipelines at the swap fails, naming the frame (Metal) 16ms
+     × #379.2299cd3b on the reference Mac, no frame of the switch exceeds the work product's frame time (2 ms GPU, 4 ms CPU), five runs 109ms
+ ❯ perf-lane.test.ts (6 tests | 6 failed) 1262ms
+   ❯ #379.7cc48ffe the perf lane records cold, warm and the authoring loop for each budget class (3)
+     × #379.7cc48ffe budgets.json has a task per budget class that runs its fixture's bench, valid against the merge base's budgets 53ms
+     × #379.7cc48ffe each class's fixture records three timings on this reference Mac with its fingerprint: cold, warm against the class, and both authoring patches 1083ms
+     × #379.7cc48ffe a planted lane that records warm frames only fails, naming the class 37ms
+   ❯ #379.7cc48ffe warm frames pass or fail against the class; cold and authoring-loop readings never fail a change (3)
+     × #379.7cc48ffe a change whose cold and authoring-loop readings are ten times the merge base's passes when its warm frames are within the class, the readings kept beside the base's 30ms
+     × #379.7cc48ffe warm frames over the class fail, naming the class; the class decides (3 ms of CPU fails a data view and passes a figure) 29ms
+     × #379.7cc48ffe a planted lane that fails a change on a cold reading fails this test, naming the class 29ms
+ ❯ stubs.test.ts (6 tests | 6 failed) 3774ms
+   ❯ #379.1fbf8952 the stub meter is the test build's alone (2)
+     × #379.1fbf8952 the shipped build refuses a live call carrying stub_meter with bad_input; the test build takes it 2068ms
+     × #379.1fbf8952 the JSON-lines convention: a line that isn't a scenario answers bad_input, a live call without frames is refused bad_input, and an unknown planted name or withheld feature ends the run at startup with one bad_input line 117ms
+   ❯ #379.2299cd3b the stub battery is the test build's alone (1)
+     × #379.2299cd3b the shipped build refuses a live call carrying stub_battery with bad_input; the test build takes it 107ms
+   ❯ #379.20ef578a the test writer is the test build's alone (1)
+     × #379.20ef578a the shipped build refuses allocate and release with bad_input; the test build takes them 1ms
+   ❯ #379.0806d709 the test module's kinds are the test build's alone (1)
+     × #379.0806d709 in the shipped build a document of test.mesh@1 is refused with module_missing naming test.gpu, and never draws 106ms
+   ❯ #379.1e889bee the counting allocator is the test build's alone (1)
+     × #379.1e889bee the shipped build refuses a live call reporting allocs with bad_input; the test build counts them 104ms
+ ❯ estimate.test.ts (4 tests | 4 failed) 2938ms
+   ❯ #379.57ab116a the document check's estimate refuses a document over its class (3)
+     × #379.57ab116a a board over its class is refused before it shows, naming exactly its top three contributors, with the estimate from the reference Mac's coefficients 1378ms
+     × #379.57ab116a the same document gives the same refusal under another machine's environment 376ms
+     × #379.57ab116a a planted check that estimates with the machine's own coefficients gives another refusal under another machine, and the comparison fails naming the field 14ms
+   ❯ #379.57ab116a every shipped primitive declares its cost model and has a micro-benchmark in the local preflight (1)
+     × #379.57ab116a the full build's registry gives every operator and every render pass a cost model whose coefficients carry a reference Mac's fingerprint and name a perf-lane task 13ms
+ ❯ window-memory.test.ts (2 tests | 2 failed) 3426ms
+   ❯ #379.d5e81f8a GPU memory per window, full screen (2)
+     × #379.d5e81f8a a full-screen live 3D view with frame history stays under 256 MB on the device, at the internal scale and history window that fit 2077ms
+     × #379.d5e81f8a a document that can't fit at scale 0.5 with a 2-frame window (8192 × 8192) is refused, naming the size, while the same document at 1920 × 1080 is live 111ms
+ ❯ shared.test.ts (4 tests | 4 failed) 523ms
+   ❯ #379.0806d709 two writers' documents share a texture and a mesh by content key (2)
+     × #379.0806d709 the pair is allocated once and counted in full against both writers, before and after alpha closes; bravo's next 120 frames match its run alone; the device frees the pair only once both have closed 6ms
+     × #379.0806d709 a planted cache that charges a shared result to its first holder alone changes bravo's count when alpha closes, and fails naming the writer 2ms
+   ❯ #379.0806d709 200 cycles of open, refuse, supersede, fail an asset and close leave nothing behind (2)
+     × #379.0806d709 after cycle 200 the core's cache entries and byte count equal those after cycle 10, and the device's allocated size is within 2 MiB of its cycle-10 value 247ms
+     × #379.0806d709 a planted cache that keeps results no current revision reads grows each cycle and fails, naming the cycle 225ms
+ ❯ allocs.test.ts (2 tests | 2 failed) 63ms
+   ❯ #379.1e889bee no heap allocation per frame after warm-up (2)
+     × #379.1e889bee after 60 warm-up frames, every one of frames 61–300 of two moving writers allocates nothing, a camera move included 19ms
+     × #379.1e889bee a planted meter that allocates every frame fails the check, naming the frame 4ms
+ ❯ ladder.test.ts (5 tests | 5 failed) 51ms
+   ❯ #379.1fbf8952 the ladder steps on the stub meter's schedule, frame by frame (5)
+     × #379.1fbf8952 alpha steps to effects off at 30 and LOD down at 60 for frame health, holds while the view is still, and climbs one rung at 820 after the camera move at 700; bravo never changes 6ms
+     × #379.1fbf8952 one 3 ms frame among 1 ms frames changes nothing 2ms
+     × #379.1fbf8952 a planted ladder (steps_on_first_slow_frame) fails, naming the frame and the rung 2ms
+     × #379.1fbf8952 a planted ladder (skips_a_rung) fails, naming the frame and the rung 1ms
+     × #379.1fbf8952 a planted ladder (steps_every_writer) fails, naming the frame and the rung 1ms
+ ❯ canonical.test.ts (2 tests | 2 failed) 47ms
+   ❯ #379.459fdbc0 canonical renders never step down (2)
+     × #379.459fdbc0 after frame-health step-downs and an operator measured at 3 times its declaration, the render-back, the export frame and the frame-budget run draw at the base rung, at full resolution, equal to a fresh process's 6ms
+     × #379.459fdbc0 a planted meter shared with the headless worker draws the render-back at half scale and fails, naming the rung 1ms
+ ❯ allocations.test.ts (3 tests | 3 failed) 46ms
+   ❯ #379.20ef578a the meter counts what the device allocates (3)
+     × #379.20ef578a the test writer's count equals within 1% the sizes the device reports, and Metal's allocated size moves by it within 1 MiB on creation and on release 5ms
+     × #379.20ef578a a planted count of width × height × bytes per texel × samples misses the mipped texture, the cube and the MSAA target by at least 5 MiB each, and fails naming them 1ms
+     × #379.20ef578a a resource the device can't size makes the writer's memory limit BLOCKED, never PASS 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 47 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  allocations.test.ts > #379.20ef578a the meter counts what the device allocates > #379.20ef578a the test writer's count equals within 1% the sizes the device reports, and Metal's allocated size moves by it within 1 MiB on creation and on release
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ cycle allocations.test.ts:49:36
+ ❯ allocations.test.ts:67:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/47]⎯
+
+ FAIL  allocations.test.ts > #379.20ef578a the meter counts what the device allocates > #379.20ef578a a planted count of width × height × bytes per texel × samples misses the mipped texture, the cube and the MSAA target by at least 5 MiB each, and fails naming them
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ cycle allocations.test.ts:49:36
+ ❯ allocations.test.ts:87:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/47]⎯
+
+ FAIL  allocations.test.ts > #379.20ef578a the meter counts what the device allocates > #379.20ef578a a resource the device can't size makes the writer's memory limit BLOCKED, never PASS
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ cycle allocations.test.ts:49:36
+ ❯ allocations.test.ts:96:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/47]⎯
+
+ FAIL  allocs.test.ts > #379.1e889bee no heap allocation per frame after warm-up > #379.1e889bee after 60 warm-up frames, every one of frames 61–300 of two moving writers allocates nothing, a camera move included
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ counted allocs.test.ts:20:31
+ ❯ allocs.test.ts:37:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/47]⎯
+
+ FAIL  allocs.test.ts > #379.1e889bee no heap allocation per frame after warm-up > #379.1e889bee a planted meter that allocates every frame fails the check, naming the frame
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ counted allocs.test.ts:20:31
+ ❯ allocs.test.ts:47:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/47]⎯
+
+ FAIL  canonical.test.ts > #379.459fdbc0 canonical renders never step down > #379.459fdbc0 after frame-health step-downs and an operator measured at 3 times its declaration, the render-back, the export frame and the frame-budget run draw at the base rung, at full resolution, equal to a fresh process's
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ degraded canonical.test.ts:33:31
+ ❯ canonical.test.ts:59:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/47]⎯
+
+ FAIL  canonical.test.ts > #379.459fdbc0 canonical renders never step down > #379.459fdbc0 a planted meter shared with the headless worker draws the render-back at half scale and fails, naming the rung
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ degraded canonical.test.ts:33:31
+ ❯ canonical.test.ts:72:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/47]⎯
+
+ FAIL  estimate.test.ts > #379.57ab116a the document check's estimate refuses a document over its class > #379.57ab116a a board over its class is refused before it shows, naming exactly its top three contributors, with the estimate from the reference Mac's coefficients
+AssertionError: the five-path board: the document over its class is refused: {"rev":1,"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"c1b06adecc0dcd18448384498e810fe9bd712b283d2b55cbfe05c6e52a7f71c0","w":1280,"h":720}],"changed":[],"unchanged":[],"created":["path-a","path-b","path-c","path-d","path-e"],"removed":[],"outcome":"presented","core":"core@0.0.0","set_digest":"1f2c227ce05ae6e0b5acf9d4e8aa5ecaa976f71cff09a11380cd63f3b3a66b52"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ overBudget estimate.test.ts:74:120
+     72|
+     73| function overBudget(reply: JsonObject, what: string): JsonObject {
+     74|   expect(reply['outcome'], `${what}: the document over its class is re…
+       |                                                                                                                        ^
+     75|   expect(arr(reply['snapshots'], `${what}: snapshots`), `${what}: refu…
+     76|   const issues = arr(reply['issues'], `${what}: issues`).map((i, k) =>…
+ ❯ estimate.test.ts:85:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/47]⎯
+
+ FAIL  estimate.test.ts > #379.57ab116a the document check's estimate refuses a document over its class > #379.57ab116a the same document gives the same refusal under another machine's environment
+AssertionError: under the reference machine: the document over its class is refused: {"rev":1,"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"c1b06adecc0dcd18448384498e810fe9bd712b283d2b55cbfe05c6e52a7f71c0","w":1280,"h":720}],"changed":[],"unchanged":[],"created":["path-a","path-b","path-c","path-d","path-e"],"removed":[],"outcome":"presented","core":"core@0.0.0","set_digest":"1f2c227ce05ae6e0b5acf9d4e8aa5ecaa976f71cff09a11380cd63f3b3a66b52"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ overBudget estimate.test.ts:74:120
+     72|
+     73| function overBudget(reply: JsonObject, what: string): JsonObject {
+     74|   expect(reply['outcome'], `${what}: the document over its class is re…
+       |                                                                                                                        ^
+     75|   expect(arr(reply['snapshots'], `${what}: snapshots`), `${what}: refu…
+     76|   const issues = arr(reply['issues'], `${what}: issues`).map((i, k) =>…
+ ❯ estimate.test.ts:99:54
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/47]⎯
+
+ FAIL  estimate.test.ts > #379.57ab116a the document check's estimate refuses a document over its class > #379.57ab116a a planted check that estimates with the machine's own coefficients gives another refusal under another machine, and the comparison fails naming the field
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ showRun helpers.ts:581:106
+    579|   expect(s.lines.length, `${SHOW_BIN} run: one output line per input l…
+    580|   const answer = obj(s.lines[0], `${SHOW_BIN} run: the answer`);
+    581|   expect(answer['ok'], `${SHOW_BIN} run refused the scenario: ${JSON.s…
+       |                                                                                                          ^
+    582|   const replies = arr(answer['replies'], 'run: replies').map((r, i) =>…
+    583|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ shown estimate.test.ts:48:19
+ ❯ estimate.test.ts:106:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/47]⎯
+
+ FAIL  estimate.test.ts > #379.57ab116a every shipped primitive declares its cost model and has a micro-benchmark in the local preflight > #379.57ab116a the full build's registry gives every operator and every render pass a cost model whose coefficients carry a reference Mac's fingerprint and name a perf-lane task
+AssertionError: registry: passes (every render pass the build registers) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:72:96
+     70| }
+     71| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     72|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     73|   return value as JsonObject;
+     74| }
+ ❯ estimate.test.ts:121:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/47]⎯
+
+ FAIL  ladder.test.ts > #379.1fbf8952 the ladder steps on the stub meter's schedule, frame by frame > #379.1fbf8952 alpha steps to effects off at 30 and LOD down at 60 for frame health, holds while the view is still, and climbs one rung at 820 after the camera move at 700; bravo never changes
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stepped ladder.test.ts:22:31
+ ❯ ladder.test.ts:44:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/47]⎯
+
+ FAIL  ladder.test.ts > #379.1fbf8952 the ladder steps on the stub meter's schedule, frame by frame > #379.1fbf8952 one 3 ms frame among 1 ms frames changes nothing
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stepped ladder.test.ts:22:31
+ ❯ ladder.test.ts:55:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/47]⎯
+
+ FAIL  ladder.test.ts > #379.1fbf8952 the ladder steps on the stub meter's schedule, frame by frame > #379.1fbf8952 a planted ladder (steps_on_first_slow_frame) fails, naming the frame and the rung
+ FAIL  ladder.test.ts > #379.1fbf8952 the ladder steps on the stub meter's schedule, frame by frame > #379.1fbf8952 a planted ladder (skips_a_rung) fails, naming the frame and the rung
+ FAIL  ladder.test.ts > #379.1fbf8952 the ladder steps on the stub meter's schedule, frame by frame > #379.1fbf8952 a planted ladder (steps_every_writer) fails, naming the frame and the rung
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stepped ladder.test.ts:22:31
+ ❯ ladder.test.ts:64:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 a frame's GPU time is the time its passes cover (3.5 ms), never their sum (4.5 ms); each pass is charged after earlier passes end, and a fused pass splits by its declared shares (stub meter, noop)
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stubRun meter.test.ts:30:28
+ ❯ meter.test.ts:41:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 a planted meter that sums pass intervals reports 4.5 ms and fails the covered-time check, naming the frame
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stubRun meter.test.ts:30:28
+ ❯ meter.test.ts:62:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 the proof records this Mac's timestamp features, and withholding them at device creation gives an adapter without them
+AssertionError: adapter is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ meter.test.ts:70:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 with timestamps every pass's GPU time comes from them, and the frame's GPU time is the time its passes cover (Metal)
+AssertionError: the live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ meter.test.ts:85:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 on an adapter without timestamps the meter reports CPU encode time, marked as the fallback (Metal, timestamps withheld)
+AssertionError: deep-gpu run --withhold timestamps exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:190:140
+    188|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    189|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    190|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    191|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    192|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ one helpers.ts:201:19
+ ❯ meter.test.ts:101:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 the timestamp tick agrees with the wall time of a waited submission (Metal)
+AssertionError: tick is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ meter.test.ts:112:57
+ ❯ meter.test.ts:112:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/47]⎯
+
+ FAIL  meter.test.ts > #379.6d4d0202 the meter's pass timings > #379.6d4d0202 with two writers on the reference Mac where only one is over its share, only that one steps down
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ meter.test.ts:133:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/47]⎯
+
+ FAIL  perf-lane.test.ts > #379.7cc48ffe the perf lane records cold, warm and the authoring loop for each budget class > #379.7cc48ffe budgets.json has a task per budget class that runs its fixture's bench, valid against the merge base's budgets
+AssertionError: core_view: budgets.json has the task canvas-class-core-view: expected undefined to be defined
+ ❯ perf-lane.test.ts:98:68
+     96|     for (const c of CLASSES) {
+     97|       const task = current.tasks.find((t) => t.id === taskId(c));
+     98|       expect(task, `${c}: budgets.json has the task ${taskId(c)}`).toB…
+       |                                                                    ^
+     99|       expect(task!.command, `${c}: its task runs the class's bench`).t…
+    100|       expect(String(task!.initialReason), `${c}: its task says why, na…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/47]⎯
+
+ FAIL  perf-lane.test.ts > #379.7cc48ffe the perf lane records cold, warm and the authoring loop for each budget class > #379.7cc48ffe each class's fixture records three timings on this reference Mac with its fingerprint: cold, warm against the class, and both authoring patches
+AssertionError: core_view: canvas.mjs class core_view exits 0: file://<checkout>/benchmarks/canvas.mjs:103
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task class; one of: patch-apply, merge-10k, seal, kit
+    at file://<checkout>/benchmarks/canvas.mjs:103:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:103:29
+ ❯ perf-lane.test.ts:110:89
+    108|     for (const c of CLASSES) {
+    109|       const r = bench(['class', c]);
+    110|       expect(r.status, `${c}: canvas.mjs class ${c} exits 0: ${r.stder…
+       |                                                                                         ^
+    111|       console.log(`${c}: ${JSON.stringify(r.last)}`);
+    112|       expect(reportProblems(c, r.last), `${c}: the report holds the th…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/47]⎯
+
+ FAIL  perf-lane.test.ts > #379.7cc48ffe the perf lane records cold, warm and the authoring loop for each budget class > #379.7cc48ffe a planted lane that records warm frames only fails, naming the class
+AssertionError: the planted lane runs: file://<checkout>/benchmarks/canvas.mjs:103
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task class; one of: patch-apply, merge-10k, seal, kit
+    at file://<checkout>/benchmarks/canvas.mjs:103:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:103:29
+ ❯ perf-lane.test.ts:119:73
+    117|     requireReferenceMac();
+    118|     const r = bench(['class', 'data_view', '--planted', 'warm_only']);
+    119|     expect(r.status, `the planted lane runs: ${r.stderr.slice(-1500)}`…
+       |                                                                         ^
+    120|     const problems = reportProblems('data_view', r.last);
+    121|     expect(problems.length, 'the warm-only lane fails the check').toBe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/47]⎯
+
+ FAIL  perf-lane.test.ts > #379.7cc48ffe warm frames pass or fail against the class; cold and authoring-loop readings never fail a change > #379.7cc48ffe a change whose cold and authoring-loop readings are ten times the merge base's passes when its warm frames are within the class, the readings kept beside the base's
+AssertionError: canvas.mjs judge exits 0: file://<checkout>/benchmarks/canvas.mjs:103
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task judge; one of: patch-apply, merge-10k, seal, kit
+    at file://<checkout>/benchmarks/canvas.mjs:103:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:103:29
+ ❯ judged perf-lane.test.ts:76:74
+     74| function judged(current: JsonObject, base: JsonObject, planted?: 'fail…
+     75|   const r = bench(['judge', ...(planted ? ['--planted', planted] : [])…
+     76|   expect(r.status, `canvas.mjs judge exits 0: ${r.stderr.slice(-1500)}…
+       |                                                                          ^
+     77|   return obj(r.last ?? undefined, 'the judge\'s verdict (its last stdo…
+     78| }
+ ❯ perf-lane.test.ts:128:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/47]⎯
+
+ FAIL  perf-lane.test.ts > #379.7cc48ffe warm frames pass or fail against the class; cold and authoring-loop readings never fail a change > #379.7cc48ffe warm frames over the class fail, naming the class; the class decides (3 ms of CPU fails a data view and passes a figure)
+AssertionError: canvas.mjs judge exits 0: file://<checkout>/benchmarks/canvas.mjs:103
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task judge; one of: patch-apply, merge-10k, seal, kit
+    at file://<checkout>/benchmarks/canvas.mjs:103:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:103:29
+ ❯ judged perf-lane.test.ts:76:74
+     74| function judged(current: JsonObject, base: JsonObject, planted?: 'fail…
+     75|   const r = bench(['judge', ...(planted ? ['--planted', planted] : [])…
+     76|   expect(r.status, `canvas.mjs judge exits 0: ${r.stderr.slice(-1500)}…
+       |                                                                          ^
+     77|   return obj(r.last ?? undefined, 'the judge\'s verdict (its last stdo…
+     78| }
+ ❯ perf-lane.test.ts:137:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/47]⎯
+
+ FAIL  perf-lane.test.ts > #379.7cc48ffe warm frames pass or fail against the class; cold and authoring-loop readings never fail a change > #379.7cc48ffe a planted lane that fails a change on a cold reading fails this test, naming the class
+AssertionError: canvas.mjs judge exits 0: file://<checkout>/benchmarks/canvas.mjs:103
+if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
+                            ^
+
+Error: Unknown task judge; one of: patch-apply, merge-10k, seal, kit
+    at file://<checkout>/benchmarks/canvas.mjs:103:29
+    at ModuleJob.run (node:internal/modules/esm/module_job:273:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:600:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:98:5)
+
+Node.js v23.9.0
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ ../../../benchmarks/canvas.mjs:103:29
+ ❯ judged perf-lane.test.ts:76:74
+     74| function judged(current: JsonObject, base: JsonObject, planted?: 'fail…
+     75|   const r = bench(['judge', ...(planted ? ['--planted', planted] : [])…
+     76|   expect(r.status, `canvas.mjs judge exits 0: ${r.stderr.slice(-1500)}…
+       |                                                                          ^
+     77|   return obj(r.last ?? undefined, 'the judge\'s verdict (its last stdo…
+     78| }
+ ❯ perf-lane.test.ts:148:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/47]⎯
+
+ FAIL  reasons.test.ts > #379.2299cd3b every ladder change records its reason, and the meter shows it > #379.2299cd3b initial, frame health, you, headroom and battery: each change records why, and the meter's rows show each writer's rung and reason
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stubbed reasons.test.ts:28:31
+ ❯ reasons.test.ts:39:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/47]⎯
+
+ FAIL  reasons.test.ts > #379.2299cd3b a stub battery discharging at 25% steps the live view down one rung and stops it climbing > #379.2299cd3b the control: at 80% the view dropped for frame health climbs one rung 120 frames after the view changes
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stubbed reasons.test.ts:28:31
+ ❯ reasons.test.ts:61:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/47]⎯
+
+ FAIL  reasons.test.ts > #379.2299cd3b a stub battery discharging at 25% steps the live view down one rung and stops it climbing > #379.2299cd3b at 25% from frame 200 the view steps down one rung (battery) and never climbs, the view change at 300 included
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stubbed reasons.test.ts:28:31
+ ❯ reasons.test.ts:68:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/47]⎯
+
+ FAIL  reasons.test.ts > #379.2299cd3b a change compiles the new rung's pipelines off-screen first, so no frame during the switch exceeds its class's frame time > #379.2299cd3b your change to internal_scale_down compiles its pipelines off the UI thread before it takes effect, and every frame of the switch draws (Metal)
+AssertionError: the live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ switched reasons.test.ts:84:18
+ ❯ reasons.test.ts:109:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/47]⎯
+
+ FAIL  reasons.test.ts > #379.2299cd3b a change compiles the new rung's pipelines off-screen first, so no frame during the switch exceeds its class's frame time > #379.2299cd3b a planted ladder that compiles the new rung's pipelines at the swap fails, naming the frame (Metal)
+AssertionError: deep-gpu run --planted compiles_at_swap exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:190:140
+    188|   const shown = `${GPU_BIN} ${args.join(' ')}`;
+    189|   expect(s.timedOut, `${shown} finished within its timeout`).toBe(fals…
+    190|   expect(s.status, `${shown} exited 0 (${s.signal ?? 'no signal'}); st…
+       |                                                                                                                                            ^
+    191|   expect(s.lines.length, `${shown}: one output line per input line`).t…
+    192|   const answer = obj(s.lines[0], `${shown}: the answer`);
+ ❯ one helpers.ts:201:19
+ ❯ switched reasons.test.ts:84:28
+ ❯ reasons.test.ts:117:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/47]⎯
+
+ FAIL  reasons.test.ts > #379.2299cd3b a change compiles the new rung's pipelines off-screen first, so no frame during the switch exceeds its class's frame time > #379.2299cd3b on the reference Mac, no frame of the switch exceeds the work product's frame time (2 ms GPU, 4 ms CPU), five runs
+AssertionError: the live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ switched reasons.test.ts:84:18
+ ❯ reasons.test.ts:125:32
+ ❯ reasons.test.ts:124:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/47]⎯
+
+ FAIL  shared.test.ts > #379.0806d709 two writers' documents share a texture and a mesh by content key > #379.0806d709 the pair is allocated once and counted in full against both writers, before and after alpha closes; bravo's next 120 frames match its run alone; the device frees the pair only once both have closed
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ pairRun shared.test.ts:38:31
+ ❯ shared.test.ts:81:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/47]⎯
+
+ FAIL  shared.test.ts > #379.0806d709 two writers' documents share a texture and a mesh by content key > #379.0806d709 a planted cache that charges a shared result to its first holder alone changes bravo's count when alpha closes, and fails naming the writer
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ pairRun shared.test.ts:38:31
+ ❯ shared.test.ts:113:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/47]⎯
+
+ FAIL  shared.test.ts > #379.0806d709 200 cycles of open, refuse, supersede, fail an asset and close leave nothing behind > #379.0806d709 after cycle 200 the core's cache entries and byte count equal those after cycle 10, and the device's allocated size is within 2 MiB of its cycle-10 value
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ cycles shared.test.ts:147:33
+ ❯ shared.test.ts:165:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/47]⎯
+
+ FAIL  shared.test.ts > #379.0806d709 200 cycles of open, refuse, supersede, fail an asset and close leave nothing behind > #379.0806d709 a planted cache that keeps results no current revision reads grows each cycle and fails, naming the cycle
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ cycles shared.test.ts:147:33
+ ❯ shared.test.ts:183:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/47]⎯
+
+ FAIL  stubs.test.ts > #379.1fbf8952 the stub meter is the test build's alone > #379.1fbf8952 the shipped build refuses a live call carrying stub_meter with bad_input; the test build takes it
+AssertionError: the shipped build's plain live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ plainAnswered stubs.test.ts:18:17
+ ❯ stubs.test.ts:28:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/47]⎯
+
+ FAIL  stubs.test.ts > #379.1fbf8952 the stub meter is the test build's alone > #379.1fbf8952 the JSON-lines convention: a line that isn't a scenario answers bad_input, a live call without frames is refused bad_input, and an unknown planted name or withheld feature ends the run at startup with one bad_input line
+AssertionError: run --withhold timestamps starts and exits 0: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ stubs.test.ts:43:77
+     41|     expect(replies?.[0]?.['code'], 'a live call without frames is refu…
+     42|     const withheld = start(builds.bin(), ['run', '--backend', 'noop', …
+     43|     expect(withheld.status, 'run --withhold timestamps starts and exit…
+       |                                                                             ^
+     44|     expect(withheld.lines, 'and answers its one scenario').toEqual([{ …
+     45|     for (const args of [['run', '--planted', 'no_such_program'], ['run…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/47]⎯
+
+ FAIL  stubs.test.ts > #379.2299cd3b the stub battery is the test build's alone > #379.2299cd3b the shipped build refuses a live call carrying stub_battery with bad_input; the test build takes it
+AssertionError: the shipped build's plain live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ plainAnswered stubs.test.ts:18:17
+ ❯ stubs.test.ts:55:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/47]⎯
+
+ FAIL  stubs.test.ts > #379.20ef578a the test writer is the test build's alone > #379.20ef578a the shipped build refuses allocate and release with bad_input; the test build takes them
+AssertionError: the binary builds: cargo build --locked --bin deep-gpu --features test-meter: expected 'cargo build --locked --bin deep-gpu -…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-gpu --features test-meter failed:
++ error: none of the selected packages contains this feature: test-meter
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-peek, test-step
++
+
+ ❯ Object.bin helpers.ts:130:166
+    128|       const entry = made.get(build);
+    129|       if (!entry) throw Error(`the file didn't list the build ${build}…
+    130|       expect(entry.error, `the binary builds: cargo build --locked --b…
+       |                                                                                                                                                                      ^
+    131|       return entry.bin;
+    132|     },
+ ❯ stubs.test.ts:64:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/47]⎯
+
+ FAIL  stubs.test.ts > #379.0806d709 the test module's kinds are the test build's alone > #379.0806d709 in the shipped build a document of test.mesh@1 is refused with module_missing naming test.gpu, and never draws
+AssertionError: the live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ stubs.test.ts:82:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/47]⎯
+
+ FAIL  stubs.test.ts > #379.1e889bee the counting allocator is the test build's alone > #379.1e889bee the shipped build refuses a live call reporting allocs with bad_input; the test build counts them
+AssertionError: the shipped build's plain live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ plainAnswered stubs.test.ts:18:17
+ ❯ stubs.test.ts:92:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/47]⎯
+
+ FAIL  window-memory.test.ts > #379.d5e81f8a GPU memory per window, full screen > #379.d5e81f8a a full-screen live 3D view with frame history stays under 256 MB on the device, at the internal scale and history window that fit
+AssertionError: the full-screen view at 3456 × 2234 is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ window-memory.test.ts:35:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/47]⎯
+
+ FAIL  window-memory.test.ts > #379.d5e81f8a GPU memory per window, full screen > #379.d5e81f8a a document that can't fit at scale 0.5 with a 2-frame window (8192 × 8192) is refused, naming the size, while the same document at 1920 × 1080 is live
+AssertionError: the live call is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:208:102
+    206| export function answered(reply: JsonObject, what: string): JsonObject {
+    207|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what} …
+    208|   expect(reply['code'], `${what} is answered, not refused: ${JSON.stri…
+       |                                                                                                      ^
+    209|   return reply;
+    210| }
+ ❯ liveReply helpers.ts:379:3
+ ❯ window-memory.test.ts:70:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/47]⎯
+
+
+ Test Files  11 failed (11)
+      Tests  47 failed (47)
+   Start at  13:55:36
+   Duration  20.81s (tests 99%)
+
