@@ -33,7 +33,8 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_in, check_with, duration, recheck, recheck_skipping_referrers, CheckResult,
+    check, check_costed, check_in, check_with, duration, recheck, recheck_skipping_referrers,
+    CheckResult,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;

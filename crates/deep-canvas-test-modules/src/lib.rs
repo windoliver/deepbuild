@@ -610,3 +610,60 @@ pub fn peek() -> Module {
         register: register_peek,
     }
 }
+
+fn str_param(name: &'static str, default: &str) -> Param {
+    Param {
+        ty: ParamType::Str,
+        default: json!(default),
+        ..json_param(name)
+    }
+}
+
+/// The pass that draws `test.texture@1` and `test.mesh@1` items into the 3D linear target.
+pub const TEST_GPU_DRAW: &str = "test.gpu.draw";
+/// `test.burn`, the operator `test.burn@1` items run: one pass over the view.
+pub const TEST_BURN: &str = "test.burn";
+
+fn register_test_gpu(r: &mut Registrar) {
+    r.kind(
+        kind(
+            "test",
+            "texture",
+            vec![
+                json_param("size"),
+                str_param("format", "rgba8"),
+                json_param("mips"),
+                str_param("pattern", ""),
+            ],
+        ),
+        &[],
+        "",
+    );
+    r.kind(
+        kind(
+            "test",
+            "mesh",
+            vec![
+                json_param("vertices"),
+                str_param("seed", ""),
+                str_param("asset", ""),
+            ],
+        ),
+        &[],
+        "",
+    );
+    r.kind(kind("test", "burn", vec![json_param("loops")]), &[], "");
+    r.pass(TEST_GPU_DRAW, "geometry");
+    r.pass(TEST_BURN, "effects");
+}
+
+/// `test.gpu` (issue #379, tests/acceptance/379/README.md: The test canvas module): a texture
+/// with its whole mip chain and a generated mesh, each a result keyed by its content key, and
+/// `test.burn`, an effect whose fragment loops `loops` times per pixel. Only `deep-gpu`'s
+/// `test-meter` build holds it.
+pub fn test_gpu() -> Module {
+    Module {
+        manifest: manifest("test.gpu", &[]),
+        register: register_test_gpu,
+    }
+}

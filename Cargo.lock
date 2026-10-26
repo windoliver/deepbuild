@@ -1833,6 +1833,7 @@ dependencies = [
  "deep-canvas-marks",
  "deep-canvas-motion",
  "deep-canvas-scene3d",
+ "deep-canvas-test-modules",
  "deep-gpu",
  "deep-replica",
  "deep-scene3d-render",
