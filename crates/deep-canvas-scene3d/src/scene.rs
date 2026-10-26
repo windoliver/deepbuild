@@ -1060,3 +1060,41 @@ pub fn has_3d(doc: &Value) -> bool {
                 .any(|i| i.get("kind").and_then(Value::as_str).is_some_and(is_3d))
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_child_box_rides_its_parent_once() {
+        let look = Look3::read(&json!({"roles": {"block": "#808080", "ground": "#ffffff"}}))
+            .expect("the look reads");
+        let solid = |id: &str, pos: [f64; 3]| {
+            json!({"id": id, "kind": "mark.box@1", "layer": "main", "name": id, "order": "a1",
+                "params": {"size": [1, 1, 1], "paint": {"fill": {"role": "block"}}}, "at": {"pos": pos}})
+        };
+        let mut child = solid("child", [1.0, 0.0, 0.0]);
+        child["parent"] = json!("parent");
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
+            "camera": "cam", "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+                    "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
+                "parent": solid("parent", [5.0, 0.0, 0.0]),
+                "child": child,
+            }
+        });
+        let scene = evaluate(&doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
+        let placed = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.solids)
+            .find(|s| s.id == "child")
+            .expect("the child is drawn");
+        // The evaluated `at` already holds the parent's position; adding it again puts the
+        // child at x = 11.
+        assert_eq!(origin(&placed.model), [6.0, 0.0, 0.0]);
+    }
+}
