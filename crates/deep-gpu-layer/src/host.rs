@@ -152,6 +152,7 @@ fn check(
         let role = r["role"].as_str().unwrap_or("").to_string();
         let state = r["state"].as_str().unwrap_or("");
         let issue = Issue {
+            ids: Vec::new(),
             fix: "Change the role so the document's colors keep the host's status distance.".into(),
             ..Issue::error(
                 "status_distance",
@@ -217,7 +218,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         (Some(Planted::HostKeepsDocumentLook), Some(s)) => s.clone(),
         _ => args.host_status.clone(),
     };
-    let bindings = status::bindings(&args.doc)?;
+    // The host's own ink draws the legend over the guarded frame, so it keeps the distance too.
+    if let Some(r) = status::role_clash("ink", args.host_ink, &status, &args.theme) {
+        return Err(r);
+    }
+    let mut bindings = status::bindings(&args.doc)?;
     // Revision 1: the document as shown; a clash refuses the call, naming the role and the state.
     let mut checks = Vec::new();
     let (ok, issues, clash) = check(&args.doc, &args.draw_json, &args.draw, &status, &args.theme);
@@ -270,8 +275,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     ok
                 };
                 if accepted {
-                    args.doc = candidate;
-                    current_rev = rev;
+                    // The revision's bindings are the ones the host draws from here on; a
+                    // revision whose bindings don't resolve is refused like any other.
+                    match status::bindings(&candidate) {
+                        Ok(b) => {
+                            bindings = b;
+                            args.doc = candidate;
+                            current_rev = rev;
+                        }
+                        Err(r) => match checks.last_mut().filter(|c| c["rev"] == json!(rev)) {
+                            Some(last) => {
+                                last["ok"] = json!(false);
+                                if let Some(issues) = last["issues"].as_array_mut() {
+                                    issues.push(r);
+                                }
+                            }
+                            None => checks.push(json!({"rev": rev, "ok": false, "issues": [r]})),
+                        },
+                    }
                 }
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;

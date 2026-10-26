@@ -338,7 +338,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     // Status can show in a view3d call exactly when the document has a status binding (the
     // status-color rule's first case); then its data roles keep the look's distance (#382).
-    let bindings = status::bindings(&args.doc)?;
+    let mut bindings = status::bindings(&args.doc)?;
     let bound = !bindings.is_empty();
     // The planted guard runs (and shows a legend) where status can't show: the bug AC1 catches.
     let shows = bound || app.planted == Some(Planted::GuardEverywhere);
@@ -389,9 +389,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let result = (|| -> Result<(), Value> {
         for n in args.from..args.from + args.frames {
             // A seek applies every patch up to the frame it opens at.
+            let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
                 if *frame == n || (n == args.from && *frame < n) {
                     apply_patch(&mut args.doc, writer, ops, k)?;
+                    patched = true;
+                }
+            }
+            // The patched document's bindings are the ones drawn (a slice op can't add or
+            // remove one, only leave one dangling, which refuses), and its roles keep the
+            // distance.
+            if patched {
+                bindings = status::bindings(&args.doc)?;
+                if let Some(status) = status.as_ref().filter(|_| bound) {
+                    if let Some(r) =
+                        status::clash(&args.doc, &args.look_json, &args.look, status, &args.theme)
+                    {
+                        return Err(r);
+                    }
                 }
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;

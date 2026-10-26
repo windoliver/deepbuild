@@ -55,8 +55,9 @@ pub fn theme_of(call: &Value) -> Result<String, Value> {
     }
 }
 
-/// Every look role a document's items name in their params (`role` fields), and the roles the
-/// look's ground grid draws in when it has one, once each, sorted.
+/// Every look role a document's items name in their params (`role` fields), the roles the
+/// look's ground grid draws in when it has one, and `ink` (the legend's and the labels' text),
+/// once each, sorted.
 pub fn used_roles(doc: &Value, look_json: &Value) -> Vec<String> {
     fn walk(value: &Value, out: &mut Vec<String>) {
         match value {
@@ -81,6 +82,9 @@ pub fn used_roles(doc: &Value, look_json: &Value) -> Vec<String> {
         if let Some(params) = item.get("params") {
             walk(params, &mut out);
         }
+    }
+    if !out.iter().any(|r| r == "ink") {
+        out.push("ink".to_string());
     }
     let ground = &look_json["ground_3d"];
     if ground["kind"] == "grid" {
@@ -112,14 +116,21 @@ pub fn clash(
         let Some(color) = roles.role(&role) else {
             continue;
         };
-        if let Some((state, _)) = look::clash(color, status) {
-            return Some(json!({
-                "ok": false, "code": "status_distance", "theme": theme, "role": role, "state": state,
-                "reason": format!("the data role `{role}` comes within the status distance of {state}"),
-            }));
+        if let Some(r) = role_clash(&role, color, status, theme) {
+            return Some(r);
         }
     }
     None
+}
+
+/// One role's color against the status map: the look's refusal when it comes within the
+/// distance of a status color.
+pub fn role_clash(role: &str, color: [u8; 3], status: &Status, theme: &str) -> Option<Value> {
+    let (state, _) = look::clash(color, status)?;
+    Some(json!({
+        "ok": false, "code": "status_distance", "theme": theme, "role": role, "state": state,
+        "reason": format!("the data role `{role}` comes within the status distance of {state}"),
+    }))
 }
 
 /// The guard's inputs: the status colors in OKLab and the distance.
