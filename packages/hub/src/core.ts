@@ -5,24 +5,37 @@
 import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { open, readFile, stat, type FileHandle } from 'node:fs/promises';
+import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { openAsks } from '@deepbuild/asks';
+import { AskRefused, openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
-import { openRecord, RecordError, toJson, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
-import { answers, composeKind, downStack, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
+import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
+import { openLeases } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
+import { parse as parseYaml } from 'yaml';
+import { confirmYou } from './confirm.js';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
+import { checkKey, Devices } from './trusted.js';
+import { openIndex, search, type IndexFill } from './search.js';
+import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { refuse, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta, type Refusal } from './wire.js';
 
 const DAY = 86_400_000;
+/** How long deep_ask and deep_wait wait for an answer before saying it's still waiting: under the 60 s agents give a tool call. */
+const ASK_WAIT = 40_000;
+/** A value quoted into SQL. */
+const sql = (text: string): string => text.replace(/'/g, "''");
+/** A session ID as a handle holds it: letters and digits only. */
+const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
 /** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
 const keychain = (service: string): Promise<string | undefined> => {
   const own = (() => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } })();
@@ -60,8 +73,25 @@ const isUnder = (path: string, dir: string) => {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel);
 };
 
-/** What a connection brings to a call: its role, the session it is bound to, and for deep mcp the process it serves. */
-export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string } }
+/**
+ * What a connection brings to a call: its role, the session it is bound to, for deep mcp the process it serves, and
+ * for the app or the CLI the process its hello named as its own.
+ */
+export interface CallContext { role: string; session?: string | null; parent?: { pid: number; start: string }; cwd?: string; peer?: { pid: number; start: string } }
+/** The asks core's refusal as the socket's error@3, with the code that fits what it names. */
+const asRefused = (error: unknown): unknown => {
+  if (!(error instanceof AskRefused)) return error;
+  const code = error.outcome ? 'not_found' : error.option ? 'enum' : error.field === 'writer' ? 'role' : 'type';
+  return new Refused(refusal(code, `/params/${error.option ? 'option' : error.field ?? 'ask'}`, error.message, error.option ?? error.ask ?? ''));
+};
+/** Every process's parent, from one `ps`: how the peer check walks up from a deep command to the agent above it. */
+const parents = (): Promise<Map<number, number>> => new Promise((done) => {
+  execFile('ps', ['-A', '-o', 'pid=,ppid='], { env: { ...process.env, LC_ALL: 'C' }, maxBuffer: 16 << 20 }, (error, stdout) => {
+    const map = new Map<number, number>();
+    if (!error) for (const row of String(stdout).split('\n')) { const [pid, ppid] = row.trim().split(/\s+/).map(Number); if (pid && ppid) map.set(pid, ppid); }
+    done(map);
+  });
+});
 
 /**
  * A session as its own hooks established it: the agent process, its working folder and its transcript; and how
@@ -95,6 +125,15 @@ interface Run { run: string; check: string; claim: string; commit: string; argv:
 const RUN_AS_YOU: Grant = { run_as_you: true };
 const GRANT_LISTS = ['read', 'write', 'hosts', 'sockets'] as const;
 
+/** One events row as the record stores it, its seq read as text so no digit is lost. */
+interface Row { v: number; id: string; kind: string; writer: string; actor: string; scope: string; ts: number; log_pos: number; data: string; evidence: string | null;
+  subject: string | null; seq: string | null; session_id: string | null; project_id: string | null; agent: string | null; unverified: number }
+const q = JSON.stringify;
+/** An event's JSON text: the record's toJson fields, seq as its decimal string, and `verified` for the unverified mark. */
+const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.kind)},"writer":${q(r.writer)},"actor":${q(r.actor)},"scope":${q(r.scope)},"ts":${r.ts},"log_pos":${r.log_pos},`
+  + `"data":${r.data},"evidence":${r.evidence ?? '[]'}${r.subject === null ? '' : `,"subject":${q(r.subject)}`}${r.seq === null ? '' : `,"seq":${q(r.seq)}`}`
+  + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
+
 /** A ULID at `ms` whose random part is a hash of `key`, so the same source line always gets the same ID. */
 function derivedId(ms: number, key: string): string {
   const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -112,8 +151,12 @@ export class Core {
   private readonly now: () => number;
   private readonly durable: Durable;
   private record!: RecordStore;
+  private asks!: Asks;
+  private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
+  /** The wiki's index@1 fill, which deep_search reads it through. */
+  private index!: Promise<IndexFill>;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
@@ -151,17 +194,24 @@ export class Core {
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
   private readonly inflight = new Set<Promise<unknown>>();
   private streaming = false;
+  private restream = false;
+  /** The full page after the last one read, built ahead for a reader paging in order. */
+  private ahead: { after: number; limit: number; log_pos: number; events: string } | undefined;
   private secrets: { at: number; value: Promise<string> } | undefined;
   private readonly timers: NodeJS.Timeout[] = [];
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
+  /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
+  private dropped = false;
+  private doubled = false;
   /** Whether appends came back during a replay, so the files it kept are taken again after it. */
   private retake = false;
 
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: Obj) => void) {
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
+    this.devices = new Devices(this.root.devices);
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
@@ -179,6 +229,8 @@ export class Core {
     // never on how many arrived together, so a cut at any one can be replayed.
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
+    // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
+    this.record = streamed(this.record, () => this.stream());
     // A start that finds the last run still marked running records that run's stop as a crash.
     try {
       // A cursor whose transcript is gone has no session left to judge.
@@ -190,13 +242,25 @@ export class Core {
     this.writeState('running');
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
-    const asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined });
+    const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: () => undefined, home: this.root.dir });
+    // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
+    // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
+    const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
+    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick() : undefined)).catch(() => undefined), 1000));
+    this.index = openIndex(this.root.wiki, this.options.index);
+    this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
     const compose = this.compose = composeKind(join(this.root.dir, 'compose'));
+    // env-local's port kind (#331): ports from 3000 up, each checked free before it is leased.
+    const port = portKind({ free: this.options.plant !== 'env-leases-port-again' });
+    // The kernel's one lease table (#237): env-local declares its kinds there with their free checks, the core its
+    // cpu.slot, and the supervisor takes every run's keys through it.
+    const leases = await openLeases({ record: this.record, now: this.now, ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}) });
+    for (const kind of leaseKinds) await leases.declare('env-local', kind, [port, compose].find((k) => k.kind === kind.name)?.free);
+    this.timers.push(setInterval(() => void leases.tick().catch(() => undefined), 1000));
     this.supervisor = await openSupervisor({
       record: this.record, asks, now: this.now, settings: { asks: { unblock: { deadline_ms: 2 * DAY } } },
-      // env-local's port kind (#331): ports from 3000 up, each checked free before it is leased.
-      resources: [portKind({ free: this.options.plant !== 'env-leases-port-again' }), compose],
+      resources: [port, compose], leases,
       ...(this.options.plant === 'env-holds-lease-for-helper' ? { plant: 'holds-lease-while-taken' as const } : {}),
       ...(this.options.leaseMs ? { lease_ms: this.options.leaseMs } : {}),
       ...(this.options.crash ? { crash: this.options.crash } : {}),
@@ -276,7 +340,6 @@ export class Core {
     } finally {
       this.inflight.delete(appended);
     }
-    this.stream();
   }
   private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[] } = {}): Promise<void> {
     const ts = this.now();
@@ -335,6 +398,11 @@ export class Core {
     return done;
   }
   private async handleHook(drafts: Draft[], meta: HookMeta, writer: string, replayed = false, waited = false): Promise<{ settled: Promise<void> }> {
+    // The planted wrong program answers the first PostToolUse it reads and appends nothing for it.
+    if (this.options.plant === 'drops-post-tool-use' && meta.event === 'PostToolUse' && !this.dropped) {
+      this.dropped = true;
+      return { settled: Promise.resolve() };
+    }
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
@@ -674,20 +742,22 @@ export class Core {
    */
   call(method: string, params: unknown, context: CallContext): Promise<unknown> {
     const p = isObj(params) ? params : {};
-    // deep_status reads only what belongs to no session, so it needs no binding.
-    if (method === 'mcp.call' && p.tool === 'deep_status') {
-      return this.queue(async () => undefined).then(() => ({ session: context.session ?? null, gates: { watch_only: this.blocked !== undefined, reason: this.blocked ?? null } }));
-    }
-    if (method === 'mcp.call') {
-      return this.queue(async () => this.bindCall(p, context)).then(({ tool, args, session }) => (tool === 'deep_claim' ? this.claim(session, args) : this.attach(session, args)));
-    }
-    return this.queue(async () => undefined).then(() => this.dispatch(method, p));
+    if (method === 'mcp.call') return this.mcpCall(p, context);
+    return this.queue(async () => undefined).then(() => this.dispatch(method, p, context));
   }
-  private async dispatch(method: string, params: Obj): Promise<unknown> {
+  private async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health': return this.health();
       case 'events.read': return this.read(params);
-      case 'ask.answer': throw new Refused(refusal('not_found', '/params/ask', `No open ask ${String(params.ask)}; answer an ask the hub lists.`, params.ask));
+      case 'inbox.read': return this.reflecting(() => this.inbox());
+      case 'sessions.read': return this.reflecting(async () => ({ sessions: (await this.record.table('sessions')).rows }));
+      case 'numbers.read': return this.reflecting(async () => ({ numbers: (await this.record.table('readings')).rows }));
+      case 'changes.read': return this.change(params);
+      case 'evidence.read': return this.evidence(params);
+      case 'ask.answer': return this.answer(params, context);
+      case 'decision.overrule': return this.overrule(params, context);
+      case 'ask.undo': return this.undo(params, context);
+      case 'device.pair': return this.pair(params);
       case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
@@ -720,18 +790,190 @@ export class Core {
     return value;
   }
 
-  private eventJson(event: Event): Obj {
-    const out = JSON.parse(toJson(event)) as Obj;
-    delete out.unverified;
-    out.verified = !event.unverified;
-    return out;
+  /**
+   * A page of the log as each event's JSON text, the record's own JSON with `verified` for its unverified mark,
+   * built from the stored text without parsing it again: the reads and the stream page through many events.
+   */
+  private async page(after: number, limit: number): Promise<{ log_pos: number; json: string }[]> {
+    const rows = (await this.record.raw(`SELECT v, id, kind, writer, actor, scope, ts, log_pos, data, evidence, subject, CAST(seq AS TEXT) AS seq, session_id, project_id, agent, unverified FROM events WHERE log_pos > ${after} ORDER BY log_pos LIMIT ${limit}`)) as Row[];
+    return rows.map((r) => ({ log_pos: r.log_pos, json: eventText(r) }));
   }
-  private async read(params: Obj): Promise<Obj> {
+  /**
+   * The log's committed end, read in the same step as `read` starts, before anything else can append: a read
+   * reflects at least that log_pos, so a consumer that subscribes after it misses nothing.
+   */
+  private async reflecting(read: () => Promise<Obj>): Promise<Obj> {
     await Promise.allSettled([...this.inflight]);
+    const end = this.record.raw('SELECT coalesce(max(log_pos), 0) AS log_pos FROM events');
+    const result = read();
+    result.catch(() => undefined);
+    return { log_pos: Number(((await end) as { log_pos: number }[])[0]!.log_pos), ...(await result) };
+  }
+  /**
+   * A page of the log: a full one reflects its last event, a short one the log's end, so an empty gap is crossed
+   * once. Its events go back as one JSON array's text, which the server writes as it is.
+   */
+  private async read(params: Obj): Promise<Obj> {
     const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
     const limit = Number.isSafeInteger(params.limit) && (params.limit as number) > 0 ? Math.min(params.limit as number, 1000) : 1000;
-    const events = (await this.record.read({ after, limit })).map((e) => this.eventJson(e));
-    return { log_pos: events.length ? events[events.length - 1]!.log_pos : after, events };
+    const ahead = this.ahead?.after === after && this.ahead.limit === limit ? this.ahead : undefined;
+    this.ahead = undefined;
+    let out: { log_pos: number; events: string };
+    if (ahead) {
+      await Promise.allSettled([...this.inflight]);
+      out = { log_pos: ahead.log_pos, events: ahead.events };
+    } else {
+      const read = await this.reflecting(async () => ({ events: await this.page(after, limit) }));
+      const events = read.events as { log_pos: number; json: string }[];
+      out = { log_pos: events.length === limit ? events[limit - 1]!.log_pos : Math.max(after, read.log_pos as number), events: `[${events.map((e) => e.json).join(',')}]` };
+    }
+    // History is paged in order: the next full page is built while the reader takes this one. A full page never
+    // changes once committed, since log positions only grow and a gap never fills.
+    if (out.events !== '[]') {
+      setImmediate(() => void this.page(out.log_pos, limit).then((next) => {
+        if (next.length === limit) this.ahead = { after: out.log_pos, limit, log_pos: next[limit - 1]!.log_pos, events: `[${next.map((e) => e.json).join(',')}]` };
+      }));
+    }
+    return out;
+  }
+  /** changes/:id: a claim, with the runs and verdicts of its checks. */
+  private change(params: Obj): Promise<Obj> {
+    const id = typeof params.id === 'string' && /^claim:[0-9A-Za-z]+$/.test(params.id) ? params.id.slice(6) : undefined;
+    if (!id) throw new Refused(refusal('pattern', '/params/id', 'Name the change as claim:<id>.', params.id));
+    return this.reflecting(async () => {
+      const [claim] = await this.record.raw(`SELECT * FROM claims WHERE id = '${id}'`);
+      if (!claim) throw new Refused(refusal('not_found', '/params/id', `No change claim:${id} in the record.`, params.id));
+      const runs = await this.record.raw(`SELECT * FROM runs WHERE claim_id = '${id}' ORDER BY started`);
+      const verdicts = await this.record.raw(`SELECT * FROM verdicts WHERE claim_id = '${id}' ORDER BY created`);
+      return { change: { claim, runs, verdicts } };
+    });
+  }
+  /** evidence/:sha: what the store holds of one file, never its bytes. */
+  private evidence(params: Obj): Promise<Obj> {
+    const sha = typeof params.sha === 'string' && /^[0-9a-f]{64}$/.test(params.sha) ? params.sha : undefined;
+    if (!sha) throw new Refused(refusal('pattern', '/params/sha', 'Name the evidence by its SHA-256, in lower-case hex.', params.sha));
+    return this.reflecting(async () => {
+      const evidence = await this.store.get(sha);
+      if (!evidence) throw new Refused(refusal('not_found', '/params/sha', `The store holds no evidence ${sha}.`, sha));
+      return { evidence: JSON.parse(JSON.stringify(evidence)) as Obj };
+    });
+  }
+
+  // ---- Answers on the trusted path (#24, #34).
+
+  /**
+   * Whether an answer may count: a paired device's valid signature, from any role; otherwise, from the CLI alone,
+   * the OS confirming you with a prompt that names what you answer. The control token and the peer check alone
+   * never make one count, and a deep command run inside an agent's process tree acts as that agent's session.
+   */
+  private async trusted(params: Obj, context: CallContext, what: string, handle: string): Promise<void> {
+    if (params.signature !== undefined || params.device !== undefined) {
+      if (this.devices.signed(params)) return;
+      throw new Refused(refusal('credential', '/params/signature', 'Sign the answer with a device you paired, over exactly the params it sends.', params.device));
+    }
+    if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/params/signature', `${handle} stays open: an answer from the app counts only when a device you paired signs it.`, handle));
+    const agent = await this.agentAbove(context.peer);
+    if (agent && this.options.plant !== 'answer-inside-session') {
+      throw new Refused(refusal('role', '/params/ask', `${handle} stays open: this deep command runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent answers an ask. Answer it from your own terminal or on the question card.`, handle));
+    }
+    const plant = this.options.plant;
+    if (plant === 'answer-on-token' || plant === 'answer-on-peer-check') return;
+    const why = await confirmYou(what, this.options.confirm);
+    if (why) {
+      throw new Refused(refusal('unconfirmed', '/params/ask', `${handle} stays open: the OS didn't confirm you (${why}). An answer from the CLI counts only once it does; answer again and confirm, or answer on the question card.`, handle, true));
+    }
+  }
+
+  /** Every ask, as the inbox projection holds it, with each one's question and options; `deep inbox` lists the open ones. */
+  private async inbox(): Promise<Obj> {
+    const rows = (await this.record.raw('SELECT id, question, options FROM asks')) as { id: string; question: string | null; options: string | null }[];
+    const texts = new Map(rows.map((r) => [r.id, r]));
+    return {
+      asks: (await this.asks.inbox()).map((row) => {
+        const text = texts.get(row.ask.slice(4));
+        return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [] };
+      }),
+    };
+  }
+
+  /**
+   * asks/:id/answer, from the app or `deep inbox answer`: once the trusted path allows it, the asks core records it
+   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither saves none.
+   */
+  private async answer(params: Obj, context: CallContext): Promise<Obj> {
+    const { ask: handle, device: _device, signature: _signature, ...input } = params;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>, as deep inbox lists it.', handle));
+    const [row] = (await this.record.raw(`SELECT e.session_id AS session, e.project_id AS project, e.data AS data, a.status AS status FROM events e JOIN asks a ON a.id = e.id WHERE e.id = '${handle.slice(4)}' AND e.kind = 'ask.created'`)) as { session: string | null; project: string | null; data: string; status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; answer an ask deep inbox lists.`, handle));
+    const answered = (): Promise<void> => this.asks.answer(this.connection(context.role === 'app' ? 'app' : 'cli'), handle, input).catch((error: unknown) => { throw asRefused(error); });
+    // A closed ask takes no answer: the asks core records the refusal, and there's nothing to confirm you for.
+    if (row.status !== 'open' && row.status !== 'later') {
+      await answered();
+      throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
+    }
+    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string }[] };
+    const chosen = ask.options.find((o) => o.id === input.option);
+    if (input.option !== undefined && !chosen) {
+      throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
+    }
+    await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
+    await answered();
+    // Saved for this repo, from the ask's own events, never wider than its card showed; with no repo, for its session.
+    const repo = (row.project ?? '').replace(/[^0-9A-Za-z]/g, '');
+    const session = (row.session ?? '').replace(/[^0-9A-Za-z]/g, '');
+    const scope = repo ? `repo:${repo}` : session ? `session:${session}` : null;
+    const answer = chosen?.id ?? String(input.words);
+    if (scope) await this.appendCore('decision.created', { key: ask.key, scope, answer, ask: handle });
+    return { ask: handle, answer, scope };
+  }
+  /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
+  private async undo(params: Obj, context: CallContext): Promise<Obj> {
+    const handle = params.ask;
+    if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/ask', 'Name the ask by its handle, ask:<id>.', handle));
+    const [row] = (await this.record.raw(`SELECT question, status FROM asks WHERE id = '${handle.slice(4)}'`)) as { question: string; status: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
+    if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
+    await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle);
+    await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
+    const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = '${handle.slice(4)}'`)) as { deadline: number }[];
+    return { ask: handle, deadline: open?.deadline ?? null };
+  }
+  /** decisions/:id/overrule: a saved decision taken out of force, on the trusted path alone. */
+  private async overrule(params: Obj, context: CallContext): Promise<Obj> {
+    const id = typeof params.decision === 'string' && /^decision:[0-9A-Za-z]+$/.test(params.decision) ? params.decision : undefined;
+    if (!id) throw new Refused(refusal('pattern', '/params/decision', 'Name the decision as decision:<id>.', params.decision));
+    const [row] = (await this.record.raw(`SELECT answer, state FROM decisions WHERE id = '${id.slice(9)}'`)) as { answer: string; state: string }[];
+    if (!row) throw new Refused(refusal('not_found', '/params/decision', `No decision ${id} in the record.`, id));
+    if (row.state === 'revoked') return { overruled: id };
+    await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
+    await this.appendCore('decision.overruled', { decision: id }, { subject: id });
+    return { overruled: id };
+  }
+  /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
+  private async pair(params: Obj): Promise<Obj> {
+    if (typeof params.name !== 'string' || !params.name) throw new Refused(refusal('required', '/params/name', 'Name the device you pair.', params.name));
+    const key = checkKey(params.public_key);
+    const why = await confirmYou(`pair “${params.name.slice(0, 80)}” with DeepBuild, so what it signs answers for you`, this.options.confirm);
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was paired: the OS didn't confirm you (${why}).`, params.name, true));
+    const device = `device:${ulid(this.now())}`;
+    this.devices.pair(device, params.name, key, this.now());
+    return { device };
+  }
+
+  /**
+   * The peer check: the agent session whose process is above the caller's, by PID and start time as that session's
+   * hooks established them. It decides whose session a deep command acts as, never whether an answer counts.
+   */
+  private async agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
+    if (!peer || (await this.startOf(peer.pid, true)) !== peer.start) return undefined;
+    const up = await parents();
+    const seen = new Set<number>();
+    for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
+      seen.add(pid);
+      const session = [...this.sessions.values()].find((s) => s.pid === pid);
+      if (session && (await this.startOf(pid, true)) === session.start) return session.id;
+    }
+    return undefined;
   }
 
   /** Streams every event after `after` to the subscriber, then each one appended from then on. */
@@ -744,17 +986,28 @@ export class Core {
     this.subscribers.delete(sub);
   }
   private stream(): void {
-    if (!this.subscribers.size || this.streaming) return;
+    if (!this.subscribers.size) return;
+    // An append during a flush flushes again after it, so its frame never waits for the next append.
+    if (this.streaming) {
+      this.restream = true;
+      return;
+    }
     this.streaming = true;
-    setImmediate(() => void this.flushStream().finally(() => { this.streaming = false; }));
+    setImmediate(() => void this.flushStream().finally(() => {
+      this.streaming = false;
+      if (this.restream) {
+        this.restream = false;
+        this.stream();
+      }
+    }));
   }
   private async flushStream(): Promise<void> {
     for (const [sub, after] of this.subscribers) {
       let last = after;
       for (;;) {
-        const events = await this.record.read({ after: last, limit: 1000 });
+        const events = await this.page(last, 1000);
         if (!this.subscribers.has(sub)) break;
-        for (const event of events) this.emit(sub, this.eventJson(event));
+        for (const event of events) this.emit(sub, event.json);
         if (events.length) last = events[events.length - 1]!.log_pos;
         if (events.length < 1000) break;
       }
@@ -764,18 +1017,52 @@ export class Core {
 
   // ---- deep mcp.
 
-  private bindCall(params: Obj, context: CallContext): { tool: string; args: Obj; session: string } {
-    const tool = params.tool;
-    const args = isObj(params.arguments) ? params.arguments : {};
-    if (tool !== 'deep_claim' && tool !== 'deep_evidence') throw new Refused(refusal('not_found', '/params/tool', 'Call one of the deep_* tools the hub serves: deep_status, deep_claim, deep_evidence.', tool));
-    return { tool, args, session: this.bind(tool, args, context) };
+  /**
+   * One deep_* call: its arguments held to its tool's schema, bound to the session it acts for, then served. Binding
+   * holds the queue, so it sees every hook that arrived before the call; serving holds up no session's hooks. Its
+   * refusal reaches the agent scrubbed of every value the hub holds, scrubbed whole before it is cut.
+   */
+  private async mcpCall(params: Obj, context: CallContext): Promise<unknown> {
+    const tool = String(params.tool);
+    try {
+      const args = checkArguments(tool, params.arguments);
+      const sent = isObj(params.arguments) ? params.arguments : {};
+      // A call bound to no session still reads what belongs to no session; every other tool needs its session.
+      const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search'));
+      switch (tool) {
+        case 'deep_status': return await this.status(session);
+        case 'deep_search': return await this.find(String(args.query), session, context);
+        case 'deep_ask': return await this.askFor(session!, args);
+        case 'deep_wait': return await this.waitFor(session!, String(args.ask));
+        case 'deep_open_item': return await this.openItem(session!, String(args.text));
+        case 'deep_claim': return await this.claim(session!, args);
+        case 'deep_evidence': return await this.attach(session!, args);
+        default: return await this.runCheck(session!, args);
+      }
+    } catch (error) {
+      throw this.forAgent(error, tool);
+    }
   }
-  /** The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call. */
-  private bind(tool: string, args: Obj, context: CallContext): string {
+  private forAgent(error: unknown, tool: string): Refused {
+    const refused = error instanceof Refused ? error : error instanceof AskRefused ? (asRefused(error) as Refused)
+      : new Refused(refusal('unavailable', '', `${tool} failed in the hub: ${error instanceof Error ? error.message : String(error)}; nothing was recorded.`, tool, true));
+    const plant = this.options.plant;
+    const scrub = (text: string) => (plant === 'errors-unscrubbed' ? text : scrubText(text, { held: this.options.held }));
+    const out: Partial<Refusal> = { ...refused.refusal, remediation: scrub(refused.refusal.remediation), actual: scrub(refused.whole ?? refused.refusal.actual).slice(0, 8192) };
+    if (plant === 'errors-without-actual') delete out.actual;
+    return new Refused(out as Refusal);
+  }
+  /**
+   * The session a deep_* call acts for: its deep mcp's own, or the one unspent PreToolUse stamped for this very call,
+   * by its tool and the digest of its arguments as sent. A call more than one unspent stamp matches binds to none.
+   * Unbound, a call that needs its session is refused; one that only reads goes on bound to none.
+   */
+  private bind(tool: string, args: Obj, context: CallContext, required: boolean): string | undefined {
     const live = (id: string) => { const s = this.sessions.get(id); return s && !s.ended ? s : undefined; };
     if (context.session) {
-      if (!live(context.session)) throw new Refused(refusal('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool));
-      return context.session;
+      if (live(context.session)) return context.session;
+      if (!required) return undefined;
+      throw refuse('unbound', '/params/tool', `Session ${context.session} has ended; this deep mcp acts for no session now.`, tool);
     }
     const parent = context.parent;
     const digest = sha256Hex(canonicalize(args as JsonValue));
@@ -783,24 +1070,178 @@ export class Core {
       const session = live(s.session);
       return s.tool === tool && s.digest === digest && session !== undefined && session.pid === parent.pid && session.start === parent.start;
     }) : [];
-    // A call more than one unspent stamp matches binds to none.
-    if (matches.length !== 1) throw new Refused(refusal('unbound', '/params/arguments', `This ${tool} call binds to no session: ${matches.length ? 'more than one' : 'no'} PreToolUse stamped for it is unspent.`, tool));
-    this.stamps.splice(this.stamps.indexOf(matches[0]!), 1);
-    return matches[0]!.session;
+    const bound = this.options.plant === 'binds-first-stamp' || matches.length === 1 ? matches[0] : undefined;
+    if (!bound) {
+      if (!required) return undefined;
+      throw refuse('unbound', '/params/arguments', `This ${tool} call binds to no session: ${matches.length ? 'more than one' : 'no'} PreToolUse stamped for it is unspent.`, tool);
+    }
+    this.stamps.splice(this.stamps.indexOf(bound), 1);
+    return bound.session;
   }
-  private async claim(session: string, args: Obj): Promise<Obj> {
-    // While appends fail, no claim is acknowledged.
-    if (this.blocked) throw new Refused(refusal('unavailable', '/params/tool', `${this.blocked}; the claim was not recorded. Claim again once appends work.`, 'deep_claim', true));
-    const data = Object.fromEntries(['task_ref', 'attempt', 'commit', 'scope'].filter((k) => k in args).map((k) => [k, args[k]]));
+  /** The connection a session's deep mcp writes through: writer mcp:<session>, from the binding, never the call. */
+  private agentConnection(session: string): Connection {
+    const agent = this.sessions.get(session)?.agent;
+    return this.connection(`mcp:${session}`, { session, ...(agent ? { agent } : {}) });
+  }
+
+  /** deep_status: the gates, and for a bound session its newest claims, each with its runs, its verdict and its contradictions. */
+  private async status(session: string | undefined): Promise<Obj> {
+    const gates = { watch_only: this.blocked !== undefined, reason: this.blocked ?? null };
+    if (!session) return { session: null, gates, claims: [] };
+    const made = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ORDER BY log_pos DESC LIMIT 10`)) as { id: string; data: string }[];
+    const claims: Obj[] = [];
+    for (const row of made) {
+      const claim = JSON.parse(row.data) as { task_ref: string; commit: string; predictions?: Prediction[] };
+      const runs = (await this.record.raw(`SELECT kind, ts, data FROM events WHERE kind IN ('run.started', 'run.finished') AND subject IN
+        (SELECT subject FROM events WHERE kind = 'run.started' AND json_extract(data, '$.claim') = 'claim:${row.id}') ORDER BY log_pos`)) as { kind: string; ts: number; data: string }[];
+      const byRun = new Map<string, { run: string; check: string; started?: number; ended?: number; outcome?: RunOutcome }>();
+      for (const r of runs) {
+        const d = JSON.parse(r.data) as { run: string; check?: string; outcome?: RunOutcome };
+        const one = byRun.get(d.run) ?? { run: d.run, check: String(d.check) };
+        if (r.kind === 'run.started') Object.assign(one, { check: String(d.check), started: r.ts });
+        else Object.assign(one, { ended: r.ts, outcome: d.outcome });
+        byRun.set(d.run, one);
+      }
+      const finished = [...byRun.values()].flatMap((r) => (r.outcome !== undefined && r.ended !== undefined ? [{ ...r, outcome: r.outcome, ended: r.ended }] : []));
+      const checks = [...new Set(finished.map((r) => r.check))].map((check) => ({ check, runs: finished.filter((r) => r.check === check) }));
+      const [verdict] = (await this.record.raw(`SELECT handle, outcome, smallest, points_to FROM verdicts WHERE claim_id = '${row.id}' AND stale = 0 ORDER BY created DESC LIMIT 1`)) as Obj[];
+      claims.push({
+        claim: `claim:${row.id}`, task_ref: claim.task_ref, commit: claim.commit,
+        runs: [...byRun.values()].map((r) => ({ run: r.run, check: r.check, outcome: r.outcome ?? 'running' })),
+        verdict: verdict ?? null,
+        contradictions: predictionContradictions(claim.predictions ?? [], checks),
+      });
+    }
+    return { session, gates, claims };
+  }
+
+  /** deep_search: the wiki, decisions and the project's spec; bound to a session, its own open items and verdicts too. */
+  private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
+    const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
+    const everyone = !session && this.options.plant === 'unbound-reads-all';
+    return search({ query, index: await this.index, raw: (q) => this.record.raw(q), worktree, session: everyone ? { everyone: true } : session });
+  }
+  /** The worktree of a session the hub knows that holds `folder`: an unbound call reads that project's spec, and no other file. */
+  private worktreeAt(folder: string | undefined): string | undefined {
+    if (!folder || !isAbsolute(folder)) return undefined;
+    let real: string;
+    try { real = realpathSync(folder); } catch { return undefined; }
+    return [...this.sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
+  }
+  /** The checks a worktree's spec names, by name, with the command each runs. */
+  private checksOf(worktree: string): Map<string, string> {
+    let spec: unknown;
+    try { spec = parseYaml(readFileSync(join(worktree, '.deepbuild', 'done.yaml'), 'utf8')); } catch { return new Map(); }
+    const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
+    return new Map(Object.entries(checks).flatMap(([name, c]) => (isObj(c) && typeof c.run === 'string' ? [[name, c.run] as [string, string]] : [])));
+  }
+  private unknownCheck(worktree: string, check: unknown): Refused {
+    const names = [...this.checksOf(worktree).keys()];
+    return refuse('enum', '/params/arguments/check', `Name a check this repo's .deepbuild/done.yaml names: ${names.join(', ') || 'it names none'}.`, check);
+  }
+
+  /** deep_ask: raises the ask under the session, then waits for its answer as deep_wait does. */
+  private async askFor(session: string, args: Obj): Promise<Obj> {
+    const s = this.sessions.get(session)!;
+    const kind = String(args.kind);
+    const question = String(args.question);
+    const need = (field: string, why: string) => { if (args[field] === null) throw refuse('required', `/params/arguments/${field}`, why, null); };
+    let raised: Obj;
+    if (kind === 'unblock') {
+      need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
+      if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+      need('steps', 'List the task\'s steps, in order.');
+      need('where', 'Say where the person does the task.');
+      need('why', 'Say what the task unblocks.');
+      raised = {
+        kind, question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done',
+        steps: args.steps, where: args.where, why: args.why, unblocks: [`session:${letters(session)}`], proves: args.check,
+      };
+    } else {
+      need('options', 'Give the question\'s options.');
+      const options = (args.options as { id: string; label: string }[]).map((o) => ({ ...o, decision: 'none' }));
+      raised = { kind, question, options, recommended: args.recommended };
+    }
+    const pinned = await this.pinOf(s.cwd, question);
+    const ask = { ...raised, fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned };
+    const handle = await this.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
+    return this.waitFor(session, handle);
+  }
+  /** What an ask shows: the worktree's commit, or where there's none, the question's own digest. */
+  private pinOf(worktree: string, question: string): Promise<Obj> {
+    return new Promise((done) => execFile('git', ['-C', worktree, 'rev-parse', 'HEAD'], { timeout: 2000 }, (error, out) => {
+      const commit = String(out ?? '').trim();
+      done(!error && /^[0-9a-f]{40}$/.test(commit) ? { kind: 'commit', ref: commit } : { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(question)) });
+    }));
+  }
+  /**
+   * deep_wait: the ask's answer once one arrives, or before the agent's tool timeout, that it's still waiting, with
+   * its deadline and default. Only the session that raised an ask waits on it.
+   */
+  private async waitFor(session: string, handle: string): Promise<Obj> {
+    const until = Date.now() + ASK_WAIT;
+    for (;;) {
+      const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
+      if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
+      if (row.status !== 'open' && row.status !== 'later') return { ask: handle, status: row.status, answer: row.answer === null ? null : JSON.parse(row.answer) };
+      if (this.stopping) throw refuse('unavailable', '', 'The hub is stopping, and nothing was answered; wait on the ask again once it is back.', handle, true);
+      if (Date.now() >= until) return { ask: handle, status: 'waiting', answer: null, deadline: row.deadline, default: row.default_option === null ? null : JSON.parse(row.default_option) };
+      await new Promise((done) => setTimeout(done, 100));
+    }
+  }
+
+  /** deep_open_item: an open item on the session's newest claim's task, or else on the message it works on. */
+  private async openItem(session: string, text: string): Promise<Obj> {
+    const [claim] = (await this.record.raw(`SELECT data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
+    const message = this.sessions.get(session)?.turn?.uuid.replace(/[^A-Za-z0-9._-]/g, '') || 'start';
+    const task_ref = claim ? String((JSON.parse(claim.data) as Obj).task_ref) : `session:${letters(session)}#${message}`;
     const ts = this.now();
     const id = ulid(ts);
-    const agent = this.sessions.get(session)?.agent;
     try {
-      await this.append(this.connection(`mcp:${session}`, { session, ...(agent ? { agent } : {}) }), { v: 1, id, kind: 'claim.made', ts, data: data as JsonValue });
+      await this.append(this.agentConnection(session), { v: 1, id, kind: 'open_item.opened', ts, data: { task_ref, text: scrubText(text, { held: this.options.held }).slice(0, 8192) } });
+    } catch (error) {
+      throw this.refusedAppend(error, 'deep_open_item');
+    }
+    return { task_ref, event: id };
+  }
+
+  private async claim(session: string, args: Obj): Promise<Obj> {
+    // While appends fail, no claim is acknowledged.
+    if (this.blocked) throw refuse('unavailable', '/params/tool', `${this.blocked}; the claim was not recorded. Claim again once appends work.`, 'deep_claim', true);
+    const ts = this.now();
+    const id = ulid(ts);
+    // What the agent expects each check to show, stamped now, before any run it could have seen.
+    const predictions = ((args.predictions ?? []) as { check: string; expects: string }[]).map((p) => ({ ...p, at: ts }));
+    const data = { task_ref: args.task_ref, attempt: args.attempt, commit: args.commit, scope: args.scope, predictions };
+    try {
+      await this.append(this.agentConnection(session), { v: 2, id, kind: 'claim.made', ts, data: data as JsonValue });
     } catch (error) {
       throw this.refusedAppend(error, 'deep_claim');
     }
-    return { session, event: id };
+    return { session, claim: `claim:${id}`, event: id };
+  }
+
+  /** deep_run: a check the session's spec names, run for one of its claims (its newest by default) at that claim's commit, answered with its outcome. */
+  private async runCheck(session: string, args: Obj): Promise<Obj> {
+    const cwd = this.sessions.get(session)!.cwd;
+    const command = this.checksOf(cwd).get(String(args.check));
+    if (command === undefined) throw this.unknownCheck(cwd, args.check);
+    const which = args.claim === null ? '' : `AND id = '${sql(String(args.claim).slice(6))}'`;
+    const [claim] = (await this.record.raw(`SELECT id, data FROM events WHERE session_id = '${sql(session)}' AND kind = 'claim.made' ${which} ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
+    if (!claim) throw refuse('not_found', '/params/arguments/claim', 'Run a check for a claim this session made: claim first with deep_claim.', args.claim);
+    const commit = String((JSON.parse(claim.data) as Obj).commit);
+    const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', command], cwd });
+    // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
+    const until = Date.now() + ASK_WAIT;
+    for (;;) {
+      const [done] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = '${sql(String(run))}' LIMIT 1`)) as { data: string }[];
+      if (done) {
+        const d = JSON.parse(done.data) as { outcome: string; evidence: string[] };
+        return { run, claim: `claim:${claim.id}`, outcome: d.outcome, evidence: d.evidence.map((sha) => `ev:${sha}`) };
+      }
+      if (this.stopping || Date.now() >= until) return { run, claim: `claim:${claim.id}`, outcome: 'running', evidence: [] };
+      await new Promise((wake) => setTimeout(wake, 100));
+    }
   }
   private refusedAppend(error: unknown, what: string): Refused {
     if (error instanceof RecordError && error.code === 'storage') return new Refused(refusal('unavailable', '', `BLOCKED: appends fail: ${error.message}; ${what} was not recorded.`, what, true));
@@ -826,15 +1267,22 @@ export class Core {
     }).catch(() => undefined);
     return ev;
   }
+  /**
+   * deep_evidence: a file in the session's working folder, read only once `..` and every link in its path are
+   * resolved and it is still inside; any other path is answered exactly as one that doesn't exist.
+   */
   private async attach(session: string, args: Obj): Promise<Obj> {
-    const folder = this.sessions.get(session)!.cwd;
-    const path = typeof args.path === 'string' ? resolve(folder, args.path) : '';
-    if (!path || !isUnder(path, folder)) throw new Refused(refusal('pattern', '/params/arguments/path', `Name a file inside the session's working folder ${folder}.`, args.path));
+    const folder = realpathSync(this.sessions.get(session)!.cwd);
+    const sent = String(args.path);
+    const missing = () => refuse('not_found', '/params/arguments/path', `No file ${sent} in this session's working folder; name a file inside it.`, sent);
+    let path = resolve(folder, sent);
+    if (this.options.plant !== 'evidence-checks-path-first') path = await realpath(path).catch(() => '');
+    if (!path || !isUnder(path, folder)) throw missing();
     let bytes: Buffer;
     try {
       bytes = await readFile(path);
-    } catch (error) {
-      throw new Refused(refusal('not_found', '/params/arguments/path', `Can't read ${path}: ${error instanceof Error ? error.message : String(error)}`, args.path));
+    } catch {
+      throw missing();
     }
     const claimed = typeof args.origin === 'string' ? args.origin : undefined;
     const writer = this.store.connect(this.peer({ role: 'agent', session }, claimed, session));
@@ -1142,6 +1590,12 @@ export class Core {
             failed = true;
             process.stderr.write(`deep hub: ${name} kept: ${meta.id} not replayed: ${error instanceof Error ? error.message : String(error)}\n`);
           });
+          // The planted wrong program appends the first event it replays a second time, under a new ID.
+          if (this.options.plant === 'replay-appends-twice' && !this.doubled) {
+            this.doubled = true;
+            const again = ulid(Date.now());
+            await this.queue(() => this.handleHook(drafts.map((d) => ({ ...d, id: again })), { ...meta, id: again }, 'hook', true), true).then(({ settled }) => settled);
+          }
         } else if (parsed) {
           await skip(offset, parsed.kind === 'refused' ? `refused: ${parsed.error.code} at ${parsed.error.path || '/'}` : 'not a hook request');
         }
@@ -1191,6 +1645,7 @@ export class Core {
     let msg = 0;
     let turn = 0;
     let worked = false;
+    let waited = 0;
     for (const [i, raw] of text.split('\n').entries()) {
       if (!raw) continue;
       let line: Obj;
@@ -1216,6 +1671,13 @@ export class Core {
         // An assistant message that calls no tool ends its turn.
         appends.push(this.append(connection, { v: 1, id, kind: 'agent.stop', subject: `session:${handle}`, ts, data: { turn: ++turn, did_work: worked } }, true));
         worked = false;
+      }
+      // Each thousand settle, and the stream's flush gets its turn, before the next are read: the stream carries
+      // them while the backfill runs (#34).
+      if (appends.length - waited >= 1000) {
+        waited = appends.length;
+        await Promise.allSettled(appends.slice(-1000));
+        await new Promise((done) => setImmediate(done));
       }
     }
     await Promise.allSettled(appends);
@@ -1258,6 +1720,26 @@ export class Core {
  * job is recorded and before anything of it starts; job.started, once a job's process is tracked and before its
  * prompt is written. Only tests set it.
  */
+/** The record, with its append replaced. */
+function withAppend(record: RecordStore, append: RecordStore['append']): RecordStore {
+  return new Proxy(record, {
+    get: (target, key) => {
+      if (key === 'append') return append;
+      const value = Reflect.get(target, key, target) as unknown;
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+}
+
+/** The record, calling `appended` after each append it took. */
+function streamed(record: RecordStore, appended: () => void): RecordStore {
+  return withAppend(record, async (connection, input) => {
+    const event = await record.append(connection, input);
+    appended();
+    return event;
+  });
+}
+
 function crashing(record: RecordStore, point: string): RecordStore {
   const jobs = new Set<string>();
   const append: RecordStore['append'] = async (connection, input) => {
@@ -1274,11 +1756,5 @@ function crashing(record: RecordStore, point: string): RecordStore {
     if ((point === 'job.recorded' && input.kind === 'job.recorded') || (point === 'job.started' && input.kind === 'process.tracked' && jobs.has(run))) process.kill(process.pid, 'SIGKILL');
     return event;
   };
-  return new Proxy(record, {
-    get: (target, key) => {
-      if (key === 'append') return append;
-      const value = Reflect.get(target, key, target) as unknown;
-      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
-    },
-  });
+  return withAppend(record, append);
 }

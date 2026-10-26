@@ -1,0 +1,276 @@
+{
+  "format": 1,
+  "id": "move-378",
+  "profile": "scene",
+  "title": "Nine boxes, one of which moves",
+  "description": "Nine 1 m boxes of one size on a 2.5 m grid under a still camera.",
+  "size": [
+    640,
+    480
+  ],
+  "camera": "cam",
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "perspective",
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "orbit": {
+          "azimuth": 30,
+          "elevation": 35,
+          "distance": 14
+        },
+        "fov": 40
+      }
+    },
+    "box-0": {
+      "id": "box-0",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 0",
+      "order": "a1",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c0"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -2.5,
+          0.5,
+          -2.5
+        ]
+      }
+    },
+    "box-1": {
+      "id": "box-1",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 1",
+      "order": "a2",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c1"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          -2.5
+        ]
+      }
+    },
+    "box-2": {
+      "id": "box-2",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 2",
+      "order": "a3",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c2"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          2.5,
+          0.5,
+          -2.5
+        ]
+      }
+    },
+    "box-3": {
+      "id": "box-3",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 3",
+      "order": "a4",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c3"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -2.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-4": {
+      "id": "box-4",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 4",
+      "order": "a5",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c4"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-5": {
+      "id": "box-5",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 5",
+      "order": "a6",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c5"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          2.5,
+          0.5,
+          0
+        ]
+      }
+    },
+    "box-6": {
+      "id": "box-6",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 6",
+      "order": "a7",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c6"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          -2.5,
+          0.5,
+          2.5
+        ]
+      }
+    },
+    "box-7": {
+      "id": "box-7",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 7",
+      "order": "a8",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c7"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          0,
+          0.5,
+          2.5
+        ]
+      }
+    },
+    "box-8": {
+      "id": "box-8",
+      "kind": "mark.box@1",
+      "layer": "main",
+      "name": "Box 8",
+      "order": "a9",
+      "params": {
+        "size": [
+          1,
+          1,
+          1
+        ],
+        "paint": {
+          "fill": {
+            "role": "c0"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          2.5,
+          0.5,
+          2.5
+        ]
+      }
+    }
+  }
+}

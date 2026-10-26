@@ -269,6 +269,11 @@ export class Projector {
         if (e.kind === 'ask.answered' && typeof d.plan_hash === 'string') this.up('plans', { ask, answered_hash: d.plan_hash });
         break;
       }
+      case 'default.undone':
+        // Your undo, on the trusted path: a defaulted ask is open again, unanswered, until its new deadline.
+        if (e.writer !== 'core') break;
+        this.stmt("UPDATE asks SET status = 'open', outcome = 'unanswered', answered = NULL, answer = NULL, decision = NULL, deadline = ? WHERE id = ? AND status = 'defaulted'").run(int(d.deadline), bare(e.subject));
+        break;
       case 'ask.escalated':
       case 'ask.cancelled':
       case 'ask.moot':
@@ -312,6 +317,9 @@ export class Projector {
       case 'decision.revoked':
         // Revoked on the trusted path: it covers nothing from here on, and a resolver that names it is refused.
         this.stmt("UPDATE decisions SET state = 'revoked' WHERE id = ?").run(bare(d.decision));
+      case 'decision.overruled':
+        // Overruled on the trusted path: it answers nothing from then on.
+        this.stmt("UPDATE decisions SET state = 'revoked', overruled_by = ? WHERE id = ?").run(e.id, bare(d.decision));
         break;
       case 'definition.drafted':
         this.add('definitions', this.definition(d, 'drafted', null));

@@ -1,0 +1,128 @@
+Base commit: 8b98570b782c8e1131b912a5a9753ff3738198c5 (origin/main, no implementation of #34)
+Command: npm ci; npm run build --workspaces; then npx vitest run --root tests/acceptance/34 --no-file-parallelism
+         (node = ~/.local/share/fnm/node-versions/v24.22.0, the repo's .node-version, first on PATH; cargo on PATH)
+Date: 2026-10-24  Node v24.22.0  vitest 5.0.5  darwin-arm64 (Mac15,7, Apple M3 Pro: a reference Mac, so AC8's two
+timing tests ran instead of skipping as INCONCLUSIVE)
+Exit code: 1
+Result: 7 files, 42 tests, 31 failed, 11 passed, 0 skipped. (The first run had 29 failed and 13 passed: AC3's two
+"request line carrying Origin" tests passed on the base for the wrong reason, inbox.read being unknown there, so each
+got a positive control, the same request without an Origin served, and now fails on the base; the second listing below
+is that rerun of access.test.ts, judges.test.ts and privacy.test.ts.) Trimmed to each failure's reason; <repo> is
+the checkout. No token value is kept.
+
+Checked beside this run: the TypeScript side type-checks (node node_modules/typescript/bin/tsc -p
+tests/acceptance/34/tsconfig.json, no errors); helpers.ts's signature was verified with node:crypto's verify from the
+raw public key, and fails for a changed option; the OS stand-in's script records prompts holding newlines intact.
+
+== Why each failing test fails at the base: a missing surface, never its own setup
+
+access.test.ts
+  × AC1 each App API method is served with the token
+      with the control token, each method is served: inbox.read: unknown_method; sessions.read: unknown_method;
+      changes.read: unknown_method; evidence.read: unknown_method; numbers.read: unknown_method;
+      decision.overrule: unknown_method; device.pair: unknown_method
+  × AC1 no hello / app with no token / CLI with no token / a wrong token / an empty token (5 tests)
+      the refusals hold at the base (nothing was served on any token-less connection); each fails at its positive
+      control: "the app, with the token, still reads the inbox: expected false to be true" (inbox.read unknown_method)
+  × AC1 the token is new at each launch, mode 0600, the last launch's refused
+      the new token, mode 0600 and the old token's refusal hold; fails at: refused: {"code":"unknown_method", … inbox.read}
+  × AC3 a hello with the right token carrying Origin https://example.com / null (2 tests)
+      a hello carrying "origin": "https://example.com" serves nothing: expected [ { v: 1, role: 'app' } ] to deeply equal []
+  × AC3 a request line carrying Origin https://example.com / null (2 tests, the rerun)
+      without an Origin, the request is served: expected false to be true (inbox.read unknown_method)
+
+answers.test.ts
+  × AC2 (4 tests) and AC4 (2 tests) and AC2 (wrong program)
+      BLOCKED: device.pair didn't pair the app's key with the OS confirming you: {"error":{"code":"unknown_method", … device.pair}}
+      or, where no pairing comes first ("a key paired without the OS", "from the CLI"):
+      refused: {"code":"unknown_method", … inbox.read}   (the base answers ask.answer with not_found for every ask)
+      The asks were raised through the asks core on the hub's ledger before each hub started, and the hub started on it.
+
+app.test.ts
+  × AC5, AC6, AC10, AC11 (4 tests)
+      BLOCKED: the acceptance_34 target didn't build or run:
+      error: no test target named `acceptance_34` in `deep-app` package
+      (deep-app has neither the [[test]] entry nor deep_app::record at the base.)
+
+budgets.test.ts
+  × AC8 the perf lane has #34's two tasks       budgets.json has a task hub-stream: expected undefined to be defined
+  × AC8 `node benchmarks/hub.mjs stream`        Error: Unknown mode stream; one of: cold-start, round-trip, idle
+  × AC8 `node benchmarks/hub.mjs history`       Error: Unknown mode history; one of: cold-start, round-trip, idle
+  × AC8 stream within 50 ms at p95              the stream's first frame carries the start ID: expected undefined to be '<start id>'
+  × AC8 30 days of history under 300 ms         BLOCKED: events.read carries no start ID: undefined
+                                                (after seeding the 30 days, about 90,000 events, through @deepbuild/record)
+
+privacy.test.ts
+  × AC9 the debug bundle                        BLOCKED: `deep debug bundle` is #19's (CLI basics: setup, status, doctor,
+                                                off and on, debug bundle), open at this base; the CLI says: Unsupported command.
+
+stream.test.ts
+  × AC5 the hub's half                          refused: {"code":"unknown_method", … inbox.read}   (after fillTo reached 800 exactly)
+  × AC7 20,000 behind                           expected "the consumer was never cut off with fell_behind" to be null
+                                                (the base buffers every frame for a paused consumer and never cuts it off)
+  × AC11 the hub's half                         the stream's first frame carries the start ID: expected undefined to be '<start id>'
+                                                (after the log reached 898 by hooks and 899 by test.load's FULL verdict)
+
+== What passes at the base, and why that is right
+
+  ✓ judges.test.ts AC2 (4)       the judge on a right hub's refusal and on three planted twins' answers (each names the ask)
+  ✓ access.test.ts AC3 an HTTP request or a WebSocket upgrade with an Origin and the token is refused and changes nothing
+                                 (the base already reads such a first line as not JSON and closes); kept so it stays so
+  ✓ stream.test.ts AC7 8,000 behind is never cut off (the base never cuts anyone off); the lower bound for the 20,000 case
+  ✓ stream.test.ts AC7 (wrong program) the silent dropper fails the judge with
+                                 "log_pos <n> was lost with no fell_behind: the consumer never got it", n the first lost
+  ✓ stream.test.ts AC12 the two stamps come back as two events with the exact strings: #16 already writes seq as its
+                                 decimal string on the stream; kept as the criterion's test, with its planted twin
+  ✓ stream.test.ts AC12 (wrong program) fixtures/seq-as-number.mjs: "no event on the stream carries seq
+                                 "1760013451123456789" as that exact string; it came back as a JSON number"
+  ✓ privacy.test.ts AC9 neither launch's token in the hub's output, the CLI's or any log file: the base logs no token
+  ✓ privacy.test.ts AC9 (wrong program) fixtures/leak-token.mjs: the judge finds "the hub's stderr: raw"
+
+== The rerun of the quick files (after AC3's positive control)
+
+ × access.test.ts AC1 (7 tests), AC3 hello with Origin (2), AC3 request line with Origin (2)
+ ✓ access.test.ts AC3 an HTTP request or a WebSocket upgrade …
+ ✓ privacy.test.ts AC9 across two launches …; ✓ AC9 (wrong program) …; × AC9 the debug bundle (BLOCKED, #19)
+ ✓ judges.test.ts AC2 (4)
+ Tests  12 failed | 7 passed (19)
+
+== The app's wrong programs (Rust): a sample record reader kept outside the checkout, and its mutants
+
+No record reader exists at the base, so the Rust tests (app/record_reader.rs, unchanged) were run against a stand-in
+deep-app crate kept in the job's scratch folder: the base's src/hub.rs copied as is, plus a sample src/record.rs of
+about 230 lines, with the same [[test]] entry pointing at app/record_reader.rs, and PROOF_MUTANT selecting a mutant.
+The sample does its reads (inbox.read), subscribes after the log_pos they reflect, ignores a frame it holds, refetches
+through events.read from its last log_pos when a frame isn't the next one and moves to the log_pos the refetch
+reflects, and on reconnecting redoes its reads when the start ID is new. Proof-only: since the base hub has no
+inbox.read, the sample falls back there to paging events.read for its read's log_pos; AC11 ran it against the base
+hub that way. The stand-in and the sample were not added to the checkout.
+
+  cargo test -q --test acceptance_34 -- --test-threads=1   (in the stand-in crate, CARGO_TARGET_DIR in scratch)
+
+  PROOF_MUTANT unset (the sample)                 test result: ok. 4 passed; 0 failed
+  subscribe-from-end (stream.subscribe with no `after`)
+      ac5: the app doesn't show ask:01K70000000000000000000801, appended at log_pos 801 after its inbox read at 800
+           and before its subscription opened; it subscribed with [Object {}]
+      test result: FAILED. 3 passed; 1 failed
+  apply-as-they-come (applies any frame it lacks, never refetches)
+      ac6: the app skipped log_pos 701: it holds [702, 703]
+      ac10: the app refetched from 700 0 times; once crosses the gap (left: 0, right: 1)
+      test result: FAILED. 2 passed; 2 failed
+  stay-after-refetch (keeps its log_pos at 700 after a refetch)
+      ac10: the app refetched from 700 6 times; once crosses the gap (left: 6, right: 1)
+      ac6: the view reflects log_pos 703 (left: 700, right: 703)
+      test result: FAILED. 2 passed; 2 failed
+  resume-across-starts (on reconnecting, subscribes after its last log_pos whatever the start ID)
+      ac11: the app still shows log_pos 900 after the restarted hub's new start ID: it resumed instead of redoing its
+            reads (it holds [900, 901, 902, 903, 904, 905, 1025])
+      test result: FAILED. 3 passed; 1 failed
+
+== The hub's wrong programs
+
+  AC7  helpers.ts silentDropper, in front of the base hub: fails, naming the first log_pos lost (above, passing as a
+       wrong-program test).
+  AC9  fixtures/leak-token.mjs on the base hub: named (above).
+  AC12 fixtures/seq-as-number.mjs on the base hub: named (above).
+  AC2  helpers.ts tokenOnlySigner needs device.pair to pair its key, so at the base it fails BLOCKED with the rest of
+       answers.test.ts; judges.test.ts shows the judge naming the ask on that hub's answers. It runs end to end once
+       device.pair exists.

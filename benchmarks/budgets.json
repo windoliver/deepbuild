@@ -237,6 +237,28 @@
       "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-stream",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "stream"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #34 first measurement: the merge base's hub has no App API stream with start IDs. One process starts the hub on a temp home, subscribes as the app and sends 1,000 PreToolUse requests, timing each from its write to the app's frame for its event; the issue's 50 ms p95 stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-history",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "history"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "otlp-receive-20k-spans",
       "command": [
         "node",
@@ -374,6 +396,36 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #348 first measurement: the merge base has no extension host. One process opens a record, the asks core, the supervisor and project trust, then times host.load for ten TypeScript packages in the hub and ten in the platform sandbox, and the time the host adds per event per subscribed package (a batch of 2,000 events to four subscribers, minus the same batch to none). The issue's 100 ms load and 0.5 ms per event limits stay in tests/acceptance/348/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-inbox-30d",
+      "command": [
+        "node",
+        "benchmarks/inbox.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #24 first measurement: the merge base has no deep inbox. One process seeds a heavy month of asks (20 sessions a day, five asks each; the first 29 days' asks closed at their defaults, the last day's 100 open), starts the hub on it and times five deep inbox runs after a warm-up, failing unless each lists every open ask; p50 includes the seeding and the hub's start. The issue's 300 ms stays in tests/acceptance/24/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "lease-grant",
+      "command": [
+        "node",
+        "benchmarks/lease.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #237 first measurement: the merge base has no lease table. One process opens a record and the lease table, grants 1,000 port leases one after another, refuses a second holder on each, then ends every holder and releases every lease, so p50 includes Node's start; the issue's 50 ms per grant stays in tests/acceptance/237/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-mcp-30d",
+      "command": [
+        "node",
+        "benchmarks/mcp.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #26 first measurement: the merge base's deep mcp has no deep_open_item or deep_search. One process seeds a heavy month (20 sessions a day, five asks each with the first saved as a decision, and an open item), starts the hub on it, binds a deep mcp to a session through hooks from its own children, and times 40 deep_status, 40 deep_open_item and 20 deep_search calls after a warm-up round, failing on any error; p50 includes the seeding and the hub's start. The issue's 100 ms, 300 ms and 80 MB stay in tests/acceptance/26/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

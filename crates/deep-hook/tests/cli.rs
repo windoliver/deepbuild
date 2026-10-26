@@ -55,6 +55,50 @@ fn a_hook_whose_stdin_never_ends_is_allowed_within_the_deadline() {
 }
 
 #[test]
+fn a_call_still_unread_at_the_deadline_is_denied_while_a_fail_closed_entry_is_installed() {
+    let home = std::env::temp_dir().join(format!("dh316-stdin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&home);
+    std::fs::create_dir_all(home.join(".deepbuild")).unwrap();
+    std::fs::write(
+        home.join(".deepbuild/rules.json"),
+        r#"{"v":1,"entries":{"no-kill-by-name":{"match":"kill:by-name","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":true}}}"#,
+    )
+    .unwrap();
+    let start = std::time::Instant::now();
+    // The agent never closes stdin and no hub is there: the call can't be checked, so it isn't let through.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+        .args(["claude-code", "PreToolUse"])
+        .env_clear()
+        .env("HOME", &home)
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let held = child.stdin.take();
+    let exited = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if start.elapsed() > std::time::Duration::from_secs(1) {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    };
+    drop(held);
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut stderr).unwrap();
+    std::fs::remove_dir_all(&home).unwrap();
+    let status = exited.expect("deep-hook still waited on stdin after a second");
+    assert_eq!(
+        status.code(),
+        Some(2),
+        "a call it couldn't read is denied: {stderr}"
+    );
+}
+
+#[test]
 fn a_call_whose_guard_rules_stall_is_denied_within_the_deadline() {
     use std::io::Write;
     let home = std::env::temp_dir().join(format!("dh315-rules-{}", std::process::id()));

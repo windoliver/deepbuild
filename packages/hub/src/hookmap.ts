@@ -1,5 +1,5 @@
 // One line read off the socket, parsed: a hello or a method call is handed back as it is; a hook request is
-// held to hook.request@2, mapped through its agent's adapter to its event, and kept to that kind's catalogue
+// held to hook.request@3, mapped through its agent's adapter to its event, and kept to that kind's catalogue
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
 import { shipped, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
@@ -56,7 +56,7 @@ export function parseLine(bytes: Uint8Array, first: boolean, held: readonly stri
 
 function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): Parsed {
   const id = typeof value.id === 'string' ? value.id : null;
-  const checked = validate('hook.request@2', value);
+  const checked = validate('hook.request@3', value);
   // A field the hub doesn't know is refused, never ignored: an ignored deny or answer would read as a success.
   const issues = checked.ok ? [] : checked.issues.filter((issue) => !(plant === 'ignores-unknown-field' && issue.code === 'unlisted_field'));
   if (issues.length) {
@@ -71,10 +71,11 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const scrub = (text: string) => scrubText(text, { held });
   const meta: HookMeta = {
     id: request.id, agent: request.agent, event: request.event, session: str(payload.session_id), cwd: str(payload.cwd),
-    transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid,
+    transcript: str(payload.transcript_path), pid: request.pid, ppid: request.ppid, matched: request.matched,
   };
   if (str(payload.tool_use_id)) meta.toolUse = str(payload.tool_use_id);
   if (request.late === true) meta.late = { matched: request.matched };
+  if (request.notes) meta.notes = request.notes;
   const tool = str(payload.tool_name);
   if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
