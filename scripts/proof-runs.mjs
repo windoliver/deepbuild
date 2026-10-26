@@ -569,10 +569,14 @@ function strykerRun(root, copyDirectory, mutate, command) {
   const started = Date.now();
   const result = spawnSync(process.execPath, [join(root, 'node_modules/.bin/stryker'), 'run', config], { cwd: copyDirectory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 4 * TIMEOUT });
   if (!existsSync(report)) {
-    // No report is always an error, named even when StrykerJS said nothing: killed by a signal (the lane's own
-    // cap, `timeout` above, ends it with SIGTERM), or exited without writing one.
+    // No report is always an error, named even when StrykerJS said nothing: killed by a signal, with the reason when
+    // spawnSync stopped it itself (ETIMEDOUT is the lane's own cap, `timeout` above; ENOBUFS its maxBuffer), never
+    // started (a spawn error, no status), or exited without writing one.
     const said = firstLine([result.stdout, result.stderr].join('\n').split('\n').find((line) => /error/i.test(line)) ?? result.stderr ?? '');
-    const ended = result.signal ? `StrykerJS was killed by ${result.signal} after ${Math.round((Date.now() - started) / 1000)} s and left no report` : `StrykerJS exited ${result.status} and left no report`;
+    const why = result.error ? ` (${result.error.code ?? result.error.message})` : '';
+    const ended = result.signal ? `StrykerJS was killed by ${result.signal}${why} after ${Math.round((Date.now() - started) / 1000)} s and left no report`
+      : result.status === null ? `StrykerJS could not be started${why}`
+        : `StrykerJS exited ${result.status} and left no report`;
     return { error: said ? `${ended}: ${said}` : ended };
   }
   const mutants = [];
@@ -652,7 +656,7 @@ export function mutation({ root, change }, runs, say, print) {
     const killed = new Set(), seen = new Map();
     for (const [test, line] of groups) {
       const run = strykerRun(root, directory, mutate, line);
-      if (run.error || !run.mutants) {
+      if (run.error) {
         blocked = true;
         say('BLOCKED', 'mutation', `StrykerJS could not run ${test ? test.key : 'the tagged tests'}: ${run.error}`, MUTATION_FIX);
         break;
