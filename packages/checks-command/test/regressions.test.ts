@@ -92,6 +92,16 @@ test('leaves a child', () => {
     expect(alive(pid), `the child ${pid} the run left is still running`).toBe(false);
   }, 180_000);
 
+  it('a test named by the credential alone, no longer than the value, is scrubbed from the attempts and failures', async () => {
+    // The runner skips scrubbing texts too short to hold any value: a text exactly as long as the value isn't one.
+    const checkout = project({ 'a.test.ts': `test('${SECRET}', () => { expect(1).toBe(2); });\n` });
+    const r = await runCommandCheck(check(checkout, { secrets: { SHOP_KEY: SECRET } }));
+    expect(r.testsRun).toBe(1);
+    expect(JSON.stringify(r), 'the credential, anywhere in the run record').not.toContain(SECRET);
+    expect(r.attempts.map((a) => a.test)).toEqual(['[REDACTED]']);
+    expect(r.failures.map((f) => f.test)).toEqual(['[REDACTED]']);
+  }, 60_000);
+
   it('a suite that skips every test and writes a pass into the runner\'s report, wherever it can find it, is never counted', async () => {
     const checkout = project({
       'a.test.ts': `import { execFileSync, spawnSync } from 'node:child_process';
