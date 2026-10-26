@@ -509,6 +509,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #379 first measurement: the merge base has no budget classes. One process records the export class's fixture (benchmarks/canvas/export.json) in `deep-gpu`'s live window: cold, a fresh process to its first settled frame; warm, five runs of 300 frames whose p95 GPU and CPU frame times `canvas.mjs judge` holds to the class; and the authoring loop, a values patch and one that needs a new pipeline, each from its latch to its settled frame. Cold and authoring-loop timings are readings. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "map-deepest-level",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "map-deepest-level"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #383 first measurement: the merge base loads no level by reference. One process generates a city of 64 parts, 768 tables and 6,144 columns over 833 documents, each part and table opening its own document, and draws 60 frames of its deepest level in the reference window (3024 x 1964) through `deep-gpu run`'s view3d on Metal, failing unless the view settles with the deepest document resident; p50 includes Node's and the binary's start and the city's generation. The issue's window-sized GPU budget (2 ms of GPU per frame at p95, 256 MB of GPU memory) stays in tests/acceptance/383/city.test.ts, read from the device's timestamps and its allocated size. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

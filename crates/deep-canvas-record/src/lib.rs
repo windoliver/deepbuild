@@ -7,6 +7,7 @@
 //! evidence level.
 
 pub mod module;
+pub mod zoom;
 
 use serde_json::Value;
 

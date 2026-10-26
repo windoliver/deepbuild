@@ -460,7 +460,9 @@ pub(crate) fn local_of(pos: Vec3, rot: Vec3, sc: Vec3, extra_scale: Vec3) -> Aff
     m
 }
 
-/// An item's world transform: its parents' composed over its own, without its size.
+/// An item's world transform, without its size: its parents' composed over its own, in 3D. The
+/// items carry their own transforms (`Program::evaluate_local`): motion's child-of parenting
+/// turns a child only about z, and composed here again it would add the parent twice.
 fn world(items: &Map<String, Value>, id: &str) -> Affine3 {
     let mut m = match items.get(id) {
         Some(item) => local(item, [1.0; 3]),
@@ -680,8 +682,9 @@ pub(crate) fn near_far(
     };
 }
 
-/// What one item contributes to the bounds the camera's near and far come from.
-fn corners(model: &Affine3) -> Vec<Vec3> {
+/// A solid's eight corners in the world: what it contributes to the bounds the camera's near and
+/// far come from, and what a view projects to tell whether it is on screen (#383).
+pub fn corners(model: &Affine3) -> Vec<Vec3> {
     let mut out = Vec::with_capacity(8);
     corners_into(model, &mut out);
     out
@@ -708,7 +711,7 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         path: r.path,
     })?;
     let mut state = program.state();
-    program.evaluate(t, eval::Validity::Full, &mut state);
+    program.evaluate_local(t, eval::Validity::Full, &mut state);
     let items = eval::items(map, &program, &state);
     let size = match map
         .get("size")
@@ -1141,4 +1144,55 @@ pub fn has_3d(doc: &Value) -> bool {
                 .values()
                 .any(|i| i.get("kind").and_then(Value::as_str).is_some_and(is_3d))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_child_box_rides_its_parent_once() {
+        let look = Look3::read(&json!({"roles": {"block": "#808080", "ground": "#ffffff"}}))
+            .expect("the look reads");
+        let solid = |id: &str, pos: [f64; 3]| {
+            json!({"id": id, "kind": "mark.box@1", "layer": "main", "name": id, "order": "a1",
+                "params": {"size": [1, 1, 1], "paint": {"fill": {"role": "block"}}}, "at": {"pos": pos}})
+        };
+        let mut child = solid("child", [1.0, 0.0, 0.0]);
+        child["parent"] = json!("parent");
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "description": "D", "size": [64, 64],
+            "camera": "cam", "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+                    "params": {"projection": "perspective", "target": [0, 0, 0], "position": [0, 0, 20], "fov": 40}},
+                "parent": solid("parent", [5.0, 0.0, 0.0]),
+                "child": child,
+            }
+        });
+        let child_at = |doc: &Value| {
+            let scene = evaluate(doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
+            let placed = scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .find(|s| s.id == "child")
+                .expect("the child is drawn")
+                .model;
+            origin(&placed)
+        };
+        // Adding the parent twice puts the child at x = 11.
+        assert_eq!(child_at(&doc), [6.0, 0.0, 0.0]);
+        // A parent turned a quarter about y carries the child's offset round with it, in 3D:
+        // the child is 1 m from the parent along z, not along x as a turn about z alone leaves it.
+        let mut turned = doc.clone();
+        turned["items"]["parent"]["at"]["rot"] = json!([0, 90, 0]);
+        let [x, y, z] = child_at(&turned);
+        assert!(
+            (x - 5.0).abs() < 1e-9 && y.abs() < 1e-9 && (z.abs() - 1.0).abs() < 1e-9,
+            "the child at {:?}",
+            [x, y, z]
+        );
+    }
 }

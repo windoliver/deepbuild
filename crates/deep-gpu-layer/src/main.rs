@@ -14,6 +14,7 @@ mod frames;
 mod golden;
 mod guard;
 mod host;
+mod levels;
 mod live;
 mod liveview;
 mod plugin;
@@ -90,6 +91,9 @@ pub enum Planted {
     HostCacheByDocId,
     HostCheckOnce,
     GuardToGrey,
+    /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
+    LoadsEverything,
+    SlowGpuFrame,
 }
 
 impl Planted {
@@ -135,6 +139,8 @@ impl Planted {
             "host_cache_by_doc_id" => Planted::HostCacheByDocId,
             "host_check_once" => Planted::HostCheckOnce,
             "guard_to_grey" => Planted::GuardToGrey,
+            "loads_everything" => Planted::LoadsEverything,
+            "slow_gpu_frame" => Planted::SlowGpuFrame,
             _ => return None,
         })
     }
