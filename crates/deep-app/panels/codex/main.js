@@ -1,14 +1,26 @@
-import { Background, PathBuilder, View, div } from "gpui-kit";
+import { View, div } from "gpui-kit";
 import { Button, h_flex, v_flex } from "gpui-base";
+import { Canvas, CanvasScene } from "gpui-component";
 import { quotes } from "deepbuild";
 
 export default class StocksView extends View {
   init() {
+    // The chart's line is the canvas's: its prices are an item of a retained scene (#380).
+    this.scene = CanvasScene();
     this.recording = quotes();
     this.tick = 0;
     this.selected = this.recording.symbols[0]?.symbol ?? "";
     this.targets = Object.create(null);
     this.alert = null;
+    this.plot();
+  }
+
+  /** The selected stock's prices so far, as the chart's line. */
+  plot() {
+    const stock = this.stock(this.selected);
+    if (!stock) return;
+    const prices = stock.prices.slice(0, this.tick + 1);
+    this.scene.set("prices", prices.length === 1 ? [prices[0], prices[0]] : prices);
   }
 
   stock(symbol) {
@@ -43,6 +55,7 @@ export default class StocksView extends View {
       }
     }
 
+    this.plot();
     cx.notify();
   }
 
@@ -61,22 +74,7 @@ export default class StocksView extends View {
     cx.notify();
   }
 
-  chart(stock, color) {
-    const prices = stock.prices.slice(0, this.tick + 1);
-    const low = Math.min(...prices);
-    const high = Math.max(...prices);
-    const spread = high - low;
-    const path = PathBuilder.stroke(2);
-
-    for (let index = 0; index < prices.length; index += 1) {
-      const x = prices.length === 1 ? 0 : (index / (prices.length - 1)) * 100;
-      const y = spread === 0 ? 50 : 92 - ((prices[index] - low) / spread) * 84;
-      const method = index === 0 ? "move_to" : "line_to";
-      path[method](`${x}%`, `${y}%`);
-    }
-
-    if (prices.length === 1) path.line_to("100%", "50%");
-
+  chart(color) {
     return div()
       .h(220)
       .w("100%")
@@ -84,7 +82,7 @@ export default class StocksView extends View {
       .border(1)
       .border_color(color.border)
       .bg(color.surface)
-      .child(window.paint_path(path.build(), Background.solid(color.primary)).size_full());
+      .child(new Canvas(this.scene).size_full());
   }
 
   watchRow(stock, color) {
@@ -107,6 +105,7 @@ export default class StocksView extends View {
       .hover((style) => style.bg(color.muted))
       .on_click((_event, cx) => {
         this.selected = stock.symbol;
+        this.plot();
         cx.notify();
       })
       .child(div().w(70).font_semibold().child(stock.symbol))
@@ -163,7 +162,7 @@ export default class StocksView extends View {
           .gap(12)
           .child(div().text_size(20).font_bold().child(`Selected: ${this.selected}`))
           .when(Boolean(selectedStock), (element) =>
-            element.child(this.chart(selectedStock, color)),
+            element.child(this.chart(color)),
           )
           .child(
             h_flex()

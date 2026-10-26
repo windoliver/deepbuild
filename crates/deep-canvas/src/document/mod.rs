@@ -389,19 +389,9 @@ pub(crate) fn sort_notices(notices: &mut [Notice]) {
     });
 }
 
-/// The object at `value`, if it is one.
-pub(crate) fn as_object(value: &Value) -> Option<&Map<String, Value>> {
-    value.as_object()
-}
-
 /// The object member `key` of `value`, if `value` is an object holding it.
 pub fn member<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     value.as_object().and_then(|o| o.get(key))
-}
-
-/// A JSON number as an f64, if it is one.
-pub(crate) fn as_f64(value: &Value) -> Option<f64> {
-    value.as_f64()
 }
 
 /// The `family.name@major` text of an item, if it carries one.

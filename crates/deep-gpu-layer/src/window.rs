@@ -45,6 +45,8 @@ pub struct Paint {
     pub current: u64,
     /// The planted composer that draws the current frame's 2D layers over whatever slot shows.
     pub pairs_newest: bool,
+    /// A plug-in's panel script view in its header strip, `[x, y, w, h]` (#380).
+    pub panel: Option<(AnyView, [f32; 4])>,
     /// The page as one picture, made once per page and window size.
     picture: Option<(PageKey, Arc<RenderImage>)>,
 }
@@ -152,6 +154,7 @@ impl Render for Root {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         let state = self.paint.clone();
         let card = self.paint.borrow().card.clone();
+        let panel = self.paint.borrow().panel.clone();
         div()
             .size_full()
             .relative()
@@ -179,6 +182,16 @@ impl Render for Root {
                 )
                 .size_full(),
             )
+            .children(panel.map(|(view, [x, y, w, h])| {
+                div()
+                    .absolute()
+                    .left(px(x))
+                    .top(px(y))
+                    .w(px(w))
+                    .h(px(h))
+                    .overflow_hidden()
+                    .child(view)
+            }))
             .children(card.map(|c| {
                 let [x, y, w, h] = c.rect;
                 div()
@@ -234,6 +247,7 @@ impl Win {
             overlays: BTreeMap::new(),
             current: 0,
             pairs_newest: false,
+            panel: None,
             picture: None,
         }));
         let root = Root {
@@ -271,6 +285,16 @@ impl Win {
         self.paint.borrow_mut().ui_time = Duration::ZERO;
         // A forced frame request draws once, as the app's display link does.
         cx.present_frame(self.handle);
+    }
+
+    /// Runs `f` in the window, as a panel mounts in it.
+    pub fn update<T>(
+        &self,
+        cx: &mut HeadlessAppContext,
+        f: impl FnOnce(&mut Window, &mut gpui_kit::App) -> T,
+    ) -> Result<T, String> {
+        cx.update_window(self.handle, |_, window, cx| f(window, cx))
+            .map_err(|e| format!("no window: {e}"))
     }
 
     /// The renderer's image of the whole window, RGBA.

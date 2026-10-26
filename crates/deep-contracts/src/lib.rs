@@ -413,7 +413,7 @@ fn number(n: f64) -> String {
     } else {
         let e = point - 1;
         let mantissa = if k == 1 {
-            digits.clone()
+            digits
         } else {
             format!("{}.{}", &digits[..1], &digits[1..])
         };

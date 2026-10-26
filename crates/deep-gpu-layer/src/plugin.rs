@@ -1,7 +1,9 @@
 //! The plug-in fixture (README: The plug-in fixture): a plug-in beside a live GPU-layer view. Its
 //! panel runs in the app's panel runtime (gpui-shell with the app's registry and the `deepbuild`
 //! module), which offers no GPU and no drawing surface; its documents go to the canvas core as the
-//! plug-in's revisions, which carry descriptions, never pixels, surfaces or shaders.
+//! plug-in's revisions, which carry descriptions, never pixels, surfaces or shaders. With a panel
+//! (#380), the script's view takes the panel's header strip in the window and the panel's canvas
+//! view below it draws the plug-in's first presented 3D document through the GPU layer.
 
 use std::path::{Path, PathBuf};
 
@@ -13,7 +15,7 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::frames::{self, Args};
-use crate::{refused, App, Planted};
+use crate::{refused, view3d, App, Planted};
 
 /// The plug-in's panel, copied out to a folder of its own (the runtime writes its typings beside
 /// an application it loads). The planted runtime runs it with a global `deepGpu` holding the GPU
@@ -41,6 +43,8 @@ fn shipped() -> Option<Sealed> {
         deep_canvas_marks::modules::look(),
         deep_canvas_marks::modules::marks2d(),
         deep_canvas_motion::module::module(),
+        deep_canvas_scene3d::module::module(),
+        deep_canvas_effects::module::module(),
     ]
     .into_iter()
     .fold(Registry::new(BuildSet::Full), Registry::with)
@@ -122,39 +126,217 @@ fn panel(app: &mut App, dir: &Path) -> Value {
     }
 }
 
-pub fn call(app: &mut App, call: &Value) -> Value {
-    let (Some(dir), Some(scene)) = (call["dir"].as_str(), call["scene"].as_str()) else {
-        return refused("bad_input", "plugin takes a dir and a scene");
+/// Where the panel sits in the window and what its canvas view draws under (#380).
+struct PanelCall {
+    look: Value,
+    window: [u32; 2],
+    page: [u8; 3],
+    rect: [u32; 4],
+    header: u32,
+    capture: bool,
+}
+
+fn numbers<const N: usize>(v: &Value) -> Option<[u32; N]> {
+    let a = v.as_array().filter(|a| a.len() == N)?;
+    let mut out = [0; N];
+    for (o, x) in out.iter_mut().zip(a) {
+        *o = u32::try_from(x.as_u64()?).ok()?;
+    }
+    Some(out)
+}
+
+fn panel_call(call: &Value) -> Option<Result<PanelCall, Value>> {
+    let p = call.get("panel").filter(|p| !p.is_null())?;
+    let bad = || {
+        refused(
+            "bad_input",
+            "a panel takes window {size, page} and panel {rect, header}",
+        )
+    };
+    let (Some(window), Some(page), Some(rect)) = (
+        numbers::<2>(&call["window"]["size"]),
+        numbers::<3>(&call["window"]["page"]),
+        numbers::<4>(&p["rect"]),
+    ) else {
+        return Some(Err(bad()));
+    };
+    let header = p["header"]
+        .as_u64()
+        .and_then(|h| u32::try_from(h).ok())
+        .unwrap_or(0);
+    if header >= rect[3] || page.iter().any(|c| *c > 255) {
+        return Some(Err(bad()));
+    }
+    Some(Ok(PanelCall {
+        look: call["look"].clone(),
+        window,
+        page: page.map(|c| c as u8),
+        rect,
+        header,
+        capture: call["capture"].as_bool().unwrap_or(false),
+    }))
+}
+
+/// Each request the plug-in sends on its writer connection, answered: the connection carries
+/// documents and patches, so a call to open a GPU device is refused, naming it.
+fn requests(fixture: &Value) -> Vec<Value> {
+    fixture["requests"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|r| {
+            let call = r["request"]["call"].as_str().unwrap_or_default();
+            let (code, why) = match call {
+                "gpu.request_device" => ("no_device", "a plug-in gets no GPU device; it describes what to draw and the canvas draws it"),
+                _ => ("unknown_call", "the writer connection takes no such call"),
+            };
+            json!({"call": call, "outcome": "refused", "code": code, "reason": format!("{call}: {why}")})
+        })
+        .collect()
+}
+
+/// The panel in the window: its script's view in the header strip and, below it, the canvas view
+/// drawing `doc` at the view's size through `view3d` (planted: at the document's own size, past the
+/// panel's edge). Answers the panel's reply and the window capture's name.
+fn in_panel(
+    app: &mut App,
+    out: &str,
+    entry: &Path,
+    id: &str,
+    p: &PanelCall,
+    doc: Option<&Value>,
+) -> Result<(Value, Option<String>), Value> {
+    let runtime = deep_app::new_runtime().map_err(|e| refused("no_runtime", e.to_string()))?;
+    let [x, y, w, h] = p.rect;
+    let canvas = [x, y + p.header, w, h - p.header];
+    app.window(p.window)?;
+    let win = app.window.as_ref().expect("opened above");
+    let mounted = win
+        .update(&mut app.cx, |window, cx| {
+            deep_app::mount_panel(&runtime, entry, window, cx)
+        })
+        .map_err(|e| refused("no_window", e))?;
+    let (view, error) = match mounted {
+        Ok(v) => (Some(v), None),
+        Err(e) => (None, Some(format!("{e:#}"))),
+    };
+    {
+        let mut paint = win.paint.borrow_mut();
+        paint.page = (32, vec![p.page]);
+        paint.panel = view
+            .clone()
+            .map(|v| (v.into(), [x as f32, y as f32, w as f32, p.header as f32]));
+    }
+    let drawn = (|| -> Result<Option<String>, Value> {
+        let Some(doc) = doc else {
+            let win = app.window.as_ref().expect("opened above");
+            win.present(&mut app.cx);
+            if !p.capture {
+                return Ok(None);
+            }
+            let image = win
+                .capture(&mut app.cx)
+                .map_err(|e| refused("no_capture", e))?;
+            let png = view3d::png(image.as_raw(), [image.width(), image.height()])?;
+            return view3d::write_named(out, &png, "png").map(Some);
+        };
+        let size = match app.planted {
+            Some(Planted::HostUnclipped) => {
+                numbers::<2>(&doc["size"]).unwrap_or([canvas[2], canvas[3]])
+            }
+            _ => [canvas[2], canvas[3]],
+        };
+        let path =
+            std::env::temp_dir().join(format!("deep-gpu-plugin-doc-{}.json", std::process::id()));
+        std::fs::write(&path, doc.to_string())
+            .map_err(|e| refused("not_written", e.to_string()))?;
+        let reply = view3d::call(
+            app,
+            out,
+            &json!({
+                "call": "view3d", "doc": path, "look": p.look, "size": size, "frames": 1,
+                "window": {"size": p.window, "view": [canvas[0], canvas[1]], "page": p.page},
+                "capture": if p.capture { json!([0]) } else { json!([]) },
+            }),
+        );
+        let _ = std::fs::remove_file(&path);
+        if reply.get("code").is_some() {
+            return Err(reply);
+        }
+        Ok(reply["frames"][0]["window"].as_str().map(str::to_string))
+    })();
+    let tree = view.and_then(|v| {
+        app.cx.update(|cx| {
+            let v = v.read(cx);
+            if v.build_error().is_some() {
+                return None;
+            }
+            v.snapshot().map(|s| s.debug_tree())
+        })
+    });
+    if let Some(win) = app.window.as_ref() {
+        win.paint.borrow_mut().panel = None;
+    }
+    let window = drawn?;
+    let panel = match tree {
+        Some(tree) => {
+            json!({"id": id, "loaded": true, "text": texts(&tree), "rect": p.rect, "canvas": canvas})
+        }
+        None => {
+            json!({"id": id, "loaded": false, "error": error, "text": [], "rect": p.rect, "canvas": canvas})
+        }
+    };
+    Ok((panel, window))
+}
+
+pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
+    match run(app, out, call) {
+        Ok(v) | Err(v) => v,
+    }
+}
+
+fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
+    let panel_call = panel_call(call).transpose()?;
+    let scene = call["scene"].as_str();
+    let (Some(dir), true) = (
+        call["dir"].as_str(),
+        scene.is_some() || panel_call.is_some(),
+    ) else {
+        return Err(refused(
+            "bad_input",
+            "plugin takes a dir and a scene or a panel",
+        ));
     };
     let dir = Path::new(dir);
     let fixture: Value = match std::fs::read_to_string(dir.join("documents.json")) {
         Ok(t) => serde_json::from_str(&t).unwrap_or(Value::Null),
-        Err(e) => return refused("bad_input", e.to_string()),
+        Err(e) => return Err(refused("bad_input", e.to_string())),
     };
     // The live view beside the plug-in.
-    let before = match frames::drive(app, "", &Args::new(scene, 2), &|_| false) {
-        Ok(r) => r.frames.len(),
-        Err(e) => return e,
+    let live = |app: &mut App| match scene {
+        Some(scene) => {
+            frames::drive(app, "", &Args::new(scene, 2), &|_| false).map(|r| r.frames.len())
+        }
+        None => Ok(0),
     };
+    let before = live(app)?;
     let planted = (app.planted == Some(Planted::ExposesGpuToPanels))
         .then_some(("metal", app.decision.path.name()));
-    let entry = match entry(dir, planted) {
-        Ok(p) => p,
-        Err(e) => return refused("bad_input", e),
-    };
-    let panel = panel(app, &entry);
-    let _ = std::fs::remove_dir_all(&entry);
-    let after = match frames::drive(app, "", &Args::new(scene, 2), &|_| false) {
-        Ok(r) => r.frames.len(),
-        Err(e) => return e,
-    };
+    let entry = entry(dir, planted).map_err(|e| refused("bad_input", e))?;
+    let plugin = fixture["plugin"].as_str().unwrap_or("plugin").to_string();
     let writer = Writer {
         kind: WriterKind::Plugin,
-        id: fixture["plugin"].as_str().unwrap_or("plugin").to_string(),
+        id: plugin.clone(),
     };
     let Some(sealed) = shipped() else {
-        return refused("no_build", "the shipped canvas modules didn't seal");
+        let _ = std::fs::remove_dir_all(&entry);
+        return Err(refused(
+            "no_build",
+            "the shipped canvas modules didn't seal",
+        ));
     };
+    // The first presented document that draws in 3D, for the panel's canvas view.
+    let mut scene3d = None;
     let documents: Vec<Value> = fixture["documents"]
         .as_array()
         .map(|docs| {
@@ -167,6 +349,9 @@ pub fn call(app: &mut App, call: &Value) -> Value {
                         Ok(stamped) => {
                             let checked = deep_canvas::document::check_in(&stamped, &sealed);
                             if checked.ok {
+                                if scene3d.is_none() && stamped["requires"]["modules"].get("scene3d").is_some() {
+                                    scene3d = Some(stamped.clone());
+                                }
                                 // What the check said of what it presents, its notices (an item
                                 // of a kind this build doesn't know is skipped) among them.
                                 let said: Vec<Value> = checked.issues.iter().map(|i| i.to_json()).chain(checked.notices.iter().map(|n| n.to_json())).collect();
@@ -180,9 +365,21 @@ pub fn call(app: &mut App, call: &Value) -> Value {
                 .collect()
         })
         .unwrap_or_default();
-    json!({
+    let drawn = match &panel_call {
+        Some(p) => in_panel(app, out, &entry, &plugin, p, scene3d.as_ref()),
+        None => Ok((panel(app, &entry), None)),
+    };
+    let _ = std::fs::remove_dir_all(&entry);
+    let (panel, window) = drawn?;
+    let after = live(app)?;
+    let mut reply = json!({
         "panel": panel,
         "documents": documents,
+        "requests": requests(&fixture),
         "gpu": {"devices": Gpu::count(), "frames": before + after},
-    })
+    });
+    if let Some(w) = window {
+        reply["window"] = json!(w);
+    }
+    Ok(reply)
 }

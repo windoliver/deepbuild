@@ -308,11 +308,10 @@ impl<'a> Hub<'a> {
         let mut out = Vec::with_capacity(count);
         for k in 0..count {
             let t = from + step * k as i64;
-            let allocs = crate::allocations();
             let started = Instant::now();
-            let ran = session.frame(&mut self.sched, t, &view);
+            let (ran, allocs) =
+                crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
             let ms = started.elapsed().as_secs_f64() * 1000.0;
-            let allocs = crate::allocations() - allocs;
             out.push(json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms}));
         }
         json!({ "frames": out })

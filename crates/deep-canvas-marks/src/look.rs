@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use deep_canvas::color::{srgb_to_oklab, Srgb};
+use deep_canvas::color::{srgb_to_oklab, Oklab, Srgb};
 use deep_canvas::ops;
 use serde_json::{json, Map, Value};
 
@@ -230,17 +230,23 @@ fn theme(def: &Map<String, Value>, name: &'static str) -> Result<Palette, Refusa
         .collect()
 }
 
+/// An sRGB-encoded color in OKLab.
+fn lab(c: Rgb) -> Oklab {
+    srgb_to_oklab(Srgb {
+        r: f64::from(c[0]) / 255.0,
+        g: f64::from(c[1]) / 255.0,
+        b: f64::from(c[2]) / 255.0,
+    })
+}
+
+/// OKLab ΔE between two colors already in OKLab.
+fn delta(p: Oklab, q: Oklab) -> f64 {
+    ops::sqrt((p.l - q.l) * (p.l - q.l) + (p.a - q.a) * (p.a - q.a) + (p.b - q.b) * (p.b - q.b))
+}
+
 /// OKLab ΔE between two sRGB-encoded colors.
 pub fn distance(a: Rgb, b: Rgb) -> f64 {
-    let lab = |c: Rgb| {
-        srgb_to_oklab(Srgb {
-            r: f64::from(c[0]) / 255.0,
-            g: f64::from(c[1]) / 255.0,
-            b: f64::from(c[2]) / 255.0,
-        })
-    };
-    let (p, q) = (lab(a), lab(b));
-    ops::sqrt((p.l - q.l) * (p.l - q.l) + (p.a - q.a) * (p.a - q.a) + (p.b - q.b) * (p.b - q.b))
+    delta(lab(a), lab(b))
 }
 
 /// WCAG 2.x relative luminance of an sRGB-encoded color.
@@ -249,10 +255,14 @@ fn luminance(c: Rgb) -> f64 {
     0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
 }
 
+/// WCAG 2.x contrast ratio of two relative luminances.
+fn ratio(x: f64, y: f64) -> f64 {
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
 /// WCAG 2.x contrast ratio of two colors.
 pub fn contrast(a: Rgb, b: Rgb) -> f64 {
-    let (x, y) = (luminance(a), luminance(b));
-    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    ratio(luminance(a), luminance(b))
 }
 
 /// Every font entry names a bundled face file (`bundled`), may be embedded and carries a license.
@@ -375,12 +385,14 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
         }
         // A status mark keeps 3:1 against what's behind it, by its own color or its outline's,
         // and its glyph or word 4.5:1 in the theme's ink or ground (The status-color rule).
+        let (g, i) = (luminance(ground), luminance(ink));
         for (state, color) in &status.colors {
-            let held = contrast(*color, ground) >= 3.0
+            let c = luminance(*color);
+            let held = ratio(c, g) >= 3.0
                 || ring.is_some_and(|r| contrast(r, ground) >= 3.0 && contrast(r, *color) >= 3.0);
             let against = if !held {
                 "ground"
-            } else if contrast(ink, *color).max(contrast(ground, *color)) < 4.5 {
+            } else if ratio(i, c).max(ratio(g, c)) < 4.5 {
                 "label"
             } else {
                 continue;
@@ -393,13 +405,13 @@ pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
         }
     }
     // Data colors keep the look's distance from every status color; the ground sits behind them.
+    // Each color goes to OKLab once, not once per pair.
+    let states: Vec<(&'static str, Oklab)> =
+        status.colors.iter().map(|(s, c)| (*s, lab(*c))).collect();
     for (name, palette) in [("light", &light), ("dark", &dark)] {
         for (role, color) in palette.iter().filter(|(r, _)| *r != "ground") {
-            if let Some((state, _)) = status
-                .colors
-                .iter()
-                .find(|(_, s)| distance(*color, **s) < min)
-            {
+            let at = lab(*color);
+            if let Some((state, _)) = states.iter().find(|(_, s)| delta(at, *s) < min) {
                 return Err(Refusal::Distance {
                     theme: name,
                     role: role.clone(),
