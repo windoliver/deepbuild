@@ -6,7 +6,9 @@
 mod compare;
 mod compile;
 mod conformance;
+mod effects;
 mod frames;
+mod golden;
 mod plugin;
 mod reference;
 mod scene;
@@ -45,6 +47,17 @@ pub enum Planted {
     EncodesEveryFrame,
     ReplaysAfterAdd,
     PairsNewestSlot,
+    /// #380's wrong programs (tests/acceptance/380/README.md: Planted programs).
+    HostUnclipped,
+    SlowGlow,
+    ComparesAnyEnvironment,
+    FailsMissingSnapshot,
+    SkipsOperatorCheck,
+    NoiseFromFrameCounter,
+    NoiseFromClock,
+    PassOffByTwo,
+    BloomWithoutKaris,
+    PassesOneGpu,
 }
 
 impl Planted {
@@ -63,6 +76,16 @@ impl Planted {
             "encodes_every_frame" => Planted::EncodesEveryFrame,
             "replays_after_add" => Planted::ReplaysAfterAdd,
             "pairs_newest_slot" => Planted::PairsNewestSlot,
+            "host_unclipped" => Planted::HostUnclipped,
+            "slow_glow" => Planted::SlowGlow,
+            "compares_any_environment" => Planted::ComparesAnyEnvironment,
+            "fails_missing_snapshot" => Planted::FailsMissingSnapshot,
+            "skips_operator_check" => Planted::SkipsOperatorCheck,
+            "noise_from_frame_counter" => Planted::NoiseFromFrameCounter,
+            "noise_from_clock" => Planted::NoiseFromClock,
+            "pass_off_by_two" => Planted::PassOffByTwo,
+            "bloom_without_karis" => Planted::BloomWithoutKaris,
+            "passes_one_gpu" => Planted::PassesOneGpu,
             _ => return None,
         })
     }
@@ -245,8 +268,16 @@ impl App {
             Some("compare") => compare::compare(self, call),
             Some("declare_dark") => compare::declare(self, call),
             Some("decisions") => compare::decisions(self),
-            Some("plugin") => plugin::call(self, call),
+            Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("operators") => effects::operators(self),
+            Some("reference") => effects::reference(self, out, call),
+            Some("check_operator") => effects::check_operator(self, call),
+            Some("op") => effects::op(self, call),
+            Some("exact") => effects::exact(self, out),
+            Some("cross_gpu") => effects::cross_gpu(self, call),
+            Some("golden") => golden::golden(self, out, call),
+            Some("decide") => golden::decide(self, call),
             _ => refused("bad_input", "unknown call"),
         }
     }

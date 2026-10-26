@@ -11,17 +11,18 @@ use deep_canvas::document::{apply_ops, writer_layer, Writing};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{evaluate, Labels};
+use deep_effects_render::frame::{self as fx, Effects};
 use deep_gpu::device::Backend;
 use deep_gpu::encode::Pool;
 use deep_gpu::view::{Config, View};
-use deep_scene3d_render::{Counts, Module3, Planted as Planted3};
+use deep_scene3d_render::{Counts, Module3, Planted as Planted3, SHADOW_PASS};
 use image::ImageEncoder as _;
 use serde_json::{json, Map, Value};
 
 use crate::frames::{hex, Capture};
 use crate::window::OverlayPicture;
 use crate::worker::{Scene3Session, SLOTS, WORKERS};
-use crate::{refused, App, Planted};
+use crate::{effects, refused, App, Planted};
 
 const FLICKS_PER_SECOND: u64 = 705_600_000;
 
@@ -38,6 +39,14 @@ struct Window3 {
 struct Args {
     doc: Value,
     look: Look3,
+    /// The look as given: its bloom and ground grid turn effects on (#380).
+    look_json: Value,
+    /// The session's selection, whose items draw their outlines (#380).
+    selection: Vec<String>,
+    /// The first frame latched: the session opens there, a seek (#380).
+    from: u64,
+    /// Each frame's GPU time and each pass's, from wgpu-profiler (#380).
+    timings: bool,
     size: [u32; 2],
     frames: u64,
     fps: u64,
@@ -125,6 +134,16 @@ fn parse(call: &Value) -> Result<Args, Value> {
     Ok(Args {
         doc,
         look,
+        look_json: call["look"].clone(),
+        selection: call["selection"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        from: call["from"].as_u64().unwrap_or(0),
+        timings: call["timings"].as_bool().unwrap_or(false),
         size,
         frames,
         fps,
@@ -176,7 +195,7 @@ fn overlay_picture(o: &deep_canvas_scene3d::scene::Overlay) -> Option<OverlayPic
     })
 }
 
-fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
+pub(crate) fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
     let mut out = Vec::new();
     image::codecs::png::PngEncoder::new_with_quality(
         &mut out,
@@ -189,7 +208,7 @@ fn png(rgba: &[u8], size: [u32; 2]) -> Result<Vec<u8>, Value> {
 }
 
 /// Writes `bytes` under `out`, named by their SHA-256 with `ext`; returns the name.
-fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
+pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
     let name = hex(bytes);
     std::fs::write(
         std::path::Path::new(out).join(format!("{name}.{ext}")),
@@ -207,6 +226,8 @@ struct Drawn {
     /// The slot's BGRA bytes.
     bytes: Option<Vec<u8>>,
     targets: Option<(Vec<u8>, Vec<u8>)>,
+    /// The frame's GPU time and each pass's share, ms.
+    timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
 }
 
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
@@ -231,10 +252,23 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let planted = planted3(app.planted);
     let path = app.decision.path;
     let size = args.size;
-    let ui = app
+    let fx_planted = effects::planted_fx(app.planted);
+    let timings = args.timings && !noop;
+    let (ui, fx, profiler) = app
         .worker
         .call(move |state| -> Result<_, String> {
             let (module, shared) = Module3::new(planted);
+            // The shipped effects run between scene3d's geometry and its output (#380).
+            let fx = Arc::new(Mutex::new(Effects::new(Default::default(), fx_planted)));
+            lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
+            let profiler = if timings {
+                let p =
+                    wgpu_profiler::GpuProfiler::new(&state.gpu.device().device, Default::default())
+                        .map_err(|e| e.to_string())?;
+                Some(Arc::new(Mutex::new(p)))
+            } else {
+                None
+            };
             let config = Config {
                 path,
                 slots: SLOTS,
@@ -249,9 +283,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             )?;
             let ui = view.ui();
             state.scene3d = Some(Scene3Session { view, shared });
-            Ok(ui)
+            Ok((ui, fx, profiler))
         })
         .map_err(|e| refused("no_session", e))?;
+    let doc_seed = args.doc["seed"].as_u64().unwrap_or(0);
     if let Some(w) = &args.window {
         deep_app::gpu_view::watch(&ui);
         app.window(w.size)?;
@@ -272,9 +307,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut held: Vec<(u64, usize)> = Vec::new();
     let wants_targets = args.targets.contains("linear") || args.targets.contains("ids");
     let result = (|| -> Result<(), Value> {
-        for n in 0..args.frames {
+        for n in args.from..args.from + args.frames {
+            // A seek applies every patch up to the frame it opens at.
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
-                if *frame == n {
+                if *frame == n || (n == args.from && *frame < n) {
                     apply_patch(&mut args.doc, writer, ops, k)?;
                 }
             }
@@ -283,6 +319,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 evaluate(&args.doc, t, &args.look, &mut labels)
                     .map_err(|r| refused(r.code, r.path))?,
             );
+            let seeding = match app.planted {
+                Some(Planted::NoiseFromFrameCounter) => {
+                    effects::Seeding::FrameCounter(n - args.from)
+                }
+                Some(Planted::NoiseFromClock) => effects::Seeding::Clock,
+                _ => effects::Seeding::Item,
+            };
+            let settings = effects::settings(
+                &scene,
+                &args.look_json,
+                &args.look,
+                &args.selection,
+                n as f64 / args.fps as f64,
+                doc_seed,
+                seeding,
+            );
+            lock(&fx).settings = settings;
+            let (fx2, profiler2) = (fx.clone(), profiler.clone());
             if let Some(win) = app.window.as_ref().filter(|_| args.window.is_some()) {
                 let pictures = scene.overlays.iter().filter_map(overlay_picture).collect();
                 let mut p = win.paint.borrow_mut();
@@ -301,7 +355,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .worker
                 .call(move |state| -> Result<Drawn, String> {
                     let s = state.scene3d.as_mut().ok_or("no session")?;
-                    lock(&s.shared).next = Some((scene, look));
+                    {
+                        let mut shared = lock(&s.shared);
+                        shared.next = Some((scene, look));
+                        if let Some(r) = shared.renderer.as_mut() {
+                            r.profiler = profiler2.clone();
+                        }
+                    }
+                    lock(&fx2).profiler = profiler2.clone();
                     if delay > 0 {
                         s.view.hold_next();
                     }
@@ -312,8 +373,20 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         s.view.wait_free();
                     };
                     s.view.wait_done(drawn.slot);
-                    let bytes = (!noop).then(|| s.view.read(drawn.slot)).flatten();
                     let device = s.view.device().clone();
+                    // The frame's GPU time, as its passes' timestamp queries measured it.
+                    let timing = profiler2.as_ref().map(|p| {
+                        let mut p = lock(p);
+                        let mut enc = device.device.create_command_encoder(&Default::default());
+                        p.resolve_queries(&mut enc);
+                        device.queue.submit([enc.finish()]);
+                        let _ = p.end_frame();
+                        let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
+                        p.process_finished_frame(device.queue.get_timestamp_period())
+                            .map(|r| fx::timings(&r))
+                            .unwrap_or_default()
+                    });
+                    let bytes = (!noop).then(|| s.view.read(drawn.slot)).flatten();
                     let shared = lock(&s.shared);
                     let r = shared.renderer.as_ref().ok_or("no renderer")?;
                     Ok(Drawn {
@@ -326,6 +399,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                         } else {
                             None
                         },
+                        timing,
                     })
                 })
                 .map_err(|e| refused("render_failed", e))?;
@@ -419,6 +493,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 frame.insert("instances_written".into(), json!(c.instances_written));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
             }
+            if let Some((gpu_ms, passes)) = &drawn.timing {
+                frame.insert("gpu_ms".into(), json!(gpu_ms));
+                frame.insert("passes_ms".into(), json!(passes));
+            }
             frames.push(Value::Object(frame));
         }
         Ok(())
@@ -433,11 +511,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     }
     app.worker.call(|state| state.scene3d = None);
     result?;
-    Ok(json!({
-        "frames": frames,
-        "passes": [
-            {"name": GEOMETRY_PASS, "reads": [], "writes": ["linear", "ids", "depth"]},
-            {"name": OUTPUT_PASS, "reads": ["linear"], "writes": ["final"]},
-        ],
-    }))
+    // The frame's passes in order: the shadow map when a sun casts, geometry, the effects and
+    // the output.
+    let effects = lock(&fx);
+    let mut passes = Vec::new();
+    if effects.settings.shadow.is_some() {
+        passes.push(json!({"name": SHADOW_PASS, "reads": [], "writes": ["shadow"]}));
+    }
+    passes.push(json!({"name": GEOMETRY_PASS, "reads": [], "writes": ["linear", "ids", "depth"]}));
+    for p in effects.passes() {
+        passes.push(
+            json!({"name": p.name, "reads": p.reads, "writes": p.writes, "operator": p.operator}),
+        );
+    }
+    passes.push(json!({"name": OUTPUT_PASS, "reads": ["linear"], "writes": ["final"]}));
+    let mut reply = json!({"frames": frames, "passes": passes});
+    if timings {
+        reply["profiler"] =
+            json!({"name": "wgpu-profiler", "version": env!("DEEP_WGPU_PROFILER_VERSION")});
+    }
+    Ok(reply)
 }
