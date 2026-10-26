@@ -1,0 +1,28 @@
+// A first-party test package (#331 AC4): env-local, the first-party environment, registered through
+// `deep.registerEnvironment('local', envLocal({ host }))`. A hub-bound package runs in the hub's process and the
+// published `deep` has no way to hand it a Host (README, The surface), so its host is a supervisor of its own,
+// opened lazily on the first `up` on a record beside the package, through the built entries env-local.json names
+// (`record`, `asks`, `supervisor`, `envLocal`), as kit.test.ts's third test opens one; registering needs no import.
+import { readFileSync } from 'node:fs';
+
+interface Settings { record: string; asks: string; supervisor: string; envLocal: string }
+let fill: Promise<any> | undefined;
+function local(settings: Settings): Promise<any> {
+  fill ??= (async () => {
+    const [{ openRecord }, { openAsks }, { openSupervisor }, { envLocal }] = await Promise.all([settings.record, settings.asks, settings.supervisor, settings.envLocal].map((entry) => import(entry)));
+    const record = await openRecord({ path: new URL('./ledger.db', import.meta.url).pathname, now: Date.now });
+    const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
+    const host = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 2 * 86_400_000 } } } });
+    return envLocal({ host });
+  })();
+  return fill;
+}
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./env-local.json', import.meta.url), 'utf8'));
+  deep.registerEnvironment('local', {
+    slot: 'environment@1', revision: 1,
+    up: async (spec: unknown, lease: unknown, checkout: string) => (await local(settings)).up(spec, lease, checkout),
+    down: async (handle: unknown) => (await local(settings)).down(handle),
+  });
+}

@@ -6,6 +6,7 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod ask;
 mod costs;
 mod evidence;
 mod frames;
@@ -262,6 +263,46 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
         "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
+        "ask" => {
+            let pointer = match c.get("pointer") {
+                None => None,
+                Some(p) => {
+                    let a = p.as_array().filter(|a| a.len() == 2)?;
+                    Some([a[0].as_f64()?, a[1].as_f64()?])
+                }
+            };
+            return Some(Call::Ask {
+                panel: c.get("panel")?.as_str()?.to_string(),
+                session: c.get("session")?.as_str()?.to_string(),
+                words: c.get("words")?.as_str()?.to_string(),
+                pointer,
+            });
+        }
+        "messages" => return Some(Call::Messages(c.get("session")?.as_str()?.to_string())),
+        "render_back" => {
+            let size = match c.get("size") {
+                None => None,
+                Some(v) => {
+                    let s: Vec<u16> = v
+                        .as_array()?
+                        .iter()
+                        .map(|n| {
+                            n.as_u64()
+                                .and_then(|n| u16::try_from(n).ok())
+                                .filter(|n| *n > 0)
+                        })
+                        .collect::<Option<_>>()?;
+                    Some(<[u16; 2]>::try_from(s.as_slice()).ok()?)
+                }
+            };
+            return Some(Call::RenderBack {
+                session: c.get("session")?.as_str()?.to_string(),
+                doc: doc()?,
+                t: c.get("t")?.as_i64().filter(|t| *t >= 0)?,
+                rev: c.get("rev")?.as_u64()?,
+                size,
+            });
+        }
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
         "costs" => return Some(Call::Costs),
@@ -515,6 +556,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 None => true,
                 Some(v) => v.as_bool()?,
             },
+            html: match p.get("html") {
+                None => None,
+                Some(h) => Some(PathBuf::from(h.as_str()?)),
+            },
         })
     })?;
     let docs = entries(input, "docs", |d| {
@@ -670,6 +715,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "patch_shows_a_frame_late" => Planted::PatchShowsAFrameLate,
             "full_screen_only_3d" => Planted::FullScreenOnly3d,
             "esc_to_root" => Planted::EscToRoot,
+            "box_folds_quote" => Planted::BoxFoldsQuote,
+            "box_drops_t" => Planted::BoxDropsT,
+            "box_drops_doc_rev" => Planted::BoxDropsDocRev,
+            "box_sends_every_id" => Planted::BoxSendsEveryId,
+            "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
+            "resolver_closes_task" => Planted::ResolverClosesTask,
             _ => return None,
         }),
     };
