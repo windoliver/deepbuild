@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "profile": "view",
+  "title": "Session sess-alpha's line",
+  "description": "A session's line: its events as markers along one track, left to right in time, on a 2D camera you move.",
+  "size": [800, 450],
+  "camera": "cam",
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "track": {
+      "id": "track", "kind": "rect@1", "name": "Track", "order": "a1",
+      "params": { "box": [0, 0, 720, 6], "paint": { "fill": { "role": "ink" } } },
+      "at": { "pos": [40, 222, 0] }
+    },
+    "ev-1": {
+      "id": "ev-1", "kind": "rect@1", "name": "Session started", "order": "a2",
+      "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [88, 213, 0] }
+    },
+    "ev-2": {
+      "id": "ev-2", "kind": "rect@1", "name": "Edited api/orders.rs", "order": "a3",
+      "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [208, 213, 0] }
+    },
+    "ev-3": {
+      "id": "ev-3", "kind": "rect@1", "name": "Check failed", "order": "a4",
+      "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [328, 213, 0] }
+    },
+    "ev-4": {
+      "id": "ev-4", "kind": "rect@1", "name": "Asked you", "order": "a5",
+      "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [448, 213, 0] }
+    },
+    "ev-5": {
+      "id": "ev-5", "kind": "rect@1", "name": "Answered", "order": "a6",
+      "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [568, 213, 0] }
+    },
+    "ev-6": {
+      "id": "ev-6", "kind": "rect@1", "name": "Check passed", "order": "a7",
+      "params": { "box": [0, 0, 24, 24], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [688, 213, 0] }
+    }
+  }
+}

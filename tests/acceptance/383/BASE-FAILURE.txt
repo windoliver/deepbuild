@@ -1,0 +1,263 @@
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-383/tests/acceptance/383
+
+ ❯ input.test.ts (2 tests | 2 failed) 8255ms
+   ❯ AC3 the same gestures do the same thing on a chart and a session's line (2)
+     × AC3 one shared input test: drag pans, scroll and pinch zoom, click selects and opens the panel, double-click flies in, Esc backs out, ⌘K flies to a name, on both 1357ms
+     × AC3 one interaction scope owns every gesture: one commit per gesture, on the input that ends it, and no picking mid-gesture, on both 15ms
+ ❯ screen.test.ts (2 tests | 2 failed) 8087ms
+   ❯ AC5 every canvas has a full-screen button, and Esc steps back one level at a time (2)
+     × AC5 every canvas, one per profile, has a full-screen button inside it; a click fills the display and Esc gives the panel back 1291ms
+     × AC5 three levels deep and full screen, each Esc steps back exactly one step, and Esc at the top does nothing 16ms
+ ❯ city.test.ts (3 tests | 3 failed) 31211ms
+   ❯ AC2 with the deepest level open, a window-sized 3D frame stays within the GPU budget, because only what's on screen is loaded (3)
+     × AC2 with the deepest level open, only what's on screen is loaded 10745ms
+     × AC2 on the reference Mac, the deepest level's window-sized frame takes at most 2 ms of GPU at p95 and at most 256 MB of GPU memory, in five runs 6340ms
+     × AC2 the perf lane has a task map-deepest-level, a #383 first measurement, valid against the merge base's budgets, and it runs 68ms
+ ❯ zoom.test.ts (3 tests | 3 failed) 4031ms
+   ❯ AC1 zooming into Postgres shows what you need to know about its tables, not a list of its files (3)
+     × AC1 the 9 tables ranked first, the 3 changed ones among them, each with what it holds; the other 3 folded into one count; no file 752ms
+     × AC1 a check that points at one migration file adds that file alone, beside the check 6ms
+     × AC1 a planted level that lists the part's files fails, naming the part 5ms
+ ❯ frames.test.ts (2 tests | 2 failed) 7097ms
+   ❯ AC4 a drag shows on screen within 2 frames, and a patch within 1 frame of the latch (2)
+     × AC4 every move of a drag on the chart shows within 2 frames of its input, at every phase of the frame 1297ms
+     × AC4 every patch an agent sends shows within 1 frame of the latch it became current at 19ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  city.test.ts > AC2 with the deepest level open, a window-sized 3D frame stays within the GPU budget, because only what's on screen is loaded > AC2 with the deepest level open, only what's on screen is loaded
+AssertionError: the city at its deepest level: frames[0].settled (whether every document the view selects is resident) is a boolean, got undefined: expected 'undefined' to be 'boolean' // Object.is equality
+
+Expected: "boolean"
+Received: "undefined"
+
+ ❯ bool helpers.ts:50:78
+     48| }
+     49| export function bool(value: JsonValue | undefined, what: string): bool…
+     50|   expect(typeof value, `${what} is a boolean, got ${JSON.stringify(val…
+       |                                                                              ^
+     51|   return value as boolean;
+     52| }
+ ❯ helpers.ts:420:55
+ ❯ cityFrames helpers.ts:414:50
+ ❯ loadedRun city.test.ts:62:18
+ ❯ city.test.ts:87:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  city.test.ts > AC2 with the deepest level open, a window-sized 3D frame stays within the GPU budget, because only what's on screen is loaded > AC2 on the reference Mac, the deepest level's window-sized frame takes at most 2 ms of GPU at p95 and at most 256 MB of GPU memory, in five runs
+AssertionError: the timed city: frames[0].settled (whether every document the view selects is resident) is a boolean, got undefined: expected 'undefined' to be 'boolean' // Object.is equality
+
+Expected: "boolean"
+Received: "undefined"
+
+ ❯ bool helpers.ts:50:78
+     48| }
+     49| export function bool(value: JsonValue | undefined, what: string): bool…
+     50|   expect(typeof value, `${what} is a boolean, got ${JSON.stringify(val…
+       |                                                                              ^
+     51|   return value as boolean;
+     52| }
+ ❯ helpers.ts:420:55
+ ❯ cityFrames helpers.ts:414:50
+ ❯ timedRun city.test.ts:73:33
+ ❯ timedRuns city.test.ts:80:3
+ ❯ city.test.ts:95:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  city.test.ts > AC2 with the deepest level open, a window-sized 3D frame stays within the GPU budget, because only what's on screen is loaded > AC2 the perf lane has a task map-deepest-level, a #383 first measurement, valid against the merge base's budgets, and it runs
+AssertionError: benchmarks/budgets.json has a task map-deepest-level, the deepest level's frame compared with the merge base: expected undefined to be defined
+ ❯ city.test.ts:113:131
+    111|     validateBudgets(current, JSON.parse(execFileSync('git', ['show', `…
+    112|     const task = current.tasks.find((t) => t.id === 'map-deepest-level…
+    113|     expect(task, 'benchmarks/budgets.json has a task map-deepest-level…
+       |                                                                                                                                   ^
+    114|     expect(String(task!.initialReason), 'its first measurement says wh…
+    115|     const [command, ...args] = task!.command;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  frames.test.ts > AC4 a drag shows on screen within 2 frames, and a patch within 1 frame of the latch > AC4 every move of a drag on the chart shows within 2 frames of its input, at every phase of the frame
+AssertionError: the chart's drag: deep-show run answers the scenario ok (the interaction scope takes `input`, `scope` and `presented` calls, the scenario its `display`); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:272:300
+
+ ❯ dragRun frames.test.ts:44:19
+ ❯ frames.test.ts:101:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  frames.test.ts > AC4 a drag shows on screen within 2 frames, and a patch within 1 frame of the latch > AC4 every patch an agent sends shows within 1 frame of the latch it became current at
+AssertionError: the agent's patches: deep-show run answers the scenario ok (the interaction scope takes `input`, `scope` and `presented` calls, the scenario its `display`); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:272:300
+
+ ❯ patchRun frames.test.ts:81:19
+ ❯ frames.test.ts:108:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  input.test.ts > AC3 the same gestures do the same thing on a chart and a session's line > AC3 one shared input test: drag pans, scroll and pinch zoom, click selects and opens the panel, double-click flies in, Esc backs out, ⌘K flies to a name, on both
+AssertionError: chart: its scope before any input: deep-show run answers the scenario ok (the interaction scope takes `input`, `scope` and `presented` calls, the scenario its `display`); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:272:300
+
+ ❯ Driver.step helpers.ts:305:21
+ ❯ Driver.scope helpers.ts:310:22
+ ❯ play input.test.ts:71:19
+ ❯ get input.test.ts:174:37
+ ❯ input.test.ts:182:62
+ ❯ input.test.ts:182:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  input.test.ts > AC3 the same gestures do the same thing on a chart and a session's line > AC3 one interaction scope owns every gesture: one commit per gesture, on the input that ends it, and no picking mid-gesture, on both
+AssertionError: chart: its scope before any input: deep-show run answers the scenario ok (the interaction scope takes `input`, `scope` and `presented` calls, the scenario its `display`); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:272:300
+
+ ❯ Driver.step helpers.ts:305:21
+ ❯ Driver.scope helpers.ts:310:22
+ ❯ play input.test.ts:71:19
+ ❯ get input.test.ts:174:37
+ ❯ input.test.ts:196:86
+ ❯ input.test.ts:196:54
+ ❯ input.test.ts:196:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  screen.test.ts > AC5 every canvas has a full-screen button, and Esc steps back one level at a time > AC5 every canvas, one per profile, has a full-screen button inside it; a click fills the display and Esc gives the panel back
+AssertionError: figure: its scope: deep-show run answers the scenario ok (the interaction scope takes `input`, `scope` and `presented` calls, the scenario its `display`); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:272:300
+
+ ❯ Driver.step helpers.ts:305:21
+ ❯ Driver.scope helpers.ts:310:22
+ ❯ fullScreenFailures screen.test.ts:37:15
+ ❯ screen.test.ts:104:46
+ ❯ screen.test.ts:104:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  screen.test.ts > AC5 every canvas has a full-screen button, and Esc steps back one level at a time > AC5 three levels deep and full screen, each Esc steps back exactly one step, and Esc at the top does nothing
+AssertionError: levels: its scope: deep-show run answers the scenario ok (the interaction scope takes `input`, `scope` and `presented` calls, the scenario its `display`); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:272:300
+
+ ❯ Driver.step helpers.ts:305:21
+ ❯ Driver.scope helpers.ts:310:22
+ ❯ backOut screen.test.ts:62:13
+ ❯ screen.test.ts:113:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  zoom.test.ts > AC1 zooming into Postgres shows what you need to know about its tables, not a list of its files > AC1 the 9 tables ranked first, the 3 changed ones among them, each with what it holds; the other 3 folded into one count; no file
+AssertionError: deep-salience zoom exits 0 (no signal); stdout: ; stderr: deep-salience: usage: deep-salience level
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ lines helpers.ts:132:162
+    130|   // A run that hangs is stopped by spawnSync's own timeout, which sig…
+    131|   if (run.error && (run.error as NodeJS.ErrnoException).code === 'ETIM…
+    132|   expect(run.status, `${label} exits 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                                  ^
+    133|   const out = (run.stdout ?? '').split('\n').filter((l) => l !== '');
+    134|   expect(out.length, `${label}: one output line per input line`).toBe(…
+ ❯ zoom zoom.test.ts:31:10
+ ❯ zoom.test.ts:77:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  zoom.test.ts > AC1 zooming into Postgres shows what you need to know about its tables, not a list of its files > AC1 a check that points at one migration file adds that file alone, beside the check
+AssertionError: deep-salience zoom exits 0 (no signal); stdout: ; stderr: deep-salience: usage: deep-salience level
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ lines helpers.ts:132:162
+    130|   // A run that hangs is stopped by spawnSync's own timeout, which sig…
+    131|   if (run.error && (run.error as NodeJS.ErrnoException).code === 'ETIM…
+    132|   expect(run.status, `${label} exits 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                                  ^
+    133|   const out = (run.stdout ?? '').split('\n').filter((l) => l !== '');
+    134|   expect(out.length, `${label}: one output line per input line`).toBe(…
+ ❯ zoom zoom.test.ts:31:10
+ ❯ zoom.test.ts:91:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  zoom.test.ts > AC1 zooming into Postgres shows what you need to know about its tables, not a list of its files > AC1 a planted level that lists the part's files fails, naming the part
+AssertionError: deep-salience zoom exits 0 (no signal); stdout: ; stderr: deep-salience: usage: deep-salience level
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ lines helpers.ts:132:162
+    130|   // A run that hangs is stopped by spawnSync's own timeout, which sig…
+    131|   if (run.error && (run.error as NodeJS.ErrnoException).code === 'ETIM…
+    132|   expect(run.status, `${label} exits 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                                  ^
+    133|   const out = (run.stdout ?? '').split('\n').filter((l) => l !== '');
+    134|   expect(out.length, `${label}: one output line per input line`).toBe(…
+ ❯ zoom zoom.test.ts:31:10
+ ❯ zoom.test.ts:103:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  12 failed (12)
+   Start at  13:50:48
+   Duration  59.29s (tests 100%)
+

@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Three levels deep",
+  "description": "A region holding a cluster holding a node, each a level you fly into, on a 2D camera you move.",
+  "size": [800, 450],
+  "camera": "cam",
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "region": {
+      "id": "region", "kind": "frame@1", "name": "Region", "order": "a1",
+      "params": { "box": [100, 50, 600, 350], "paint": { "fill": { "role": "muted" } } }
+    },
+    "cluster": {
+      "id": "cluster", "kind": "frame@1", "parent": "region", "name": "Cluster", "order": "a2",
+      "params": { "box": [300, 150, 300, 200], "paint": { "fill": { "role": "ink" } } }
+    },
+    "node": {
+      "id": "node", "kind": "rect@1", "parent": "cluster", "name": "Node", "order": "a3",
+      "params": { "box": [400, 200, 100, 60], "paint": { "fill": { "role": "accent" } } }
+    }
+  }
+}

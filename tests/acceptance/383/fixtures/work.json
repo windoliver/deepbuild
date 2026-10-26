@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "A box an agent moves",
+  "description": "A shared board whose one box an agent moves by patch, to time each patch from its latch to the frame that shows it.",
+  "size": [800, 450],
+  "layers": {
+    "alpha-main": { "writer": "agent:thread-alpha", "title": "Claude Code: diagram", "order": "a0" }
+  },
+  "items": {
+    "alpha.box": {
+      "id": "alpha.box", "kind": "rect@1", "layer": "alpha-main", "name": "Box", "order": "a0",
+      "params": { "box": [0, 0, 60, 40], "paint": { "fill": { "role": "muted" } } },
+      "at": { "pos": [40, 200, 0] }
+    }
+  }
+}
