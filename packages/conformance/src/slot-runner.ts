@@ -3,19 +3,14 @@
 // PASS, FAIL with the rule's finding and codes, or BLOCKED. The preflight's kit check runs the same judges
 // synchronously: every rule has its one planted fill, and the kit refuses each with its own message.
 import { randomInt } from 'node:crypto';
-import { ContractError, ERROR_CODES } from '@deepbuild/contracts';
+import { ERROR_CODES } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
 import { Random } from './generator.js';
+import { refuse, worst } from './runner.js';
 import { Finding } from './slot-types.js';
 import type { CheckResult, Judge, SeededCase, SlotCase, SlotCaseResult, SlotFill, SlotKit, SlotKitImpl, SlotReport, SlotRunOptions, Step } from './slot-types.js';
 import { isObject } from './types.js';
 import type { Problem, Verdict } from './types.js';
-
-const PRECEDENCE: Verdict[] = ['FAIL', 'BLOCKED', 'INVALID', 'INCONCLUSIVE', 'PASS'];
-const worst = (verdicts: Verdict[]): Verdict => (verdicts.length ? PRECEDENCE.find((v) => verdicts.includes(v))! : 'INCONCLUSIVE');
-
-const refuse = (code: string, path: string, actual: unknown, remediation: string): ContractError =>
-  new ContractError({ code, retryable: false, remediation, path, actual: typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? '', evidence: [] });
 
 /** Refuses a fill the kit can't run: another slot's, or one with no revision. */
 function load(kit: SlotKit, fill: unknown): asserts fill is SlotFill {

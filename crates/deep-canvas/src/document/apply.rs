@@ -13,9 +13,7 @@ use super::check::{check, migrate_item};
 use super::order::key_between;
 use super::requires::write_required_kinds;
 use super::shape::DocShape;
-use super::{
-    as_object, kind_text, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS,
-};
+use super::{kind_text, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS};
 use super::{rows, transform};
 use crate::canon::{revision_hash, sha256_hex};
 use crate::grammar::{HandleId, Id, Path, Section};
@@ -406,7 +404,7 @@ pub fn touched(patch: &Value, targets_only: bool) -> BTreeSet<String> {
 /// the patch and `n`, so a replay mints the same ID; never one the document holds.
 fn mint_ids(doc: &Value, ops: &[Value], writing: &Writing<'_>, patch: &str) -> Map<String, Value> {
     let mut out = Map::new();
-    let items = member(doc, "items").and_then(as_object);
+    let items = member(doc, "items").and_then(Value::as_object);
     for op in ops {
         let Some(temp) = member(op, "item")
             .and_then(|i| member(i, "id"))
@@ -483,7 +481,7 @@ fn patch_ops<'a>(at: &str, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
             what,
         ))
     };
-    let Some(envelope) = as_object(patch) else {
+    let Some(envelope) = patch.as_object() else {
         return Err(Box::new(Issue::envelope(
             "out_of_range",
             at.to_string(),
@@ -537,7 +535,7 @@ fn patch_ops<'a>(at: &str, patch: &'a Value, doc_id: &str) -> Result<&'a Vec<Val
 /// but the input is not checked before the first patch).
 pub fn writer_layer(doc: &Value, writer: &str) -> Result<String, Refused> {
     let mut found: Vec<&String> = Vec::new();
-    if let Some(layers) = member(doc, "layers").and_then(as_object) {
+    if let Some(layers) = member(doc, "layers").and_then(Value::as_object) {
         for (id, layer) in layers {
             if member(layer, "writer").and_then(Value::as_str) == Some(writer) {
                 found.push(id);
@@ -801,7 +799,7 @@ fn apply_op(
     seed: &str,
     done: &mut Patched,
 ) -> Result<(), Refused> {
-    let Some(fields) = as_object(op) else {
+    let Some(fields) = op.as_object() else {
         return Err(Box::new(Issue::envelope(
             "out_of_range",
             format!("ops/{j}"),
@@ -836,7 +834,7 @@ fn create(
     op: &Value,
     done: &mut Patched,
 ) -> Result<(), Refused> {
-    let Some(item) = member(op, "item").and_then(as_object) else {
+    let Some(item) = member(op, "item").and_then(Value::as_object) else {
         return Err(Box::new(Issue::envelope(
             "out_of_range",
             format!("ops/{j}/item"),
@@ -1070,7 +1068,7 @@ fn rows_op(
         .get("params")
         .and_then(Value::as_object)
         .unwrap_or(&empty);
-    let edit = as_object(op).expect("an op is an object");
+    let edit = op.as_object().expect("an op is an object");
     match rows::rows(params, edit) {
         Ok(params) => {
             item.insert("params".into(), Value::Object(params));
@@ -1125,7 +1123,7 @@ fn reorder(
     let base = writing
         .base
         .and_then(|b| member(b, "items"))
-        .and_then(as_object)
+        .and_then(Value::as_object)
         .filter(|b| b.contains_key(&neighbor))
         .unwrap_or(&*items);
     if parent_of(base, &neighbor) != parent {

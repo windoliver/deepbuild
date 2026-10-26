@@ -141,12 +141,11 @@ pub fn glob(pattern: &[u8], text: &[u8]) -> bool {
             continue;
         }
         if p < pattern.len() {
-            if let Some((hit, next)) = one(pattern, p, text[t]) {
-                if hit {
-                    p = next;
-                    t += 1;
-                    continue;
-                }
+            let (hit, next) = one(pattern, p, text[t]);
+            if hit {
+                p = next;
+                t += 1;
+                continue;
             }
         }
         match star {
@@ -162,9 +161,9 @@ pub fn glob(pattern: &[u8], text: &[u8]) -> bool {
 }
 
 /// Whether the pattern item at `p` matches `c`, and where the next item starts.
-fn one(pattern: &[u8], p: usize, c: u8) -> Option<(bool, usize)> {
+fn one(pattern: &[u8], p: usize, c: u8) -> (bool, usize) {
     match pattern[p] {
-        b'?' => Some((true, p + 1)),
+        b'?' => (true, p + 1),
         b'[' => {
             let mut i = p + 1;
             let negate = matches!(pattern.get(i), Some(b'!' | b'^'));
@@ -183,12 +182,12 @@ fn one(pattern: &[u8], p: usize, c: u8) -> Option<(bool, usize)> {
                 }
             }
             if i >= pattern.len() {
-                return Some((pattern[p] == c, p + 1));
+                return (pattern[p] == c, p + 1);
             }
-            Some((hit != negate, i + 1))
+            (hit != negate, i + 1)
         }
-        b'\\' if p + 1 < pattern.len() => Some((pattern[p + 1] == c, p + 2)),
-        other => Some((other == c, p + 1)),
+        b'\\' if p + 1 < pattern.len() => (pattern[p + 1] == c, p + 2),
+        other => (other == c, p + 1),
     }
 }
 

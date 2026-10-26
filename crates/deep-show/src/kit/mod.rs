@@ -417,7 +417,12 @@ impl<'a> Hub<'a> {
                 let _ = std::fs::create_dir_all(dir);
             }
             let text = serde_json::to_string_pretty(&Value::Object(ledger)).unwrap_or_default();
-            let _ = std::fs::write(path, format!("{text}\n"));
+            let text = format!("{text}\n");
+            // Written only when it changed: a newer ledger makes cargo rebuild the binary that
+            // embeds it (build.rs), even with the same bytes.
+            if std::fs::read_to_string(path).ok().as_deref() != Some(text.as_str()) {
+                let _ = std::fs::write(path, text);
+            }
         }
         drop(lease);
         json!({
