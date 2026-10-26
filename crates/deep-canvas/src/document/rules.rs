@@ -5,6 +5,9 @@
 //!   refused `number_unsourced`, naming the item.
 //! - A bound value's text is never typed over: its item's own text stays empty
 //!   (`bound_typed_over`).
+//! - A template's words follow the same rule, and each slot shows a value its path resolves to
+//!   (`ref_unresolved`). A story's own number (a constant whose source is `story`) passes only in a
+//!   document that binds no status and no reading; elsewhere it is unsourced (`number_unsourced`).
 //! - A status color comes only through a status binding whose source is a verdict, a run, an ask or
 //!   a session. A paint or a scale that names a status role (`status.<state>`), and a binding fed
 //!   anything else (a reading, which only a threshold could cut into states), are refused
@@ -16,6 +19,7 @@ use serde_json::{json, Map, Value};
 
 use super::{as_object, kind_text, member, Issue};
 use crate::grammar::{Handle, Path, Scheme, Section};
+use crate::template::{self, Part};
 
 /// The prefix of every status role; only a status binding reaches one.
 pub const STATUS_ROLE: &str = "status.";
@@ -92,8 +96,18 @@ fn numbers(doc: &Value, items: &Map<String, Value>, issues: &mut Vec<Issue>) {
         .filter_map(|b| member(b, "target").and_then(Value::as_str))
         .filter_map(|t| t.strip_prefix("items/")?.strip_suffix("/params/text"))
         .collect();
+    let binds = |key: &str| {
+        member(doc, key)
+            .and_then(as_object)
+            .is_some_and(|m| !m.is_empty())
+    };
+    let binds_status_or_reading = binds("status_bindings") || binds("bound_values");
     for (id, item) in items {
         if !kind_text(item).is_some_and(|k| k.starts_with("text@")) {
+            continue;
+        }
+        if let Some(Value::String(t)) = member(item, "params").and_then(|p| member(p, "template")) {
+            template_numbers(doc, id, t, binds_status_or_reading, issues);
             continue;
         }
         let Some(Value::String(text)) = member(item, "params").and_then(|p| member(p, "text"))
@@ -119,6 +133,53 @@ fn numbers(doc: &Value, items: &Map<String, Value>, issues: &mut Vec<Issue>) {
                 json!(text),
                 "shows a number with no source or as-of time; bind it to a reading, or compute it in the document",
             ));
+        }
+    }
+}
+
+/// A template's words and slots: words that show a number are unsourced, a slot names a value its
+/// path resolves to, and a story's own number shows only where no status or reading is bound.
+fn template_numbers(doc: &Value, id: &str, t: &str, binds: bool, issues: &mut Vec<Issue>) {
+    let path = format!("items/{id}/params/template");
+    let Ok(parts) = template::parts(t) else {
+        issues.push(Issue::error(
+            "out_of_range",
+            id,
+            path,
+            json!(t),
+            "a brace that opens no slot or closes none; a slot is `{path}`",
+        ));
+        return;
+    };
+    for part in parts {
+        match part {
+            Part::Words(words) if shows_number(words) => issues.push(Issue::error(
+                "number_unsourced",
+                id,
+                path.clone(),
+                json!(t),
+                "its words show a number with no source; show the number through a `{path}` slot",
+            )),
+            Part::Words(_) => {}
+            Part::Slot(slot) => match template::value(doc, slot) {
+                None => issues.push(Issue::error(
+                    "ref_unresolved",
+                    id,
+                    path.clone(),
+                    json!(slot),
+                    "the slot's path names no data constant this build shows",
+                )),
+                Some(shown) if binds && shown.number && shown.source.as_deref() == Some("story") => {
+                    issues.push(Issue::error(
+                        "number_unsourced",
+                        id,
+                        path.clone(),
+                        json!(slot),
+                        "shows a story's own number, which only a document that binds no status and no reading may show; bind it to a reading",
+                    ))
+                }
+                Some(_) => {}
+            },
         }
     }
 }

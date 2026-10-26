@@ -8,9 +8,10 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use deep_canvas::document::{apply_ops, writer_layer, Writing};
+use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
-use deep_canvas_scene3d::scene::{evaluate, Labels};
+use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
 use deep_gpu::device::Backend;
 use deep_gpu::encode::Pool;
 use deep_gpu::view::{Config, View};
@@ -48,6 +49,8 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// Report each label's glyphs and the atlas pages they sample (#381).
+    labels: bool,
     /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
     clicks: Vec<(u64, [f64; 2])>,
 }
@@ -147,6 +150,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
+        labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
     })
 }
@@ -250,6 +254,40 @@ fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
     Ok(name)
 }
 
+/// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,
+/// each written as an 8-bit grayscale PNG of its alpha named by its SHA-256.
+fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
+    let mut labels = Vec::new();
+    let mut sampled = BTreeSet::new();
+    for l in scene.layers.iter().flat_map(|layer| &layer.labels) {
+        let glyphs: Vec<Value> = l
+            .glyphs
+            .iter()
+            .map(|g| {
+                let atlas = g.atlas.map(|a| {
+                    sampled.insert(a.page);
+                    json!({"page": a.page, "x": a.x, "y": a.y, "w": a.w, "h": a.h, "raster": g.raster})
+                });
+                json!({
+                    "font": format!("crates/deep-text/fonts/{}", g.file), "size": g.size, "id": g.id,
+                    "x": g.x, "y": g.y, "grapheme": g.grapheme, "atlas": atlas,
+                })
+            })
+            .collect();
+        labels.push(json!({"item": l.id, "glyphs": glyphs}));
+    }
+    let mut pages = Vec::new();
+    for page in sampled {
+        let bytes = &scene.pages[page as usize].bytes;
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(bytes, PAGE, PAGE, image::ExtendedColorType::L8)
+            .map_err(|e| refused("not_written", e.to_string()))?;
+        pages.push(json!({"page": page, "png": write_named(out, &png, "png")?}));
+    }
+    Ok((json!(labels), json!(pages)))
+}
+
 /// What the render thread answers for one frame.
 struct Drawn {
     slot: usize,
@@ -324,6 +362,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         p.ui = Some(ui.clone());
     }
     let mut labels = Labels::new();
+    labels.fixed_em = app.planted == Some(Planted::LabelMask);
     let mut frames = Vec::new();
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
@@ -340,6 +379,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 evaluate(&args.doc, t, &args.look, &mut labels)
                     .map_err(|r| refused(r.code, r.path))?,
             );
+            let label_report = if args.labels {
+                Some(labels_json(&scene, out)?)
+            } else {
+                None
+            };
             if let Some(win) = app.window.as_ref().filter(|_| args.window.is_some()) {
                 let pictures = scene.overlays.iter().filter_map(overlay_picture).collect();
                 let mut p = win.paint.borrow_mut();
@@ -470,6 +514,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 if let Some(name) = window_name {
                     frame.insert("window".into(), json!(name));
                 }
+            }
+            if let Some((labels, pages)) = label_report {
+                frame.insert("labels".into(), labels);
+                frame.insert("pages".into(), pages);
             }
             if args.counts {
                 let c = &drawn.counts;

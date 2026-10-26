@@ -1930,7 +1930,11 @@ name = "deep-text"
 version = "0.0.0"
 dependencies = [
  "fearless_simd",
+ "icu_properties",
+ "icu_segmenter",
  "parley",
+ "parley_data",
+ "parley_engine",
  "serde_json",
  "vello_cpu",
 ]
