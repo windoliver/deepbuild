@@ -1,0 +1,387 @@
+[
+  {
+    "method": "deep.on",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:a835ee7b3bd031e52a8ce58545b0b68d8a45a4b388fc8943bca15c65a9cba077",
+    "params": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerCheck",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:ef964cca49b77fd02010af414d06151d4e00e842b9714db30b16a99a920e797c",
+    "params": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerResolver",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f",
+    "params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerSource",
+    "variants": [
+      "stream",
+      "polled",
+      "mcp"
+    ],
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:b91a9a6d1bfbe5bfd0808335a7b1f6780a6b9282d48581ebfa3c5edbb58b9f10",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "source": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerEnvironment",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerView",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:13a87be727b3bee24e988056df0a299ae55bc59ff858ea6e9bb1ff9e09aaeb98",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "panel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "area": {
+          "type": "string",
+          "enum": [
+            "sidebar",
+            "home",
+            "tab",
+            "line"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "panel",
+        "area"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerAdapter",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:57fb94b01dd9e808435d9c8be79da9f67fd5a055d54171eef31e3780e7458b27",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "adapter": {
+          "type": "object",
+          "properties": {
+            "facts": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": true
+            },
+            "caps": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": true
+            },
+            "unsupported": {
+              "type": "object",
+              "properties": {},
+              "required": [],
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "facts",
+            "caps",
+            "unsupported"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "adapter"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerRoute",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:9a22da7084c9353b5a2acb7912aee3fbac5c471d4d6d6d2b6f5977a56a0362d4",
+    "params": {
+      "type": "object",
+      "properties": {
+        "route": {
+          "type": "string",
+          "pattern": "^(GET|HEAD|POST|PUT|PATCH|DELETE) /\\S*$"
+        }
+      },
+      "required": [
+        "route"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.record.append",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:5e1abe51040927c6848a34cd130b32fd0c386bbd9337b39c791a7e8f492ae8bc",
+    "params": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.record.query",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:925a9f01d1787905fb15b900f5ccbda1afd38233e119fc347440cb0b77f2d08c",
+    "params": {
+      "type": "object",
+      "properties": {
+        "filter": {
+          "type": "object",
+          "properties": {
+            "kinds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "filter"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.evidence.put",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:12f1088c044c8fbb685a7425fc5026272bb450c96675c1b36029e9648a953c66",
+    "params": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.asks.create",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:52c8f6e58d710c8bc4663462c671d42192aee7be5745fdc88882dc116e5539fa",
+    "params": {
+      "type": "object",
+      "properties": {
+        "ask": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "ask"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.config.get",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:71b7b4e2e3db1026349e712236f9d3231abdec149243becc4ac6fd1f85f6f08d",
+    "params": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.notices.send",
+    "variants": null,
+    "since": "R1",
+    "stability": "stable",
+    "digest": "d1:1278dcb064eaaf8a0978a1e9e8761ce8ec0aa0f8da2668f87939b82ff27f2a2b",
+    "params": {
+      "type": "object",
+      "properties": {
+        "notice": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "notice"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.registerAction",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "digest": "d1:e3f3d719dd4a19c61231550621eb4d966cdf7eba22e542d6d7be541b396e1cca",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z0-9_.-]+$"
+        },
+        "declared": {
+          "type": "object",
+          "properties": {
+            "declares": {
+              "enum": [
+                "read",
+                "change",
+                "send"
+              ]
+            },
+            "input": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "declares",
+            "input"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "declared"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

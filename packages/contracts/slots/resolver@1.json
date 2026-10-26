@@ -1,0 +1,29 @@
+{
+  "title": "resolver@1",
+  "description": "A resolver: resolve(ask) answers for you only by naming what covers the ask, a decision handle the core checks, or answers nothing.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "resolver@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The resolver, as refusals name it: the extension that registered it."
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "name"
+  ],
+  "additionalProperties": false
+}
