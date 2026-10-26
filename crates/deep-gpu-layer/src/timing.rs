@@ -198,14 +198,15 @@ impl Spin {
 }
 
 /// The next trial's loop count: the last one scaled toward `target` from the `ns` it took, by
-/// at most 16, and always at least one more.
+/// at most 16, and always at least one more, up to the u32 maximum (timestamps that read zero
+/// grow it sixteenfold a trial; the count saturates instead of overflowing).
 fn grown(loops: u32, ns: f64, target: f64) -> u32 {
     let grow = if ns > 0.0 {
         (target / ns).clamp(1.0, 16.0)
     } else {
         16.0
     };
-    ((f64::from(loops) * grow) as u32).max(loops + 1)
+    ((f64::from(loops) * grow) as u32).max(loops.saturating_add(1))
 }
 
 /// `{"call": "tick", "gpu_ms"}`: a submission sized, from short trial runs, to take about
@@ -225,15 +226,25 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
         let spin = Spin::new(&device);
         let target = gpu_ms * 1e6;
         let mut loops = 64u32;
+        let mut ticks = 0;
         for _ in 0..8 {
-            let Some((ticks, _)) = spin.run(&device, loops) else {
+            let Some((t, _)) = spin.run(&device, loops) else {
                 return refused("no_read_back", "the timestamps didn't map");
             };
+            ticks = t;
             let ns = ticks as f64 * period;
             if ns > target * 0.8 {
                 break;
             }
             loops = grown(loops, ns, target);
+        }
+        // Timestamps that still read zero at the largest trial can't size a submission; the
+        // call says so rather than reporting a zero interval.
+        if ticks == 0 {
+            return refused(
+                "no_timestamps",
+                format!("the pass timestamps read zero at {loops} loops"),
+            );
         }
         match spin.run(&device, loops) {
             Some((ticks, wall)) => json!({
