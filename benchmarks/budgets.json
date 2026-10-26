@@ -426,6 +426,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #26 first measurement: the merge base's deep mcp has no deep_open_item or deep_search. One process seeds a heavy month (20 sessions a day, five asks each with the first saved as a decision, and an open item), starts the hub on it, binds a deep mcp to a session through hooks from its own children, and times 40 deep_status, 40 deep_open_item and 20 deep_search calls after a warm-up round, failing on any error; p50 includes the seeding and the hub's start. The issue's 100 ms, 300 ms and 80 MB stay in tests/acceptance/26/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "map-deepest-level",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "map-deepest-level"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #383 first measurement: the merge base loads no level by reference. One process generates a city of 64 parts, 768 tables and 6,144 columns over 833 documents, each part and table opening its own document, and draws 60 frames of its deepest level in the reference window (3024 x 1964) through `deep-gpu run`'s view3d on Metal, failing unless the view settles with the deepest document resident; p50 includes Node's and the binary's start and the city's generation. The issue's window-sized GPU budget (2 ms of GPU per frame at p95, 256 MB of GPU memory) stays in tests/acceptance/383/city.test.ts, read from the device's timestamps and its allocated size. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

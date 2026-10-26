@@ -7,6 +7,7 @@ mod compare;
 mod compile;
 mod conformance;
 mod frames;
+mod levels;
 mod plugin;
 mod reference;
 mod scene;
@@ -45,6 +46,9 @@ pub enum Planted {
     EncodesEveryFrame,
     ReplaysAfterAdd,
     PairsNewestSlot,
+    /// #383's wrong programs (tests/acceptance/383/README.md: Planted programs).
+    LoadsEverything,
+    SlowGpuFrame,
 }
 
 impl Planted {
@@ -63,6 +67,8 @@ impl Planted {
             "encodes_every_frame" => Planted::EncodesEveryFrame,
             "replays_after_add" => Planted::ReplaysAfterAdd,
             "pairs_newest_slot" => Planted::PairsNewestSlot,
+            "loads_everything" => Planted::LoadsEverything,
+            "slow_gpu_frame" => Planted::SlowGpuFrame,
             _ => return None,
         })
     }

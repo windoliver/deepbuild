@@ -6,6 +6,8 @@
 //! verdict change, and arrivals that would change it wait as "N new". Files show only at the
 //! evidence level.
 
+pub mod zoom;
+
 /// The record facts salience ranks by, in the rank list's order.
 pub const RANK: [&str; 6] = [
     "needs_you",
