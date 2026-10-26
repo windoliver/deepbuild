@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use deep_canvas::document::Issue;
 use deep_canvas::schedule::{default_view, OpIssue, Session as DocSession, Target, Val};
-use deep_canvas_marks::modules::Drawing;
+use deep_canvas_marks::modules::{Drawing, StatusDrawing};
 use serde_json::{json, Map, Value};
 
 use crate::evidence;
@@ -174,14 +174,19 @@ impl<'a> Hub<'a> {
     }
 
     /// The revision `doc` checked before it becomes current: the operators' errors, and the
-    /// frame's drawing when it ran.
+    /// frame's drawing when it ran. `readings` stand in for the scenario's record: a kit
+    /// fixture's own.
     pub fn probe(
         &mut self,
         doc: &Value,
         t: i64,
         frames: bool,
-    ) -> (Vec<OpIssue>, Option<Arc<Drawing>>) {
-        let base = self.new_session();
+        readings: Option<&BTreeMap<String, Value>>,
+    ) -> (Vec<OpIssue>, Option<Painted>) {
+        let mut base = self.new_session();
+        if let Some(r) = readings {
+            base.set_readings(r.clone());
+        }
         let scratch = base.probe(&mut self.sched, doc, t, frames);
         let drawing = drawing_of(&self.sched, &scratch);
         (scratch.report.issues, drawing)
@@ -276,7 +281,7 @@ impl<'a> Hub<'a> {
                     let rgba = self.renderer.raster(&drawn, size, Some(ground));
                     let png = snapshot::png(rgba, size);
                     if let Ok(sha) = evidence::put(&self.scenario.evidence, &png) {
-                        reply["snapshots"] = json!([{"sha256": sha, "w": size[0], "h": size[1]}]);
+                        reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
                     }
                 }
                 Err(Unfit { code, path }) => {
@@ -363,13 +368,92 @@ fn session_view(session: &DocSession, over: &Map<String, Value>) -> [Value; 6] {
     view
 }
 
-/// The drawing marks2d's frame operator left in a session.
+/// What a session's frame draws: marks2d's draw list, in a build that holds marks2d, else the
+/// core's boxes; and the text module's status marks with the legend, at the document's size.
+pub(crate) struct Painted {
+    pub drawing: Option<Arc<Drawing>>,
+    pub boxes: Vec<CoreBox>,
+    pub status: Option<Arc<StatusDrawing>>,
+    pub size: [f64; 2],
+}
+
+/// An item of a canvas module's kind that the core draws as `rect@1` (Kind: `draws_as`): its
+/// lowered box, moved by its world position, filled in the color of the role its paint names.
+pub(crate) struct CoreBox {
+    pub rect: [f64; 4],
+    pub color: [u8; 3],
+}
+
+/// In a build without marks2d, the core's own boxes, in item order: every item whose kind a
+/// canvas module registered with `draws_as: rect@1`. Marks2d draws them where it is held.
+fn core_boxes(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+    doc: &Value,
+) -> Vec<CoreBox> {
+    let mut items: Vec<(&str, &str)> = doc["items"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| {
+            item["kind"]
+                .as_str()
+                .is_some_and(|k| sched.sealed.draws_as(k) == Some("rect@1"))
+        })
+        .map(|(id, item)| (item["order"].as_str().unwrap_or(""), id.as_str()))
+        .collect();
+    items.sort();
+    let json = |array: &str, id: &str| match session.value(sched, array, Some(id)) {
+        Some(Val::Json(v)) => Some(v),
+        _ => None,
+    };
+    let num = |v: &Value| v.as_f64().unwrap_or(0.0);
+    items
+        .into_iter()
+        .filter_map(|(_, id)| {
+            let lowered = json("core.lowered", id)?;
+            let b = lowered["params"]["box"].as_array()?;
+            let pos = json("core.world", id).map(|w| [num(&w["pos"][0]), num(&w["pos"][1])]);
+            let [x, y] = pos.unwrap_or([0.0, 0.0]);
+            let role = lowered["params"]["paint"]["fill"]["role"]
+                .as_str()
+                .unwrap_or("ink");
+            let c = session.look().get(role)?.as_array()?;
+            let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
+            Some(CoreBox {
+                rect: [
+                    x + num(b.first()?),
+                    y + num(b.get(1)?),
+                    num(b.get(2)?),
+                    num(b.get(3)?),
+                ],
+                color: [channel(0)?, channel(1)?, channel(2)?],
+            })
+        })
+        .collect()
+}
+
+/// What the frame's operators left in a session to draw; `None` before it has a document.
 pub(crate) fn drawing_of(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &DocSession,
-) -> Option<Arc<Drawing>> {
-    match session.value(sched, "marks2d.frame", None)? {
-        Val::Any(any, _) => any.downcast::<Drawing>().ok(),
+) -> Option<Painted> {
+    let doc = session.document()?;
+    let typed = |array: &str| match session.value(sched, array, None) {
+        Some(Val::Any(any, _)) => Some(any),
         _ => None,
-    }
+    };
+    let drawing = typed("marks2d.frame").and_then(|a| a.downcast::<Drawing>().ok());
+    let status = typed("text.status").and_then(|a| a.downcast::<StatusDrawing>().ok());
+    let side = |k: usize| doc["size"][k].as_f64().unwrap_or(1.0);
+    let boxes = match drawing {
+        Some(_) => Vec::new(),
+        None => core_boxes(sched, session, doc),
+    };
+    Some(Painted {
+        drawing,
+        boxes,
+        status,
+        size: [side(0), side(1)],
+    })
 }

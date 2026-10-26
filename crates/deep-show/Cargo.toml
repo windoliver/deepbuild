@@ -48,6 +48,10 @@ test-step = ["dep:deep-canvas-test-modules"]
 test-step-renamed = ["dep:deep-canvas-test-modules"]
 test-step-cycle = ["dep:deep-canvas-test-modules"]
 test-scatter = ["dep:deep-canvas-test-modules"]
+# Issue #388: test builds that leave look, or text, out of the build set's list; the seal
+# refuses each at startup, naming the module.
+test-leave-out-look = []
+test-leave-out-text = []
 # Issue #138: the canvas conformance kit's test canvas modules (the #138 acceptance README: The
 # test canvas modules), each a clean module or its planted twin, never in a shipped build.
 test-kit = []
@@ -92,6 +96,9 @@ test-kit-selfish-analytic = ["test-kit"]
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-graph = { path = "../deep-canvas-graph" }
+deep-canvas-record = { path = "../deep-canvas-record" }
+deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-gpu = { path = "../deep-gpu" }

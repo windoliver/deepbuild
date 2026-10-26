@@ -608,6 +608,10 @@
     },
     "crates/deep-canvas-graph/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #388: the graph canvas module's manifest, register call and operator view on the scheduler."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #394: the deep-graph CLI's JSON lines and the layout memory it reads and writes. Already in the workspace tree."
@@ -616,6 +620,10 @@
     },
     "crates/deep-canvas-record/Cargo.toml": {
       "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #388: the record canvas module's manifest, register call and operator view on the scheduler."
+        },
         "serde_json": {
           "spec": "^1",
           "why": "Issue #394: the deep-salience CLI's JSON lines. Already in the workspace tree."
@@ -640,6 +648,18 @@
     },
     "crates/deep-show/Cargo.toml": {
       "dependencies": {
+        "deep-canvas-graph": {
+          "spec": "* path=../deep-canvas-graph",
+          "why": "Issue #388: the graph canvas module, in the r1 build set and up."
+        },
+        "deep-canvas-record": {
+          "spec": "* path=../deep-canvas-record",
+          "why": "Issue #388: the record canvas module, in the r1 build set and up."
+        },
+        "deep-canvas-sheet": {
+          "spec": "* path=../deep-canvas-sheet",
+          "why": "Issue #388: the sheet canvas module, in the r1 build set and up."
+        },
         "deep-canvas": {
           "spec": "* path=../deep-canvas",
           "why": "Issue #393: the document check, canonical revision hash, and the show module that stamps a writer's layer, diffs whole revisions and caps a reply's issues."

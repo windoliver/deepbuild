@@ -1,0 +1,20 @@
+{
+  "module": "data",
+  "phases": {
+    "items": [
+      {
+        "operator": "data.scale",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.scale"
+        ],
+        "per": "item"
+      }
+    ]
+  },
+  "contributions": {}
+}
