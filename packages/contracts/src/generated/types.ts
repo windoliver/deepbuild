@@ -1307,6 +1307,24 @@ export interface DecisionOverruled {
   evidence?: Array<string>;
 }
 
+/** decision.revoked@1 */
+export interface DecisionRevoked {
+  v: 1;
+  id: string;
+  kind: "decision.revoked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** default.undone@1 */
 export interface DefaultUndone {
   v: 1;

@@ -197,6 +197,18 @@ impl Spin {
     }
 }
 
+/// The next trial's loop count: the last one scaled toward `target` from the `ns` it took, by
+/// at most 16, and always at least one more, up to the u32 maximum (timestamps that read zero
+/// grow it sixteenfold a trial; the count saturates instead of overflowing).
+fn grown(loops: u32, ns: f64, target: f64) -> u32 {
+    let grow = if ns > 0.0 {
+        (target / ns).clamp(1.0, 16.0)
+    } else {
+        16.0
+    };
+    ((f64::from(loops) * grow) as u32).max(loops.saturating_add(1))
+}
+
 /// `{"call": "tick", "gpu_ms"}`: a submission sized, from short trial runs, to take about
 /// `gpu_ms` of GPU time.
 pub fn tick(app: &mut App, call: &Value) -> Value {
@@ -214,16 +226,26 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
         let spin = Spin::new(&device);
         let target = gpu_ms * 1e6;
         let mut loops = 64u32;
+        // The last trial: its loop count and the ticks it read.
+        let mut tried = (loops, 0u64);
         for _ in 0..8 {
             let Some((ticks, _)) = spin.run(&device, loops) else {
                 return refused("no_read_back", "the timestamps didn't map");
             };
+            tried = (loops, ticks);
             let ns = ticks as f64 * period;
             if ns > target * 0.8 {
                 break;
             }
-            let grow = if ns > 0.0 { (target / ns).clamp(1.0, 16.0) } else { 16.0 };
-            loops = ((f64::from(loops) * grow) as u32).max(loops + 1);
+            loops = grown(loops, ns, target);
+        }
+        // Timestamps that still read zero at the last trial can't size a submission; the call
+        // says so, naming that trial, rather than reporting a zero interval.
+        if tried.1 == 0 {
+            return refused(
+                "no_timestamps",
+                format!("the pass timestamps read zero at {} loops", tried.0),
+            );
         }
         match spin.run(&device, loops) {
             Some((ticks, wall)) => json!({
@@ -232,4 +254,20 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
             None => refused("no_read_back", "the timestamps didn't map"),
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::grown;
+
+    /// Timestamps that read zero grow the trial sixteenfold each time; eight trials from 64
+    /// loops pass the u32 maximum, where the count saturates instead of overflowing.
+    #[test]
+    fn zero_ticks_saturate_the_loop_count() {
+        let mut loops = 64u32;
+        for _ in 0..8 {
+            loops = grown(loops, 0.0, 50e6);
+        }
+        assert_eq!(loops, u32::MAX);
+    }
 }

@@ -1,0 +1,27 @@
+{
+  "title": "route@1",
+  "description": "An inbound route, METHOD and path, served only once you turned the package on and chose it; its handler answers a status and a body.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "route@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "route": {
+      "type": "string",
+      "pattern": "^(GET|HEAD|POST|PUT|PATCH|DELETE) /\\S*$"
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "route"
+  ],
+  "additionalProperties": false
+}

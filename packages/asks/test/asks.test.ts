@@ -244,3 +244,79 @@ describe('a block someone else owns (#320)', () => {
     expect(await shown()).toHaveLength(6);
   });
 });
+
+describe('#349 resolvers are consulted outside the core\'s lock', () => {
+  it('a resolver that reads the core while it answers doesn\'t deadlock raise: the ask is raised, and its refusals read empty', async () => {
+    let read: unknown;
+    asks.registerResolver('reader', async (a) => { read = await asks.refusals(a.ask); return undefined; });
+    const raised = asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    const timer = new Promise<'stuck'>((resolve) => setTimeout(() => resolve('stuck'), 3_000));
+    const handle = await Promise.race([raised, timer]);
+    expect(handle, 'raise returned while the resolver read the core').toMatch(/^ask:/);
+    expect(read).toEqual([]);
+    expect(await asks.refusals(handle as string)).toEqual([]);
+  });
+});
+
+// The resolver gate (#349) against what main writes beside it: #667's overrule, and the decisions the hub saves from
+// your inbox answer, whose scope names the ask's project and strips the session ID to letters and digits.
+describe('the resolver gate reads every decision the record holds, however it was written', () => {
+  const core: Connection = { writer: 'core', ...who };
+  const letters = (s: string): string => s.replace(/[^0-9A-Za-z]/g, '');
+  const appendAs = (connection: Connection, eventId: string, kind: string, data: JsonValue, subject?: string) =>
+    record.append(connection, { v: 1, id: eventId, kind, ts: now, data, ...(subject ? { subject } : {}) });
+
+  it('a decision you overruled covers nothing: a resolver naming it is refused naming it, nothing is applied, and it can\'t be revoked again', async () => {
+    await start('S1', 'T1');
+    await start('S2', 'T2');
+    const first = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    await asks.answer(card, first, { option: 'green' });
+    const decision = await asks.saveDecision(card, first, 'all');
+    await append(core, 'decision.overruled', { decision }, decision);
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'green', because: decision }));
+    try {
+      const again = await asks.raise(agent('S2'), 'deep_ask.taste', taste('header'));
+      expect((await events('decision.applied')).map((e) => e.data)).toEqual([]);
+      expect(await asks.refusals(again)).toMatchObject([{ ask: again, resolver: 'test/resolver', decision, reason: expect.stringContaining(decision) }]);
+      expect(await outcome(again)).toBe('unanswered');
+      await expect(asks.revokeDecision(card, decision)).rejects.toThrow(/already revoked/);
+    } finally {
+      off();
+    }
+  });
+
+  it('a decision the hub saved as repo:<the ask\'s project> covers an ask of a session in that project', async () => {
+    const session = 'claude-0001-abcd';
+    await append({ ...hook(session), project: 'shop' }, 'session.start', { agent: 'claude-code', worktree: join(dir, 'shop'), branch: 'main', thread: 'T1' });
+    const decisionId = id(now);
+    await appendAs({ ...core, session, project: 'shop' }, decisionId, 'decision.created', { key: sha('taste:header'), scope: 'repo:shop', answer: 'green', ask: `ask:${id(now)}` });
+    const decision = `decision:${decisionId}`;
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'green', because: decision }));
+    try {
+      const handle = await asks.raise({ ...agent(session), project: 'shop' }, 'deep_ask.taste', taste('header'));
+      expect(await asks.refusals(handle)).toEqual([]);
+      expect((await events('decision.applied')).map((e) => e.data)).toEqual([{ decision, ask: handle }]);
+      expect(await outcome(handle)).toBe('decided_for_you');
+    } finally {
+      off();
+    }
+  });
+
+  it('a decision the hub saved as session:<the session\'s letters and digits> covers that session\'s asks', async () => {
+    const session = 'claude-0002-abcd';
+    await start(session, 'T1');
+    const decisionId = id(now);
+    await appendAs({ ...core, session }, decisionId, 'decision.created', { key: sha('choice:store'), scope: `session:${letters(session)}`, answer: 'files', ask: `ask:${id(now)}` });
+    const decision = `decision:${decisionId}`;
+    const off = asks.registerResolver('test/resolver', () => ({ answer: 'files', because: decision }));
+    try {
+      const handle = await asks.raise(agent(session), 'deep_ask.choice', choice('store'));
+      expect(await asks.refusals(handle)).toEqual([]);
+      expect((await events('decision.applied')).map((e) => e.data)).toEqual([{ decision, ask: handle }]);
+      const other = await asks.raise(agent('S9'), 'deep_ask.choice', choice('store'));
+      expect(await asks.refusals(other)).toMatchObject([{ decision, reason: expect.stringContaining('cover') }]);
+    } finally {
+      off();
+    }
+  });
+});
