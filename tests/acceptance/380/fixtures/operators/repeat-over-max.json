@@ -1,0 +1,105 @@
+{
+  "id": "dim-over-max",
+  "kind": "pass",
+  "origin": "shipped",
+  "about": "The control with its repeat count from an input, n, whose range runs to 1,000: past the 64 a repeat count may be, so not fixed at check.",
+  "inputs": {
+    "src": {
+      "type": "texture",
+      "from": {
+        "texture": {
+          "target": {
+            "op": "core",
+            "output": "color"
+          }
+        }
+      }
+    },
+    "gain": {
+      "type": "f32",
+      "unit": "1",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0.5,
+      "from": {
+        "param": "params/gain"
+      }
+    },
+    "n": {
+      "type": "u32",
+      "unit": "1",
+      "range": [
+        1,
+        1000
+      ],
+      "default": 4,
+      "from": {
+        "param": "params/n"
+      }
+    }
+  },
+  "steps": {
+    "uv": {
+      "op": "screen_uv@1",
+      "args": {}
+    },
+    "c": {
+      "op": "sample@1",
+      "args": {
+        "tex": "src",
+        "uv": "uv",
+        "lod": 0
+      }
+    },
+    "sum": {
+      "op": "repeat@1",
+      "args": {
+        "count": "n",
+        "accumulate": {
+          "acc": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "body": {
+          "acc": {
+            "op": "add@1",
+            "args": {
+              "a": "acc",
+              "b": "c"
+            }
+          }
+        }
+      }
+    },
+    "avg": {
+      "op": "div@1",
+      "args": {
+        "a": "sum.acc",
+        "b": "n"
+      }
+    },
+    "out": {
+      "op": "mul@1",
+      "args": {
+        "a": "avg",
+        "b": "gain"
+      }
+    }
+  },
+  "outputs": {
+    "color": "out"
+  },
+  "chain": "effects",
+  "order": "a0",
+  "resolution": "full",
+  "determinism": "same_machine",
+  "cost": {
+    "ns_per_px": 0.5
+  },
+  "fallback": "look"
+}
