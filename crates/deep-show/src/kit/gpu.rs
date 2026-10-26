@@ -36,11 +36,9 @@ fn ready<T>(f: impl Future<Output = T>) -> Option<T> {
     None
 }
 
-/// Whether wgpu's noop backend gives a device: the backend a headless case runs on.
-pub fn noop_device() -> bool {
-    let (device, _queue) = wgpu::Device::noop(&wgpu::DeviceDescriptor::default());
-    drop(device);
-    true
+/// Opens and drops a device on wgpu's noop backend: the backend a headless case runs on.
+pub fn noop_device() {
+    let _ = wgpu::Device::noop(&wgpu::DeviceDescriptor::default());
 }
 
 /// The GPU's adapter: its name and driver, for the environment digest; `None` with no GPU.

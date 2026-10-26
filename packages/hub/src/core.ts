@@ -11,8 +11,9 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AskRefused, openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
-import { canonicalize, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
+import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openLeases } from '@deepbuild/leases';
@@ -27,7 +28,7 @@ import { checkKey, Devices } from './trusted.js';
 import { openIndex, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { refuse, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type HookMeta, type Refusal } from './wire.js';
+import { EXTENSION_HOOK_MS, refuse, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type HookMeta, type Refusal } from './wire.js';
 
 const DAY = 86_400_000;
 /** How long deep_ask and deep_wait wait for an answer before saying it's still waiting: under the 60 s agents give a tool call. */
@@ -135,16 +136,7 @@ const eventText = (r: Row): string => `{"v":${r.v},"id":${q(r.id)},"kind":${q(r.
   + `${r.session_id === null ? '' : `,"session":${q(r.session_id)}`}${r.project_id === null ? '' : `,"project":${q(r.project_id)}`}${r.agent === null ? '' : `,"agent":${q(r.agent)}`},"verified":${r.unverified ? 'false' : 'true'}}`;
 
 /** A ULID at `ms` whose random part is a hash of `key`, so the same source line always gets the same ID. */
-function derivedId(ms: number, key: string): string {
-  const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  let out = '';
-  let time = BigInt(Math.max(0, Math.floor(ms)));
-  for (let i = 0; i < 10; i++) { out = CROCKFORD[Number(time & 31n)] + out; time >>= 5n; }
-  let bits = BigInt(`0x${sha256Hex(new TextEncoder().encode(key)).slice(0, 20)}`);
-  let tail = '';
-  for (let i = 0; i < 16; i++) { tail = CROCKFORD[Number(bits & 31n)] + tail; bits >>= 5n; }
-  return out + tail;
-}
+const derivedId = (ms: number, key: string): string => ulid(ms, sha256Hex(new TextEncoder().encode(key)).slice(0, 20));
 
 export class Core {
   private readonly root: Root;
@@ -181,6 +173,8 @@ export class Core {
   /** Hooks and calls run in arrival order: a deep_* call finds the stamp its PreToolUse left. */
   private chain: Promise<unknown> = Promise.resolve();
   private blocked: string | undefined;
+  /** Unset until the start opened it: a start that fails before has nothing to close or ask. */
+  private extensions: ExtensionHost | undefined;
   private readonly runs = new Map<string, { run: Run; done: Promise<void>; stop(): void }>();
   /** The stack `deep env up` started in each worktree, by the worktree's real path, and each one on its way up. */
   private readonly stacks = new Map<string, Stack>();
@@ -286,7 +280,16 @@ export class Core {
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
     });
+    // Every installed extension loads, sandboxed until a signed release lists it; one refused is named and left out.
+    const trust = await openTrust({ record: this.record, now: this.now });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now });
+    for (const pkg of await extensions.installed()) {
+      const load = await extensions.load(pkg);
+      if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
+    }
     await this.replaySpool();
+    // The replay is done: the extensions start, and each that can't is unloaded and named.
+    await extensions.ready().catch((error: unknown) => process.stderr.write(`deep hub: ${error instanceof Error ? error.message : String(error)}\n`));
     // A session that ended with turns still to judge sends no hook again: they are judged now.
     for (const [id, cursor] of this.cursors) {
       if (typeof cursor.ended?.agent !== 'string' || typeof cursor.read !== 'number' || !Array.isArray(cursor.reached)) continue;
@@ -344,6 +347,11 @@ export class Core {
   private appendCore(kind: string, data: Obj, extra: { subject?: string; evidence?: string[] } = {}): Promise<void> {
     const ts = this.now();
     return this.append(this.connection('core'), { v: 1, id: ulid(ts), kind, ts, data: data as JsonValue, ...extra });
+  }
+  /** A session.reading for the session, appended as the core. */
+  private appendReading(session: string, agent: string, reading: string): Promise<void> {
+    const ts = this.now();
+    return this.append(this.connection('core', { session, agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
   }
 
   // ---- Hooks.
@@ -429,8 +437,7 @@ export class Core {
     }
     if (whose.reading && !this.readings.has(`${meta.session}\0${whose.reading.job}`)) {
       this.readings.add(`${meta.session}\0${whose.reading.job}`);
-      const ts = this.now();
-      await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: whose.reading.text } }).catch(() => undefined);
+      await this.appendReading(meta.session, meta.agent, whose.reading.text).catch(() => undefined);
     }
     const verified = await this.verify(meta);
     const session = this.sessions.get(meta.session);
@@ -495,6 +502,22 @@ export class Core {
     return { settled };
   }
 
+  /** The hook kinds some loaded extension handles, read once the extensions have started. */
+  hooks(): string[] {
+    return this.extensions?.hooks() ?? [];
+  }
+  /**
+   * The extensions' joined reply to a tool.before, or null when it takes the hook's fail-open policy: while appends
+   * fail every gate is watch-only, and the extensions' denies and context go with them. A handler that failed is
+   * named on stderr; its reply is already out of the join.
+   */
+  async extensionHook(data: unknown): Promise<ExtensionReply | null> {
+    if (this.blocked || !this.extensions) return null;
+    const reply = await this.extensions.hook({ kind: 'tool.before', data, deadline: EXTENSION_HOOK_MS, bound: contextBoundFor(EXTENSION_HOOK_MS) });
+    for (const { reason } of reply.failed) process.stderr.write(`deep hub: tool.before handler failed: ${reason}\n`);
+    return { denies: reply.denies, context: reply.context };
+  }
+
   /** Records, once, that a call the hub answered was let through by deep-hook as late, naming its guard entries. */
   private async lateAnswered(meta: HookMeta, matched: string[]): Promise<void> {
     const reading = `deep-hook let ${meta.event} ${meta.id} through as late, after the hub's answer missed its deadline; `
@@ -502,8 +525,7 @@ export class Core {
     // The ID is a ULID (checked before this is called), so it goes into the query as it is.
     const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), '${meta.id}') > 0 LIMIT 1`);
     if (known.length) return;
-    const ts = this.now();
-    await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading } });
+    await this.appendReading(meta.session, meta.agent, reading);
   }
 
   /**
@@ -594,12 +616,9 @@ export class Core {
         continue;
       }
       turn.recording = true;
-      const ts = this.now();
       // Settled like a hook's drafts: the next hook doesn't wait for its commit. The turn, and so where a restart
       // reads from, stays until its reading is durable; one whose append fails is judged again with the next hook.
-      void this.append(this.connection('core', { session: session.id, agent: session.agent }), {
-        v: 1, id: ulid(ts), kind: 'session.reading', ts, data: { reading: HOOKS_MISSING },
-      }).then(() => {
+      void this.appendReading(session.id, session.agent, HOOKS_MISSING).then(() => {
         session.closed.splice(session.closed.indexOf(turn), 1);
         this.saveCursors();
       }, () => {
@@ -636,12 +655,9 @@ export class Core {
     this.saving = undefined;
     const cursors = new Map(this.cursors);
     for (const s of this.sessions.values()) {
-      // An ended session is kept until its last turns are judged and their readings durable.
-      if (s.ended && !s.closed.length) {
-        cursors.delete(s.id);
-        continue;
-      }
       cursors.delete(s.id);
+      // An ended session is kept until its last turns are judged and their readings durable.
+      if (s.ended && !s.closed.length) continue;
       cursors.set(s.id, { transcript: s.transcript, read: s.closed[0]?.from ?? s.turn?.from ?? s.read, reached: [...s.reached], ...(s.ended ? { ended: { agent: s.agent } } : {}) });
     }
     // Synced, so a power cut leaves the last whole save; a failed save is made again with the next hook's.
@@ -1709,6 +1725,7 @@ export class Core {
     await this.runner.close();
     await Promise.race([Promise.allSettled([...this.runs.values()].map((r) => r.done)), new Promise((done) => setTimeout(done, 5000))]);
     await this.appendCore('hub.stopped', { reason }).catch(() => undefined);
+    await this.extensions?.close();
     await this.supervisor.close();
     await this.record.close();
     this.writeState('stopped');

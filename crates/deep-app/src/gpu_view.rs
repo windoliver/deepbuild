@@ -38,8 +38,8 @@ fn install() {
         let views = VIEWS.lock().unwrap_or_else(|e| e.into_inner());
         for ui in views.iter() {
             match &event {
-                Event::Committed { buffer, surfaces } => ui.committed(*buffer, surfaces),
-                Event::Completed { buffer, gpu_ns } => ui.completed(*buffer, *gpu_ns),
+                Event::Encoded { frame, surfaces } => ui.committed(*frame, surfaces),
+                Event::Completed { frame, gpu_ns } => ui.completed(*frame, *gpu_ns),
             }
         }
     })));

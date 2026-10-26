@@ -9,6 +9,7 @@ export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
   | { op: 'mcp-hello'; parent: { pid: number; start: string } }
   | { op: 'health' }
+  | { op: 'extension-hook'; data: unknown }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
@@ -22,6 +23,7 @@ export async function answer(core: Core, request: CoreRequest): Promise<unknown>
     case 'call': return core.call(request.method, request.params, request.context);
     case 'mcp-hello': return core.mcpHello(request.parent);
     case 'health': return core.health();
+    case 'extension-hook': return core.extensionHook(request.data);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'stop': return core.stop(request.reason);
   }
@@ -32,7 +34,7 @@ if (parentPort && workerData?.core) {
   const port = parentPort;
   const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }));
   core.started().then(
-    () => { shedStartup(); port.postMessage({ op: 'started' }); },
+    () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
   );
   port.on('message', (message: CoreMessage) => {

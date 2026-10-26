@@ -255,7 +255,11 @@ fn fast_path(
     program: &Program,
     scene: &Scene,
 ) -> Option<(Vec<Solid>, Vec<Override>, Camera)> {
+    // A sun's direction and another module's items (#380) move with transforms this path
+    // doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
+        || scene.sun.is_some()
+        || !scene.others.is_empty()
         || scene
             .layers
             .iter()

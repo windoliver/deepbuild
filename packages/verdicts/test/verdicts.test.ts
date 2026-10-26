@@ -237,14 +237,6 @@ describe('a run with one waived failure and one new one', () => {
   });
 });
 
-describe('a fix check', () => {
-  it('with no run on the merge base never passes', () => {
-    const c = check('fix');
-    const v = verdict(claim({ requirements: [{ req: REQ, depth: 'unit', oracle: 'code', on_base: 'fails' }], checks: [c], runs: [run(c, 'passed')] }));
-    expect(v.outcome).toBe('INVALID');
-  });
-});
-
 describe('a check with a numeric contract', () => {
   it('whose passed run has no contract report never passes', () => {
     const c = check('kernel', { contract: { reference: { precision: 'fp64' }, accumulate: 'fp32', tolerances: [{ output: 'o', size: 1, atol: 1e-3, rtol: 1e-3, unit: 'value' }], twin: { accumulate: 'fp16' }, assert: 'assert_close' } });
@@ -354,23 +346,17 @@ describe('never the same question twice', () => {
   });
 });
 
-describe('a flaky check\'s open item', () => {
-  it('names no clean runs still needed, since no more start on this commit', () => {
-    const c = check('unit', { accept: '10%' });
-    const v = verdict(claim({ checks: [c], runs: [run(c, 'failed', { failures: [failure('t')] }), run(c, 'passed')] }));
-    const item = v.open_items.find((i) => i.check === 'unit')!;
-    expect(item.text).not.toMatch(/clean runs/);
-    expect(item.closes_with.evidence).not.toMatch(/clean runs/);
-  });
-});
-
-describe('a stopped check\'s open item', () => {
-  it('names no clean runs still needed, since no more start on this commit', () => {
-    const c = check('unit', { runs: 3 });
-    const v = verdict(claim({ checks: [c], runs: [run(c, 'passed'), run(c, 'stopped')] }));
+describe('a flaky or stopped check\'s open item', () => {
+  it.each<[string, Partial<ClaimCheck>, (c: ClaimCheck) => Run[]]>([
+    ['flaky', { accept: '10%' }, (c) => [run(c, 'failed', { failures: [failure('t')] }), run(c, 'passed')]],
+    ['stopped', { runs: 3 }, (c) => [run(c, 'passed'), run(c, 'stopped')]],
+  ])('%s: names no clean runs still needed, since no more start on this commit', (_, over, runs) => {
+    const c = check('unit', over);
+    const v = verdict(claim({ checks: [c], runs: runs(c) }));
     const item = v.open_items.find((i) => i.check === 'unit')!;
     expect(item.closes_with.runs_needed).toBe(0);
     expect(item.text).not.toMatch(/clean runs/);
+    expect(item.closes_with.evidence).not.toMatch(/clean runs/);
   });
 });
 
@@ -517,9 +503,10 @@ describe('a waiver\'s error', () => {
 
 describe('wording a person reads', () => {
   const fixReq = { req: REQ, depth: 'unit' as const, oracle: 'code' as const, on_base: 'fails' as const };
-  it('a fix check with no base result names what closes it, not its reason', () => {
+  it('a fix check with no base result never passes, and names what closes it, not its reason', () => {
     const c = check('fix');
     const v = verdict(claim({ requirements: [fixReq], checks: [c], runs: [run(c, 'passed')] }));
+    expect(v.outcome).toBe('INVALID');
     const item = v.open_items.find((i) => i.check === 'fix');
     expect(item?.closes_with.evidence).toBe('a run of it on the merge base that fails on an assertion it names');
   });

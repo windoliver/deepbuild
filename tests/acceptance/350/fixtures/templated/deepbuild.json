@@ -1,0 +1,14 @@
+{
+  "id": "test/tmpl",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["record"] },
+  "templates": [
+    {
+      "name": "status",
+      "hook": "tool.before",
+      "text": "{handle} has {count} checks still open",
+      "fields": { "handle": { "type": "handle" }, "count": { "type": "number" } }
+    }
+  ]
+}
