@@ -13,3 +13,4 @@ export { buildCatalogue, catalogue, catalogueDrift, checkViewBindings, type Cata
 export { HANDLE_SCHEMES, parseHandle, printHandle, type Handle } from './handles.js';
 export { contextBoundFor, joinHookReplies, negotiateFeatures, type HookContribution, type JoinedHookReply } from './hook.js';
 export { checkManifest } from './manifest.js';
+export { extensionApi, hubSlots, type ApiEntry, type HubSlot } from './slots.js';
