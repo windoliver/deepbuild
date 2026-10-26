@@ -1,0 +1,33 @@
+// A first-party test package (#349 AC2, AC6): one test adapter, shaped by adapter.json: its registered name, its
+// capability flags, the hooks it maps (an adapter that only relays maps no gate), its adapter.facts@1 and
+// adapter.unsupported@1 data, the published fixture data of each event it maps, and the file it appends one JSON
+// line to per answer the host asks it to deliver. Its mapHook maps a hook line by the payload's hook_event_name to
+// the event of that hook, so the host sees a session start, prompt, call tools, stop and end.
+import { appendFileSync, readFileSync } from 'node:fs';
+
+interface Settings { name: string; caps: Record<string, boolean>; maps: string[]; seen: string; facts: unknown; unsupported: unknown; data: Record<string, unknown> }
+const KINDS: Record<string, string> = { SessionStart: 'session.start', UserPromptSubmit: 'user.ask', PreToolUse: 'tool.before', PostToolUse: 'tool.after', Stop: 'agent.stop', SessionEnd: 'session.end' };
+
+export default async function (deep: any): Promise<void> {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./adapter.json', import.meta.url), 'utf8'));
+  const adapter = {
+    facts: settings.facts,
+    caps: settings.caps,
+    unsupported: settings.unsupported,
+    doctor: () => [],
+    mapHook(request: { agent: string; payload: any }) {
+      const hook = String(request.payload?.hook_event_name ?? '');
+      const kind = KINDS[hook];
+      if (!kind || !settings.maps.includes(hook)) return { events: [], verified: true, readings: [] };
+      const d: any = structuredClone(settings.data[kind]);
+      if (kind === 'session.start') Object.assign(d, { agent: settings.name, worktree: String(request.payload.cwd ?? '/'), thread: String(request.payload.session_id) });
+      if (kind === 'tool.before') Object.assign(d, { late: false, matched: [] });
+      return { events: [{ agent: settings.name, kind, data: d, rule: `/test/${hook}` }], verified: true, readings: [] };
+    },
+    deliver(answer: unknown, session: string, route: string) {
+      appendFileSync(settings.seen, `${JSON.stringify({ answer, session, route, at: Date.now() })}\n`);
+      return { outcome: 'delivered', route };
+    },
+  };
+  await deep.registerAdapter(settings.name, adapter);
+}

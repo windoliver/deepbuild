@@ -925,3 +925,21 @@ describe('round 16: cut starts across restarts, late finishes, archived transcri
     expect((await r.table('evidence')).rows).toEqual([]);
   });
 });
+
+describe('the decisions projection tells a revocation from an overrule', () => {
+  it('a decision revoked on the trusted path reads revoked with no overruler; an overruled one names the event that overruled it', async () => {
+    const { record: r, S } = await record();
+    const made = async (at: number): Promise<string> => {
+      const D = ulidAt(at);
+      await r.append(core(S), { v: 1, id: D, kind: 'decision.created', ts: at, data: { key: 'a'.repeat(64), scope: 'all', answer: 'approve', ask: `ask:${ulidAt(at - 1)}` } });
+      return D;
+    };
+    const revoked = await made(T0 + 10);
+    await r.append(core(S), { v: 1, id: ulidAt(T0 + 20), kind: 'decision.revoked', ts: T0 + 20, subject: `decision:${revoked}`, data: { decision: `decision:${revoked}` } });
+    const overruled = await made(T0 + 30);
+    const by = ulidAt(T0 + 40);
+    await r.append(core(S), { v: 1, id: by, kind: 'decision.overruled', ts: T0 + 40, subject: `decision:${overruled}`, data: { decision: `decision:${overruled}` } });
+    expect(await r.raw(`SELECT state, overruled_by FROM decisions WHERE id = '${revoked}'`)).toEqual([{ state: 'revoked', overruled_by: null }]);
+    expect(await r.raw(`SELECT state, overruled_by FROM decisions WHERE id = '${overruled}'`)).toEqual([{ state: 'revoked', overruled_by: by }]);
+  });
+});

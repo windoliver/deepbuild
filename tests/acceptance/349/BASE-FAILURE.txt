@@ -1,0 +1,467 @@
+Acceptance tests for #349, run on the base commit 0c2fed1 (origin/main; no implementation of #349).
+
+Command:  PATH=$HOME/.nvm/versions/node/v24.22.0/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/349 --no-file-parallelism
+          (with CLAUDECODE and AI_AGENT unset and NO_COLOR=1)
+Node:     v24.22.0
+Vitest:   5.0.5 darwin-arm64
+Date:     2026-10-24
+Machine:  Mac15,12 (Apple M3)
+
+Result: 8 of 8 files fail, 22 of 22 collected tests fail, nothing passes and nothing is skipped.
+
+Why each fails, all for the expected reason (the surface the README names doesn't exist at this base):
+- results.test.ts (AC1 x1): the base host returns the runner's {"outcome":"passed","testsRun":0,...} unchanged,
+  so "the core returned a passed run with no results" fails.
+- delivery.test.ts (AC2 x3) and owner.test.ts (AC6 x3): each test adapter package fails conformance with
+  "deep.registerAdapter isn't wired into this host yet", so no adapter loads; the two AC6 wrong-program tests fail
+  because the twin's scenario fails that way instead of naming the session (and the host has no such plants).
+- resolver.test.ts (AC3 x3) and decisions.test.ts (AC7 x3): the asks core has no saveDecision / refusals /
+  revokeDecision ("w.asks.saveDecision is not a function", "r.w.asks.refusals is not a function"); the resolver
+  package loads but its deep.registerResolver call is refused as not wired, so nothing resolves.
+- install-kit.test.ts (AC4 x2): install runs no kit: Installed has no kits, so the expected
+  {slot:"check.kind@1", fill:"journey", verdict:"PASS"} is missing (and the planted runner would install).
+- slot-table.test.ts (AC5 x4) and slot-list.test.ts (AC8 x3): packages/contracts/extension-api.json and
+  hub-slots.json don't exist ("ENOENT"), contracts exports no extensionApi(), and scripts/slots-check.mjs doesn't exist.
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/349/tsconfig.json --noEmit exits 2 with 32
+errors, every one of them the missing surface: Asks has no saveDecision/revokeDecision/refusals and exports no
+AsksPlant; ExtensionHost has no hook/adapters/owner/deliverAnswer, ExtensionHostOptions no asks, Installed no kits,
+Plant lacks 'both-adapters-deliver' and 'first-to-bind-owns'; contracts exports no ApiEntry/HubSlot/extensionApi/
+hubSlots; conformance exports no SlotProblem/slotProblems (and the implicit-any errors that follow from those types
+being missing). No other type error.
+
+---- vitest output (home paths redacted to ~) ----
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/tests/acceptance/349
+
+ ❯ delivery.test.ts (3 tests | 3 failed) 1434ms
+   ❯ AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn (3)
+     × AC2 steer false, holdStop true: an answer that arrives mid-turn waits, and is delivered once in the stop hold, by the route `hold` 806ms
+     × AC2 steer false, holdStop false: an answer that arrives mid-turn waits through the stop, and is delivered once at the next prompt, by the route `prompt` 228ms
+     × AC2 steer true: the same answer is delivered in the middle of the turn, by the route `steer`, so the flag and not the name decides 341ms
+ ❯ owner.test.ts (3 tests | 3 failed) 1993ms
+   ❯ AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session (3)
+     × AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays 666ms
+     × AC6 (wrong program) a host that lets both adapters deliver sends one answer twice, and fails this test naming the session 783ms
+     × AC6 (wrong program) a host that gives the session to the first adapter to bind it delivers through the adapter that doesn't gate it, and fails this test naming the session 473ms
+ ❯ decisions.test.ts (3 tests | 3 failed) 1889ms
+   ❯ AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision (3)
+     × AC7 a resolver naming a revoked decision of the ask's kind and scope is refused, naming the decision, and the ask reaches you 792ms
+     × AC7 a resolver naming an active decision saved in another repo is refused, naming the decision, and the ask reaches you; in its own repo the same decision applies 22ms
+     × AC7 (wrong program) a core that checks only that the named decision exists applies the revoked one and the other repo's, and fails this test naming each decision 966ms
+ ❯ resolver.test.ts (3 tests | 3 failed) 1798ms
+   ❯ AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you (3)
+     × AC3 a resolver that answers approve naming no decision is refused by the core, nothing is applied, and the ask reaches you 1580ms
+     × AC3 a resolver naming an active decision of another kind (saved from a merge ask) is refused for a push ask, naming the decision, and the ask reaches you 25ms
+     × AC3 the same answer naming an active decision of the ask's kind and scope is applied: decision.applied names it, the ask is logged as decided for you, and the answer reaches the agent 30ms
+ ❯ results.test.ts (1 test | 1 failed) 782ms
+   ❯ AC1 #349.68572cba a check runner can't return a passed run without its results (1)
+     × AC1 a loaded runner that reports passed with no test counted gets no passed run from the core, which names the kind; the same runner's complete passed run goes through unchanged 758ms
+ ❯ install-kit.test.ts (2 tests | 2 failed) 986ms
+   ❯ AC4 #349.e98531fc a second journey installs only after check.kind@1's fixtures pass; a planted runner passing a crashed suite with 12 tests is refused at install naming the fixture, and the kind in use keeps running (2)
+     × AC4 the first journey installs with check.kind@1 passed and runs; the planted second one is refused at install, naming fail-elsewhere, and the first keeps running 942ms
+     × AC4 a sound second implementation of journey installs, after check.kind@1's fixtures pass on it 4ms
+ ❯ slot-list.test.ts (3 tests | 3 failed) 214ms
+   ❯ AC8 #349.b8d8858e the preflight lists slots from the published contract, per register* method and variant; a planted MCP variant with no row fails it naming the method and the variant; a check listing slots from the table passes it and fails this test (3)
+     × AC8 the published contract names every deep.register* method the host's API has, registerSource with a stream, a polled source and an MCP tool, and the table has a row for each 46ms
+     × AC8 a planted MCP variant of deep.registerSource with no row in the hub-slot table fails the preflight, naming the method and the variant 2ms
+     × AC8 (wrong program) a check that lists slots from the table itself passes the table with no MCP row, and fails this test 164ms
+ ❯ slot-table.test.ts (4 tests | 4 failed) 69ms
+   ❯ AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill (4)
+     × AC5 the published contract passes the preflight's slot check, which the lint lane runs 5ms
+     × AC5 a planted deep.registerFoo declared with no kit fails the preflight, naming the slot and the missing kit 1ms
+     × AC5 a planted deep.registerFoo declared with a kit but no planted wrong fill fails the preflight, naming the slot and the missing planted fill 0ms
+     × AC5 (wrong program) a check.kind@1 kit that admits its planted fill crashed-suite fails the preflight's check, naming the fill; the shipped kit passes it 60ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  decisions.test.ts > AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision > AC7 a resolver naming a revoked decision of the ask's kind and scope is refused, naming the decision, and the ask reaches you
+TypeError: w.asks.saveDecision is not a function
+ ❯ Object.decide resolving.ts:43:37
+     41|     async decide(ask, scope) {
+     42|       await approve(w, ask);
+     43|       const decision = await w.asks.saveDecision(YOU, ask, scope);
+       |                                     ^
+     44|       expect(decision, 'a saved decision is a decision: handle').toMat…
+     45|       return decision;
+ ❯ revokedCase decisions.test.ts:19:20
+ ❯ decisions.test.ts:38:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  decisions.test.ts > AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision > AC7 a resolver naming an active decision saved in another repo is refused, naming the decision, and the ask reaches you; in its own repo the same decision applies
+TypeError: w.asks.saveDecision is not a function
+ ❯ Object.decide resolving.ts:43:37
+     41|     async decide(ask, scope) {
+     42|       await approve(w, ask);
+     43|       const decision = await w.asks.saveDecision(YOU, ask, scope);
+       |                                     ^
+     44|       expect(decision, 'a saved decision is a decision: handle').toMat…
+     45|       return decision;
+ ❯ otherRepoCase decisions.test.ts:30:20
+ ❯ decisions.test.ts:44:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  decisions.test.ts > AC7 #349.70f6262e a resolver naming a revoked decision, or an active one saved in another repo, is refused and the ask reaches you; a core checking only that the decision exists applies both and fails naming the decision > AC7 (wrong program) a core that checks only that the named decision exists applies the revoked one and the other repo's, and fails this test naming each decision
+TypeError: w.asks.saveDecision is not a function
+ ❯ Object.decide resolving.ts:43:37
+     41|     async decide(ask, scope) {
+     42|       await approve(w, ask);
+     43|       const decision = await w.asks.saveDecision(YOU, ask, scope);
+       |                                     ^
+     44|       expect(decision, 'a saved decision is a decision: handle').toMat…
+     45|       return decision;
+ ❯ revokedCase decisions.test.ts:19:20
+ ❯ decisions.test.ts:52:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  delivery.test.ts > AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn > AC2 steer false, holdStop true: an answer that arrives mid-turn waits, and is delivered once in the stop hold, by the route `hold`
+AssertionError: deepbuild/test-claude-code passes conformance: {"id":"deepbuild/test-claude-code","version":"1.0.0","digest":"d1:eb21e5af84adba53a4736e3bb76837fb99f4cb54b97bae24207a2ad009558b99","passed":false,"reasons":["its code didn't register in the platform sandbox: deep.registerAdapter isn't wired into this host yet"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:198:72
+    196|   const p = await h.install({ from: dir, builtBy: null });
+    197|   const c = await h.check(p);
+    198|   expect(c.passed, `${p.id} passes conformance: ${JSON.stringify(c)}`)…
+       |                                                                        ^
+    199|   const load = await h.load(p);
+    200|   expect(load.status === 'loaded' && load.place, `${p.id} loads in the…
+ ❯ loadInHub helpers.ts:192:3
+ ❯ delivery.test.ts:17:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  delivery.test.ts > AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn > AC2 steer false, holdStop false: an answer that arrives mid-turn waits through the stop, and is delivered once at the next prompt, by the route `prompt`
+AssertionError: deepbuild/test-waiter passes conformance: {"id":"deepbuild/test-waiter","version":"1.0.0","digest":"d1:2a2317bff094f6c19c75874af522fac4ad4b52c5e56bab21cc87b5e8376ab8db","passed":false,"reasons":["its code didn't register in the platform sandbox: deep.registerAdapter isn't wired into this host yet"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:198:72
+    196|   const p = await h.install({ from: dir, builtBy: null });
+    197|   const c = await h.check(p);
+    198|   expect(c.passed, `${p.id} passes conformance: ${JSON.stringify(c)}`)…
+       |                                                                        ^
+    199|   const load = await h.load(p);
+    200|   expect(load.status === 'loaded' && load.place, `${p.id} loads in the…
+ ❯ loadInHub helpers.ts:192:3
+ ❯ delivery.test.ts:33:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  delivery.test.ts > AC2 #349.009ae072 a test adapter with steer false gets answers through its stop hold or its next prompt, never in the middle of a turn > AC2 steer true: the same answer is delivered in the middle of the turn, by the route `steer`, so the flag and not the name decides
+AssertionError: deepbuild/test-steerer passes conformance: {"id":"deepbuild/test-steerer","version":"1.0.0","digest":"d1:b952c2c25a17f7e0a132bedc7c2ee061d095bb1eb8dc0e38284820a6ea986ea1","passed":false,"reasons":["its code didn't register in the platform sandbox: deep.registerAdapter isn't wired into this host yet"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:198:72
+    196|   const p = await h.install({ from: dir, builtBy: null });
+    197|   const c = await h.check(p);
+    198|   expect(c.passed, `${p.id} passes conformance: ${JSON.stringify(c)}`)…
+       |                                                                        ^
+    199|   const load = await h.load(p);
+    200|   expect(load.status === 'loaded' && load.place, `${p.id} loads in the…
+ ❯ loadInHub helpers.ts:192:3
+ ❯ delivery.test.ts:49:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  install-kit.test.ts > AC4 #349.e98531fc a second journey installs only after check.kind@1's fixtures pass; a planted runner passing a crashed suite with 12 tests is refused at install naming the fixture, and the kind in use keeps running > AC4 the first journey installs with check.kind@1 passed and runs; the planted second one is refused at install, naming fail-elsewhere, and the first keeps running
+AssertionError: the install ran check.kind@1's kit on journey: undefined: expected [] to deep equally contain { slot: 'check.kind@1', …(2) }
+
+- Expected:
+{
+  "fill": "journey",
+  "slot": "check.kind@1",
+  "verdict": "PASS",
+}
+
++ Received:
+[]
+
+ ❯ install-kit.test.ts:30:110
+     28|     const { host, a, b } = await hostWithJourneys();
+     29|     const first = await host.install({ from: a, builtBy: null });
+     30|     expect(first.kits ?? [], `the install ran check.kind@1's kit on jo…
+       |                                                                                                              ^
+     31|     expect((await host.check(first)).passed).toBe(true);
+     32|     expect((await host.load(first)).status).toBe('loaded');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  install-kit.test.ts > AC4 #349.e98531fc a second journey installs only after check.kind@1's fixtures pass; a planted runner passing a crashed suite with 12 tests is refused at install naming the fixture, and the kind in use keeps running > AC4 a sound second implementation of journey installs, after check.kind@1's fixtures pass on it
+AssertionError: expected [] to deep equally contain { slot: 'check.kind@1', …(2) }
+
+- Expected:
+{
+  "fill": "journey",
+  "slot": "check.kind@1",
+  "verdict": "PASS",
+}
+
++ Received:
+[]
+
+ ❯ install-kit.test.ts:44:60
+     42|     const { host, c } = await hostWithJourneys();
+     43|     const second = await host.install({ from: c, builtBy: null });
+     44|     expect(second.kits ?? [], JSON.stringify(second.kits)).toContainEq…
+       |                                                            ^
+     45|     expect((await host.installed()).map((p) => p.id)).toContain('deepb…
+     46|   }, 300_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  owner.test.ts > AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session > AC6 the gating adapter, second to bind the session, owns it and delivers each answer once; the first to bind only relays
+AssertionError: deepbuild/test-relay passes conformance: {"id":"deepbuild/test-relay","version":"1.0.0","digest":"d1:274d47f6df0937476e4a294889422f970246783be3c9de97b318ccf01650796c","passed":false,"reasons":["its code didn't register in the platform sandbox: deep.registerAdapter isn't wired into this host yet"]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:198:72
+    196|   const p = await h.install({ from: dir, builtBy: null });
+    197|   const c = await h.check(p);
+    198|   expect(c.passed, `${p.id} passes conformance: ${JSON.stringify(c)}`)…
+       |                                                                        ^
+    199|   const load = await h.load(p);
+    200|   expect(load.status === 'loaded' && load.place, `${p.id} loads in the…
+ ❯ loadInHub helpers.ts:192:3
+ ❯ gatesAndRelays owner.test.ts:19:13
+ ❯ owner.test.ts:42:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  owner.test.ts > AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session > AC6 (wrong program) a host that lets both adapters deliver sends one answer twice, and fails this test naming the session
+AssertionError: expected [Function] to throw error including '01M5R44NG0Z7Z255V5G7PCH7Z4' but got 'deepbuild/test-relay passes conforman…'
+
+Expected: "01M5R44NG0Z7Z255V5G7PCH7Z4"
+Received: "deepbuild/test-relay passes conformance: {"id":"deepbuild/test-relay","version":"1.0.0","digest":"d1:09bb55b8a3c0c45bb9854f4003c5f2ab892a7f88510b5af44778fab696ef1450","passed":false,"reasons":["its code didn't register in the platform sandbox: deep.registerAdapter isn't wired into this host yet"]}: expected false to be true // Object.is equality"
+
+ ❯ owner.test.ts:47:61
+     45|   it('AC6 (wrong program) a host that lets both adapters deliver sends…
+     46|     const s = sessionId();
+     47|     await expect(gatesAndRelays(s, 'both-adapters-deliver')).rejects.t…
+       |                                                             ^
+     48|   }, 120_000);
+     49|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  owner.test.ts > AC6 #349.77853dd0 two adapters see one session; the second to bind it gates it and delivers each answer once, the other only relays; a host letting both deliver, or giving the session to the first to bind, fails naming the session > AC6 (wrong program) a host that gives the session to the first adapter to bind it delivers through the adapter that doesn't gate it, and fails this test naming the session
+AssertionError: expected [Function] to throw error including '01M5R44P8FD9HQEGDR7QNT20KX' but got 'deepbuild/test-relay passes conforman…'
+
+Expected: "01M5R44P8FD9HQEGDR7QNT20KX"
+Received: "deepbuild/test-relay passes conformance: {"id":"deepbuild/test-relay","version":"1.0.0","digest":"d1:9ed4ab9d6c99b61d4ff568894af24a6d1760f40751de0d6ae3da8390b49e651e","passed":false,"reasons":["its code didn't register in the platform sandbox: deep.registerAdapter isn't wired into this host yet"]}: expected false to be true // Object.is equality"
+
+ ❯ owner.test.ts:52:58
+     50|   it('AC6 (wrong program) a host that gives the session to the first a…
+     51|     const s = sessionId();
+     52|     await expect(gatesAndRelays(s, 'first-to-bind-owns')).rejects.toTh…
+       |                                                          ^
+     53|   }, 120_000);
+     54| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  resolver.test.ts > AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you > AC3 a resolver that answers approve naming no decision is refused by the core, nothing is applied, and the ask reaches you
+TypeError: r.w.asks.refusals is not a function
+ ❯ refusedAndReachesYou resolving.ts:54:35
+     52|   const applied = (await r.w.events('decision.applied')).filter((e) =>…
+     53|   expect(applied, `the core applied ${named ?? 'no decision'} to ${ask…
+     54|   const refusals = await r.w.asks.refusals(ask);
+       |                                   ^
+     55|   expect(refusals.length, `the core refused the resolver's answer to $…
+     56|   const [refusal] = refusals;
+ ❯ resolver.test.ts:21:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  resolver.test.ts > AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you > AC3 a resolver naming an active decision of another kind (saved from a merge ask) is refused for a push ask, naming the decision, and the ask reaches you
+TypeError: w.asks.saveDecision is not a function
+ ❯ Object.decide resolving.ts:43:37
+     41|     async decide(ask, scope) {
+     42|       await approve(w, ask);
+     43|       const decision = await w.asks.saveDecision(YOU, ask, scope);
+       |                                     ^
+     44|       expect(decision, 'a saved decision is a decision: handle').toMat…
+     45|       return decision;
+ ❯ resolver.test.ts:28:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  resolver.test.ts > AC3 #349.27abd805 a resolver answering an authority ask without naming an active decision of its kind and scope is refused and the ask reaches you; naming one, the answer is applied and logged as decided for you > AC3 the same answer naming an active decision of the ask's kind and scope is applied: decision.applied names it, the ask is logged as decided for you, and the answer reaches the agent
+TypeError: w.asks.saveDecision is not a function
+ ❯ Object.decide resolving.ts:43:37
+     41|     async decide(ask, scope) {
+     42|       await approve(w, ask);
+     43|       const decision = await w.asks.saveDecision(YOU, ask, scope);
+       |                                     ^
+     44|       expect(decision, 'a saved decision is a decision: handle').toMat…
+     45|       return decision;
+ ❯ resolver.test.ts:38:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  results.test.ts > AC1 #349.68572cba a check runner can't return a passed run without its results > AC1 a loaded runner that reports passed with no test counted gets no passed run from the core, which names the kind; the same runner's complete passed run goes through unchanged
+AssertionError: the core returned a passed run with no results: {"outcome":"passed","testsRun":0,"failures":[],"evidence":[],"read":[],"mask":null}: expected 'passed' not to be 'passed' // Object.is equality
+ ❯ results.test.ts:27:111
+     25|
+     26|     const refused = await host.runCheck(KIND, COMMAND_SPEC(KIND), ctx);
+     27|     expect(refused.outcome, `the core returned a passed run with no re…
+       |                                                                                                               ^
+     28|     expect(refused.testsRun, 'nothing was counted').toBe(0);
+     29|     expect(refused.failures.map((f) => f.message).join('\n'), 'the res…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  slot-list.test.ts > AC8 #349.b8d8858e the preflight lists slots from the published contract, per register* method and variant; a planted MCP variant with no row fails it naming the method and the variant; a check listing slots from the table passes it and fails this test > AC8 the published contract names every deep.register* method the host's API has, registerSource with a stream, a polled source and an MCP tool, and the table has a row for each
+TypeError: extensionApi is not a function
+ ❯ slot-list.test.ts:26:17
+     24|     const { extensionApi, hubSlots, frozenDigests } = await contracts(…
+     25|     const { EXTENSION_API } = await host();
+     26|     const api = extensionApi();
+       |                 ^
+     27|     const table = hubSlots();
+     28|     for (const m of EXTENSION_API.filter((m) => m.method.startsWith('d…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  slot-list.test.ts > AC8 #349.b8d8858e the preflight lists slots from the published contract, per register* method and variant; a planted MCP variant with no row fails it naming the method and the variant; a check listing slots from the table passes it and fails this test > AC8 a planted MCP variant of deep.registerSource with no row in the hub-slot table fails the preflight, naming the method and the variant
+Error: ENOENT: no such file or directory, open '~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/extension-api.json'
+ ❯ readApi slotting.ts:12:53
+     10| export const API_FILE = join(REPO, 'packages/contracts/extension-api.j…
+     11| export const TABLE_FILE = join(REPO, 'packages/contracts/hub-slots.jso…
+     12| export const readApi = (): ApiEntry[] => JSON.parse(readFileSync(API_F…
+       |                                                     ^
+     13| export const readTable = (): HubSlot[] => JSON.parse(readFileSync(TABL…
+     14|
+ ❯ slot-list.test.ts:45:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  slot-list.test.ts > AC8 #349.b8d8858e the preflight lists slots from the published contract, per register* method and variant; a planted MCP variant with no row fails it naming the method and the variant; a check listing slots from the table passes it and fails this test > AC8 (wrong program) a check that lists slots from the table itself passes the table with no MCP row, and fails this test
+Error: ENOENT: no such file or directory, open '~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/hub-slots.json'
+ ❯ readTable slotting.ts:13:54
+     11| export const TABLE_FILE = join(REPO, 'packages/contracts/hub-slots.jso…
+     12| export const readApi = (): ApiEntry[] => JSON.parse(readFileSync(API_F…
+     13| export const readTable = (): HubSlot[] => JSON.parse(readFileSync(TABL…
+       |                                                      ^
+     14|
+     15| export interface Checked { status: number | null; stdout: string; stde…
+ ❯ withoutMcp slot-list.test.ts:16:26
+ ❯ slot-list.test.ts:53:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  slot-table.test.ts > AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill > AC5 the published contract passes the preflight's slot check, which the lint lane runs
+Error: ENOENT: no such file or directory, open '~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/extension-api.json'
+ ❯ readApi slotting.ts:12:53
+     10| export const API_FILE = join(REPO, 'packages/contracts/extension-api.j…
+     11| export const TABLE_FILE = join(REPO, 'packages/contracts/hub-slots.jso…
+     12| export const readApi = (): ApiEntry[] => JSON.parse(readFileSync(API_F…
+       |                                                     ^
+     13| export const readTable = (): HubSlot[] => JSON.parse(readFileSync(TABL…
+     14|
+ ❯ slot-table.test.ts:21:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  slot-table.test.ts > AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill > AC5 a planted deep.registerFoo declared with no kit fails the preflight, naming the slot and the missing kit
+Error: ENOENT: no such file or directory, open '~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/extension-api.json'
+ ❯ readApi slotting.ts:12:53
+     10| export const API_FILE = join(REPO, 'packages/contracts/extension-api.j…
+     11| export const TABLE_FILE = join(REPO, 'packages/contracts/hub-slots.jso…
+     12| export const readApi = (): ApiEntry[] => JSON.parse(readFileSync(API_F…
+       |                                                     ^
+     13| export const readTable = (): HubSlot[] => JSON.parse(readFileSync(TABL…
+     14|
+ ❯ slot-table.test.ts:28:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  slot-table.test.ts > AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill > AC5 a planted deep.registerFoo declared with a kit but no planted wrong fill fails the preflight, naming the slot and the missing planted fill
+Error: ENOENT: no such file or directory, open '~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/extension-api.json'
+ ❯ readApi slotting.ts:12:53
+     10| export const API_FILE = join(REPO, 'packages/contracts/extension-api.j…
+     11| export const TABLE_FILE = join(REPO, 'packages/contracts/hub-slots.jso…
+     12| export const readApi = (): ApiEntry[] => JSON.parse(readFileSync(API_F…
+       |                                                     ^
+     13| export const readTable = (): HubSlot[] => JSON.parse(readFileSync(TABL…
+     14|
+ ❯ slot-table.test.ts:36:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+ FAIL  slot-table.test.ts > AC5 #349.2eb6c029 a planted slot deep.registerFoo declared without a kit or a planted wrong fill fails the preflight naming the slot; one whose kit admits its planted fill fails it naming the fill > AC5 (wrong program) a check.kind@1 kit that admits its planted fill crashed-suite fails the preflight's check, naming the fill; the shipped kit passes it
+Error: ENOENT: no such file or directory, open '~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/extension-api.json'
+ ❯ readApi slotting.ts:12:53
+     10| export const API_FILE = join(REPO, 'packages/contracts/extension-api.j…
+     11| export const TABLE_FILE = join(REPO, 'packages/contracts/hub-slots.jso…
+     12| export const readApi = (): ApiEntry[] => JSON.parse(readFileSync(API_F…
+       |                                                     ^
+     13| export const readTable = (): HubSlot[] => JSON.parse(readFileSync(TABL…
+     14|
+ ❯ slot-table.test.ts:47:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/22]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  22 failed (22)
+   Start at  16:32:34
+   Duration  13.12s (tests 82%, import 12%, transform 5%, worker 1%)
+
+    Isolate  8 workers spawned · ~221ms startup each (spawn + environment, per file)
+             at least ~1.54s faster with isolate: false — reuses workers across files instead of one per file
+
+
+---- tsc output (home paths redacted to ~) ----
+tests/acceptance/349/adapting.ts(35,39): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/decisions.test.ts(20,18): error TS2339: Property 'revokeDecision' does not exist on type 'Asks'.
+tests/acceptance/349/delivery.test.ts(21,25): error TS2339: Property 'deliverAnswer' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/delivery.test.ts(37,21): error TS2339: Property 'deliverAnswer' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/delivery.test.ts(53,25): error TS2339: Property 'deliverAnswer' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/helpers.ts(18,21): error TS2305: Module '"../../../packages/asks/src/index.ts"' has no exported member 'AsksPlant'.
+tests/acceptance/349/helpers.ts(136,23): error TS2353: Object literal may only specify known properties, and 'asks' does not exist in type 'ExtensionHostOptions'.
+tests/acceptance/349/install-kit.test.ts(30,18): error TS2339: Property 'kits' does not exist on type 'Installed'.
+tests/acceptance/349/install-kit.test.ts(30,101): error TS2339: Property 'kits' does not exist on type 'Installed'.
+tests/acceptance/349/install-kit.test.ts(44,19): error TS2339: Property 'kits' does not exist on type 'Installed'.
+tests/acceptance/349/install-kit.test.ts(44,53): error TS2339: Property 'kits' does not exist on type 'Installed'.
+tests/acceptance/349/owner.test.ts(21,19): error TS2339: Property 'adapters' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/owner.test.ts(21,36): error TS7006: Parameter 'a' implicitly has an 'any' type.
+tests/acceptance/349/owner.test.ts(26,25): error TS2339: Property 'owner' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/owner.test.ts(32,25): error TS2339: Property 'deliverAnswer' does not exist on type 'ExtensionHost'.
+tests/acceptance/349/owner.test.ts(47,36): error TS2345: Argument of type '"both-adapters-deliver"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/349/owner.test.ts(52,36): error TS2345: Argument of type '"first-to-bind-owns"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/349/resolving.ts(8,15): error TS2305: Module '"../../../packages/asks/src/index.ts"' has no exported member 'AsksPlant'.
+tests/acceptance/349/resolving.ts(43,37): error TS2339: Property 'saveDecision' does not exist on type 'Asks'.
+tests/acceptance/349/resolving.ts(54,35): error TS2339: Property 'refusals' does not exist on type 'Asks'.
+tests/acceptance/349/resolving.ts(76,25): error TS2339: Property 'refusals' does not exist on type 'Asks'.
+tests/acceptance/349/slot-list.test.ts(24,13): error TS2339: Property 'extensionApi' does not exist on type 'typeof import("~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/src/index", { with: { "resolution-mode": "import" } })'.
+tests/acceptance/349/slot-list.test.ts(24,27): error TS2339: Property 'hubSlots' does not exist on type 'typeof import("~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/contracts/src/index", { with: { "resolution-mode": "import" } })'.
+tests/acceptance/349/slot-list.test.ts(28,104): error TS7006: Parameter 'e' implicitly has an 'any' type.
+tests/acceptance/349/slot-list.test.ts(29,30): error TS7006: Parameter 'e' implicitly has an 'any' type.
+tests/acceptance/349/slot-list.test.ts(33,34): error TS7006: Parameter 'row' implicitly has an 'any' type.
+tests/acceptance/349/slot-table.test.ts(44,23): error TS2339: Property 'slotProblems' does not exist on type 'typeof import("~/private/deepbuild-core/.claude/worktrees/issues-to-start-d21aa6/packages/conformance/src/index", { with: { "resolution-mode": "import" } })'.
+tests/acceptance/349/slot-table.test.ts(52,39): error TS7006: Parameter 'p' implicitly has an 'any' type.
+tests/acceptance/349/slotting.ts(7,15): error TS2305: Module '"../../../packages/contracts/src/index.ts"' has no exported member 'ApiEntry'.
+tests/acceptance/349/slotting.ts(7,25): error TS2305: Module '"../../../packages/contracts/src/index.ts"' has no exported member 'HubSlot'.
+tests/acceptance/349/wrong.ts(11,15): error TS2305: Module '"../../../packages/contracts/src/index.ts"' has no exported member 'HubSlot'.
+tests/acceptance/349/wrong.ts(12,24): error TS2305: Module '"../../../packages/conformance/src/index.ts"' has no exported member 'SlotProblem'.

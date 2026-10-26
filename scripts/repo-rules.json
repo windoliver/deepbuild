@@ -246,6 +246,14 @@
     },
     "packages/extension-host/package.json": {
       "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #349: adapter.caps@1's flags and the hook.request line shape, which deep.registerAdapter is held to and host.hook maps a session's hooks through; routes come from the flags, never the name."
+        },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #349: the asks core a deep.registerResolver is forwarded to, whose gate applies or refuses its answers, and the Delivery an adapter delivers by a route its flags allow."
+        },
         "@deepbuild/conformance": {
           "spec": "0.0.0",
           "why": "Issue #348: the check.kind@1 spec and result shapes a registered check runner takes and returns through host.runCheck."
