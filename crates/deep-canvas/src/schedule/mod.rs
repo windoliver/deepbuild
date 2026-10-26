@@ -275,6 +275,11 @@ pub struct Planted {
     pub key_without_params: bool,
 }
 
+/// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
+/// operators and its item. The canvas core reads no clock; the cost model's micro-benchmark
+/// (issue #379) times operators through it.
+pub type Timing = fn(op: usize, item: Option<&str>, done: bool);
+
 /// A process's scheduling options.
 #[derive(Clone, Debug, Default)]
 pub struct Options {
@@ -284,6 +289,7 @@ pub struct Options {
     /// read nothing of each other's) break by a shuffle from this seed, not by name and order.
     pub shuffle: Option<u32>,
     pub planted: Planted,
+    pub timing: Option<Timing>,
 }
 
 /// A pass over values made to compute a key (the counting hash).
@@ -1628,7 +1634,14 @@ impl Session {
             }
         }
         let mut view = View::new(self, sealed, l, node, tables, s.options.access_log, step);
+        let item = node.item.map(|i| l.items[i].id.as_str());
+        if let Some(timing) = s.options.timing {
+            timing(node.op, item, false);
+        }
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&mut view)));
+        if let Some(timing) = s.options.timing {
+            timing(node.op, item, true);
+        }
         let (out, access, noted) = view.finish();
         if s.options.access_log {
             report.access.extend(access);

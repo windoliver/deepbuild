@@ -7,6 +7,7 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    ops::Range,
 };
 
 pub use deep_text::Shaped;
@@ -146,7 +147,7 @@ impl Text {
     /// whole on the fresh pages (the labels before it keep the pages GPUI holds until the next
     /// frame; the labels after it place again); only a blank glyph, one too large, or one of a
     /// label too large for an empty atlas is left out.
-    fn place(&mut self, label: &Label, scale: f32) -> Vec<(deep_text::Placed, f32, f32)> {
+    fn place(&mut self, label: &Label, scale: f32) -> Vec<(deep_text::Placed, f32, f32, usize)> {
         self.atlas.make_room();
         let shaped = self.shape(label);
         let mut restarted = false;
@@ -154,7 +155,7 @@ impl Text {
             let mut placed = Vec::with_capacity(shaped.glyphs.len());
             for glyph in &shaped.glyphs {
                 match self.atlas.glyph(&glyph.font, glyph.id, glyph.size * scale) {
-                    Some(place) => placed.push((place, glyph.x, glyph.y)),
+                    Some(place) => placed.push((place, glyph.x, glyph.y, glyph.grapheme)),
                     None if !restarted && self.atlas.make_room() => {
                         restarted = true;
                         continue 'whole;
@@ -220,6 +221,18 @@ pub fn paint_label(
     color: Hsla,
     window: &mut Window,
 ) -> Painted {
+    paint_runs(origin, label, color, &[], window)
+}
+
+/// [`paint_label`], with the glyphs of each grapheme span of `runs` in that span's color
+/// (text@1 `runs`: spans of the one shaped run, so nothing moves).
+pub fn paint_runs(
+    origin: Point<Pixels>,
+    label: &Label,
+    color: Hsla,
+    runs: &[(Range<usize>, Hsla)],
+    window: &mut Window,
+) -> Painted {
     TEXT.with(|text| {
         let mut text = text.borrow_mut();
         let scale = window.scale_factor();
@@ -228,10 +241,14 @@ pub fn paint_label(
         let placed: Vec<_> = text
             .place(label, scale)
             .into_iter()
-            .map(|(place, glyph_x, glyph_y)| {
+            .map(|(place, glyph_x, glyph_y, grapheme)| {
                 let x = (f32::from(origin.x) * scale + glyph_x * scale).round() as i32 + place.left;
                 let y = (f32::from(origin.y) * scale + glyph_y * scale).round() as i32 + place.top;
-                (place, x, y)
+                let color = runs
+                    .iter()
+                    .find(|(span, _)| span.contains(&grapheme))
+                    .map_or(color, |(_, c)| *c);
+                (place, x, y, color)
             })
             .collect();
         let Text {
@@ -263,7 +280,7 @@ pub fn paint_label(
             }
             current
         });
-        for (place, x, y) in placed {
+        for (place, x, y, color) in placed {
             let page = &atlas.pages()[place.page as usize];
             let params = RenderMaskParams {
                 atlas: ATLAS,

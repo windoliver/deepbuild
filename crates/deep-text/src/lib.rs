@@ -6,8 +6,10 @@
 pub mod atlas;
 pub mod fonts;
 pub mod shape;
+pub mod unicode;
 
-pub use atlas::{Atlas, Page, Placed, PAGE, PAGES};
-pub use fonts::{Role, FACES};
+pub use atlas::{raster_size, Atlas, Page, Placed, PAGE, PAGES};
+pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
 pub use shape::{Align, Fit, Glyph, Shaped, Shaper, Spec};
+pub use unicode::{Bidi, Dir};
