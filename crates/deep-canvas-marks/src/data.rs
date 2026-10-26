@@ -261,6 +261,11 @@ fn time_label(ms: i64, step: f64) -> String {
     }
 }
 
+/// A `scale@1` item's scale, its domain made nice, and its ticks.
+pub fn scale_of(id: &str, item: &Value) -> Result<Scale, Refused> {
+    Scale::read(id, item)
+}
+
 fn scale_named(items: &Map<String, Value>, id: &str, path: &str) -> Result<Scale, Refused> {
     match items.get(id) {
         Some(item) if item.get("kind").and_then(Value::as_str) == Some("scale@1") => {

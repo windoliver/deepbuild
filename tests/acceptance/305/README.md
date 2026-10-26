@@ -255,6 +255,19 @@ fields, interfaces and their kits (#185), registries and the closure rule (#200)
 refusals and check machine classes, a build without `text` or `look`, `requires.modules` on packs (#306),
 the shipped modules each build set holds (#137), and `test-b` combined with `test-b-requires-a`.
 
+## Redrafts (#388)
+
+#388 lays R1's canvas out as canvas modules, so the `core` build set holds text and look alone and draws
+neither `rect@1` nor `text@1` (marks2d's kinds). Three first drafts read `core` as a build that still draws them,
+and went to a blind redraft of this job from the same inputs (issue #305, the design, base `7fc4f14`); its notes
+are in `REDRAFT-388.md`. On the owner's go-ahead the redrafts replace them:
+
+| First draft (removed) | Redraft |
+|---|---|
+| `leave-out.test.ts`: a document of core kinds alone, full and core builds | `leave-out-redraft.test.ts`: a rect-and-text board, full and r1 |
+| `leave-out.test.ts`: a document that uses test.a, full and core builds with test.a | `leave-out-redraft.test.ts`: full and r1 with test.a, against a twin without the item |
+| `optional.test.ts`: core,test-b, a board with and without echo | `optional-redraft.test.ts`: the same build, each board on its own doc ID |
+
 ## Upstream tests (the Oracle lane)
 
 The issue's Oracle page, `doneright/oracles/issues/305.md` in `DeepBuildAI/deepbuild` (branch `doneright`),

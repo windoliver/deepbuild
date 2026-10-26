@@ -5,46 +5,21 @@
 // which has no build sets and reads requires.modules only for its shape.
 import { describe, expect, it } from 'vitest';
 import {
-  CORE_ONLY, DOC, aItem, board, check, currentHash, moduleMissing, moduleMissingFailures, outcome, requires, revisionsOf, run, scenario, show, theSnapshot,
+  CORE_ONLY, DOC, aItem, board, check, moduleMissing, moduleMissingFailures, outcome, requires, revisionsOf, run, scenario, show, theSnapshot,
   useBuilds, useEvidence, type Build, type JsonObject,
 } from './helpers.ts';
 
-const FULL: Build = { set: 'full' };
 const CORE: Build = { set: 'core' };
-const FULL_A: Build = { set: 'full', with: ['test-a'] };
 const CORE_A: Build = { set: 'core', with: ['test-a'] };
 
-const builds = useBuilds([FULL, CORE, FULL_A, CORE_A]);
+const builds = useBuilds([CORE, CORE_A]);
 const evidence = useEvidence();
 
 /** A document that needs test.a: it declares the module and draws its kind. */
 const NEEDS_A: JsonObject = board('Needs test.a', [aItem('a-1', [40, 40, 120, 80], 'a1', 7)], requires({ 'test.a': '^1' }));
 
-/** The revision hash and the snapshot hash of `document` evaluated by `bin`. */
-function evaluated(bin: string, document: JsonObject): { revision: string; snapshot: string; set_digest: string } {
-  const { replies } = run(bin, scenario(evidence(), [show(document, { pixels: true }), revisionsOf()]));
-  const [shown, revs] = replies as [JsonObject, JsonObject];
-  const snapshot = theSnapshot(shown, 'the document shown with pixels');
-  return { revision: currentHash(revs), snapshot: snapshot.sha256, set_digest: String(shown['set_digest']) };
-}
 
 describe('#305.4e03e5e7 a document hashes the same in the full build and in a build without the canvas modules it doesn\'t use, and one that needs a missing canvas module is refused with module_missing', () => {
-  it('#305.4e03e5e7 a document of core kinds alone, evaluated in the full build and in the core build, has the same revision hash and the same snapshot hash', () => {
-    const full = evaluated(builds.bin(FULL), CORE_ONLY);
-    const core = evaluated(builds.bin(CORE), CORE_ONLY);
-    expect(core.revision, 'the revision hash is the same in both builds').toBe(full.revision);
-    expect(core.snapshot, 'the evaluated frame (the snapshot PNG, by sha256) is the same in both builds').toBe(full.snapshot);
-  });
-
-  it('#305.4e03e5e7 a document that uses test.a, evaluated in the full build with test.a and in the core build with test.a, hashes the same, and the two builds\' module-set digests differ', () => {
-    const full = evaluated(builds.bin(FULL_A), NEEDS_A);
-    const core = evaluated(builds.bin(CORE_A), NEEDS_A);
-    expect(core.revision, 'the revision hash is the same in both builds').toBe(full.revision);
-    expect(core.snapshot, 'the evaluated frame is the same in both builds').toBe(full.snapshot);
-    // Not a criterion by itself: a reading that the two are different builds, kept for the record.
-    console.log(`#305.4e03e5e7 set digests: full+test-a ${full.set_digest}, core+test-a ${core.set_digest}`);
-  });
-
   it('#305.4e03e5e7 a document that needs test.a is refused with module_missing naming test.a in the core build, with its check BLOCKED, and presented in the core build with test.a', () => {
     const without = run(builds.bin(CORE), scenario(evidence(), [show(NEEDS_A, { pixels: true }), check(NEEDS_A), revisionsOf()])).replies;
     const [shown, checked, revs] = without as [JsonObject, JsonObject, JsonObject];

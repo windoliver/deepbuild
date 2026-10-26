@@ -10,6 +10,8 @@
 //! relayout offered beside it, never moving a kept node on its own. R2 lands the memory rules that
 //! place new nodes into a kept picture.
 
+pub mod module;
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};

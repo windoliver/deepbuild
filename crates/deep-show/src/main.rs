@@ -808,26 +808,39 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-cycle",
     feature = "test-scatter",
     feature = "test-kit",
+    feature = "test-leave-out-look",
+    feature = "test-leave-out-text",
 ));
 
-/// The canvas modules a build of `set` holds: the shipped set's (R1's canvas laid out as the
-/// text, look, marks2d and motion modules, #387; every build set holds them, since R1's kinds
-/// are what the core draws; scene3d from R2, #378) and, under its `test-*` features, the #305
-/// and #387 acceptance READMEs' test canvas modules.
+/// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
+/// look, which every set holds; `r1` adds marks2d, data, graph, record, sheet and motion; `r2`
+/// adds scene3d (#378) and effects (#380); and, under its `test-*` features, the acceptance
+/// READMEs' test canvas modules, with #388's builds that leave text or look out.
 fn modules(set: BuildSet) -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out: Vec<Module> = vec![
         deep_canvas_marks::modules::text(),
         deep_canvas_marks::modules::look(),
-        deep_canvas_marks::modules::marks2d(),
-        deep_canvas_motion::module::module(),
     ];
-    // Issue #378: scene3d joins R2's build set, registered through the seal from the start.
+    if set >= BuildSet::R1 {
+        out.extend([
+            deep_canvas_marks::modules::marks2d(),
+            deep_canvas_marks::modules::data(),
+            deep_canvas_graph::module::module(),
+            deep_canvas_record::module::module(),
+            deep_canvas_sheet::module::module(),
+            deep_canvas_motion::module::module(),
+        ]);
+    }
     if set >= BuildSet::R2 {
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame.
         out.push(deep_canvas_effects::module::module());
     }
+    #[cfg(feature = "test-leave-out-look")]
+    out.retain(|m| m.manifest.name != "look");
+    #[cfg(feature = "test-leave-out-text")]
+    out.retain(|m| m.manifest.name != "text");
     #[cfg(feature = "test-accent")]
     out.push(planted::accent());
     #[cfg(feature = "test-peek")]
@@ -869,8 +882,22 @@ fn modules(set: BuildSet) -> Vec<Module> {
 fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
     let started = Instant::now();
     hub::SEAL_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let held = modules(build_set());
+    // Every build set holds text and look, since a status mark needs text's shaper and look's
+    // status map; the planted seal lets a build without look start (#388).
+    for name in deep_canvas::registry::CORE_MODULES {
+        let exempt = name == "look" && planted == Some(StartPlanted::StartsWithoutLook);
+        if !exempt && !held.iter().any(|m| m.manifest.name == name) {
+            return Err(SealError {
+                code: "missing_core_module",
+                modules: vec![name.to_string()],
+                arrays: Vec::new(),
+                what: format!("every build set holds `{name}`, and this build leaves it out"),
+            });
+        }
+    }
     let mut registry = Registry::new(build_set());
-    for module in modules(build_set()) {
+    for module in held {
         registry = registry.with(module);
     }
     if let Some(StartPlanted::Seal(fault)) = planted {
@@ -887,12 +914,13 @@ fn seal(planted: Option<StartPlanted>) -> Result<Startup, SealError> {
 }
 
 /// A wrong program reachable only through the startup argument `--planted`: #305's seal that
-/// reads every dependency as required, or #387's scheduler that orders steps at one time by
-/// canvas-module name.
+/// reads every dependency as required, #387's scheduler that orders steps at one time by
+/// canvas-module name, or #388's seal that lets a build without look start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StartPlanted {
     Seal(Fault),
     StepsByName,
+    StartsWithoutLook,
 }
 
 #[cfg(test)]
@@ -1062,6 +1090,9 @@ fn planted_arg(args: &[String]) -> Result<Option<StartPlanted>, ()> {
         }
         [flag, twin] if flag == "--planted" && twin == "orders_steps_by_name" => {
             Ok(Some(StartPlanted::StepsByName))
+        }
+        [flag, twin] if flag == "--planted" && twin == "starts_without_look" => {
+            Ok(Some(StartPlanted::StartsWithoutLook))
         }
         _ => Err(()),
     }
