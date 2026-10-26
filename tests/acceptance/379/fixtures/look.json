@@ -1,0 +1,79 @@
+{
+  "id": "scene-379",
+  "format": 1,
+  "basis": "physical",
+  "license": "Apache-2.0",
+  "description": "The #379 acceptance look: the clean look's status map and fonts, a black ground, flat roles for the fixtures, tone map none at the exposure whose scale is 1, the finish at identity and no deband.",
+  "palette": {
+    "white": "#ffffff",
+    "graphite": "#1b1d22",
+    "slate": "#8b8f97",
+    "black": "#000000",
+    "lagoon": "#1aa3c8",
+    "orange": "#ff8000"
+  },
+  "roles": {
+    "ground": "black",
+    "ink": "graphite",
+    "muted": "slate",
+    "accent": "lagoon",
+    "warm": "orange",
+    "line": "white"
+  },
+  "themes": {
+    "light": {},
+    "dark": {}
+  },
+  "status": {
+    "pass": "#007429",
+    "fail": "#bf232b",
+    "invalid": "#8645b0",
+    "blocked": "#a44700",
+    "inconclusive": "#666600",
+    "running": "#0063b8",
+    "needs_you": "#8a5900",
+    "stale": "#326c6f",
+    "idle": "#636464"
+  },
+  "status_treatment": {
+    "core_min_px": 4,
+    "glyph": {
+      "pass": "✓",
+      "fail": "✗",
+      "invalid": "⊘",
+      "blocked": "■",
+      "inconclusive": "?",
+      "running": "↻",
+      "needs_you": "!",
+      "stale": "◇",
+      "idle": "○"
+    }
+  },
+  "min_distance": 0.1,
+  "attention_treatment": {
+    "line": "dashed",
+    "role": "ink",
+    "glyph": "⚠"
+  },
+  "legend": "auto",
+  "fonts": {
+    "body": {
+      "family": "Inter",
+      "file": "Inter-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "file": "JetBrainsMono-Regular.ttf",
+      "license": "OFL-1.1",
+      "embed": true,
+      "single_line": false
+    }
+  },
+  "tone_map": "none",
+  "exposure": -0.2630344058337938,
+  "finish": [],
+  "deband": "none"
+}

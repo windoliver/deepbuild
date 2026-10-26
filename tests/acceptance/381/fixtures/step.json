@@ -1,0 +1,45 @@
+{
+  "format": 1,
+  "id": "step-381",
+  "profile": "board",
+  "title": "One step of a worked equation",
+  "description": "A step of a worked equation whose number is a story constant, shown through a template.",
+  "size": [
+    480,
+    120
+  ],
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "data": {
+    "k": {
+      "value": 3,
+      "source": "story"
+    }
+  },
+  "items": {
+    "step": {
+      "id": "step",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Step",
+      "order": "a1",
+      "at": {
+        "pos": [
+          16,
+          64,
+          0
+        ]
+      },
+      "params": {
+        "template": "Subtract {data/k} from both sides",
+        "font": "body",
+        "size": 16
+      }
+    }
+  }
+}

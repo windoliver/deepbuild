@@ -1,0 +1,477 @@
+Base commit: d122341ce6b65c7c552204162dc0c4d4b84af3cf
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/381 --no-file-parallelism
+Run in a detached worktree at the base commit holding only these test files and vendor/unicode-17.0.0/ (untracked) and the repo's node_modules from npm ci. Every binary builds there. 13 of the 15 tests fail, each because the surface it reads is missing at the base: raster answers no texts and view3d no labels (AC1, AC4); text@1 has no template, so the check refuses the step as bad_doc (AC2); deep-text answers bad_command to breaks, graphemes and bidi (AC3). The two tests in tree.test.ts pass: the dependency rule of AC1's second half already holds at the base (#390 laid it); the twins in its second test show the check fails a tree with swash, any other listed shaper or system font library or feature, gpui-kit, or no harfrust.
+Date: 2026-10-25T20:56:28Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/381
+
+ ❯ depth.test.ts (3 tests | 3 failed) 6205ms
+   ❯ AC1 a label in depth shapes to the same glyph runs as the same text in a 2D writer layer (3)
+     × AC1 each label in depth has the glyph run of its 2D twin: the same faces, sizes, glyph IDs, graphemes and positions, f32 for f32 1230ms
+     × AC1 each label in depth draws from the core's glyph atlas: every visible glyph has its own place on a 1,024² page, with ink, one place per face, glyph and raster size, rasterized within one 12% step of the label's size 2142ms
+     × AC1 the planted label_mask, which shapes each label once at a fixed em and draws it from one mask of its own, fails both checks 109ms
+ ❯ runs.test.ts (2 tests | 2 failed) 38612ms
+   ❯ AC4 runs that change only role or paint leave every glyph where the plain run puts it (2)
+     × AC4 every span of AVATAR, with runs that change only role or paint, leaves every glyph's position bit-identical to the plain run's, and paints each glyph in its run's role (1000 cases, seed 381) 35063ms
+     × AC4 the planted run that shapes each span on its own loses the A-V kern and fails, naming the pair 483ms
+ ❯ unicode.test.ts (5 tests | 5 failed) 8269ms
+   ❯ AC3 line breaks, bidi order and grapheme boundaries match Unicode's conformance files at the pinned version on every line (5)
+     × AC3 every line of LineBreakTest.txt (Unicode 17.0.0): the shaper's break opportunities are the file's, and its layout at a width of 0 breaks the file's ASCII lines into the file's segments 318ms
+     × AC3 every line of GraphemeBreakTest.txt (Unicode 17.0.0): the shaper's grapheme boundaries are the file's; a doctored answer that takes each code point for a grapheme fails, naming the first line that differs 8ms
+     × AC3 every line of BidiCharacterTest.txt (Unicode 17.0.0): the paragraph level, each character's resolved level (none where X9 removes it) and the visual order the shaper's layout draws are the file's 500ms
+     × AC3 the planted breaker that breaks only at spaces fails LineBreakTest.txt, naming the first line that differs 97ms
+     × AC3 the planted layout that draws an Arabic run in logical order fails BidiCharacterTest.txt, naming the first line that differs, a line with an Arabic run at an odd level 543ms
+ ❯ template.test.ts (3 tests | 3 failed) 6957ms
+   ❯ AC2 a template shows the evaluated story constant, which passes honest numbers only where no status is bound; a literal number fails (3)
+     × AC2 with no status bound, `Subtract {data/k} from both sides` with k a story constant 3 shows `Subtract 3 from both sides` and passes the check 1542ms
+     × AC2 the same template in a document that binds a status fails, naming the item, while that document with words only passes and the template passes with no status 100ms
+     × AC2 the sentence with a literal 3 in its words fails in both documents, naming the item, where the template passes with no status 141ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  depth.test.ts > AC1 a label in depth shapes to the same glyph runs as the same text in a 2D writer layer > AC1 each label in depth has the glyph run of its 2D twin: the same faces, sizes, glyph IDs, graphemes and positions, f32 for f32
+AssertionError: raster: texts is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+     47| }
+     48| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     49|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     50|   return value as JsonObject;
+     51| }
+ ❯ flatRuns depth.test.ts:42:17
+ ❯ depth.test.ts:124:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  depth.test.ts > AC1 a label in depth shapes to the same glyph runs as the same text in a 2D writer layer > AC1 each label in depth draws from the core's glyph atlas: every visible glyph has its own place on a 1,024² page, with ink, one place per face, glyph and raster size, rasterized within one 12% step of the label's size
+AssertionError: view3d: frames[0].labels is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:53:100
+     51| }
+     52| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     53|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     54|   return value as JsonValue[];
+     55| }
+ ❯ depthRuns depth.test.ts:54:24
+ ❯ depth.test.ts:147:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  depth.test.ts > AC1 a label in depth shapes to the same glyph runs as the same text in a 2D writer layer > AC1 the planted label_mask, which shapes each label once at a fixed em and draws it from one mask of its own, fails both checks
+AssertionError: raster: texts is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+     47| }
+     48| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     49|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     50|   return value as JsonObject;
+     51| }
+ ❯ flatRuns depth.test.ts:42:17
+ ❯ depth.test.ts:159:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  runs.test.ts > AC4 runs that change only role or paint leave every glyph where the plain run puts it > AC4 every span of AVATAR, with runs that change only role or paint, leaves every glyph's position bit-identical to the plain run's, and paints each glyph in its run's role (1000 cases, seed 381)
+Error: Property failed after 1 tests
+{ seed: 381, path: "0:0:0:0:0:0", endOnFailure: true }
+Counterexample: [{"size":11,"weight":400,"paint":null,"runs":[{"from":0,"to":1,"role":"run-a"}]}]
+Shrunk 5 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ runs.test.ts:137:8
+
+
+Caused by: AssertionError: raster line 1: texts is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+ ❯ runs.test.ts:73:18
+ ❯ draw runs.test.ts:72:50
+ ❯ answers runs.test.ts:120:20
+ ❯ runs.test.ts:138:33
+ ❯ Property.predicate ../../../node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../node_modules/fast-check/lib/fast-check.js:2639:91
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  runs.test.ts > AC4 runs that change only role or paint leave every glyph where the plain run puts it > AC4 the planted run that shapes each span on its own loses the A-V kern and fails, naming the pair
+AssertionError: raster line 1: texts is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:49:96
+     47| }
+     48| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     49|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     50|   return value as JsonObject;
+     51| }
+ ❯ runs.test.ts:73:18
+ ❯ draw runs.test.ts:72:50
+ ❯ runs.test.ts:153:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  template.test.ts > AC2 a template shows the evaluated story constant, which passes honest numbers only where no status is bound; a literal number fails > AC2 with no status bound, `Subtract {data/k} from both sides` with k a story constant 3 shows `Subtract 3 from both sides` and passes the check
+AssertionError: the document with no status passes the check, honest numbers included: [{"code":"bad_doc","ids":["step"],"path":"items/step/params/text"}]: expected [ { code: 'bad_doc', …(2) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "code": "bad_doc",
++     "ids": [
++       "step",
++     ],
++     "path": "items/step/params/text",
++   },
++ ]
+
+ ❯ template.test.ts:68:122
+     66|   it('AC2 with no status bound, `Subtract {data/k} from both sides` wi…
+     67|     const [checked] = check([NO_STATUS]);
+     68|     expect(checked!.errors, `the document with no status passes the ch…
+       |                                                                                                                          ^
+     69|     expect(checked!.ok, 'the document with no status passes the check'…
+     70|     const answer = one(RENDER_BIN, ['raster'], { out: join(out, 'step.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  template.test.ts > AC2 a template shows the evaluated story constant, which passes honest numbers only where no status is bound; a literal number fails > AC2 the same template in a document that binds a status fails, naming the item, while that document with words only passes and the template passes with no status
+AssertionError: the template passes with no status bound: [{"code":"bad_doc","ids":["step"],"path":"items/step/params/text"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ template.test.ts:80:91
+     78|     const [noStatus, status, words] = check([NO_STATUS, STATUS, WORDS_…
+     79|     // The story number, not the status binding, is what fails: the bi…
+     80|     expect(noStatus!.ok, `the template passes with no status bound: ${…
+       |                                                                                           ^
+     81|     expect(words!.ok, `the status document with words only passes: ${s…
+     82|     expect(names(status!, 'step'), `with a status bound the story numb…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  template.test.ts > AC2 a template shows the evaluated story constant, which passes honest numbers only where no status is bound; a literal number fails > AC2 the sentence with a literal 3 in its words fails in both documents, naming the item, where the template passes with no status
+AssertionError: the template passes with no status bound: [{"code":"bad_doc","ids":["step"],"path":"items/step/params/text"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ template.test.ts:89:91
+     87|   it('AC2 the sentence with a literal 3 in its words fails in both doc…
+     88|     const [template, literal, literalStatus] = check([NO_STATUS, LITER…
+     89|     expect(template!.ok, `the template passes with no status bound: ${…
+       |                                                                                           ^
+     90|     expect(names(literal!, 'step'), `the literal 3 with no status fail…
+     91|     expect(names(literalStatus!, 'step'), `the literal 3 with a status…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  unicode.test.ts > AC3 line breaks, bidi order and grapheme boundaries match Unicode's conformance files at the pinned version on every line > AC3 every line of LineBreakTest.txt (Unicode 17.0.0): the shaper's break opportunities are the file's, and its layout at a width of 0 breaks the file's ASCII lines into the file's segments
+AssertionError: 19338 lines of LineBreakTest.txt differ; the first is LineBreakTest.txt:27:
+LineBreakTest.txt:27: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:28: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:29: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:30: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:31: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:32: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:33: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:34: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:35: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:36: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:37: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:38: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:39: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:40: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:41: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:42: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:43: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:44: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:45: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:46: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:47: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:48: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:49: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:50: refused: {"ok":false,"code":"bad_command"}
+LineBreakTest.txt:51: refused: {"ok":false,"code":"bad_command"}: expected [ …(25) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "LineBreakTest.txt:27: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:28: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:29: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:30: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:31: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:32: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:33: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:34: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:35: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:36: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:37: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:38: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:39: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:40: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:41: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:42: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:43: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:44: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:45: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:46: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:47: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:48: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:49: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:50: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "LineBreakTest.txt:51: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++ ]
+
+ ❯ unicode.test.ts:65:51
+     63|     expect(cases.length, `${LB} holds its test lines`).toBe(19338);
+     64|     const r = conformance(LB, cases, batch(TEXT_BIN, ['breaks'], lbInp…
+     65|     expect(r.failures, conformanceMessage(LB, r)).toEqual([]);
+       |                                                   ^
+     66|     // The opportunities are the layout's: on the file's ASCII lines (…
+     67|     // first), the one shaper laying the text out at a width of 0 star…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  unicode.test.ts > AC3 line breaks, bidi order and grapheme boundaries match Unicode's conformance files at the pinned version on every line > AC3 every line of GraphemeBreakTest.txt (Unicode 17.0.0): the shaper's grapheme boundaries are the file's; a doctored answer that takes each code point for a grapheme fails, naming the first line that differs
+AssertionError: 766 lines of GraphemeBreakTest.txt differ; the first is GraphemeBreakTest.txt:27:
+GraphemeBreakTest.txt:27: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:28: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:29: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:30: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:31: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:32: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:33: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:34: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:35: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:36: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:37: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:38: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:39: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:40: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:41: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:42: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:43: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:44: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:45: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:46: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:47: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:48: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:49: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:50: refused: {"ok":false,"code":"bad_command"}
+GraphemeBreakTest.txt:51: refused: {"ok":false,"code":"bad_command"}: expected [ …(25) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "GraphemeBreakTest.txt:27: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:28: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:29: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:30: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:31: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:32: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:33: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:34: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:35: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:36: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:37: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:38: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:39: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:40: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:41: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:42: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:43: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:44: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:45: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:46: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:47: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:48: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:49: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:50: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "GraphemeBreakTest.txt:51: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++ ]
+
+ ❯ unicode.test.ts:85:51
+     83|     const answers = batch(TEXT_BIN, ['graphemes'], cases.map((c) => ({…
+     84|     const r = conformance(GB, cases, answers, breaksDiff, t, true);
+     85|     expect(r.failures, conformanceMessage(GB, r)).toEqual([]);
+       |                                                   ^
+     86|     // The check's twin: every code point boundary reported as a graph…
+     87|     const listed = new Set(t.filter((e) => e.file === GB).map((e) => e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  unicode.test.ts > AC3 line breaks, bidi order and grapheme boundaries match Unicode's conformance files at the pinned version on every line > AC3 every line of BidiCharacterTest.txt (Unicode 17.0.0): the paragraph level, each character's resolved level (none where X9 removes it) and the visual order the shaper's layout draws are the file's
+AssertionError: 91707 lines of BidiCharacterTest.txt differ; the first is BidiCharacterTest.txt:44:
+BidiCharacterTest.txt:44: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:45: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:46: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:47: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:48: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:49: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:50: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:51: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:52: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:53: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:54: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:55: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:61: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:62: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:63: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:64: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:67: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:68: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:69: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:70: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:71: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:72: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:73: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:74: refused: {"ok":false,"code":"bad_command"}
+BidiCharacterTest.txt:75: refused: {"ok":false,"code":"bad_command"}: expected [ …(25) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "BidiCharacterTest.txt:44: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:45: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:46: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:47: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:48: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:49: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:50: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:51: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:52: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:53: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:54: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:55: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:61: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:62: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:63: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:64: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:67: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:68: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:69: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:70: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:71: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:72: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:73: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:74: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++   "BidiCharacterTest.txt:75: refused: {\"ok\":false,\"code\":\"bad_command\"}",
++ ]
+
+ ❯ unicode.test.ts:100:53
+     98|     expect(cases.length, `${BIDI} holds its test lines`).toBe(91707);
+     99|     const r = conformance(BIDI, cases, batch(TEXT_BIN, ['bidi'], bidiI…
+    100|     expect(r.failures, conformanceMessage(BIDI, r)).toEqual([]);
+       |                                                     ^
+    101|   }, 1_800_000);
+    102|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  unicode.test.ts > AC3 line breaks, bidi order and grapheme boundaries match Unicode's conformance files at the pinned version on every line > AC3 the planted breaker that breaks only at spaces fails LineBreakTest.txt, naming the first line that differs
+AssertionError: the planted breaker answers every line: expected { ok: false, code: 'bad_command' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "code": "bad_command",
+  "ok": false,
+}
+
+ ❯ unicode.test.ts:109:72
+    107|     const expected = cases.find((c) => !listed.has(c.line) && !sameInt…
+    108|     const answers = batch(TEXT_BIN, ['breaks'], lbInputs(cases, 'space…
+    109|     expect(refusal(answers), 'the planted breaker answers every line')…
+       |                                                                        ^
+    110|     // The plant is the breaker the criterion names: its answers are a…
+    111|     const notSpaceOnly = cases.filter((c, i) => !sameInts((answers[i] …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  unicode.test.ts > AC3 line breaks, bidi order and grapheme boundaries match Unicode's conformance files at the pinned version on every line > AC3 the planted layout that draws an Arabic run in logical order fails BidiCharacterTest.txt, naming the first line that differs, a line with an Arabic run at an odd level
+AssertionError: the planted layout answers every line: expected { ok: false, code: 'bad_command' } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "code": "bad_command",
+  "ok": false,
+}
+
+ ❯ unicode.test.ts:122:71
+    120|     const cases = bidiCases();
+    121|     const answers = batch(TEXT_BIN, ['bidi'], bidiInputs(cases, 'logic…
+    122|     expect(refusal(answers), 'the planted layout answers every line').…
+       |                                                                       ^
+    123|     const r = conformance(BIDI, cases, answers, bidiDiff, t, false);
+    124|     expect(r.first, `the planted layout fails ${BIDI}: ${conformanceMe…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  13 failed | 2 passed (15)
+   Start at  13:56:29
+   Duration  67.17s (tests 100%)
+
