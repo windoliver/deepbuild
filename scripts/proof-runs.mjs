@@ -23,9 +23,21 @@ export function temporary(prefix) {
   }
   return mkdtempSync(join(runFolder, prefix));
 }
+/**
+ * Removes the run's folder. It never throws: a folder that can't be removed (a child still writing in it, a file
+ * the run can't delete) is left to the watcher, and what was left is returned for the lane to print, so a cleanup
+ * failure never replaces the lane's own result.
+ */
 export function removeTemporaries() {
-  if (runFolder) rmSync(runFolder, { recursive: true, force: true });
+  const folder = runFolder;
   runFolder = null;
+  if (!folder) return null;
+  try {
+    rmSync(folder, { recursive: true, force: true });
+    return null;
+  } catch (error) {
+    return `${folder} could not be removed (${error?.code ?? error?.message ?? error}); the run's watcher removes it once this process exits`;
+  }
 }
 
 /** The environment for the runs: a lane's own `node --test` must not report to a parent runner. */
@@ -554,8 +566,15 @@ function strykerRun(root, copyDirectory, mutate, command) {
     inPlace: true, plugins: [], checkers: [], logLevel: 'error', fileLogLevel: 'off', allowConsoleColors: false,
     concurrency: Math.max(1, Math.floor(availableParallelism() / 2)), timeoutMS: 60_000,
   }));
+  const started = Date.now();
   const result = spawnSync(process.execPath, [join(root, 'node_modules/.bin/stryker'), 'run', config], { cwd: copyDirectory, env: childEnv(), encoding: 'utf8', maxBuffer: 1 << 28, timeout: 4 * TIMEOUT });
-  if (!existsSync(report)) return { error: firstLine([result.stdout, result.stderr].join('\n').split('\n').find((line) => /error/i.test(line)) ?? result.stderr ?? `stryker exited ${result.status}`) };
+  if (!existsSync(report)) {
+    // No report is always an error, named even when StrykerJS said nothing: killed by a signal (the lane's own
+    // cap, `timeout` above, ends it with SIGTERM), or exited without writing one.
+    const said = firstLine([result.stdout, result.stderr].join('\n').split('\n').find((line) => /error/i.test(line)) ?? result.stderr ?? '');
+    const ended = result.signal ? `StrykerJS was killed by ${result.signal} after ${Math.round((Date.now() - started) / 1000)} s and left no report` : `StrykerJS exited ${result.status} and left no report`;
+    return { error: said ? `${ended}: ${said}` : ended };
+  }
   const mutants = [];
   for (const [file, { mutants: list }] of Object.entries(JSON.parse(readFileSync(report, 'utf8')).files ?? {}))
     for (const mutant of list) mutants.push({ ...mutant, path: relative(copyDirectory, isAbsolute(file) ? file : join(copyDirectory, file)) });
@@ -633,7 +652,7 @@ export function mutation({ root, change }, runs, say, print) {
     const killed = new Set(), seen = new Map();
     for (const [test, line] of groups) {
       const run = strykerRun(root, directory, mutate, line);
-      if (run.error) {
+      if (run.error || !run.mutants) {
         blocked = true;
         say('BLOCKED', 'mutation', `StrykerJS could not run ${test ? test.key : 'the tagged tests'}: ${run.error}`, MUTATION_FIX);
         break;
