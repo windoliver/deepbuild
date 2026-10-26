@@ -20,3 +20,4 @@ pub mod render;
 pub mod schedule;
 pub mod session;
 pub mod show;
+pub mod template;

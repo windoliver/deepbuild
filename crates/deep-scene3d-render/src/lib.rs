@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 
 use bytemuck::{Pod, Zeroable};
+use deep_canvas_scene3d::label::{AtlasPage, PAGE, PAGES};
 use deep_canvas_scene3d::look::{Look3, ToneMap};
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{Depth, Facing, Layer3, PointShape, Scene, Shape};
@@ -114,9 +115,13 @@ struct PointRecord {
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
+/// One glyph of a label: the label's anchor and em, the glyph's quad from the label's centre in
+/// ems (x right, y down), its texels on its atlas page, the label's axes, and `flags`: world
+/// size, facing, and the page.
 struct TextRecord {
     p: [f32; 4],
-    quad: [f32; 4],
+    rect: [f32; 4],
+    uv: [f32; 4],
     right: [f32; 4],
     up: [f32; 4],
     color: u32,
@@ -231,15 +236,14 @@ impl Set {
     }
 }
 
-/// A 3D writer layer's batch: its instance sets, its labels' masks and its encoding.
+/// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
     solids: BTreeMap<Shape, Set>,
     lines: Set,
     points: Set,
+    /// One record per inked glyph of its labels.
     labels: Set,
-    /// Each label's mask, in the labels' order.
-    masks: Vec<(String, String)>,
     bundle: Option<wgpu::RenderBundle>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
@@ -247,9 +251,11 @@ struct Batch {
     next_key: Vec<u64>,
 }
 
-struct MaskTexture {
-    generation: u64,
+/// The core's glyph atlas on the GPU: one layer per page, each uploaded once per generation.
+struct AtlasTexture {
+    texture: wgpu::Texture,
     bind: wgpu::BindGroup,
+    generations: Vec<Option<u32>>,
 }
 
 struct Targets {
@@ -268,9 +274,7 @@ pub struct Renderer {
     frame_buffer: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
     tone_buffer: wgpu::Buffer,
-    mask_layout: wgpu::BindGroupLayout,
     output_layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
     mesh_pipeline: wgpu::RenderPipeline,
     families: Families,
     output_pipeline: wgpu::RenderPipeline,
@@ -278,7 +282,7 @@ pub struct Renderer {
     compiled: u32,
     meshes: BTreeMap<Shape, Mesh>,
     batches: BTreeMap<String, Batch>,
-    masks: BTreeMap<(String, String), MaskTexture>,
+    atlas: AtlasTexture,
     picks: BTreeMap<String, u32>,
     next_generation: u64,
     targets: Option<Targets>,
@@ -315,9 +319,9 @@ const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
 ];
 const POINT: [wgpu::VertexAttribute; 4] =
     wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
-const TEXT: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
-    0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4,
-    4 => Uint32, 5 => Uint32, 6 => Uint32
+const TEXT: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4,
+    5 => Uint32, 6 => Uint32, 7 => Uint32
 ];
 
 fn instance(
@@ -491,7 +495,7 @@ impl Renderer {
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
                         multisampled: false,
                     },
                     count: None,
@@ -597,15 +601,52 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let atlas = {
+            let texture = d.create_texture(&wgpu::TextureDescriptor {
+                label: Some("scene3d glyph atlas"),
+                size: wgpu::Extent3d {
+                    width: PAGE,
+                    height: PAGE,
+                    depth_or_array_layers: PAGES as u32,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
+                ..Default::default()
+            });
+            let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("scene3d glyph atlas"),
+                layout: &mask_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+            AtlasTexture {
+                texture,
+                bind,
+                generations: vec![None; PAGES],
+            }
+        };
         Renderer {
             planted,
             epoch: device.epoch,
             frame_buffer,
             frame_bind,
             tone_buffer,
-            mask_layout,
             output_layout,
-            sampler,
             mesh_pipeline,
             families: Families {
                 module,
@@ -620,7 +661,7 @@ impl Renderer {
             compiled: 2,
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
-            masks: BTreeMap::new(),
+            atlas,
             picks: BTreeMap::new(),
             next_generation: 0,
             targets: None,
@@ -715,66 +756,37 @@ impl Renderer {
         }
     }
 
-    fn mask(
-        &mut self,
-        device: &Device,
-        key: &(String, String),
-        mask: &deep_canvas_scene3d::label::Mask,
-    ) -> u64 {
-        if let Some(m) = self.masks.get(key) {
-            return m.generation;
+    /// Uploads each atlas page whose generation the GPU doesn't hold.
+    fn upload_pages(&mut self, device: &Device, pages: &[AtlasPage]) {
+        for (i, page) in pages.iter().enumerate().take(PAGES) {
+            if self.atlas.generations[i] == Some(page.generation) {
+                continue;
+            }
+            device.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &self.atlas.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: i as u32,
+                    },
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &page.bytes,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(PAGE),
+                    rows_per_image: Some(PAGE),
+                },
+                wgpu::Extent3d {
+                    width: PAGE,
+                    height: PAGE,
+                    depth_or_array_layers: 1,
+                },
+            );
+            self.atlas.generations[i] = Some(page.generation);
         }
-        let d = &device.device;
-        let size = wgpu::Extent3d {
-            width: mask.width,
-            height: mask.height,
-            depth_or_array_layers: 1,
-        };
-        let texture = d.create_texture(&wgpu::TextureDescriptor {
-            label: Some("scene3d label mask"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        device.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &mask.alpha,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(mask.width),
-                rows_per_image: Some(mask.height),
-            },
-            size,
-        );
-        let view = texture.create_view(&Default::default());
-        let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scene3d label"),
-            layout: &self.mask_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-        self.next_generation += 1;
-        let generation = self.next_generation;
-        self.masks
-            .insert(key.clone(), MaskTexture { generation, bind });
-        generation
     }
 
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
@@ -782,6 +794,7 @@ impl Renderer {
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.counts = Counts::default();
         self.ensure_targets(device, scene.size);
+        self.upload_pages(device, &scene.pages);
         let cam = &scene.camera;
         let depth = if self.planted.forward_z {
             Depth::Forward { far: FORWARD_FAR }
@@ -876,10 +889,8 @@ impl Renderer {
         for p in &layer.points {
             self.pick(&p.id);
         }
-        let mut mask_generations = Vec::new();
         for l in &layer.labels {
             self.pick(&l.id);
-            mask_generations.push(self.mask(device, &l.key, &l.mask));
         }
         if !self.batches.contains_key(&layer.id) {
             self.batches.insert(layer.id.clone(), Batch::default());
@@ -945,22 +956,24 @@ impl Renderer {
                 Facing::Upright => 1,
                 Facing::Fixed => 2,
             };
-            let record = TextRecord {
-                p: v4(l.pos, 0.0),
-                quad: [l.quad[0] as f32, l.quad[1] as f32, 0.0, 0.0],
-                right: v4(l.axes[0], 0.0),
-                up: v4(l.axes[1], 0.0),
-                color: pack(l.color),
-                pick: picks[&l.id],
-                flags: u32::from(l.world) | (facing << 1),
-                pad: 0,
-            };
-            batch.labels.push(&l.id, bytemuck::bytes_of(&record));
+            for g in &l.glyphs {
+                let Some(a) = g.atlas else { continue };
+                let texel = |v: u32| v as f32 / PAGE as f32;
+                let record = TextRecord {
+                    p: v4(l.pos, l.em),
+                    rect: g.rect,
+                    uv: [texel(a.x), texel(a.y), texel(a.x + a.w), texel(a.y + a.h)],
+                    right: v4(l.axes[0], 0.0),
+                    up: v4(l.axes[1], 0.0),
+                    color: pack(l.color),
+                    pick: picks[&l.id],
+                    flags: u32::from(l.world) | (facing << 1) | (a.page << 3),
+                    pad: 0,
+                };
+                batch.labels.push(&l.id, bytemuck::bytes_of(&record));
+            }
         }
         batch.labels.finish(device, &mut next, &mut written);
-        if !layer.labels.is_empty() || !batch.masks.is_empty() {
-            batch.masks = layer.labels.iter().map(|l| l.key.clone()).collect();
-        }
         self.next_generation = next;
         self.counts.instances_written += written;
 
@@ -979,7 +992,6 @@ impl Renderer {
                     .extend([family, set.generation, u64::from(set.len())]);
             }
         }
-        batch.next_key.extend(mask_generations);
         let unchanged = batch.bundle.is_some() && batch.key == batch.next_key;
         let keeps_stale = self.planted.replays_after_add && batch.bundle.is_some();
         if (unchanged || keeps_stale) && !self.planted.encodes_every_frame {
@@ -1038,12 +1050,8 @@ impl Renderer {
         ) {
             enc.set_pipeline(pipeline);
             enc.set_vertex_buffer(0, buffer.slice(..));
-            for (i, key) in batch.masks.iter().enumerate() {
-                if let Some(mask) = self.masks.get(key) {
-                    enc.set_bind_group(1, &mask.bind, &[]);
-                    enc.draw(0..6, i as u32..i as u32 + 1);
-                }
-            }
+            enc.set_bind_group(1, &self.atlas.bind, &[]);
+            enc.draw(0..6, 0..batch.labels.len());
         }
         enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) })
     }
@@ -1359,7 +1367,7 @@ impl RenderModule for Module3 {
             "tone:buffer",
             "instances:buffer",
             "meshes:buffer",
-            "label masks:texture",
+            "glyph atlas:texture",
             "linear:texture",
             "ids:texture",
             "depth:texture",

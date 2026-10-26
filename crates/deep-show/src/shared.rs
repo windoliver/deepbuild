@@ -36,7 +36,7 @@ use sha2::{Digest, Sha256};
 
 use crate::evidence;
 use crate::frames::unfit_issue;
-use crate::hub::{diff_reply, Body, Call, Hub, PatchCall, Planted, Show, Via};
+use crate::hub::{diff_reply, Body, Call, Hub, Include, PatchCall, Planted, Show, Via};
 use crate::snapshot::Unfit;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Palette, Record, Refused};
@@ -235,9 +235,11 @@ pub fn writer_of_text(text: &str) -> Option<Writer> {
     })
 }
 
-/// Whether this build knows a kind: the marks module draws it, or the kernel registers it.
+/// Whether this build knows a kind: the marks module or scene3d draws it, or the kernel registers it.
 pub fn knows(kind: &str) -> bool {
     deep_canvas_marks::scene::KINDS.contains(&kind)
+        || deep_canvas_scene3d::scene::is_3d(kind)
+        || kind == deep_canvas_scene3d::scene::OVERLAY
         || !matches!(lookup(&registry(), kind), Lookup::UnknownKind)
 }
 
@@ -1277,7 +1279,9 @@ impl Hub<'_> {
         let unreadable = unreadable_handles(&doc, |h| self.can_read(&writer, h));
         issues.extend(unreadable.into_iter().filter(|i| i.ids.iter().any(mine)));
         let mut drawn = None;
-        if !issues.iter().any(|i| i.severity == "error") {
+        // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
+        let three = deep_canvas_scene3d::scene::has_3d(&doc);
+        if !three && !issues.iter().any(|i| i.severity == "error") {
             let shown = drawable(&doc);
             match self.renderer.prepare(
                 shown.as_object().expect("a document is an object"),
@@ -1349,6 +1353,10 @@ impl Hub<'_> {
             diff_reply(diff, &mut reply);
         }
         let visible = panel.visible;
+        if three && visible && show.include.iter().any(|i| matches!(i, Include::Pixels)) {
+            let shown = self.shared[&show.doc].doc.clone();
+            self.pending3d = Some(self.draw3d(&shown, show.t, show.size));
+        }
         self.present(show, visible, drawn.as_ref(), reply)
     }
 
