@@ -211,7 +211,11 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
 
   // The run's own folder, its temp folder: its home, its programs, and the evidence files its processes write (where
   // check.kind@1's erases-evidence case looks for them: a suite that alters them is found out by their trailers).
-  const temp = mkdtempSync(join((tempRoot ??= realpathSync(tmpdir())), 'deep-check-'));
+  // Named by the run, whose handle is unique while the hub runs, so no random name is drawn; a folder a crash left
+  // with that name makes the plain mkdir fail, and a random one is drawn then.
+  const root = (tempRoot ??= realpathSync(tmpdir()));
+  let temp = join(root, `deep-check-${run.replace(/[^A-Za-z0-9._-]/g, '-')}`);
+  try { mkdirSync(temp); } catch { temp = mkdtempSync(join(root, 'deep-check-')); }
   let kill: NodeJS.Timeout | undefined;
   try {
     const bin = join(temp, 'bin');
@@ -291,7 +295,18 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
     }
 
     // Everything kept of the run, scrubbed by value of everything it was given that marks a secret, the output before its digest.
-    const scrub = (text: string): string => scrubValues(String(text), { env: { ...check.env, ...secrets }, held: [...Object.values(secrets), token] });
+    const marks = { env: { ...check.env, ...secrets }, held: [...Object.values(secrets), token] };
+    // No text with fewer bytes than the shortest printed form of any value can hold one: raw, or base64 after 0, 1
+    // or 2 leading bytes (the URL form is longer than raw). Most test names are shorter, and are kept as they are.
+    const shortest = (value: string): number => {
+      const n = Buffer.byteLength(value);
+      return Math.min(n, ...[0, 1, 2].map((lead) => Math.floor((8 * (lead + n)) / 6) - Math.ceil((8 * lead) / 6)));
+    };
+    const floor = Math.min(...[...marks.held, ...Object.values(marks.env)].filter(Boolean).map(shortest));
+    const scrub = (text: string): string => {
+      const s = String(text);
+      return s.length < floor && Buffer.byteLength(s) < floor ? s : scrubValues(s, marks);
+    };
     const scrubbed = (r: CommandRun): CommandRun => ({
       ...r, mask: r.mask === null ? null : scrub(r.mask), evidence: r.evidence.map(scrub), attempts: r.attempts.map((a) => ({ ...a, test: scrub(a.test) })),
       failures: r.failures.map((f) => ({ ...f, test: scrub(f.test), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
