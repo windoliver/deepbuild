@@ -7,13 +7,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use deep_canvas_marks::modules::{Drawing, Run};
+use deep_canvas_marks::modules::{self as modules, Run, StatusDrawing};
 use deep_canvas_marks::path;
 use deep_canvas_marks::scene::{self, Fill, Mark, Palette, Record, Rgb, Slot, StatusMark};
 use deep_canvas_motion::eval;
 use deep_canvas_motion::program::Program;
 use deep_marks_vello::{brush, image, sampler, shape, Scopes};
 use deep_text::{Align, Role, Shaper, Spec};
+use serde_json::json;
 use serde_json::{Map, Value};
 use vello_cpu::kurbo::{Affine, BezPath, Circle, Rect, RoundedRect, Shape};
 use vello_cpu::peniko::{ColorStop, Fill as FillRule, Gradient, ImageSampler};
@@ -38,10 +39,13 @@ fn unfit<T>(code: &'static str, path: impl Into<String>) -> Result<T, Unfit> {
     })
 }
 
-/// A revision's draw list at one time: the marks module's frame and the status marks.
+/// A revision's draw list at one time: the marks module's frame, and the status marks with the
+/// legend.
 pub struct Drawn {
     pub frame: scene::Frame,
-    pub status: Vec<StatusMark>,
+    /// The core's boxes, in a build without marks2d: `(rect, color)` in the document's units.
+    pub boxes: Vec<([f64; 4], Rgb)>,
+    pub status: Arc<StatusDrawing>,
     /// Each image mark's asset, decoded: an asset that isn't decoded yet can't settle a frame.
     images: BTreeMap<String, Arc<Pixmap>>,
     /// Each text's run as the text module shaped it (#387), drawn as it is when its spec is the
@@ -146,8 +150,15 @@ impl Renderer {
         let items = eval::items(doc, &program, &state);
         let frame =
             scene::frame(doc, &items, palette, record, 1.0).or_else(|r| unfit(r.code, r.path))?;
-        let status = scene::status_marks(doc, &items, record, status, palette)
+        let marks = scene::status_marks(doc, &items, record, status, palette)
             .or_else(|r| unfit(r.code, r.path))?;
+        let status = Arc::new(modules::status_drawing(
+            marks,
+            status,
+            palette,
+            frame.size[1],
+            &mut self.shaper,
+        ));
         let mut images = BTreeMap::new();
         for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Image { item, asset, .. } = &drawn.mark {
@@ -166,6 +177,7 @@ impl Renderer {
         }
         Ok(Drawn {
             frame,
+            boxes: Vec::new(),
             status,
             images,
             runs: BTreeMap::new(),
@@ -173,9 +185,29 @@ impl Renderer {
         })
     }
 
-    /// The scheduler's frame as marks2d drew it (#387), with every image decoded.
-    pub fn prepare_drawing(&mut self, drawing: &Drawing, evidence: &Path) -> Result<Drawn, Unfit> {
+    /// The scheduler's frame as marks2d drew it (#387), with every image decoded, and the status
+    /// marks the text module drew; a build without marks2d draws the status marks alone.
+    pub fn prepare_drawing(
+        &mut self,
+        painted: &crate::frames::Painted,
+        evidence: &Path,
+    ) -> Result<Drawn, Unfit> {
         let mut images = BTreeMap::new();
+        let status = painted.status.clone().unwrap_or_default();
+        let Some(drawing) = &painted.drawing else {
+            return Ok(Drawn {
+                frame: scene::Frame {
+                    size: painted.size,
+                    ground: [255; 3],
+                    layers: Vec::new(),
+                },
+                boxes: painted.boxes.iter().map(|b| (b.rect, b.color)).collect(),
+                status,
+                images,
+                runs: BTreeMap::new(),
+                animated: BTreeMap::new(),
+            });
+        };
         for drawn in drawing.frame.layers.iter().flat_map(|l| &l.marks) {
             if let Mark::Image { item, asset, .. } = &drawn.mark {
                 if !images.contains_key(asset) {
@@ -185,7 +217,8 @@ impl Renderer {
         }
         Ok(Drawn {
             frame: drawing.frame.clone(),
-            status: drawing.status.clone(),
+            boxes: Vec::new(),
+            status,
             images,
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
@@ -216,9 +249,29 @@ impl Renderer {
         }
         ctx.set_transform(at);
         scopes.enter(&mut ctx, &mut self.resources, &[]);
-        for s in &drawn.status {
+        for (rect, c) in &drawn.boxes {
+            ctx.set_paint(color(*c));
+            ctx.fill_rect(&Rect::new(
+                rect[0],
+                rect[1],
+                rect[0] + rect[2],
+                rect[1] + rect[3],
+            ));
+        }
+        for s in &drawn.status.marks {
             ctx.set_transform(at);
-            self.status_mark(&mut ctx, s, at);
+            self.status_mark(&mut ctx, &s.mark, at);
+        }
+        for e in &drawn.status.legend {
+            ctx.set_transform(at);
+            ctx.set_paint(color(e.color));
+            ctx.fill_path(&rect_path(e.swatch, 2.0));
+            let text = modules::status_text(&e.glyph, e.word);
+            let spec = Spec {
+                weight: 600,
+                ..Spec::label(&text)
+            };
+            self.text(&mut ctx, &spec, [e.label[0], e.label[1]], e.ink, at);
         }
         ctx.flush();
         let mut pixmap = Pixmap::new(size[0], size[1]);
@@ -480,7 +533,7 @@ impl Renderer {
             Slot::Fill => {
                 ctx.set_paint(color(s.color));
                 ctx.fill_path(&rect_path(s.bounds, s.radius));
-                let text = format!("{} {}", s.glyph, s.word);
+                let text = modules::status_text(&s.glyph, s.word);
                 let spec = Spec {
                     weight: 600,
                     ..Spec::label(&text)
@@ -518,6 +571,35 @@ impl Renderer {
             at,
         );
     }
+}
+
+/// A snapshot's entry in a reply: the PNG's hash and size, with the text snapshot of the status
+/// marks and the legend it drew, boxes in the PNG's pixels (The status-color rule).
+pub fn entry(sha: &str, drawn: &Drawn, size: [u16; 2]) -> Value {
+    let [dw, dh] = drawn.frame.size;
+    let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
+    let px = |b: [f64; 4]| json!(b.map(|v| v * scale));
+    let text = |t: &str| (!t.is_empty()).then(|| t.to_string());
+    let marks: Vec<Value> = drawn
+        .status
+        .marks
+        .iter()
+        .map(|m| {
+            json!({"item": m.mark.item, "binding": m.mark.binding, "state": m.mark.state,
+                   "color": m.mark.color, "bounds": px(m.mark.bounds),
+                   "glyph": text(&m.mark.glyph), "word": text(m.mark.word), "label": px(m.label)})
+        })
+        .collect();
+    let legend: Vec<Value> = drawn
+        .status
+        .legend
+        .iter()
+        .map(|e| {
+            json!({"state": e.state, "glyph": e.glyph, "word": e.word, "color": e.color,
+                   "swatch": px(e.swatch)})
+        })
+        .collect();
+    json!({"sha256": sha, "w": size[0], "h": size[1], "marks": marks, "legend": legend})
 }
 
 /// An RGBA raster as an 8-bit RGBA PNG, its bytes the same for the same pixels.

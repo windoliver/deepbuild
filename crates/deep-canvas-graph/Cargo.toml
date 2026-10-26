@@ -13,4 +13,5 @@ name = "deep-graph"
 path = "src/main.rs"
 
 [dependencies]
+deep-canvas = { path = "../deep-canvas" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

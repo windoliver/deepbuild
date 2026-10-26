@@ -8,6 +8,8 @@
 //! (content key, size, treatment, look); its highlights draw beside it, never on it; and a sheet
 //! whose cells show different looks names each cell's look in its caption.
 
+pub mod module;
+
 use deep_canvas::color::{linear_to_oklab, oklab_to_srgb, srgb_decode, LinearRgb, Oklab};
 use deep_canvas::ops;
 use deep_canvas_marks::key::{ContentKey, KeyBuilder};

@@ -145,6 +145,41 @@ fn register_text(r: &mut Registrar) {
     )
     .applies(is_animated)
     .run(animate);
+    r.array(
+        "text.status",
+        "status_marks",
+        "document",
+        "shading",
+        "extract",
+    );
+    r.operator(
+        "status",
+        "extract",
+        &[
+            "refs",
+            "reading",
+            "core.world",
+            "core.fields",
+            "core.status",
+            "table:text.fonts",
+        ],
+        &["text.status"],
+    )
+    .document()
+    .applies(deep_canvas::schedule::core_ops::has_status)
+    .run(status);
+    r.code(
+        "status_slot_kind",
+        "A status binding on a slot its item's kind can't carry a status color in.",
+        "Bind a rect's or a circle's fill, or a stroke or badge, never a text's fill.",
+        false,
+    );
+    r.code(
+        "status_too_small",
+        "A status fill on an item smaller than the look's smallest status mark.",
+        "Make the item at least the look's core size, or bind its stroke or badge instead.",
+        false,
+    );
     r.code(
         "bad_doc",
         "A text item the text module can't read: no text to shape, or an alignment it doesn't know.",
@@ -169,6 +204,13 @@ fn register_text(r: &mut Registrar) {
         "oracles": ["seek_play"],
         "codes": ["unknown_kind"],
         "twin": {"path": "items/title/at/pos", "value": [24, 80, 0]},
+    }));
+    r.fixture("status", status_board(), Some(status_record()))
+        .sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/build/params/box", "value": [16, 24, 168, 40]},
     }));
 }
 
@@ -367,6 +409,212 @@ fn counter_record() -> Value {
     json!({"reading:01JB8700000000000000000001": {"session": null, "value": 1234567.5, "as_of": 1000}})
 }
 
+/// What a frame's status marks draw (The status-color rule): each mark with the box of its glyph
+/// and word, and the legend, one entry per state on screen.
+#[derive(Clone, Debug, Default)]
+pub struct StatusDrawing {
+    pub marks: Vec<Labelled>,
+    pub legend: Vec<LegendEntry>,
+}
+
+/// A status mark and the box its glyph and word draw in, in u.
+#[derive(Clone, Debug)]
+pub struct Labelled {
+    pub mark: StatusMark,
+    pub label: [f64; 4],
+}
+
+/// A legend entry: the state's glyph, word and color, its swatch and its label's box, in u.
+#[derive(Clone, Debug)]
+pub struct LegendEntry {
+    pub state: &'static str,
+    pub glyph: String,
+    pub word: &'static str,
+    pub color: Rgb,
+    pub ink: Rgb,
+    pub swatch: [f64; 4],
+    pub label: [f64; 4],
+}
+
+/// The text a status mark or a legend entry draws: its glyph and its word.
+pub fn status_text(glyph: &str, word: &str) -> String {
+    if glyph.is_empty() {
+        word.to_string()
+    } else {
+        format!("{glyph} {word}")
+    }
+}
+
+/// A status label's height: one line of the 13 px label face.
+pub const LABEL_H: f64 = 17.0;
+/// A legend row: its swatch's side and the row's pitch, in u.
+const SWATCH: f64 = 12.0;
+const LEGEND_ROW: f64 = 20.0;
+
+/// The status map with nothing contributed: no state has a glyph or a color of its own, so a mark
+/// drawn from it carries its word alone.
+pub fn unmapped() -> Status {
+    Status {
+        colors: crate::look::STATES.iter().map(|s| (*s, [128; 3])).collect(),
+        glyphs: crate::look::STATES
+            .iter()
+            .map(|s| (*s, String::new()))
+            .collect(),
+        core_min_px: 4.0,
+        outline: None,
+        min_distance: 0.0,
+    }
+}
+
+/// Each status binding's mark in its source's state, through the status map in `core.status`,
+/// with its glyph and word shaped by the one shaper, and the legend.
+fn status(v: &mut View<'_>) -> Result<(), OpError> {
+    let doc = v.document()?;
+    let record = record_of(v.outside()?);
+    let worlds: BTreeMap<&str, Val> = v.every("core.world")?.into_iter().collect();
+    let mut items = Map::new();
+    for (id, fields) in v.every("core.fields")? {
+        let Val::Json(fields) = fields else { continue };
+        let mut item = (*fields).clone();
+        if let (Some(map), Some(Val::Json(at))) = (item.as_object_mut(), worlds.get(id)) {
+            map.insert("at".into(), (**at).clone());
+        }
+        items.insert(id.to_string(), item);
+    }
+    let base = v.json("core.status")?.ok_or_else(|| missing(v))?;
+    let mut palette = Palette::new();
+    for (role, value) in base["roles"].as_object().into_iter().flatten() {
+        let c: Option<Vec<u8>> = value.as_array().and_then(|c| {
+            c.iter()
+                .map(|x| x.as_u64().and_then(|x| u8::try_from(x).ok()))
+                .collect()
+        });
+        if let Some(rgb) = c.and_then(|c| <[u8; 3]>::try_from(c.as_slice()).ok()) {
+            palette.insert(role.clone(), rgb);
+        }
+    }
+    let map = Status::from_json(&base["map"]);
+    let unmapped = unmapped();
+    let status = map.as_ref().unwrap_or(&unmapped);
+    let empty = Map::new();
+    let doc = doc.as_object().unwrap_or(&empty);
+    let marks =
+        scene::status_marks(doc, &items, &record, Some(status), &palette).map_err(refused)?;
+    let height = doc
+        .get("size")
+        .and_then(|s| s.get(1))
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let fonts = v.table::<Mutex<Shaper>>("text.fonts")?;
+    let mut shaper = fonts
+        .lock()
+        .map_err(|_| OpError::new("shaper_poisoned", "status_bindings"))?;
+    let out = status_drawing(marks, map.as_ref(), &palette, height, &mut shaper);
+    let bytes = format!("{out:?}").into_bytes();
+    v.write("text.status", Val::typed(out, bytes))
+}
+
+/// Status marks with the box their glyph and word draw in, shaped by `shaper`, and the legend:
+/// one entry per state on screen, in the legend's order, stacked up from the bottom left of a
+/// document `height` u tall. With no status map (`status` `None`) there is no legend to give.
+pub fn status_drawing(
+    marks: Vec<StatusMark>,
+    status: Option<&Status>,
+    palette: &Palette,
+    height: f64,
+    shaper: &mut Shaper,
+) -> StatusDrawing {
+    let mut width = |text: &str| {
+        let spec = deep_text::Spec {
+            weight: 600,
+            ..deep_text::Spec::label(text)
+        };
+        f64::from(shaper.shape(&spec).width)
+    };
+    let mut out = StatusDrawing::default();
+    for mark in marks {
+        let [x, y, w, h] = mark.bounds;
+        let label = match mark.slot {
+            scene::Slot::Fill => [
+                x + 6.0,
+                y + (h - LABEL_H) / 2.0,
+                width(&status_text(&mark.glyph, mark.word)),
+                LABEL_H,
+            ],
+            scene::Slot::Stroke | scene::Slot::Badge => {
+                let chip = mark.core.max(16.0);
+                [x + w - chip / 2.0, y - chip / 2.0, chip, chip]
+            }
+        };
+        out.marks.push(Labelled { mark, label });
+    }
+    let Some(status) = status else {
+        return out;
+    };
+    let states: Vec<&'static str> = crate::look::STATES
+        .iter()
+        .copied()
+        .filter(|s| out.marks.iter().any(|m| m.mark.state == *s))
+        .collect();
+    let ink = palette.get("ink").copied().unwrap_or([0; 3]);
+    for (i, state) in states.iter().enumerate() {
+        let top = height - 8.0 - LEGEND_ROW * (states.len() - i) as f64;
+        let glyph = status.glyphs[state].clone();
+        let word = crate::look::word(state).unwrap_or(state);
+        let label = [
+            8.0 + SWATCH + 6.0,
+            top + (LEGEND_ROW - LABEL_H) / 2.0,
+            width(&status_text(&glyph, word)),
+            LABEL_H,
+        ];
+        out.legend.push(LegendEntry {
+            state,
+            glyph,
+            word,
+            color: status.colors[state],
+            ink,
+            swatch: [8.0, top + (LEGEND_ROW - SWATCH) / 2.0, SWATCH, SWATCH],
+            label,
+        });
+    }
+    out
+}
+
+/// The text module's status board: three boxes bound to verdicts, a caption and room for the
+/// legend below them, which the core set draws with text and look alone.
+fn status_board() -> Value {
+    let rect = |id: &str, b: [i64; 4], order: &str| {
+        json!({"id": id, "kind": "rect@1", "name": format!("Check {id}"), "order": order,
+               "params": {"box": b, "radius": 4, "paint": {"fill": {"role": "muted"}}}})
+    };
+    let bind = |id: &str, n: u8| {
+        json!({"target": format!("items/{id}/params/paint/fill"),
+               "source": format!("verdict:01JB88000000000000000000{n:02}")})
+    };
+    json!({
+        "format": 1, "profile": "board", "seed": 388, "title": "Status",
+        "description": "Three checks bound to their verdicts, each drawn in its state's color with its glyph and word, and the legend: the text module's status fixture.",
+        "size": [480, 240],
+        "items": {
+            "build": rect("build", [16, 16, 168, 40], "a1"),
+            "tests": rect("tests", [200, 16, 168, 40], "a2"),
+            "review": rect("review", [16, 72, 168, 40], "a3"),
+            "cap": {"id": "cap", "kind": "text@1", "name": "Caption", "order": "a4",
+                    "params": {"text": "Checks", "font": "body", "size": 13, "box": {"w": 160, "h": 20}},
+                    "at": {"pos": [200, 82, 0]}}
+        },
+        "status_bindings": {"sb-build": bind("build", 1), "sb-tests": bind("tests", 2), "sb-review": bind("review", 3)}
+    })
+}
+
+fn status_record() -> Value {
+    json!({
+        "verdict:01JB8800000000000000000001": {"session": null, "state": "pass"},
+        "verdict:01JB8800000000000000000002": {"session": null, "state": "fail"},
+        "verdict:01JB8800000000000000000003": {"session": null, "state": "needs_you"}
+    })
+}
+
 // ------------------------------------------------------------------------------------------------
 // look
 
@@ -387,9 +635,23 @@ pub struct LookValue {
 
 fn register_look(r: &mut Registrar) {
     r.array("look.palette", "palette", "document", "shading", "items");
-    r.operator("palette", "items", &["look"], &["look.palette"])
-        .document()
-        .run(palette);
+    // The status map every status mark draws from, into the core's array (The status-color rule).
+    r.contribution(
+        "look.status",
+        "status",
+        "document",
+        "shading",
+        "items",
+        "core.status",
+    );
+    r.operator(
+        "palette",
+        "items",
+        &["look"],
+        &["look.palette", "look.status"],
+    )
+    .document()
+    .run(palette);
     r.fixture("roles", roles_board(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],
@@ -435,6 +697,11 @@ fn palette(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let status = clean().status;
     bytes.extend_from_slice(format!("{status:?}").as_bytes());
+    let map = status.as_ref().map(Status::to_json).unwrap_or(Value::Null);
+    v.write(
+        "look.status",
+        Val::json(json!([{"op": "set", "path": ["map"], "value": map}])),
+    )?;
     v.write(
         "look.palette",
         Val::typed(LookValue { palette, status }, bytes),
@@ -460,6 +727,69 @@ fn roles_board() -> Value {
 }
 
 // ------------------------------------------------------------------------------------------------
+// data
+
+/// The data module: R1's mark sets, scales and axes, which marks2d draws; it evaluates each
+/// scale once, its domain made nice and its ticks labelled, for what reads it.
+pub fn data() -> Module {
+    Module {
+        manifest: manifest("data", &["marks2d"]),
+        register: register_data,
+    }
+}
+
+fn register_data(r: &mut Registrar) {
+    r.array("data.scale", "scale", "item", "geometry", "items");
+    r.operator("scale", "items", &["core.fields"], &["data.scale"])
+        .applies(is_scale)
+        .run(scale);
+    // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
+    // axes raise through the same scale.
+    r.fixture("points", points_board(), None).sidecar(json!({
+        "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
+        "oracles": ["seek_play"],
+        "codes": ["unknown_kind"],
+        "twin": {"path": "items/x/params/domain", "value": [0, 20]},
+    }));
+}
+
+fn is_scale(_: &Value, _: &str, item: &Value) -> bool {
+    item.get("kind").and_then(Value::as_str) == Some("scale@1")
+}
+
+/// A scale's nice domain, range, step and labelled ticks.
+fn scale(v: &mut View<'_>) -> Result<(), OpError> {
+    let fields = v.json("core.fields")?.ok_or_else(|| missing(v))?;
+    let id = v.id().unwrap_or_default();
+    let s = crate::data::scale_of(id, &fields).map_err(refused)?;
+    let ticks: Vec<Value> = s.ticks().into_iter().map(|(t, l)| json!([t, l])).collect();
+    v.write(
+        "data.scale",
+        Val::json(json!({"domain": s.domain, "range": s.range, "step": s.step, "ticks": ticks})),
+    )
+}
+
+fn points_board() -> Value {
+    json!({
+        "format": 1, "profile": "board", "seed": 388, "title": "Points",
+        "description": "Two points placed through a linear scale, with its axis: the data module's fixture.",
+        "size": [320, 200],
+        "items": {
+            "x": {"id": "x", "kind": "scale@1", "name": "X", "order": "a0",
+                  "params": {"domain": [0, 10], "range": [20, 300]}},
+            // [2.0, 5.0] as little-endian f64.
+            "dots": {"id": "dots", "kind": "marks@1", "name": "Dots", "order": "a1",
+                     "params": {"mark": "point", "n": 2, "key": "k",
+                                "columns": {"v": {"dtype": "f64", "len": 2, "data": "AAAAAAAAAEAAAAAAAAAUQA=="},
+                                            "k": {"dtype": "str", "len": 2, "data": ["a", "b"]}},
+                                "encode": {"x": {"column": "v", "scale": "x"}, "y": 80, "size": 8}}},
+            "axis": {"id": "axis", "kind": "axis@1", "name": "Axis", "order": "a2",
+                     "params": {"scale": "x", "side": "bottom"}, "at": {"pos": [0, 140, 0]}}
+        }
+    })
+}
+
+// ------------------------------------------------------------------------------------------------
 // marks2d
 
 /// The marks2d module.
@@ -470,12 +800,11 @@ pub fn marks2d() -> Module {
     }
 }
 
-/// What the frame draws: the draw list, the status marks, each text's shaped run and each
-/// animated text's units as `[lift, opacity]`.
+/// What the frame draws: the draw list, each text's shaped run and each animated text's units as
+/// `[lift, opacity]`. The status marks are the text module's (`text.status`).
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
-    pub status: Vec<StatusMark>,
     pub runs: BTreeMap<String, Arc<Run>>,
     pub animated: BTreeMap<String, Vec<[f64; 2]>>,
 }
@@ -539,18 +868,6 @@ fn register_marks2d(r: &mut Registrar) {
         "bad_path_data",
         "A path's data that doesn't parse as path commands.",
         "Write the path data as SVG path commands with all their numbers.",
-        false,
-    );
-    r.code(
-        "status_slot_kind",
-        "A status binding on a slot its item's kind can't carry a status color in.",
-        "Bind a rect's or a circle's fill, or a stroke or badge, never a text's fill.",
-        false,
-    );
-    r.code(
-        "status_too_small",
-        "A status fill on an item smaller than the look's smallest status mark.",
-        "Make the item at least the look's core size, or bind its stroke or badge instead.",
         false,
     );
     r.code(
@@ -677,8 +994,6 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = doc.as_object().unwrap_or(&empty);
     let frame =
         scene::frame_with(doc, &items, &look.palette, 1.0, &bound, &record).map_err(refused)?;
-    let status = scene::status_marks(doc, &items, &record, look.status.as_ref(), &look.palette)
-        .map_err(refused)?;
     // Each text mark's font names a role the shaper bundles.
     for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
         if let Mark::Text { item, spec, .. } = &drawn.mark {
@@ -690,7 +1005,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    let mut bytes = format!("{frame:?}{status:?}{animated:?}").into_bytes();
+    let mut bytes = format!("{frame:?}{animated:?}").into_bytes();
     for (id, run) in &runs {
         bytes.extend_from_slice(id.as_bytes());
         for g in &run.shaped.glyphs {
@@ -704,7 +1019,6 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         Val::typed(
             Drawing {
                 frame,
-                status,
                 runs,
                 animated,
             },

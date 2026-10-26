@@ -163,7 +163,7 @@ pub fn render(hub: &Hub<'_>, doc: &Value, backend: &str, t: i64) -> Render {
                 Err(code) => Render::Unfit(code),
             };
         }
-        let Some(drawing) = crate::frames::drawing_of(&s, &session) else {
+        let Some(drawing) = crate::frames::drawing_of(&s, &session).and_then(|p| p.drawing) else {
             return Render::Unfit("no_drawing".into());
         };
         let mut quads = Vec::new();

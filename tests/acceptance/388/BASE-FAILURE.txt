@@ -1,0 +1,417 @@
+
+Base commit: d18a3c62f49e49316a7944a6cf7c5ce4d5181fcb
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/388 --no-file-parallelism (output not a TTY, so no color)
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci.
+Every test fails for the expected reason: the core build set holds marks2d and motion besides text and look, and the r1 set lacks
+data, graph, record and sheet, so each set check names the extra or missing modules (soft, so the test goes on to its own part);
+the core schedule runs marks2d's and motion's operators and the core and r1 sets publish one plan (motion.compile is in core);
+the core build lists marks2d's and motion's fixtures and r1 has no data, graph, record or sheet fixture; no core fixture board has
+a status binding; and neither test-leave-out-look nor test-leave-out-text exists, so cargo refuses those builds ("none of the
+selected packages contains this feature"). The shuffle comparison itself, run by hand at the base over the base core build's
+five fixtures and shuffles 1 to 3, found no hash difference and 45 shuffled orders, and the snapshot comparison found the base's
+core plan equal to its snapshot and named a dropped and a changed operator in a mutated copy: those parts are not what fails here.
+Date: 2026-10-26T03:57:10Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/388
+
+ ❯ schedule.test.ts (3 tests | 3 failed) 13181ms
+   ❯ #388.46473baa the sealed plan equals its committed snapshot (3)
+     × #388.46473baa core: sealed with exactly text and look, its published plan (deep://schedule/<core version>) equals crates/deep-show/schedule/core.json and runs only the core's, text's and look's operators 1506ms
+     × #388.46473baa r1: sealed with exactly text, look, marks2d, data, graph, record, sheet and motion, its published plan equals crates/deep-show/schedule/r1.json and runs only those modules' and the core's operators 1394ms
+     × #388.46473baa the core and r1 plans are two plans: r1's published plan differs from the core snapshot, naming operators of the modules r1 adds, so neither snapshot can stand for the other 31ms
+ ❯ shuffle.test.ts (2 tests | 2 failed) 12441ms
+   ❯ #388.46473baa evaluating each fixture under 8 legal orders shuffled by a seed gives identical hashes (parity/determinism/legal-order-shuffle.scene) (2)
+     × #388.46473baa core: every fixture of the core, text and look, at 0, 0.5 and 1 s, has the same node keys and results, step log and snapshot under shuffle seeds 1 to 8 as unshuffled, each order legal 1339ms
+     × #388.46473baa r1: every fixture of the core, text, look, marks2d, data, graph, record, sheet and motion, at 0, 0.5 and 1 s, has the same node keys and results, step log and snapshot under shuffle seeds 1 to 8 as unshuffled, each order legal 1301ms
+ ❯ sets.test.ts (4 tests | 4 failed) 13286ms
+   ❯ #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module (4)
+     × #388.c1a5581d the core build set seals with exactly text and look 2093ms
+     × #388.c1a5581d the r1 build set seals with exactly text, look, marks2d, data, graph, record, sheet and motion 1313ms
+     × #388.c1a5581d a test build that leaves look out (core,test-leave-out-look) refuses startup, naming look 5ms
+     × #388.c1a5581d a test build that leaves text out (core,test-leave-out-text) refuses startup, naming text 1ms
+ ❯ status.test.ts (2 tests | 2 failed) 3068ms
+   ❯ #388.c1a5581d in the core set a fixture board's status mark draws its state's glyph and word beside its color, with a legend; a planted seal that lets a build without look start draws the mark with no glyph and fails, naming the mark (2)
+     × #388.c1a5581d in the core build, each fixture board's status mark draws the clean look's color for its state, the state's glyph and word beside it, and a legend entry with that glyph, color and word; with every state moved on, the marks and legend follow 1332ms
+     × #388.c1a5581d a planted seal that lets a build without look start (--planted starts_without_look on core,test-leave-out-look) starts with text alone, draws the fixture board's status mark with no glyph, and the status check fails, naming the mark 16ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa core: sealed with exactly text and look, its published plan (deep://schedule/<core version>) equals crates/deep-show/schedule/core.json and runs only the core's, text's and look's operators
+AssertionError: the core build holds exactly text and look:
+  the core build holds marks2d, which its list doesn't name
+  the core build holds motion, which its list doesn't name: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the core build holds marks2d, which its list doesn't name",
++   "the core build holds motion, which its list doesn't name",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ schedule.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
+
+ FAIL  schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa core: sealed with exactly text and look, its published plan (deep://schedule/<core version>) equals crates/deep-show/schedule/core.json and runs only the core's, text's and look's operators
+AssertionError: the core schedule is the core set's:
+  the core schedule runs motion.compile (plan) of motion, a module its list doesn't name
+  the core schedule runs motion.channels (items) of motion, a module its list doesn't name
+  the core schedule runs marks2d.frame (extract) of marks2d, a module its list doesn't name: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the core schedule runs motion.compile (plan) of motion, a module its list doesn't name",
++   "the core schedule runs motion.channels (items) of motion, a module its list doesn't name",
++   "the core schedule runs marks2d.frame (extract) of marks2d, a module its list doesn't name",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ schedule.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa r1: sealed with exactly text, look, marks2d, data, graph, record, sheet and motion, its published plan equals crates/deep-show/schedule/r1.json and runs only those modules' and the core's operators
+AssertionError: the r1 build holds exactly its list:
+  the r1 build lacks data, which its list names
+  the r1 build lacks graph, which its list names
+  the r1 build lacks record, which its list names
+  the r1 build lacks sheet, which its list names: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the r1 build lacks data, which its list names",
++   "the r1 build lacks graph, which its list names",
++   "the r1 build lacks record, which its list names",
++   "the r1 build lacks sheet, which its list names",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ schedule.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa the core and r1 plans are two plans: r1's published plan differs from the core snapshot, naming operators of the modules r1 adds, so neither snapshot can stand for the other
+AssertionError: motion.compile (of motion) is not in the core build: expected { module: 'motion', …(3) } to be undefined
+
+- Expected:
+undefined
+
++ Received:
+{
+  "module": "motion",
+  "phase": "plan",
+  "reads": [
+    "refs",
+  ],
+  "writes": [
+    "motion.program",
+  ],
+}
+
+ ❯ schedule.test.ts:82:132
+     80|     const r1Only = Object.entries(r1.reg.operators).filter(([, o]) => …
+     81|     expect(r1Only.length, `r1 registers operators of the modules it ad…
+     82|     for (const op of r1Only) expect(core.reg.operators[op], `${op} (of…
+       |                                                                                                                                    ^
+     83|     expect(diff.join('\n'), 'the difference names an operator r1 adds'…
+     84|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
+
+ FAIL  sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d the core build set seals with exactly text and look
+AssertionError: the core build's canvas modules, sorted by name: expected [ 'look', 'marks2d', 'motion', 'text' ] to deeply equal [ 'look', 'text' ]
+
+- Expected
++ Received
+
+  [
+    "look",
++   "marks2d",
++   "motion",
+    "text",
+  ]
+
+ ❯ sets.test.ts:23:77
+     21|   it('#388.c1a5581d the core build set seals with exactly text and loo…
+     22|     const reg = registry(run(builds.bin(CORE), scenario(evidence(), [R…
+     23|     expect(reg.modules, 'the core build\'s canvas modules, sorted by n…
+       |                                                                             ^
+     24|     none(setFailures(reg, 'core'), 'the core build holds exactly text …
+     25|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
+
+ FAIL  sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d the r1 build set seals with exactly text, look, marks2d, data, graph, record, sheet and motion
+AssertionError: the r1 build's canvas modules, sorted by name: expected [ 'look', 'marks2d', 'motion', 'text' ] to deeply equal [ 'data', 'graph', 'look', …(5) ]
+
+- Expected
++ Received
+
+  [
+-   "data",
+-   "graph",
+    "look",
+    "marks2d",
+    "motion",
+-   "record",
+-   "sheet",
+    "text",
+  ]
+
+ ❯ sets.test.ts:29:75
+     27|   it('#388.c1a5581d the r1 build set seals with exactly text, look, ma…
+     28|     const reg = registry(run(builds.bin(R1), scenario(evidence(), [REG…
+     29|     expect(reg.modules, 'the r1 build\'s canvas modules, sorted by nam…
+       |                                                                           ^
+     30|     none(setFailures(reg, 'r1'), 'the r1 build holds exactly its list'…
+     31|   }, 600_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/16]⎯
+
+ FAIL  sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d a test build that leaves look out (core,test-leave-out-look) refuses startup, naming look
+AssertionError: the binary builds: deep-show with features core,test-leave-out-look: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-leave-out-look failed:
++ error: none of the selected packages contains this feature: test-leave-out-look
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:116:107
+    114|       const entry = made.get(buildName(build));
+    115|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    116|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    117|       return entry.bin;
+    118|     },
+ ❯ sets.test.ts:34:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d a test build that leaves text out (core,test-leave-out-text) refuses startup, naming text
+AssertionError: the binary builds: deep-show with features core,test-leave-out-text: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features core,test-leave-out-text failed:
++ error: none of the selected packages contains this feature: test-leave-out-text
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-text-gpui, deep-text, deep-gpu-layer, deep-canvas-marks, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-replica, deep-scene3d-render, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:116:107
+    114|       const entry = made.get(buildName(build));
+    115|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    116|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    117|       return entry.bin;
+    118|     },
+ ❯ sets.test.ts:40:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  shuffle.test.ts > #388.46473baa evaluating each fixture under 8 legal orders shuffled by a seed gives identical hashes (parity/determinism/legal-order-shuffle.scene) > #388.46473baa core: every fixture of the core, text and look, at 0, 0.5 and 1 s, has the same node keys and results, step log and snapshot under shuffle seeds 1 to 8 as unshuffled, each order legal
+AssertionError: the core build holds exactly its list:
+  the core build holds marks2d, which its list doesn't name
+  the core build holds motion, which its list doesn't name: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the core build holds marks2d, which its list doesn't name",
++   "the core build holds motion, which its list doesn't name",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ shuffleCheck shuffle.test.ts:38:3
+ ❯ shuffle.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  shuffle.test.ts > #388.46473baa evaluating each fixture under 8 legal orders shuffled by a seed gives identical hashes (parity/determinism/legal-order-shuffle.scene) > #388.46473baa core: every fixture of the core, text and look, at 0, 0.5 and 1 s, has the same node keys and results, step log and snapshot under shuffle seeds 1 to 8 as unshuffled, each order legal
+AssertionError: fixture marks2d/board belongs to the core or a module of the core set: expected [ 'core', 'look', 'text' ] to include 'marks2d'
+ ❯ shuffleCheck shuffle.test.ts:41:150
+     39|   const fixtures = fixturesOf(replies[1]!);
+     40|   for (const m of SET_MODULES[set]) expect(fixtures.filter((f) => f.mo…
+     41|   for (const f of fixtures) expect(['core', ...SET_MODULES[set]], `fix…
+       |                                                                                                                                                      ^
+     42|
+     43|   const failures: string[] = [];
+ ❯ shuffle.test.ts:63:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+ FAIL  shuffle.test.ts > #388.46473baa evaluating each fixture under 8 legal orders shuffled by a seed gives identical hashes (parity/determinism/legal-order-shuffle.scene) > #388.46473baa r1: every fixture of the core, text, look, marks2d, data, graph, record, sheet and motion, at 0, 0.5 and 1 s, has the same node keys and results, step log and snapshot under shuffle seeds 1 to 8 as unshuffled, each order legal
+AssertionError: the r1 build holds exactly its list:
+  the r1 build lacks data, which its list names
+  the r1 build lacks graph, which its list names
+  the r1 build lacks record, which its list names
+  the r1 build lacks sheet, which its list names: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the r1 build lacks data, which its list names",
++   "the r1 build lacks graph, which its list names",
++   "the r1 build lacks record, which its list names",
++   "the r1 build lacks sheet, which its list names",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ shuffleCheck shuffle.test.ts:38:3
+ ❯ shuffle.test.ts:67:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/16]⎯
+
+ FAIL  shuffle.test.ts > #388.46473baa evaluating each fixture under 8 legal orders shuffled by a seed gives identical hashes (parity/determinism/legal-order-shuffle.scene) > #388.46473baa r1: every fixture of the core, text, look, marks2d, data, graph, record, sheet and motion, at 0, 0.5 and 1 s, has the same node keys and results, step log and snapshot under shuffle seeds 1 to 8 as unshuffled, each order legal
+AssertionError: canvas module data registers at least one fixture: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ shuffleCheck shuffle.test.ts:40:160
+     38|   none(setFailures(reg, set), `the ${set} build holds exactly its list…
+     39|   const fixtures = fixturesOf(replies[1]!);
+     40|   for (const m of SET_MODULES[set]) expect(fixtures.filter((f) => f.mo…
+       |                                                                                                                                                                ^
+     41|   for (const f of fixtures) expect(['core', ...SET_MODULES[set]], `fix…
+     42|
+ ❯ shuffle.test.ts:67:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/16]⎯
+
+ FAIL  status.test.ts > #388.c1a5581d in the core set a fixture board's status mark draws its state's glyph and word beside its color, with a legend; a planted seal that lets a build without look start draws the mark with no glyph and fails, naming the mark > #388.c1a5581d in the core build, each fixture board's status mark draws the clean look's color for its state, the state's glyph and word beside it, and a legend entry with that glyph, color and word; with every state moved on, the marks and legend follow
+AssertionError: the core build holds exactly text and look:
+  the core build holds marks2d, which its list doesn't name
+  the core build holds motion, which its list doesn't name: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the core build holds marks2d, which its list doesn't name",
++   "the core build holds motion, which its list doesn't name",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ statusBoards status.test.ts:27:3
+ ❯ status.test.ts:51:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/16]⎯
+
+ FAIL  status.test.ts > #388.c1a5581d in the core set a fixture board's status mark draws its state's glyph and word beside its color, with a legend; a planted seal that lets a build without look start draws the mark with no glyph and fails, naming the mark > #388.c1a5581d in the core build, each fixture board's status mark draws the clean look's color for its state, the state's glyph and word beside it, and a legend entry with that glyph, color and word; with every state moved on, the marks and legend follow
+AssertionError: the core build registers a fixture board with a status mark: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ statusBoards status.test.ts:29:121
+     27|   none(setFailures(registry(replies[0]!), 'core'), 'the core build hol…
+     28|   const boards = fixturesOf(replies[1]!).filter((f) => f.document['pro…
+     29|   expect(boards.map((f) => `${f.module}/${f.name}`), 'the core build r…
+       |                                                                                                                         ^
+     30|   for (const f of boards) {
+     31|     expect(['core', 'text', 'look'], `fixture ${f.module}/${f.name} is…
+ ❯ status.test.ts:51:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/16]⎯
+
+ FAIL  status.test.ts > #388.c1a5581d in the core set a fixture board's status mark draws its state's glyph and word beside its color, with a legend; a planted seal that lets a build without look start draws the mark with no glyph and fails, naming the mark > #388.c1a5581d a planted seal that lets a build without look start (--planted starts_without_look on core,test-leave-out-look) starts with text alone, draws the fixture board's status mark with no glyph, and the status check fails, naming the mark
+AssertionError: the core build holds exactly text and look:
+  the core build holds marks2d, which its list doesn't name
+  the core build holds motion, which its list doesn't name: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the core build holds marks2d, which its list doesn't name",
++   "the core build holds motion, which its list doesn't name",
++ ]
+
+ ❯ none helpers.ts:257:83
+    255| /** No failures; the message lists them, each naming what failed. `sof…
+    256| export function none(failures: readonly string[], what: string, soft =…
+    257|   (soft ? expect.soft : expect)(failures, `${what}:\n  ${failures.join…
+       |                                                                                   ^
+    258| }
+    259|
+ ❯ statusBoards status.test.ts:27:3
+ ❯ status.test.ts:63:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/16]⎯
+
+ FAIL  status.test.ts > #388.c1a5581d in the core set a fixture board's status mark draws its state's glyph and word beside its color, with a legend; a planted seal that lets a build without look start draws the mark with no glyph and fails, naming the mark > #388.c1a5581d a planted seal that lets a build without look start (--planted starts_without_look on core,test-leave-out-look) starts with text alone, draws the fixture board's status mark with no glyph, and the status check fails, naming the mark
+AssertionError: the core build registers a fixture board with a status mark: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ statusBoards status.test.ts:29:121
+     27|   none(setFailures(registry(replies[0]!), 'core'), 'the core build hol…
+     28|   const boards = fixturesOf(replies[1]!).filter((f) => f.document['pro…
+     29|   expect(boards.map((f) => `${f.module}/${f.name}`), 'the core build r…
+       |                                                                                                                         ^
+     30|   for (const f of boards) {
+     31|     expect(['core', 'text', 'look'], `fixture ${f.module}/${f.name} is…
+ ❯ status.test.ts:63:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/16]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  11 failed (11)
+   Start at  20:56:00
+   Duration  42.39s (tests 100%)
+
