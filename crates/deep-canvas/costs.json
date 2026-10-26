@@ -60,6 +60,26 @@
       "ns_per_px": 0.0001,
       "ns_per_vertex": 7.38,
       "bytes_per_px": 12
+    },
+    "effects.grid": {
+      "ns_per_px": 0.3052,
+      "bytes_per_px": 8
+    },
+    "effects.shadow": {
+      "ns_per_px": 0.3287,
+      "bytes_per_px": 8
+    },
+    "effects.particles": {
+      "ns_per_px": 0.0001,
+      "bytes_per_px": 8
+    },
+    "effects.outline": {
+      "ns_per_px": 0.1737,
+      "bytes_per_px": 8
+    },
+    "effects.glow": {
+      "ns_per_px": 0.2847,
+      "bytes_per_px": 11
     }
   }
 }
