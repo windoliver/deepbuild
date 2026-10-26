@@ -33,7 +33,8 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_in, check_with, duration, recheck, recheck_skipping_referrers, CheckResult,
+    check, check_costed, check_in, check_with, duration, recheck, recheck_skipping_referrers,
+    CheckResult,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
@@ -1335,6 +1336,38 @@ mod tests {
             "controls/slider/value/deeper",
             "controls/slider/range/5",
             "controls/slider/range/x",
+        ] {
+            assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
+        }
+    }
+
+    #[test]
+    fn a_path_inside_a_structured_param_resolves_only_where_a_value_is() {
+        // A camera's orbit, which a channel turns (#379): `orbit` is the kind's param, and each
+        // step below it must reach a value the item's params hold.
+        let mut doc = base();
+        doc["items"]["cam"] = json!({"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
+            "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 14}, "fov": 40}});
+        let refused = |target: &str| {
+            let mut doc = doc.clone();
+            doc["channels"] = json!({"c": {"target": target}});
+            let result = check(&doc);
+            result
+                .issues
+                .iter()
+                .find(|i| i.path == "channels/c/target")
+                .map(|i| i.code)
+        };
+        for target in [
+            "items/cam/params/orbit/azimuth",
+            "items/cam/params/target/1",
+        ] {
+            assert_eq!(refused(target), None, "{target}");
+        }
+        for target in [
+            "items/cam/params/orbit/roll",
+            "items/cam/params/target/3",
+            "items/cam/params/nonexistent/x",
         ] {
             assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
         }

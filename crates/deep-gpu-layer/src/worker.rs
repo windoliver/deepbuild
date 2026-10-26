@@ -7,7 +7,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use deep_gpu::device::{Backend, Gpu};
+use deep_gpu::device::{Backend, Gpu, Withheld};
 use deep_gpu::encode::Pool;
 use deep_gpu::surface::Path;
 use deep_gpu::view::{Config, View};
@@ -37,6 +37,8 @@ pub struct State {
     pub current: Option<String>,
     pub submits_on_completion: bool,
     pub releases_early: bool,
+    /// The test writer's textures, by writer (#379, `test-meter` builds only).
+    pub allocations: HashMap<String, Vec<wgpu::Texture>>,
 }
 
 /// The slot count every surface takes.
@@ -107,10 +109,11 @@ pub struct Worker {
 impl Worker {
     pub fn start(
         backend: Backend,
+        withheld: Withheld,
         submits_on_completion: bool,
         releases_early: bool,
     ) -> Result<Worker, String> {
-        let gpu = Gpu::open(backend)?;
+        let gpu = Gpu::open_withholding(backend, withheld)?;
         let (tx, rx) = mpsc::channel::<Work>();
         let name = "deep-gpu render".to_string();
         thread::Builder::new()
@@ -123,6 +126,7 @@ impl Worker {
                     current: None,
                     submits_on_completion,
                     releases_early,
+                    allocations: HashMap::new(),
                 };
                 for work in rx {
                     work(&mut state);

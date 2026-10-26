@@ -137,7 +137,9 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// One family's instance records in a batch, in a buffer of their own.
+/// One family's instance records in a batch, in a buffer of their own. A frame gathers its
+/// records into `next` with [`Set::push`], kept from frame to frame, so a frame whose members
+/// hold allocates nothing; [`Set::finish`] writes what changed.
 #[derive(Default)]
 struct Set {
     buffer: Option<wgpu::Buffer>,
@@ -145,58 +147,87 @@ struct Set {
     generation: u64,
     capacity: usize,
     owners: Vec<String>,
-    records: Vec<Vec<u8>>,
+    /// The records, each `stride` bytes, end to end.
+    records: Vec<u8>,
+    stride: usize,
+    /// This frame's records and how many, and its owners once they differ from `owners`.
+    next: Vec<u8>,
+    count: usize,
+    new_owners: Option<Vec<String>>,
 }
 
 impl Set {
+    fn begin(&mut self) {
+        self.next.clear();
+        self.count = 0;
+        self.new_owners = None;
+    }
+
+    fn push(&mut self, owner: &str, record: &[u8]) {
+        self.stride = record.len();
+        if self.new_owners.is_none() && self.owners.get(self.count).is_none_or(|o| o != owner) {
+            self.new_owners = Some(self.owners[..self.count].to_vec());
+        }
+        if let Some(owners) = self.new_owners.as_mut() {
+            owners.push(owner.to_string());
+        }
+        self.next.extend_from_slice(record);
+        self.count += 1;
+    }
+
     /// Writes the records that changed, or all of them when the set's members changed. True when
     /// the members changed.
-    fn update(
-        &mut self,
-        device: &Device,
-        owners: Vec<String>,
-        records: Vec<Vec<u8>>,
-        next_generation: &mut u64,
-        written: &mut u32,
-    ) -> bool {
-        let size = records.first().map_or(16, Vec::len) as u64;
-        let members_changed = owners != self.owners || self.buffer.is_none();
+    fn finish(&mut self, device: &Device, next_generation: &mut u64, written: &mut u32) -> bool {
+        if self.count != self.owners.len() && self.new_owners.is_none() {
+            self.new_owners = Some(self.owners[..self.count].to_vec());
+        }
+        let stride = self.stride.max(16);
+        let members_changed = self.new_owners.is_some() || self.buffer.is_none();
         if members_changed {
-            if self.buffer.is_none() || self.capacity < records.len() {
-                self.capacity = records.len().max(1);
+            if self.buffer.is_none() || self.capacity < self.count {
+                self.capacity = self.count.max(1);
                 *next_generation += 1;
                 self.generation = *next_generation;
                 self.buffer = Some(device.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("scene3d instances"),
-                    size: size * self.capacity as u64,
+                    size: (stride * self.capacity) as u64,
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 }));
             }
             let buffer = self.buffer.as_ref().expect("allocated above");
-            if !records.is_empty() {
-                device.queue.write_buffer(buffer, 0, &records.concat());
+            if self.count > 0 {
+                deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, 0, &self.next));
             }
-            *written += records.len() as u32;
+            *written += self.count as u32;
+            if let Some(owners) = self.new_owners.take() {
+                self.owners = owners;
+            }
         } else {
             let buffer = self
                 .buffer
                 .as_ref()
                 .expect("a set with members has a buffer");
-            for (i, (new, old)) in records.iter().zip(&self.records).enumerate() {
+            for (i, (new, old)) in self
+                .next
+                .chunks_exact(stride)
+                .zip(self.records.chunks_exact(stride))
+                .enumerate()
+            {
                 if new != old {
-                    device.queue.write_buffer(buffer, i as u64 * size, new);
+                    deep_gpu::alloc::outside(|| {
+                        device.queue.write_buffer(buffer, (i * stride) as u64, new)
+                    });
                     *written += 1;
                 }
             }
         }
-        self.owners = owners;
-        self.records = records;
+        std::mem::swap(&mut self.records, &mut self.next);
         members_changed
     }
 
     fn len(&self) -> u32 {
-        self.records.len() as u32
+        self.owners.len() as u32
     }
 }
 
@@ -210,8 +241,10 @@ struct Batch {
     /// Each label's mask, in the labels' order.
     masks: Vec<(String, String)>,
     bundle: Option<wgpu::RenderBundle>,
-    /// The resources and draws the bundle binds and records, as it was encoded.
+    /// The resources and draws the bundle binds and records, as it was encoded, and this
+    /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
+    next_key: Vec<u64>,
 }
 
 struct MaskTexture {
@@ -239,10 +272,10 @@ pub struct Renderer {
     output_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     mesh_pipeline: wgpu::RenderPipeline,
-    line_pipeline: wgpu::RenderPipeline,
-    point_pipeline: wgpu::RenderPipeline,
-    text_pipeline: wgpu::RenderPipeline,
+    families: Families,
     output_pipeline: wgpu::RenderPipeline,
+    /// Render pipelines this renderer compiled, so a patch's new ones can be counted (#379).
+    compiled: u32,
     meshes: BTreeMap<Shape, Mesh>,
     batches: BTreeMap<String, Batch>,
     masks: BTreeMap<(String, String), MaskTexture>,
@@ -272,7 +305,160 @@ fn shape_code(s: Shape) -> u64 {
     }
 }
 
+const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
+    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+const SOLID: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+    2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32
+];
+const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
+];
+const POINT: [wgpu::VertexAttribute; 4] =
+    wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
+const TEXT: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4,
+    4 => Uint32, 5 => Uint32, 6 => Uint32
+];
+
+fn instance(
+    stride: u64,
+    attributes: &'static [wgpu::VertexAttribute],
+) -> wgpu::VertexBufferLayout<'static> {
+    wgpu::VertexBufferLayout {
+        array_stride: stride,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes,
+    }
+}
+
+/// A draw pipeline into the linear and object-ID targets with reversed-Z depth (or the planted
+/// forward Z).
+fn draw_pipeline(
+    d: &wgpu::Device,
+    module: &wgpu::ShaderModule,
+    layout: &wgpu::PipelineLayout,
+    forward_z: bool,
+    vs: &str,
+    fs: &str,
+    buffers: &[Option<wgpu::VertexBufferLayout<'_>>],
+) -> wgpu::RenderPipeline {
+    let depth = wgpu::DepthStencilState {
+        format: DEPTH,
+        depth_write_enabled: Some(true),
+        depth_compare: Some(if forward_z {
+            wgpu::CompareFunction::Less
+        } else {
+            wgpu::CompareFunction::GreaterEqual
+        }),
+        stencil: Default::default(),
+        bias: Default::default(),
+    };
+    let targets = [
+        Some(wgpu::ColorTargetState {
+            format: LINEAR,
+            blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+            write_mask: wgpu::ColorWrites::ALL,
+        }),
+        Some(wgpu::ColorTargetState {
+            format: IDS,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        }),
+    ];
+    d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(vs),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some(vs),
+            compilation_options: Default::default(),
+            buffers,
+        },
+        primitive: Default::default(),
+        depth_stencil: Some(depth),
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module,
+            entry_point: Some(fs),
+            compilation_options: Default::default(),
+            targets: &targets,
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+/// The line, point and text pipelines, each compiled the first time a batch draws its family, so
+/// a patch that adds a family compiles a new pipeline and one that changes only values doesn't.
+struct Families {
+    module: wgpu::ShaderModule,
+    draw_layout: wgpu::PipelineLayout,
+    text_layout: wgpu::PipelineLayout,
+    forward_z: bool,
+    line: Option<wgpu::RenderPipeline>,
+    point: Option<wgpu::RenderPipeline>,
+    text: Option<wgpu::RenderPipeline>,
+}
+
+impl Families {
+    /// Compiles the pipelines `layer` draws with that aren't yet; how many it compiled.
+    fn ensure(&mut self, d: &wgpu::Device, layer: &Layer3) -> u32 {
+        let mut made = 0;
+        let (module, draw, text, fz) = (
+            &self.module,
+            &self.draw_layout,
+            &self.text_layout,
+            self.forward_z,
+        );
+        for (wanted, slot, layout, vs, fs, buffer) in [
+            (
+                !layer.lines.is_empty(),
+                &mut self.line,
+                draw,
+                "line_vs",
+                "line_fs",
+                instance(std::mem::size_of::<SegmentRecord>() as u64, &SEGMENT),
+            ),
+            (
+                !layer.points.is_empty(),
+                &mut self.point,
+                draw,
+                "point_vs",
+                "point_fs",
+                instance(std::mem::size_of::<PointRecord>() as u64, &POINT),
+            ),
+            (
+                !layer.labels.is_empty(),
+                &mut self.text,
+                text,
+                "text_vs",
+                "text_fs",
+                instance(std::mem::size_of::<TextRecord>() as u64, &TEXT),
+            ),
+        ] {
+            if wanted && slot.is_none() {
+                *slot = Some(draw_pipeline(
+                    d,
+                    module,
+                    layout,
+                    fz,
+                    vs,
+                    fs,
+                    &[Some(buffer)],
+                ));
+                made += 1;
+            }
+        }
+        made
+    }
+}
+
 impl Renderer {
+    /// Render pipelines it compiled so far.
+    pub fn pipelines(&self) -> u32 {
+        self.compiled
+    }
+
     pub fn new(device: &Device, planted: Planted) -> Renderer {
         let d = &device.device;
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -370,77 +556,11 @@ impl Renderer {
         let draw_layout = layout(&[Some(&frame_layout)]);
         let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
-        let depth = wgpu::DepthStencilState {
-            format: DEPTH,
-            depth_write_enabled: Some(true),
-            depth_compare: Some(if planted.forward_z {
-                wgpu::CompareFunction::Less
-            } else {
-                wgpu::CompareFunction::GreaterEqual
-            }),
-            stencil: Default::default(),
-            bias: Default::default(),
-        };
-        let targets = [
-            Some(wgpu::ColorTargetState {
-                format: LINEAR,
-                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            }),
-            Some(wgpu::ColorTargetState {
-                format: IDS,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            }),
-        ];
-        let pipeline = |layout: &wgpu::PipelineLayout,
-                        vs: &str,
-                        fs: &str,
-                        buffers: &[Option<wgpu::VertexBufferLayout<'_>>]| {
-            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(vs),
-                layout: Some(layout),
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some(vs),
-                    compilation_options: Default::default(),
-                    buffers,
-                },
-                primitive: Default::default(),
-                depth_stencil: Some(depth.clone()),
-                multisample: Default::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some(fs),
-                    compilation_options: Default::default(),
-                    targets: &targets,
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
-        let instance =
-            |stride: u64, attributes: &'static [wgpu::VertexAttribute]| wgpu::VertexBufferLayout {
-                array_stride: stride,
-                step_mode: wgpu::VertexStepMode::Instance,
-                attributes,
-            };
-        const MESH_VERTEX: [wgpu::VertexAttribute; 2] =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
-        const SOLID: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-            2 => Float32x4, 3 => Float32x4, 4 => Float32x4, 5 => Uint32, 6 => Uint32
-        ];
-        const SEGMENT: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-            0 => Float32x4, 1 => Float32x4, 2 => Uint32, 3 => Uint32, 4 => Uint32
-        ];
-        const POINT: [wgpu::VertexAttribute; 4] =
-            wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32, 2 => Uint32, 3 => Uint32];
-        const TEXT: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
-            0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4,
-            4 => Uint32, 5 => Uint32, 6 => Uint32
-        ];
-        let mesh_pipeline = pipeline(
+        let mesh_pipeline = draw_pipeline(
+            d,
+            &module,
             &draw_layout,
+            planted.forward_z,
             "mesh_vs",
             "mesh_fs",
             &[
@@ -451,33 +571,6 @@ impl Renderer {
                 }),
                 Some(instance(std::mem::size_of::<SolidRecord>() as u64, &SOLID)),
             ],
-        );
-        let line_pipeline = pipeline(
-            &draw_layout,
-            "line_vs",
-            "line_fs",
-            &[Some(instance(
-                std::mem::size_of::<SegmentRecord>() as u64,
-                &SEGMENT,
-            ))],
-        );
-        let point_pipeline = pipeline(
-            &draw_layout,
-            "point_vs",
-            "point_fs",
-            &[Some(instance(
-                std::mem::size_of::<PointRecord>() as u64,
-                &POINT,
-            ))],
-        );
-        let text_pipeline = pipeline(
-            &text_layout,
-            "text_vs",
-            "text_fs",
-            &[Some(instance(
-                std::mem::size_of::<TextRecord>() as u64,
-                &TEXT,
-            ))],
         );
         let output_pipeline = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some(OUTPUT_PASS),
@@ -514,10 +607,17 @@ impl Renderer {
             output_layout,
             sampler,
             mesh_pipeline,
-            line_pipeline,
-            point_pipeline,
-            text_pipeline,
+            families: Families {
+                module,
+                draw_layout,
+                text_layout,
+                forward_z: planted.forward_z,
+                line: None,
+                point: None,
+                text: None,
+            },
             output_pipeline,
+            compiled: 2,
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
             masks: BTreeMap::new(),
@@ -712,9 +812,11 @@ impl Renderer {
             ],
             light,
         };
-        device
-            .queue
-            .write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame));
+        deep_gpu::alloc::outside(|| {
+            device
+                .queue
+                .write_buffer(&self.frame_buffer, 0, bytemuck::bytes_of(&frame))
+        });
         let (map, white, contrast) = match look.tone_map {
             ToneMap::Agx { white, contrast } => (2, white, contrast),
             other => (other.code(), 16.29, 1.25),
@@ -733,65 +835,94 @@ impl Renderer {
             },
             pad: [0; 3],
         };
-        device
-            .queue
-            .write_buffer(&self.tone_buffer, 0, bytemuck::bytes_of(&tone));
+        deep_gpu::alloc::outside(|| {
+            device
+                .queue
+                .write_buffer(&self.tone_buffer, 0, bytemuck::bytes_of(&tone))
+        });
         self.ground = [
             decode(scene.ground[0]),
             decode(scene.ground[1]),
             decode(scene.ground[2]),
             1.0,
         ];
-        let mut order = Vec::with_capacity(scene.layers.len());
         for layer in &scene.layers {
             self.prepare_batch(device, layer);
-            order.push(layer.id.clone());
         }
-        self.batches.retain(|id, _| order.contains(id));
-        self.order = order;
+        let same = self.order.len() == scene.layers.len()
+            && self
+                .order
+                .iter()
+                .zip(&scene.layers)
+                .all(|(o, l)| *o == l.id);
+        if !same {
+            self.order = scene.layers.iter().map(|l| l.id.clone()).collect();
+            let order = &self.order;
+            self.batches.retain(|id, _| order.contains(id));
+        }
     }
 
     fn prepare_batch(&mut self, device: &Device, layer: &Layer3) {
+        self.compiled += self.families.ensure(&device.device, layer);
         let mut written = 0u32;
         let mut next = self.next_generation;
-        let mut shapes: BTreeMap<Shape, (Vec<String>, Vec<Vec<u8>>)> = BTreeMap::new();
         for s in &layer.solids {
-            let pick = self.pick(&s.id);
+            self.mesh(device, s.shape);
+            self.pick(&s.id);
+        }
+        for l in &layer.lines {
+            self.pick(&l.id);
+        }
+        for p in &layer.points {
+            self.pick(&p.id);
+        }
+        let mut mask_generations = Vec::new();
+        for l in &layer.labels {
+            self.pick(&l.id);
+            mask_generations.push(self.mask(device, &l.key, &l.mask));
+        }
+        if !self.batches.contains_key(&layer.id) {
+            self.batches.insert(layer.id.clone(), Batch::default());
+        }
+        let picks = &self.picks;
+        let batch = self.batches.get_mut(&layer.id).expect("made above");
+        for set in batch.solids.values_mut() {
+            set.begin();
+        }
+        for s in &layer.solids {
             let rows = s
                 .model
                 .map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]);
             let record = SolidRecord {
                 rows,
                 color: pack(s.color),
-                pick,
+                pick: picks[&s.id],
                 pad: [0; 2],
             };
-            let entry = shapes.entry(s.shape).or_default();
-            entry.0.push(s.id.clone());
-            entry.1.push(bytemuck::bytes_of(&record).to_vec());
+            let set = batch.solids.entry(s.shape).or_default();
+            set.push(&s.id, bytemuck::bytes_of(&record));
         }
-        for shape in shapes.keys() {
-            self.mesh(device, *shape);
+        batch.solids.retain(|_, set| set.count > 0);
+        for set in batch.solids.values_mut() {
+            set.finish(device, &mut next, &mut written);
         }
-        let (mut line_owners, mut line_records) = (Vec::new(), Vec::new());
+        batch.lines.begin();
         for l in &layer.lines {
-            let pick = self.pick(&l.id);
             for seg in &l.segments {
                 let record = SegmentRecord {
                     a: v4(seg.a, seg.wa),
                     b: v4(seg.b, seg.wb),
                     color: pack(l.color),
-                    pick,
+                    pick: picks[&l.id],
                     flags: u32::from(l.world),
                     pad: 0,
                 };
-                line_owners.push(l.id.clone());
-                line_records.push(bytemuck::bytes_of(&record).to_vec());
+                batch.lines.push(&l.id, bytemuck::bytes_of(&record));
             }
         }
-        let (mut point_owners, mut point_records) = (Vec::new(), Vec::new());
+        batch.lines.finish(device, &mut next, &mut written);
+        batch.points.begin();
         for p in &layer.points {
-            let pick = self.pick(&p.id);
             let shape = match p.shape {
                 PointShape::Dot => 0,
                 PointShape::Square => 1,
@@ -800,19 +931,15 @@ impl Renderer {
             let record = PointRecord {
                 p: v4(p.pos, p.size),
                 color: pack(p.color),
-                pick,
+                pick: picks[&p.id],
                 flags: u32::from(p.world) | (shape << 1),
                 pad: 0,
             };
-            point_owners.push(p.id.clone());
-            point_records.push(bytemuck::bytes_of(&record).to_vec());
+            batch.points.push(&p.id, bytemuck::bytes_of(&record));
         }
-        let (mut label_owners, mut label_records, mut masks, mut mask_generations) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        batch.points.finish(device, &mut next, &mut written);
+        batch.labels.begin();
         for l in &layer.labels {
-            let pick = self.pick(&l.id);
-            mask_generations.push(self.mask(device, &l.key, &l.mask));
-            masks.push(l.key.clone());
             let facing = match l.facing {
                 Facing::Camera => 0,
                 Facing::Upright => 1,
@@ -824,59 +951,45 @@ impl Renderer {
                 right: v4(l.axes[0], 0.0),
                 up: v4(l.axes[1], 0.0),
                 color: pack(l.color),
-                pick,
+                pick: picks[&l.id],
                 flags: u32::from(l.world) | (facing << 1),
                 pad: 0,
             };
-            label_owners.push(l.id.clone());
-            label_records.push(bytemuck::bytes_of(&record).to_vec());
+            batch.labels.push(&l.id, bytemuck::bytes_of(&record));
         }
-        let batch = self.batches.entry(layer.id.clone()).or_default();
-        batch.solids.retain(|s, _| shapes.contains_key(s));
-        for (shape, (owners, records)) in shapes {
-            batch.solids.entry(shape).or_default().update(
-                device,
-                owners,
-                records,
-                &mut next,
-                &mut written,
-            );
+        batch.labels.finish(device, &mut next, &mut written);
+        if !layer.labels.is_empty() || !batch.masks.is_empty() {
+            batch.masks = layer.labels.iter().map(|l| l.key.clone()).collect();
         }
-        batch
-            .lines
-            .update(device, line_owners, line_records, &mut next, &mut written);
-        batch
-            .points
-            .update(device, point_owners, point_records, &mut next, &mut written);
-        batch
-            .labels
-            .update(device, label_owners, label_records, &mut next, &mut written);
-        batch.masks = masks;
         self.next_generation = next;
         self.counts.instances_written += written;
 
         // The draw key: each draw's pipeline, the buffers and bind groups it binds by resource,
         // and its counts. The values written into those buffers never enter it.
-        let mut key = Vec::new();
+        batch.next_key.clear();
         for (shape, set) in &batch.solids {
-            key.extend([shape_code(*shape), set.generation, u64::from(set.len())]);
+            batch
+                .next_key
+                .extend([shape_code(*shape), set.generation, u64::from(set.len())]);
         }
         for (family, set) in [(10, &batch.lines), (11, &batch.points), (12, &batch.labels)] {
             if set.len() > 0 {
-                key.extend([family, set.generation, u64::from(set.len())]);
+                batch
+                    .next_key
+                    .extend([family, set.generation, u64::from(set.len())]);
             }
         }
-        key.extend(mask_generations);
-        let unchanged = batch.bundle.is_some() && batch.key == key;
+        batch.next_key.extend(mask_generations);
+        let unchanged = batch.bundle.is_some() && batch.key == batch.next_key;
         let keeps_stale = self.planted.replays_after_add && batch.bundle.is_some();
         if (unchanged || keeps_stale) && !self.planted.encodes_every_frame {
             self.counts.replayed += 1;
             return;
         }
+        std::mem::swap(&mut batch.key, &mut batch.next_key);
         let bundle = self.encode(device, &layer.id);
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         batch.bundle = Some(bundle);
-        batch.key = key;
         self.counts.encoded.push((layer.id.clone(), layer.items()));
     }
 
@@ -909,17 +1022,21 @@ impl Renderer {
             enc.draw_indexed(0..mesh.count, 0, 0..set.len());
         }
         for (pipeline, set) in [
-            (&self.line_pipeline, &batch.lines),
-            (&self.point_pipeline, &batch.points),
+            (&self.families.line, &batch.lines),
+            (&self.families.point, &batch.points),
         ] {
-            if let (Some(buffer), true) = (&set.buffer, set.len() > 0) {
+            if let (Some(buffer), Some(pipeline), true) = (&set.buffer, pipeline, set.len() > 0) {
                 enc.set_pipeline(pipeline);
                 enc.set_vertex_buffer(0, buffer.slice(..));
                 enc.draw(0..6, 0..set.len());
             }
         }
-        if let (Some(buffer), true) = (&batch.labels.buffer, batch.labels.len() > 0) {
-            enc.set_pipeline(&self.text_pipeline);
+        if let (Some(buffer), Some(pipeline), true) = (
+            &batch.labels.buffer,
+            &self.families.text,
+            batch.labels.len() > 0,
+        ) {
+            enc.set_pipeline(pipeline);
             enc.set_vertex_buffer(0, buffer.slice(..));
             for (i, key) in batch.masks.iter().enumerate() {
                 if let Some(mask) = self.masks.get(key) {
@@ -951,42 +1068,16 @@ impl Renderer {
             t.ids_view.clone(),
             t.depth_view.clone(),
         );
-        let [r, g, b, a] = self.ground;
-        let clear_depth = if self.planted.forward_z { 1.0 } else { 0.0 };
+        let (ground, clear_depth) = (self.ground, self.clear_depth());
         let geometry: Job = Box::new(move |encoder| {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(GEOMETRY_PASS),
-                color_attachments: &[
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &linear,
-                        resolve_target: None,
-                        depth_slice: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &ids,
-                        resolve_target: None,
-                        depth_slice: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(clear_depth),
-                        store: wgpu::StoreOp::Discard,
-                    }),
-                    stencil_ops: None,
-                }),
-                ..Default::default()
-            });
-            pass.execute_bundles(bundles.iter());
+            geometry_pass(
+                encoder,
+                [&linear, &ids, &depth],
+                ground,
+                clear_depth,
+                bundles.iter(),
+                None,
+            );
         });
         let (slot, pipeline, bind) = (
             slot.clone(),
@@ -994,27 +1085,67 @@ impl Renderer {
             t.output_bind.clone(),
         );
         let output: Job = Box::new(move |encoder| {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(OUTPUT_PASS),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &slot,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            pass.set_pipeline(&pipeline);
-            pass.set_bind_group(0, &bind, &[]);
-            pass.draw(0..3, 0..1);
+            output_pass(encoder, &slot, &pipeline, &bind, None);
         });
         vec![
             (GEOMETRY_PASS.into(), geometry),
             (OUTPUT_PASS.into(), output),
         ]
+    }
+
+    fn clear_depth(&self) -> f64 {
+        if self.planted.forward_z {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
+    /// The geometry pass recorded into `encoder` on the calling thread (the live path, issue
+    /// #379), with its timestamp writes when given.
+    pub fn record_geometry(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        let Some(t) = self.targets.as_ref() else {
+            return;
+        };
+        let bundles = self
+            .order
+            .iter()
+            .filter_map(|id| self.batches.get(id)?.bundle.as_ref());
+        geometry_pass(
+            encoder,
+            [&t.linear_view, &t.ids_view, &t.depth_view],
+            self.ground,
+            self.clear_depth(),
+            bundles,
+            timestamps,
+        );
+    }
+
+    /// The output pass, tone-mapping the linear target into `target`.
+    pub fn record_output(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) {
+        if let Some(t) = self.targets.as_ref() {
+            output_pass(
+                encoder,
+                target,
+                &self.output_pipeline,
+                &t.output_bind,
+                timestamps,
+            );
+        }
+    }
+
+    /// The linear target the geometry pass draws, for passes between it and the output.
+    pub fn linear(&self) -> Option<(&wgpu::Texture, &wgpu::TextureView)> {
+        self.targets.as_ref().map(|t| (&t.linear, &t.linear_view))
     }
 
     /// The frame's linear target as little-endian f32 RGBA and its object-ID target as each
@@ -1112,6 +1243,80 @@ fn read_texture(
         out.extend_from_slice(&data[start..start + row as usize]);
     }
     Some(out)
+}
+
+fn geometry_pass<'a>(
+    encoder: &mut wgpu::CommandEncoder,
+    [linear, ids, depth]: [&wgpu::TextureView; 3],
+    [r, g, b, a]: [f64; 4],
+    clear_depth: f64,
+    bundles: impl Iterator<Item = &'a wgpu::RenderBundle>,
+    timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+) {
+    deep_gpu::alloc::outside(|| {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(GEOMETRY_PASS),
+            color_attachments: &[
+                Some(wgpu::RenderPassColorAttachment {
+                    view: linear,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                }),
+                Some(wgpu::RenderPassColorAttachment {
+                    view: ids,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                }),
+            ],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(clear_depth as f32),
+                    store: wgpu::StoreOp::Discard,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: timestamps,
+            ..Default::default()
+        });
+        pass.execute_bundles(bundles);
+    });
+}
+
+fn output_pass(
+    encoder: &mut wgpu::CommandEncoder,
+    target: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    bind: &wgpu::BindGroup,
+    timestamps: Option<wgpu::RenderPassTimestampWrites<'_>>,
+) {
+    deep_gpu::alloc::outside(|| {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some(OUTPUT_PASS),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            timestamp_writes: timestamps,
+            ..Default::default()
+        });
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, bind, &[]);
+        pass.draw(0..3, 0..1);
+    });
 }
 
 /// What the GPU-layer view and the driver share: the next frame's scene and look, and the
