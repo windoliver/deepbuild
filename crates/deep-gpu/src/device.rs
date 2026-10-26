@@ -66,6 +66,9 @@ pub struct Device {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub backend: Backend,
+    /// The adapter's name and driver, for a run's environment fingerprint (#380); `None` on the
+    /// noop backend.
+    pub adapter: Option<wgpu::AdapterInfo>,
     /// Bumped on every device the app opens; a resource built at an older epoch is gone.
     pub epoch: u64,
     lost: Arc<AtomicBool>,
@@ -73,6 +76,7 @@ pub struct Device {
 
 impl Device {
     fn open(backend: Backend) -> Result<Arc<Device>, String> {
+        let mut info = None;
         let (device, queue) = match backend {
             Backend::Noop => wgpu::Device::noop(&wgpu::DeviceDescriptor::default()),
             Backend::Gpu => {
@@ -86,8 +90,11 @@ impl Device {
                         ..Default::default()
                     }))
                     .map_err(|e| format!("no GPU adapter: {e}"))?;
+                info = Some(adapter.get_info());
+                // Pass timestamps, where the adapter has them, so passes can be timed (#380).
                 pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                     label: Some("deep-gpu"),
+                    required_features: adapter.features() & wgpu::Features::TIMESTAMP_QUERY,
                     ..Default::default()
                 }))
                 .map_err(|e| format!("no GPU device: {e}"))?
@@ -101,6 +108,7 @@ impl Device {
             device,
             queue,
             backend,
+            adapter: info,
             epoch,
             lost,
         }))

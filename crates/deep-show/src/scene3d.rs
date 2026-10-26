@@ -53,8 +53,8 @@ impl Gpu3 {
             code: r.code,
             path: r.path,
         })?;
-        let mut bytes =
-            draw_offscreen(&self.device, &mut self.renderer, &scene, &look).ok_or(Unfit {
+        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, &scene, &look, None)
+            .ok_or(Unfit {
                 code: "unsupported_platform",
                 path: String::new(),
             })?;

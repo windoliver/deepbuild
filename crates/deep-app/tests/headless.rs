@@ -28,7 +28,8 @@ fn open(
         gpui_kit::init(cx);
         deep_app::init(cx);
     });
-    let runtime = gpui_shell::components::new_isolated_runtime().expect("panel runtime");
+    // The app's runtime: its component registry holds the canvas a panel draws its lines with.
+    let runtime = deep_app::new_runtime().expect("panel runtime");
     let mut mounted = None;
     let (window, spike) = cx.update(|cx| {
         gpui_kit::open_window(

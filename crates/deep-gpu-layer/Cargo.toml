@@ -26,6 +26,9 @@ deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
+deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-effects-render = { path = "../deep-effects-render" }
+wgpu-profiler = "0.28"
 deep-app = { path = "../deep-app" }
 deep-replica = { path = "../deep-replica" }
 bytemuck = { version = "1", features = ["derive"] }
