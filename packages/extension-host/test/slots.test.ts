@@ -3,7 +3,7 @@
 // gates a session no answer is delivered; steer is a route into a running turn only; an answer whose delivery
 // failed stays waiting; a stuck runner can't hang an install; a sandboxed replacement of a shipped kind is BLOCKED
 // at install; and a session whose owner was unloaded has no owner. Each runs a real package through a real host.
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -294,10 +294,11 @@ describe('#349 a resolver registers only from the hub', () => {
 
   it('a resolver registered by a package whose start has not finished is consulted on nothing: an ask raised meanwhile reaches you with no refusal from it', async () => {
     const flag = join(temp(), 'hang');
-    const folder = pkgOf('test/hanging-resolver', `import { existsSync } from 'node:fs';
+    const registered = `${flag}.registered`;
+    const folder = pkgOf('test/hanging-resolver', `import { existsSync, writeFileSync } from 'node:fs';
 export default async function (deep: any): Promise<void> {
   await deep.registerResolver(() => ({ answer: 'blue', because: 'decision:NONE' }));
-  if (existsSync(${JSON.stringify(flag)})) await new Promise(() => undefined);
+  if (existsSync(${JSON.stringify(flag)})) { writeFileSync(${JSON.stringify(registered)}, ''); await new Promise(() => undefined); }
 }
 `);
     const h = await host(release(folder));
@@ -306,7 +307,8 @@ export default async function (deep: any): Promise<void> {
     expect((await h.check(p)).passed, JSON.stringify(await h.check(p))).toBe(true);
     writeFileSync(flag, '');
     const loading = h.load(p);
-    await new Promise((r) => setTimeout(r, 300));
+    for (let i = 0; i < 500 && !existsSync(registered); i++) await new Promise((r) => setTimeout(r, 10));
+    expect(existsSync(registered), 'the start registered its resolver before hanging').toBe(true);
     const you: Connection = { writer: 'mcp:S-hang', actor: 'you', scope: 'you', session: 'S-hang' };
     await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: 'S-hang' }, { v: 1, id: '01K7HANG00000000000000000A', kind: 'session.start', ts: Date.now(), data: { agent: 'claude-code', worktree: temp(), branch: 'main', thread: 'T' } });
     const handle = await asks.raise(you, 'deep_ask.taste', {
