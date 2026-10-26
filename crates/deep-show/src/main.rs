@@ -6,6 +6,7 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod costs;
 mod evidence;
 mod frames;
 mod hub;
@@ -239,6 +240,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "revisions" => return Some(Call::Revisions(doc()?)),
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "costs" => return Some(Call::Costs),
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
         "eval" => {
@@ -629,6 +631,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "accepts_agent_decisions" => Planted::AcceptsAgentDecisions,
             "every_digest_positive" => Planted::EveryDigestPositive,
             "checks_share_only" => Planted::ChecksShareOnly,
+            "estimates_on_this_machine" => Planted::EstimatesOnThisMachine,
             _ => return None,
         }),
     };
@@ -696,6 +699,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         commit: match input.get("commit") {
             None => None,
             Some(c) => Some(c.as_str()?.to_string()),
+        },
+        machine: match input.get("machine") {
+            None => None,
+            Some(m) => Some(m.as_object()?.clone()),
         },
     })
 }

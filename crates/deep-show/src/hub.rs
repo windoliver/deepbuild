@@ -15,7 +15,8 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
-use deep_canvas::document::{canonical_in, check_in, Issue};
+use deep_canvas::cost::Coefficients;
+use deep_canvas::document::{canonical_in, check_costed, check_in, Issue};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::schedule::{
@@ -78,6 +79,9 @@ pub enum Planted {
     UndoReorderMintsKey,
     /// #138: order keys are drawn when a patch applies, not from its base.
     ApplyTimeOrderKeys,
+    /// #379: the check estimates with coefficients for the machine it runs on, not the
+    /// reference Mac's.
+    EstimatesOnThisMachine,
     /// #138: the incremental check after a patch skips the items that refer to what it touched.
     IncrementalCheckSkipsReferrers,
     /// #138: a stale patch rebases when no path it writes changed since its base.
@@ -214,6 +218,8 @@ pub struct PatchCall {
 }
 
 pub enum Call {
+    /// #379: the cost model's micro-benchmark.
+    Costs,
     Show(Box<Show>),
     Patch(Box<PatchCall>),
     Read {
@@ -349,6 +355,8 @@ pub struct Scenario {
     pub environment: Map<String, Value>,
     /// The commit this run renders at (#138); the checkout's HEAD without it.
     pub commit: Option<String>,
+    /// The machine the hub runs on, its environment fingerprint (#379); this machine without it.
+    pub machine: Option<Map<String, Value>>,
 }
 
 /// One revision of a document (Revision).
@@ -392,6 +400,24 @@ pub struct Hub<'a> {
 /// A snapshot's straight RGBA and its size.
 pub type Raster = (Vec<u8>, [u16; 2]);
 
+/// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
+/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
+    let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
+        Some(m) => m.to_string(),
+        None => std::process::Command::new("sysctl")
+            .args(["-n", "hw.model"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default(),
+    };
+    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
+        1.0
+    } else {
+        1.6
+    }
+}
+
 /// The look render-back draws in: the shipped clean look, light.
 pub fn shipped_look() -> Look {
     let def = look::shipped("clean").expect("the clean look ships");
@@ -425,6 +451,7 @@ impl<'a> Hub<'a> {
                 access_log: startup.test_build,
                 shuffle: scenario.shuffle,
                 planted,
+                timing: None,
             },
         );
         #[cfg(feature = "test-accent")]
@@ -636,6 +663,7 @@ impl<'a> Hub<'a> {
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Costs => crate::costs::measure(self.startup),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
@@ -825,7 +853,14 @@ impl<'a> Hub<'a> {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
-                let mut issues = check_in(&doc, &self.startup.sealed).issues;
+                let mut issues = match self.scenario.planted {
+                    Some(Planted::EstimatesOnThisMachine) => {
+                        let coefficients = Coefficients::reference()
+                            .scaled(machine_factor(self.scenario.machine.as_ref()));
+                        check_costed(&doc, &self.startup.sealed, &coefficients).issues
+                    }
+                    _ => check_in(&doc, &self.startup.sealed).issues,
+                };
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
