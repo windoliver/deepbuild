@@ -43,6 +43,11 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     origin: maybe(str('Leave null: the file is stored with origin agent whatever this says, since origin comes from your connection.')),
   }),
   deep_run: object({ check: str('A check the repo\'s spec names.'), claim: maybe(str('The claim the run is for; null for your newest.', HANDLE('claim'))) }),
+  deep_propose: object({
+    target: str('What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec.'),
+    change: str('The change, in your own words.'),
+    evidence: maybe({ type: 'array', items: object({ at: str('A record handle, such as session:<id>#<message>.'), quote: str('The exact words there.') }), description: 'What the change rests on; null for none.' }),
+  }),
 };
 
 let described: Record<string, string> | undefined;
