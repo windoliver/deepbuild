@@ -209,6 +209,26 @@ fn grown(loops: u32, ns: f64, target: f64) -> u32 {
     ((f64::from(loops) * grow) as u32).max(loops.saturating_add(1))
 }
 
+/// What one trial decides: the next trial's loop count, a submission sized, or timestamps
+/// that read zero.
+#[derive(Debug, PartialEq)]
+enum Trial {
+    Grow(u32),
+    Sized,
+    ZeroTicks,
+}
+
+/// One trial of `loops` loops that read `ns` of GPU time and took `wall_ns` to come back, judged
+/// against `target`: sized once the GPU time reaches 80% of it, else grown.
+fn judge(loops: u32, ns: f64, wall_ns: f64, target: f64) -> Trial {
+    let _ = wall_ns;
+    if ns > target * 0.8 {
+        Trial::Sized
+    } else {
+        Trial::Grow(grown(loops, ns, target))
+    }
+}
+
 /// `{"call": "tick", "gpu_ms"}`: a submission sized, from short trial runs, to take about
 /// `gpu_ms` of GPU time.
 pub fn tick(app: &mut App, call: &Value) -> Value {
@@ -229,15 +249,14 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
         // The last trial: its loop count and the ticks it read.
         let mut tried = (loops, 0u64);
         for _ in 0..8 {
-            let Some((ticks, _)) = spin.run(&device, loops) else {
+            let Some((ticks, wall)) = spin.run(&device, loops) else {
                 return refused("no_read_back", "the timestamps didn't map");
             };
             tried = (loops, ticks);
-            let ns = ticks as f64 * period;
-            if ns > target * 0.8 {
-                break;
+            match judge(loops, ticks as f64 * period, wall as f64, target) {
+                Trial::Grow(next) => loops = next,
+                Trial::Sized | Trial::ZeroTicks => break,
             }
-            loops = grown(loops, ns, target);
         }
         // Timestamps that still read zero at the last trial can't size a submission; the call
         // says so, naming that trial, rather than reporting a zero interval.
@@ -258,7 +277,7 @@ pub fn tick(app: &mut App, call: &Value) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::grown;
+    use super::{grown, judge, Trial};
 
     /// Timestamps that read zero grow the trial sixteenfold each time; eight trials from 64
     /// loops pass the u32 maximum, where the count saturates instead of overflowing.
@@ -269,5 +288,28 @@ mod tests {
             loops = grown(loops, 0.0, 50e6);
         }
         assert_eq!(loops, u32::MAX);
+    }
+
+    /// A trial that took four times the target of wall time and read no ticks says the
+    /// timestamps don't work; growing it would only lengthen the submission.
+    #[test]
+    fn a_long_trial_that_reads_zero_is_zero_ticks() {
+        assert_eq!(
+            judge(1 << 20, 0.0, 4.0 * 50e6 + 1.0, 50e6),
+            Trial::ZeroTicks
+        );
+    }
+
+    /// A trial that took four times the target of wall time but read a tenth of it is sized as
+    /// it is: the timers under-read, and growing it would run the GPU longer still.
+    #[test]
+    fn a_long_trial_that_under_reads_is_sized() {
+        assert_eq!(judge(1 << 20, 0.1 * 50e6, 5.0 * 50e6, 50e6), Trial::Sized);
+    }
+
+    /// A short trial that read too little grows.
+    #[test]
+    fn a_short_trial_grows() {
+        assert_eq!(judge(64, 1e5, 2e5, 50e6), Trial::Grow(1024));
     }
 }
