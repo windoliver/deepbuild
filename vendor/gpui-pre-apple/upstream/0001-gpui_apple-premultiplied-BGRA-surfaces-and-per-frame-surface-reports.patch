@@ -1,8 +1,8 @@
-From e04839ec65b84766513aa3bc11502d9cdf25b724 Mon Sep 17 00:00:00 2001
+From 2fbb21f14d90a7d28708d8e30b39fe447aa9cf42 Mon Sep 17 00:00:00 2001
 From: SophiaWJ <jingwangsophia@gmail.com>
 Date: Sat, 24 Oct 2026 16:01:03 -0700
-Subject: [PATCH] gpui_apple: premultiplied BGRA surfaces and per-frame surface
- reports
+Subject: [PATCH 1/2] gpui_apple: premultiplied BGRA surfaces and per-frame
+ surface reports
 
 paint_surface took only 4:2:0 YCbCr video frames: the Metal renderer asserted
 the format. A premultiplied BGRA pixel buffer (kCVPixelFormatType_32BGRA), as
