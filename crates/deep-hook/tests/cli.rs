@@ -270,26 +270,53 @@ fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
 }
 
 /// A hub on `home`'s socket that writes its hello, reads one request, writes what `answer` makes of the request's
-/// id, then holds the connection for `linger`.
+/// id, then holds the connection for `linger`. A deep-hook that never connects, or that hangs up before its request
+/// (on a loaded machine its own budgets can run out first), ends the hub after `GIVE_UP` instead of leaving the test
+/// waiting on it forever; the test's assertions then say what deep-hook did.
 fn fake_hub(
     home: &std::path::Path,
     answer: impl Fn(&str) -> String + Send + 'static,
     linger: std::time::Duration,
 ) -> std::thread::JoinHandle<()> {
     use std::io::{BufRead, BufReader, Write};
+    const GIVE_UP: std::time::Duration = std::time::Duration::from_secs(30);
     let listener =
         std::os::unix::net::UnixListener::bind(home.join(".deepbuild/hub.sock")).unwrap();
+    listener.set_nonblocking(true).unwrap();
     std::thread::spawn(move || {
-        let (stream, _) = listener.accept().unwrap();
+        let deadline = std::time::Instant::now() + GIVE_UP;
+        let stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if std::time::Instant::now() >= deadline {
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(2));
+                }
+                Err(e) => panic!("the fake hub's accept failed: {e}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
+        stream.set_read_timeout(Some(GIVE_UP)).unwrap();
         let mut reader = BufReader::new(stream);
-        reader
+        if reader
             .get_mut()
             .write_all(b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n")
-            .unwrap();
+            .is_err()
+        {
+            return;
+        }
         let mut request = String::new();
-        reader.read_line(&mut request).unwrap();
-        let at = request.find("\"id\":\"").unwrap() + 6;
-        let id = &request[at..at + 26];
+        if reader.read_line(&mut request).is_err() {
+            return;
+        }
+        let Some(at) = request.find("\"id\":\"").map(|at| at + 6) else {
+            return;
+        };
+        let Some(id) = request.get(at..at + 26) else {
+            return;
+        };
         let _ = reader.get_mut().write_all(answer(id).as_bytes());
         std::thread::sleep(linger);
     })

@@ -26,6 +26,7 @@ fn planted3(p: Option<Planted>) -> Planted3 {
         skips_encode: p == Some(Planted::SkipsEncode),
         encodes_every_frame: p == Some(Planted::EncodesEveryFrame),
         replays_after_add: p == Some(Planted::ReplaysAfterAdd),
+        slow_gpu_frame: p == Some(Planted::SlowGpuFrame),
     }
 }
 
@@ -112,6 +113,8 @@ pub struct Drawn {
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// How many pixels the status guard moved, when the stage ran and the frame asked.
     pub moved: Option<u32>,
+    /// With timings: the GPU memory the device holds as the frame draws (#383).
+    pub gpu_bytes: Option<u64>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -188,6 +191,9 @@ pub fn draw(
                 } else {
                     None
                 },
+                gpu_bytes: profiler2
+                    .as_ref()
+                    .and_then(|_| deep_gpu::memory::allocated(&device)),
                 timing,
                 moved,
             })

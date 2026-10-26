@@ -2,7 +2,9 @@
 //! 3D writer layers drawn by scene3d's render module through a GPU-layer view, frame n at
 //! t = n ÷ fps on a virtual clock, with the writers' patches applied before the frames they name.
 //! With a window, the view sits over a flat page and its 2D writer layers anchored to 3D items
-//! draw over it from the evaluated data of the `frame_seq` the shown slot carries.
+//! draw over it from the evaluated data of the `frame_seq` the shown slot carries. Items that
+//! open deeper documents by reference load them as they come on screen (#383), and with
+//! `timings` each frame reports its GPU time and the GPU memory the device holds.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -20,6 +22,7 @@ use image::ImageEncoder as _;
 use serde_json::{json, Map, Value};
 
 use crate::frames::{hex, Capture};
+use crate::levels::Levels;
 use crate::session3::{self, lock};
 use crate::status;
 use crate::window::OverlayPicture;
@@ -54,6 +57,8 @@ struct Args {
     window: Option<Window3>,
     latency: Vec<u64>,
     counts: bool,
+    /// The documents an item may open by reference, by doc handle.
+    docs: BTreeMap<String, std::path::PathBuf>,
     /// Report each label's glyphs and the atlas pages they sample (#381).
     labels: bool,
     /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
@@ -142,6 +147,15 @@ fn parse(call: &Value) -> Result<Args, Value> {
         .flatten()
         .filter_map(Value::as_u64)
         .collect();
+    let docs = match call.get("docs") {
+        None | Some(Value::Null) => BTreeMap::new(),
+        Some(Value::Object(d)) => d
+            .iter()
+            .map(|(h, p)| Some((h.clone(), std::path::PathBuf::from(p.as_str()?))))
+            .collect::<Option<_>>()
+            .ok_or_else(|| bad("docs maps a doc handle to a path"))?,
+        Some(_) => return Err(bad("docs maps a doc handle to a path")),
+    };
     let mut clicks = Vec::new();
     for c in call["clicks"].as_array().into_iter().flatten() {
         let at = c["at"]
@@ -154,6 +168,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         clicks.push((frame, at));
     }
     Ok(Args {
+        docs,
         doc,
         look,
         look_json,
@@ -386,6 +401,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // Held slots, each with the frame whose present releases it.
     let mut held: Vec<(u64, usize)> = Vec::new();
     let wants_targets = args.targets.contains("linear") || args.targets.contains("ids");
+    let mut levels = Levels::new(
+        std::mem::take(&mut args.docs),
+        app.planted == Some(Planted::LoadsEverything),
+    );
     let result = (|| -> Result<(), Value> {
         for n in args.from..args.from + args.frames {
             // A seek applies every patch up to the frame it opens at.
@@ -410,10 +429,14 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 }
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
+            levels.collect();
+            let (composed, resident) = levels.compose(&args.doc);
             let scene = Arc::new(
-                evaluate(&args.doc, t, &args.look, &mut labels)
+                evaluate(&composed, t, &args.look, &mut labels)
                     .map_err(|r| refused(r.code, r.path))?,
             );
+            let selected = levels.select(&composed, &scene);
+            let settled = levels.settle(&selected);
             let seeding = match app.planted {
                 Some(Planted::NoiseFromFrameCounter) => {
                     effects::Seeding::FrameCounter(n - args.from)
@@ -515,6 +538,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let mut frame = Map::new();
             frame.insert("frame".into(), json!(n));
+            frame.insert("settled".into(), json!(settled));
+            frame.insert("resident".into(), json!(resident));
+            if let Some(bytes) = drawn.gpu_bytes {
+                frame.insert("gpu_bytes".into(), json!(bytes));
+            }
             let (frame_seq, window_name) = match (&args.window, app.window.as_ref()) {
                 (Some(_), Some(win)) => {
                     win.present(&mut app.cx);

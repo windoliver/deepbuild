@@ -104,6 +104,20 @@ pub enum Planted {
     EveryDigestPositive,
     /// #138: `compare_images` checks only the share of pixels off.
     ChecksShareOnly,
+    /// #383: on a `view` document a scroll pans in time instead of zooming.
+    LineScrollPans,
+    /// #383: a drag commits on every move.
+    CommitEveryMove,
+    /// #383: a drag hit-tests on every move.
+    PickMidGesture,
+    /// #383: a drag's moves reach the presented frames only when it ends.
+    DragShowsOnRelease,
+    /// #383: a revision current at a latch is first drawn a frame after the vsync that latch begins.
+    PatchShowsAFrameLate,
+    /// #383: only `scene`, `world` and `figure` canvases get a full-screen button.
+    FullScreenOnly3d,
+    /// #383: Esc leaves full screen and goes back to the top at once.
+    EscToRoot,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -271,6 +285,17 @@ pub enum Call {
     },
     /// The canvas conformance kit (#138).
     Kit(Box<crate::kit::KitCall>),
+    /// Your input to a panel's canvas (#383).
+    Input {
+        panel: String,
+        event: deep_canvas::scope::Event,
+    },
+    /// A panel's interaction scope, with no input (#383).
+    Scope(String),
+    /// The frames a panel presented up to now (#383).
+    Presented(String),
+    /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
+    View(String),
     /// The parity suite's manifest (#138).
     Manifest,
     /// The check catalog (#138).
@@ -331,6 +356,11 @@ pub struct Scenario {
     pub record: BTreeMap<String, RecordObject>,
     pub claims: BTreeMap<String, Claim>,
     pub window: Option<[f64; 2]>,
+    /// The display the window is on, px: full screen fills it (#383).
+    pub display: Option<[f64; 2]>,
+    /// The record's verdicts by ID, each as `verdict.made` writes it, its `key` naming the
+    /// record states it read (#383: what a change to a selected value would make stale).
+    pub verdicts: Map<String, Value>,
     pub card: Option<Card>,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
@@ -395,6 +425,12 @@ pub struct Hub<'a> {
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
     pub pending3d: Option<Result<Raster, ()>>,
+    /// Each panel's interaction scope (#383).
+    pub scopes: BTreeMap<String, crate::input::PanelScope>,
+    /// The input router's last serial.
+    pub serial: u64,
+    /// When each revision of a document that isn't shared became current, by doc ID.
+    pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
 }
 
 /// A snapshot's straight RGBA and its size.
@@ -473,6 +509,9 @@ impl<'a> Hub<'a> {
             panels_shown: BTreeMap::new(),
             gpu3: None,
             pending3d: None,
+            scopes: BTreeMap::new(),
+            serial: 0,
+            shown_at: BTreeMap::new(),
         }
     }
 
@@ -657,7 +696,15 @@ impl<'a> Hub<'a> {
     pub fn call(&mut self, call: &Call) -> Value {
         let mut reply = match call {
             Call::Show(show) if self.shared.contains_key(&show.doc) => self.show_shared(show),
-            Call::Show(show) => self.show(show),
+            Call::Show(show) => {
+                let reply = self.show(show);
+                let rev = self.current(&show.doc).map(|r| r.rev);
+                let seen = self.shown_at.entry(show.doc.clone()).or_default();
+                if let Some(rev) = rev.filter(|r| seen.last().is_none_or(|(_, l)| l != r)) {
+                    seen.push((self.now, rev));
+                }
+                reply
+            }
             Call::Patch(p) => self.patch(p, None, self.now),
             Call::Read { doc, via } => self.read(doc, via.as_ref()),
             Call::History { doc, item } => self.history(doc, item),
@@ -709,6 +756,10 @@ impl<'a> Hub<'a> {
                 json!({"bands": self.bands().iter().map(|b| b.to_json()).collect::<Vec<_>>()})
             }
             Call::Kit(k) => self.kit(k),
+            Call::Input { panel, event } => self.input(panel, event),
+            Call::Scope(panel) => self.scope_reply(panel),
+            Call::Presented(panel) => self.presented(panel),
+            Call::View(panel) => self.view(panel),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),

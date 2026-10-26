@@ -36,6 +36,7 @@ pub const FORWARD_FAR: f64 = 10_000.0;
 
 const SHADER: &str = include_str!("scene3d.wgsl");
 const OUTPUT: &str = include_str!("output.wgsl");
+const BUSY: &str = include_str!("busy.wgsl");
 /// The pass that draws the key light's shadow map, in the frame's shadows place.
 pub const SHADOW_PASS: &str = "scene3d.shadow";
 
@@ -52,6 +53,8 @@ pub struct Planted {
     pub encodes_every_frame: bool,
     /// A batch keeps replaying its old encoding after its draw key changed.
     pub replays_after_add: bool,
+    /// #383: every frame adds a pass that keeps the GPU busy for at least 10 ms.
+    pub slow_gpu_frame: bool,
 }
 
 /// What one frame's preparation did (Render worker; Object; Dirty classes).
@@ -390,6 +393,8 @@ pub struct Renderer {
     order: Vec<String>,
     ground: [f64; 4],
     counts: Counts,
+    /// The planted slow_gpu_frame twin's pipeline.
+    busy: Option<wgpu::RenderPipeline>,
     shadow: Shadow,
     /// This frame's camera: world to clip (column-major), the eye and the near plane.
     camera: Camera,
@@ -775,6 +780,37 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let busy = planted.slow_gpu_frame.then(|| {
+            let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("scene3d busy"),
+                source: wgpu::ShaderSource::Wgsl(BUSY.into()),
+            });
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("scene3d busy"),
+                layout: None,
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("busy_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("busy_fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        });
         let atlas = {
             let texture = d.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene3d glyph atlas"),
@@ -844,6 +880,7 @@ impl Renderer {
             order: Vec::new(),
             ground: [0.0, 0.0, 0.0, 1.0],
             counts: Counts::default(),
+            busy,
             shadow: Shadow {
                 pipeline: shadow_pipeline,
                 buffer: light_buffer,
@@ -1454,7 +1491,27 @@ impl Renderer {
             None => (slot.clone(), self.output_pipeline.clone()),
         };
         let profiler = self.profiler.clone();
+        let (busy, busy_slot) = (self.busy.clone(), slot.clone());
         let output: Job = Box::new(move |encoder| {
+            // The planted slow frame's pass, inside the frame's span of timed passes; it writes
+            // the slot, which the output or the passes after it write again.
+            if let Some(busy) = &busy {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("scene3d busy"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &busy_slot,
+                        resolve_target: None,
+                        depth_slice: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                pass.set_pipeline(busy);
+                pass.draw(0..3, 0..1);
+            }
             timed(&profiler, OUTPUT_PASS, encoder, |encoder, timestamps| {
                 output_pass(encoder, &target, &pipeline, &bind, timestamps)
             })

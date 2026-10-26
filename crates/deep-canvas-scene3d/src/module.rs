@@ -82,11 +82,13 @@ fn kind(name: &'static str, params: Vec<Param>) -> Entry {
     }
 }
 
-/// What every mark in 3D carries (Marks in 3D: common fields).
+/// What every mark in 3D carries (Marks in 3D: common fields), with `open`, the deeper document
+/// it loads by reference once it is large enough on screen (Level of detail; #383).
 fn common(mut params: Vec<Param>) -> Vec<Param> {
     params.push(str_param("size_space", "screen"));
     params.push(json_param("paint"));
     params.push(json_param("status"));
+    params.push(json_param("open"));
     params
 }
 
