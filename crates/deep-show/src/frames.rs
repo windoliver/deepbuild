@@ -117,6 +117,28 @@ impl<'a> Hub<'a> {
                 )
             })
             .collect();
+        // #379: every render pass the build registers, and every operator's and pass's cost
+        // model, its coefficients and the micro-benchmark that measured them.
+        let reference = deep_canvas::cost::Coefficients::reference();
+        let mut passes = Map::new();
+        let mut costs = Map::new();
+        let mut cost = |name: &str, module: &str| {
+            let terms = reference.terms.get(name).copied().unwrap_or_default();
+            costs.insert(
+                name.to_string(),
+                json!({"module": module, "terms": terms.to_json(), "fingerprint": reference.fingerprint,
+                       "benchmark": {"task": "canvas-costs", "case": name}}),
+            );
+        };
+        for o in &sealed.ops {
+            cost(&o.key, &o.module);
+        }
+        for m in &sealed.modules {
+            for p in &m.shapes.passes {
+                passes.insert(p.name.clone(), json!({"module": m.name, "place": p.place}));
+                cost(&p.name, &m.name);
+            }
+        }
         json!({
             "build_set": sealed.build_set.name(),
             "state": sealed.state(),
@@ -125,6 +147,8 @@ impl<'a> Hub<'a> {
             "digests": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.digest))).collect::<Map<_, _>>(),
             "arrays": arrays,
             "operators": operators,
+            "passes": passes,
+            "costs": costs,
             "plan": sealed.plan,
             "schedule": {"uri": sealed.schedule_uri(), "sha256": deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(&sealed.schedule()))},
             "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed)},
