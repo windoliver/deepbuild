@@ -77,7 +77,7 @@ function claudeArgs(o) {
   return [
     '-p', '--output-format', 'stream-json', '--verbose', '--model', o.model ?? 'haiku', '--setting-sources', 'project', '--strict-mcp-config',
     '--mcp-config', join(o.dir, 'mcp.json'), '--settings', join(o.dir, 'settings.json'), '--permission-mode', 'acceptEdits',
-    '--allowedTools', 'mcp__deep__deep_ask,mcp__deep__deep_wait,mcp__deep__deep_open_item,mcp__deep__deep_status,mcp__deep__deep_search,mcp__deep__deep_claim,mcp__deep__deep_evidence,mcp__deep__deep_run,Read,Edit,Write,Skill,Bash(git:*),Bash(node:*)',
+    '--allowedTools', 'mcp__deep__deep_ask,mcp__deep__deep_wait,mcp__deep__deep_open_item,mcp__deep__deep_status,mcp__deep__deep_search,mcp__deep__deep_claim,mcp__deep__deep_evidence,mcp__deep__deep_run,mcp__deep__deep_propose,Read,Edit,Write,Skill,Bash(git:*),Bash(node:*)',
   ];
 }
 

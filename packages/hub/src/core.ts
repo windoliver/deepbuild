@@ -25,7 +25,7 @@ import { confirmYou } from './confirm.js';
 import { parseLine } from './hookmap.js';
 import { rootOf, type Root } from './paths.js';
 import { checkKey, Devices } from './trusted.js';
-import { openIndex, search, type IndexFill } from './search.js';
+import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, refuse, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type HookMeta, type Refusal } from './wire.js';
@@ -147,8 +147,10 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
-  /** The wiki's index@1 fill, which deep_search reads it through. */
-  private index!: Promise<IndexFill>;
+  /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
+  private index!: Promise<IndexFill | undefined>;
+  /** A package's index, once rebuilt from the pages. */
+  private swapped: IndexFill | undefined;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
@@ -1053,6 +1055,7 @@ export class Core {
         case 'deep_open_item': return await this.openItem(session!, String(args.text));
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
+        case 'deep_propose': return await this.propose(session!, args);
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -1135,7 +1138,24 @@ export class Core {
   private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
     const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session && this.options.plant === 'unbound-reads-all';
-    return search({ query, index: await this.index, raw: (q) => this.record.raw(q), worktree, session: everyone ? { everyone: true } : session });
+    // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
+    const [project] = session ? (await this.record.raw(`SELECT project_id FROM sessions WHERE id = '${sql(session)}'`)) as { project_id: string | null }[] : [];
+    const scopes = new Set(session ? [`session:${letters(session)}`, 'all', ...(project?.project_id ? [`repo:${letters(project.project_id)}`] : [])] : []);
+    const covers = (scope: string): boolean => everyone || (session ? scopes.has(scope) : scope === 'all' || scope.startsWith('repo:'));
+    return search({
+      query, index: await this.wikiIndex(), raw: (q) => this.record.raw(q), worktree, session: everyone ? { everyone: true } : session, covers,
+      trustsIndex: this.options.plant === 'trusts-index',
+    });
+  }
+  /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
+  private async wikiIndex(): Promise<IndexFill | undefined> {
+    const swapped = this.extensions?.index()?.fill;
+    if (!swapped) return this.index;
+    if (this.swapped !== swapped) {
+      await swapped.rebuild(pageClaims(this.root.wiki));
+      this.swapped = swapped;
+    }
+    return swapped;
   }
   /** The worktree of a session the hub knows that holds `folder`: an unbound call reads that project's spec, and no other file. */
   private worktreeAt(folder: string | undefined): string | undefined {
@@ -1219,6 +1239,32 @@ export class Core {
       throw this.refusedAppend(error, 'deep_open_item');
     }
     return { task_ref, event: id };
+  }
+
+  /**
+   * deep_propose: a change the agent proposes, recorded as learn.proposed and applied by no one, and an ask in your
+   * inbox naming it; the proposal cites that ask, whose question holds the change's words (#355).
+   */
+  private async propose(session: string, args: Obj): Promise<Obj> {
+    const target = scrubText(String(args.target), { held: this.options.held }).slice(0, 1000);
+    const change = scrubText(String(args.change), { held: this.options.held }).slice(0, 4000);
+    const question = `Apply this change an agent proposed to ${target}? ${change}`;
+    const pinned = await this.pinOf(this.sessions.get(session)!.cwd, question);
+    const options = [{ id: 'apply', label: 'Apply it', decision: 'none' }, { id: 'keep', label: 'Keep it as it is', decision: 'none' }];
+    const raised = { kind: 'choice', question, options, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'propose', target, change, session } as JsonValue)), pinned_to: pinned };
+    const ask = await this.asks.raise(this.agentConnection(session), 'deep_propose.choice', raised);
+    const ts = this.now();
+    const id = ulid(ts);
+    const evidence = [...((args.evidence as { at: string; quote: string }[] | null) ?? []), { at: ask, quote: change }];
+    try {
+      await this.append(this.agentConnection(session), {
+        v: 1, id, kind: 'learn.proposed', ts,
+        data: { layer: 'learned', target, diff: `+ ${change}`, evidence, scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null },
+      });
+    } catch (error) {
+      throw this.refusedAppend(error, 'deep_propose');
+    }
+    return { proposal: `doc:${id}`, ask };
   }
 
   private async claim(session: string, args: Obj): Promise<Obj> {

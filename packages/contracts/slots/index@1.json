@@ -1,0 +1,22 @@
+{
+  "title": "index@1",
+  "description": "The wiki's index: upsert(claims), search(query) giving hits that each cite their claim, page, quote and source, dropSource(source) and rebuild(claims) from the pages. It is never the source of truth; the hub reads each hit's provenance from the claim records.",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "index@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    }
+  },
+  "required": [
+    "slot",
+    "revision"
+  ],
+  "additionalProperties": false
+}
