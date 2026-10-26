@@ -43,12 +43,32 @@ function own(name: string, plugin: string, withMajor: boolean): boolean {
   return withMajor && OWN_NAME.test(rest.slice(0, at)) && /^[1-9][0-9]*$/.test(rest.slice(at + 1));
 }
 
+/** Hook context templates (#350): a manifest's `templates`, each a hook.template@1 whose text names only its fields. */
+const TEMPLATE = 'hook.template@1';
+function checkTemplates(templates: unknown): ContractIssue[] {
+  if (!Array.isArray(templates)) return [issue('type', '/templates', templates)];
+  const names = new Set<string>();
+  return templates.flatMap((t, i): ContractIssue[] => {
+    const held = validate(TEMPLATE, t);
+    if (!held.ok) return held.issues.map((x) => ({ ...x, path: `/templates/${i}${x.path}` }));
+    const { name, text, fields } = t as { name: string; text: string; fields: Record<string, unknown> };
+    const found: ContractIssue[] = [];
+    if (names.has(name)) found.push(issue('enum', `/templates/${i}/name`, name));
+    names.add(name);
+    for (const [, field] of text.matchAll(/\{([^{}]*)\}/g)) if (!Object.hasOwn(fields, field!)) found.push(issue('required', `/templates/${i}/fields`, field));
+    return found;
+  });
+}
+
 /** The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. */
 export function checkManifest(value: unknown): Validation {
-  const held = validate(MANIFEST, value);
+  // `templates` is hook.template@1's, read beside extension.manifest@1, whose frozen shape doesn't list it.
+  const object = typeof value === 'object' && value !== null && !Array.isArray(value);
+  const { templates, ...rest } = object ? value as Record<string, unknown> : {};
+  const held = validate(MANIFEST, object && Object.hasOwn(value, 'templates') ? rest : value);
   if (!held.ok) return held;
   const m = value as Manifest;
-  const issues: ContractIssue[] = [];
+  const issues: ContractIssue[] = templates === undefined ? [] : checkTemplates(templates);
   const words = new Set(m.access?.words ?? []);
   (m.panels ?? []).forEach((panel, i) => {
     (panel.media ?? []).forEach((medium, j) => { if (!words.has(medium)) issues.push(issue('required', `/panels/${i}/media/${j}`, medium)); });
