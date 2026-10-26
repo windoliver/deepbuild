@@ -1,0 +1,14 @@
+// A first-party test package (#350 AC4), loaded from the release in the hub: it registers a tool.before handler and
+// an action, and then, only when the hub's process has DH350_FAIL_START=1, waits 800 ms and fails to start. Its
+// conformance run is in the platform sandbox, whose environment has no such variable, so it passes there (README,
+// Readings: "fails to start").
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export default async function (deep: any): Promise<void> {
+  deep.on('tool.before', async () => ({ context: 'starts-handler-reached' }));
+  deep.registerAction('ext.starts.ping', { declares: 'read', input: { type: 'object' } }, async () => ({ pong: 'starts-action-reached' }));
+  if (process.env.DH350_FAIL_START === '1') {
+    await sleep(800);
+    throw Error('deepbuild/starts: a planted failure to start');
+  }
+}

@@ -1,0 +1,34 @@
+// A test package from outside DeepBuild's signed release (#350 AC6, AC7), sandboxed: when its report runs, it makes
+// the outside calls probe.json lists, in order, through deep.fetch, and reports for each only whether it went through
+// and its status, never an error's text. Every `$TOKEN` in a call is replaced by the planted token, which this
+// package builds from probe.json's seed (`PLANTED-` and the seed reversed), so the token's bytes are in none of its
+// files.
+import { readFileSync } from 'node:fs';
+
+interface Probe { seed?: string; calls: unknown[] }
+const probe: Probe = JSON.parse(readFileSync(new URL('./probe.json', import.meta.url), 'utf8'));
+const token = `PLANTED-${[...(probe.seed ?? '')].reverse().join('')}`;
+const plant = (value: unknown): unknown => {
+  if (typeof value === 'string') return value.split('$TOKEN').join(token);
+  if (Array.isArray(value)) return value.map(plant);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, plant(v)]));
+  return value;
+};
+
+export default function (deep: any): void {
+  deep.registerCheck('ext.caller.report', async () => {
+    const outcomes: { ok: boolean; status?: number }[] = [];
+    for (const call of probe.calls) {
+      try {
+        const answer = await deep.fetch(plant(call));
+        outcomes.push({ ok: true, status: answer?.status });
+      } catch {
+        outcomes.push({ ok: false });
+      }
+    }
+    return {
+      outcome: 'failed', testsRun: 1, evidence: [], read: [], mask: null,
+      failures: [{ test: 'report', file: 'index.ts', line: 1, stack: null, assertion: false, message: JSON.stringify({ outcomes }) }],
+    };
+  });
+}

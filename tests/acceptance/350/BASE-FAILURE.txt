@@ -1,0 +1,540 @@
+# #350 acceptance tests on the base commit 0c2fed1, 2026-10-24T23:38Z, Node v24.22.0
+# Expected: every test fails, each for the missing #350 surface (no hook/callAction/disable, no deep.registerAction,
+# deep.fetch or deep.provide, no manifest templates, no capability.refused@1); tsc fails on the same missing names.
+
+## node node_modules/vitest/vitest.mjs run --root tests/acceptance/350 --no-file-parallelism
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-350-run-time/tests/acceptance/350
+
+ ❯ refusals.test.ts (4 tests | 4 failed) 1384ms
+   ❯ AC6 #350.7884cbb1 a call to a host the grant doesn't name, with writer "app" and a planted token in its arguments, is refused and recorded once as capability.refused by ext:<its ID>, naming the grant clause and the call's digest, with the token nowhere in the record, evidence or logs; a host that takes the writer from the arguments records app and fails (3)
+     × AC6 the call is refused, and the record holds one capability.refused written by ext:test/caller, naming the grant clause and the call's digest 353ms
+     × AC6 the planted token appears nowhere in the record, the evidence or the logs, on disk or read back 233ms
+     × AC6 (wrong program) a host that takes the writer from the arguments records app and fails this test 195ms
+   ❯ AC7 #350.b5c18039 a call past its quota and a call whose arguments fail the action's schema each append their own capability.refused, naming the quota or the schema field (1)
+     × AC7 the third call to a host granted two is refused and recorded naming the quota; an action call with a count that isn't an integer is refused and recorded naming the field 326ms
+ ❯ staged.test.ts (6 tests | 6 failed) 880ms
+   ❯ AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it (4)
+     × AC4 a package that registers a handler and an action and then fails to start exposes neither, while it starts or after; the same package that starts exposes both 212ms
+     × AC4 a sandboxed package enabled and disabled 20 times leaves no process, handler, action or handle it owned, and enabled again answers once 23ms
+     × AC4 a hub package enabled and disabled 20 times leaves no handler or action of an earlier load: each hook calls one handler once, each action call runs once 158ms
+     × AC4 a call to a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement 132ms
+   ❯ AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge (2)
+     × AC9 A reads B's value until its use is detached and reads missing after, never through a stopped B; B's process is gone after 134ms
+     × AC9 (wrong program) a host that stops B first fails, naming the edge 144ms
+ ❯ join.test.ts (6 tests | 6 failed) 561ms
+   ❯ AC3 #350.b88afef3 three extensions that add context, deny, and miss the deadline give the same reply in every order they registered or finished in: the deny stands, the context stays within the bound, the late one is recorded as failed, and its late reply changes no later request (3)
+     × AC3 all six registration orders, each with both finishing orders, give the same first reply and the same second reply 58ms
+     × AC3 the deny stands, the context stays within the total bound, and the one past the deadline is recorded as failed and adds nothing 1ms
+     × AC3 the late one's reply to the first request, arriving while the second waits on it, changes nothing in the second 0ms
+   ❯ AC8 #350.170a7bd3 three contexts past the bound, from the first-party z-notes and the outside a and b, keep z-notes whole and cut a and b to equal shares of what's left; a host that joins by ID alone, and one that keeps a whole and cuts b, fail, naming the extension (3)
+     × AC8 z-notes is kept whole, and a and b are each cut to half the room left, keeping their starts 163ms
+     × AC8 (wrong program) a host that joins by ID alone cuts z-notes and fails, naming it 147ms
+     × AC8 (wrong program) a host that keeps a whole and cuts b fails, naming a 138ms
+ ❯ actions.test.ts (3 tests | 3 failed) 476ms
+   ❯ AC5 #350.7c4e7560 two overlapping calls that finish in reverse order each keep their own authenticated scope across every await; the same action called headlessly and from a panel targets the same explicit handle and version whichever window has focus; a stale target has no effect (3)
+     × AC5 in the sandbox, two overlapping calls from two agent sessions, finishing in reverse order, each act as their own caller before and after an await 185ms
+     × AC5 in the hub, two overlapping calls from two agent sessions, finishing in reverse order, each act as their own caller before and after an await 126ms
+     × AC5 the same action called headlessly and from a panel, with either window focused, gets the same explicit handle and version; a stale target has no effect 127ms
+ ❯ replies.test.ts (3 tests | 3 failed) 260ms
+   ❯ AC1 #350.2f824654 a tool.before handler can only add context the agent sees or deny the call with a reason the agent sees (1)
+     × AC1 context, a deny and nothing each reach the reply as given; a reply that allows, rewrites or answers is recorded as failed and none of it reaches the agent 172ms
+   ❯ AC2 #350.7727c408 an outside package fills a declared tool.before template with typed values only: planted text in the handle field is recorded as failed, naming the field, and never reaches the agent; a handle and a number add one block labelled with the extension; a host that passes context through as text fails, naming the extension (2)
+     × AC2 the planted handle is recorded as failed naming the field and the agent gets none of it; the handle and number add one block from test/tmpl 24ms
+     × AC2 (wrong program) a host that passes a handler's context through as text delivers the string and fails this test, naming the extension 25ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  actions.test.ts > AC5 #350.7c4e7560 two overlapping calls that finish in reverse order each keep their own authenticated scope across every await; the same action called headlessly and from a panel targets the same explicit handle and version whichever window has focus; a stale target has no effect > AC5 in the sandbox, two overlapping calls from two agent sessions, finishing in reverse order, each act as their own caller before and after an await
+AssertionError: test/acts@1.0.0's conformance: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ actions.test.ts:20:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  actions.test.ts > AC5 #350.7c4e7560 two overlapping calls that finish in reverse order each keep their own authenticated scope across every await; the same action called headlessly and from a panel targets the same explicit handle and version whichever window has focus; a stale target has no effect > AC5 in the hub, two overlapping calls from two agent sessions, finishing in reverse order, each act as their own caller before and after an await
+AssertionError: deepbuild/acts@1.0.0's conformance: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ actions.test.ts:20:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  actions.test.ts > AC5 #350.7c4e7560 two overlapping calls that finish in reverse order each keep their own authenticated scope across every await; the same action called headlessly and from a panel targets the same explicit handle and version whichever window has focus; a stale target has no effect > AC5 the same action called headlessly and from a panel, with either window focused, gets the same explicit handle and version; a stale target has no effect
+AssertionError: test/acts@1.0.0's conformance: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ actions.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  join.test.ts > AC3 #350.b88afef3 three extensions that add context, deny, and miss the deadline give the same reply in every order they registered or finished in: the deny stands, the context stays within the bound, the late one is recorded as failed, and its late reply changes no later request > AC3 all six registration orders, each with both finishing orders, give the same first reply and the same second reply
+AssertionError: test/ctx@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"ctx","hook":"tool.before","text":"{handle} was checked {count} times","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}},{"name":"why","hook":"tool.before","text":"held until {handle} passes","fields":{"handle":{"type":"handle"}}},{"name":"late","hook":"tool.before","text":"late reply to call {count}","fields":{"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ run join.test.ts:38:34
+ ❯ join.test.ts:47:116
+ ❯ join.test.ts:53:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  join.test.ts > AC3 #350.b88afef3 three extensions that add context, deny, and miss the deadline give the same reply in every order they registered or finished in: the deny stands, the context stays within the bound, the late one is recorded as failed, and its late reply changes no later request > AC3 the deny stands, the context stays within the total bound, and the one past the deadline is recorded as failed and adds nothing
+ FAIL  join.test.ts > AC3 #350.b88afef3 three extensions that add context, deny, and miss the deadline give the same reply in every order they registered or finished in: the deny stands, the context stays within the bound, the late one is recorded as failed, and its late reply changes no later request > AC3 the late one's reply to the first request, arriving while the second waits on it, changes nothing in the second
+AssertionError: test/ctx@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"ctx","hook":"tool.before","text":"{handle} was checked {count} times","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}},{"name":"why","hook":"tool.before","text":"held until {handle} passes","fields":{"handle":{"type":"handle"}}},{"name":"late","hook":"tool.before","text":"late reply to call {count}","fields":{"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+Expected: "true"
+Received: "false"
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ run join.test.ts:38:34
+ ❯ join.test.ts:47:116
+ ❯ join.test.ts:53:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  join.test.ts > AC8 #350.170a7bd3 three contexts past the bound, from the first-party z-notes and the outside a and b, keep z-notes whole and cut a and b to equal shares of what's left; a host that joins by ID alone, and one that keeps a whole and cuts b, fail, naming the extension > AC8 z-notes is kept whole, and a and b are each cut to half the room left, keeping their starts
+AssertionError: acme/a@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"status","hook":"tool.before","text":"{handle} has {count} checks still open","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario join.test.ts:97:38
+ ❯ join.test.ts:109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  join.test.ts > AC8 #350.170a7bd3 three contexts past the bound, from the first-party z-notes and the outside a and b, keep z-notes whole and cut a and b to equal shares of what's left; a host that joins by ID alone, and one that keeps a whole and cuts b, fail, naming the extension > AC8 (wrong program) a host that joins by ID alone cuts z-notes and fails, naming it
+AssertionError: acme/a@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"status","hook":"tool.before","text":"{handle} has {count} checks still open","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario join.test.ts:97:38
+ ❯ join.test.ts:114:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  join.test.ts > AC8 #350.170a7bd3 three contexts past the bound, from the first-party z-notes and the outside a and b, keep z-notes whole and cut a and b to equal shares of what's left; a host that joins by ID alone, and one that keeps a whole and cuts b, fail, naming the extension > AC8 (wrong program) a host that keeps a whole and cuts b fails, naming a
+AssertionError: acme/a@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"status","hook":"tool.before","text":"{handle} has {count} checks still open","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario join.test.ts:97:38
+ ❯ join.test.ts:120:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  refusals.test.ts > AC6 #350.7884cbb1 a call to a host the grant doesn't name, with writer "app" and a planted token in its arguments, is refused and recorded once as capability.refused by ext:<its ID>, naming the grant clause and the call's digest, with the token nowhere in the record, evidence or logs; a host that takes the writer from the arguments records app and fails > AC6 the call is refused, and the record holds one capability.refused written by ext:test/caller, naming the grant clause and the call's digest
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the record holds 0 capability.refused events, not one: []",
++ ]
+
+ ❯ refusals.test.ts:62:51
+     60|     const { outcomes, refusals, token } = await scenario();
+     61|     expect(outcomes, 'the call to a host its grant doesn\'t name went …
+     62|     expect(judgeRefusal(refusals, CALLER, token)).toEqual([]);
+       |                                                   ^
+     63|   }, 120_000);
+     64|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  refusals.test.ts > AC6 #350.7884cbb1 a call to a host the grant doesn't name, with writer "app" and a planted token in its arguments, is refused and recorded once as capability.refused by ext:<its ID>, naming the grant clause and the call's digest, with the token nowhere in the record, evidence or logs; a host that takes the writer from the arguments records app and fails > AC6 the planted token appears nowhere in the record, the evidence or the logs, on disk or read back
+AssertionError: the refusal on record: expected [] to deeply equal [ 'ext:test/caller' ]
+
+- Expected
++ Received
+
+- [
+-   "ext:test/caller",
+- ]
++ []
+
+ ❯ refusals.test.ts:69:68
+     67|     expect(outcomes).toEqual([{ ok: false }]);
+     68|     // The search means something only once the refused call reached t…
+     69|     expect(refusals.map((e) => e.writer), 'the refusal on record').toE…
+       |                                                                    ^
+     70|     const all = await w.events();
+     71|     expect(all.filter((e) => toJson(e).includes(token)).map((e) => e.k…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  refusals.test.ts > AC6 #350.7884cbb1 a call to a host the grant doesn't name, with writer "app" and a planted token in its arguments, is refused and recorded once as capability.refused by ext:<its ID>, naming the grant clause and the call's digest, with the token nowhere in the record, evidence or logs; a host that takes the writer from the arguments records app and fails > AC6 (wrong program) a host that takes the writer from the arguments records app and fails this test
+AssertionError: ["the record holds 0 capability.refused events, not one: []"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ refusals.test.ts:82:89
+     80|     const { refusals, token } = await scenario('writer-from-arguments'…
+     81|     const problems = judgeRefusal(refusals, CALLER, token);
+     82|     expect(problems.some((p) => p.includes('writer is app')), JSON.str…
+       |                                                                                         ^
+     83|   }, 120_000);
+     84| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  refusals.test.ts > AC7 #350.b5c18039 a call past its quota and a call whose arguments fail the action's schema each append their own capability.refused, naming the quota or the schema field > AC7 the third call to a host granted two is refused and recorded naming the quota; an action call with a count that isn't an integer is refused and recorded naming the field
+AssertionError: test/acts@1.0.0's conformance: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ refusals.test.ts:93:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  replies.test.ts > AC1 #350.2f824654 a tool.before handler can only add context the agent sees or deny the call with a reason the agent sees > AC1 context, a deny and nothing each reach the reply as given; a reply that allows, rewrites or answers is recorded as failed and none of it reaches the agent
+TypeError: h.hook is not a function
+ ❯ replies.test.ts:26:54
+     24|
+     25|     const replies: HookReply[] = [];
+     26|     for (let i = 0; i < 7; i++) replies.push(await h.hook(toolBefore(5…
+       |                                                      ^
+     27|     for (const [i, reply] of replies.entries()) {
+     28|       for (const key of Object.keys(reply)) expect(REPLY_FIELDS, `repl…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  replies.test.ts > AC2 #350.7727c408 an outside package fills a declared tool.before template with typed values only: planted text in the handle field is recorded as failed, naming the field, and never reaches the agent; a handle and a number add one block labelled with the extension; a host that passes context through as text fails, naming the extension > AC2 the planted handle is recorded as failed naming the field and the agent gets none of it; the handle and number add one block from test/tmpl
+AssertionError: test/tmpl@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"status","hook":"tool.before","text":"{handle} has {count} checks still open","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario replies.test.ts:60:5
+ ❯ replies.test.ts:68:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  replies.test.ts > AC2 #350.7727c408 an outside package fills a declared tool.before template with typed values only: planted text in the handle field is recorded as failed, naming the field, and never reaches the agent; a handle and a number add one block labelled with the extension; a host that passes context through as text fails, naming the extension > AC2 (wrong program) a host that passes a handler's context through as text delivers the string and fails this test, naming the extension
+AssertionError: test/tmpl@1.0.0's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"status","hook":"tool.before","text":"{handle} has {count} checks still open","fields":{"handle":{"type":"handle"},"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario replies.test.ts:60:5
+ ❯ replies.test.ts:73:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  staged.test.ts > AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it > AC4 a package that registers a handler and an action and then fails to start exposes neither, while it starts or after; the same package that starts exposes both
+AssertionError: its conformance, in the sandbox, passes: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ staged.test.ts:46:120
+     44|     const h = await openHost(w, { release });
+     45|     const p = await h.install({ from: dir, builtBy: null, grant: HOOK_…
+     46|     { const c = await h.check(p); expect(c.passed, `its conformance, i…
+       |                                                                                                                        ^
+     47|     process.env.DH350_FAIL_START = '1';
+     48|     try {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  staged.test.ts > AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it > AC4 a sandboxed package enabled and disabled 20 times leaves no process, handler, action or handle it owned, and enabled again answers once
+AssertionError: test/cycle's conformance: its manifest fails extension.manifest@1 at /templates: unlisted_field [{"name":"calls","hook":"tool.before","text":"cycle handler call {count}","fields":{"count":{"type":"number"}}}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ staged.test.ts:82:102
+     80|     const h = await openHost(w);
+     81|     const p = await h.install({ from: await pkg('cycle'), builtBy: nul…
+     82|     { const c = await h.check(p); expect(c.passed, `${p.id}'s conforma…
+       |                                                                                                      ^
+     83|     let baseline: Record<string, number> = {};
+     84|     for (let i = 0; i <= 20; i++) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  staged.test.ts > AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it > AC4 a hub package enabled and disabled 20 times leaves no handler or action of an earlier load: each hook calls one handler once, each action call runs once
+AssertionError: deepbuild/cyclehub's conformance: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ staged.test.ts:112:102
+    110|     const h = await openHost(w, { release: [await releaseEntry(dir)] }…
+    111|     const p = await h.install({ from: dir, builtBy: null, grant: HOOK_…
+    112|     { const c = await h.check(p); expect(c.passed, `${p.id}'s conforma…
+       |                                                                                                      ^
+    113|     let baseline: Record<string, number> = {};
+    114|     for (let i = 0; i <= 20; i++) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  staged.test.ts > AC4 #350.43f82359 a package that registers a handler and an action and then fails to start exposes neither; enabling and disabling one 20 times leaves no listener or callback it owned; a call from a removed version finishing after its replacement is active changes no state and delivers nothing through it > AC4 a call to a removed version that finishes after its replacement is active changes no state and delivers nothing through the replacement
+AssertionError: deepbuild/acts@1.0.0's conformance: its code didn't register in the platform sandbox: deep.registerAction is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ staged.test.ts:143:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+ FAIL  staged.test.ts > AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge > AC9 A reads B's value until its use is detached and reads missing after, never through a stopped B; B's process is gone after
+AssertionError: test/b@1.0.0's conformance: its code didn't register in the platform sandbox: deep.provide is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario staged.test.ts:176:5
+ ❯ staged.test.ts:189:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/22]⎯
+
+ FAIL  staged.test.ts > AC9 #350.bff15b51 with A using B's output, removing B detaches A's use before B's handlers stop; a host that stops B first fails, naming the edge > AC9 (wrong program) a host that stops B first fails, naming the edge
+AssertionError: test/b@1.0.0's conformance: its code didn't register in the platform sandbox: deep.provide is not a function: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installAndLoad helpers.ts:190:95
+    188|   const p = await h.install({ from, builtBy: null, ...(grant ? { grant…
+    189|   const checked = await h.check(p);
+    190|   expect(checked.passed, `${p.id}@${p.version}'s conformance: ${checke…
+       |                                                                                               ^
+    191|   const load = await h.load(p);
+    192|   expect(load.status, `${p.id}@${p.version} didn't load: ${JSON.string…
+ ❯ scenario staged.test.ts:176:5
+ ❯ staged.test.ts:195:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/22]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  22 failed (22)
+   Start at  16:38:45
+   Duration  4.37s (tests 91%, import 7%, transform 2%)
+
+    Isolate  5 workers spawned · ~88ms startup each (spawn + environment, per file)
+             at least ~353ms faster with isolate: false — reuses workers across files instead of one per file
+
+exit 1
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/350/tsconfig.json
+tests/acceptance/350/actions.test.ts(10,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ActionResult'.
+tests/acceptance/350/actions.test.ts(25,79): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/actions.test.ts(28,16): error TS7006: Parameter 'r' implicitly has an 'any' type.
+tests/acceptance/350/actions.test.ts(62,25): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/actions.test.ts(70,25): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/actions.test.ts(77,25): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/actions.test.ts(84,25): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/helpers.ts(18,30): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HookReply'.
+tests/acceptance/350/helpers.ts(18,41): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HookRequest'.
+tests/acceptance/350/helpers.ts(204,81): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(14,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HookReply'.
+tests/acceptance/350/join.test.ts(27,128): error TS7006: Parameter 'f' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(39,22): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/join.test.ts(40,22): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/join.test.ts(65,34): error TS7006: Parameter 'd' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(67,38): error TS7006: Parameter 'n' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(67,41): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(70,31): error TS7006: Parameter 'f' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(78,46): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/join.test.ts(100,26): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/join.test.ts(104,25): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/join.test.ts(114,48): error TS2345: Argument of type '"join-by-id-alone"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/350/join.test.ts(120,48): error TS2345: Argument of type '"cut-in-join-order"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/350/judges.ts(5,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HookReply'.
+tests/acceptance/350/judges.ts(22,39): error TS7006: Parameter 'f' implicitly has an 'any' type.
+tests/acceptance/350/judges.ts(29,27): error TS7006: Parameter 'f' implicitly has an 'any' type.
+tests/acceptance/350/judges.ts(37,83): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/refusals.test.ts(51,36): error TS2353: Object literal may only specify known properties, and 'hosts' does not exist in type '{ record?: string[]; }'.
+tests/acceptance/350/refusals.test.ts(80,48): error TS2345: Argument of type '"writer-from-arguments"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/350/refusals.test.ts(92,94): error TS2353: Object literal may only specify known properties, and 'hosts' does not exist in type '{ record?: string[]; }'.
+tests/acceptance/350/refusals.test.ts(101,25): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/refusals.test.ts(103,26): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/replies.test.ts(10,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'HookReply'.
+tests/acceptance/350/replies.test.ts(26,54): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/replies.test.ts(32,39): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/replies.test.ts(36,32): error TS7006: Parameter 'd' implicitly has an 'any' type.
+tests/acceptance/350/replies.test.ts(36,63): error TS7006: Parameter 'd' implicitly has an 'any' type.
+tests/acceptance/350/replies.test.ts(44,32): error TS7006: Parameter 'f' implicitly has an 'any' type.
+tests/acceptance/350/replies.test.ts(46,35): error TS7006: Parameter 'd' implicitly has an 'any' type.
+tests/acceptance/350/replies.test.ts(62,27): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/replies.test.ts(63,28): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/replies.test.ts(73,46): error TS2345: Argument of type '"context-as-text"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/350/staged.test.ts(14,15): error TS2305: Module '"../../../packages/extension-host/src/index.ts"' has no exported member 'ActionResult'.
+tests/acceptance/350/staged.test.ts(35,5): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(51,30): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(55,29): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(73,30): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(73,72): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/staged.test.ts(89,31): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(90,15): error TS2339: Property 'disable' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(92,31): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(100,37): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(101,24): error TS7006: Parameter 'b' implicitly has an 'any' type.
+tests/acceptance/350/staged.test.ts(117,15): error TS2339: Property 'disable' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(119,31): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(128,27): error TS2339: Property 'hook' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(148,23): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(152,27): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(162,28): error TS2339: Property 'callAction' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(183,13): error TS2339: Property 'disable' does not exist on type 'ExtensionHost'.
+tests/acceptance/350/staged.test.ts(195,41): error TS2345: Argument of type '"stop-provider-first"' is not assignable to parameter of type 'Plant | undefined'.
+exit 2

@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "capability.refused",
+  "writer": "ext:acme/caller",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "call": "deep.fetch",
+    "broke": "grant",
+    "clause": "hosts: evil.example is not a host the grant names",
+    "digest": "9f2c6b1f0e7a4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6b5a"
+  }
+}

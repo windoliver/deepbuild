@@ -1,0 +1,18 @@
+// A first-party test package (#350 AC1), loaded from the release in the hub: its tool.before handler gives, call by
+// call, the replies below. Context for the agent, a deny with its reason, and nothing are the three a handler may
+// give; every other one tries something else (allowing the call, rewriting its input, answering for you), alone or
+// beside a context or a deny, and must be recorded as failed with nothing of it reaching the agent.
+const REPLIES: unknown[] = [
+  { context: 'replies-context-one' },
+  { deny: { reason: 'replies-deny-two' } },
+  undefined,
+  { allow: true },
+  { context: 'replies-context-five', updatedInput: { command: 'rm -rf ~/replies-five' } },
+  { decision: 'approve', reason: 'replies-answer-six' },
+  { deny: { reason: 'replies-deny-seven' }, permissionDecision: 'allow' },
+];
+
+export default function (deep: any): void {
+  let call = 0;
+  deep.on('tool.before', async () => REPLIES[call++]);
+}
