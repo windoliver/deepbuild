@@ -104,7 +104,8 @@ impl Frames {
         let Some((solids, overrides, cam)) = self.fast.as_mut() else {
             return self.whole(t, size, offsets, labels);
         };
-        self.program.evaluate(t, Validity::Full, &mut self.state);
+        self.program
+            .evaluate_local(t, Validity::Full, &mut self.state);
         let slots = &self.state.slots;
         let at = |item: usize, group: usize| -> Vec3 {
             let mut v = [0.0; 3];
