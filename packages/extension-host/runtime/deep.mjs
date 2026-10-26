@@ -2,6 +2,7 @@
 // sandbox runner, where every other package runs: the extension API schema, the `deep` object a package gets, and
 // the JSON-RPC 2.0 peer, one JSON object per line, that carries calls between a sandboxed package and the host.
 // Plain JavaScript with Node's built-in modules only, so the sandbox needs to read nothing but this folder and Node.
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
  * The extension API schema: each method a package can call, and the grant a call needs, or null. A grant is an
@@ -23,24 +24,38 @@ export const API = Object.freeze([
   { method: 'deep.asks.create', needs: null },
   { method: 'deep.config.get', needs: null },
   { method: 'deep.notices.send', needs: 'notices' },
+  // #350: actions, outside calls the host makes for the package, and the outputs pieces provide and use.
+  { method: 'deep.registerAction', needs: null },
+  { method: 'deep.fetch', needs: 'hosts' },
+  { method: 'deep.provide', needs: null },
+  { method: 'deep.use', needs: null },
+  { method: 'deep.read', needs: null },
 ].map((m) => Object.freeze(m)));
 
 /**
  * The package's side: its `deep`, each call going to the host through `call` with its functions left out and
  * kept here unless the host refuses the call; and `serve`, what the host asks of the package. `load` runs the
- * package's code with its `deep` and the host's `load` params.
+ * package's code with its `deep` and the host's `load` params. Every call made while the package serves an action
+ * goes with that action call's scope, the token the host gave it, across every await, so the host acts for that
+ * call's caller and no other.
  */
 export function extensionSide(call, load) {
   const checks = new Map();
   const handlers = new Map();
   const routes = new Map();
+  const actions = new Map();
+  const outputs = new Map();
+  const scope = new AsyncLocalStorage();
+  const keeper = (map) => (name, fn) => { map.set(name, fn); return () => { if (map.get(name) === fn) map.delete(name); }; };
   // The package's resolvers in order, and its adapters by name: their functions stay here (#349).
   let resolvers = [];
   const adapters = new Map();
   // Each returns how to drop what it kept.
   const keep = {
-    'deep.registerCheck': (type, runner) => { checks.set(type, runner); return () => { if (checks.get(type) === runner) checks.delete(type); }; },
-    'deep.registerRoute': (route, handler) => { routes.set(route, handler); return () => { if (routes.get(route) === handler) routes.delete(route); }; },
+    'deep.registerCheck': keeper(checks),
+    'deep.registerRoute': keeper(routes),
+    'deep.registerAction': (name, _declared, fn) => keeper(actions)(name, fn),
+    'deep.provide': (name, _kind, _schema, fn) => keeper(outputs)(name, fn),
     'deep.registerResolver': (resolver) => { resolvers = [...resolvers, resolver]; return () => { resolvers = resolvers.filter((r) => r !== resolver); }; },
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
     'deep.on': (kind, handler) => {
@@ -56,7 +71,8 @@ export function extensionSide(call, load) {
     owner[path[path.length - 1]] = (...args) => {
       // Kept before the host hears of it, so the host never asks for what isn't here yet; dropped if it refuses.
       const drop = keep[method]?.(...args);
-      const made = Promise.resolve().then(() => call(method, args.filter((a) => typeof a !== 'function'))).catch((error) => {
+      const within = scope.getStore();
+      const made = Promise.resolve().then(() => call(method, args.filter((a) => typeof a !== 'function'), within)).catch((error) => {
         drop?.();
         throw error;
       });
@@ -95,6 +111,30 @@ export function extensionSide(call, load) {
         if (!adapter) throw Error(`no adapter ${params?.name} is registered here`);
         return method === 'adapter.mapHook' ? await adapter.mapHook(params.request, params.version) : await adapter.deliver(params.answer, params.session, params.route);
       }
+      // A hook: each handler of its kind replies, in the order they registered. One that throws or misses the
+      // deadline gives a marker in its place, so its siblings' replies (a deny among them) still reach the host.
+      if (method === 'hook') {
+        const deadline = params?.deadline ?? 0;
+        const start = Date.now();
+        return Promise.all((handlers.get(params?.kind) ?? []).map((handler) => {
+          let timer;
+          const late = new Promise((resolve) => { timer = setTimeout(() => resolve({ $handler: 'late' }), deadline); });
+          // A reply that comes after the deadline, even one that never yielded to the timer, is late all the same.
+          const replied = Promise.resolve().then(() => handler(params.request))
+            .then((r) => (Date.now() - start > deadline ? { $handler: 'late' } : r ?? null), () => ({ $handler: 'threw' }));
+          return Promise.race([replied, late]).finally(() => clearTimeout(timer));
+        }));
+      }
+      if (method === 'action') {
+        const fn = actions.get(params?.name);
+        if (!fn) throw Error(`no action ${params?.name} is registered here`);
+        return (await scope.run(params.scope, () => fn(params.input, params.ctx))) ?? null;
+      }
+      if (method === 'output') {
+        const fn = outputs.get(params?.name);
+        if (!fn) throw Error(`no output ${params?.name} is provided here`);
+        return (await fn()) ?? null;
+      }
       throw Error(`no method ${method}`);
     },
   };
@@ -121,7 +161,7 @@ export function peer(stream, serve) {
       // A side asking faster than it is answered is cut off rather than queued without end.
       if (inflight >= INFLIGHT) return void stream.destroy();
       inflight++;
-      Promise.resolve().then(() => serve(m.method, m.params)).then(
+      Promise.resolve().then(() => serve(m.method, m.params, typeof m.scope === 'string' ? m.scope : undefined)).then(
         (result) => answer(m.id, { result: result ?? null }),
         (error) => answer(m.id, { error: { code: -32000, message: String(error?.message ?? error) } }),
       ).finally(() => { inflight--; });
@@ -155,11 +195,12 @@ export function peer(stream, serve) {
     pending.clear();
   });
   return {
-    call(method, params) {
+    /** `scope`, when given, is the action call a request is made for (extensionSide). */
+    call(method, params, scope) {
       const id = ++next;
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
-        send({ id, method, params });
+        send({ id, method, params, ...(typeof scope === 'string' ? { scope } : {}) });
       });
     },
   };

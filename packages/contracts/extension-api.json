@@ -342,5 +342,46 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "method": "deep.registerAction",
+    "variants": null,
+    "since": "R2",
+    "stability": "preview",
+    "digest": "d1:e3f3d719dd4a19c61231550621eb4d966cdf7eba22e542d6d7be541b396e1cca",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^ext\\.[a-z0-9_-]+\\.[a-z0-9_.-]+$"
+        },
+        "declared": {
+          "type": "object",
+          "properties": {
+            "declares": {
+              "enum": [
+                "read",
+                "change",
+                "send"
+              ]
+            },
+            "input": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "declares",
+            "input"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "declared"
+      ],
+      "additionalProperties": false
+    }
   }
 ]

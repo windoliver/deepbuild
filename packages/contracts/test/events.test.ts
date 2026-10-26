@@ -281,9 +281,11 @@ describe('the design says', () => {
 
   // The kinds a deep_* MCP tool produces (technical-design.md:429): ask.created and plan.proposed from deep_ask,
   // claim.made from deep_claim, learn.proposed from deep_propose, run.started from deep_run, open items from
-  // deep_open_item, evidence.put from deep_evidence, a lease from deep_env, a patch and its suggestion from deep_show.
+  // deep_open_item, evidence.put from deep_evidence, a lease from deep_env, a patch and its suggestion from deep_show;
+  // and capability.refused, written as the caller's connection when capabilities refuse an agent's call
+  // (technical-design.md:445, #350).
   const FROM_AGENTS = ['ask.created', 'plan.proposed', 'claim.made', 'learn.proposed', 'run.started', 'open_item.opened', 'open_item.closed',
-    'evidence.put', 'lease.acquired', 'lease.released', 'doc.patched', 'suggestion.filed'];
+    'evidence.put', 'lease.acquired', 'lease.released', 'doc.patched', 'suggestion.filed', 'capability.refused'];
 
   it('an agent, through MCP, appends only the kinds a deep_* tool produces', () => {
     for (const { kind, schema } of catalogue()) {
@@ -301,7 +303,7 @@ describe('the design says', () => {
       return { root, shared: { ...shared, v: version }, required: required.filter((key) => key !== 'subject') };
     };
     const kinds = catalogue().map((e) => e.schema);
-    expect(kinds).toHaveLength(99);
+    expect(kinds).toHaveLength(100);
     for (const name of kinds) expect(envelope(name), name).toEqual(envelope(kinds[0]!));
   });
 
