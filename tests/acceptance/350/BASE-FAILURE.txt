@@ -4,7 +4,7 @@
 
 ## node node_modules/vitest/vitest.mjs run --root tests/acceptance/350 --no-file-parallelism
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/issue-350-run-time/tests/acceptance/350
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-350-run-time/tests/acceptance/350
 
  ❯ refusals.test.ts (4 tests | 4 failed) 1384ms
    ❯ AC6 #350.7884cbb1 a call to a host the grant doesn't name, with writer "app" and a planted token in its arguments, is refused and recorded once as capability.refused by ext:<its ID>, naming the grant clause and the call's digest, with the token nowhere in the record, evidence or logs; a host that takes the writer from the arguments records app and fails (3)
