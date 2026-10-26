@@ -47,6 +47,8 @@ export function extensionSide(call, load) {
   const routes = new Map();
   const actions = new Map();
   const outputs = new Map();
+  // Its environments by name (#331): their up and down stay here, asked by the host at the kit and at a stack's start.
+  const environments = new Map();
   const scope = new AsyncLocalStorage();
   const keeper = (map) => (name, fn) => { map.set(name, fn); return () => { if (map.get(name) === fn) map.delete(name); }; };
   // The package's resolvers in order, and its adapters by name: their functions stay here (#349).
@@ -63,6 +65,7 @@ export function extensionSide(call, load) {
     'deep.registerResolver': (resolver) => { resolvers = [...resolvers, resolver]; return () => { resolvers = resolvers.filter((r) => r !== resolver); }; },
     'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
+    'deep.registerEnvironment': keeper(environments),
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
@@ -93,6 +96,11 @@ export function extensionSide(call, load) {
         const runner = checks.get(params?.type);
         if (!runner) throw Error(`no check kind ${params?.type} is registered here`);
         return await runner(params.spec, params.ctx);
+      }
+      if (method === 'env.up' || method === 'env.down') {
+        const env = environments.get(params?.name);
+        if (!env) throw Error(`no environment ${params?.name} is registered here`);
+        return method === 'env.up' ? await env.up(params.spec, params.lease, params.checkout) : (await env.down(params.handle)) ?? null;
       }
       if (method === 'deliver') {
         for (const event of params.events) for (const handler of handlers.get(event.kind) ?? []) await handler(event);

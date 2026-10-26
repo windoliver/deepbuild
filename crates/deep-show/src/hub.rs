@@ -118,6 +118,18 @@ pub enum Planted {
     FullScreenOnly3d,
     /// #383: Esc leaves full screen and goes back to the top at once.
     EscToRoot,
+    /// #384: the ask box puts the quote into your words.
+    BoxFoldsQuote,
+    /// #384: the ask box sends no `t`.
+    BoxDropsT,
+    /// #384: the ask box sends no `doc_rev`.
+    BoxDropsDocRev,
+    /// #384: the ask box sends `precision: id` for every reference.
+    BoxSendsEveryId,
+    /// #384: the resolver answers a gone item's handle with `ref_unresolved` alone.
+    ResolverOnlyRefUnresolved,
+    /// #384: the resolver closes the ask-task of a message whose item is gone.
+    ResolverClosesTask,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -174,6 +186,8 @@ pub struct Process {
 pub struct Panel {
     pub rect: [f64; 4],
     pub visible: bool,
+    /// A web page the panel shows, an agent's deliverable that holds no canvas items (#384).
+    pub html: Option<PathBuf>,
 }
 
 pub struct RecordObject {
@@ -296,6 +310,23 @@ pub enum Call {
     Presented(String),
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
+    /// Your words from a panel's ask box to a session, about what you point at (#384).
+    Ask {
+        panel: String,
+        session: String,
+        words: String,
+        pointer: Option<[f64; 2]>,
+    },
+    /// A session's messages as its agent reads them (#384).
+    Messages(String),
+    /// A session's render-back of a document at a time as of a revision (#384).
+    RenderBack {
+        session: String,
+        doc: String,
+        t: i64,
+        rev: u64,
+        size: Option<[u16; 2]>,
+    },
     /// The parity suite's manifest (#138).
     Manifest,
     /// The check catalog (#138).
@@ -431,6 +462,8 @@ pub struct Hub<'a> {
     pub serial: u64,
     /// When each revision of a document that isn't shared became current, by doc ID.
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
+    /// The messages each session was sent from an ask box, by session ID (#384).
+    pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
 }
 
 /// A snapshot's straight RGBA and its size.
@@ -512,6 +545,7 @@ impl<'a> Hub<'a> {
             scopes: BTreeMap::new(),
             serial: 0,
             shown_at: BTreeMap::new(),
+            asks: BTreeMap::new(),
         }
     }
 
@@ -760,6 +794,20 @@ impl<'a> Hub<'a> {
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::View(panel) => self.view(panel),
+            Call::Ask {
+                panel,
+                session,
+                words,
+                pointer,
+            } => self.ask(panel, session, words, *pointer),
+            Call::Messages(session) => self.messages(session),
+            Call::RenderBack {
+                session,
+                doc,
+                t,
+                rev,
+                size,
+            } => self.render_back(session, doc, *t, *rev, *size),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
