@@ -235,12 +235,13 @@ export function lintSchemas(entries: readonly SchemaEntry[]): LintProblem[] {
       else if (new Set(rules.map((r) => (r as Schema).id)).size !== rules.length) flag('/x-rules', 'x-rules gives each rule its own id');
     }
     for (const [key, def] of Object.entries(defs)) node(def, '/$defs' + segment(key));
-    for (const key of cycles(defs)) flag('/$defs' + segment(key), 'a $ref cycle: a definition reaches itself');
+    const looped = cycles(defs);
+    for (const key of looped) flag('/$defs' + segment(key), 'a $ref cycle: a definition reaches itself');
     if ('x-feeds' in schema && !(Array.isArray(schema['x-feeds']) && schema['x-feeds'].every((f) => typeof f === 'string'))) flag('/x-feeds', 'x-feeds lists projection names');
     const marker = schema['x-hash'];
     if ('x-hash' in schema && !(isObject(marker) && Array.isArray(marker.excludes) && marker.excludes.every((p) => typeof p === 'string' && p.startsWith('/')))) {
       flag('/x-hash', 'x-hash lists the JSON Pointers its hash leaves out, as excludes');
-    } else if (isObject(marker) && Array.isArray(marker.excludes) && !cycles(defs).length) {
+    } else if (isObject(marker) && Array.isArray(marker.excludes) && !looped.length) {
       for (const pointer of marker.excludes as string[]) {
         // A trailing `*` names every item of an array, not a field; to leave the array out, exclude the array.
         if (pointer.endsWith('/*')) { flag('/x-hash', `x-hash excludes ${pointer}, which ends in every item of an array, not at a field; exclude ${pointer.slice(0, -2)}`); continue; }

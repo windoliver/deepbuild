@@ -1,0 +1,638 @@
+Base commit: d122341 ("Merge pull request #737 from windoliver/feat/667-ask-checkpoint")
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/380 --no-file-parallelism
+Run in the blind job's worktree at the base, holding only these test files (untracked) and node_modules from npm ci.
+deep-gpu builds at the base (cargo build --locked --bin deep-gpu, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0), so every
+test fails at a named assertion past the build: 26 failed, 1 passed, 1 skipped.
+- The new calls (operators, reference, golden, decide, check_operator, op, exact, cross_gpu) answer
+  {"code":"bad_input","reason":"unknown call"}; each planted name is refused at startup ({"ok":false,"code":"bad_input"},
+  exit 2); the plugin call takes no window, panel or capture (no `panel` in its reply); view3d draws the plug-in's
+  scene unlit with no grid, glow or shadow ("what the scene shows" fails).
+- lines.test.ts's second test fails naming crates/deep-app/src/canvas.rs (PathBuilder and paint_path: the session line
+  is a polyline its view paints). Its first test passes at the base: the app's views hold no GPU code (README: what
+  the base already does).
+- cts-exact.test.ts's M1-against-M3 test skips as BLOCKED: DEEPBUILD_M1_RECORD isn't set (no record from an M1).
+The reference-Mac gate was open (Mac15,7, M3 Pro, 36 GiB, on mains, Low Power Mode off), so the budget tests ran and
+failed at the operators call rather than skipping as INCONCLUSIVE.
+Date: 2026-10-25  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1 (the checkout's toolchain)
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/380
+
+ ❯ refusals.test.ts (2 tests | 2 failed) 39103ms
+   ❯ #380.e70d1419 a shipped operator with a loop whose count isn't fixed, an index past a declared length, or shader text is refused before it reaches the GPU (2)
+     × #380.e70d1419 the check accepts the control, which compiles and runs on the GPU, and refuses each defective shipped operator with an error naming its defect before naga, a pipeline or the GPU sees it 5327ms
+     × #380.e70d1419 a planted core that compiles operators without the check (--planted skips_operator_check) lets a defect reach the GPU and fails, naming it 43ms
+ ❯ cts-exact.test.ts (4 tests | 3 failed | 1 skipped) 44085ms
+   ❯ #380.639458be every exact operator gives identical bits on two GPUs of different families (an M1 and an M3); with one GPU that comparison is BLOCKED with one unblock ask, never PASS (4)
+     × #380.639458be the CTS integer and bool expression cases, ported to our operators: the GPU and the CPU interpreter give exactly the bits CTS computes; a flipped bit fails, naming the operation and the row 2749ms
+     × #380.639458be the CTS f32 expression cases, ported to our operators: each GPU result and the CPU interpreter's lie in the interval CTS gives; a result two ULP off fails, naming the operation and the row 268ms
+     × #380.639458be with one GPU family the exact comparison is BLOCKED with one unblock ask, never PASS; another family's equal bits pass and an operator's changed bits fail, naming it; a planted comparison that passes one family (--planted passes_one_gpu) fails 212ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 31181ms
+   ❯ #380.c9214bdc on the reference Mac, a window-sized 3D scene with glow, shadows and outlines costs under 2 ms of GPU time per frame, measured with wgpu-profiler (3)
+     × #380.c9214bdc the measure is wgpu-profiler's, in the GPU layer's build, and it times every frame and the glow's, the shadows' and the outlines' passes in each 8425ms
+     × #380.c9214bdc the window-sized scene with glow, shadows and outlines costs under 2 ms of GPU time in its worst frame of 600, in five runs 4957ms
+     × #380.c9214bdc the measure sees the glow: a planted glow that blurs at full resolution 64 times (--planted slow_glow) is judged FAIL 18ms
+ ❯ reference.test.ts (4 tests | 4 failed) 15930ms
+   ❯ #380.639458be every shipped pass operator matches its CPU reference within one 10-bit code value per channel on 99.9% of pixels on the same machine (4)
+     × #380.639458be every shipped pass operator, on its effect's scene, matches its CPU reference within one 10-bit code per channel on 99.9% of pixels, none past 4 codes, no 16 × 16 window with more than 8 off 2170ms
+     × #380.639458be the glow's reference and its GPU operator reproduce the formula's fixtures: a uniform field passes unchanged, and with the Karis average a firefly's halo doesn't grow with its brightness; a planted bloom without it (--planted bloom_without_karis) fails 132ms
+     × #380.639458be the ground grid's reference and its GPU operator fade a line thinner than a device pixel by its width: at 0.25 px each pixel draws 0.25 of what the 1 px grid draws there, within 5%, and nothing more 127ms
+     × #380.639458be a planted GPU pass two 10-bit codes off its CPU reference (--planted pass_off_by_two) fails, naming the operator 15ms
+ ❯ plugin-scene.test.ts (4 tests | 4 failed) 12021ms
+   ❯ #380.32634ba0 a test plug-in draws a 3D scene of a box on the ground grid with glow and a shadow by describing it, matching its golden blessed by your decision through the perceptual oracle; clipped at the panel's edge; its GPU-device call refused, naming it; a planted unclipped host fails, naming the panel (4)
+     × #380.32634ba0 the plug-in's described scene draws in its panel, clipped at the panel's edge, and its call to open a GPU device is refused, naming the call 2207ms
+     × #380.32634ba0 the panel's drawing is the scene the plug-in described: the GPU layer's frame of its document, showing the lamp box, the ground grid's lines, the glow's halo and the box's shadow 1414ms
+     × #380.32634ba0 the scene matches its golden, blessed by your decision, through the perceptual oracle: an agent's blessing is refused, a fresh run passes, the scene without its glow, shadow or grid fails, and a blank frame is BLOCKED 221ms
+     × #380.32634ba0 a planted host that lets the scene draw past the panel's bounds (--planted host_unclipped) fails, naming the panel 68ms
+ ❯ goldens.test.ts (3 tests | 3 failed) 111339ms
+   ❯ #380.3b28146e a GPU golden compares only under an equal environment fingerprint (OS, GPU, driver, wgpu version), and a missing snapshot is BLOCKED, never FAIL (3)
+     × #380.3b28146e blessed under this machine's fingerprint, the frame passes and a changed frame fails; under another OS, GPU, driver or wgpu version neither is compared, naming both fingerprints 6246ms
+     × #380.3b28146e a missing snapshot is BLOCKED, never FAIL: no golden yet, a snapshot file that isn't there, and a frame whose document can't be drawn 422ms
+     × #380.3b28146e planted wrong programs fail: a golden that compares under any fingerprint (--planted compares_any_environment), and a missing snapshot that reads FAIL (--planted fails_missing_snapshot) 336ms
+ ❯ licenses.test.ts (2 tests | 2 failed) 52015ms
+   ❯ #380.993f9e93 every ported shader keeps its license beside it, and none comes from a GPL source or under Shadertoy's default license (2)
+     × #380.993f9e93 the shipped operators list the shaders they port, each with its license beside it and named in its header, none under a GPL or Shadertoy's default license; the check fails each planted twin, naming it 3949ms
+     × #380.993f9e93 no shader source in the checkout holds GPL or Shadertoy-default license text, and every Shadertoy source is a listed port; the scan fails a planted GPL shader, naming it 526ms
+ ❯ seek.test.ts (4 tests | 4 failed) 105383ms
+   ❯ #380.b40177b9 every shipped pass that uses noise seeds it from a hash of the pixel and the item's seed, never a frame counter or the clock, so seeking equals playing on the pixel hash for every shipped effect (4)
+     × #380.b40177b9 for every shipped effect, seeking to frames 30 and 90 equals playing to them on this machine's pixel hash, and two plays are the same 2549ms
+     × #380.b40177b9 every shipped operator that draws noise is seeded by the item's seed: its scene differs between two seeds and repeats at one 234ms
+     × #380.b40177b9 a planted program that seeds the shipped noise from the session's frame counter (--planted noise_from_frame_counter) fails seek against play, naming the effect 36ms
+     × #380.b40177b9 a planted program that seeds the shipped noise from the clock (--planted noise_from_clock) fails seek against play, naming the effect 30ms
+    Blocking waiting for file lock on package cache
+ ❯ lines.test.ts (2 tests | 1 failed) 17345ms
+   ❯ #380.3893743e DeepBuild's lines are drawn only with the canvas's primitives and effects, with no view-specific GPU code (2)
+     × #380.3893743e DeepBuild's line is drawn with the canvas's primitives: no app view paints a path, quad or sprite of its own; the check fails a planted view that paints its own line, naming the file and the call 8ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 26 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > #380.c9214bdc on the reference Mac, a window-sized 3D scene with glow, shadows and outlines costs under 2 ms of GPU time per frame, measured with wgpu-profiler > #380.c9214bdc the measure is wgpu-profiler's, in the GPU layer's build, and it times every frame and the glow's, the shadows' and the outlines' passes in each
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ timedRun budgets.test.ts:35:35
+ ❯ budgets.test.ts:54:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/26]⎯
+
+ FAIL  budgets.test.ts > #380.c9214bdc on the reference Mac, a window-sized 3D scene with glow, shadows and outlines costs under 2 ms of GPU time per frame, measured with wgpu-profiler > #380.c9214bdc the window-sized scene with glow, shadows and outlines costs under 2 ms of GPU time in its worst frame of 600, in five runs
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ timedRun budgets.test.ts:35:35
+ ❯ runs budgets.test.ts:47:26
+ ❯ budgets.test.ts:78:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/26]⎯
+
+ FAIL  budgets.test.ts > #380.c9214bdc on the reference Mac, a window-sized 3D scene with glow, shadows and outlines costs under 2 ms of GPU time per frame, measured with wgpu-profiler > #380.c9214bdc the measure sees the glow: a planted glow that blurs at full resolution 64 times (--planted slow_glow) is judged FAIL
+AssertionError: deep-gpu run --planted slow_glow exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ timedRun budgets.test.ts:34:24
+ ❯ runs budgets.test.ts:47:26
+ ❯ budgets.test.ts:89:76
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/26]⎯
+
+ FAIL  cts-exact.test.ts > #380.639458be every exact operator gives identical bits on two GPUs of different families (an M1 and an M3); with one GPU that comparison is BLOCKED with one unblock ask, never PASS > #380.639458be the CTS integer and bool expression cases, ported to our operators: the GPU and the CPU interpreter give exactly the bits CTS computes; a flipped bit fails, naming the operation and the row
+AssertionError: add@1 on i32, i32 was answered: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ opResult cts-exact.test.ts:172:66
+    170| }
+    171| function opResult(reply: JsonObject, rows: number, what: string): OpRe…
+    172|   expect(reply['code'], `${what} was answered: ${shown(reply)}`).toBeU…
+       |                                                                  ^
+    173|   const gpu = arr(reply['gpu'], `${what}: gpu`).map((v, k) => num(v, `…
+    174|   const cpu = arr(reply['cpu'], `${what}: cpu`).map((v) => (v === null…
+ ❯ cts-exact.test.ts:237:41
+ ❯ cts-exact.test.ts:237:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/26]⎯
+
+ FAIL  cts-exact.test.ts > #380.639458be every exact operator gives identical bits on two GPUs of different families (an M1 and an M3); with one GPU that comparison is BLOCKED with one unblock ask, never PASS > #380.639458be the CTS f32 expression cases, ported to our operators: each GPU result and the CPU interpreter's lie in the interval CTS gives; a result two ULP off fails, naming the operation and the row
+AssertionError: add@1 on f32 was answered: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ opResult cts-exact.test.ts:172:66
+    170| }
+    171| function opResult(reply: JsonObject, rows: number, what: string): OpRe…
+    172|   expect(reply['code'], `${what} was answered: ${shown(reply)}`).toBeU…
+       |                                                                  ^
+    173|   const gpu = arr(reply['gpu'], `${what}: gpu`).map((v, k) => num(v, `…
+    174|   const cpu = arr(reply['cpu'], `${what}: cpu`).map((v) => (v === null…
+ ❯ cts-exact.test.ts:247:63
+ ❯ cts-exact.test.ts:247:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/26]⎯
+
+ FAIL  cts-exact.test.ts > #380.639458be every exact operator gives identical bits on two GPUs of different families (an M1 and an M3); with one GPU that comparison is BLOCKED with one unblock ask, never PASS > #380.639458be with one GPU family the exact comparison is BLOCKED with one unblock ask, never PASS; another family's equal bits pass and an operator's changed bits fail, naming it; a planted comparison that passes one family (--planted passes_one_gpu) fails
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ exactRecord cts-exact.test.ts:209:20
+ ❯ cts-exact.test.ts:262:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/26]⎯
+
+ FAIL  goldens.test.ts > #380.3b28146e a GPU golden compares only under an equal environment fingerprint (OS, GPU, driver, wgpu version), and a missing snapshot is BLOCKED, never FAIL > #380.3b28146e blessed under this machine's fingerprint, the frame passes and a changed frame fails; under another OS, GPU, driver or wgpu version neither is compared, naming both fingerprints
+AssertionError: your blessing is decided: {"code":"bad_input","reason":"unknown call"}: expected undefined to be 'decided' // Object.is equality
+
+- Expected:
+"decided"
+
++ Received:
+undefined
+
+ ❯ blessed goldens.test.ts:36:78
+     34| function blessed(store: string, frame: string, startup: Startup = {}):…
+     35|   const [decided] = run(bins.bin(), out(), [blessCall(store, FIXTURE, …
+     36|   expect(decided!['outcome'], `your blessing is decided: ${shown(decid…
+       |                                                                              ^
+     37| }
+     38| /** Under a changed field the golden must not compare; each problem na…
+ ❯ goldens.test.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/26]⎯
+
+ FAIL  goldens.test.ts > #380.3b28146e a GPU golden compares only under an equal environment fingerprint (OS, GPU, driver, wgpu version), and a missing snapshot is BLOCKED, never FAIL > #380.3b28146e a missing snapshot is BLOCKED, never FAIL: no golden yet, a snapshot file that isn't there, and a frame whose document can't be drawn
+AssertionError: with no golden was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ goldenReply helpers.ts:567:3
+ ❯ goldens.test.ts:86:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/26]⎯
+
+ FAIL  goldens.test.ts > #380.3b28146e a GPU golden compares only under an equal environment fingerprint (OS, GPU, driver, wgpu version), and a missing snapshot is BLOCKED, never FAIL > #380.3b28146e planted wrong programs fail: a golden that compares under any fingerprint (--planted compares_any_environment), and a missing snapshot that reads FAIL (--planted fails_missing_snapshot)
+AssertionError: deep-gpu run --planted compares_any_environment exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ blessed goldens.test.ts:35:21
+ ❯ goldens.test.ts:109:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/26]⎯
+
+ FAIL  licenses.test.ts > #380.993f9e93 every ported shader keeps its license beside it, and none comes from a GPL source or under Shadertoy's default license > #380.993f9e93 the shipped operators list the shaders they port, each with its license beside it and named in its header, none under a GPL or Shadertoy's default license; the check fails each planted twin, naming it
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ licenses.test.ts:90:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/26]⎯
+
+ FAIL  licenses.test.ts > #380.993f9e93 every ported shader keeps its license beside it, and none comes from a GPL source or under Shadertoy's default license > #380.993f9e93 no shader source in the checkout holds GPL or Shadertoy-default license text, and every Shadertoy source is a listed port; the scan fails a planted GPL shader, naming it
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ licenses.test.ts:110:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/26]⎯
+
+ FAIL  lines.test.ts > #380.3893743e DeepBuild's lines are drawn only with the canvas's primitives and effects, with no view-specific GPU code > #380.3893743e DeepBuild's line is drawn with the canvas's primitives: no app view paints a path, quad or sprite of its own; the check fails a planted view that paints its own line, naming the file and the call
+AssertionError: views that paint their own lines, quads or sprites: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crates/deep-app/panels/codex/main.js paints with GPUI's own call PathBuilder instead of the canvas's primitives: import { Background, PathBuilder, View, div } from \"gpui-kit\";",
++   "crates/deep-app/src/canvas.rs paints with GPUI's own call PathBuilder instead of the canvas's primitives: let mut path = PathBuilder::stroke(px(2.));",
++ ]
+
+ ❯ lines.test.ts:87:91
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/26]⎯
+
+ FAIL  plugin-scene.test.ts > #380.32634ba0 a test plug-in draws a 3D scene of a box on the ground grid with glow and a shadow by describing it, matching its golden blessed by your decision through the perceptual oracle; clipped at the panel's edge; its GPU-device call refused, naming it; a planted unclipped host fails, naming the panel > #380.32634ba0 the plug-in's described scene draws in its panel, clipped at the panel's edge, and its call to open a GPU device is refused, naming the call
+AssertionError: plugin: panel is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:41:96
+     39| }
+     40| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     41|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     42|   return value as JsonObject;
+     43| }
+ ❯ plugin plugin-scene.test.ts:43:17
+ ❯ plugin-scene.test.ts:152:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/26]⎯
+
+ FAIL  plugin-scene.test.ts > #380.32634ba0 a test plug-in draws a 3D scene of a box on the ground grid with glow and a shadow by describing it, matching its golden blessed by your decision through the perceptual oracle; clipped at the panel's edge; its GPU-device call refused, naming it; a planted unclipped host fails, naming the panel > #380.32634ba0 the panel's drawing is the scene the plug-in described: the GPU layer's frame of its document, showing the lamp box, the ground grid's lines, the glow's halo and the box's shadow
+AssertionError: what the scene shows: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the ground grid adds lines to 0 of 122408 floor pixels, not between 500 and half of them",
++   "the glow: the floor ring around the lamp (6080 px) is 0.0000 brighter with bloom, not 0.02",
++   "the shadow darkens 0 floor pixels by 25%, fewer than 300",
++ ]
+
+ ❯ plugin-scene.test.ts:177:54
+    175|     requireGpu();
+    176|     const v = variants();
+    177|     expect(sceneProblems(v), 'what the scene shows').toEqual([]);
+       |                                                      ^
+    178|     // The check's own twins: each variant fails it for the part it la…
+    179|     expect(sceneProblems({ ...v, full: v.noGlow }).join('\n'), 'the sc…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/26]⎯
+
+ FAIL  plugin-scene.test.ts > #380.32634ba0 a test plug-in draws a 3D scene of a box on the ground grid with glow and a shadow by describing it, matching its golden blessed by your decision through the perceptual oracle; clipped at the panel's edge; its GPU-device call refused, naming it; a planted unclipped host fails, naming the panel > #380.32634ba0 the scene matches its golden, blessed by your decision, through the perceptual oracle: an agent's blessing is refused, a fresh run passes, the scene without its glow, shadow or grid fails, and a blank frame is BLOCKED
+AssertionError: plugin: panel is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj helpers.ts:41:96
+     39| }
+     40| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     41|   expect(isObject(value), `${what} is an object, got ${JSON.stringify(…
+       |                                                                                                ^
+     42|   return value as JsonObject;
+     43| }
+ ❯ plugin plugin-scene.test.ts:43:17
+ ❯ plugin-scene.test.ts:188:44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/26]⎯
+
+ FAIL  plugin-scene.test.ts > #380.32634ba0 a test plug-in draws a 3D scene of a box on the ground grid with glow and a shadow by describing it, matching its golden blessed by your decision through the perceptual oracle; clipped at the panel's edge; its GPU-device call refused, naming it; a planted unclipped host fails, naming the panel > #380.32634ba0 a planted host that lets the scene draw past the panel's bounds (--planted host_unclipped) fails, naming the panel
+AssertionError: deep-gpu run --planted host_unclipped exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:149:3
+ ❯ plugin plugin-scene.test.ts:42:17
+ ❯ plugin-scene.test.ts:219:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/26]⎯
+
+ FAIL  reference.test.ts > #380.639458be every shipped pass operator matches its CPU reference within one 10-bit code value per channel on 99.9% of pixels on the same machine > #380.639458be every shipped pass operator, on its effect's scene, matches its CPU reference within one 10-bit code per channel on 99.9% of pixels, none past 4 codes, no 16 × 16 window with more than 8 off
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ shippedPasses reference.test.ts:34:15
+ ❯ reference.test.ts:93:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/26]⎯
+
+ FAIL  reference.test.ts > #380.639458be every shipped pass operator matches its CPU reference within one 10-bit code value per channel on 99.9% of pixels on the same machine > #380.639458be the glow's reference and its GPU operator reproduce the formula's fixtures: a uniform field passes unchanged, and with the Karis average a firefly's halo doesn't grow with its brightness; a planted bloom without it (--planted bloom_without_karis) fails
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ shippedPasses reference.test.ts:34:15
+ ❯ reference.test.ts:112:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/26]⎯
+
+ FAIL  reference.test.ts > #380.639458be every shipped pass operator matches its CPU reference within one 10-bit code value per channel on 99.9% of pixels on the same machine > #380.639458be the ground grid's reference and its GPU operator fade a line thinner than a device pixel by its width: at 0.25 px each pixel draws 0.25 of what the 1 px grid draws there, within 5%, and nothing more
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ shippedPasses reference.test.ts:34:15
+ ❯ reference.test.ts:127:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/26]⎯
+
+ FAIL  reference.test.ts > #380.639458be every shipped pass operator matches its CPU reference within one 10-bit code value per channel on 99.9% of pixels on the same machine > #380.639458be a planted GPU pass two 10-bit codes off its CPU reference (--planted pass_off_by_two) fails, naming the operator
+AssertionError: deep-gpu run --planted pass_off_by_two exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:149:3
+ ❯ shippedPasses reference.test.ts:34:30
+ ❯ reference.test.ts:147:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/26]⎯
+
+ FAIL  refusals.test.ts > #380.e70d1419 a shipped operator with a loop whose count isn't fixed, an index past a declared length, or shader text is refused before it reaches the GPU > #380.e70d1419 the check accepts the control, which compiles and runs on the GPU, and refuses each defective shipped operator with an error naming its defect before naga, a pipeline or the GPU sees it
+AssertionError: the control was answered: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ checked refusals.test.ts:36:66
+     34| interface Checked { outcome: string; issues: JsonObject[]; reached: { …
+     35| function checked(reply: JsonObject, what: string): Checked {
+     36|   expect(reply['code'], `${what} was answered: ${shown(reply)}`).toBeU…
+       |                                                                  ^
+     37|   const r = obj(reply['reached'], `${what}: reached`);
+     38|   return {
+ ❯ checkAll refusals.test.ts:55:19
+ ❯ refusals.test.ts:62:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/26]⎯
+
+ FAIL  refusals.test.ts > #380.e70d1419 a shipped operator with a loop whose count isn't fixed, an index past a declared length, or shader text is refused before it reaches the GPU > #380.e70d1419 a planted core that compiles operators without the check (--planted skips_operator_check) lets a defect reach the GPU and fails, naming it
+AssertionError: deep-gpu run --planted skips_operator_check exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ checkAll refusals.test.ts:54:19
+ ❯ refusals.test.ts:71:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/26]⎯
+
+ FAIL  seek.test.ts > #380.b40177b9 every shipped pass that uses noise seeds it from a hash of the pixel and the item's seed, never a frame counter or the clock, so seeking equals playing on the pixel hash for every shipped effect > #380.b40177b9 for every shipped effect, seeking to frames 30 and 90 equals playing to them on this machine's pixel hash, and two plays are the same
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ shipped seek.test.ts:29:15
+ ❯ seek.test.ts:63:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/26]⎯
+
+ FAIL  seek.test.ts > #380.b40177b9 every shipped pass that uses noise seeds it from a hash of the pixel and the item's seed, never a frame counter or the clock, so seeking equals playing on the pixel hash for every shipped effect > #380.b40177b9 every shipped operator that draws noise is seeded by the item's seed: its scene differs between two seeds and repeats at one
+AssertionError: the operators call was answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:158:79
+    156| export function answered(reply: JsonObject, what: string): JsonObject {
+    157|   if (reply['code'] === 'unsupported_platform') expect.fail(`INCONCLUS…
+    158|   expect(reply['code'], `${what} was answered, not refused: ${shown(re…
+       |                                                                               ^
+    159|   return reply;
+    160| }
+ ❯ operatorsReply helpers.ts:325:3
+ ❯ shipped seek.test.ts:29:15
+ ❯ seek.test.ts:70:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/26]⎯
+
+ FAIL  seek.test.ts > #380.b40177b9 every shipped pass that uses noise seeds it from a hash of the pixel and the item's seed, never a frame counter or the clock, so seeking equals playing on the pixel hash for every shipped effect > #380.b40177b9 a planted program that seeds the shipped noise from the session's frame counter (--planted noise_from_frame_counter) fails seek against play, naming the effect
+AssertionError: deep-gpu run --planted noise_from_frame_counter exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:149:3
+ ❯ shipped seek.test.ts:29:30
+ ❯ seek.test.ts:87:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/26]⎯
+
+ FAIL  seek.test.ts > #380.b40177b9 every shipped pass that uses noise seeds it from a hash of the pixel and the item's seed, never a frame counter or the clock, so seeking equals playing on the pixel hash for every shipped effect > #380.b40177b9 a planted program that seeds the shipped noise from the clock (--planted noise_from_clock) fails seek against play, naming the effect
+AssertionError: deep-gpu run --planted noise_from_clock exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:140:139
+    138|   const name = `${BIN} ${args.join(' ')}`;
+    139|   expect(s.timedOut, `${name} finished within its timeout`).toBe(false…
+    140|   expect(s.status, `${name} exited 0 (${s.signal ?? 'no signal'}); std…
+       |                                                                                                                                           ^
+    141|   expect(s.lines.length, `${name}: one output line per input line`).to…
+    142|   const answer = obj(s.lines[0], `${name}: the answer`);
+ ❯ run1 helpers.ts:149:3
+ ❯ shipped seek.test.ts:29:30
+ ❯ seek.test.ts:87:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/26]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  26 failed | 1 passed | 1 skipped (28)
+   Start at  15:33:45
+   Duration  431.02s (tests 100%)
+

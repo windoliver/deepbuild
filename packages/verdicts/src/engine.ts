@@ -111,16 +111,18 @@ class Selection {
   /** Run IDs whose records differ, by check: none of those records counts, whichever arrived first. */
   readonly conflicts = new Map<string, Map<string, Set<RunOutcome>>>();
   constructor(private readonly claim: ClaimInput) {
-    const byId = new Map<string, Map<string, Run>>();
+    const byId = new Map<string, Run[]>();
     for (const r of claim.runs) {
-      const copies = byId.get(r.run) ?? new Map<string, Run>();
-      copies.set(canonical(r), r);
-      byId.set(r.run, copies);
+      const records = byId.get(r.run);
+      if (records) records.push(r);
+      else byId.set(r.run, [r]);
     }
     this.runs = [];
-    for (const [id, copies] of byId) {
-      if (copies.size === 1) { this.runs.push(...copies.values()); continue; }
-      for (const r of copies.values()) {
+    for (const [id, records] of byId) {
+      // Only a run ID with more than one record is compared, by content: identical copies are one record.
+      const copies = records.length === 1 ? records : [...new Map(records.map((r) => [canonical(r), r])).values()];
+      if (copies.length === 1) { this.runs.push(copies[0]!); continue; }
+      for (const r of copies) {
         const byCheck = this.conflicts.get(r.check) ?? new Map<string, Set<RunOutcome>>();
         byCheck.set(id, (byCheck.get(id) ?? new Set<RunOutcome>()).add(r.outcome));
         this.conflicts.set(r.check, byCheck);
@@ -421,23 +423,22 @@ export function verdict(claim: ClaimInput): Verdict {
     asks.push({ kind: 'authority', question: `Approve ${approve} as the check for ${reqs.join(', ')}?`, req: reqs.length === 1 ? reqs[0]! : null, check: approve });
   }
   const outcomes: Result[] = [...judged.map((j) => j.result.outcome), ...requirements.map((r) => r.outcome)];
+  /** The claim itself is INVALID: its reason goes first, with an open item naming what closes it. */
+  const invalid = (why: string, evidence: string): void => {
+    outcomes.push('INVALID');
+    reasons.unshift(why);
+    const scope = { repo: claim.repo, task: claim.task, req: null };
+    const text = `INVALID: ${why}`;
+    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence, depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+  };
   const badState = (claim.state ?? []).filter((d) => !HEX64.test(d));
   if (badState.length) {
-    outcomes.push('INVALID');
-    const why = `state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`;
-    reasons.unshift(why);
-    const scope = { repo: claim.repo, task: claim.task, req: null };
-    const text = `INVALID: ${why}`;
-    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'state digests as sha256 hex from the workspace\'s state sources', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+    invalid(`state digest${badState.length === 1 ? '' : 's'} ${sorted(badState).join(', ')} ${badState.length === 1 ? 'isn\'t' : 'aren\'t'} a sha256, so the verdict can't pin to the workspace's state`,
+      'state digests as sha256 hex from the workspace\'s state sources');
   }
   if (!claim.checks.length) {
-    outcomes.push('INVALID');
     const reqs = claim.requirements.map((q) => q.req);
-    const why = `no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`;
-    reasons.unshift(why);
-    const scope = { repo: claim.repo, task: claim.task, req: null };
-    const text = `INVALID: ${why}`;
-    items.push({ id: openItemId(text, scope), text, scope, check: null, closes_with: { evidence: 'a check selected for the claim', depth: null, environment: null, runs_needed: 0 }, needs_you: false });
+    invalid(`no check was selected for the claim${reqs.length ? `, so nothing checks ${reqs.join(', ')}` : ''}`, 'a check selected for the claim');
   } else if (!claim.requirements.length && claim.checks.every((c) => c.source === 'own')) {
     // With no requirement to cover, the claim itself is what its checks cover, and the agent's own never pass it.
     const passed = judged.find((j) => j.result.outcome === 'PASS');

@@ -67,20 +67,20 @@ fn paint_line(bounds: Bounds<Pixels>, values: &[f64], color: Hsla, window: &mut 
     let low = values.iter().cloned().fold(f64::INFINITY, f64::min);
     let high = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let spread = if high > low { high - low } else { 1.0 };
-    let mut path = PathBuilder::stroke(px(2.));
-    for (index, value) in values.iter().enumerate() {
-        let x = bounds.origin.x + bounds.size.width * (index as f32 / (values.len() - 1) as f32);
-        let y = bounds.origin.y
-            + bounds.size.height * (1.0 - ((value - low) / spread) as f32 * 0.84 - 0.08);
-        if index == 0 {
-            path.move_to(point(x, y));
-        } else {
-            path.line_to(point(x, y));
-        }
-    }
-    if let Ok(path) = path.build() {
-        window.paint_path(path, color);
-    }
+    let w = f64::from(f32::from(bounds.size.width));
+    let h = f64::from(f32::from(bounds.size.height));
+    let points = values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let x = w * (index as f64 / (values.len() - 1) as f64);
+            let y = h * (1.0 - ((value - low) / spread) * 0.84 - 0.08);
+            [x, y]
+        })
+        .collect();
+    // The canvas's stroke paint, 2 px wide: no view paints a line of its own (#380).
+    let origin = [f32::from(bounds.origin.x), f32::from(bounds.origin.y)];
+    deep_marks_gpui::paint(&deep_marks_gpui::stroke(points, 2.0), origin, color, window);
 }
 
 /// A script's retained canvas state: items by ID, each a list of values.

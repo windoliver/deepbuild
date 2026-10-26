@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Map, Value};
 
-use super::{as_object, kind_text, member, Issue};
+use super::{kind_text, member, Issue};
 use crate::grammar::{Handle, Path, Scheme, Section};
 use crate::template::{self, Part};
 
@@ -71,7 +71,7 @@ const NUMBER_WORDS: &[&str] = &[
 ];
 
 pub(crate) fn check(doc: &Value, issues: &mut Vec<Issue>) {
-    let items = member(doc, "items").and_then(as_object);
+    let items = member(doc, "items").and_then(Value::as_object);
     status_bindings(doc, items, issues);
     if let Some(items) = items {
         status_roles(items, issues);
@@ -90,7 +90,7 @@ fn shows_number(text: &str) -> bool {
 fn numbers(doc: &Value, items: &Map<String, Value>, issues: &mut Vec<Issue>) {
     // The texts a bound value fills: each shows its reading, with its source and as-of time.
     let sourced: BTreeSet<&str> = member(doc, "bound_values")
-        .and_then(as_object)
+        .and_then(Value::as_object)
         .into_iter()
         .flat_map(|b| b.values())
         .filter_map(|b| member(b, "target").and_then(Value::as_str))
@@ -98,7 +98,7 @@ fn numbers(doc: &Value, items: &Map<String, Value>, issues: &mut Vec<Issue>) {
         .collect();
     let binds = |key: &str| {
         member(doc, key)
-            .and_then(as_object)
+            .and_then(Value::as_object)
             .is_some_and(|m| !m.is_empty())
     };
     let binds_status_or_reading = binds("status_bindings") || binds("bound_values");
@@ -184,25 +184,26 @@ fn template_numbers(doc: &Value, id: &str, t: &str, binds: bool, issues: &mut Ve
     }
 }
 
-/// The path to the first status role under `value`: a `role`, or an entry of a `range`.
-fn status_role(value: &Value, at: &str) -> Option<(String, String)> {
+/// The path under `value` to its first status role (a `role`, or an entry of a `range`), each
+/// step after a `/`, and the role. The path is written only for a role found, since every item's
+/// params are searched.
+fn status_role(value: &Value) -> Option<(String, String)> {
     match value {
-        Value::Object(map) => map.iter().find_map(|(k, v)| {
-            let here = format!("{at}/{k}");
-            match (k.as_str(), v) {
-                ("role", Value::String(s)) if s.starts_with(STATUS_ROLE) => Some((here, s.clone())),
-                ("range", Value::Array(list)) => list.iter().enumerate().find_map(|(i, r)| {
-                    r.as_str()
-                        .filter(|s| s.starts_with(STATUS_ROLE))
-                        .map(|s| (format!("{here}/{i}"), s.to_string()))
-                }),
-                _ => status_role(v, &here),
+        Value::Object(map) => map.iter().find_map(|(k, v)| match (k.as_str(), v) {
+            ("role", Value::String(s)) if s.starts_with(STATUS_ROLE) => {
+                Some((format!("/{k}"), s.clone()))
             }
+            ("range", Value::Array(list)) => list.iter().enumerate().find_map(|(i, r)| {
+                r.as_str()
+                    .filter(|s| s.starts_with(STATUS_ROLE))
+                    .map(|s| (format!("/{k}/{i}"), s.to_string()))
+            }),
+            _ => status_role(v).map(|(path, role)| (format!("/{k}{path}"), role)),
         }),
         Value::Array(list) => list
             .iter()
             .enumerate()
-            .find_map(|(i, v)| status_role(v, &format!("{at}/{i}"))),
+            .find_map(|(i, v)| status_role(v).map(|(path, role)| (format!("/{i}{path}"), role))),
         _ => None,
     }
 }
@@ -213,12 +214,12 @@ fn status_roles(items: &Map<String, Value>, issues: &mut Vec<Issue>) {
         let Some(params) = member(item, "params") else {
             continue;
         };
-        if let Some((path, role)) = status_role(params, &format!("items/{id}/params")) {
+        if let Some((path, role)) = status_role(params) {
             scales.insert(id.as_str());
             issues.push(Issue::error(
                 "status_color_unbound",
                 id,
-                path,
+                format!("items/{id}/params{path}"),
                 json!(role),
                 "names a status color itself; a status color comes only through a status binding",
             ));
@@ -247,12 +248,12 @@ fn status_roles(items: &Map<String, Value>, issues: &mut Vec<Issue>) {
 }
 
 fn status_bindings(doc: &Value, items: Option<&Map<String, Value>>, issues: &mut Vec<Issue>) {
-    let Some(bindings) = member(doc, "status_bindings").and_then(as_object) else {
+    let Some(bindings) = member(doc, "status_bindings").and_then(Value::as_object) else {
         return;
     };
     for (key, binding) in bindings {
         let at = format!("status_bindings/{key}");
-        let Some(fields) = as_object(binding) else {
+        let Some(fields) = binding.as_object() else {
             issues.push(Issue::error(
                 "out_of_range",
                 key,

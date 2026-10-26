@@ -72,6 +72,21 @@ function build(lean) {
   if (!fails.length) fails.push(`FAIL build: lake build failed: ${log.trim().split('\n').at(-1) ?? `exit ${r.status}`}`);
   return { fails, log };
 }
+/** The pinned toolchain with the model built, or null once its BLOCKED or FAIL lines are printed. */
+function built() {
+  const lean = toolchain();
+  if (lean.blocked) {
+    console.log(lean.blocked);
+    return null;
+  }
+  const { fails, log } = build(lean);
+  if (fails.length) {
+    for (const line of fails) console.log(line);
+    console.error(log);
+    return null;
+  }
+  return lean;
+}
 
 /** Each theorem's axioms, read with #print axioms. */
 function axioms(lean) {
@@ -91,17 +106,8 @@ function axioms(lean) {
 }
 
 function lane() {
-  const lean = toolchain();
-  if (lean.blocked) {
-    console.log(lean.blocked);
-    return 1;
-  }
-  const built = build(lean);
-  if (built.fails.length) {
-    for (const line of built.fails) console.log(line);
-    console.error(built.log);
-    return 1;
-  }
+  const lean = built();
+  if (!lean) return 1;
   const { found, out } = axioms(lean);
   let failed = false;
   for (const theorem of THEOREMS) {
@@ -137,17 +143,8 @@ function vectors(args) {
     console.log('INVALID vectors: give --seed <a whole number in [0, 2^31)> and --count <a whole number>');
     return 1;
   }
-  const lean = toolchain();
-  if (lean.blocked) {
-    console.log(lean.blocked);
-    return 1;
-  }
-  const built = build(lean);
-  if (built.fails.length) {
-    for (const line of built.fails) console.log(line);
-    console.error(built.log);
-    return 1;
-  }
+  const lean = built();
+  if (!lean) return 1;
   const r = spawnSync(join(model, '.lake/build/bin/vectors'), [String(seed), String(count)], { cwd: model, env: lean.env, stdio: ['ignore', 'inherit', 'inherit'] });
   return r.status ?? 1;
 }

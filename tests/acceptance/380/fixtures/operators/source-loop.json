@@ -1,0 +1,41 @@
+{
+  "id": "glow-loop",
+  "kind": "pass",
+  "origin": "shipped",
+  "about": "A pass written in the WGSL subset whose loop runs until the value it sums passes a bound: no count fixed at check.",
+  "inputs": {
+    "src": {
+      "type": "vec4",
+      "unit": "1",
+      "range": [
+        0,
+        1
+      ],
+      "default": [
+        0.1,
+        0.1,
+        0.1,
+        1
+      ],
+      "from": {
+        "param": "params/tint"
+      }
+    }
+  },
+  "source": {
+    "wgsl": "glow-loop-src"
+  },
+  "outputs": {
+    "color": {
+      "type": "vec4"
+    }
+  },
+  "chain": "effects",
+  "order": "a0",
+  "resolution": "full",
+  "determinism": "same_machine",
+  "cost": {
+    "ns_per_px": 0.5
+  },
+  "fallback": "look"
+}

@@ -117,7 +117,6 @@ export function shipped(): AdapterRegistry {
 
 /** The type set a published schema node takes: `true` is every type; a $ref follows draft-07 definitions. */
 function publishedTypes(node: unknown, root: Schema): Set<string> | 'any' {
-  if (node === true) return 'any';
   if (!isObject(node)) return 'any';
   if (typeof node.$ref === 'string') {
     const key = node.$ref.replace(/^#\/(definitions|\$defs)\//, '');

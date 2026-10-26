@@ -332,6 +332,26 @@ impl Camera {
     }
 }
 
+/// The key light (Light and the light policy: `light.sun`): the unit direction toward it, its
+/// illuminance in lx and whether it casts the shadow.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sun {
+    pub id: String,
+    pub toward: Vec3,
+    pub illuminance: f64,
+    pub shadow: bool,
+}
+
+/// An item of a kind another canvas module draws (particles@1 among them), as evaluated at t:
+/// its params and its world position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Other {
+    pub id: String,
+    pub kind: String,
+    pub params: Value,
+    pub pos: Vec3,
+}
+
 /// A document at t, as the GPU layer draws it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
@@ -341,6 +361,9 @@ pub struct Scene {
     /// The 3D writer layers that draw something, in layer order.
     pub layers: Vec<Layer3>,
     pub overlays: Vec<Overlay>,
+    /// The first sun in item order, which shades the solids and casts the shadow.
+    pub sun: Option<Sun>,
+    pub others: Vec<Other>,
     /// The core's glyph atlas pages the labels' glyphs sample, by page number.
     pub pages: Vec<AtlasPage>,
 }
@@ -736,6 +759,8 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
     let mut layers = Vec::new();
     let mut overlay_items = Vec::new();
     let mut bounds: Vec<Vec3> = Vec::new();
+    let mut sun = None;
+    let mut others = Vec::new();
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
@@ -848,7 +873,26 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
                     });
                 }
                 OVERLAY => overlay_items.push((layer_id.clone(), id.clone())),
-                _ => {}
+                "light.sun@1" if sun.is_none() => {
+                    // It shines along its local −Z, glTF's convention for lights.
+                    let m = world(&items, id);
+                    sun = Some(Sun {
+                        id: id.clone(),
+                        toward: normalize(turn(&m, [0.0, 0.0, 1.0])),
+                        illuminance: num(params.get("illuminance")).unwrap_or(10_000.0),
+                        shadow: params
+                            .get("shadow")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false),
+                    });
+                }
+                "light.sun@1" | "camera@1" => {}
+                _ => others.push(Other {
+                    id: id.clone(),
+                    kind: kind.to_string(),
+                    params: params.clone(),
+                    pos: origin(&world(&items, id)),
+                }),
             }
         }
         if !layer.items().is_empty() {
@@ -900,6 +944,8 @@ pub fn evaluate(doc: &Value, t: i64, look: &Look3, labels: &mut Labels) -> Resul
         ground: look.ground,
         layers,
         overlays,
+        sun,
+        others,
         pages: labels.pages(),
     })
 }
