@@ -831,7 +831,8 @@ class Host implements ExtensionHost {
         if (!conformance && !ext.resolverDrop) {
           const asks = this.options.asks;
           if (!asks) throw Error(`deep.registerResolver: this host has no asks core to consult ${id}'s resolver`);
-          ext.resolverDrop = asks.registerResolver(id, (ask) => this.ask(ext, CALL_MS, 'resolver', 'resolve', { ask }) as Promise<ResolverAnswer | undefined>);
+          // Consulted only once the package started (live), as a hook handler or an action is; before that it answers nothing and the ask goes on.
+          ext.resolverDrop = asks.registerResolver(id, (ask) => (ext.live ? this.ask(ext, CALL_MS, 'resolver', 'resolve', { ask }) as Promise<ResolverAnswer | undefined> : undefined));
         }
         return null;
       }

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
-import { openAsks, type Delivery } from '@deepbuild/asks';
+import { openAsks, type Asks, type Connection, type Delivery } from '@deepbuild/asks';
 import { fixtures } from '@deepbuild/contracts';
 import { openRecord, type RecordStore } from '@deepbuild/record';
 import { openSupervisor } from '@deepbuild/supervisor';
@@ -38,6 +38,8 @@ const release = (...folders: string[]): ReleaseEntry[] => folders.map((folder) =
   const m = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as { id: string; version: string };
   return { id: m.id, version: m.version, digest: packageDigest(folder) };
 });
+/** The asks core and record a test host was opened on, for tests that raise an ask through it. */
+const worldOf = new WeakMap<ExtensionHost, { asks: Asks; record: RecordStore }>();
 async function host(release: ReleaseEntry[], ready = true): Promise<ExtensionHost> {
   const dir = temp();
   const record: RecordStore = await openRecord({ path: join(dir, 'ledger.db'), now: Date.now });
@@ -48,6 +50,7 @@ async function host(release: ReleaseEntry[], ready = true): Promise<ExtensionHos
   const trust = await openTrust({ record, now: Date.now });
   const h = await openExtensionHost({ record, asks, supervisor, trust, home: join(dir, 'home'), now: Date.now, release });
   closing.push(h);
+  worldOf.set(h, { asks, record });
   if (ready) await h.ready();
   return h;
 }
@@ -287,5 +290,32 @@ describe('#349 a resolver registers only from the hub', () => {
     await expect(h.hook(line('hanger', 'S-hang', 'SessionStart'))).rejects.toThrow(/no loaded extension registered an adapter hanger/);
     expect((await loading).status, 'the package never finished starting').toBe('refused');
     expect((await h.adapters()).map((x) => x.name)).not.toContain('hanger');
+  }, 60_000);
+
+  it('a resolver registered by a package whose start has not finished is consulted on nothing: an ask raised meanwhile reaches you with no refusal from it', async () => {
+    const flag = join(temp(), 'hang');
+    const folder = pkgOf('test/hanging-resolver', `import { existsSync } from 'node:fs';
+export default async function (deep: any): Promise<void> {
+  await deep.registerResolver(() => ({ answer: 'blue', because: 'decision:NONE' }));
+  if (existsSync(${JSON.stringify(flag)})) await new Promise(() => undefined);
+}
+`);
+    const h = await host(release(folder));
+    const { asks, record } = worldOf.get(h)!;
+    const p = await h.install({ from: folder, builtBy: null });
+    expect((await h.check(p)).passed, JSON.stringify(await h.check(p))).toBe(true);
+    writeFileSync(flag, '');
+    const loading = h.load(p);
+    await new Promise((r) => setTimeout(r, 300));
+    const you: Connection = { writer: 'mcp:S-hang', actor: 'you', scope: 'you', session: 'S-hang' };
+    await record.append({ writer: 'hook', actor: 'you', scope: 'you', session: 'S-hang' }, { v: 1, id: '01K7HANG00000000000000000A', kind: 'session.start', ts: Date.now(), data: { agent: 'claude-code', worktree: temp(), branch: 'main', thread: 'T' } });
+    const handle = await asks.raise(you, 'deep_ask.taste', {
+      kind: 'taste', question: 'Which colour?', options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }],
+      recommended: 'blue', deadline: Date.now() + 3_600_000, fallback: 'you', default: 'blue', provisional: false, owner: 'you',
+      key: 'a'.repeat(64), pinned_to: { kind: 'evidence', ref: 'b'.repeat(64) },
+    });
+    expect(await asks.refusals(handle), 'nothing was asked of a package that has not started').toEqual([]);
+    expect((await asks.needsYou()).map((c) => c.ask)).toContain(handle);
+    expect((await loading).status, 'the package never finished starting').toBe('refused');
   }, 60_000);
 });
