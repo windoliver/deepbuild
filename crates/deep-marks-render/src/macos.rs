@@ -69,6 +69,8 @@ enum Draw {
         label: Label,
         origin: Point<Pixels>,
         color: Hsla,
+        /// text@1 `runs`: grapheme spans in their own colors.
+        runs: Vec<(std::ops::Range<usize>, Hsla)>,
     },
     /// A picture mapped onto `image_bounds` and shown inside `bounds`: an image mark, or a cached
     /// writer layer with everything under it over the whole view.
@@ -126,8 +128,9 @@ fn paint(draw: &Draw, view: Bounds<Pixels>, window: &mut Window) {
             label,
             origin,
             color,
+            runs,
         } => {
-            deep_text_gpui::paint_label(view.origin + *origin, label, *color, window);
+            deep_text_gpui::paint_runs(view.origin + *origin, label, *color, runs, window);
         }
     }
 }
@@ -655,6 +658,8 @@ impl Renderer {
                     spec,
                     origin,
                     color,
+                    runs,
+                    ..
                 } => {
                     let Some(label) = label_of(spec) else {
                         return Err(refused("bad_font", &format!("items/{item}/params/font")));
@@ -663,6 +668,7 @@ impl Renderer {
                         label,
                         origin: point(px(origin[0] as f32), px(origin[1] as f32)),
                         color: hsla(*color),
+                        runs: runs.iter().map(|r| (r.from..r.to, hsla(r.color))).collect(),
                     });
                 }
                 Mark::Shape { item, .. } => return Err(gpui_lacks(item)),
@@ -1221,6 +1227,7 @@ fn status_draws(
                     label,
                     origin: point(px(origin[0] as f32), px(origin[1] as f32)),
                     color: hsla(color),
+                    runs: Vec::new(),
                 },
             },
             None,

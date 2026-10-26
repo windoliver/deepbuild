@@ -1342,12 +1342,13 @@ mod tests {
     }
 
     #[test]
-    fn a_path_inside_a_structured_param_resolves_only_where_a_value_is() {
-        // A camera's orbit, which a channel turns (#379): `orbit` is the kind's param, and each
-        // step below it must reach a value the item's params hold.
+    fn a_step_inside_a_param_resolves_only_where_a_value_is() {
+        // A camera's `orbit/azimuth` is a part of its `orbit` param (#671); no kind gives a
+        // param's parts a schema, so each step must reach a value the item holds.
         let mut doc = base();
-        doc["items"]["cam"] = json!({"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0",
-            "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 14}, "fov": 40}});
+        let mut cam = item("cam", "main", Value::Null);
+        cam["params"] = json!({"orbit": {"azimuth": 0, "elevation": 35}, "target": [0, 0.5, 0]});
+        doc["items"] = json!({"cam": cam});
         let refused = |target: &str| {
             let mut doc = doc.clone();
             doc["channels"] = json!({"c": {"target": target}});
@@ -1366,8 +1367,9 @@ mod tests {
         }
         for target in [
             "items/cam/params/orbit/roll",
+            "items/cam/params/orbit/azimuth/deeper",
             "items/cam/params/target/3",
-            "items/cam/params/nonexistent/x",
+            "items/cam/params/fov/x",
         ] {
             assert_eq!(refused(target), Some("ref_unresolved"), "{target}");
         }

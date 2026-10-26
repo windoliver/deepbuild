@@ -1665,28 +1665,11 @@ pub(crate) fn resolve(
         }
         return Ok(());
     }
-    let known_param = |name: &str| match kind_text(target).map(|text| lookup(kinds, text)) {
-        Some(Lookup::Known { entry, saved }) => entry
-            .version(saved)
-            .unwrap_or(entry.current())
-            .param(name)
-            .is_some(),
-        _ => member(target, "params")
-            .and_then(as_object)
-            .is_some_and(|p| p.contains_key(name)),
-    };
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
-        ["params", name] => {
-            if known_param(name) {
-                Ok(())
-            } else {
-                unreachable()
-            }
-        }
-        // Inside a structured param, such as a camera's `orbit/azimuth` (#379): the param is
-        // the kind's, and each further step must reach a value the item's params hold.
-        ["params", name, rest @ ..] => {
+        // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
+        // holds: no kind gives a param's parts a schema in this slice.
+        ["params", name, rest @ ..] if !rest.is_empty() => {
             let mut cursor = member(target, "params").and_then(|p| member(p, name));
             for field in rest {
                 cursor = match cursor {
@@ -1697,7 +1680,24 @@ pub(crate) fn resolve(
                     _ => None,
                 };
             }
-            if known_param(name) && cursor.is_some() {
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
+        ["params", name] => {
+            let known = match kind_text(target).map(|text| lookup(kinds, text)) {
+                Some(Lookup::Known { entry, saved }) => entry
+                    .version(saved)
+                    .unwrap_or(entry.current())
+                    .param(name)
+                    .is_some(),
+                _ => member(target, "params")
+                    .and_then(as_object)
+                    .is_some_and(|p| p.contains_key(*name)),
+            };
+            if known {
                 Ok(())
             } else {
                 unreachable()

@@ -64,6 +64,8 @@ pub enum Planted {
     SkipsARung,
     StepsEveryWriter,
     SharesMeterWithWorker,
+    /// #381's: labels shaped at a fixed em for masks of their own, nothing in the atlas.
+    LabelMask,
 }
 
 impl Planted {
@@ -92,6 +94,7 @@ impl Planted {
             "skips_a_rung" => Planted::SkipsARung,
             "steps_every_writer" => Planted::StepsEveryWriter,
             "shares_meter_with_worker" => Planted::SharesMeterWithWorker,
+            "label_mask" => Planted::LabelMask,
             _ => return None,
         })
     }

@@ -9,6 +9,7 @@ use parley::{
 };
 
 use crate::fonts::{self, Role, FACES};
+use crate::unicode::{grapheme_starts, LineBreaks};
 
 /// Text's horizontal alignment within its box (`align: start | center | end = start`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,6 +77,8 @@ pub struct Glyph {
     pub id: u32,
     pub x: f32,
     pub y: f32,
+    /// The grapheme cluster (UAX #29) of the shown text the glyph belongs to.
+    pub grapheme: usize,
 }
 
 /// A shaped text: its glyphs and the box they take.
@@ -110,8 +113,8 @@ pub struct Fit {
 
 /// The shaper: a font collection of the bundled faces and parley's layout context.
 pub struct Shaper {
-    fonts: FontContext,
-    layout: LayoutContext<()>,
+    pub(crate) fonts: FontContext,
+    pub(crate) layout: LayoutContext<()>,
 }
 
 impl Default for Shaper {
@@ -149,9 +152,12 @@ impl Shaper {
     }
 
     fn layout(&mut self, spec: &Spec<'_>, text: &str) -> Layout<()> {
+        let decide = LineBreaks::new(text).into_override();
         let mut builder = self
             .layout
             .ranged_builder(&mut self.fonts, text, 1.0, false);
+        // Lines break at UAX #14's opportunities at the pinned Unicode version (17.0.0).
+        builder.set_line_break_override(Some(&*decide));
         builder.push_default(StyleProperty::FontFamily(FontFamily::named(
             spec.role.family(),
         )));
@@ -182,6 +188,8 @@ impl Shaper {
             shown: shown.to_owned(),
             ..Shaped::default()
         };
+        let starts = grapheme_starts(shown);
+        let grapheme = |byte: usize| starts.partition_point(|&s| s <= byte).saturating_sub(1);
         for (index, line) in layout.lines().enumerate() {
             if max_lines.is_some_and(|max| index >= usize::from(max)) {
                 break;
@@ -196,13 +204,19 @@ impl Shaper {
                 };
                 let font = run.run().font().clone();
                 let size = run.run().font_size();
-                for glyph in run.positioned_glyphs() {
+                // The run's clusters in the order its glyphs are drawn, each with its glyphs.
+                let clusters = run.run().visual_clusters().flat_map(|c| {
+                    let first = c.text_range().start;
+                    c.glyphs().map(move |_| first)
+                });
+                for (glyph, byte) in run.positioned_glyphs().zip(clusters) {
                     shaped.glyphs.push(Glyph {
                         font: font.clone(),
                         size,
                         id: glyph.id,
                         x: glyph.x,
                         y: glyph.y,
+                        grapheme: grapheme(byte),
                     });
                 }
             }
