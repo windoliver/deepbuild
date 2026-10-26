@@ -1,0 +1,10 @@
+{
+  "format": 1,
+  "name": "legal-order-shuffle",
+  "description": "Every fixture each build set's canvas modules register, shown once and evaluated at each time below with a render-back snapshot, unshuffled and then under each shuffle seed (the scenario's `shuffle`, #387): every node's key and result, the step log and the snapshot must equal the unshuffled frame's, each order must be legal, and across a build's fixtures the shuffled orders must not all be the unshuffled one.",
+  "builds": ["core", "r1"],
+  "fixtures": "every entry of the build's `fixtures` call, with its `record`",
+  "times": ["0s", "0.5s", "1s"],
+  "shuffles": [1, 2, 3, 4, 5, 6, 7, 8],
+  "compare": ["nodes.key", "nodes.result", "steps", "snapshot"]
+}
