@@ -1,33 +1,24 @@
-// #315 AC2, AC8 and AC9: deep-hook's numbers. Each timed call is first shown to be the call the issue means (the
+// #315 AC8 and AC9: deep-hook's numbers. Each timed call is first shown to be the call the issue means (the
 // matcher ran and named its entries; a late hub's call was failed open and spooled marked late; the fail_closed
-// entry denied), so a number never comes from a program that skipped the work. The numbers count only on a
+// entry denied), so a number never comes from a program that skipped the work. The overhead budget (AC2 and the
+// "under 10 ms at p95" half of AC8) is budgets-overhead-redraft.test.ts (blind redraft, AC2-AC8-REDRAFT.md, #745). The numbers count only on a
 // reference Mac (Mac15,7 or Mac15,12) on mains power, Low Power Mode off, no thermal warning, and are judged by the
 // design's rule for timing results (five runs; PASS when all are within the limit, FAIL when all are over it by
 // more than the margin, otherwise INCONCLUSIVE); anywhere else they are skipped as INCONCLUSIVE, never passed.
-// Overhead is measured with hyperfine (AC9); without hyperfine on PATH it is INCONCLUSIVE, naming hyperfine. The
-// merge-base comparison is the perf lane's (scripts/benchmark.mjs, benchmarks/budgets.json), as #16's is.
+// The merge-base comparison is the perf lane's (scripts/benchmark.mjs, benchmarks/budgets.json), as #16's is.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, type TestContext } from 'vitest';
 import {
   bash, buildDeepHook, childEnv, cleanup, decision, environmentProblem, forwarder, hook, hookTimed, hyperfinePath, jsonLines, judge, makeHome,
-  MATCHED, newSession, NODE, p95, readSpool, REPO, run, setAddress, shared, shown, startHub, stopHub, tempDir, writeRules, type Hub, type Session,
+  MATCHED, newSession, NODE, p95, readSpool, REPO, run, setAddress, shown, startHub, stopHub, tempDir, writeRules, type Hub, type Session,
 } from './helpers.ts';
 
 afterEach(cleanup, 60_000);
 
 const problem = environmentProblem();
 const TASKS = { 'deep-hook-overhead': 'overhead', 'deep-hook-fail-open': 'fail-open' } as const;
-
-/** A native no-op binary, the floor: `fn main() {}` built by rustc with the release profile's optimisation. */
-const noop = shared(async () => {
-  const dir = tempDir();
-  writeFileSync(join(dir, 'noop.rs'), 'fn main() {}\n');
-  const r = await run('rustc', ['-C', 'opt-level=3', '-o', join(dir, 'noop'), join(dir, 'noop.rs')], { cwd: dir });
-  if (r.code !== 0) throw Error(`BLOCKED: rustc couldn't build the no-op floor: ${r.stderr}`);
-  return join(dir, 'noop');
-});
 
 /** A home with rules.json, a running hub and one session: what every forwarded call below goes to. */
 async function upHome(): Promise<{ home: string; hub: Hub; s: Session }> {
@@ -52,32 +43,6 @@ async function matcherRuns(binary: string): Promise<void> {
   }
 }
 
-/** Five hyperfine runs of 1,000 forwarded `ls` calls each, beside the no-op floor: p95 overhead in ms per run. */
-const overhead = shared(async (): Promise<number[]> => {
-  const hyperfine = hyperfinePath()!;
-  const binary = await buildDeepHook({ release: true });
-  const floor = await noop();
-  const { home, hub, s } = await upHome();
-  const dir = tempDir();
-  const input = join(dir, 'ls.json');
-  writeFileSync(input, JSON.stringify(bash(s, 'ls')));
-  const runs: number[] = [];
-  try {
-    for (let i = 0; i < 5; i++) {
-      const out = join(dir, `run-${i}.json`);
-      const r = spawnSync(hyperfine, ['-N', '--runs', '1000', '--warmup', '20', '--input', input, '--export-json', out, floor, `${binary} claude-code PreToolUse`], { cwd: s.cwd, env: childEnv(home), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-      if (r.status !== 0) throw Error(`BLOCKED: hyperfine exited ${r.status}: ${r.stderr}`);
-      const results = (JSON.parse(readFileSync(out, 'utf8')) as { results: { times: number[] }[] }).results;
-      const [base, call] = results.map((x) => x.times.map((t) => t * 1000));
-      if (!base || !call || base.length < 1000 || call.length < 1000) throw Error('BLOCKED: hyperfine reported fewer than 1,000 runs of each command');
-      runs.push(p95(call) - p95(base));
-    }
-  } finally {
-    await stopHub(hub);
-  }
-  return runs;
-});
-
 /** A home whose hub is stopped with SIGSTOP: every call there fails open, late. */
 async function lateHome(): Promise<{ home: string; hub: Hub; s: Session; resume(): Promise<void> }> {
   const { home, hub, s } = await upHome();
@@ -94,16 +59,6 @@ function failsOpen(binary: string, late: { home: string; s: Session }): void {
   const denied = hookTimed(late.home, late.s, 'PreToolUse', bash(late.s, 'pkill -f node'), { binary, timeoutMs: 10_000 });
   expect(decision(denied), `with the hub stopped by SIGSTOP, \`pkill -f node\` is denied: ${shown(denied)}`).toBe('deny');
 }
-
-describe('AC2 #315.9543886e overhead under 10 ms at p95 on top of process start, measured over 1,000 calls', () => {
-  it('AC2 1,000 forwarded PreToolUse calls, with the matcher running, against the no-op floor: p95 overhead under 10 ms', async (ctx: TestContext) => {
-    const binary = await buildDeepHook({ release: true });
-    await matcherRuns(binary);
-    if (problem) ctx.skip(`INCONCLUSIVE (reading only): ${problem}`);
-    if (!hyperfinePath()) ctx.skip('INCONCLUSIVE: hyperfine is not installed (AC9: overhead is measured with hyperfine)');
-    judge(ctx, 'AC2 overhead p95 over the no-op floor (ms)', await overhead(), 10);
-  }, 900_000);
-});
 
 describe('AC8 #315.515d4e08 budgets on the reference Mac in the local preflight, compared with the merge base', () => {
   it('AC8 the perf lane has deep-hook\'s two tasks, each a #315 first measurement, valid against the merge base\'s budgets', async () => {
@@ -122,14 +77,6 @@ describe('AC8 #315.515d4e08 budgets on the reference Mac in the local preflight,
   it.each(Object.values(TASKS))('AC8 `node benchmarks/deep-hook.mjs %s` runs and exits 0', async (mode) => {
     const r = await run(NODE, [join(REPO, 'benchmarks/deep-hook.mjs'), mode], { timeoutMs: 900_000 });
     expect(r.code, `benchmarks/deep-hook.mjs ${mode}: ${r.stderr.slice(-2000)}`).toBe(0);
-  }, 900_000);
-
-  it('AC8 under 10 ms at p95 on top of process start (the AC2 measurement, with hyperfine)', async (ctx: TestContext) => {
-    const binary = await buildDeepHook({ release: true });
-    await matcherRuns(binary);
-    if (problem) ctx.skip(`INCONCLUSIVE (reading only): ${problem}`);
-    if (!hyperfinePath()) ctx.skip('INCONCLUSIVE: hyperfine is not installed (AC9: overhead is measured with hyperfine)');
-    judge(ctx, 'AC8 overhead p95 over the no-op floor (ms)', await overhead(), 10);
   }, 900_000);
 
   it('AC8 under 50 ms to fail open: a PreToolUse against a hub stopped with SIGSTOP, from spawn to exit, p95 of 50 calls', async (ctx: TestContext) => {
