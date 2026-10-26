@@ -176,13 +176,19 @@ impl Spin {
             pass.set_bind_group(0, &self.bind, &[]);
             pass.draw(0..3, 0..1);
         }
-        encoder.resolve_query_set(&self.query, 0..2, &self.resolve, 0);
-        encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, 16);
         let buffer = encoder.finish();
         let started = Instant::now();
         device.queue.submit([buffer]);
         let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
         let wall = started.elapsed().as_nanos() as u64;
+        // The samples are resolved in a submission of their own, once the pass's has completed:
+        // resolved in the pass's command buffer, the end-of-pass sample can land after the
+        // resolve on Apple GPUs, so a trial reads the last trial's end, or nothing.
+        let mut encoder = device.device.create_command_encoder(&Default::default());
+        encoder.resolve_query_set(&self.query, 0..2, &self.resolve, 0);
+        encoder.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, 16);
+        device.queue.submit([encoder.finish()]);
+        let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
         let slice = self.read.slice(..);
         slice.map_async(wgpu::MapMode::Read, |_| {});
         let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
