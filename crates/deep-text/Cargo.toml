@@ -11,6 +11,15 @@ publish = false
 # `system` feature, so CoreText, fontconfig and DirectWrite are never reached; swash isn't linked.
 [dependencies]
 parley = { version = "0.12", default-features = false, features = ["std"] }
+# Issue #381: the analysis parley's layout runs (UAX #14 opportunities, UAX #29 graphemes, UAX #9
+# levels), read as the layout reads it, and the properties it reads them from; already in parley's tree.
+parley_engine = { version = "0.12", default-features = false, features = ["std"] }
+parley_data = { version = "0.12", default-features = false }
+icu_properties = { version = "2.3", default-features = false }
+# UAX #14 at Unicode 17.0.0: parley's stable line segmenter still runs 15.1's rules, so the layout
+# takes its opportunities from icu_segmenter's 17.0 state machine, behind `unstable`, through
+# parley's line-break override.
+icu_segmenter = { version = "2.3", default-features = false, features = ["compiled_data", "unstable"] }
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline"] }
 # Only for its feature: Vello CPU's scalar level exists on arm64 and x86_64 with it alone, and the
 # atlas rasterizes at that level so every platform computes the same alpha (design: Decided, Goldens).

@@ -9,6 +9,7 @@ use super::{
     as_f64, as_object, kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS,
     AT_VECTORS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
+use crate::cost::Coefficients;
 use crate::grammar::{
     forms_for, Handle, Id, Path, Refusal, Section, Time, TimeContext, UnitContext, UnitLiteral,
 };
@@ -68,17 +69,29 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds())
+    check_by(doc, sealed, &sealed.kinds(), None)
+}
+
+/// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
+/// Mac's (`deep-show`'s planted check that estimates on its own machine).
+pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> CheckResult {
+    check_by(doc, sealed, &sealed.kinds(), Some(coefficients))
 }
 
 /// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
 /// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
 pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
-    check_by(doc, &registry::core(), kinds)
+    check_by(doc, &registry::core(), kinds, None)
 }
 
-/// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`.
-fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
+/// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
+/// from `coefficients` (the reference Mac's when `None`).
+fn check_by(
+    doc: &Value,
+    sealed: &Sealed,
+    kinds: &Registry,
+    coefficients: Option<&Coefficients>,
+) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
@@ -142,6 +155,7 @@ fn check_by(doc: &Value, sealed: &Sealed, kinds: &Registry) -> CheckResult {
     }
 
     module_checks(&lowered, sealed, &mut issues, &mut notices);
+    budget_check(&lowered, sealed, coefficients, &mut issues);
     check_id_maps(&lowered, &mut issues);
     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
@@ -234,6 +248,64 @@ fn module_checks(
         issue.ids = costly;
         issues.push(issue);
     }
+}
+
+/// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
+/// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
+/// per frame passes one of its caps is refused, naming its top three contributors, with the
+/// estimate and the fingerprint of the machine its coefficients were measured on.
+fn budget_check(
+    lowered: &Value,
+    sealed: &Sealed,
+    coefficients: Option<&Coefficients>,
+    issues: &mut Vec<Issue>,
+) {
+    let Some((class, limits)) = crate::budget::of(lowered) else {
+        return;
+    };
+    let reference;
+    let coefficients = match coefficients {
+        Some(c) => c,
+        None => {
+            reference = Coefficients::reference();
+            &reference
+        }
+    };
+    let e = crate::cost::estimate(lowered, sealed, coefficients);
+    let over: Vec<String> = [
+        ("CPU", e.cpu_ms, limits.cpu_ms, "ms"),
+        ("GPU", e.gpu_ms, limits.gpu_ms, "ms"),
+        (
+            "GPU memory",
+            e.gpu_mb,
+            Some(limits.gpu_bytes as f64 / 1e6),
+            "MB",
+        ),
+    ]
+    .iter()
+    .filter_map(|(what, est, cap, unit)| {
+        cap.filter(|c| est > c)
+            .map(|c| format!("{what} {est:.3} {unit} past {c} {unit}"))
+    })
+    .collect();
+    if over.is_empty() {
+        return;
+    }
+    let mut issue = Issue::envelope(
+        "over_budget",
+        "budget".into(),
+        json!({
+            "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "fingerprint": coefficients.fingerprint,
+        }),
+        &format!(
+            "the document's estimate per frame passes its {} class: {}",
+            class.name(),
+            over.join(", ")
+        ),
+    );
+    issue.ids = e.top(3);
+    issues.push(issue);
 }
 
 /// The issues of `doc`, a patch's result that changed only the items `changed`, re-checked
@@ -1595,6 +1667,25 @@ pub(crate) fn resolve(
     }
     match fields.as_slice() {
         [] | ["params"] | ["at"] => Ok(()),
+        // A step inside a param, such as a camera's `orbit/azimuth`, must reach a value the item
+        // holds: no kind gives a param's parts a schema in this slice.
+        ["params", name, rest @ ..] if !rest.is_empty() => {
+            let mut cursor = member(target, "params").and_then(|p| member(p, name));
+            for field in rest {
+                cursor = match cursor {
+                    Some(Value::Object(map)) => map.get(*field),
+                    Some(Value::Array(list)) => {
+                        field.parse::<usize>().ok().and_then(|i| list.get(i))
+                    }
+                    _ => None,
+                };
+            }
+            if cursor.is_some() {
+                Ok(())
+            } else {
+                unreachable()
+            }
+        }
         ["params", name] => {
             let known = match kind_text(target).map(|text| lookup(kinds, text)) {
                 Some(Lookup::Known { entry, saved }) => entry

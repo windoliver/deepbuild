@@ -5,9 +5,11 @@
 //! and the lint lane (`scripts/canvas-lint.mjs`) refuses anything else.
 
 pub mod base64;
+pub mod budget;
 pub mod camera;
 pub mod canon;
 pub mod color;
+pub mod cost;
 pub mod document;
 pub mod draw;
 pub mod grammar;
@@ -18,3 +20,4 @@ pub mod render;
 pub mod schedule;
 pub mod session;
 pub mod show;
+pub mod template;
