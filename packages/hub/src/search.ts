@@ -1,29 +1,36 @@
 // deep_search (#26): read-only search of your wiki, past decisions and the project's spec, and, for a call bound to
 // a session, that session's own open items and verdicts; every hit cites its source. A call bound to no session
-// reads only what belongs to no session. The wiki is read through an index@1 fill, never as the source of truth.
+// reads only what belongs to no session. The wiki is never the index's to vouch for (#355): the default index is
+// SQLite FTS5 over the claims in force, in the ledger; any other is an index@1 fill rebuilt from the pages' claim
+// lines. Either way each hit's quote, marks and sources come from the claim's record, which also drops a claim out
+// of the caller's scope, superseded or rolled back.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseClaimLine } from '@deepbuild/record';
 
-export interface Hit { source: string; quote: string }
-/** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it. */
+export interface Hit { source: string; quote: string; outside?: boolean; known?: string; proof?: number; sources?: unknown[] }
+export interface Claim { id: string; page: string; source: string; text: string }
+interface IndexHit { claim: string; page: string; quote: string; source: string; [mark: string]: unknown }
+/** index@1's surface, as packages/conformance/src/slots/wiki-index.ts defines it; a fill that runs elsewhere answers later. */
 export interface IndexFill {
   slot: 'index@1';
-  rebuild(claims: { id: string; page: string; source: string; text: string }[]): void;
-  search(query: string): { claim: string; page: string; quote: string; source: string }[];
+  rebuild(claims: Claim[]): unknown;
+  search(query: string): IndexHit[] | Promise<IndexHit[]>;
 }
 /** The most hits one search returns, newest first; `more` says how many it left out. */
 const MAX_HITS = 20;
 const QUOTE = 400;
+/** Pages the wiki generates from other pages' claims, such as its standing questions: no index holds them twice. */
+const VIEWS = 'questions/';
 
 /** The words a query asks for: every hit holds each of them as a word. */
 export const words = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 const holds = (text: string, wanted: readonly string[]): boolean => { const have = new Set(words(text)); return wanted.every((w) => have.has(w)); };
 
-/** The wiki's index: the test's fill when DEEP_HUB_TEST_INDEX names one, else a keyword index of the wiki's pages, a claim per paragraph. */
-export async function openIndex(wiki: string, module?: string): Promise<IndexFill> {
-  const fill = module ? ((await import(pathToFileURL(module).href)) as { default: () => IndexFill }).default() : keywordIndex();
-  const claims: { id: string; page: string; source: string; text: string }[] = [];
+/** The claims on the wiki's pages, each by `<page>#<id>`, so one ID on two pages stays two claims. */
+export function pageClaims(wiki: string): Claim[] {
+  const claims: Claim[] = [];
   const walk = (dir: string): void => {
     let names: string[];
     try { names = readdirSync(dir); } catch { return; }
@@ -31,32 +38,83 @@ export async function openIndex(wiki: string, module?: string): Promise<IndexFil
       const path = join(dir, name);
       if (name.endsWith('.md')) {
         const page = relative(wiki, path).slice(0, -3);
-        readFileSync(path, 'utf8').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).forEach((text, i) => claims.push({ id: `c${i + 1}`, page, source: `wiki/${page}.md`, text }));
+        if (page.startsWith(VIEWS)) continue;
+        for (const line of readFileSync(path, 'utf8').split('\n')) {
+          const parsed = parseClaimLine(line);
+          if (parsed && typeof parsed.record.id === 'string') claims.push({ id: `${page}#${parsed.record.id}`, page, source: `wiki/${page}.md`, text: parsed.text });
+        }
       } else if (!name.includes('.')) walk(path);
     }
   };
   walk(wiki);
-  fill.rebuild(claims);
+  return claims;
+}
+
+/** The test's index when DEEP_HUB_TEST_INDEX names one, rebuilt from the pages; undefined for the ledger's own. */
+export async function openIndex(wiki: string, module?: string): Promise<IndexFill | undefined> {
+  if (!module) return undefined;
+  const fill = ((await import(pathToFileURL(module).href)) as { default: () => IndexFill }).default();
+  await fill.rebuild(pageClaims(wiki));
   return fill;
 }
-function keywordIndex(): IndexFill {
-  let claims: { id: string; page: string; source: string; text: string }[] = [];
-  return {
-    slot: 'index@1',
-    rebuild(next) { claims = [...next]; },
-    search(query) { const wanted = words(query); return claims.filter((c) => holds(c.text, wanted)).map((c) => ({ claim: c.id, page: c.page, quote: c.text, source: c.source })); },
-  };
+
+const list = (values: readonly string[]): string => values.map((v) => `'${v.replace(/'/g, "''")}'`).join(', ');
+/** The ledger's index: every query word an FTS5 term, and each hit holding every word as a word, as the reference index reads it. */
+async function ledgerSearch(input: SearchIn, wanted: readonly string[]): Promise<IndexHit[]> {
+  // Each word is letters and digits only, so it goes into the SQL as it is.
+  const rows = (await input.raw(`SELECT handle, page, text FROM wiki_text WHERE wiki_text MATCH '${wanted.map((w) => `"${w}"`).join(' ')}' ORDER BY rowid`)) as { handle: string; page: string; text: string }[];
+  return rows.filter((r) => holds(r.text, wanted)).map((r) => ({ claim: r.handle.slice(r.handle.indexOf('#') + 1), page: r.page, quote: r.text, source: `wiki/${r.page}.md` }));
+}
+
+interface Recorded { handle: string; text: string; known: string; proof: number; scope: string; state: string }
+/**
+ * The index's hits as deep_search shows them, each read again from its claim's record (wiki_claims, wiki_sources):
+ * shown while it is in force and its scope covers the caller. A claim the learned layer holds changes for but none
+ * in force so is dropped. A hit with no record at all keeps the index's quote, marked as outside: nothing vouches
+ * for it. `trustsIndex` (a planted wrong program) takes the index's marks and drops nothing.
+ */
+async function wikiHits(found: IndexHit[], input: SearchIn): Promise<Hit[]> {
+  const handles = found.map((h) => `wiki:${h.page}#${h.claim.startsWith(`${h.page}#`) ? h.claim.slice(h.page.length + 1) : h.claim}`);
+  if (!handles.length) return [];
+  const claims = new Map(((await input.raw(`SELECT handle, text, known, proof, scope, state FROM wiki_claims WHERE handle IN (${list(handles)})`)) as Recorded[]).map((c) => [c.handle, c]));
+  const sources = new Map<string, unknown[]>();
+  for (const s of (await input.raw(`SELECT claim, at, repo, path, commit_sha, quote, role, hash FROM wiki_sources WHERE claim IN (${list(handles)}) ORDER BY claim, n`)) as Record<string, string | null>[]) {
+    const { claim, commit_sha, ...rest } = s;
+    const kept = Object.fromEntries(Object.entries({ ...rest, commit: commit_sha }).filter(([, v]) => v !== null));
+    sources.set(claim!, [...(sources.get(claim!) ?? []), kept]);
+  }
+  const learned = new Set(((await input.raw(`SELECT DISTINCT target FROM learned_layer WHERE layer = 'learned' AND target IN (${list(handles)})`)) as { target: string }[]).map((r) => r.target));
+  const hits: Hit[] = [];
+  found.forEach((h, i) => {
+    const source = handles[i]!;
+    const claim = claims.get(source);
+    const shown = claim && claim.state === 'in force' && input.covers(claim.scope) ? claim : undefined;
+    const marks = shown ? { outside: shown.known === 'outside', known: shown.known, proof: shown.proof, sources: sources.get(source) ?? [] } : { outside: true, known: 'outside', proof: 0, sources: [] };
+    if (input.trustsIndex) {
+      const told = Object.fromEntries(Object.entries(h).filter(([k]) => k in marks));
+      hits.push({ source, quote: h.quote.slice(0, QUOTE), ...marks, ...told });
+      return;
+    }
+    if (learned.has(source) && !shown) return;
+    hits.push({ source, quote: (shown?.text ?? h.quote).slice(0, QUOTE), ...marks });
+  });
+  return hits;
 }
 
 export interface SearchIn {
   query: string;
-  index: IndexFill;
+  /** A swapped-in index; undefined reads the ledger's own. */
+  index: IndexFill | undefined;
   /** SQL over the record, read only. */
   raw(sql: string): Promise<unknown[]>;
   /** The worktree whose spec is the project's, if the call names one the hub knows. */
   worktree: string | undefined;
   /** The session the call is bound to; undefined reads only what belongs to no session. `everyone` reads every session's (a planted wrong program). */
   session: string | undefined | { everyone: true };
+  /** Whether a claim's scope covers the caller: its session, its repo, or everywhere; a call bound to no session reads repo and all. */
+  covers(scope: string): boolean;
+  /** A planted wrong program: the index's marks stand, and nothing is dropped. */
+  trustsIndex?: boolean;
 }
 
 /** Every hit for the query, each citing its source: the wiki's and the spec's, then the session's own, then decisions, newest first. */
@@ -65,8 +123,7 @@ export async function search(input: SearchIn): Promise<{ hits: Hit[]; more: numb
   if (!wanted.length) return { hits: [], more: 0 };
   // Each word is letters and digits only, so it goes into the SQL as it is.
   const like = (column: string) => wanted.map((w) => `${column} LIKE '%${w}%'`).join(' AND ');
-  const hits: Hit[] = [];
-  for (const h of input.index.search(input.query)) hits.push({ source: `wiki:${h.page}#${h.claim}`, quote: h.quote.slice(0, QUOTE) });
+  const hits: Hit[] = await wikiHits(input.index ? await input.index.search(input.query) : await ledgerSearch(input, wanted), input);
 
   const decisions = (await input.raw(`SELECT e.id AS id, a.question AS question, e.data AS data FROM events e JOIN asks a ON a.id = substr(json_extract(e.data, '$.ask'), 5)
     WHERE e.kind = 'decision.created' AND ${like('a.question')} ORDER BY e.log_pos DESC`)) as { id: string; question: string; data: string }[];

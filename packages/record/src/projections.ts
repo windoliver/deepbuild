@@ -4,7 +4,7 @@
 // replaying the log rebuilds them all (design: One event log, with tables built from it).
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Statement } from 'better-sqlite3';
-import { CHECKED, judge, ROLLERS, YOURS, type LearnedChange } from './learned.js';
+import { CHECKED, judge, parseClaimLine, ROLLERS, YOURS, type LearnedChange } from './learned.js';
 import type { Db } from './storage.js';
 
 /** One event as the projections read it: the stored row, with its data parsed and migrated. */
@@ -26,7 +26,7 @@ export interface Projected {
   evidence: string[];
 }
 
-interface TableDef { name: string; pk: string[]; columns: string; indexes?: string[] }
+interface TableDef { name: string; pk: string[]; columns: string; indexes?: string[]; fts?: true }
 type Row = Record<string, unknown>;
 type Obj = { [key: string]: JsonValue };
 
@@ -68,9 +68,15 @@ const TABLES: readonly TableDef[] = [
   T('turns', ['session_id', 'idx'], 'session_id TEXT, idx INTEGER, number INTEGER, start_seq INTEGER, start_id TEXT, stop_seq INTEGER, stopped INTEGER NOT NULL DEFAULT 0, last_seq INTEGER, last_id TEXT'),
   T('turn_events', ['event_id'], 'event_id TEXT, session_id TEXT, turn_idx INTEGER, eff_seq INTEGER, eff_id TEXT, log_pos INTEGER'),
   T('session_readings', ['session_id', 'reading'], 'session_id TEXT, reading TEXT, since INTEGER'),
+  // The wiki's claims in force (#355), each from its newest change in force, with its sources and its links, and
+  // their text in SQLite FTS5: the default index deep_search reads, rebuilt like every table here.
+  T('wiki_claims', ['handle'], 'handle TEXT, page TEXT, claim TEXT, text TEXT, known TEXT, proof INTEGER, scope TEXT, change TEXT, state TEXT, log_pos INTEGER'),
+  T('wiki_sources', ['claim', 'n'], 'claim TEXT, n INTEGER, at TEXT, repo TEXT, path TEXT, commit_sha TEXT, quote TEXT, role TEXT, hash TEXT'),
+  T('wiki_links', ['claim', 'url'], 'claim TEXT, url TEXT'),
+  { name: 'wiki_text', pk: ['handle'], columns: 'handle UNINDEXED, page UNINDEXED, text', fts: true },
 ];
-/** The record's reading of turns is keyed by event IDs; it serves `session()` and is not a listed projection. */
-const INTERNAL = new Set(['turns', 'turn_events']);
+/** The record's reading of turns is keyed by event IDs; it serves `session()` and is not a listed projection; the wiki's text is wiki_claims' index. */
+const INTERNAL = new Set(['turns', 'turn_events', 'wiki_text']);
 export const PROJECTIONS: readonly string[] = TABLES.filter((t) => !INTERNAL.has(t.name)).map((t) => t.name);
 const byName = new Map(TABLES.map((t) => [t.name, t]));
 export const tableDef = (name: string): TableDef | undefined => byName.get(name);
@@ -91,6 +97,8 @@ const sessionOf = (v: unknown): string | null => (typeof v === 'string' && v.sta
 /** The start of every write below: `INSERT INTO table (cols) VALUES (?, …)`. */
 const insert = (table: string, cols: readonly string[]): string => `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`;
 const TOOL = new Set(['tool.before', 'tool.after']);
+/** The kinds that can change which wiki claim is in force. */
+const WIKI_KINDS = new Set(['learn.applied', 'learn.widened', 'learn.rolled_back', 'learn_check.made']);
 const ENDED = new Set(['finished', 'failed']);
 
 export class Projector {
@@ -112,7 +120,8 @@ export class Projector {
         stale = true;
         continue;
       }
-      this.db.exec(`CREATE TABLE IF NOT EXISTS ${t.name} (${t.columns}, PRIMARY KEY (${t.pk.join(', ')})) STRICT`);
+      if (t.fts) this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ${t.name} USING fts5(${t.columns}, tokenize = 'unicode61')`);
+      else this.db.exec(`CREATE TABLE IF NOT EXISTS ${t.name} (${t.columns}, PRIMARY KEY (${t.pk.join(', ')})) STRICT`);
       for (const [i, columns] of (t.indexes ?? []).entries()) this.db.exec(`CREATE INDEX IF NOT EXISTS ${t.name}_${i} ON ${t.name} (${columns})`);
     }
     return stale;
@@ -493,6 +502,40 @@ export class Projector {
         break;
       default:
         break;
+    }
+    if (WIKI_KINDS.has(e.kind)) this.wikiClaims(d);
+  }
+
+  /**
+   * The wiki claims a learned change touches, read again from the learned layer: the claim it is about, the one it
+   * supersedes or rolls back, and, for the core's refusal, the one it refused. Each claim's row is its newest
+   * change in force, marked superseded while a change in force supersedes it; one with none in force is gone.
+   */
+  private wikiClaims(d: Obj): void {
+    // A change named by handle touches its own claim and the one it supersedes, which a refusal or a rollback frees.
+    const named = (handle: unknown, depth = 1): (string | null)[] => {
+      if (typeof handle !== 'string') return [];
+      const row = this.stmt('SELECT target, supersedes FROM learned_layer WHERE handle = ?').get(handle) as { target: string | null; supersedes: string | null } | undefined;
+      return row ? [row.target, ...(depth ? named(row.supersedes, depth - 1) : [])] : [];
+    };
+    const touched = [str(d.target), ...named(d.supersedes), ...named(d.change)].filter((t): t is string => t?.startsWith('wiki:') === true);
+    for (const target of new Set(touched)) {
+      for (const table of ['wiki_claims', 'wiki_text']) this.stmt(`DELETE FROM ${table} WHERE handle = ?`).run(target);
+      for (const table of ['wiki_sources', 'wiki_links']) this.stmt(`DELETE FROM ${table} WHERE claim = ?`).run(target);
+      const row = this.stmt("SELECT handle, diff, scope, log_pos FROM learned_layer WHERE target = ? AND layer = 'learned' AND state = 'applied' AND kind IN ('learn.applied', 'learn.widened') ORDER BY log_pos DESC LIMIT 1")
+        .get(target) as { handle: string; diff: string | null; scope: string | null; log_pos: number } | undefined;
+      const line = row?.diff?.startsWith('+ ') ? parseClaimLine(row.diff.slice(2)) : undefined;
+      if (!row || !line) continue;
+      const superseded = this.stmt("SELECT 1 FROM learned_layer WHERE supersedes = ? AND state = 'applied'").get(row.handle) !== undefined;
+      const page = target.slice('wiki:'.length, target.indexOf('#'));
+      this.up('wiki_claims', {
+        handle: target, page, claim: target.slice(target.indexOf('#') + 1), text: line.text, known: str(line.record.known), proof: int(line.record.proof),
+        scope: row.scope, change: row.handle, state: superseded ? 'superseded' : 'in force', log_pos: row.log_pos,
+      });
+      this.stmt('INSERT INTO wiki_text (handle, page, text) VALUES (?, ?, ?)').run(target, page, line.text);
+      const sources = Array.isArray(line.record.sources) ? line.record.sources.filter(isObj) : [];
+      sources.forEach((s, n) => this.up('wiki_sources', { claim: target, n, at: str(s.at), repo: str(s.repo), path: str(s.path), commit_sha: str(s.commit), quote: str(s.quote), role: str(s.role), hash: str(s.hash) }));
+      for (const url of new Set(line.text.match(/https?:\/\/[^\s"'`<>]+/g) ?? [])) this.up('wiki_links', { claim: target, url });
     }
   }
 

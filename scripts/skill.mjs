@@ -41,6 +41,10 @@ const TOOLS = {
     use: 'Attach a file from your working folder as evidence, stored by its hash.',
     proves: 'Storing a file does not prove what it shows; a path outside your working folder is answered as one that doesn\'t exist.',
   },
+  deep_propose: {
+    use: 'Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person\'s inbox, and nothing changes until they apply it.',
+    proves: 'A proposal does not prove the change is right, and it is never applied by you or any agent.',
+  },
   deep_run: {
     use: 'Run a check the repo\'s spec names, for your claim at its commit; it answers with the run\'s outcome and its evidence once the run finishes.',
     proves: 'One run\'s outcome does not prove your claim passes: only a verdict over the runs a claim needs says so.',
@@ -83,7 +87,7 @@ export function generate(rows = blocks()) {
     '',
     '# DeepBuild',
     '',
-    'Your word is never evidence: only check results are. Nothing missing or unrun passes. You can\'t change checks or decisions, and no tool answers, decides or overrules. This skill says when to use each block and what it never does; each tool\'s schema says what it takes.',
+    'Your word is never evidence; only check results are. Nothing missing or unrun passes. You can\'t change checks or decisions, and no tool answers, decides or overrules. This skill says when to use each block and what it never does; each tool\'s schema says what it takes.',
     '',
     'Begin each task with deep_status, which shows where your session stands; read it once, since deep_run\'s answer is the run\'s outcome and no verdict appears until the checks are judged. Predict before you run: declare your claim with what you expect each check to show, then run the checks. Make each call once, never again with the same input. When the hub is unreachable, nothing was recorded; call again once it is back.',
     '',

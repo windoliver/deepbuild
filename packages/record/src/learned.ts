@@ -21,6 +21,19 @@ const INSTALL = 'rule:install';
  * output is the evidence this product runs on, though a file the agent wrote and read back is its own words.
  */
 const OUTSIDE = /^(WebFetch|WebSearch|Glob|Grep|Task|Agent|mcp__.+)$/;
+/** A wiki claim's line, as its page and its change's diff hold it (#355): `- <text> <!-- deep:claim <its record> -->`. */
+export interface ClaimLine { text: string; record: { [key: string]: JsonValue } }
+const CLAIM_LINE = /^- (.*?) <!-- deep:claim (\{.*\}) -->$/;
+export function parseClaimLine(line: string): ClaimLine | undefined {
+  const m = CLAIM_LINE.exec(line);
+  if (!m) return undefined;
+  try {
+    const record = JSON.parse(m[2]!) as JsonValue;
+    return typeof record === 'object' && record !== null && !Array.isArray(record) ? { text: m[1]!, record } : undefined;
+  } catch {
+    return undefined;
+  }
+}
 /** The writers that speak for you: only through them does a change reach the base. */
 export const YOURS = new Set(['app', 'cli']);
 /** The writers whose learn.rolled_back takes a change out of force: you, through the app or the CLI, and the core. */
@@ -53,7 +66,7 @@ const textOf = (stored: string | null): string => {
  * One Claude Code transcript entry: its text, and whether it is no first-hand source: the result of a tool that
  * brings outside content, or the agent's own words, which may repeat it (an agent's word is never evidence).
  */
-interface Entry { text: string; outside: boolean }
+export interface Entry { text: string; outside: boolean; role?: string; tool?: string }
 function readTranscript(bytes: Uint8Array): Map<string, Entry> {
   const entries = new Map<string, Entry>();
   const tools = new Map<string, string>();
@@ -66,6 +79,8 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
     // The agent's turns, and what Claude Code writes under the user's role in its stead: a compaction summary,
     // and a subagent's run, whose prompt the agent composed.
     let outside = entry.message.role === 'assistant' || entry.isCompactSummary === true || entry.isSidechain === true;
+    // The tool whose result the entry holds ('' for one whose call the transcript doesn't hold).
+    let called: string | undefined;
     if (typeof content === 'string') parts.push(content);
     else if (Array.isArray(content)) {
       for (const block of content) {
@@ -76,12 +91,13 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
           // A result whose call the transcript doesn't hold is nobody's: no first-hand source either.
           const tool = tools.get(String(block.tool_use_id));
           if (tool === undefined || OUTSIDE.test(tool)) outside = true;
+          called = tool ?? '';
           if (typeof block.content === 'string') parts.push(block.content);
           else if (Array.isArray(block.content)) for (const c of block.content) if (isObj(c) && typeof c.text === 'string') parts.push(c.text);
         }
       }
     }
-    entries.set(entry.uuid, { text: parts.join('\n'), outside });
+    entries.set(entry.uuid, { text: parts.join('\n'), outside, ...(typeof entry.message.role === 'string' ? { role: entry.message.role } : {}), ...(called === undefined ? {} : { tool: called }) });
   }
   return entries;
 }
@@ -114,15 +130,37 @@ const clip = (text: string, max: number): string => (text.length > max ? `${text
 const notAt = (quote: Quote): Check => ({ outcome: 'refused', reason: `the quote "${clip(quote.quote, 200)}" is not at its handle ${clip(quote.at, 4000)}` });
 const quoted = (entry: Entry, quote: string): boolean => norm(entry.text).includes(norm(quote));
 
-/** The project of each session a change's evidence cites. */
+/** Every repo a scope reaches: `all` for every one. */
+const EVERY = '*';
+/**
+ * The project of each session a change's evidence cites, of each file it cites that the core kept for a repo
+ * (`keep`), and what each decision of yours it cites covers: its repo, its session's, or every repo.
+ */
 function projectsOf(db: Db, evidence: readonly Quote[]): Set<string> | undefined {
   const projects = new Set<string>();
+  const ofSession = (id: string): string | null =>
+    (db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(id) as { project_id: string | null } | undefined)?.project_id ?? null;
   for (const { at } of evidence) {
     const session = /^session:([0-9A-Za-z]+)/.exec(at)?.[1];
-    if (!session) continue;
-    const row = db.prepare('SELECT project_id FROM sessions WHERE id = ?').get(session) as { project_id: string | null } | undefined;
-    if (!row?.project_id) return undefined;
-    projects.add(row.project_id);
+    if (session) {
+      const project = ofSession(session);
+      if (!project) return undefined;
+      projects.add(project);
+      continue;
+    }
+    const file = /^ev:([0-9a-f]{64})$/.exec(at)?.[1];
+    if (file) {
+      const kept = db.prepare("SELECT project_id FROM events WHERE kind = 'evidence.stored' AND json_extract(data, '$.sha256') = ? AND project_id IS NOT NULL ORDER BY log_pos DESC LIMIT 1").get(file) as { project_id: string } | undefined;
+      if (kept) projects.add(kept.project_id);
+      continue;
+    }
+    const decision = /^decision:([0-9A-Za-z]+)$/.exec(at)?.[1];
+    if (decision) {
+      const row = db.prepare("SELECT scope FROM decisions WHERE id = ? AND state = 'active'").get(decision) as { scope: string | null } | undefined;
+      const scope = textOf(row?.scope ?? null);
+      const project = scope === 'all' ? EVERY : scope.startsWith('repo:') ? scope.slice(5) : scope.startsWith('session:') ? ofSession(scope.slice(8)) : null;
+      if (project) projects.add(project);
+    }
   }
   return projects.size ? projects : undefined;
 }
@@ -242,7 +280,7 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
   if (sources && (!scope.startsWith('session:') || (sources.size > 0 && !sources.has(scope)))) return refused(`the local-first rule applies ${target} only to the session it came from; ${scope} needs your OK`);
   if (by === INSTALL) {
     const projects = projectsOf(db, change.evidence);
-    const covered = !projects ? undefined : projects.size > 1 ? 'all' : `repo:${[...projects][0]!}`;
+    const covered = !projects ? undefined : projects.size > 1 || projects.has(EVERY) ? 'all' : `repo:${[...projects][0]!}`;
     if (!covered) return refused(`${target} was learned at install from no session of a known repo`);
     if (covered !== 'all' && scope !== covered) return refused(`${target} claims ${scope}, but its evidence covers ${covered}`);
   } else if (by !== null && by !== 'you' && by !== LOCAL_FIRST
@@ -272,6 +310,37 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
   return loosening === undefined ? undefined : { outcome: 'held', reason: loosening };
 }
 
+/** What the store holds at a location: a file as text, or one transcript message. Transcripts are parsed once, by hash. */
+// A file the store doesn't hold has nothing at it; a read of one it holds that fails throws, so the append
+// fails and its retry reads again, and nothing false about the evidence is recorded or kept.
+async function readStored(store: EvidenceStore | undefined, transcripts: Transcripts, where: { sha: string; message?: string }): Promise<Entry | undefined> {
+  const bytesOf = async (sha: string): Promise<Uint8Array | undefined> => (store && (await store.get(sha)) ? store.read(sha) : undefined);
+  if (where.message === undefined) {
+    const b = await bytesOf(where.sha);
+    return b ? { text: Buffer.from(b).toString('utf8'), outside: false } : undefined;
+  }
+  // Only a parsed transcript is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
+  let parsed = transcripts.get(where.sha);
+  if (!parsed) {
+    parsed = bytesOf(where.sha).then((b) => {
+      if (!b) transcripts.delete(where.sha);
+      return b ? readTranscript(b) : undefined;
+    });
+    transcripts.set(where.sha, parsed);
+    parsed.catch(() => transcripts.delete(where.sha));
+  }
+  return (await parsed)?.get(where.message);
+}
+
+/**
+ * What a handle names now (design: Reading by reference): a transcript message, with its role and the tool whose
+ * result it holds; a decision's answer; an evidence file's text; a learned change's diff. Undefined for nothing.
+ */
+export async function resolveHandle(db: Db, store: EvidenceStore | undefined, transcripts: Transcripts, handle: string): Promise<Entry | undefined> {
+  const where = locate(db, handle);
+  return where?.in === 'store' ? readStored(store, transcripts, where) : where?.entry;
+}
+
 /**
  * The core's reading of what a change cites in the evidence store, at append: a quote not in its transcript
  * message or evidence file is refused, naming the handle, and a start-slice claim whose every cited source is
@@ -279,27 +348,7 @@ export function judge(db: Db, change: LearnedChange, writer: string): Check | un
  * nothing it read refuses it; the core records a refusal as learn_check.made, so a rebuild needs no bytes.
  */
 export async function readEvidence(db: Db, store: EvidenceStore | undefined, change: LearnedChange, transcripts: Transcripts): Promise<Check | undefined> {
-  /** What the store holds at a location: a file as text, or one transcript message. Transcripts are parsed once, by hash. */
-  // A file the store doesn't hold has nothing at it; a read of one it holds that fails throws, so the append
-  // fails and its retry reads again, and nothing false about the evidence is recorded or kept.
-  const bytesOf = async (sha: string): Promise<Uint8Array | undefined> => (store && (await store.get(sha)) ? store.read(sha) : undefined);
-  const read = async (where: { sha: string; message?: string }): Promise<Entry | undefined> => {
-    if (where.message === undefined) {
-      const b = await bytesOf(where.sha);
-      return b ? { text: Buffer.from(b).toString('utf8'), outside: false } : undefined;
-    }
-    // Only a parsed transcript is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
-    let parsed = transcripts.get(where.sha);
-    if (!parsed) {
-      parsed = bytesOf(where.sha).then((b) => {
-        if (!b) transcripts.delete(where.sha);
-        return b ? readTranscript(b) : undefined;
-      });
-      transcripts.set(where.sha, parsed);
-      parsed.catch(() => transcripts.delete(where.sha));
-    }
-    return (await parsed)?.get(where.message);
-  };
+  const read = (where: { sha: string; message?: string }): Promise<Entry | undefined> => readStored(store, transcripts, where);
   /** Whether a learned change rests only on outside content, through every change it cites: a citation inherits it. */
   // Each cited change is judged once and its answer reused wherever it is cited again; one being judged reads
   // false to a citation back to it, though a change cites only changes already in force, so none can.
