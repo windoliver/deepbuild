@@ -280,6 +280,8 @@ const FOLD_SOURCE = 'asks.fold';
 /** Where the core drafts a request for the owner of a block that isn't yours. */
 const REQUEST_SOURCE = 'request.draft';
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
+/** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
+const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 const ANSWER_FIELDS = new Set(['option', 'words', 'plan_hash', 'token']);
 const PROVISIONAL_KINDS = new Set(['taste', 'choice']);
@@ -345,7 +347,7 @@ const CLOSING: Readonly<Record<string, string>> = {
 
 class AsksCore implements Asks {
   private cursor = 0;
-  private readonly sessions = new Map<string, { thread: string; worktree: string }>();
+  private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null }>();
   private readonly asks = new Map<string, Ask>();
   /** Each thread's asks, open or closed, in log order. */
   private readonly threads = new Map<string, Ask[]>();
@@ -661,7 +663,7 @@ class AsksCore implements Asks {
       if (scope === 'all') at = 'all';
       else if (scope === 'session') {
         if (!ask.session) throw new AskRefused(`${ask.handle} was raised in no session`, { field: 'scope', ask: ask.handle });
-        at = `session:${ask.session}`;
+        at = `session:${letters(ask.session)}`;
       } else {
         const repo = this.repoOf(ask.session);
         if (repo === null) throw new AskRefused(`${ask.handle}'s session started in no repo the record knows`, { field: 'scope', ask: ask.handle });
@@ -681,7 +683,7 @@ class AsksCore implements Asks {
       if (TRUSTED[connection.writer] === undefined) throw new AskRefused(`a decision is revoked only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
       const decision = this.decisions.get(handle);
       if (!decision) throw new AskRefused(`${handle} is no decision`, { field: 'decision' });
-      if (decision.state === 'revoked') throw new AskRefused(`${handle} is already revoked`, { field: 'decision' });
+      if (decision.state === 'revoked') throw new AskRefused(`${handle} is already revoked or overruled`, { field: 'decision' });
       const now = this.options.now();
       await this.options.record.append(this.core(connection), { v: 1, id: ulid(now), kind: 'decision.revoked', subject: handle, ts: now, data: { decision: handle } });
       await this.sync();
@@ -695,16 +697,25 @@ class AsksCore implements Asks {
     });
   }
 
-  /** The repo a session started in, as a scope names it: an ID derived from its worktree; null when the record knows none. */
+  /**
+   * The repo a session started in, as a scope names it: the project its session.start was recorded under, in letters
+   * and digits, as the hub writes it when it saves your inbox answer (`repo:<project>`); with no project, an ID derived
+   * from its worktree. Null when the record knows neither.
+   */
   private repoOf(session: string | undefined): string | null {
-    const worktree = session ? this.sessions.get(session)?.worktree : undefined;
-    return worktree === undefined ? null : sha256Hex(new TextEncoder().encode(worktree));
+    const started = session ? this.sessions.get(session) : undefined;
+    if (!started) return null;
+    const project = started.project === null ? '' : letters(started.project);
+    return project || sha256Hex(new TextEncoder().encode(started.worktree));
   }
 
-  /** Whether a decision's scope covers an ask: everywhere, its session, or its session's repo. */
+  /**
+   * Whether a decision's scope covers an ask: everywhere, its session, or its session's repo. A session scope names
+   * the session in letters and digits, as the hub writes it; one written with the ID as recorded reads the same.
+   */
   private covers(decision: HeldDecision, ask: Ask): boolean {
     if (decision.scope === 'all') return true;
-    if (decision.scope === `session:${ask.session}`) return ask.session !== '';
+    if (decision.scope.startsWith('session:')) return ask.session !== '' && letters(decision.scope.slice('session:'.length)) === letters(ask.session);
     const repo = this.repoOf(ask.session);
     return repo !== null && decision.scope === `repo:${repo}`;
   }
@@ -978,7 +989,7 @@ class AsksCore implements Asks {
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
     switch (e.kind) {
       case 'session.start':
-        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree) });
+        if (e.session) this.sessions.set(e.session, { thread: String(d.thread), worktree: String(d.worktree), project: e.project ?? null });
         return;
       case 'ask.created': {
         const thread = this.threadOf(e.session);
@@ -1017,7 +1028,9 @@ class AsksCore implements Asks {
       case 'decision.created':
         if (e.writer === 'core') this.decisions.set(`decision:${e.id}`, { handle: `decision:${e.id}`, key: String(d.key), scope: String(d.scope), answer: String(d.answer), ask: String(d.ask), state: 'active' });
         return;
-      case 'decision.revoked': {
+      // Revoked or overruled (#667) on the trusted path: it covers nothing from then on.
+      case 'decision.revoked':
+      case 'decision.overruled': {
         const decision = e.writer === 'core' ? this.decisions.get(String(d.decision)) : undefined;
         if (decision) decision.state = 'revoked';
         return;

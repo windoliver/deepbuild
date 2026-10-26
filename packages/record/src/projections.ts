@@ -317,6 +317,7 @@ export class Projector {
       case 'decision.revoked':
         // Revoked on the trusted path: it covers nothing from here on, and a resolver that names it is refused.
         this.stmt("UPDATE decisions SET state = 'revoked' WHERE id = ?").run(bare(d.decision));
+        break;
       case 'decision.overruled':
         // Overruled on the trusted path: it answers nothing from then on.
         this.stmt("UPDATE decisions SET state = 'revoked', overruled_by = ? WHERE id = ?").run(e.id, bare(d.decision));

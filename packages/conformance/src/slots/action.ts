@@ -3,7 +3,8 @@
 // an input JSON Schema it can check) and runs fn only on input the schema admits, handing what it returns to the
 // caller as JSON. The kit holds the same on a fill: its declaration, its schema, and that each case the schema admits
 // comes back as JSON; a case the schema refuses is never run, as the host never runs it. What read, change and send
-// each permit, and the ask a change or send needs first, are the host's rules, not judged here.
+// each permit, the ask a change or send needs first, and the schema keywords the host refuses because its validator
+// would skip them (it is the stricter side at registration), are the host's rules, not judged here.
 import { registry, type JsonValue, type Schema } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { fail } from '../slot-types.js';
