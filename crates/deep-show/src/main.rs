@@ -247,6 +247,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
         "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
+        "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
         "costs" => return Some(Call::Costs),
@@ -700,6 +701,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         claims,
         window,
         display,
+        verdicts: match input.get("verdicts") {
+            None => Map::new(),
+            Some(v) => v.as_object()?.clone(),
+        },
         card,
         fault,
         planted,
@@ -1120,6 +1125,14 @@ mod tests {
         calls.push(control(51 * FRAME, "lens", json!("changed")));
         calls.push(json!({"call": "presented", "panel": "main", "at": 60 * FRAME}));
         calls.push(json!({"call": "revisions", "doc": doc, "at": 61 * FRAME}));
+        calls.push(json!({"call": "view", "panel": "main", "at": 62 * FRAME}));
+        calls.push(control(
+            63 * FRAME,
+            "filter",
+            json!({"writers": ["agent:t"]}),
+        ));
+        calls.push(json!({"call": "view", "panel": "main", "at": 64 * FRAME}));
+        calls.push(json!({"call": "revisions", "doc": doc, "at": 65 * FRAME}));
         let scenario = json!({
             "evidence": evidence.to_string_lossy(),
             "sessions": {"s": {"thread": "t", "name": "Claude Code: t", "process": {"pid": 4100, "start": 1000}}},
@@ -1177,6 +1190,16 @@ mod tests {
         );
         // No view control wrote a revision: the board still has its three.
         assert_eq!(r[12]["revisions"].as_array().map(Vec::len), Some(3));
+        // The view drawn: under the changed lens, then with the agent's boxes filtered out, a
+        // different picture of the same three revisions.
+        let snap = |i: usize| r[i]["snapshot"]["sha256"].as_str().map(str::to_string);
+        assert!(snap(13).is_some(), "the view is drawn: {}", r[13]);
+        assert_ne!(
+            snap(13),
+            snap(15),
+            "hiding the agent's boxes changes the picture"
+        );
+        assert_eq!(r[16]["revisions"].as_array().map(Vec::len), Some(3));
     }
 }
 

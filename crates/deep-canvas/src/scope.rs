@@ -6,8 +6,8 @@
 //! scroll's or a pinch's begin, changes and end, or a key press; it hit-tests only where it
 //! starts, never mid-gesture, and commits once, on the input that ends it. Only navigation (a
 //! double-click, ⌘K, Esc) frames the camera, never a click. In a flat view an item is its
-//! `params.box`; in 3D it is the box of its `params.size` about its position, picked by the
-//! nearest face under the pointer. Every canvas draws a full-screen button; Esc ends isolation,
+//! `params.box`; in 3D a solid is the box of its `params.size` about its position, picked by
+//! the nearest face under the pointer, and a line or a point is hit within a few px of it. Every canvas draws a full-screen button; Esc ends isolation,
 //! then leaves full screen, then backs out a level. Its view controls filter items out by kind
 //! or writer, isolate one, pick a lens (provenance by writer, or how each item changed), scrub
 //! the record's time and compare against an earlier revision; the caller hands it the revision
@@ -153,10 +153,65 @@ pub struct Done {
 
 /// Where an item sits: a rect in page u (`[x, y, w, h]`), or a 3D box by its centre and half
 /// sizes.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Bounds {
     Rect([f64; 4]),
-    Box { centre: [f64; 3], half: [f64; 3] },
+    Box {
+        centre: [f64; 3],
+        half: [f64; 3],
+    },
+    /// A 3D line through its points, or a point or label at its one point: hit within a few px.
+    Path(Vec<[f64; 3]>),
+}
+
+impl Bounds {
+    /// A 3D item's box, centre and half sizes; a flat rect has none.
+    fn box3(&self) -> Option<([f64; 3], [f64; 3])> {
+        match self {
+            Bounds::Rect(_) => None,
+            Bounds::Box { centre, half } => Some((*centre, *half)),
+            Bounds::Path(points) => {
+                let lo = |k: usize| points.iter().map(|p| p[k]).fold(f64::MAX, f64::min);
+                let hi = |k: usize| points.iter().map(|p| p[k]).fold(f64::MIN, f64::max);
+                Some((
+                    [0, 1, 2].map(|k| (lo(k) + hi(k)) / 2.0),
+                    // A point has no extent; framing gives it a metre about it.
+                    [0, 1, 2].map(|k| ((hi(k) - lo(k)) / 2.0).max(0.5)),
+                ))
+            }
+        }
+    }
+}
+
+/// How near the pointer must come to a 3D point or line to hit it, px.
+const POINT_PX: f64 = 8.0;
+const LINE_PX: f64 = 6.0;
+
+/// The depth of a 3D line or point under the pixel `at`, or `None` when the pointer passes
+/// farther from it than a point's or a line's reach.
+fn path_depth(view: &Projector, points: &[[f64; 3]], at: [f64; 2]) -> Option<f64> {
+    let projected: Vec<_> = points.iter().filter_map(|p| view.project(*p)).collect();
+    if projected.len() != points.len() {
+        return None;
+    }
+    if let [only] = projected.as_slice() {
+        return (distance([only.x, only.y], at) <= POINT_PX).then_some(only.depth);
+    }
+    projected
+        .windows(2)
+        .filter_map(|w| {
+            let (a, b) = ([w[0].x, w[0].y], [w[1].x, w[1].y]);
+            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+            let len2 = dx * dx + dy * dy;
+            let k = if len2 > 0.0 {
+                (((at[0] - a[0]) * dx + (at[1] - a[1]) * dy) / len2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let near = [a[0] + dx * k, a[1] + dy * k];
+            (distance(near, at) <= LINE_PX).then(|| w[0].depth + (w[1].depth - w[0].depth) * k)
+        })
+        .min_by(f64::total_cmp)
 }
 
 /// An item the scope can hit: where it sits, its parent and where it stacks.
@@ -229,8 +284,9 @@ fn three(value: Option<&Value>) -> Option<[f64; 3]> {
 }
 
 /// The items a press can hit, in the order they stack, bottom first: in a flat view those with
-/// a `params.box` offset by `at.pos`; in 3D those with a `params.size`, centred on their
-/// position with their parents' positions added.
+/// a `params.box` offset by `at.pos`; in 3D a solid's box of its `params.size`, a line through
+/// its `params.points` and a point or a label at its position, each with its parents' positions
+/// added.
 fn targets(doc: &Value, flat: bool) -> Vec<Target> {
     let items = member(doc, "items").and_then(Value::as_object);
     let pos = |item: &Value| three(member(item, "at").and_then(|a| member(a, "pos")));
@@ -247,8 +303,11 @@ fn targets(doc: &Value, flat: bool) -> Vec<Target> {
                 let at = pos(item).unwrap_or([0.0; 3]);
                 Bounds::Rect([at[0] + n(0)?, at[1] + n(1)?, n(2)?, n(3)?])
             } else {
-                let size = three(params.and_then(|p| member(p, "size")))?;
-                let mut centre = pos(item).unwrap_or([0.0; 3]);
+                if member(item, "kind").and_then(Value::as_str) == Some("camera@1") {
+                    return None;
+                }
+                let own = pos(item);
+                let mut centre = own.unwrap_or([0.0; 3]);
                 let mut seen = vec![id.as_str()];
                 let mut up = member(item, "parent").and_then(Value::as_str);
                 while let Some(parent) = up.filter(|p| !seen.contains(p)) {
@@ -260,9 +319,26 @@ fn targets(doc: &Value, flat: bool) -> Vec<Target> {
                     seen.push(parent);
                     up = member(p, "parent").and_then(Value::as_str);
                 }
-                Bounds::Box {
-                    centre,
-                    half: size.map(|v| v.abs() / 2.0),
+                let size = params.and_then(|p| member(p, "size"));
+                let size = three(size).or_else(|| size?.as_f64().map(|s| [s; 3]));
+                let points: Vec<[f64; 3]> = params
+                    .and_then(|p| member(p, "points"))
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|q| three(Some(q)))
+                    .map(|q| [0, 1, 2].map(|k| q[k] + centre[k]))
+                    .collect();
+                match (points.len() >= 2, size) {
+                    // A line, by the points it runs through.
+                    (true, _) => Bounds::Path(points),
+                    (false, Some(size)) => Bounds::Box {
+                        centre,
+                        half: size.map(|v| v.abs() / 2.0),
+                    },
+                    // A point or a label: where it sits.
+                    (false, None) if own.is_some() => Bounds::Path(vec![centre]),
+                    (false, None) => return None,
                 }
             };
             let text = |k: &str| member(item, k).and_then(Value::as_str).map(str::to_string);
@@ -434,6 +510,79 @@ impl Scope {
             .collect()
     }
 
+    /// The document as the view draws it, never saved: what the view hides set invisible, and
+    /// under a lens each shown item's fill set to the look role its key draws in. The changed
+    /// lens draws what was added or changed in `accent` and the rest `muted`; the writer lens
+    /// draws your items in `ink` and every agent's in `accent`. Status colors stay status's.
+    pub fn view_document(&self, doc: &Value, before: Option<&Value>) -> Value {
+        let mut out = doc.clone();
+        let hidden = self.hidden(doc);
+        let changed = before.map(|b| diff(b, doc)).unwrap_or_default();
+        let roles: Map<String, Value> = match self.view.lens {
+            None => Map::new(),
+            Some(lens) => member(doc, "items")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .map(|(id, item)| {
+                    let role = match lens {
+                        Lens::Changed if changed.contains_key(id) => "accent",
+                        Lens::Changed => "muted",
+                        Lens::Writer => match writer_of(doc, item) {
+                            Some(w) if w.starts_with("agent:") => "accent",
+                            _ => "ink",
+                        },
+                    };
+                    (id.clone(), json!(role))
+                })
+                .collect(),
+        };
+        if let Some(items) = out.get_mut("items").and_then(Value::as_object_mut) {
+            for (id, item) in items.iter_mut() {
+                if member(item, "kind").and_then(Value::as_str) == Some("camera@1") {
+                    continue;
+                }
+                if hidden.contains(id) {
+                    item["visible"] = json!(false);
+                }
+                if let (Some(role), Some(params)) = (roles.get(id), item.get_mut("params")) {
+                    params["paint"]["fill"] = json!({"role": role});
+                }
+            }
+        }
+        out
+    }
+
+    /// The verdicts a change to what's selected would make stale: each verdict whose key holds
+    /// a digest of a record state a selected item shows (`verdict.made`'s `key.state_digests`,
+    /// by the handle a bound value reads), in ID order.
+    pub fn stale_if_changed(&self, doc: &Value, verdicts: &Map<String, Value>) -> Vec<String> {
+        let handles: Vec<&str> = member(doc, "bound_values")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(_, b)| {
+                let target = member(b, "target").and_then(Value::as_str).unwrap_or("");
+                self.selection
+                    .iter()
+                    .any(|id| target.starts_with(&format!("items/{id}/")))
+            })
+            .filter_map(|(_, b)| member(b, "source").and_then(Value::as_str))
+            .collect();
+        verdicts
+            .iter()
+            .filter(|(_, v)| {
+                member(v, "key")
+                    .and_then(|k| member(k, "state_digests"))
+                    .and_then(Value::as_object)
+                    .is_some_and(|digests| handles.iter().any(|h| digests.contains_key(*h)))
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
     /// The items a press or ⌘K can reach: every target the view doesn't hide.
     fn shown_targets(&self, doc: &Value) -> Vec<Target> {
         let hidden = self.hidden(doc);
@@ -566,10 +715,12 @@ impl Scope {
         let at = [p[0] - r[0], p[1] - r[1]];
         let mut best: Option<(f64, String)> = None;
         for t in all.iter().rev() {
-            let Bounds::Box { centre, half } = t.bounds else {
-                continue;
+            let depth = match &t.bounds {
+                Bounds::Box { centre, half } => face_depth(&view, *centre, *half, at),
+                Bounds::Path(points) => path_depth(&view, points, at),
+                Bounds::Rect(_) => None,
             };
-            if let Some(depth) = face_depth(&view, centre, half, at) {
+            if let Some(depth) = depth {
                 if best.as_ref().is_none_or(|(d, _)| depth < *d) {
                     best = Some((depth, t.id.clone()));
                 }
@@ -605,7 +756,7 @@ impl Scope {
                 back: self.offsets,
             });
             if let Some(t) = all.iter().find(|t| &t.id == step) {
-                self.frame(t.bounds);
+                self.frame(&t.bounds);
             }
         }
     }
@@ -613,12 +764,12 @@ impl Scope {
     /// The camera that holds an item wholly in view, centred on it: a flat view's width, or in
     /// 3D the distance at which the box's bounding sphere fits the narrower side. A camera that
     /// pivots about its eye never moves its eye, so it isn't framed.
-    fn frame(&mut self, bounds: Bounds) {
+    fn frame(&mut self, bounds: &Bounds) {
         let r = self.rect();
         let [lo, hi] = self.spec.user.zoom;
-        let rect = match bounds {
-            Bounds::Rect(rect) if self.rig.flat => rect,
-            Bounds::Box { centre, half } if !self.rig.flat => {
+        let rect = match (bounds, bounds.box3()) {
+            (Bounds::Rect(rect), _) if self.rig.flat => *rect,
+            (_, Some((centre, half))) if !self.rig.flat => {
                 if self.spec.user.pivot == Pivot::Eye {
                     return;
                 }
@@ -834,9 +985,15 @@ impl Scope {
         done
     }
 
-    /// The scope's state over `doc`, the revision it shows, and `before`, the one it compares
-    /// against: what the view hides, how each item changed, and the key the lens colors by.
-    pub fn to_json(&self, doc: &Value, before: Option<&Value>) -> Value {
+    /// The scope's state over `doc`, the revision it shows, `before`, the one it compares
+    /// against, and the record's `verdicts`: what the view hides, how each item changed, the key
+    /// the lens colors by, and the verdicts a change to the selection would make stale.
+    pub fn to_json(
+        &self,
+        doc: &Value,
+        before: Option<&Value>,
+        verdicts: &Map<String, Value>,
+    ) -> Value {
         let changed = before.map(|b| diff(b, doc));
         let hidden = self.hidden(doc);
         let lens = self.view.lens.map(|lens| {
@@ -877,6 +1034,7 @@ impl Scope {
             "hidden": hidden,
             "changed": changed,
             "lens": lens,
+            "stale_if_changed": self.stale_if_changed(doc, verdicts),
             "camera": self.pose().to_json(),
             "rect": self.rect(),
             "full_screen": self.full_screen,
@@ -1101,7 +1259,7 @@ mod tests {
         .expect("the board reads");
         set(&mut s, &doc, "lens", json!("writer"));
         set(&mut s, &doc, "filter", json!({"kinds": ["text@1"]}));
-        let state = s.to_json(&doc, None);
+        let state = s.to_json(&doc, None, &Map::new());
         assert_eq!(state["lens"]["by"], json!("writer"));
         assert_eq!(
             state["lens"]["key"],
@@ -1115,12 +1273,95 @@ mod tests {
             .expect("items")
             .remove("note");
         set(&mut s, &doc, "lens", json!("changed"));
-        let state = s.to_json(&later, Some(&doc));
+        let state = s.to_json(&later, Some(&doc), &Map::new());
         assert_eq!(
             state["changed"],
             json!({"line": "changed", "note": "removed"})
         );
         assert_eq!(state["lens"]["key"]["line"], json!("changed"));
         assert_eq!(state["lens"]["key"]["box"], json!("same"));
+    }
+
+    #[test]
+    fn a_click_in_3d_hits_a_point_or_a_line_within_a_few_px_of_it() {
+        // The scene's camera, with a point 2 m right of the target and a rail 2 m below it.
+        let mut doc = scene();
+        let items = doc["items"].as_object_mut().expect("items");
+        items.remove("near");
+        items.remove("far");
+        items.insert(
+            "dot".into(),
+            json!({"id": "dot", "kind": "mark.point@1", "name": "Dot", "order": "a1", "at": {"pos": [2, 0, 0]}}),
+        );
+        items.insert(
+            "rail".into(),
+            json!({"id": "rail", "kind": "mark.line@1", "name": "Rail", "order": "a2",
+                "params": {"points": [[-3, -2, 0], [3, -2, 0]]}}),
+        );
+        let mut s = scope(&doc);
+        // 2 m at 10 m is 2 × focal ÷ 10 px from the centre, focal = 400 ÷ tan 20°.
+        let px = 2.0 * 400.0 / crate::ops::tan(crate::ops::rad(20.0)) / 10.0;
+        click(&mut s, &doc, 0, [400.0 + px + 5.0, 300.0]);
+        assert_eq!(s.selection, ["dot"], "5 px from the point");
+        click(&mut s, &doc, 2000 * MS, [450.0, 300.0 + px - 4.0]);
+        assert_eq!(s.selection, ["rail"], "4 px from the rail");
+        click(&mut s, &doc, 4000 * MS, [450.0, 300.0 + px - 20.0]);
+        assert!(s.selection.is_empty(), "20 px from both");
+    }
+
+    #[test]
+    fn selecting_a_bound_value_lights_the_verdicts_that_read_its_state() {
+        let mut doc = board();
+        doc["bound_values"] = json!({
+            "b1": {"target": "items/note/params/text", "source": "reading:rd-latency"},
+            "b2": {"target": "items/line/params/text", "source": "reading:rd-errors"},
+        });
+        let verdicts: Map<String, Value> = serde_json::from_value(json!({
+            "vd-1": {"outcome": "PASS", "key": {"state_digests": {"reading:rd-latency": "sha-a"}}},
+            "vd-2": {"outcome": "PASS", "key": {"state_digests": {"reading:rd-errors": "sha-b"}}},
+            "vd-3": {"outcome": "FAIL", "key": {"state_digests": {"reading:rd-latency": "sha-a", "reading:rd-cpu": "sha-c"}}},
+        }))
+        .expect("verdicts");
+        let mut s = Scope::new(
+            &doc,
+            [0.0, 0.0, 800.0, 450.0],
+            [1600.0, 900.0],
+            Planted::default(),
+        )
+        .expect("the board reads");
+        click(&mut s, &doc, 0, [50.0, 150.0]);
+        assert_eq!(s.selection, ["note"]);
+        assert_eq!(
+            s.to_json(&doc, None, &verdicts)["stale_if_changed"],
+            json!(["vd-1", "vd-3"])
+        );
+        click(&mut s, &doc, 2000 * MS, [250.0, 150.0]);
+        assert_eq!(s.selection, ["region"], "a region shows no bound value");
+        assert_eq!(s.stale_if_changed(&doc, &verdicts), Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_view_document_hides_what_the_view_hides_and_paints_the_lens_and_saves_nothing() {
+        let doc = board();
+        let mut s = Scope::new(
+            &doc,
+            [0.0, 0.0, 800.0, 450.0],
+            [1600.0, 900.0],
+            Planted::default(),
+        )
+        .expect("the board reads");
+        set(&mut s, &doc, "filter", json!({"kinds": ["text@1"]}));
+        set(&mut s, &doc, "lens", json!("writer"));
+        let view = s.view_document(&doc, None);
+        assert_eq!(view["items"]["note"]["visible"], json!(false));
+        assert_eq!(
+            view["items"]["line"]["params"]["paint"]["fill"]["role"],
+            json!("accent")
+        );
+        assert_eq!(
+            view["items"]["note"]["params"]["paint"]["fill"]["role"],
+            json!("ink")
+        );
+        assert_eq!(doc, board(), "the document itself is unchanged");
     }
 }
