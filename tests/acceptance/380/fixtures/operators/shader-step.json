@@ -1,0 +1,99 @@
+{
+  "id": "dim-shader-step",
+  "kind": "pass",
+  "origin": "shipped",
+  "about": "The control with a step that carries WGSL text, its output the pass color.",
+  "inputs": {
+    "src": {
+      "type": "texture",
+      "from": {
+        "texture": {
+          "target": {
+            "op": "core",
+            "output": "color"
+          }
+        }
+      }
+    },
+    "gain": {
+      "type": "f32",
+      "unit": "1",
+      "range": [
+        0,
+        1
+      ],
+      "default": 0.5,
+      "from": {
+        "param": "params/gain"
+      }
+    }
+  },
+  "steps": {
+    "uv": {
+      "op": "screen_uv@1",
+      "args": {}
+    },
+    "c": {
+      "op": "sample@1",
+      "args": {
+        "tex": "src",
+        "uv": "uv",
+        "lod": 0
+      }
+    },
+    "sum": {
+      "op": "repeat@1",
+      "args": {
+        "count": 4,
+        "accumulate": {
+          "acc": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "body": {
+          "acc": {
+            "op": "add@1",
+            "args": {
+              "a": "acc",
+              "b": "c"
+            }
+          }
+        }
+      }
+    },
+    "avg": {
+      "op": "div@1",
+      "args": {
+        "a": "sum.acc",
+        "b": 4
+      }
+    },
+    "out": {
+      "op": "mul@1",
+      "args": {
+        "a": "avg",
+        "b": "gain"
+      }
+    },
+    "raw": {
+      "op": "wgsl@1",
+      "args": {
+        "code": "return vec4<f32>(1.0, 0.0, 1.0, 1.0);"
+      }
+    }
+  },
+  "outputs": {
+    "color": "raw"
+  },
+  "chain": "effects",
+  "order": "a0",
+  "resolution": "full",
+  "determinism": "same_machine",
+  "cost": {
+    "ns_per_px": 0.5
+  },
+  "fallback": "look"
+}
