@@ -138,7 +138,7 @@ function sameDrawing(a: Image, b: Image, what: string): void {
   const d = diffs8(a, b);
   const off = d.filter((x) => x > 2).length;
   expect(off, `${what}: pixels more than 2 code values apart`).toBeLessThanOrEqual(Math.floor(0.001 * d.length));
-  expect(Math.max(...d), `${what}: the largest difference`).toBeLessThanOrEqual(8);
+  expect(d.reduce((m, x) => Math.max(m, x), 0), `${what}: the largest difference`).toBeLessThanOrEqual(8);
 }
 
 describe('#380.32634ba0 a test plug-in draws a 3D scene of a box on the ground grid with glow and a shadow by describing it, matching its golden blessed by your decision through the perceptual oracle; clipped at the panel\'s edge; its GPU-device call refused, naming it; a planted unclipped host fails, naming the panel', () => {

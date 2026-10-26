@@ -11,7 +11,8 @@
 // Each check's own twin (a GPU crate planted under deep-app; a planted shader module call; a planted
 // view that paints its own line) fails it, naming what it found. At the base the app's session line is a
 // polyline the view paints itself (crates/deep-app/src/canvas.rs: PathBuilder and paint_path).
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { REPO, cargoMetadata, type Package } from './helpers.ts';
@@ -27,18 +28,11 @@ const SHADER_FILE = /\.(wgsl|metal|glsl|hlsl|spv|vert|frag|comp)$/;
 const OWN_PAINT = /\bpaint_path\b|\bpaint_quad\b|\bpaint_sprite\b|\bpaint_polychrome_sprite\b|\bPathBuilder\b|\bpaint_shadows?\b|\bpaint_underline\b|\bpaint_strikethrough\b/;
 
 interface File { path: string; text: string }
+/** The app's own files: tracked or new, not what the repo ignores (build output, typings a panel runtime writes). */
 function appFiles(): File[] {
-  const files: File[] = [];
-  const walk = (dir: string): void => {
-    for (const name of readdirSync(dir)) {
-      const path = join(dir, name);
-      if (name === 'target' || name === 'node_modules') continue;
-      if (statSync(path).isDirectory()) walk(path);
-      else files.push({ path: relative(REPO, path), text: /\.(png|ttf|otf|icns|ico)$/.test(name) ? '' : readFileSync(path, 'utf8') });
-    }
-  };
-  walk(APP_DIR);
-  return files;
+  const listed = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', relative(REPO, APP_DIR)], { cwd: REPO, encoding: 'utf8' });
+  return listed.split('\0').filter((p) => p !== '' && existsSync(join(REPO, p)))
+    .map((p) => ({ path: p, text: /\.(png|ttf|otf|icns|ico)$/.test(p) ? '' : readFileSync(join(REPO, p), 'utf8') }));
 }
 /** Lines that aren't comments, so a sentence about GPU code doesn't count as GPU code. */
 const code = (text: string): string[] => text.split('\n').map((l) => l.replace(/\/\/.*$/, '')).map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('*') && !l.startsWith('#'));
