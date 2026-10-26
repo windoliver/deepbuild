@@ -1136,7 +1136,8 @@ class Host implements ExtensionHost {
   private async hookLine(line: HookRequestLine): Promise<{ adapter: string; events: { kind: string }[] }> {
     const name = line.agent;
     const fill = this.adapterFills.get(name);
-    if (!fill?.ext.ask || (await this.revoked(fill.ext))) throw Error(`no loaded extension registered an adapter ${name}`);
+    // An adapter counts once its package started (live), as a hook handler or an action does; never one a start still running registered.
+    if (!fill?.ext.live || !fill.ext.ask || (await this.revoked(fill.ext))) throw Error(`no loaded extension registered an adapter ${name}`);
     const mapped = await this.ask(fill.ext, CALL_MS, `adapter ${name}`, 'adapter.mapHook', { name, request: line, version: 'hook.request@2' }) as { events?: unknown } | null;
     const events = (Array.isArray(mapped?.events) ? mapped.events : []).flatMap((e: unknown) => (typeof (e as { kind?: unknown })?.kind === 'string' ? [{ kind: (e as { kind: string }).kind }] : []));
     const session = (line.payload as { session_id?: unknown } | null)?.session_id;
@@ -1237,7 +1238,7 @@ class Host implements ExtensionHost {
     if (failed.length) throw Error(`session ${session}'s waiting answers weren't all delivered: ${failed.join('; ')}`);
   }
   private async deliverVia(fill: { ext: Ext; caps: AdapterCaps }, name: string, answer: Delivery, route: Route): Promise<void> {
-    if (!fill.ext.ask || (await this.revoked(fill.ext))) throw Error(`the adapter ${name}'s package stopped, so ${answer.ask} wasn't delivered`);
+    if (!fill.ext.live || !fill.ext.ask || (await this.revoked(fill.ext))) throw Error(`the adapter ${name}'s package stopped, so ${answer.ask} wasn't delivered`);
     await this.ask(fill.ext, CALL_MS, `adapter ${name}'s delivery`, 'adapter.deliver', { name, answer, session: answer.session, route });
   }
 

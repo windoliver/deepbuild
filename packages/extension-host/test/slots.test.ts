@@ -62,10 +62,10 @@ const CAPS: AdapterCaps = { holdStop: false, wakeIdle: false, steer: false, foll
 const REAL: Record<string, string> = { SessionStart: 'session.start', UserPromptSubmit: 'user.ask', PreToolUse: 'tool.before', PostToolUse: 'tool.after', Stop: 'agent.stop', SessionEnd: 'session.end' };
 interface TestAdapter { name: string; folder: string; seen(): { route: string; ask: string }[] }
 /** An adapter package: `maps` names each hook and the kind it maps to; `deliver` is the body of its deliver, with `seen` the file it appends to. */
-function adapter(name: string, caps: Partial<AdapterCaps>, maps: Record<string, string> = REAL, deliver = ''): TestAdapter {
+function adapter(name: string, caps: Partial<AdapterCaps>, maps: Record<string, string> = REAL, deliver = '', after = ''): TestAdapter {
   const seen = join(temp(), 'seen.jsonl');
   writeFileSync(seen, '');
-  const code = `import { appendFileSync } from 'node:fs';
+  const code = `import { appendFileSync, existsSync } from 'node:fs';
 let calls = 0;
 export default async function (deep: any): Promise<void> {
   const maps: Record<string, string> = ${JSON.stringify(maps)};
@@ -75,6 +75,7 @@ export default async function (deep: any): Promise<void> {
     mapHook(request: any) { const kind = maps[String(request.payload?.hook_event_name)]; return { events: kind ? [{ agent: ${JSON.stringify(name)}, kind, data: {}, rule: '/test' }] : [], verified: true, readings: [] }; },
     deliver(answer: any, session: string, route: string) { ${deliver} appendFileSync(${JSON.stringify(seen)}, JSON.stringify({ route, ask: answer.ask }) + '\\n'); return { outcome: 'delivered', route }; },
   });
+  ${after}
 }
 `;
   return { name, folder: pkgOf(`test/${name}`, code), seen: () => readFileSync(seen, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l) as { route: string; ask: string }) };
@@ -271,5 +272,20 @@ describe('#349 a resolver registers only from the hub', () => {
     expect(c.passed, 'its conformance refuses the resolver').toBe(false);
     expect(c.reasons.join('\n')).toMatch(/resolver/);
     expect((await h.load(p)).status).toBe('refused');
+  }, 60_000);
+
+  it('an adapter whose package has not finished starting is no adapter yet: a hook line for it rejects, and nothing it mapped binds a session', async () => {
+    const flag = join(temp(), 'hang');
+    const a = adapter('hanger', {}, REAL, '', `if (existsSync(${JSON.stringify(flag)})) await new Promise(() => undefined);`);
+    const h = await host(release(a.folder));
+    const p = await h.install({ from: a.folder, builtBy: null });
+    expect((await h.check(p)).passed).toBe(true);
+    writeFileSync(flag, '');
+    const loading = h.load(p);
+    for (let i = 0; i < 500 && !(await h.adapters()).some((x) => x.name === 'hanger'); i++) await new Promise((r) => setTimeout(r, 10));
+    expect((await h.adapters()).map((x) => x.name), 'the adapter was registered by a start that has not finished').toContain('hanger');
+    await expect(h.hook(line('hanger', 'S-hang', 'SessionStart'))).rejects.toThrow(/no loaded extension registered an adapter hanger/);
+    expect((await loading).status, 'the package never finished starting').toBe('refused');
+    expect((await h.adapters()).map((x) => x.name)).not.toContain('hanger');
   }, 60_000);
 });
