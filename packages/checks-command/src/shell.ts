@@ -103,7 +103,8 @@ function traced(program: string, args: string[], cwd: string, path: string, trus
   } catch { /* unreadable: untraced */ }
   if (!head.startsWith('#!')) return trust.python && real !== null && PYTHON.test(real) && !isolated(args);
   if (depth > 0) return false;
-  const script = pnpmShim(at);
+  // Only a file that starts as pnpm's shim does can be one: any other `#!` line is read as the interpreter's.
+  const script = head === '#!/bin/sh' ? pnpmShim(at) : null;
   if (script !== null) return traced('node', [script, ...args], cwd, path, trust, depth + 1);
   const [first = '', ...rest] = head.slice(2).trim().split(/\s+/);
   const viaEnv = (first.split('/').pop() ?? first) === 'env';
