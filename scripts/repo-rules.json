@@ -310,6 +310,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
         },
+        "@deepbuild/extension-host": {
+          "spec": "0.0.0",
+          "why": "Issue #350: the hub opens project trust and the extension host on its record and supervisor at startup, and asks its extensions at run time."
+        },
         "@deepbuild/leases": {
           "spec": "0.0.0",
           "why": "Issue #237: the hub holds the kernel's one lease table, opened on its record, with env-local's kinds declared in it, and the supervisor leases every run's keys through it."
