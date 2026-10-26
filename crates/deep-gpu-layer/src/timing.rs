@@ -219,11 +219,18 @@ enum Trial {
 }
 
 /// One trial of `loops` loops that read `ns` of GPU time and took `wall_ns` to come back, judged
-/// against `target`: sized once the GPU time reaches 80% of it, else grown.
+/// against `target`: sized once the GPU time reaches 80% of it; past four times the target of
+/// wall time the ladder stops, since growing would only run the GPU longer: zero ticks then
+/// say the timestamps don't work, and anything else is sized as it is; else grown.
 fn judge(loops: u32, ns: f64, wall_ns: f64, target: f64) -> Trial {
-    let _ = wall_ns;
     if ns > target * 0.8 {
         Trial::Sized
+    } else if wall_ns > target * 4.0 {
+        if ns > 0.0 {
+            Trial::Sized
+        } else {
+            Trial::ZeroTicks
+        }
     } else {
         Trial::Grow(grown(loops, ns, target))
     }
