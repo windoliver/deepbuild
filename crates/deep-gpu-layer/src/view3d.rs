@@ -4,32 +4,28 @@
 //! With a window, the view sits over a flat page and its 2D writer layers anchored to 3D items
 //! draw over it from the evaluated data of the `frame_seq` the shown slot carries.
 
-use std::collections::BTreeSet;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use deep_canvas::document::{apply_ops, writer_layer, Writing};
+use deep_canvas_marks::look::Status;
 use deep_canvas_scene3d::label::PAGE;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::module::{GEOMETRY_PASS, OUTPUT_PASS};
 use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
-use deep_effects_render::frame::{self as fx, Effects};
 use deep_gpu::device::Backend;
-use deep_gpu::encode::Pool;
-use deep_gpu::view::{Config, View};
-use deep_scene3d_render::{Counts, Module3, Planted as Planted3, SHADOW_PASS};
+use deep_scene3d_render::status::{Mode, COLORS_PASS, GUARD_PASS};
+use deep_scene3d_render::SHADOW_PASS;
 use image::ImageEncoder as _;
 use serde_json::{json, Map, Value};
 
 use crate::frames::{hex, Capture};
+use crate::session3::{self, lock};
+use crate::status;
 use crate::window::OverlayPicture;
-use crate::worker::{Scene3Session, SLOTS, WORKERS};
 use crate::{effects, refused, App, Planted};
 
-const FLICKS_PER_SECOND: u64 = 705_600_000;
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
-}
+pub const FLICKS_PER_SECOND: u64 = 705_600_000;
 
 struct Window3 {
     size: [u32; 2],
@@ -62,9 +58,15 @@ struct Args {
     labels: bool,
     /// `(frame, at)`: a click at `at` view px while frame n is presented (#671).
     clicks: Vec<(u64, [f64; 2])>,
+    /// The record's state for each status binding's source (#382).
+    states: BTreeMap<String, String>,
+    /// The theme the look's roles and status map resolve in (#382).
+    theme: String,
+    /// The look's status map, when it has one (#382).
+    status: Option<Status>,
 }
 
-fn pair(v: &Value) -> Option<[u32; 2]> {
+pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
     let a = v.as_array()?;
     if a.len() != 2 {
         return None;
@@ -80,7 +82,11 @@ fn parse(call: &Value) -> Result<Args, Value> {
     let path = call["doc"].as_str().ok_or_else(|| bad("doc is a path"))?;
     let text = std::fs::read_to_string(path).map_err(|e| bad(&format!("doc: {e}")))?;
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
-    let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let theme = status::theme_of(call)?;
+    let look_json = status::themed(&call["look"], &theme);
+    let look = Look3::read(&look_json).map_err(|e| bad(&format!("look: {e}")))?;
+    let status = status::status_of(&look_json)?;
+    let states = status::states(call).ok_or_else(|| bad("states maps handles to states"))?;
     let size = pair(&call["size"])
         .filter(|s| s[0] > 0 && s[1] > 0)
         .ok_or_else(|| bad("size is [w, h]"))?;
@@ -150,7 +156,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
     Ok(Args {
         doc,
         look,
-        look_json: call["look"].clone(),
+        look_json,
         selection: call["selection"]
             .as_array()
             .into_iter()
@@ -171,11 +177,19 @@ fn parse(call: &Value) -> Result<Args, Value> {
         counts: call["counts"].as_bool().unwrap_or(false),
         labels: call["labels"].as_bool().unwrap_or(false),
         clicks,
+        states,
+        theme,
+        status,
     })
 }
 
 /// A patch's ops applied as `writer`, to the layer its connection stands for.
-fn apply_patch(doc: &mut Value, writer: &str, ops: &Value, seq: usize) -> Result<(), Value> {
+pub(crate) fn apply_patch(
+    doc: &mut Value,
+    writer: &str,
+    ops: &Value,
+    seq: usize,
+) -> Result<(), Value> {
     let layer = writer_layer(doc, writer).map_err(|i| refused(i.code, i.what.clone()))?;
     let id = doc["id"].as_str().unwrap_or_default().to_string();
     let patch = json!({
@@ -307,31 +321,9 @@ fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
     Ok((json!(labels), json!(pages)))
 }
 
-/// What the render thread answers for one frame.
-struct Drawn {
-    slot: usize,
-    counts: Counts,
-    picks: Vec<(String, u32)>,
-    /// The slot's BGRA bytes.
-    bytes: Option<Vec<u8>>,
-    targets: Option<(Vec<u8>, Vec<u8>)>,
-    /// The frame's GPU time and each pass's share, ms.
-    timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
-}
-
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
     match run(app, out, call) {
         Ok(v) | Err(v) => v,
-    }
-}
-
-fn planted3(p: Option<Planted>) -> Planted3 {
-    Planted3 {
-        forward_z: p == Some(Planted::ForwardZ),
-        encodes_twice: p == Some(Planted::EncodesTwice),
-        skips_encode: p == Some(Planted::SkipsEncode),
-        encodes_every_frame: p == Some(Planted::EncodesEveryFrame),
-        replays_after_add: p == Some(Planted::ReplaysAfterAdd),
     }
 }
 
@@ -344,43 +336,35 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             "a click reads the object-ID target, which the noop backend doesn't draw",
         ));
     }
-    let planted = planted3(app.planted);
-    let path = app.decision.path;
+    // Status can show in a view3d call exactly when the document has a status binding (the
+    // status-color rule's first case); then its data roles keep the look's distance (#382).
+    let mut bindings = status::bindings(&args.doc)?;
+    let bound = !bindings.is_empty();
+    // The planted guard runs (and shows a legend) where status can't show: the bug AC1 catches.
+    let shows = bound || app.planted == Some(Planted::GuardEverywhere);
+    let status = if shows {
+        let status = args
+            .status
+            .clone()
+            .ok_or_else(|| refused("status_unmapped", "look: status"))?;
+        if bound {
+            if let Some(r) =
+                status::clash(&args.doc, &args.look_json, &args.look, &status, &args.theme)
+            {
+                return Err(r);
+            }
+        }
+        Some(status)
+    } else {
+        None
+    };
     let size = args.size;
-    let fx_planted = effects::planted_fx(app.planted);
     let timings = args.timings && !noop;
-    let (ui, fx, profiler) = app
-        .worker
-        .call(move |state| -> Result<_, String> {
-            let (module, shared) = Module3::new(planted);
-            // The shipped effects run between scene3d's geometry and its output (#380).
-            let fx = Arc::new(Mutex::new(Effects::new(Default::default(), fx_planted)));
-            lock(&shared).post = Some(Box::new(fx::Shared(fx.clone())));
-            let profiler = if timings {
-                let p =
-                    wgpu_profiler::GpuProfiler::new(&state.gpu.device().device, Default::default())
-                        .map_err(|e| e.to_string())?;
-                Some(Arc::new(Mutex::new(p)))
-            } else {
-                None
-            };
-            let config = Config {
-                path,
-                slots: SLOTS,
-                size,
-                upload_bytes_per_frame: 64 << 20,
-            };
-            let view = View::new(
-                state.gpu.clone(),
-                config,
-                Box::new(module),
-                Pool::new(WORKERS),
-            )?;
-            let ui = view.ui();
-            state.scene3d = Some(Scene3Session { view, shared });
-            Ok((ui, fx, profiler))
-        })
-        .map_err(|e| refused("no_session", e))?;
+    let opened = session3::open(app, size, timings, shows)?;
+    let (ui, fx) = (opened.ui.clone(), opened.fx.clone());
+    let mut text = status::Text::default();
+    let mut report = (Value::Array(Vec::new()), Value::Array(Vec::new()));
+    let mut moved: Option<u32> = None;
     let doc_seed = args.doc["seed"].as_u64().unwrap_or(0);
     if let Some(w) = &args.window {
         deep_app::gpu_view::watch(&ui);
@@ -405,9 +389,24 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let result = (|| -> Result<(), Value> {
         for n in args.from..args.from + args.frames {
             // A seek applies every patch up to the frame it opens at.
+            let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
                 if *frame == n || (n == args.from && *frame < n) {
                     apply_patch(&mut args.doc, writer, ops, k)?;
+                    patched = true;
+                }
+            }
+            // The patched document's bindings are the ones drawn (a slice op can't add or
+            // remove one, only leave one dangling, which refuses), and its roles keep the
+            // distance.
+            if patched {
+                bindings = status::bindings(&args.doc)?;
+                if let Some(status) = status.as_ref().filter(|_| bound) {
+                    if let Some(r) =
+                        status::clash(&args.doc, &args.look_json, &args.look, status, &args.theme)
+                    {
+                        return Err(r);
+                    }
                 }
             }
             let t = (n * FLICKS_PER_SECOND / args.fps) as i64;
@@ -432,7 +431,6 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 seeding,
             );
             lock(&fx).settings = settings;
-            let (fx2, profiler2) = (fx.clone(), profiler.clone());
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
             } else {
@@ -457,60 +455,45 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .map(|(_, at)| *at)
                 .collect();
             let read_targets = (capture && wants_targets || !clicks.is_empty()) && !noop;
-            let look = args.look.clone();
+            if let (Some(status), Some(stage)) = (&status, &opened.stage) {
+                let (layer, marks, legend) = status::layer(
+                    &scene,
+                    &args.look,
+                    args.look.role("ink").unwrap_or([0, 0, 0]),
+                    status,
+                    &bindings,
+                    &args.states,
+                    &mut text,
+                )?;
+                let distance = match app.planted {
+                    Some(Planted::GuardHalfDistance) => status.min_distance / 2.0,
+                    _ => status.min_distance,
+                };
+                let mode = match app.planted {
+                    Some(Planted::GuardToGrey) => Mode::Grey,
+                    _ => Mode::Line,
+                };
+                let mut st = lock(stage);
+                st.guard = Some(status::guard_of(status, distance, mode));
+                st.layer = Some(layer);
+                if n == args.from {
+                    report = (marks, legend);
+                }
+            }
             let evaluated = scene.clone();
-            let drawn = app
-                .worker
-                .call(move |state| -> Result<Drawn, String> {
-                    let s = state.scene3d.as_mut().ok_or("no session")?;
-                    {
-                        let mut shared = lock(&s.shared);
-                        shared.next = Some((scene, look));
-                        if let Some(r) = shared.renderer.as_mut() {
-                            r.profiler = profiler2.clone();
-                        }
-                    }
-                    lock(&fx2).profiler = profiler2.clone();
-                    if delay > 0 {
-                        s.view.hold_next();
-                    }
-                    let drawn = loop {
-                        if let Some(d) = s.view.render(n)? {
-                            break d;
-                        }
-                        s.view.wait_free();
-                    };
-                    s.view.wait_done(drawn.slot);
-                    let device = s.view.device().clone();
-                    // The frame's GPU time, as its passes' timestamp queries measured it.
-                    let timing = profiler2.as_ref().map(|p| {
-                        let mut p = lock(p);
-                        let mut enc = device.device.create_command_encoder(&Default::default());
-                        p.resolve_queries(&mut enc);
-                        device.queue.submit([enc.finish()]);
-                        let _ = p.end_frame();
-                        let _ = device.device.poll(wgpu::PollType::wait_indefinitely());
-                        p.process_finished_frame(device.queue.get_timestamp_period())
-                            .map(|r| fx::timings(&r))
-                            .unwrap_or_default()
-                    });
-                    let bytes = (!noop).then(|| s.view.read(drawn.slot)).flatten();
-                    let shared = lock(&s.shared);
-                    let r = shared.renderer.as_ref().ok_or("no renderer")?;
-                    Ok(Drawn {
-                        slot: drawn.slot,
-                        counts: r.counts().clone(),
-                        picks: r.picks().iter().map(|(k, v)| (k.clone(), *v)).collect(),
-                        bytes,
-                        targets: if read_targets {
-                            r.read_targets(&device)
-                        } else {
-                            None
-                        },
-                        timing,
-                    })
-                })
-                .map_err(|e| refused("render_failed", e))?;
+            let drawn = session3::draw(
+                app,
+                &opened,
+                scene,
+                args.look.clone(),
+                n,
+                delay,
+                read_targets,
+                shows && n == args.from,
+            )?;
+            if n == args.from {
+                moved = drawn.moved;
+            }
             if delay > 0 {
                 held.push((n + delay, drawn.slot));
             }
@@ -632,7 +615,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             p.overlays.clear();
         }
     }
-    app.worker.call(|state| state.scene3d = None);
+    session3::close(app);
     result?;
     // The frame's passes in order: the shadow map when a sun casts, geometry, the effects and
     // the output.
@@ -648,7 +631,19 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         );
     }
     passes.push(json!({"name": OUTPUT_PASS, "reads": ["linear"], "writes": ["final"]}));
-    let mut reply = json!({"frames": frames, "passes": passes});
+    if shows {
+        passes.push(json!({"name": GUARD_PASS, "reads": ["final"], "writes": ["final"]}));
+        passes.push(json!({"name": COLORS_PASS, "reads": ["final"], "writes": ["final"]}));
+    }
+    let status_report = status::report(
+        shows,
+        "document",
+        status.as_ref().map(|s| s.min_distance),
+        shows.then_some(moved),
+        report.0,
+        report.1,
+    );
+    let mut reply = json!({"frames": frames, "passes": passes, "status": status_report});
     if timings {
         reply["profiler"] =
             json!({"name": "wgpu-profiler", "version": env!("DEEP_WGPU_PROFILER_VERSION")});

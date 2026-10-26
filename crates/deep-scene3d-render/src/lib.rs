@@ -9,6 +9,7 @@
 
 mod mesh;
 pub mod shadow;
+pub mod status;
 
 use std::collections::BTreeMap;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
@@ -107,6 +108,23 @@ pub fn timed(
         }
         None => f(encoder, None),
     }
+}
+
+/// What a frame hands the passes after the finish (issue #382: the status guard and the status
+/// colors): the finished frame, display-referred and sRGB-encoded in f32, and the slot they write.
+pub struct AfterFrame<'a> {
+    pub size: [u32; 2],
+    pub finished: &'a wgpu::TextureView,
+    pub slot: &'a wgpu::TextureView,
+}
+
+/// Passes after the finish: with one attached, the output pass writes the finished frame instead
+/// of the slot, and these passes write the slot from it.
+pub trait After: Send {
+    /// The passes it adds to the frame, each into its place, for the frame's plan.
+    fn passes(&self) -> Vec<Pass>;
+    /// The passes' encodes, in frame order.
+    fn jobs(&mut self, device: &Device, frame: &AfterFrame<'_>) -> Vec<(String, Job)>;
 }
 
 /// Passes between geometry and output, with the targets they read.
@@ -356,6 +374,10 @@ pub struct Renderer {
     mesh_pipeline: wgpu::RenderPipeline,
     families: Families,
     output_pipeline: wgpu::RenderPipeline,
+    /// The output pass into the finished frame, for the passes after the finish (#382).
+    output_f32: wgpu::RenderPipeline,
+    /// The finished frame (status::FINISHED), made when a frame has passes after the finish.
+    finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
     /// Render pipelines this renderer compiled, so a patch's new ones can be counted (#379).
     compiled: u32,
     meshes: BTreeMap<Shape, Mesh>,
@@ -728,6 +750,31 @@ impl Renderer {
             multiview_mask: None,
             cache: None,
         });
+        let output_f32 = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(OUTPUT_PASS),
+            layout: Some(&output_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &output,
+                entry_point: Some("out_vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: Default::default(),
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &output,
+                entry_point: Some("out_fs"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: status::FINISHED,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let atlas = {
             let texture = d.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene3d glyph atlas"),
@@ -785,6 +832,8 @@ impl Renderer {
                 text: None,
             },
             output_pipeline,
+            output_f32,
+            finished: None,
             compiled: 2,
             meshes: BTreeMap::new(),
             batches: BTreeMap::new(),
@@ -1325,6 +1374,7 @@ impl Renderer {
         device: &Device,
         slot: &wgpu::TextureView,
         post: Option<&mut dyn Post>,
+        after: Option<&mut dyn After>,
     ) -> Vec<(String, Job)> {
         let shadow = match post.as_deref() {
             Some(p) if p.shadows() => self.shadow_job(device),
@@ -1395,15 +1445,58 @@ impl Renderer {
                 });
             }
         }
-        let (slot, pipeline) = (slot.clone(), self.output_pipeline.clone());
+        // With passes after the finish, the output writes the finished frame, and they write
+        // the slot from it (#382).
+        let size = t.size;
+        let finished = after.is_some().then(|| self.finished(device, size));
+        let (target, pipeline) = match &finished {
+            Some(f) => (f.clone(), self.output_f32.clone()),
+            None => (slot.clone(), self.output_pipeline.clone()),
+        };
         let profiler = self.profiler.clone();
         let output: Job = Box::new(move |encoder| {
             timed(&profiler, OUTPUT_PASS, encoder, |encoder, timestamps| {
-                output_pass(encoder, &slot, &pipeline, &bind, timestamps)
+                output_pass(encoder, &target, &pipeline, &bind, timestamps)
             })
         });
         jobs.push((OUTPUT_PASS.into(), output));
+        if let (Some(after), Some(finished)) = (after, finished) {
+            jobs.extend(after.jobs(
+                device,
+                &AfterFrame {
+                    size,
+                    finished: &finished,
+                    slot,
+                },
+            ));
+        }
         jobs
+    }
+
+    /// The finished frame's view at `size`, made or remade when the size changed.
+    fn finished(&mut self, device: &Device, size: [u32; 2]) -> wgpu::TextureView {
+        if self.finished.as_ref().is_none_or(|(_, _, s)| *s != size) {
+            let texture = deep_gpu::alloc::outside(|| {
+                device.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("scene3d finished"),
+                    size: wgpu::Extent3d {
+                        width: size[0],
+                        height: size[1],
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: status::FINISHED,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+            });
+            let view = texture.create_view(&Default::default());
+            self.finished = Some((texture, view, size));
+        }
+        self.finished.as_ref().expect("made above").1.clone()
     }
 
     /// The last frame's depth target and, when one was drawn, the key light's shadow map, as
@@ -1518,7 +1611,7 @@ fn f16_to_f32(h: u16) -> f32 {
 }
 
 /// A texture's bytes, `texel` bytes a pixel, rows top-down with no padding.
-fn read_texture(
+pub(crate) fn read_texture(
     device: &Device,
     texture: &wgpu::Texture,
     size: [u32; 2],
@@ -1656,6 +1749,8 @@ pub struct Shared {
     pub planted: Planted,
     /// Passes another render module adds between geometry and output.
     pub post: Option<Box<dyn Post>>,
+    /// Passes after the finish: the status guard and the status colors, where status can show.
+    pub after: Option<Box<dyn After>>,
 }
 
 /// scene3d as the GPU layer's render module: one view's renderer.
@@ -1670,6 +1765,7 @@ impl Module3 {
             renderer: None,
             planted,
             post: None,
+            after: None,
         }));
         (
             Module3 {
@@ -1698,16 +1794,20 @@ impl RenderModule for Module3 {
             "shader:shader_module",
             "draws:render_pipeline",
             "output:render_pipeline",
+            "finished:texture",
             "batches:render_bundle",
         ]
     }
 
     fn passes(&self) -> Vec<Pass> {
         let s = lock(&self.shared);
-        let Some(post) = s.post.as_ref() else {
-            return self.own_passes();
-        };
         let mut passes = self.own_passes();
+        if let Some(after) = s.after.as_ref() {
+            passes.extend(after.passes());
+        }
+        let Some(post) = s.post.as_ref() else {
+            return passes;
+        };
         passes.push(Pass {
             name: SHADOW_PASS.into(),
             place: "shadows",
@@ -1738,7 +1838,12 @@ impl RenderModule for Module3 {
         let Some((scene, look)) = s.next.clone() else {
             return Vec::new();
         };
-        let Shared { renderer, post, .. } = &mut *s;
+        let Shared {
+            renderer,
+            post,
+            after,
+            ..
+        } = &mut *s;
         let Some(renderer) = renderer.as_mut() else {
             return Vec::new();
         };
@@ -1747,6 +1852,7 @@ impl RenderModule for Module3 {
             device,
             &target.view,
             post.as_deref_mut().map(|p| p as &mut dyn Post),
+            after.as_deref_mut().map(|a| a as &mut dyn After),
         )
     }
 }
@@ -1805,7 +1911,12 @@ pub fn draw_offscreen(
     });
     renderer.prepare(device, scene, look);
     let mut encoder = device.device.create_command_encoder(&Default::default());
-    for (_, job) in renderer.jobs(device, &texture.create_view(&Default::default()), post) {
+    for (_, job) in renderer.jobs(
+        device,
+        &texture.create_view(&Default::default()),
+        post,
+        None,
+    ) {
         job(&mut encoder);
     }
     device.queue.submit([encoder.finish()]);

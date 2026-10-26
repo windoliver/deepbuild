@@ -844,6 +844,10 @@
           "spec": "* path=../deep-canvas-test-modules",
           "why": "Issue #379: the test canvas module test.gpu, whose texture, mesh and burn the meter's acceptance tests draw; optional, under the test-meter feature, so no shipped build holds it."
         },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #382: the shaper and glyph atlas the status layer's marks and legend are rasterized from, exact before the status colors composite them."
+        },
         "gpui-kit": {
           "spec": "* git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1",
           "why": "Issue #377: the headless window, the page, the view and the question card the handoff is captured from."

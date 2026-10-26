@@ -1862,6 +1862,7 @@ dependencies = [
  "deep-gpu",
  "deep-replica",
  "deep-scene3d-render",
+ "deep-text",
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-shell",
