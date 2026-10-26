@@ -31,6 +31,7 @@ interface Manifest {
   codes?: string[];
   notices?: string[];
   actions?: string[];
+  environments?: string[];
 }
 
 /** Whether a name is the plug-in's own: ext.<plugin>.<name>, with `@major` allowed for an interface. */
@@ -60,15 +61,24 @@ function checkTemplates(templates: unknown): ContractIssue[] {
   });
 }
 
+/** The environments a package registers through `deep.registerEnvironment` (#331): a list of names. */
+const ENVIRONMENT_NAME = /^[a-z][a-z0-9_.-]*$/;
+function checkEnvironments(environments: unknown): ContractIssue[] {
+  if (!Array.isArray(environments)) return [issue('type', '/environments', environments)];
+  return environments.flatMap((name, i): ContractIssue[] => (typeof name === 'string' && ENVIRONMENT_NAME.test(name) ? [] : [issue('pattern', `/environments/${i}`, name)]));
+}
+
 /** The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. */
 export function checkManifest(value: unknown): Validation {
-  // `templates` is hook.template@1's, read beside extension.manifest@1, whose frozen shape doesn't list it.
+  // `templates` is hook.template@1's and `environments` the environment slot's (#331), each read beside
+  // extension.manifest@1, whose frozen shape lists neither.
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, ...rest } = object ? value as Record<string, unknown> : {};
-  const held = validate(MANIFEST, object && Object.hasOwn(value, 'templates') ? rest : value);
+  const { templates, environments, ...rest } = object ? value as Record<string, unknown> : {};
+  const beside = object && (Object.hasOwn(value, 'templates') || Object.hasOwn(value, 'environments'));
+  const held = validate(MANIFEST, beside ? rest : value);
   if (!held.ok) return held;
   const m = value as Manifest;
-  const issues: ContractIssue[] = templates === undefined ? [] : checkTemplates(templates);
+  const issues: ContractIssue[] = [...(templates === undefined ? [] : checkTemplates(templates)), ...(environments === undefined ? [] : checkEnvironments(environments))];
   const words = new Set(m.access?.words ?? []);
   (m.panels ?? []).forEach((panel, i) => {
     (panel.media ?? []).forEach((medium, j) => { if (!words.has(medium)) issues.push(issue('required', `/panels/${i}/media/${j}`, medium)); });
