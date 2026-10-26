@@ -1,8 +1,8 @@
 // Regressions of the proof lanes (#569) that its acceptance suite doesn't cover.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdirSync, symlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { chmodSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { ISSUE, criterionId, git, named, problems, proof, repo, root, show, strykerPresent, write } from './acceptance/569/helpers.mjs';
 
 const c1 = criterionId(ISSUE, 'Adds');
@@ -720,4 +720,52 @@ test("the change runs on what its own lock installs, so a package its worktree's
   const result = proof(scene, ['trace']);
   assert.ok(!result.stdout.includes(`PASS before: ${dir}/a.test.mjs`), show(result));
   assert.notEqual(result.status, 0, show(result));
+});
+
+// StrykerJS killed by the lane's own cap (spawnSync's timeout) leaves no report, no stdout and no stderr. That is
+// a BLOCKED mutation lane naming the signal, never a TypeError from reading the mutants it didn't write.
+test('a StrykerJS run that dies by a signal with no report makes the mutation lane BLOCKED, naming the signal', (t) => {
+  const source = 'packages/calc/src/calc.ts';
+  const scene = repo(t, {
+    issues: { [ISSUE]: ['Adds'] },
+    base: { 'packages/calc/package.json': '{ "name": "calc", "version": "0.0.0", "private": true, "type": "module" }\n', [source]: 'export const legacy = (n: number): number => n * 2;\n' },
+    link: true,
+    commits: [{
+      files: {
+        [source]: 'export const legacy = (n: number): number => n * 2;\nexport const total = (prices: number[]): number => prices.reduce((sum, price) => sum + price, 0);\n',
+        [`${dir}/total.test.mjs`]: `import assert from 'node:assert/strict';\nimport test from 'node:test';\nimport { total } from '../../../${source}';\n\ntest('${c1} totals', () => {\n  assert.equal(total([1, 2, 3]), 6);\n});\n`,
+      },
+      message: `Add total\n\nPart of #${ISSUE}`,
+    }],
+  });
+  // The scene's node_modules/.bin is a link to this checkout's: replace it with a folder of links, all but stryker.
+  const bin = join(scene.cwd, 'node_modules/.bin');
+  const realBin = join(root, 'node_modules/.bin');
+  rmSync(bin);
+  mkdirSync(bin);
+  for (const entry of readdirSync(realBin)) if (entry !== 'stryker') symlinkSync(join(realBin, entry), join(bin, entry));
+  writeFileSync(join(bin, 'stryker'), "process.kill(process.pid, 'SIGTERM');\nsetTimeout(() => undefined, 10_000);\n");
+  const result = proof(scene, ['mutation']);
+  assert.equal(result.status, 1, show(result));
+  assert.ok(!result.out.includes('TypeError'), show(result));
+  const blocked = problems(result, 'mutation');
+  assert.ok(blocked.some((found) => /^BLOCKED mutation: StrykerJS could not run .*SIGTERM.*no report/.test(found)), show(result));
+});
+
+// A run folder the lane can't remove (a child still writing in it, a file it can't delete) must not replace the
+// lane's own error with ENOTEMPTY: removing the temporaries never throws, and reports what was left.
+test("removing the run's temporaries never throws: a folder that can't be removed is reported, not thrown", async () => {
+  const { temporary, removeTemporaries } = await import('../scripts/proof-runs.mjs');
+  const held = temporary('deep-proof-test-');
+  writeFileSync(join(held, 'busy'), '');
+  chmodSync(held, 0o500);
+  let left;
+  try {
+    left = removeTemporaries();
+  } finally {
+    chmodSync(held, 0o700);
+    rmSync(join(held, '..'), { recursive: true, force: true });
+  }
+  assert.equal(typeof left, 'string');
+  assert.ok(left.includes(dirname(held)), left);
 });
