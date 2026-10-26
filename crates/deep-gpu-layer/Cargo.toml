@@ -26,6 +26,7 @@ test-meter = ["dep:deep-canvas-test-modules"]
 deep-gpu = { path = "../deep-gpu" }
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }

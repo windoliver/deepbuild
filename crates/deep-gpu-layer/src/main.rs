@@ -12,11 +12,15 @@ mod conformance;
 mod effects;
 mod frames;
 mod golden;
+mod guard;
+mod host;
 mod live;
 mod liveview;
 mod plugin;
 mod reference;
 mod scene;
+mod session3;
+mod status;
 #[cfg(feature = "test-meter")]
 mod testgpu;
 mod timing;
@@ -79,6 +83,13 @@ pub enum Planted {
     SharesMeterWithWorker,
     /// #381's: labels shaped at a fixed em for masks of their own, nothing in the atlas.
     LabelMask,
+    /// #382's wrong programs (tests/acceptance/382/README.md: Planted programs).
+    GuardEverywhere,
+    GuardHalfDistance,
+    HostKeepsDocumentLook,
+    HostCacheByDocId,
+    HostCheckOnce,
+    GuardToGrey,
 }
 
 impl Planted {
@@ -118,6 +129,12 @@ impl Planted {
             "steps_every_writer" => Planted::StepsEveryWriter,
             "shares_meter_with_worker" => Planted::SharesMeterWithWorker,
             "label_mask" => Planted::LabelMask,
+            "guard_everywhere" => Planted::GuardEverywhere,
+            "guard_half_distance" => Planted::GuardHalfDistance,
+            "host_keeps_document_look" => Planted::HostKeepsDocumentLook,
+            "host_cache_by_doc_id" => Planted::HostCacheByDocId,
+            "host_check_once" => Planted::HostCheckOnce,
+            "guard_to_grey" => Planted::GuardToGrey,
             _ => return None,
         })
     }
@@ -302,6 +319,8 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("host") => host::call(self, out, call),
+            Some("guard") => guard::call(self, out, call),
             Some("operators") => effects::operators(self),
             Some("reference") => effects::reference(self, out, call),
             Some("check_operator") => effects::check_operator(self, call),
