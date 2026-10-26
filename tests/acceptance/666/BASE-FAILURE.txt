@@ -1,0 +1,290 @@
+The #666 suite at base commit 0b41a19 (origin/main), on a Mac15,7 / Apple M3 Pro / 36 GiB on battery, load average
+30 to 100 from other worktrees' builds and suites. Node 24.22.0; Claude Code 2.1.310 on PATH.
+
+Summary
+- fast.test.ts: 7 tests, 2 failed, 5 passed.
+  Failed, as expected: AC1 (wrong program) and AC2 (wrong program): the hub exits at start, "DEEP_HUB_PLANT=<name>
+  names no planted program" (drops-post-tool-use, replay-appends-twice are this issue's additions).
+  Passed: AC1, AC2, AC3 and AC5 (control), AC5 (mutant). The controls show the checks hold on the merged deep-hook and
+  hub. They are load-sensitive at the base: an earlier run on the same commit failed AC2 (control) because deep-hook
+  spooled only 5 of the made-up session's 7 hooks (the first two printed "could not spool <id> within the hook's 50
+  ms"), and an earlier draft of AC3 (control) lost a PreToolUse the hub was late to acknowledge, neither recorded nor
+  spooled. That is the base dropping hooks, which AC1 holds against (README, What the base does).
+- session.live.test.ts with DEEP_HARNESS_LIVE=1 (one attempt): 7 tests, 7 failed, each BLOCKED before any session
+  started or spent anything: the merged harness has no add-readme-line scenario ("unknown or incomplete option
+  --workdir", exit 2). Once the scenario exists, Claude Code 2.1.310 is outside the facts' versions (2.1.299,
+  2.1.304), so the harness's run is BLOCKED and the tests stay BLOCKED until the facts cover it.
+- session.live.test.ts without the opt-in: 7 tests, 7 failed, each "BLOCKED: these tests start real Claude Code
+  sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1".
+
+================ npx vitest run --root tests/acceptance/666 --no-file-parallelism fast.test.ts ================
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-666-54c719/tests/acceptance/666
+
+ ❯ fast.test.ts (7 tests | 2 failed) 129447ms
+   ❯ AC1 #666.fa419b94 every hook in the record once, under the session's ID, in stamp order; a hub that drops a PostToolUse fails, naming the call (2)
+     × AC1 (wrong program) the planted hub drops-post-tool-use fails the same check, naming the dropped call 3699ms
+   ❯ AC2 #666.d0fc950d with the hub stopped, every spooled event is in the record once in stamp order; a replay that appends one twice fails, naming its ID (2)
+     × AC2 (wrong program) the planted replay replay-appends-twice fails the same check, naming the event's ID 4081ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  fast.test.ts > AC1 #666.fa419b94 every hook in the record once, under the session's ID, in stamp order; a hub that drops a PostToolUse fails, naming the call > AC1 (wrong program) the planted hub drops-post-tool-use fails the same check, naming the dropped call
+Error: BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=drops-post-tool-use): stderr: file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/wire.js:65
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=drops-post-tool-use names no planted program
+    at plantOf (file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/wire.js:65:15)
+    at runHub (file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/server.js:408:19)
+    at hubCommand (file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/index.js:23:28)
+    at file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:295:17
+    293|   const proc: HubProc = { child, pid: child.pid!, stdout: () => out, s…
+    294|   const r = await Promise.race([ready, sleep(timeoutMs).then(() => und…
+    295|   if (!r) throw Error(`BLOCKED: the hub didn't start (deep hub run${o.…
+       |                 ^
+    296|   return { ...r, home: o.home, root: join(o.home, '.deepbuild'), proc …
+    297| }
+ ❯ hubUp fast.test.ts:27:15
+ ❯ fast.test.ts:67:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  fast.test.ts > AC2 #666.d0fc950d with the hub stopped, every spooled event is in the record once in stamp order; a replay that appends one twice fails, naming its ID > AC2 (wrong program) the planted replay replay-appends-twice fails the same check, naming the event's ID
+Error: BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=replay-appends-twice): stderr: file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/wire.js:65
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=replay-appends-twice names no planted program
+    at plantOf (file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/wire.js:65:15)
+    at runHub (file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/server.js:408:19)
+    at hubCommand (file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/hub/dist/index.js:23:28)
+    at file://~/dev/claude-worktrees/doneright/github-issue-666-54c719/packages/cli/dist/main.js:131:30
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:295:17
+    293|   const proc: HubProc = { child, pid: child.pid!, stdout: () => out, s…
+    294|   const r = await Promise.race([ready, sleep(timeoutMs).then(() => und…
+    295|   if (!r) throw Error(`BLOCKED: the hub didn't start (deep hub run${o.…
+       |                 ^
+    296|   return { ...r, home: o.home, root: join(o.home, '.deepbuild'), proc …
+    297| }
+ ❯ hubStopped fast.test.ts:46:15
+ ❯ fast.test.ts:84:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed (7)
+   Start at  16:32:15
+   Duration  132.02s (tests 98%, import 1%, transform 1%)
+
+
+================ DEEP_HARNESS_LIVE=1 npx vitest run --root tests/acceptance/666 session.live.test.ts ================
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-666-54c719/tests/acceptance/666
+
+ ❯ session.live.test.ts (7 tests | 7 failed) 28921ms
+   ❯ AC1 #666.fa419b94 every hook the session fires is in the record once, under the session's ID, in stamp order (2)
+     × AC1 the killed session and the stopped session: SessionStart first, a PreToolUse and a PostToolUse for each tool call the transcript shows, and Stop, each in the record once 24151ms
+     × AC1 (wrong program) the killed session's own hook inputs, run again through deep-hook, pass on the merged hub and fail on drops-post-tool-use, naming the call 0ms
+   ❯ AC2 #666.d0fc950d with the hub stopped before the session starts (2)
+     × AC2 the stopped session runs to its stop with every hook returning within 50 ms of its start; once the hub starts every spooled event is in the record in stamp order, none twice 1336ms
+     × AC2 (wrong program) the stopped session's spool, replayed by replay-appends-twice, fails the same check, naming the event's ID 0ms
+   ❯ AC3 #666.7359ccd1 with the hub killed by SIGKILL between two tool calls and started again (1)
+     × AC3 the killed session: every event the hub acknowledged before the kill is in the record, log positions only increase, and the hooks fired while it was down arrive from the spool 0ms
+   ❯ AC4 #666.be202da6 with ANTHROPIC_API_KEY set for the session (1)
+     × AC4 the keyed session's SessionStart event says the key is set (the other sessions' say it isn't), and no record row, spool file or hub log holds its value 2551ms
+   ❯ AC5 #666.95eb0939 after the run, the record's projections rebuilt from its log equal the live ones (1)
+     × AC5 each session's ledger, once its hub stopped: every projection equals its rebuild 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  session.live.test.ts > AC1 #666.fa419b94 every hook the session fires is in the record once, under the session's ID, in stamp order > AC1 the killed session and the stopped session: SessionStart first, a PreToolUse and a PostToolUse for each tool call the transcript shows, and Stop, each in the record once
+ FAIL  session.live.test.ts > AC1 #666.fa419b94 every hook the session fires is in the record once, under the session's ID, in stamp order > AC1 (wrong program) the killed session's own hook inputs, run again through deep-hook, pass on the merged hub and fail on drops-post-tool-use, naming the call
+ FAIL  session.live.test.ts > AC3 #666.7359ccd1 with the hub killed by SIGKILL between two tool calls and started again > AC3 the killed session: every event the hub acknowledged before the kill is in the record, log positions only increase, and the hooks fired while it was down arrive from the spool
+ FAIL  session.live.test.ts > AC5 #666.95eb0939 after the run, the record's projections rebuilt from its log equal the live ones > AC5 each session's ledger, once its hub stopped: every projection equals its rebuild
+Error: BLOCKED: the harness printed no run line for scenario add-readme-line: exit 2; stdout ; stderr unknown or incomplete option --workdir
+Usage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job> [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]
+       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]
+       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]
+
+ ❯ accepted session.live.test.ts:53:22
+     51| function accepted(r: HarnessRun, s: Setup, work: string): Line {
+     52|   const problem = runProblem(r, s, work);
+     53|   if (problem) throw Error(problem);
+       |                      ^
+     54|   return r.run!;
+     55| }
+ ❯ session.live.test.ts:73:15
+ ❯ session.live.test.ts:119:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  session.live.test.ts > AC2 #666.d0fc950d with the hub stopped before the session starts > AC2 the stopped session runs to its stop with every hook returning within 50 ms of its start; once the hub starts every spooled event is in the record in stamp order, none twice
+ FAIL  session.live.test.ts > AC2 #666.d0fc950d with the hub stopped before the session starts > AC2 (wrong program) the stopped session's spool, replayed by replay-appends-twice, fails the same check, naming the event's ID
+Error: BLOCKED: the harness printed no run line for scenario add-readme-line: exit 2; stdout ; stderr unknown or incomplete option --workdir
+Usage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job> [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]
+       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]
+       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]
+
+ ❯ accepted session.live.test.ts:53:22
+     51| function accepted(r: HarnessRun, s: Setup, work: string): Line {
+     52|   const problem = runProblem(r, s, work);
+     53|   if (problem) throw Error(problem);
+       |                      ^
+     54|   return r.run!;
+     55| }
+ ❯ stoppedSession session.live.test.ts:96:15
+ ❯ session.live.test.ts:150:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  session.live.test.ts > AC4 #666.be202da6 with ANTHROPIC_API_KEY set for the session > AC4 the keyed session's SessionStart event says the key is set (the other sessions' say it isn't), and no record row, spool file or hub log holds its value
+Error: BLOCKED: the harness printed no run line for scenario add-readme-line: exit 2; stdout ; stderr unknown or incomplete option --workdir
+Usage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job> [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]
+       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]
+       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]
+
+ ❯ accepted session.live.test.ts:53:22
+     51| function accepted(r: HarnessRun, s: Setup, work: string): Line {
+     52|   const problem = runProblem(r, s, work);
+     53|   if (problem) throw Error(problem);
+       |                      ^
+     54|   return r.run!;
+     55| }
+ ❯ stoppedSession session.live.test.ts:96:15
+ ❯ session.live.test.ts:185:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed (7)
+   Start at  16:35:21
+   Duration  29.40s (tests 99%, import 1%)
+
+
+================ npx vitest run --root tests/acceptance/666 session.live.test.ts (no opt-in) ================
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-666-54c719/tests/acceptance/666
+
+ ❯ session.live.test.ts (7 tests | 7 failed) 5ms
+   ❯ AC1 #666.fa419b94 every hook the session fires is in the record once, under the session's ID, in stamp order (2)
+     × AC1 the killed session and the stopped session: SessionStart first, a PreToolUse and a PostToolUse for each tool call the transcript shows, and Stop, each in the record once 3ms
+     × AC1 (wrong program) the killed session's own hook inputs, run again through deep-hook, pass on the merged hub and fail on drops-post-tool-use, naming the call 0ms
+   ❯ AC2 #666.d0fc950d with the hub stopped before the session starts (2)
+     × AC2 the stopped session runs to its stop with every hook returning within 50 ms of its start; once the hub starts every spooled event is in the record in stamp order, none twice 0ms
+     × AC2 (wrong program) the stopped session's spool, replayed by replay-appends-twice, fails the same check, naming the event's ID 0ms
+   ❯ AC3 #666.7359ccd1 with the hub killed by SIGKILL between two tool calls and started again (1)
+     × AC3 the killed session: every event the hub acknowledged before the kill is in the record, log positions only increase, and the hooks fired while it was down arrive from the spool 0ms
+   ❯ AC4 #666.be202da6 with ANTHROPIC_API_KEY set for the session (1)
+     × AC4 the keyed session's SessionStart event says the key is set (the other sessions' say it isn't), and no record row, spool file or hub log holds its value 0ms
+   ❯ AC5 #666.95eb0939 after the run, the record's projections rebuilt from its log equal the live ones (1)
+     × AC5 each session's ledger, once its hub stopped: every projection equals its rebuild 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  session.live.test.ts > AC1 #666.fa419b94 every hook the session fires is in the record once, under the session's ID, in stamp order > AC1 the killed session and the stopped session: SessionStart first, a PreToolUse and a PostToolUse for each tool call the transcript shows, and Stop, each in the record once
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:118:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  session.live.test.ts > AC1 #666.fa419b94 every hook the session fires is in the record once, under the session's ID, in stamp order > AC1 (wrong program) the killed session's own hook inputs, run again through deep-hook, pass on the merged hub and fail on drops-post-tool-use, naming the call
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  session.live.test.ts > AC2 #666.d0fc950d with the hub stopped before the session starts > AC2 the stopped session runs to its stop with every hook returning within 50 ms of its start; once the hub starts every spooled event is in the record in stamp order, none twice
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:150:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  session.live.test.ts > AC2 #666.d0fc950d with the hub stopped before the session starts > AC2 (wrong program) the stopped session's spool, replayed by replay-appends-twice, fails the same check, naming the event's ID
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:159:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  session.live.test.ts > AC3 #666.7359ccd1 with the hub killed by SIGKILL between two tool calls and started again > AC3 the killed session: every event the hub acknowledged before the kill is in the record, log positions only increase, and the hooks fired while it was down arrive from the spool
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:177:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  session.live.test.ts > AC4 #666.be202da6 with ANTHROPIC_API_KEY set for the session > AC4 the keyed session's SessionStart event says the key is set (the other sessions' say it isn't), and no record row, spool file or hub log holds its value
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:185:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  session.live.test.ts > AC5 #666.95eb0939 after the run, the record's projections rebuilt from its log equal the live ones > AC5 each session's ledger, once its hub stopped: every projection equals its rebuild
+Error: BLOCKED: these tests start real Claude Code sessions on your plan; run them by hand with DEEP_HARNESS_LIVE=1
+ ❯ requireLive session.live.test.ts:30:52
+     28| const MINUTE = 60_000;
+     29| function requireLive(): void {
+     30|   if (process.env.DEEP_HARNESS_LIVE !== '1') throw Error('BLOCKED: the…
+       |                                                    ^
+     31| }
+     32| const spooledIn = (spooled: readonly Spooled[]) => (events: Ev[]) => s…
+ ❯ session.live.test.ts:211:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  7 failed (7)
+   Start at  16:36:14
+   Duration  552ms (transform 51%, import 45%, worker 3%, tests 1%)
+

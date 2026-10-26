@@ -1,0 +1,970 @@
+{
+  "format": 1,
+  "id": "grey-bands-378",
+  "profile": "scene",
+  "title": "Thirty-two grey bands",
+  "description": "Thirty-two 16 px horizontal 3D lines covering the frame top to bottom, each one grey from black to white, 188 among them.",
+  "size": [
+    512,
+    512
+  ],
+  "camera": "cam",
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "cam": {
+      "id": "cam",
+      "kind": "camera@1",
+      "layer": "main",
+      "name": "Camera",
+      "order": "a0",
+      "params": {
+        "projection": "orthographic",
+        "position": [
+          0,
+          0,
+          10
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "view_width": 51.2
+      }
+    },
+    "band-00": {
+      "id": "band-00",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 0",
+      "order": "a01",
+      "params": {
+        "points": [
+          [
+            -30,
+            24.8,
+            0
+          ],
+          [
+            30,
+            24.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-00"
+          }
+        }
+      }
+    },
+    "band-01": {
+      "id": "band-01",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 8",
+      "order": "a02",
+      "params": {
+        "points": [
+          [
+            -30,
+            23.2,
+            0
+          ],
+          [
+            30,
+            23.2,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-01"
+          }
+        }
+      }
+    },
+    "band-02": {
+      "id": "band-02",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 16",
+      "order": "a03",
+      "params": {
+        "points": [
+          [
+            -30,
+            21.6,
+            0
+          ],
+          [
+            30,
+            21.6,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-02"
+          }
+        }
+      }
+    },
+    "band-03": {
+      "id": "band-03",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 25",
+      "order": "a04",
+      "params": {
+        "points": [
+          [
+            -30,
+            20,
+            0
+          ],
+          [
+            30,
+            20,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-03"
+          }
+        }
+      }
+    },
+    "band-04": {
+      "id": "band-04",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 33",
+      "order": "a05",
+      "params": {
+        "points": [
+          [
+            -30,
+            18.4,
+            0
+          ],
+          [
+            30,
+            18.4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-04"
+          }
+        }
+      }
+    },
+    "band-05": {
+      "id": "band-05",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 41",
+      "order": "a06",
+      "params": {
+        "points": [
+          [
+            -30,
+            16.8,
+            0
+          ],
+          [
+            30,
+            16.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-05"
+          }
+        }
+      }
+    },
+    "band-06": {
+      "id": "band-06",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 49",
+      "order": "a07",
+      "params": {
+        "points": [
+          [
+            -30,
+            15.2,
+            0
+          ],
+          [
+            30,
+            15.2,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-06"
+          }
+        }
+      }
+    },
+    "band-07": {
+      "id": "band-07",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 58",
+      "order": "a08",
+      "params": {
+        "points": [
+          [
+            -30,
+            13.6,
+            0
+          ],
+          [
+            30,
+            13.6,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-07"
+          }
+        }
+      }
+    },
+    "band-08": {
+      "id": "band-08",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 66",
+      "order": "a09",
+      "params": {
+        "points": [
+          [
+            -30,
+            12,
+            0
+          ],
+          [
+            30,
+            12,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-08"
+          }
+        }
+      }
+    },
+    "band-09": {
+      "id": "band-09",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 74",
+      "order": "a10",
+      "params": {
+        "points": [
+          [
+            -30,
+            10.4,
+            0
+          ],
+          [
+            30,
+            10.4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-09"
+          }
+        }
+      }
+    },
+    "band-10": {
+      "id": "band-10",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 82",
+      "order": "a11",
+      "params": {
+        "points": [
+          [
+            -30,
+            8.8,
+            0
+          ],
+          [
+            30,
+            8.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-10"
+          }
+        }
+      }
+    },
+    "band-11": {
+      "id": "band-11",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 90",
+      "order": "a12",
+      "params": {
+        "points": [
+          [
+            -30,
+            7.2,
+            0
+          ],
+          [
+            30,
+            7.2,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-11"
+          }
+        }
+      }
+    },
+    "band-12": {
+      "id": "band-12",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 99",
+      "order": "a13",
+      "params": {
+        "points": [
+          [
+            -30,
+            5.6,
+            0
+          ],
+          [
+            30,
+            5.6,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-12"
+          }
+        }
+      }
+    },
+    "band-13": {
+      "id": "band-13",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 107",
+      "order": "a14",
+      "params": {
+        "points": [
+          [
+            -30,
+            4,
+            0
+          ],
+          [
+            30,
+            4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-13"
+          }
+        }
+      }
+    },
+    "band-14": {
+      "id": "band-14",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 115",
+      "order": "a15",
+      "params": {
+        "points": [
+          [
+            -30,
+            2.4,
+            0
+          ],
+          [
+            30,
+            2.4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-14"
+          }
+        }
+      }
+    },
+    "band-15": {
+      "id": "band-15",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 123",
+      "order": "a16",
+      "params": {
+        "points": [
+          [
+            -30,
+            0.8,
+            0
+          ],
+          [
+            30,
+            0.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-15"
+          }
+        }
+      }
+    },
+    "band-16": {
+      "id": "band-16",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 132",
+      "order": "a17",
+      "params": {
+        "points": [
+          [
+            -30,
+            -0.8,
+            0
+          ],
+          [
+            30,
+            -0.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-16"
+          }
+        }
+      }
+    },
+    "band-17": {
+      "id": "band-17",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 140",
+      "order": "a18",
+      "params": {
+        "points": [
+          [
+            -30,
+            -2.4,
+            0
+          ],
+          [
+            30,
+            -2.4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-17"
+          }
+        }
+      }
+    },
+    "band-18": {
+      "id": "band-18",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 148",
+      "order": "a19",
+      "params": {
+        "points": [
+          [
+            -30,
+            -4,
+            0
+          ],
+          [
+            30,
+            -4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-18"
+          }
+        }
+      }
+    },
+    "band-19": {
+      "id": "band-19",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 156",
+      "order": "a20",
+      "params": {
+        "points": [
+          [
+            -30,
+            -5.6,
+            0
+          ],
+          [
+            30,
+            -5.6,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-19"
+          }
+        }
+      }
+    },
+    "band-20": {
+      "id": "band-20",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 164",
+      "order": "a21",
+      "params": {
+        "points": [
+          [
+            -30,
+            -7.2,
+            0
+          ],
+          [
+            30,
+            -7.2,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-20"
+          }
+        }
+      }
+    },
+    "band-21": {
+      "id": "band-21",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 173",
+      "order": "a22",
+      "params": {
+        "points": [
+          [
+            -30,
+            -8.8,
+            0
+          ],
+          [
+            30,
+            -8.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-21"
+          }
+        }
+      }
+    },
+    "band-22": {
+      "id": "band-22",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 181",
+      "order": "a23",
+      "params": {
+        "points": [
+          [
+            -30,
+            -10.4,
+            0
+          ],
+          [
+            30,
+            -10.4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-22"
+          }
+        }
+      }
+    },
+    "band-23": {
+      "id": "band-23",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 188",
+      "order": "a24",
+      "params": {
+        "points": [
+          [
+            -30,
+            -12,
+            0
+          ],
+          [
+            30,
+            -12,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-23"
+          }
+        }
+      }
+    },
+    "band-24": {
+      "id": "band-24",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 197",
+      "order": "a25",
+      "params": {
+        "points": [
+          [
+            -30,
+            -13.6,
+            0
+          ],
+          [
+            30,
+            -13.6,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-24"
+          }
+        }
+      }
+    },
+    "band-25": {
+      "id": "band-25",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 205",
+      "order": "a26",
+      "params": {
+        "points": [
+          [
+            -30,
+            -15.2,
+            0
+          ],
+          [
+            30,
+            -15.2,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-25"
+          }
+        }
+      }
+    },
+    "band-26": {
+      "id": "band-26",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 214",
+      "order": "a27",
+      "params": {
+        "points": [
+          [
+            -30,
+            -16.8,
+            0
+          ],
+          [
+            30,
+            -16.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-26"
+          }
+        }
+      }
+    },
+    "band-27": {
+      "id": "band-27",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 222",
+      "order": "a28",
+      "params": {
+        "points": [
+          [
+            -30,
+            -18.4,
+            0
+          ],
+          [
+            30,
+            -18.4,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-27"
+          }
+        }
+      }
+    },
+    "band-28": {
+      "id": "band-28",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 230",
+      "order": "a29",
+      "params": {
+        "points": [
+          [
+            -30,
+            -20,
+            0
+          ],
+          [
+            30,
+            -20,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-28"
+          }
+        }
+      }
+    },
+    "band-29": {
+      "id": "band-29",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 238",
+      "order": "a30",
+      "params": {
+        "points": [
+          [
+            -30,
+            -21.6,
+            0
+          ],
+          [
+            30,
+            -21.6,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-29"
+          }
+        }
+      }
+    },
+    "band-30": {
+      "id": "band-30",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 247",
+      "order": "a31",
+      "params": {
+        "points": [
+          [
+            -30,
+            -23.2,
+            0
+          ],
+          [
+            30,
+            -23.2,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-30"
+          }
+        }
+      }
+    },
+    "band-31": {
+      "id": "band-31",
+      "kind": "mark.line@1",
+      "layer": "main",
+      "name": "Band of grey 255",
+      "order": "a32",
+      "params": {
+        "points": [
+          [
+            -30,
+            -24.8,
+            0
+          ],
+          [
+            30,
+            -24.8,
+            0
+          ]
+        ],
+        "mode": "strip",
+        "width": 16,
+        "size_space": "screen",
+        "paint": {
+          "fill": {
+            "role": "grey-31"
+          }
+        }
+      }
+    }
+  }
+}

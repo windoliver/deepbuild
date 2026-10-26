@@ -244,28 +244,57 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
             panel[2].round().clamp(1., 8192.) as u16,
             panel[3].round().clamp(1., 8192.) as u16,
         ];
-        let Ok(drawn) = hub.renderer.prepare(
-            &stamped,
-            0,
-            &palette,
-            hub.look.status.as_ref(),
-            &record,
-            &hub.scenario.evidence,
-        ) else {
-            continue;
-        };
-        let [dw, dh] = drawn.frame.size;
-        let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
-        for (id, b) in drawn.boxes() {
-            let at = [
-                panel[0] + b[0] * scale,
-                panel[1] + b[1] * scale,
-                b[2] * scale,
-                b[3] * scale,
+        let rgba = if deep_canvas_scene3d::scene::has_3d(&Value::Object(stamped.clone())) {
+            // A 3D writer layer draws natively on the GPU (#378), its frame scaled to fit the
+            // panel from the top left as a 2D layer's is.
+            let dim = |i: usize| stamped["size"][i].as_f64().unwrap_or(1.0).max(1.0);
+            let scale = (f64::from(size[0]) / dim(0)).min(f64::from(size[1]) / dim(1));
+            let drawn_size = [
+                (dim(0) * scale).round().clamp(1.0, f64::from(size[0])) as u16,
+                (dim(1) * scale).round().clamp(1.0, f64::from(size[1])) as u16,
             ];
-            items.push(json!({"id": id, "layer": row.layer, "box": at}));
-        }
-        let rgba = hub.renderer.raster(&drawn, size, None);
+            let Some(gpu) = hub.gpu3() else {
+                return refused("unsupported_platform");
+            };
+            let Ok((drawn, scene)) =
+                gpu.draw(&Value::Object(stamped.clone()), 0, &palette, drawn_size)
+            else {
+                continue;
+            };
+            for (id, b) in scene.boxes() {
+                let at = [panel[0] + b[0], panel[1] + b[1], b[2], b[3]];
+                items.push(json!({"id": id, "layer": row.layer, "box": at}));
+            }
+            let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
+            let mut rgba = vec![0u8; pw * usize::from(size[1])];
+            for (y, line) in drawn.chunks_exact(dw).enumerate() {
+                rgba[y * pw..y * pw + dw].copy_from_slice(line);
+            }
+            rgba
+        } else {
+            let Ok(drawn) = hub.renderer.prepare(
+                &stamped,
+                0,
+                &palette,
+                hub.look.status.as_ref(),
+                &record,
+                &hub.scenario.evidence,
+            ) else {
+                continue;
+            };
+            let [dw, dh] = drawn.frame.size;
+            let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
+            for (id, b) in drawn.boxes() {
+                let at = [
+                    panel[0] + b[0] * scale,
+                    panel[1] + b[1] * scale,
+                    b[2] * scale,
+                    b[3] * scale,
+                ];
+                items.push(json!({"id": id, "layer": row.layer, "box": at}));
+            }
+            hub.renderer.raster(&drawn, size, None)
+        };
         let Some(picture) = picture(rgba, size) else {
             return refused("no_picture");
         };

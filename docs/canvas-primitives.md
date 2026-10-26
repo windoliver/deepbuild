@@ -566,7 +566,7 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `turn.usage` (new) | `{turn, model, covers, tokens: {input, cached, output, exact}, cost: reported \| estimated \| unpriced, context: {used, window}}` | sessions | what a turn cost, where the adapter can read it; a cost basis stays visible, never a bare number |
 | `tool.span` (new) | `{tool, tool_use_id, duration_ms, blocked_ms, decision, reading}`, from the OTLP receiver | readings | how long each tool call took and waited on you, from the agent's own telemetry; `reading` names the tool only when its facts list it, else other |
 | `request.cost` (new) | `{model, request_id, cost: reported, tokens: {input, cached, output, exact}, reading}`, from the OTLP receiver | session_costs, readings | a model request's reported cost on its session's row and task; a session no export reached reads not captured, never $0 |
-| `claim.made` | `{task_ref, attempt, commit, scope: session \| child \| task}` | claims | the says-done station |
+| `claim.made` | `{task_ref, attempt, commit, scope: session \| child \| task}`; @2 adds `predictions`, what the agent expects each check to show (`{check, expects: passed \| failed, at}`), stamped before any run | claims | the says-done station |
 | `claim.sent_back`, `claim.stalled` (new) | `{claim, verdict, round, to}`; `{claim, rule}` | claims | "sent back, round n of 3"; stalled cards |
 | `delivery.outcome` (new) | `{delivery, via: steer \| interrupt \| stop_hold \| next_prompt, outcome}` | deliveries | whether a send-back or an answer arrived |
 | `run.started` (new), `run.finished` | `{run, check, claim, commit}`; `{run, outcome, tests_run, passed, runs, evidence, check, assertion, expected, actual, step, points_to, findings, environment}` | runs | "17 of 29"; running status |
@@ -579,6 +579,8 @@ The catalog is closed. Each kind has a JSON Schema and feeds the projections nam
 | `ask.superseded`, `ask.moot` (new) | `{by}`; `{because: check_passed, verdict}` or `{because: attempt_replaced, session}` | asks | an ask that leaves Needs you without an answer |
 | `answer.refused` (new) | `{outcome, closed_at, via: card \| inbox, option}` | asks | a late answer to a closed ask, refused and kept on its receipt |
 | `decision.created`, `decision.applied`, `decision.revoked` (new) | `{key, scope, answer, ask}`; `{decision, ask}`; `{decision}` | decisions | past calls and what was decided for you; a revoked decision covers nothing from then on |
+| `decision.overruled` (new) | `{decision}` | decisions | a decision you overruled on the trusted path, which answers nothing from then on |
+| `default.undone` (new) | `{deadline}` | asks | a default you undid on the trusted path (`deep inbox undo`): the ask is open again, waiting as long as it first did |
 | `plan.proposed` (new) | `{ask, steps: [{does, changes, undo, public: bool, cost}], diff: sha256, hash}` | plans | authority cards |
 | `open_item.opened`, `open_item.closed` (new) | `{task_ref, text}` | open_items | "part of" and still-open lists |
 | `notice.subscribed`, `notice.sent` (new) | `{notice_kind, key, by}`; `{notice, cites}` | notices | notices you asked for, with the asking recorded |

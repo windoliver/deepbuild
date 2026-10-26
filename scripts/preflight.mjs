@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { measureOnce, warm } from './benchmark.mjs';
+import { releaseLanes, runLanes } from './lanes.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 // Parity and budgets run ./target/debug binaries; a shared Cargo target directory would misplace them.
@@ -18,8 +19,8 @@ console.log('Warming builds (not timed)');
 warm(root);
 try {
   // Lane output streams as it runs, so a measurement that breaks never hides what ran.
-  const { elapsedMs, cpuMs, peakBytes, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
-  observation = { elapsedMs, cpuMs, peakBytes, status };
+  const { elapsedMs, cpuMs, peakBytes, instructions, status } = measureOnce([process.execPath, 'scripts/checks.mjs'], root, true);
+  observation = { elapsedMs, cpuMs, peakBytes, instructions, status };
   checkStatus = status === 0 ? 0 : 1;
 } catch (error) {
   console.log(`BLOCKED check workload: ${error.message}\n  Fix: Install /usr/bin/time (GNU time on Linux) and restore the check runner.`);
@@ -38,7 +39,14 @@ if (budgets.harness && checkStatus) {
   console.log('RUN harness budgets\nBLOCKED harness budgets: the check lanes did not pass, so no agent session was started\n  Fix: Repair the failing lanes above; the lane runs once they pass.');
   laneStatus = 1;
 } else if (budgets.harness) laneStatus = spawnSync(process.execPath, ['scripts/agent-harness.mjs', 'budgets'], { cwd: root, stdio: 'inherit' }).status ?? 1;
-process.exitCode = checkStatus || perfStatus || laneStatus;
+// The release lanes spend plan usage too, so they run once, at release, and only after the checks pass.
+let releaseStatus = 0;
+if (process.env.DEEP_PREFLIGHT !== 'release') for (const { name } of releaseLanes) console.log(`SKIP ${name}: it spends plan usage, so only the release preflight runs it`);
+else if (checkStatus) {
+  for (const { name } of releaseLanes) console.log(`RUN ${name}\nBLOCKED ${name}: the check lanes did not pass, so no agent session was started\n  Fix: Repair the failing lanes above; the lane runs once they pass.`);
+  releaseStatus = 1;
+} else releaseStatus = runLanes(releaseLanes);
+process.exitCode = checkStatus || perfStatus || laneStatus || releaseStatus;
 console.log(`Checks elapsed: ${(checksMs / 1000).toFixed(2)} s (budget: <${budgetMs / 1000} s); preflight elapsed: ${((performance.now() - started) / 1000).toFixed(2)} s`);
 if (checksMs >= budgetMs) {
   console.log(`FAIL preflight budget: checks took ${(checksMs / 1000).toFixed(2)} s\n  Fix: Reduce local check time below the budget in benchmarks/budgets.json.`);

@@ -24,6 +24,8 @@ deep-gpu = { path = "../deep-gpu" }
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-app = { path = "../deep-app" }
 deep-replica = { path = "../deep-replica" }
 bytemuck = { version = "1", features = ["derive"] }

@@ -28,6 +28,14 @@ export function parseCpuMs(output, platform) {
   return ms;
 }
 
+// Instructions retired by the command and every child it waited for, or null where the report has
+// no counter, as GNU time's hasn't: a missing count is never 0. Unlike time, the count doesn't move
+// with machine load.
+export function parseInstructions(report, platform) {
+  const count = platform === 'darwin' ? Number(report.match(/^\s*(\d+)\s+instructions retired\s*$/m)?.[1]) : NaN;
+  return Number.isSafeInteger(count) && count > 0 ? count : null;
+}
+
 // stream shows the command's output as it runs instead of capturing it; a captured run is stopped after timeoutMs.
 export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('BLOCKED: native peak RSS requires macOS or Linux');
@@ -43,14 +51,14 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000) {
     if (result.error) throw result.error;
     const report = readFileSync(timing, 'utf8');
     const peakBytes = parsePeakRss(report, process.platform);
-    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    return { elapsedMs, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions: parseInstructions(report, process.platform), status: result.status, output: stream ? '' : result.stdout + result.stderr };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 }
 
 // Alternates current and merge-base runs so both see the same machine load: one warmup round, then 20 rounds.
-// Returns [current] or [current, base].
+// Returns [current] or [current, base], each with its instructions retired per round, in round order.
 export function measure(command, cwd, base) {
   const sides = base ? [[command, cwd], [base.command, base.cwd]] : [[command, cwd]];
   const samples = sides.map(() => []);
@@ -58,10 +66,30 @@ export function measure(command, cwd, base) {
     sides.forEach(([argv, directory], side) => {
       const result = measureOnce(argv, directory);
       if (result.status !== 0) throw Error(`${argv[0]} exited ${result.status}: ${result.output}`);
-      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes });
+      if (round) samples[side].push({ ms: result.elapsedMs, peakBytes: result.peakBytes, instructions: result.instructions });
     });
   }
-  return samples.map(summarize);
+  return samples.map((side) => ({ ...summarize(side), instructions: side.map(({ instructions }) => instructions) }));
+}
+
+// Judges a task against its merge base on the instructions retired of each alternated round, so the
+// verdict holds on any machine under any load. A pair's difference is current / base - 1; the change
+// is the median difference, and it fails when over the margin, the larger of 2% and the pairs'
+// spread. A missing count makes it INCONCLUSIVE.
+export function judgeInstructions(pairs) {
+  const count = (value) => Number.isSafeInteger(value) && value > 0;
+  const missing = pairs.filter((pair) => !count(pair?.current) || !count(pair?.base)).length;
+  if (!pairs.length || missing) {
+    return { status: 'INCONCLUSIVE', pairs, change: null, spread: null, margin: null,
+      reason: `instructions retired are missing in ${pairs.length ? `${missing} of ${pairs.length} pairs` : 'every pair: none were measured'}; this host's /usr/bin/time reports no counter` };
+  }
+  const differences = pairs.map(({ current, base }) => current / base - 1).sort((a, b) => a - b);
+  const middle = differences.length / 2;
+  const change = differences.length % 2 ? differences[Math.floor(middle)] : (differences[middle - 1] + differences[middle]) / 2;
+  const spread = differences.at(-1) - differences[0];
+  const margin = Math.max(0.02, spread);
+  if (change > margin) return { status: 'FAIL', pairs, change, spread, margin, reason: `instructions retired rose ${(change * 100).toFixed(2)}% over the merge base, beyond the ${(margin * 100).toFixed(2)}% margin` };
+  return { status: 'PASS', pairs, change, spread, margin };
 }
 
 // Builds unmeasured, so a checkout and its merge base are both timed warm. The check lanes run

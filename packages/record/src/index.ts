@@ -8,13 +8,13 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type LearnedChange, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type HeldAtLoad, type LearnedChange, type LearnedLoad, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
 export { PROJECTIONS, testStorage };
-export type { Backend, SliceEntry, Storage, SyncCall, TestStorage };
+export type { Backend, HeldAtLoad, LearnedLoad, SliceEntry, Storage, SyncCall, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -98,7 +98,8 @@ export interface SessionView { id: string; status: string; readings: string[]; t
 
 export interface RecordStore {
   append(connection: Connection, event: EventInput): Promise<Appended>;
-  read(query: { after: number; limit?: number }): Promise<Event[]>;
+  /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
+  read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
   table(name: string): Promise<Table>;
   session(id: string): Promise<SessionView | undefined>;
   rebuild(): Promise<void>;
@@ -107,6 +108,11 @@ export interface RecordStore {
   raw(sql: string): Promise<unknown[]>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
+  /**
+   * What a session loads of the learned step specs, playbooks and compositions, checked against the guard rules
+   * in force now: one a rule denies a command of is held, its reason naming the rule (#723).
+   */
+  loadLearned(session: string): Promise<LearnedLoad>;
   /**
    * Rolls back one learned change, by its event's ID, or every learned change in force since a time: one
    * learn.rolled_back each, newest first, through the connection; nothing is deleted. Resolves with the
@@ -127,7 +133,7 @@ const SCHEMA_VERSION = 1;
 /** Events a replay reads at a time. */
 const REPLAY_PAGE = 5000;
 /** The kinds that record a decision: only the core appends them, and each commits FULL, in its own commit. */
-const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'decision.created', 'decision.applied', 'decision.revoked', 'ask.answered', 'ask.defaulted',
+const CORE_ONLY = new Set(['verdict.made', 'verdict.stale', 'definition.locked', 'definition.revised', 'decision.created', 'decision.applied', 'decision.revoked', 'decision.overruled', 'ask.answered', 'ask.defaulted', 'default.undone',
   'spend.approved', 'spend.reserved', 'spend.charged', 'spend.asked']);
 /** The evidence store's own events: only the core, which runs the store, appends them; they stream. */
 const STORE_ONLY = new Set(['evidence.stored', 'evidence.removed']);
@@ -609,8 +615,10 @@ class SqliteRecord implements RecordStore {
 
   // ---- Reads.
 
-  async read({ after, limit = 1000 }: { after: number; limit?: number }): Promise<Event[]> {
-    const rows = this.db.prepare('SELECT * FROM events WHERE log_pos > ? ORDER BY log_pos LIMIT ?').safeIntegers(true).all(after, limit) as StoredRow[];
+  async read({ after, limit = 1000, kinds }: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]> {
+    const only = kinds ? ` AND kind IN (SELECT value FROM json_each(?))` : '';
+    const rows = this.db.prepare(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
+      .all(after, ...(kinds ? [JSON.stringify(kinds)] : []), limit) as StoredRow[];
     return rows.map(toEvent);
   }
 
@@ -685,6 +693,11 @@ class SqliteRecord implements RecordStore {
   async startSlice(session: string): Promise<SliceEntry[]> {
     await this.settle();
     return startSlice(this.db, session);
+  }
+
+  async loadLearned(session: string): Promise<LearnedLoad> {
+    await this.settle();
+    return loadLearned(this.db, session);
   }
 
   rollBack(connection: Connection, what: { change: string } | { since: number }): Promise<string[]> {

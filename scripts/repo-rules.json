@@ -314,6 +314,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the hub owns #15's store: writers bound to each connection's role, scrubbed run output, retention and the scrub of hook text."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #237: the hub holds the kernel's one lease table, opened on its record, with env-local's kinds declared in it, and the supervisor leases every run's keys through it."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #16: the hub is the record's one writer (#14)."
@@ -326,9 +330,17 @@
           "spec": "0.0.0",
           "why": "Issue #236: host@1, through which every check run starts sandboxed, is signalled and waited for, and the reaping of what a run left."
         },
+        "@deepbuild/verdicts": {
+          "spec": "0.0.0",
+          "why": "Issue #26: deep_status reports a run that disagrees with deep_claim's prediction by the verdict engine's own contradiction rule."
+        },
         "better-sqlite3": {
           "spec": "13.0.3",
           "why": "Issue #16: the lock the OS holds and drops with the process, never a PID file, and the test VFS's in-memory ledger."
+        },
+        "yaml": {
+          "spec": "2.9.1",
+          "why": "Issue #26: deep_run and deep_ask read the checks a repo's .deepbuild/done.yaml names, with the parser env-local already reads that file with."
         }
       }
     },
@@ -366,9 +378,25 @@
           "spec": "0.0.0",
           "why": "Issue #236: the unblock ask an unfinished cleanup raises for what it left."
         },
+        "@deepbuild/leases": {
+          "spec": "0.0.0",
+          "why": "Issue #237: given the kernel's lease table, the supervisor takes each run's keys through it and releases them citing the processes it proved gone."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #236: ownership records, leases, denials and cleanup outcomes live in the record, and a restart reaps from it alone."
+        }
+      }
+    },
+    "packages/leases/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #237: a declared kind is checked against the lease.kind@1 schema."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #237: the lease table's state is a function of the record: grants, stale marks and releases are appended to it, and holders' ends and the supervisor's proofs are read from it."
         }
       }
     },
@@ -647,6 +675,18 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #138: the canvas conformance kit runs each case headless on wgpu's noop backend, which makes no pixels, so a probe that needs them reads BLOCKED there; already in the lockfile."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the scene3d canvas module in R2 builds, and 3D revisions evaluated for render-back and the window."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #378: the app's GPU device a 3D revision renders back on."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #378: 3D writer layers drawn natively for render-back snapshots and the window."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
@@ -799,12 +839,64 @@
         "wgpu": {
           "spec": "^30",
           "why": "Issue #377: the test render module's pipelines and passes, on the GPU layer's device."
+        },
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the view3d call evaluates a document's 3D writer layers and its anchored overlays at each frame's t."
+        },
+        "deep-scene3d-render": {
+          "spec": "* path=../deep-scene3d-render",
+          "why": "Issue #378: scene3d's render module, which the view3d call draws through a GPU-layer view."
         }
       },
       "target.'cfg(target_os = \"macos\")'.dependencies": {
         "gpui-pre-apple": {
           "spec": "=0.3.9",
           "why": "Issue #377: the GPUI patch's planted twins and its GPU ledger, which times GPUI's frames for handoff_ms."
+        }
+      }
+    },
+    "crates/deep-canvas-scene3d/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #378: the registry it registers through, the camera it evaluates and the ops module its math goes through."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #378: a document's channels evaluated at t, so a figure's parts and an orbiting camera move."
+        },
+        "deep-text": {
+          "spec": "* path=../deep-text",
+          "why": "Issue #378: the one shaper, which shapes a label once per string."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #378: documents, looks and kind entries."
+        },
+        "vello_cpu": {
+          "spec": "^0.3",
+          "why": "Issue #378: a label's coverage mask and an anchored overlay's picture, rasterized on the CPU."
+        }
+      }
+    },
+    "crates/deep-scene3d-render/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas-scene3d": {
+          "spec": "* path=../deep-canvas-scene3d",
+          "why": "Issue #378: the evaluated scene, look and passes it draws."
+        },
+        "deep-gpu": {
+          "spec": "* path=../deep-gpu",
+          "why": "Issue #378: the GPU layer's device, encode jobs and render-module interface it draws through."
+        },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #378: instance records and uniforms written to GPU buffers."
+        },
+        "wgpu": {
+          "spec": "^30",
+          "why": "Issue #378: pipelines, render bundles that replay, and the linear, object-ID and depth targets."
         }
       }
     }
