@@ -182,9 +182,12 @@ reason carries a nonce). AC13's third hub is a real `deep hub run` stopped with 
 - **Budgets (AC2, AC8, AC9).** They count only on a reference Mac (Mac15,7 or Mac15,12) on mains power, Low Power
   Mode off, no thermal warning; elsewhere each number is skipped as INCONCLUSIVE, never passed. Before any number is
   read, the call it times is shown to be the issue's: with the hub up, the request names the entries it matched; a
-  late hub's `ls` is allowed and spooled marked late and its `pkill -f node` denied. Overhead is p95 of 1,000
-  forwarded `ls` calls minus p95 of 1,000 runs of the floor, in one hyperfine run (`-N`, `--input`), five runs
-  judged; the floor is `fn main() {}` built by rustc at opt-level 3. Fail open is p95 of 50 calls against a hub
+  late hub's `ls` is allowed and spooled marked late and its `pkill -f node` denied. Overhead (AC2 and AC8's "under
+  10 ms at p95") is `budgets-overhead-redraft.test.ts`, a blind redraft (AC2-AC8-REDRAFT.md, #745): one `ls` through
+  the forwarder must be allowed with `matched` naming exactly the watch-mode entry it matches, then overhead is p95 of
+  1,000 `ls` calls straight to the hub minus p95 of 1,000 runs of the floor, in one hyperfine run (`-N`, `--input`),
+  five runs judged, every exit code 0 and nothing spooled; the floor is `fn main() {}` built by rustc at opt-level 3.
+  The first draft's bench matched `ls` with a block-mode entry, which the hub denies since #316. Fail open is p95 of 50 calls against a hub
   stopped with SIGSTOP, from spawn to exit. Peak memory is the largest `maximum resident set size` from
   `/usr/bin/time -l` over a forwarded call, a failed-open call and a failed-closed call. The binary is
   `target/release/deep-hook`, under 3,000,000 bytes. "Compared with the merge base" is the perf lane's: two tasks in
@@ -206,13 +209,13 @@ criterion says; the scenario itself must run (a plant that doesn't build or star
 | ID | Criterion (short) | Tests |
 |---|---|---|
 | AC1 `#315.f0560928` | hub stopped: a normal command allowed in under 50 ms | `failopen.test.ts` AC1 (1): ten `ls` calls with no hub, after SIGTERM, after SIGKILL with the socket left, and with the hub SIGSTOPped |
-| AC2 `#315.9543886e` | overhead under 10 ms at p95 over process start, 1,000 calls | `budgets.test.ts` AC2 (1): the matcher runs, then hyperfine against the floor |
+| AC2 `#315.9543886e` | overhead under 10 ms at p95 over process start, 1,000 calls | `budgets-overhead-redraft.test.ts` AC2 (1): the forwarded `ls` allowed and matched by the watch-mode entry, then hyperfine against the floor (blind redraft, AC2-AC8-REDRAFT.md) |
 | AC3 `#315.c8a3b16d` | ANTHROPIC_API_KEY set: SessionStart carries true; its value nowhere | `billing.test.ts` AC3 (1): hub up and hub stopped, true and false, every place searched |
 | AC4 `#315.bf6d3707` | hooks run while the hub was stopped are recorded after it starts, in order, none lost | `spool.test.ts` AC4 (1) |
 | AC5 `#315.f8b9a600` | a turn with tool calls and no hook event shows "hooks not reaching DeepBuild" | `reading.test.ts` AC5 (1): the quiet session and the control |
 | AC6 `#315.8366a61c` | fixed stamps …789 and …790 spooled exactly, recorded in order; a second replay appends nothing | `spool.test.ts` AC6 (1) |
 | AC7 `#315.2a5a4d2b` | the same nanosecond twice: two IDs, both recorded | `spool-ac7-redraft.test.ts` AC7 (2): hub up; through the spool (blind redraft, AC7-REDRAFT.md) |
-| AC8 `#315.515d4e08` | budgets on the reference Mac, against the merge base | `budgets.test.ts` AC8 (6): the perf lane's tasks; each bench runs (2); overhead; fail open; peak memory and binary size |
+| AC8 `#315.515d4e08` | budgets on the reference Mac, against the merge base | `budgets.test.ts` AC8 (5): the perf lane's tasks; each bench runs (2); fail open; peak memory and binary size; `budgets-overhead-redraft.test.ts` AC8 (1): overhead (blind redraft) |
 | AC9 `#315.23cd76ed` | overhead measured with hyperfine against a native no-op floor | `budgets.test.ts` AC9 (1) |
 | AC10 `#315.787a7ca4` | 1,000 spooled by eight processes, one killed mid-write: each exited event once, the cut recorded with its offset, lines after it kept | `cut.test.ts` AC10 (2): the run; the wrong program |
 | AC11 `#315.2d265264` | power cut after a replayed 200-event spool is removed: all 200 in the record or the spool | `cut.test.ts` AC11 (2): the run; the wrong program |
@@ -247,8 +250,8 @@ The base itself is the wrong program for the rest (BASE-FAILURE.txt).
   protocol client, the forwarder, the test hubs, `rules.json`, the spool read as bytes, the reference-Mac gate and the
   timing judge.
 - `fixtures/test-hub.mjs`: the four test hubs.
-- `failopen.test.ts` (AC1, AC13), `budgets.test.ts` (AC2, AC8, AC9), `billing.test.ts` (AC3), `spool.test.ts` (AC4,
-  AC6), `spool-ac7-redraft.test.ts` (AC7), `reading.test.ts` (AC5), `cut.test.ts` (AC10, AC11), `refusal.test.ts` (AC12).
+- `failopen.test.ts` (AC1, AC13), `budgets.test.ts` (AC8, AC9), `budgets-overhead-redraft.test.ts` (AC2, AC8 overhead),
+  `billing.test.ts` (AC3), `spool.test.ts` (AC4, AC6), `spool-ac7-redraft.test.ts` (AC7), `reading.test.ts` (AC5), `cut.test.ts` (AC10, AC11), `refusal.test.ts` (AC12).
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: the run on the base commit: 22 of the 23 tests fail, each for the reason its header gives. AC4
   passes there: #16 already built deep-hook's spooling and the hub's replay at start, which for hooks run one after
