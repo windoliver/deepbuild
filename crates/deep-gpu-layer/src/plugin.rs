@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use deep_canvas::registry::{BuildSet, Registry, Sealed};
+use deep_canvas::registry::{BuildSet, Module, Registry, Sealed};
 use deep_canvas::show::{stamp, Writer, WriterKind};
 use deep_gpu::device::Gpu;
 use gpui_kit::test::TestWindowExt as _;
@@ -36,21 +36,31 @@ fn entry(dir: &Path, planted: Option<(&str, &str)>) -> Result<PathBuf, String> {
     Ok(to)
 }
 
-/// The shipped build's canvas modules, sealed, as `deep_show` checks a writer's document in it;
-/// a host checks a revision in the same set (#382).
-pub(crate) fn shipped() -> Option<Sealed> {
-    [
+/// The shipped build's canvas modules, the list `deep_show`'s full build holds: every module of
+/// the core, r1 (#137) and r2 sets. The live view's set is this list but effects.
+pub(crate) fn shipped_modules() -> Vec<Module> {
+    vec![
         deep_canvas_marks::modules::text(),
         deep_canvas_marks::modules::look(),
         deep_canvas_marks::modules::marks2d(),
+        deep_canvas_marks::modules::data(),
+        deep_canvas_graph::module::module(),
+        deep_canvas_record::module::module(),
+        deep_canvas_sheet::module::module(),
         deep_canvas_motion::module::module(),
         deep_canvas_scene3d::module::module(),
         deep_canvas_effects::module::module(),
     ]
-    .into_iter()
-    .fold(Registry::new(BuildSet::Full), Registry::with)
-    .seal()
-    .ok()
+}
+
+/// The shipped build's canvas modules, sealed, as `deep_show` checks a writer's document in it;
+/// a host checks a revision in the same set (#382).
+pub(crate) fn shipped() -> Option<Sealed> {
+    shipped_modules()
+        .into_iter()
+        .fold(Registry::new(BuildSet::Full), Registry::with)
+        .seal()
+        .ok()
 }
 
 /// Every text the panel's script described, in tree order.
@@ -383,4 +393,41 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         reply["window"] = json!(w);
     }
     Ok(reply)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{shipped, stamp, Writer, WriterKind};
+    use serde_json::json;
+
+    /// A host checks a revision in the set deep_show's full build seals, and the live view in that
+    /// set without effects (#137): in both, a document that requires R1's data, graph, record or
+    /// sheet module is checked, not refused as module_missing.
+    #[test]
+    fn the_shipped_sets_hold_r1s_modules() {
+        let shipped = shipped().expect("the shipped canvas modules seal");
+        let writer = Writer {
+            kind: WriterKind::Plugin,
+            id: "plugin".into(),
+        };
+        let (_, board) = shipped
+            .fixtures
+            .iter()
+            .find(|(m, f)| m == "marks2d" && f.name == "board")
+            .expect("marks2d's board");
+        for (set, sealed) in [("host", &shipped), ("live", crate::live::sealed())] {
+            for module in ["data", "graph", "record", "sheet"] {
+                let mut doc = board.document.clone();
+                doc["requires"] = json!({"modules": {module: "^1"}});
+                let stamped =
+                    stamp(&doc, "plugin-board", &writer, "Board").expect("the board stamps");
+                let checked = deep_canvas::document::check_in(&stamped, sealed);
+                assert!(
+                    checked.ok,
+                    "the {set} set, a board requiring {module}: {:?}",
+                    checked.issues
+                );
+            }
+        }
+    }
 }

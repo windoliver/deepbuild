@@ -28,6 +28,11 @@ deep-canvas = { path = "../deep-canvas" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-text = { path = "../deep-text" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #137: R1's graph, record and sheet modules, in the shipped set a host and the live view
+# check in.
+deep-canvas-graph = { path = "../deep-canvas-graph" }
+deep-canvas-record = { path = "../deep-canvas-record" }
+deep-canvas-sheet = { path = "../deep-canvas-sheet" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-test-modules = { path = "../deep-canvas-test-modules", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }

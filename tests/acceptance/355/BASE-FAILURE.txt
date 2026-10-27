@@ -1,0 +1,68 @@
+The #355 acceptance suite run on the base commit, before any implementation.
+
+Base commit:  14561af (origin/main, "Merge pull request #755 from windoliver/claude/issue-349-close")
+Date:         2026-10-26T21:27:40Z
+Node:         v24.22.0 (fnm exec --using=24), vitest 5.0.5, macOS (Darwin 25.6.0)
+Setup:        fnm exec --using=24 npm ci
+              fnm exec --using=24 npm run build --workspaces
+              cargo build --locked -q -p deep-hook            (propose.test.ts builds it again, a no-op)
+Command:      fnm exec --using=24 node node_modules/vitest/vitest.mjs run --root tests/acceptance/355 --no-file-parallelism
+Exit code:    1
+Result:       Test Files 6 failed (6); Tests 18 failed (18); 7.99 s
+Type check:   fnm exec --using=24 node node_modules/typescript/bin/tsc -p tests/acceptance/355/tsconfig.json  -> exit 0
+
+Every test fails, each for the expected reason: the wiki package (@deepbuild/wiki, packages/wiki/src/index.ts)
+doesn't exist, and the extension host runs no index@1 kit at install. <checkout> is this worktree.
+
+AC1 pages.test.ts  "AC1 every line of every page is a claim whose every source holds its quote; …"
+  Error: Cannot find module 'file://<checkout>/packages/wiki/src/index.ts' imported from <checkout>/tests/acceptance/355/helpers.ts
+AC7 pages.test.ts  "AC7 three agreeing sources (one cited twice) show 3, two show 2, one shows 1, …"
+  Error: Cannot find module '…/packages/wiki/src/index.ts' (the corpus world is written once per file; the same error)
+AC3 pages.test.ts  "AC3 each of the 20 queries finds the same set of pages and quotes on the default index and on the second index …"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+AC3 pages.test.ts  "AC3 the link is kept without its query string on the page, the token is in no page and nowhere in the ledger, …"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+Proof pages.test.ts "Proof the decision's claim is a line on setup.md; deep_search finds it with its source; …"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+
+AC2 propose.test.ts "AC2 deep-hook denies the agent's Write of repos/api.md; its deep_propose of a change is an open ask in deep inbox, …"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+  (deep-hook was built first. A scratch run outside the suite showed the base's deep-hook already denies an agent's
+  Write of <home>/.deepbuild/wiki/repos/api.md, exit 2, by the shipped guard no-deepbuild-home-write: that half is
+  regression protection. The base has no deep_propose tool.)
+
+AC4 install.test.ts "AC4 an index that keeps a dropped source's claim is refused at install, naming the index@1 case it failed"
+  AssertionError: index@1's kit at install refuses deepbuild/test-index-keeps-dropped-source (keeps-dropped-source): {"installed":{…,"kits":[]}}: expected false to be true
+AC4 install.test.ts "AC4 an index that returns a hit with no source is refused at install, naming the index@1 case it failed"
+  AssertionError: index@1's kit at install refuses deepbuild/test-index-sourceless-hit (sourceless-hit): {"installed":{…,"kits":[]}}: expected false to be true
+AC4 install.test.ts "AC4 the sound index installs, with index@1 passed at install"
+  AssertionError: the install ran index@1's kit on the package's index: []: expected [] to deep equally contain ObjectContaining{slot: 'index@1', verdict: 'PASS'}
+AC4 outside.test.ts "AC4 with the planted index in place, deep_search still shows the README's claim as outside"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+AC4 outside.test.ts "AC4 (wrong program) a hub that trusts the index shows the README's claim as inside and fails, naming the claim"
+  Error: Cannot find module '…/packages/wiki/src/index.ts' (the expected rejection naming wiki:repos/api#setup never comes)
+
+AC5 outside.test.ts "AC5 the claim is recorded as known from outside content; S2's start slice holds the repo page's claim from you and not the README's; …"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+AC6 outside.test.ts "AC6 an agent's promotion is refused; yours is saved as a decision naming you, and the claim enters S2's start slice"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+
+AC8 scope.test.ts  "AC8 on the default index, B finds the claims in force and none of the three"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+AC8 scope.test.ts  "AC8 a planted index that returns all three still has them dropped by the hub"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+AC8 scope.test.ts  "AC8 (wrong program) a hub that trusts the index returns them and fails, naming the claim"
+  AssertionError: expected [Function] to throw error matching /session B's deep_search returned wiki:(repos\/web#heron-preview|setup#heron-branch-old|setup#heron-cache)/ but got 'Cannot find module …/packages/wiki/src/index.ts …'
+
+AC9 inferred.test.ts "AC9 the 3000 claim is inferred; its 3001 twin, on the same quote, is known from the repo file"
+  Error: Cannot find module '…/packages/wiki/src/index.ts'
+AC9 inferred.test.ts "AC9 (wrong program) a writer that checks only that the quote is present writes the 3000 claim as known and fails, naming the claim"
+  AssertionError: expected [Function] to throw error matching /wiki:repos\/api#port-guess/ but got 'Cannot find module …/packages/wiki/src/index.ts …'
+
+What was exercised at the base, beyond these failures (a scratch test outside the suite, not kept): the helpers'
+record seeding with archived transcripts, decisions and project trust; the test's own quote resolution (a message,
+a decision, a file at a commit, and a quote not at its file); startSlice; a hub on the seeded home with the default
+index, with the second index module (the reference index@1 fill) and with a planted index module, each answering an
+unbound deep_search with a wiki hit; the agent stand-in's bound deep_search; and the real deep-hook denying the
+agent's Write of a wiki page. The passing side of every test, and each planted program's failure, are unverified
+until the implementation exists.

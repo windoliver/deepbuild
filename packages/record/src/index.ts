@@ -8,13 +8,13 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, loadLearned, readEvidence, ROLLERS, startSlice, toRollBack, dependsOn, type HeldAtLoad, type LearnedChange, type LearnedLoad, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, parseClaimLine, readEvidence, resolveHandle, ROLLERS, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
 import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
-export { PROJECTIONS, testStorage };
-export type { Backend, HeldAtLoad, LearnedLoad, SliceEntry, Storage, SyncCall, TestStorage };
+export { parseClaimLine, PROJECTIONS, testStorage };
+export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -119,6 +119,16 @@ export interface RecordStore {
    * compensated changes' IDs, in that order.
    */
   rollBack(connection: Connection, what: { change: string } | { since: number }): Promise<string[]>;
+  /**
+   * What a record handle names now (#355): a transcript message's text, with its role, the tool whose result it
+   * holds and whether it is outside content; a decision's answer; an evidence file's text. Undefined for nothing.
+   */
+  resolve(handle: string): Promise<Resolved | undefined>;
+  /**
+   * Keeps a file in the evidence store as the core, recorded as evidence.stored under the connection's project, so
+   * a learned change can cite it by its `ev:` handle and reach the repo the file is from (#355).
+   */
+  keep(connection: Connection, file: { bytes: Uint8Array; kind: string; source: string }): Promise<string>;
   close(): Promise<void>;
 }
 
@@ -698,6 +708,24 @@ class SqliteRecord implements RecordStore {
   async loadLearned(session: string): Promise<LearnedLoad> {
     await this.settle();
     return loadLearned(this.db, session);
+  }
+
+  async resolve(handle: string): Promise<Resolved | undefined> {
+    await this.settle();
+    return resolveHandle(this.db, this.options.evidence, this.transcripts, handle);
+  }
+
+  async keep(connection: Connection, file: { bytes: Uint8Array; kind: string; source: string }): Promise<string> {
+    if (!this.evidenceWriter) throw new RecordError('storage', 'the record was opened without an evidence store');
+    const put = await this.evidenceWriter.put({ bytes: file.bytes, kind: file.kind, source: file.source, redaction: 'complete', license: { name: 'own', allows: [] } });
+    if (put.status !== 'stored') throw new RecordError('storage', `the evidence store refused ${file.source}: ${put.reason}`);
+    const ev = put.evidence;
+    const ts = this.options.now();
+    await this.append({ writer: 'core', actor: connection.actor, scope: connection.scope, ...(connection.project ? { project: connection.project } : {}) }, {
+      v: 1, id: ulid(ts), kind: 'evidence.stored', ts,
+      data: { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] },
+    });
+    return `ev:${ev.sha256}`;
   }
 
   rollBack(connection: Connection, what: { change: string } | { since: number }): Promise<string[]> {
