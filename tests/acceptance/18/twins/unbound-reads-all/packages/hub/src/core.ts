@@ -9,8 +9,9 @@ import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promise
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
+import { openArchive } from '@deepbuild/archive';
 import { AskRefused, openAsks, type Asks, type Delivery } from '@deepbuild/asks';
-import type { AdapterRegistry } from '@deepbuild/adapters';
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
@@ -28,23 +29,30 @@ import { coveredBy, hubAdapters, parseLine, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { rootOf, type Root } from './paths.js';
 import { checkKey, Devices } from './trusted.js';
-import { openIndex, search, type IndexFill } from './search.js';
+import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type HookMeta, type Refusal } from './wire.js';
 
-const DAY = 86_400_000;
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 /** How long deep_ask and deep_wait wait for an answer before saying it's still waiting: under the 60 s agents give a tool call. */
 const ASK_WAIT = 40_000;
 /** A value quoted into SQL. */
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
-/** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
+/** Whether HOME is your own account's home: a hub under a test's temp HOME never reads your credentials. */
+const ownHome = (): boolean => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } };
+/** Your login Keychain, only while HOME is your own account's home. */
 const keychain = (service: string): Promise<string | undefined> => {
-  const own = (() => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } })();
-  if (process.platform !== 'darwin' || !own) return Promise.resolve(undefined);
+  if (process.platform !== 'darwin' || !ownHome()) return Promise.resolve(undefined);
   return new Promise((done) => execFile('/usr/bin/security', ['find-generic-password', '-s', service, '-w'], { timeout: 5000 }, (error, out) => done(error ? undefined : out.trim())));
+};
+/** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
+const ghToken = (): Promise<string | undefined> => {
+  if (!ownHome()) return Promise.resolve(undefined);
+  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
 const YOU = { actor: 'you', scope: 'you' };
 const SECRETS_TTL = 10_000;
@@ -178,8 +186,10 @@ export class Core {
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
-  /** The wiki's index@1 fill, which deep_search reads it through. */
-  private index!: Promise<IndexFill>;
+  /** The test's index@1 fill for the wiki, if it named one; the ledger's own index otherwise. */
+  private index!: Promise<IndexFill | undefined>;
+  /** A package's index, once rebuilt from the pages. */
+  private swapped: IndexFill | undefined;
   /** host@1: where every check run starts, is signalled and waited for; the supervisor, unless a test put another in its place. */
   private host!: Host;
   /** env-local's compose kind, with the Docker CLI it found when the hub started (#331). */
@@ -348,6 +358,25 @@ export class Core {
     await this.recoverRuns();
     await this.retain();
     this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
+    // The transcript archive (#20) copies what the agents' cleanups would delete, and the CI runs of the GitHub repos
+    // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
+    const env: Record<string, string | undefined> = { ...process.env };
+    const repos: string[] = [];
+    const archive = await openArchive({
+      record: this.record, evidence: this.store, asks, adapters: shipped(), env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
+      held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
+    });
+    let archiving: Promise<void> | undefined;
+    const archivePass = () => {
+      archiving ??= (async () => {
+        env.GH_TOKEN = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? (await ghToken());
+        // With no token the forge's logs can't be read, so no run is asked for.
+        repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
+        await archive.pass();
+      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+    };
+    archivePass();
+    this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     // Between session starts, a removed or weakened entry of ours in Claude Code's settings goes back at once.
@@ -593,7 +622,7 @@ export class Core {
         if (!foreign) await this.recheck().catch(() => undefined);
         if (session) {
           data.thread = session.thread = await this.threadOf(session, meta.fields?.source);
-          live.reading = (live.reading ?? Promise.resolve()).then(() => this.childOf(session, live.agent)).catch(() => undefined);
+          void this.childOf(session, live.agent).catch(() => undefined);
         }
       } else if (draft.kind === 'user.ask') {
         // The origin joins the prompt to its transcript entry; one it can't place is unknown and opens no ask.
@@ -1474,6 +1503,7 @@ export class Core {
         case 'deep_open_item': return await this.openItem(session!, String(args.text));
         case 'deep_claim': return await this.claim(session!, args);
         case 'deep_evidence': return await this.attach(session!, args);
+        case 'deep_propose': return await this.propose(session!, args);
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
@@ -1556,7 +1586,24 @@ export class Core {
   private async find(query: string, session: string | undefined, context: CallContext): Promise<Obj> {
     const worktree = session ? this.sessions.get(session)?.cwd : this.worktreeAt(context.cwd);
     const everyone = !session;
-    return search({ query, index: await this.index, raw: (q) => this.record.raw(q), worktree, session: everyone ? { everyone: true } : session });
+    // A claim reaches a session at its own scope, its repo's or everywhere's; a call bound to no session reads every repo's.
+    const [project] = session ? (await this.record.raw(`SELECT project_id FROM sessions WHERE id = '${sql(session)}'`)) as { project_id: string | null }[] : [];
+    const scopes = new Set(session ? [`session:${letters(session)}`, 'all', ...(project?.project_id ? [`repo:${letters(project.project_id)}`] : [])] : []);
+    const covers = (scope: string): boolean => everyone || (session ? scopes.has(scope) : scope === 'all' || scope.startsWith('repo:'));
+    return search({
+      query, index: await this.wikiIndex(), raw: (q) => this.record.raw(q), worktree, session: everyone ? { everyone: true } : session, covers,
+      trustsIndex: this.options.plant === 'trusts-index',
+    });
+  }
+  /** The wiki's index: a loaded package's in place of the shipped one, rebuilt from the pages when it first serves (#355). */
+  private async wikiIndex(): Promise<IndexFill | undefined> {
+    const swapped = this.extensions?.index()?.fill;
+    if (!swapped) return this.index;
+    if (this.swapped !== swapped) {
+      await swapped.rebuild(pageClaims(this.root.wiki));
+      this.swapped = swapped;
+    }
+    return swapped;
   }
   /** The worktree of a session the hub knows that holds `folder`: an unbound call reads that project's spec, and no other file. */
   private worktreeAt(folder: string | undefined): string | undefined {
@@ -1651,6 +1698,32 @@ export class Core {
       throw this.refusedAppend(error, 'deep_open_item');
     }
     return { task_ref, event: id };
+  }
+
+  /**
+   * deep_propose: a change the agent proposes, recorded as learn.proposed and applied by no one, and an ask in your
+   * inbox naming it; the proposal cites that ask, whose question holds the change's words (#355).
+   */
+  private async propose(session: string, args: Obj): Promise<Obj> {
+    const target = scrubText(String(args.target), { held: this.options.held }).slice(0, 1000);
+    const change = scrubText(String(args.change), { held: this.options.held }).slice(0, 4000);
+    const question = `Apply this change an agent proposed to ${target}? ${change}`;
+    const pinned = await this.pinOf(this.sessions.get(session)!.cwd, question);
+    const options = [{ id: 'apply', label: 'Apply it', decision: 'none' }, { id: 'keep', label: 'Keep it as it is', decision: 'none' }];
+    const raised = { kind: 'choice', question, options, recommended: 'keep', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'propose', target, change, session } as JsonValue)), pinned_to: pinned };
+    const ask = await this.asks.raise(this.agentConnection(session), 'deep_propose.choice', raised);
+    const ts = this.now();
+    const id = ulid(ts);
+    const evidence = [...((args.evidence as { at: string; quote: string }[] | null) ?? []), { at: ask, quote: change }];
+    try {
+      await this.append(this.agentConnection(session), {
+        v: 1, id, kind: 'learn.proposed', ts,
+        data: { layer: 'learned', target, diff: `+ ${change}`, evidence, scope: `session:${letters(session)}`, replay: null, applied_by: null, supersedes: null },
+      });
+    } catch (error) {
+      throw this.refusedAppend(error, 'deep_propose');
+    }
+    return { proposal: `doc:${id}`, ask };
   }
 
   private async claim(session: string, args: Obj): Promise<Obj> {
@@ -2057,14 +2130,25 @@ export class Core {
     }
   }
 
-  /** The retention pass: keeps the files decisions and verdicts cite and the transcripts transcript.archived links. */
+  /**
+   * The retention pass: keeps the files decisions and verdicts cite, the transcripts transcript.archived links and the
+   * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
+   */
   private async retain(): Promise<void> {
     const rows = (await this.record.raw("SELECT evidence FROM events WHERE kind IN ('decision.created', 'decision.applied', 'verdict.made') AND evidence IS NOT NULL")) as { evidence: string }[];
     const cited = new Set<string>(this.options.plant === 'empty-cited' ? [] : rows.flatMap((r) => JSON.parse(r.evidence) as string[]));
     const linked = (await this.record.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
-    const archived = new Set(linked.flatMap((r) => (r.sha ? [r.sha] : [])));
+    const logs = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];
+    const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);
     const { removed } = await this.store.retain({ cited, archived });
     for (const sha256 of removed) await this.appendCore('evidence.removed', { sha256 }).catch(() => undefined);
+  }
+
+  /** The GitHub repos (owner/name) whose worktrees sessions worked in over the last 90 days, GitHub's default log retention. */
+  private async forgeRepos(): Promise<string[]> {
+    const rows = (await this.record.raw(`SELECT DISTINCT worktree FROM sessions WHERE worktree IS NOT NULL AND last_seen > ${this.now() - 90 * DAY}`)) as { worktree: string }[];
+    const origins = await Promise.all(rows.map(({ worktree }) => new Promise<string>((done) => execFile('git', ['-C', worktree, 'remote', 'get-url', 'origin'], { timeout: 2000 }, (error, out) => done(error ? '' : out.trim())))));
+    return [...new Set(origins.flatMap((url) => /github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/.exec(url)?.[1] ?? []))];
   }
 
   /** test.load: ten verdicts each in its own FULL commit, a checkpoint and a transcript backfill, as the hub would do them. */
