@@ -1,6 +1,6 @@
 // A package folder's digest (#348), computed by the parent: every file's relative path, mode and SHA-256, in
-// path order, refusing symlinks. deepbuild.json counts as its manifest without the `digest` field, so a build
-// can write the digest into it without changing it.
+// path order, refusing symlinks. deepbuild.json counts as its manifest without the `digest` and `signature` fields
+// (#351), so a build can write the digest, and a publisher the signature over it, without changing it.
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +17,7 @@ function manifestBytes(path: string): Uint8Array {
     return bytes;
   }
   if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) return bytes;
-  const { digest: _digest, ...rest } = manifest as Record<string, JsonValue>;
+  const { digest: _digest, signature: _signature, ...rest } = manifest as Record<string, JsonValue>;
   return canonicalize(rest);
 }
 

@@ -16,7 +16,7 @@
 // not this reference.
 import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -224,7 +224,11 @@ function runCommand(spec: CheckSpec, given: CheckContext, fault: Fault = 'none')
     if (ended.status !== 0) return result('failed', { ...rest, failures: [{ test: '(run)', file: spec.inputs[0] ?? '.', line: 1, stack: stderr.trim() || null, assertion: false, message: `the command exited ${ended.status}` }] });
     return result(tests.length ? 'passed' : 'ran_nothing', rest);
   } finally {
-    rmSync(work, { recursive: true, force: true });
+    // A detached child can outlive the run and still write by path into this folder (its evidence, its home), which
+    // would make the removal fail on a folder not yet empty. Moved aside first, the folder takes no new entry by path.
+    const gone = `${work}.gone`;
+    renameSync(work, gone);
+    rmSync(gone, { recursive: true, force: true });
   }
 }
 

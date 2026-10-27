@@ -1,0 +1,4 @@
+{
+  "conflicts": ["acme/other-gate"],
+  "kernel": ["extension.manifest@1", "hook.request@3"]
+}

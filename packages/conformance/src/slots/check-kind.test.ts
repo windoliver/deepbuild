@@ -77,3 +77,25 @@ describe('the reference runner on a checkout that changes between runs', () => {
     expect(await run(join(checkout, 'not-here'))).toMatchObject({ outcome: 'missing' });
   });
 });
+
+describe('the reference runner after a run that left a detached child writing', () => {
+  it('still reports the detached child, though the child keeps writing into the run\'s folder as the runner clears it', async () => {
+    const { checkout, run } = knownPass();
+    // The child writes new files into its home, which is the run's, in a loop for a second; the suite waits until the
+    // loop has begun, so the child is writing into the runner's folder as the runner removes it.
+    writeFileSync(join(checkout, 'spec/cart.test.mjs'), [
+      "import { spawn } from 'node:child_process';",
+      "import { once } from 'node:events';",
+      "import { test } from 'node:test';",
+      "test('starts a child that outlives the run', async () => {",
+      "  const loop = \"const fs = require('node:fs'); const home = require('node:os').homedir(); process.stdout.write('on'); for (let n = 0, end = Date.now() + 1000; Date.now() < end; n++) try { fs.writeFileSync(home + '/' + n, ''); } catch {}\";",
+      "  const child = spawn(process.execPath, ['-e', loop], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });",
+      "  await once(child.stdout, 'data');",
+      '  child.stdout.destroy();',
+      '  child.unref();',
+      '});',
+      '',
+    ].join('\n'));
+    expect(await run(checkout)).toMatchObject({ outcome: 'uncounted', mask: 'detached node' });
+  });
+});
