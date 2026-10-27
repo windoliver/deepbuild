@@ -25,9 +25,10 @@ import { predictionContradictions, type Prediction, type RunOutcome } from '@dee
 import { parse as parseYaml } from 'yaml';
 import { claudeSettings, installed, readJson, relations, restore, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
-import { coveredBy, hubAdapters, parseLine, versionOf } from './hookmap.js';
+import { addGuards } from './guards.js';
+import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { rootOf, type Root } from './paths.js';
+import { deepHook, rootOf, type Root } from './paths.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
@@ -1222,6 +1223,7 @@ export class Core {
       case 'ask.undo': return this.undo(params, context);
       case 'device.pair': return this.pair(params);
       case 'extension.install': return this.install(params, context);
+      case 'guard.add': return this.addGuard(params, context);
       case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
@@ -1453,6 +1455,21 @@ export class Core {
     } catch (error) {
       return { status: 'refused', reason: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  /**
+   * `deep guard add` (#304): installs the guard entries you wrote once the OS confirms you, the prompt naming them.
+   * Each is checked first through deep-hook's check mode on its planted call and twin; a refusal comes back as the
+   * result. No agent writes rules.json, so a deep command inside an agent's process tree adds nothing.
+   */
+  private async addGuard(params: Obj, context: CallContext): Promise<Obj> {
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'A guard is added from the CLI, once the OS confirms you.', 'guard.add'));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing was added: this deep command runs inside agent session ${agent}'s process tree, and no agent changes your rules. Add it from your own terminal.`, 'guard.add'));
+    const names = isObj(params.guards) && isObj(params.guards.entries) ? Object.keys(params.guards.entries) : [];
+    const why = await confirmYou(`add the guard ${names.length === 1 ? 'entry' : 'entries'} ${names.join(', ')} to your rules`, this.options.confirm);
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was added: the OS didn't confirm you (${why}).`, names.join(', '), true));
+    return addGuards(this.root.dir, params.guards, { deepHook: deepHook(), classes: toolClasses(), plant: this.options.plant });
   }
 
   /**

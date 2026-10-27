@@ -33,7 +33,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
-  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']],
+  ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
@@ -195,7 +195,7 @@ class Conn {
  */
 interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
 /** What the hub reads of a guard@1 entry in rules.json. */
-interface Guard { mode?: unknown; reason?: unknown; next_step?: unknown }
+interface Guard { match?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown }
 
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
@@ -443,8 +443,9 @@ class Hub {
 
   /**
    * The reply to a hook: deep-hook matched the call against every entry in rules.json, and the hub decides what
-   * each matched entry does. A matched entry in block mode denies a tool call before it runs, with its reason and
-   * next step; watch and warn are #304's.
+   * each matched entry does by its mode (#304), never reading its `match`. A matched entry in block mode denies a
+   * tool call before it runs, with its reason and next step; one in warn mode lets it through and tells the agent
+   * why; one in watch mode is only recorded, in the call's tool.before.
    */
   private reply(meta: HookMeta): string {
     // The planted wrong program answers a permission prompt itself, where the watch-only adapter only records it.
@@ -452,13 +453,20 @@ class Hub {
       return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }), stderr: '' });
     }
     // A session past its facts is watch-only: a matched entry is recorded, never a block.
-    if (meta.event !== 'PreToolUse' || !meta.matched.length || meta.watchOnly) return EMPTY_REPLY;
+    if (meta.event !== 'PreToolUse' || meta.watchOnly || (!meta.matched.length && this.plant !== 'matches-text')) return EMPTY_REPLY;
     const entries = this.rules();
-    const name = meta.matched.find((n) => entries[n]?.mode === 'block');
-    if (name === undefined) return EMPTY_REPLY;
-    const entry = entries[name]!;
-    const note = meta.notes?.[name] ? ` ${meta.notes[name]}` : '';
-    return line({ exit: 2, stdout: '', stderr: `DeepBuild blocked this: ${String(entry.reason)} ${String(entry.next_step)}${note} (guard ${name})\n` });
+    // The planted wrong program for #304's AC3 ignores what deep-hook matched and reads the command line as text.
+    const matched = this.plant === 'matches-text'
+      ? Object.keys(entries).filter((n) => { const m = String(entries[n]?.match ?? ''); return m.startsWith('run:') && (meta.command ?? '').includes(m.slice(4)); })
+      : meta.matched;
+    const mode = (n: string): unknown => (this.plant === 'warn-as-block' && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
+    const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
+    const blocks = matched.filter((n) => mode(n) === 'block');
+    if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    const warns = matched.filter((n) => mode(n) === 'warn');
+    if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
+    const additionalContext = warns.map((n) => `DeepBuild warns: ${words(n)}`).join('\n');
+    return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
   }
 
   private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined> };

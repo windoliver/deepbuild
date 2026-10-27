@@ -1,21 +1,11 @@
 // `deep setup` (#18's part of it): Claude Code's hook entries merged into your user settings beside yours, and your
 // ask settings drafted; `deep doctor`'s timing-relation items; and `deep waiter`, the background entry that wakes an
 // idle session with an answer. The rest of setup (the login service, the wiki, undo) is #19's and #41's.
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { draftAskSettings } from '@deepbuild/asks';
 import { claudeSettings, install, longestDeadline, ourGroups, relations } from './claude-settings.js';
 import { call } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
-
-/** The deep-hook this checkout built, the newer of its release and debug builds. */
-function deepHook(): string {
-  const repo = fileURLToPath(new URL('../../../', import.meta.url));
-  const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
-  if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
-  return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;
-}
+import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 
 /** `deep setup`: exit 0 once Claude Code's user settings hold our entries beside yours. `cli` is the deep command's script. */
 export async function setupCommand(cli: string): Promise<number> {
