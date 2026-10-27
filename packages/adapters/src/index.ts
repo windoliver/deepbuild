@@ -10,8 +10,8 @@ import { claudeParts, codexParts } from './shipped.js';
 import type { Adapter, AdapterParts, AdapterRegistry, Drift, JsonObject } from './types.js';
 
 export type {
-  Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookRequestLine, JsonObject, Mapped, Reading, Skill,
-  StopCause, StopReading, TurnUsage, Unsupported,
+  Adapter, AdapterCaps, AdapterEvent, AdapterParts, AdapterRegistry, DoctorItem, Drift, HookRequestLine, JsonObject, Mapped, PermissionAnswer, Reading,
+  Skill, StopCause, StopReading, TurnUsage, Unsupported,
 } from './types.js';
 
 const NAME = /^[a-z][a-z0-9-]*$/;
@@ -62,6 +62,7 @@ export function factsAdapter(facts: JsonValue, parts: AdapterParts): Adapter {
     },
   };
   for (const operation of OPERATIONS) if (parts[operation]) (adapter as unknown as Record<string, unknown>)[operation] = parts[operation];
+  if (parts.permissionReply) adapter.permissionReply = parts.permissionReply;
   return adapter;
 }
 

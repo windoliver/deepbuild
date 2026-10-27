@@ -12,8 +12,8 @@ const whole = (v: unknown): number | undefined => (typeof v === 'number' && Numb
 const TERMINAL_ONLY = { terminal: ['startTurn', 'steer', 'followUp', 'interrupt', 'respond', 'history'] };
 
 /** A check nobody ran reads skip, never ok (the design: an item that didn't run reads "not checked"). */
-const notChecked = (agent: string, binary: string): DoctorItem[] => [
-  { code: `${agent}.binary`, level: 'skip', evidence: `not checked: no ${binary} binary was looked for in this process`, fix: `Run deep doctor, which looks for ${binary} on your login shell's PATH.` },
+const notChecked = (binary: string): DoctorItem[] => [
+  { code: 'not_checked', level: 'skip', evidence: `not checked: no ${binary} binary was looked for in this process`, fix: `Run deep doctor, which looks for ${binary} on your login shell's PATH.` },
 ];
 
 /**
@@ -106,8 +106,13 @@ export const claudeParts: AdapterParts = {
   // PreToolUse hook may rewrite the input, and StopFailure fires for a turn that ends in an error.
   caps: { holdStop: true, wakeIdle: false, steer: false, followUp: false, answerPermission: true, nativeTools: true, mcp: true, rewrite: true, editInput: true, errorTurnHook: true, startTurn: false },
   unsupported: TERMINAL_ONLY,
-  doctor: () => notChecked('claude', 'claude'),
+  doctor: () => notChecked('claude'),
   readUsage: readClaudeUsage,
+  // The PermissionRequest hook's output: allow only when the answer's decision is allow; deny or none denies, with
+  // your words as the message. An option's label and the words never allow.
+  permissionReply: (answer) => ({
+    hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: answer.decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', ...(answer.words ? { message: answer.words } : {}) } },
+  }),
 };
 
 export const codexParts: AdapterParts = {
@@ -115,6 +120,6 @@ export const codexParts: AdapterParts = {
   // edits a call's input, and a turn that ends in an error fires no hook.
   caps: { holdStop: true, wakeIdle: false, steer: false, followUp: false, answerPermission: true, nativeTools: true, mcp: true, rewrite: false, editInput: false, errorTurnHook: false, startTurn: false },
   unsupported: TERMINAL_ONLY,
-  doctor: () => notChecked('codex', 'codex'),
+  doctor: () => notChecked('codex'),
   readUsage: readCodexUsage,
 };
