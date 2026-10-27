@@ -202,10 +202,7 @@ reference does, from its flags and files alone (its head says the details):
   Record text is measured by each message's unique tag: the run of that message's text following its tag.
 - **"Marked outside content" (AC5):** the finding's citation's `known` (the wiki's `Known`) and the wiki line's
   `known`. A WebFetch result is `outside`; a Bash result is never `you` (Open questions).
-- **The quote rule (AC10):** cases through one reading job (planted findings citing one session): exact; a line break
-  apart; NFD text quoted in NFC with a whitespace run; a word changed; `Port 3000` for `port 3000`; the whole session
-  cited; a secret quoted as it was before redaction. The first three are at their handles, the rest refused, each
-  refusal naming the handle in `dropped` and in a `reading.dropped` event.
+- **The quote rule (AC10):** read by the blind redraft; see `AC10-REDRAFT.md` and Blind redrafts, below.
 - **The archive turned off (AC3):** it ran one pass (day 0) and none after the agent deleted the transcript.
   "The archive's folder": the archive keeps no folder of its own; a copy at `<root>/archive/claude/<id>.jsonl` (where
   #20's own-folder twin kept them) stands for one, and holds other text.
@@ -233,7 +230,7 @@ Each test's name starts with its criterion's number; each `describe` carries the
 | AC7 `#63.b0064604` | sub-reads on a smaller model, final and premise on the strongest, each named | `models.test.ts` (2): a summary, a premise review | the mutation lane | fails (no `@deepbuild/reading`) |
 | AC8 `#63.82892e51` | budgets vs the merge base: < 200 ms, ≤ 8,192 characters, a cut reply says where to continue | `budgets.test.ts` (4): the perf-lane task; it runs; the cap; the timing | — | fails (no #63 task; `deep read` unsupported) |
 | AC9 `#63.d3ce9787` | a marker in message 900 is in no prompt; a pasting job fails naming the job | `marker.test.ts` (1) | `pasteJob` | fails (no `@deepbuild/reading`) |
-| AC10 `#63.46c00344` | the quote rule; a case-folded check fails | `quotes.test.ts` AC10 (1) | `foldedCheck` | fails (no `@deepbuild/reading`) |
+| AC10 `#63.46c00344` | the quote rule; a case-folded check fails | `quotes-redraft.test.ts` (1), the blind redraft (below) | `foldedCheck` | fails (`deep read` unsupported; `AC10-REDRAFT-BASE.txt`) |
 
 ## Wrong programs
 
@@ -290,8 +287,20 @@ Scope items with no checkbox criterion; a PR should say how it proves what it cl
 - `checks.ts`: the criterion checks the twins are run through (AC3, AC4, AC9, AC10).
 - `wrong.ts`: the three twins.
 - `fixtures/fake-reader.pl`: the fake agent.
-- The test files: `install.test.ts` (AC1, AC4), `quotes.test.ts` (AC2, AC10), `transcript.test.ts` (AC3),
-  `outside.test.ts` (AC5), `delivered.test.ts` (AC6), `models.test.ts` (AC7), `budgets.test.ts` (AC8),
-  `marker.test.ts` (AC9).
+- The test files: `install.test.ts` (AC1, AC4), `quotes.test.ts` (AC2), `quotes-redraft.test.ts` (AC10),
+  `transcript.test.ts` (AC3), `outside.test.ts` (AC5), `delivered.test.ts` (AC6), `models.test.ts` (AC7),
+  `budgets.test.ts` (AC8), `marker.test.ts` (AC9).
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
 - `BASE-FAILURE.txt`: a placeholder; the orchestrator runs the suite on the base commit and saves its output there.
+  Its AC10 lines are the removed first draft's; the redraft's base run is `AC10-REDRAFT-BASE.txt`.
+
+## Blind redrafts that replaced first drafts
+
+One first draft couldn't pass on any implementation, so it went to a blind redraft of this job (design: Dogfooding):
+a fresh run with the issue, the design and the base commit `b7bccf9`, never the work, the diff or the dispute. The
+redraft fails on the base and passes on the work. On October 27, 2026 the owner approved it in place of the first
+draft, and the first draft was removed. The criteria table above names the redraft.
+
+| Criterion | First draft (removed) | Why it couldn't hold | Redraft | Notes |
+|---|---|---|---|---|
+| AC10 `#63.46c00344` | `quotes.test.ts`, the AC10 test | its NFC case planted `café` through `fixtures/fake-reader.pl`, which prints its answer without an encoding layer, so `é` (below U+0100) left the fake as the single byte `0xE9`, not UTF-8, and no check could find the quote; the quote and the slice were also both NFC, so the case never tested NFC | `quotes-redraft.test.ts` | `AC10-REDRAFT.md`, `AC10-REDRAFT-BASE.txt` |
