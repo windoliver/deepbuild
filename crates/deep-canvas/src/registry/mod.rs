@@ -215,6 +215,9 @@ pub struct Kind {
     /// operator evaluates is refused on its own (`Param.operator`).
     pub needs: Vec<String>,
     pub draws_as: String,
+    /// `(deprecated_since, replaced_by)` once the kind is replaced: it still loads, with a
+    /// `deprecated` notice (Item and kind).
+    pub deprecated: Option<(String, String)>,
 }
 
 /// An array, with one writer: its owner (canvas primitives: Array and table).
@@ -452,7 +455,17 @@ impl Registrar {
             draws: Vec::new(),
             needs: needs.iter().map(|s| s.to_string()).collect(),
             draws_as: draws_as.into(),
+            deprecated: None,
         });
+        self
+    }
+
+    /// The last kind registered is deprecated since the release `since`, replaced by
+    /// `replaced_by` (`family.name@major`).
+    pub fn deprecated(&mut self, since: &str, replaced_by: &str) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.deprecated = Some((since.into(), replaced_by.into()));
+        }
         self
     }
 
@@ -961,6 +974,15 @@ impl Sealed {
                 .flat_map(|m| m.shapes.kinds.iter().map(|k| k.entry.clone())),
         );
         out
+    }
+
+    /// `(deprecated_since, replaced_by)` of the kind `family.name`, once a module deprecated it.
+    pub fn deprecation_of(&self, full_name: &str) -> Option<&(String, String)> {
+        self.modules
+            .iter()
+            .flat_map(|m| &m.shapes.kinds)
+            .find(|k| k.entry.is(full_name))
+            .and_then(|k| k.deprecated.as_ref())
     }
 
     /// The sealed module that registered the kind `family.name`, if one did.

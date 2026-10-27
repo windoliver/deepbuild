@@ -16,7 +16,7 @@ use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use deep_canvas::cost::Coefficients;
-use deep_canvas::document::{canonical_in, check_costed, check_in, Issue};
+use deep_canvas::document::{canonical_in, check_costed, check_in, Issue, Notice};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::schedule::{
@@ -118,6 +118,14 @@ pub enum Planted {
     FullScreenOnly3d,
     /// #383: Esc leaves full screen and goes back to the top at once.
     EscToRoot,
+    /// #371: show-time admission refuses a revision for any error it has, carried or not.
+    CountsEveryIssue,
+    /// #371: an issue counts as carried when the last good revision had one with its code.
+    MatchesCarriedByCode,
+    /// #371: the check returns its issues without `actual`.
+    IssuesWithoutActual,
+    /// #371: a kind with `deprecated_since` loads with no `deprecated` notice.
+    LoadsDeprecatedSilently,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -433,8 +441,8 @@ pub struct Hub<'a> {
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
 }
 
-/// A snapshot's straight RGBA and its size.
-pub type Raster = (Vec<u8>, [u16; 2]);
+/// A snapshot's straight RGBA, its size and each item's box in its pixels.
+pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
 /// Mac's on a reference Mac, and scaled by its own speed anywhere else.
@@ -542,7 +550,7 @@ impl<'a> Hub<'a> {
         let palette = self.look.light.clone();
         let gpu = self.gpu3().ok_or(())?;
         gpu.draw(doc, t, &palette, size)
-            .map(|(rgba, _)| (rgba, size))
+            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
             .map_err(|_| ())
     }
 
@@ -898,20 +906,23 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        let mut notices = Vec::new();
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(doc) => {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
-                let mut issues = match self.scenario.planted {
+                let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
                         let coefficients = Coefficients::reference()
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
-                        check_costed(&doc, &self.startup.sealed, &coefficients).issues
+                        check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_in(&doc, &self.startup.sealed).issues,
+                    _ => check_in(&doc, &self.startup.sealed),
                 };
+                notices = self.notices_reply(&result.notices);
+                let mut issues = result.issues;
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
@@ -979,6 +990,9 @@ impl<'a> Hub<'a> {
             .unwrap_or_default();
 
         let mut reply = Map::new();
+        if !notices.is_empty() {
+            reply.insert("notices".into(), Value::Array(notices));
+        }
         // A payload refused before it could be stamped makes no revision.
         if stamped.is_some() {
             reply.insert("rev".into(), json!(rev));
@@ -1042,10 +1056,28 @@ impl<'a> Hub<'a> {
         self.present(show, visible, drawn.as_ref(), reply)
     }
 
+    /// The check's notices as a reply carries them. The planted check that loads a deprecated
+    /// kind silently leaves its `deprecated` notices out.
+    pub fn notices_reply(&self, notices: &[Notice]) -> Vec<Value> {
+        notices
+            .iter()
+            .filter(|n| {
+                !(n.code == "deprecated"
+                    && self.scenario.planted == Some(Planted::LoadsDeprecatedSilently))
+            })
+            .map(Notice::to_json)
+            .collect()
+    }
+
     /// Every issue the checks raised, kept as evidence; the reply inlines them up to the read
-    /// cap, with an empty list of snapshots. True when one is an error.
+    /// cap, with an empty list of snapshots. True when one is an error not carried.
     pub fn issue_reply(&self, issues: &[Issue], reply: &mut Map<String, Value>) -> bool {
         let mut list: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        if self.scenario.planted == Some(Planted::IssuesWithoutActual) {
+            for i in list.iter_mut().filter_map(Value::as_object_mut) {
+                i.remove("actual");
+            }
+        }
         order_issues(&mut list);
         let full = serde_json::to_vec(&list).expect("issues serialize");
         let issues_evidence = evidence::put(&self.scenario.evidence, &full).ok();
@@ -1061,7 +1093,9 @@ impl<'a> Hub<'a> {
             reply.insert("issues_evidence".into(), json!(sha));
         }
         reply.insert("snapshots".into(), json!([]));
-        list.iter().any(|i| i["severity"] == "error")
+        // A carried error never refuses: the last good revision had it too.
+        list.iter()
+            .any(|i| i["severity"] == "error" && i.get("carried").is_none())
     }
 
     /// A revision that passed its checks, presented: a hidden session is neither evaluated nor
@@ -1100,10 +1134,11 @@ impl<'a> Hub<'a> {
                                 ]
                             });
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            Some((self.renderer.raster(drawn, size, Some(ground)), size))
+                            let rgba = self.renderer.raster(drawn, size, Some(ground));
+                            Some((rgba, size, Vec::new()))
                         }
                     };
-                    let Some((mut rgba, size)) = pixels else {
+                    let Some((mut rgba, size, boxes3d)) = pixels else {
                         reply.insert("outcome".into(), json!("not_presented"));
                         reply.insert("reason".into(), json!("timeout"));
                         if show.check {
@@ -1123,7 +1158,12 @@ impl<'a> Hub<'a> {
                                 Some(d) => snapshot::entry(&sha, d, size),
                                 None => json!({"sha256": sha, "w": size[0], "h": size[1]}),
                             };
+                            let rows = match drawn.filter(|_| !three) {
+                                Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
+                                None => snapshot::visible(boxes3d, 1.0, size),
+                            };
                             reply.insert("snapshots".into(), json!([entry]));
+                            reply.insert("visible".into(), rows);
                             snapshot_taken = true;
                             reply.insert("outcome".into(), json!("presented"));
                         }
@@ -1138,7 +1178,18 @@ impl<'a> Hub<'a> {
             reply.insert("outcome".into(), json!("presented"));
         }
         if show.check {
-            reply.insert("result".into(), json!(self.verdict(show, snapshot_taken)));
+            // A check that decides a verdict counts every issue, carried ones too: a stricter
+            // rule never blocks an unrelated fix, and never passes the work either (Revision).
+            // Errors come first in the list, so an inline one is there whenever any is.
+            let errors = reply
+                .get("issues")
+                .and_then(Value::as_array)
+                .is_some_and(|l| l.iter().any(|i| i["severity"] == "error"));
+            let verdict = match self.verdict(show, snapshot_taken) {
+                "PASS" if errors => "FAIL",
+                v => v,
+            };
+            reply.insert("result".into(), json!(verdict));
         }
         Value::Object(reply)
     }

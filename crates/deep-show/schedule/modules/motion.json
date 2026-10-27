@@ -22,7 +22,8 @@
         "version": "1.0.0",
         "reads": [
           "motion.program",
-          "t"
+          "t",
+          "view(reduced_motion)"
         ],
         "writes": [
           "motion.at",

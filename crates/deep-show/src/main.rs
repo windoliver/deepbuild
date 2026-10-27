@@ -670,6 +670,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "patch_shows_a_frame_late" => Planted::PatchShowsAFrameLate,
             "full_screen_only_3d" => Planted::FullScreenOnly3d,
             "esc_to_root" => Planted::EscToRoot,
+            "counts_every_issue" => Planted::CountsEveryIssue,
+            "matches_carried_by_code" => Planted::MatchesCarriedByCode,
+            "issues_without_actual" => Planted::IssuesWithoutActual,
+            "loads_deprecated_silently" => Planted::LoadsDeprecatedSilently,
             _ => return None,
         }),
     };
@@ -902,6 +906,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.extend(deep_canvas_test_modules::cycle());
     #[cfg(feature = "test-missing-dep")]
     out.push(deep_canvas_test_modules::missing_dep());
+    #[cfg(feature = "test-title-cap")]
+    out.push(deep_canvas_test_modules::title_cap());
+    #[cfg(feature = "test-deprecated")]
+    out.push(deep_canvas_test_modules::deprecated());
     out.extend(kit::modules::built());
     out
 }
