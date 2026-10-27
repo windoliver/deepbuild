@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+# The extension guide's worked example over JSON-RPC, in Python: the same check as the TypeScript example, under its
+# own kind, ext.rpcpaths.relative. A package in another language speaks JSON-RPC 2.0 with the host, one JSON object
+# per line on stdin and stdout: the host asks it to `load`, and it calls `deep.registerCheck` and waits for the
+# answer before answering `load`; then the host asks it to `run` the check with a spec and gets a check result back.
+import json
+import sys
+
+KIND = "ext.rpcpaths.relative"
+next_id = 0
+
+
+def send(message):
+    message["jsonrpc"] = "2.0"
+    sys.stdout.write(json.dumps(message) + "\n")
+    sys.stdout.flush()
+
+
+def call(method, params):
+    """A request to the host: its result, or an error raised with the host's message."""
+    global next_id
+    next_id += 1
+    mine = next_id
+    send({"id": mine, "method": method, "params": params})
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        message = json.loads(line)
+        if "method" not in message and message.get("id") == mine:
+            if "error" in message:
+                raise RuntimeError(message["error"].get("message", "error"))
+            return message.get("result")
+    raise RuntimeError("stdin closed before the host answered " + method)
+
+
+def outside(path):
+    return path.startswith("/") or ".." in path.split("/")
+
+
+def run(spec):
+    inputs = spec.get("inputs", [])
+    failures = [{"test": p, "file": p, "line": 0, "stack": None, "assertion": True, "message": p + " is outside the checkout"}
+                for p in inputs if outside(p)]
+    # Each input is one test; a passed run with none counted would prove nothing, and the host refuses it.
+    return {"outcome": "failed" if failures else "passed", "testsRun": len(inputs), "failures": failures,
+            "evidence": [], "read": [], "mask": None}
+
+
+def main():
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        message = json.loads(line)
+        method = message.get("method")
+        if method is None:
+            continue
+        params = message.get("params") or {}
+        try:
+            if method == "load":
+                call("deep.registerCheck", [KIND])
+                result = None
+            elif method == "run" and params.get("type") == KIND:
+                result = run(params.get("spec", {}))
+            else:
+                send({"id": message.get("id"), "error": {"code": -32601, "message": "no method " + str(method)}})
+                continue
+            send({"id": message.get("id"), "result": result})
+        except Exception as error:  # the request's error, for the host to report
+            send({"id": message.get("id"), "error": {"code": -32000, "message": str(error)}})
+
+
+main()

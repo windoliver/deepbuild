@@ -1,0 +1,8 @@
+{
+  "id": "example/paths",
+  "version": "1.0.0",
+  "digest": "d1:7c2cfe1bc6bafda99e1710b01ccf9d903e458dec819a6e04947182d6be4d8de3",
+  "checks": [
+    "ext.paths.relative"
+  ]
+}

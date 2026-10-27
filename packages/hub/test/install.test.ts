@@ -1,0 +1,105 @@
+// `deep install <folder>` (#351) shows the package's source and permissions first, then installs it through the hub
+// once the OS confirms you: a cancelled prompt installs nothing, and the installer's refusal comes back named.
+import { spawnSync } from 'node:child_process';
+import { generateKeyPairSync, sign } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { canonicalize } from '@deepbuild/contracts';
+import { packageDigest } from '@deepbuild/extension-host';
+import { withHub } from './hub.js';
+
+const CLI = fileURLToPath(new URL('../../cli/dist/main.js', import.meta.url));
+
+/** A package that registers nothing, its manifest asking for the record and declaring a conflict. */
+function pkg(home: string, id: string, extra: Record<string, unknown> = {}): string {
+  const from = join(home, id.replace('/', '-'));
+  mkdirSync(from, { recursive: true });
+  writeFileSync(join(from, 'index.ts'), 'export default function (_deep: unknown): void {}\n');
+  const manifest = { id, version: '1.2.0', access: { words: ['record'] }, conflicts: ['acme/rival'], ...extra };
+  writeFileSync(join(from, 'deepbuild.json'), JSON.stringify(manifest));
+  writeFileSync(join(from, 'deepbuild.json'), JSON.stringify({ ...manifest, digest: packageDigest(from) }));
+  return from;
+}
+/** The package signed by a new Ed25519 key, which its envelope names: the key, as `ed25519:<hex>`. */
+function signed(from: string): string {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const key = `ed25519:${publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex')}`;
+  const m = JSON.parse(readFileSync(join(from, 'deepbuild.json'), 'utf8')) as Record<string, unknown>;
+  m.publisher_key = key;
+  writeFileSync(join(from, 'deepbuild.json'), JSON.stringify(m));
+  m.digest = packageDigest(from);
+  m.signature = sign(null, canonicalize({ id: m.id, version: m.version, digest: m.digest, publisher_key: key } as never), privateKey).toString('hex');
+  writeFileSync(join(from, 'deepbuild.json'), JSON.stringify(m));
+  return key;
+}
+const install = (home: string, from: string, ...flags: string[]) => spawnSync(process.execPath, [CLI, 'install', ...flags, from], { env: { ...process.env, HOME: home }, encoding: 'utf8', timeout: 60_000 });
+const installed = (root: string): string[] => {
+  const file = join(root, 'extensions', 'installed.json');
+  return existsSync(file) ? Object.keys(JSON.parse(readFileSync(file, 'utf8')) as object) : [];
+};
+
+describe('deep install', () => {
+  it('shows the source and permissions, and installs nothing until the OS confirms you; then it installs, and a refusal is named', async () => {
+    const confirm = join('/tmp', `deep-install-confirm-${process.pid}`);
+    writeFileSync(confirm, 'cancelled');
+    try {
+      await withHub(async (root, home) => {
+        const from = pkg(home, 'acme/notes');
+        const cancelled = install(home, from);
+        expect(cancelled.stdout).toContain(`Source: ${from}`);
+        expect(cancelled.stdout).toContain(`acme/notes@1.2.0, digest ${packageDigest(from)}, unsigned`);
+        expect(cancelled.stdout).toContain('access: record');
+        expect(cancelled.stdout).toContain('conflicts with: acme/rival');
+        expect(cancelled.status, cancelled.stderr).toBe(3);
+        expect(installed(root)).toEqual([]);
+
+        writeFileSync(confirm, 'confirmed');
+        const confirmed = install(home, from);
+        expect(confirmed.stdout).toContain(`Source: ${from}`);
+        expect(confirmed.stdout).toContain('Installed acme/notes@1.2.0');
+        expect(confirmed.status, confirmed.stderr).toBe(0);
+        expect(installed(root)).toEqual(['acme/notes']);
+
+        const rival = install(home, pkg(home, 'acme/rival', { conflicts: [] }));
+        expect(rival.status, rival.stderr).toBe(1);
+        expect(rival.stderr).toMatch(/^REFUSED: acme\/rival conflicts with acme\/notes/);
+        expect(installed(root)).toEqual(['acme/notes']);
+      }, { DEEP_HUB_TEST_CONFIRM: confirm });
+    } finally {
+      rmSync(confirm, { force: true });
+    }
+  }, 120_000);
+
+  it('an update signed by another key is refused naming it; --trust-key trusts it once the OS confirms you, and it installs', async () => {
+    const confirm = join('/tmp', `deep-install-key-${process.pid}`);
+    writeFileSync(confirm, 'confirmed');
+    try {
+      await withHub(async (root, home) => {
+        const first = pkg(home, 'acme/signed', { conflicts: [] });
+        signed(first);
+        expect(install(home, first).status, 'the first signed install trusts its key').toBe(0);
+        const update = join(home, 'update');
+        mkdirSync(update);
+        writeFileSync(join(update, 'index.ts'), readFileSync(join(first, 'index.ts')));
+        writeFileSync(join(update, 'deepbuild.json'), JSON.stringify({ id: 'acme/signed', version: '1.3.0', conflicts: [] }));
+        const key = signed(update);
+        const refused = install(home, update);
+        expect(refused.status, refused.stderr).toBe(1);
+        expect(refused.stderr).toContain(key);
+
+        writeFileSync(confirm, 'cancelled');
+        expect(install(home, update, '--trust-key').status, 'a cancelled prompt trusts nothing').toBe(3);
+        writeFileSync(confirm, 'confirmed');
+        expect(install(home, update).status, 'the key is still not trusted').toBe(1);
+        const trusted = install(home, update, '--trust-key');
+        expect(trusted.stdout).toContain(`signed by ${key}`);
+        expect(trusted.status, trusted.stderr).toBe(0);
+        expect(JSON.parse(readFileSync(join(root, 'extensions', 'installed.json'), 'utf8'))['acme/signed'].version).toBe('1.3.0');
+      }, { DEEP_HUB_TEST_CONFIRM: confirm });
+    } finally {
+      rmSync(confirm, { force: true });
+    }
+  }, 120_000);
+});
