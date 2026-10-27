@@ -1,16 +1,19 @@
-//! R1's 2D canvas laid out as canvas modules (issue #387; technical design: Canvas modules, the
-//! module table's text, look and marks2d rows). Each is one manifest and one register call;
-//! its operators read only what they declare, through the scheduler's typed views:
+//! R1's 2D canvas laid out as canvas modules (issues #387 and #388; technical design: Canvas
+//! modules, the module table's text, look, marks2d and data rows). Each is one manifest and one
+//! register call; its operators read only what they declare, through the scheduler's typed views:
 //!
 //! - **text**: the one shaper over the bundled fonts (a table), counters and bound values
-//!   formatted in the view's locale, each text's shaped run, and text animators, which keep only
-//!   opacity under reduced motion (Transport);
-//! - **look**: the look's roles resolved from its tokens, with its status map;
+//!   formatted in the view's locale, each text's shaped run, text animators, which keep only
+//!   opacity under reduced motion (Transport), and each status mark's glyph and word with the
+//!   legend;
+//! - **look**: the look's roles resolved from its tokens, with the status map it contributes to
+//!   the core's `core.status`;
 //! - **marks2d**: the frame's draw list from every item's evaluated fields and transform, the
-//!   formatted texts, the shaped runs and the look, with the status marks.
+//!   formatted texts, the shaped runs and the look;
+//! - **data**: each scale's nice domain and labelled ticks.
 //!
-//! The kinds stay the core's own until a later task moves them; these modules register
-//! operators, arrays, a table and fixtures.
+//! The kinds keep their bare names, which the registry reserves to the core, so these modules
+//! register operators, arrays, a table and fixtures, not kinds.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};

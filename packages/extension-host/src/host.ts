@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import { runKit, slotKits } from '@deepbuild/conformance';
-import type { CheckResult, CheckRunnerFill, CheckSpec, SlotKit } from '@deepbuild/conformance';
+import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { Supervisor } from '@deepbuild/supervisor';
@@ -129,6 +129,8 @@ export interface ExtensionHost {
   disable(id: string): Promise<void>;
   /** The adapters loaded extensions registered. */
   adapters(): Promise<{ name: string; extension: string; caps: AdapterCaps }[]>;
+  /** The index a loaded package registered in place of the shipped one, if any (#355). */
+  index(): { name: string; extension: string; fill: IndexFill } | undefined;
   /** The adapter that owns the session: the one that gates it; null before any adapter bound it. */
   owner(session: string): Promise<{ adapter: string } | null>;
   /** An answer for a session: the owning adapter delivers it by a route its flags allow now, or it waits for one. */
@@ -169,9 +171,22 @@ const ENDS_SESSION = 'SessionEnd';
 /** How long a kit's case may run past the deadline it gave the runner before the install counts it stuck. */
 const KIT_GRACE_MS = 5_000;
 const CHECK_KIND = 'check.kind@1';
+const ENVIRONMENT = 'environment@1';
+/** The wiki's index slot (#355): one fill, a package's that replaces the shipped index. */
+const INDEX = 'index@1';
+const INDEX_NAME = /^[a-z][a-z0-9_.-]*$/;
+/** An index@1 fill as the host reaches it in the package: each call answered over the package's side. */
+export interface IndexFill extends SlotFill {
+  slot: 'index@1';
+  revision: number;
+  rebuild(claims: { id: string; page: string; source: string; text: string }[]): Promise<unknown>;
+  upsert(claims: { id: string; page: string; source: string; text: string }[]): Promise<unknown>;
+  search(query: string): Promise<{ claim: string; page: string; quote: string; source: string }[]>;
+  dropSource(source: string): Promise<unknown>;
+}
 
 interface Manifest {
-  id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[];
+  id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
   provides?: { interface: string; kind: string }[]; uses?: { interface: string }[]; templates?: Template[];
 }
 interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] } }
@@ -191,10 +206,14 @@ interface Ext {
   mode: 'conformance' | 'loaded';
   /** Check kinds it registered; at its conformance run, every one it tried. */
   kinds: string[];
+  /** Environments it registered (#331); at its conformance run, every one it tried. */
+  environments: string[];
   subscribed: Set<string>;
   routes: Set<string>;
   /** The adapter names it registered. */
   adapters: Set<string>;
+  /** The index it registered, by name, with the kit revision it declares, and how the host reaches it once loaded. */
+  index?: { name: string; revision: number; fill?: IndexFill };
   /** Whether a load of these bytes runs in the hub: a release package written by no agent, with an index.ts. */
   hubBound: boolean;
   /** How to take its resolver back from the asks core, once it registered one. */
@@ -426,10 +445,11 @@ class Host implements ExtensionHost {
   }
   /**
    * The kits at install: the package's code runs once, where it will run, and each check kind it registers in place
-   * of a shipped one (its manifest's `replaces`) is a check.kind@1 fill the kit's fixed part judges; its first FAIL
-   * refuses the install, naming the case. A kind of the package's own is BLOCKED: unrun, so never passed. A
-   * replacement the sandbox would run is BLOCKED too (the kit's suites run in a checkout the sandbox can't reach),
-   * and a BLOCKED replacement doesn't install. A package that declares no kind to kit runs no code at install.
+   * of a shipped one (its manifest's `replaces`) is a check.kind@1 fill the kit's fixed part judges, as each
+   * environment its manifest declares (#331) is an environment@1 fill; a kit's first FAIL refuses the install,
+   * naming the case. A kind of the package's own is BLOCKED: unrun, so never passed. A replacement or an
+   * environment the sandbox would run is BLOCKED too (the kits' suites and stacks run where the sandbox can't
+   * reach), and a BLOCKED one doesn't install. A package that declares nothing to kit runs no code at install.
    */
   private async installKits(entry: Entry, manifest: Manifest): Promise<KitRun[]> {
     const { folder, digest } = this.snapshot(entry);
@@ -437,21 +457,30 @@ class Host implements ExtensionHost {
     const replaces = manifest.replaces ?? [];
     const declared = manifest.checks ?? [];
     const kitted = declared.filter((kind) => replaces.includes(kind));
+    const environments = manifest.environments ?? [];
+    const what = [kitted.length ? `replaces ${kitted.join(', ')}` : '', environments.length ? `registers the environment${environments.length > 1 ? 's' : ''} ${environments.join(', ')}` : ''].filter(Boolean).join(' and ');
+    const kits = `${[kitted.length ? CHECK_KIND : '', environments.length ? ENVIRONMENT : ''].filter(Boolean).join(' and ')}'s kit${kitted.length && environments.length ? 's' : ''}`;
+    // An index that replaces the shipped one is held to index@1's kit wherever it will run (#355).
+    const indexed = replaces.includes(INDEX);
     // No package code runs in the hub before it is ready (#348): a kit that needs to is BLOCKED, so the install is.
-    if (hub && kitted.length && !this.isReady) {
+    if (hub && indexed && !this.isReady) {
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} replaces ${kitted.join(', ')}, whose ${CHECK_KIND} kit runs its code in the hub, and the hub isn't ready; install it once it is`);
+      throw Error(`BLOCKED: ${entry.id} replaces ${INDEX}, whose kit runs its code in the hub, and the hub isn't ready; install it once it is`);
     }
-    if (!hub && kitted.length) {
-      // The kit's suites run in a checkout the sandbox can't reach: unrun, the replacement doesn't install.
+    if (hub && (kitted.length || environments.length) && !this.isReady) {
       rmSync(folder, { recursive: true, force: true });
-      throw Error(`BLOCKED: ${entry.id} replaces ${kitted.join(', ')}, and ${CHECK_KIND}'s kit can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind`);
+      throw Error(`BLOCKED: ${entry.id} ${what}, whose ${kits} run${kitted.length && environments.length ? '' : 's'} its code in the hub, and the hub isn't ready; install it once it is`);
     }
-    if (!kitted.length) {
+    if (!hub && (kitted.length || environments.length)) {
+      // The kits' suites and stacks run where the sandbox can't reach: unrun, the package doesn't install.
+      rmSync(folder, { recursive: true, force: true });
+      throw Error(`BLOCKED: ${entry.id} ${what}, and ${kits} can't run on a package the sandbox will run; only a release package written by no agent replaces a shipped kind or ships an environment`);
+    }
+    if (!kitted.length && !environments.length && !indexed) {
       rmSync(folder, { recursive: true, force: true });
       return declared.map((kind) => ({ slot: CHECK_KIND, fill: kind, verdict: 'BLOCKED' as const }));
     }
-    const ext = this.ext(entry, folder, manifest, digest, 'hub', 'conformance');
+    const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'conformance');
     const runs: KitRun[] = [];
     try {
       await this.start(ext);
@@ -476,6 +505,31 @@ class Host implements ExtensionHost {
         runs.push({ slot: CHECK_KIND, fill: kind, verdict: report.verdict });
         const failed = report.cases.find((c) => c.outcome !== 'PASS');
         if (report.verdict !== 'PASS') throw Error(`${entry.id}'s ${kind} reads ${report.verdict} on ${CHECK_KIND}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+      }
+      // Each environment the manifest declares: the kit brings it up on a lease and a checkout of the kit's own and
+      // takes it down, through the package's up and down. One the package didn't register by the time its load
+      // returned is BLOCKED, unrun, and refuses the install: a registration that came later would fill the slot unkitted.
+      const envKit = environments.length ? slotKits().find((k) => k.slot === ENVIRONMENT) as SlotKit<EnvironmentFill> | undefined : undefined;
+      if (environments.length && !envKit) throw Error(`the conformance package ships no ${ENVIRONMENT} kit`);
+      for (const name of environments) {
+        if (!ext.environments.includes(name)) throw Error(`BLOCKED: ${entry.id} declares the environment ${name} and didn't register it at install, so ${ENVIRONMENT}'s kit couldn't run; it isn't installed`);
+        // The kit takes a promise from either step and bounds it; a handle is what the package's up answered with.
+        const up = (spec: EnvironmentSpec, lease: EnvironmentLease, checkout: string): Promise<unknown> => ext.ask!('env.up', { name, spec, lease, checkout });
+        const down = (handle: EnvironmentHandle): Promise<unknown> => ext.ask!('env.down', { name, handle });
+        const fill = { slot: ENVIRONMENT, revision: envKit!.revision, up, down } as unknown as EnvironmentFill;
+        const report = await runKit(envKit!, fill, { parts: ['fixed'] });
+        runs.push({ slot: ENVIRONMENT, fill: name, verdict: report.verdict });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s environment ${name} reads ${report.verdict} on ${ENVIRONMENT}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
+      }
+      if (indexed) {
+        const kit = slotKits().find((k) => k.slot === INDEX) as SlotKit<IndexFill> | undefined;
+        if (!kit) throw Error(`the conformance package ships no ${INDEX} kit`);
+        if (!ext.index) throw Error(`${entry.id} replaces ${INDEX}, but its code registered no index; it isn't installed`);
+        const report = await runKit(kit, this.indexFill(ext), { parts: ['fixed'] });
+        runs.push({ slot: INDEX, fill: ext.index.name, verdict: report.verdict });
+        const failed = report.cases.find((c) => c.outcome !== 'PASS');
+        if (report.verdict !== 'PASS') throw Error(`${entry.id}'s index ${ext.index.name} reads ${report.verdict} on ${INDEX}'s kit${failed ? ` at ${failed.id}: ${failed.message}` : ''}; it isn't installed`);
       }
     } finally {
       await ext.stop?.();
@@ -535,12 +589,16 @@ class Host implements ExtensionHost {
       await ext.stop?.();
     }
     const declared = manifest.checks ?? [];
-    return ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`);
+    const environments = manifest.environments ?? [];
+    return [
+      ...ext.kinds.filter((k) => !declared.includes(k)).map((k) => `it registers the check kind ${k}, which its manifest doesn't declare`),
+      ...ext.environments.filter((e) => !environments.includes(e)).map((e) => `it registers the environment ${e}, which its manifest doesn't declare`),
+    ];
   }
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], subscribed: new Set(), routes: new Set(),
+      entry, folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], subscribed: new Set(), routes: new Set(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Set(), detached: false, reads: new Set(), scopes: new Map(),
       adapters: new Set(), hubBound: this.hubBound(entry, folder, digest),
     };
@@ -814,6 +872,18 @@ class Host implements ExtensionHost {
         if (!ext.kinds.includes(type)) ext.kinds.push(type);
         return null;
       }
+      case 'deep.registerEnvironment': {
+        // One package fills each environment name at a time (design, Composition), under a name its manifest declares.
+        const [name] = args;
+        if (typeof name !== 'string') throw Error('deep.registerEnvironment takes the environment\'s name first');
+        if (!conformance) {
+          if (!(ext.manifest.environments ?? []).includes(name)) throw Error(`${name} isn't an environment ${id}'s manifest declares`);
+          const owner = this.environmentOwner(name);
+          if (owner && owner !== ext) throw Error(`the environment ${name} is already registered by ${owner.entry.id}`);
+        }
+        if (!ext.environments.includes(name)) ext.environments.push(name);
+        return null;
+      }
       case 'deep.on': {
         const [kind] = args;
         if (typeof kind !== 'string') throw Error('deep.on takes an event kind first');
@@ -852,6 +922,18 @@ class Host implements ExtensionHost {
           this.adapterFills.set(name, { ext, caps: structuredClone(a.caps) as AdapterCaps });
         }
         ext.adapters.add(name);
+        return null;
+      }
+      case 'deep.registerIndex': {
+        const [name, fill] = args as [unknown, { slot?: unknown; revision?: unknown } | null | undefined];
+        if (typeof name !== 'string' || !INDEX_NAME.test(name)) throw Error(`deep.registerIndex takes the index's name first, not ${JSON.stringify(name)}`);
+        if (fill?.slot !== INDEX || !Number.isSafeInteger(fill.revision) || (fill.revision as number) < 1) throw Error(`deep.registerIndex: ${name} declares itself an ${INDEX} fill, with the kit revision it was built against`);
+        // One index fills the slot: a package's, only by replacing the shipped one, and only one package's at a time.
+        if (!(ext.manifest.replaces ?? []).includes(INDEX)) throw Error(`deep.registerIndex: ${id}'s manifest doesn't replace ${INDEX}, the one index deep_search reads`);
+        if (ext.index && ext.index.name !== name) throw Error(`deep.registerIndex: ${id} already registered the index ${ext.index.name}`);
+        const owner = conformance ? undefined : [...this.exts.values()].find((e) => e.index && e !== ext);
+        if (owner) throw Error(`${INDEX} is already filled by ${owner.entry.id}`);
+        ext.index = { name, revision: fill.revision as number };
         return null;
       }
       case 'deep.registerRoute': {
@@ -936,6 +1018,10 @@ class Host implements ExtensionHost {
   }
   private kindOwner(kind: string): Ext | undefined {
     for (const ext of this.exts.values()) if (ext.kinds.includes(kind)) return ext;
+    return undefined;
+  }
+  private environmentOwner(name: string): Ext | undefined {
+    for (const ext of this.exts.values()) if (ext.environments.includes(name)) return ext;
     return undefined;
   }
 
@@ -1167,6 +1253,20 @@ class Host implements ExtensionHost {
       if (b.waiting.length) throw Error(`session ${session} ended with ${b.waiting.length} answer(s) waiting for a route that never opened: ${b.waiting.map((w) => w.ask).join(', ')}`);
     }
     return { adapter: name, events };
+  }
+  index(): { name: string; extension: string; fill: IndexFill } | undefined {
+    const ext = [...this.exts.values()].find((e) => e.index && e.live);
+    return ext && { name: ext.index!.name, extension: ext.entry.id, fill: (ext.index!.fill ??= this.indexFill(ext)) };
+  }
+  /** The package's index, each call asked of its side within the call deadline. */
+  private indexFill(ext: Ext): IndexFill {
+    const { name, revision } = ext.index!;
+    const call = (op: string, ...args: unknown[]): Promise<unknown> => this.ask(ext, CALL_MS, `index ${name}`, 'index', { name, op, args });
+    return {
+      slot: INDEX, revision,
+      rebuild: (claims) => call('rebuild', claims), upsert: (claims) => call('upsert', claims), dropSource: (source) => call('dropSource', source),
+      search: (query) => call('search', query) as ReturnType<IndexFill['search']>,
+    };
   }
   async adapters(): Promise<{ name: string; extension: string; caps: AdapterCaps }[]> {
     return [...this.adapterFills].map(([name, { ext, caps }]) => ({ name, extension: ext.entry.id, caps: structuredClone(caps) }));
