@@ -1707,7 +1707,7 @@ export interface DocPatched {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;

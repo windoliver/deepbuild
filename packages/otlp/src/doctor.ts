@@ -50,7 +50,7 @@ export function doctor(env: NodeJS.ProcessEnv): DoctorItem[] {
   };
   layer(env, 'the shell');
   layer(envBlock(join(env.CLAUDE_CONFIG_DIR ?? join(env.HOME ?? homedir(), '.claude'), 'settings.json')), "Claude Code's settings.json");
-  layer(envBlock(MANAGED), 'managed settings');
+  layer(envBlock(env.DEEP_HUB_TEST_MANAGED_SETTINGS || MANAGED), 'managed settings');
   const shown = (name: string): string => {
     const s = settings.get(name);
     return s ? `${name}=${name.endsWith('_ENDPOINT') ? redact(s.value) : s.value} (${s.from})` : `${name}=(unset)`;

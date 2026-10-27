@@ -71,6 +71,8 @@ interface AgentParts {
   reach(o: { temp: string; proxy: string; token?: string }): Record<string, string>;
   /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
   token(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<string | undefined>;
+  /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
+  expires(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<number | undefined>;
 }
 const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
@@ -108,6 +110,13 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
       try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
       const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
       return o && typeof o.accessToken === 'string' && o.accessToken && !(typeof o.expiresAt === 'number' && o.expiresAt <= Date.now()) ? o.accessToken : undefined;
+    },
+    expires: async (home, keychain) => {
+      if (existsSync(join(home, '.claude', '.credentials.json'))) return undefined;
+      let v: unknown;
+      try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
+      const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
+      return o && typeof o.expiresAt === 'number' ? o.expiresAt : undefined;
     },
   },
 };
@@ -435,7 +444,20 @@ class LocalRunner implements Runner {
     if (window) return window;
     const budget = await this.budget(job, facts);
     if (budget) return budget;
+    const token = await this.outlives(job);
+    if (token) return token;
     return { binary };
+  }
+
+  /** A run with a planned end never starts on a sign-in token that expires before it: it would stop halfway. */
+  private async outlives(job: Job): Promise<{ refused: string } | undefined> {
+    const parts = AGENTS[job.spec.agent];
+    const home = this.o.env.HOME ?? '';
+    if (!job.spec.deadline_ms || !parts || !home || !this.o.keychain) return undefined;
+    const expires = await parts.expires(home, this.o.keychain).catch(() => undefined);
+    const ends = this.o.now() + job.spec.deadline_ms;
+    if (expires === undefined || expires >= ends) return undefined;
+    return { refused: `your ${job.spec.agent} sign-in token expires at ${new Date(expires).toISOString()}, before the run's planned end at ${new Date(ends).toISOString()}, so it would stop halfway; sign in again, then run it again` };
   }
 
   private readonly factsCache = new Map<Agent, Facts>();

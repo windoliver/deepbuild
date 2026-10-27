@@ -73,8 +73,27 @@ fn setting(section: &str, key: &str) -> Option<Value> {
     member(member(&config, section)?, key).cloned()
 }
 
+/// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
+static CWD: OnceLock<PathBuf> = OnceLock::new();
+
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
+/// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
+/// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
+    if let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) {
+        let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+        let chosen = uses
+            .iter()
+            .filter_map(|(worktree, value)| match value {
+                Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
+                _ => None,
+            })
+            .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
+            .max_by_key(|(worktree, _)| worktree.as_os_str().len());
+        if let Some((_, path)) = chosen {
+            return PathBuf::from(path);
+        }
+    }
     match setting("hub", "address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
             PathBuf::from(&address[5..])
@@ -811,6 +830,9 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let mut input = String::new();
     let _ = io::stdin().read_to_string(&mut input);
     let parsed = parse(&input).ok();
+    if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
+        let _ = CWD.set(PathBuf::from(cwd));
+    }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
     let payload = if parsed.is_some() {
         input.trim().replace(['\n', '\r'], " ")

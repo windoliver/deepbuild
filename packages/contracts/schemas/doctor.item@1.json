@@ -19,6 +19,13 @@
         "timing_relation_broken",
         "telemetry_unreadable",
         "not_checked",
+        "hub_unreachable",
+        "disk_low",
+        "ports_taken",
+        "billing_api_key",
+        "binary_differs",
+        "token_expiring",
+        "prompt_failed",
         "unknown"
       ],
       "description": "What the item found: healthy when the check ran and found nothing wrong; not_checked when nobody ran it, never ok.",
