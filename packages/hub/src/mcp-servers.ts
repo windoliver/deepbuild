@@ -1,7 +1,10 @@
 // What an MCP call counts as (#18; design: Before each command): read, change, send or destructive, and its effect
 // class where it has one, from the facts file of well-known servers (adapters/mcp-servers.facts.json). A server is
 // matched by its name and the source Claude Code loads it from: your local config, the repo's .mcp.json (when you
-// approved it there) or your user config, in that order. A server or tool the file doesn't list counts as change.
+// approved it there) or your user config, in that order. A server or tool the file doesn't list counts as change,
+// unless you decided what it counts as. A server's hints and a tool's name only raise its class, never lower it
+// (#304): a `destructiveHint` or a name that starts with `delete_` counts it as destructive, while a `readOnlyHint` or
+// a read-like name counts for nothing.
 import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -51,13 +54,33 @@ export function sourceOf(server: string, cwd: string): { scope: 'local' | 'proje
   return undefined;
 }
 
-/** The call's count class and effect class; `unknownAs` is what a server or tool the facts don't list counts as. */
-export function countMcp(server: string, tool: string, cwd: string, unknownAs: Counted['counts'] = 'change'): Counted {
+const CLASSES: readonly Counted['counts'][] = ['read', 'change', 'send', 'destructive'];
+/**
+ * The tool lists sessions recorded for each server, each tool with its hints, and the classes you decided for a
+ * tool: `{"lists": {<server>: [{name, annotations}]}, "decisions": {<server>: {<tool>: <class>}}}`. Neither is in
+ * the record yet (#18 records loads without tool lists; #22 saves tool decisions), so only DEEP_HUB_TEST_MCP_TOOLS,
+ * a file only tests name, gives them.
+ */
+const recorded = (): Obj => (process.env.DEEP_HUB_TEST_MCP_TOOLS ? json(process.env.DEEP_HUB_TEST_MCP_TOOLS) ?? {} : {});
+
+/**
+ * The call's count class and effect class; `unknownAs` is what a server or tool the facts don't list, and you
+ * decided nothing for, counts as. `trustsHints` is the planted wrong program for #304's AC6.
+ */
+export function countMcp(server: string, tool: string, cwd: string, unknownAs: Counted['counts'] = 'change', trustsHints = false): Counted {
+  const { lists, decisions } = recorded();
+  const listed = isObj(lists) && Array.isArray(lists[server]) ? (lists[server] as unknown[]).find((t) => isObj(t) && t.name === tool) : undefined;
+  const hints = isObj(listed) && isObj(listed.annotations) ? listed.annotations : {};
+  if (trustsHints && (hints.readOnlyHint === true || /^(get|list)_/.test(tool))) return { counts: 'read' };
   const known = servers()[server];
   const source = isObj(known) ? sourceOf(server, cwd) : undefined;
   const matches = isObj(known) && source && Array.isArray(known.scopes) && known.scopes.includes(source.scope)
     && Object.entries(isObj(known.match) ? known.match : {}).every(([field, value]) => source.config[field] === value);
   const entry = matches && isObj(known.tools) ? known.tools[tool] : undefined;
-  if (!isObj(entry) || typeof entry.counts !== 'string') return { counts: unknownAs };
-  return { counts: entry.counts as Counted['counts'], ...(typeof entry.effect === 'string' ? { effect: entry.effect } : {}) };
+  const decided = isObj(decisions) && isObj(decisions[server]) ? decisions[server][tool] : undefined;
+  const counted: Counted = isObj(entry) && typeof entry.counts === 'string'
+    ? { counts: entry.counts as Counted['counts'], ...(typeof entry.effect === 'string' ? { effect: entry.effect } : {}) }
+    : { counts: typeof decided === 'string' && CLASSES.includes(decided as Counted['counts']) ? decided as Counted['counts'] : unknownAs };
+  if (hints.destructiveHint === true || tool.startsWith('delete_')) counted.counts = 'destructive';
+  return counted;
 }

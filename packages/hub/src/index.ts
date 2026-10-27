@@ -1,8 +1,10 @@
 // @deepbuild/hub: the hub daemon on its socket (#16), the `deep hub` commands that start, read and stop it,
 // `deep mcp`, the MCP server agents reach it through, `deep env`, a worktree's stack through it (#331), and
 // `deep inbox`, your asks and your answers through it (#24), `deep install`, a package installed through it (#351),
+// `deep guard add`, guard entries you wrote installed through it (#304),
 // and `deep setup`, `deep waiter` and the doctor's timing relations for Claude Code's hooks (#18).
 import { envCommand } from './env.js';
+import { guardCommand } from './guards.js';
 import { inboxCommand } from './inbox.js';
 import { installCommand } from './install.js';
 import { runMcp } from './mcp.js';
@@ -10,7 +12,7 @@ import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub } from './service.js';
 import { relationItems, setupCommand, waiterCommand } from './setup.js';
 
-export { envCommand, inboxCommand, installCommand, relationItems, runMcp, setupCommand, waiterCommand };
+export { envCommand, guardCommand, inboxCommand, installCommand, relationItems, runMcp, setupCommand, waiterCommand };
 
 const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
        deep hub start [--root <folder>]
