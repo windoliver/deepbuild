@@ -68,17 +68,15 @@ impl Plants {
     }
 }
 
-/// The build's sealed set: the shipped canvas modules (R2's, scene3d among them) and, in a
-/// `test-meter` build, `test.gpu`.
+/// The build's sealed set: every shipped canvas module except effects, which the live path draws
+/// none of; in a `test-meter` build, also `test.gpu`.
 pub fn sealed() -> &'static Sealed {
     static SEALED: OnceLock<Sealed> = OnceLock::new();
     SEALED.get_or_init(|| {
-        let registry = Registry::new(BuildSet::Full)
-            .with(deep_canvas_marks::modules::text())
-            .with(deep_canvas_marks::modules::look())
-            .with(deep_canvas_marks::modules::marks2d())
-            .with(deep_canvas_motion::module::module())
-            .with(deep_canvas_scene3d::module::module());
+        let registry = crate::plugin::shipped_modules()
+            .into_iter()
+            .filter(|m| m.manifest.name != "effects")
+            .fold(Registry::new(BuildSet::Full), Registry::with);
         #[cfg(feature = "test-meter")]
         let registry = registry.with(deep_canvas_test_modules::test_gpu());
         registry
