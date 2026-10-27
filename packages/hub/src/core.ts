@@ -1221,6 +1221,7 @@ export class Core {
       case 'decision.overrule': return this.overrule(params, context);
       case 'ask.undo': return this.undo(params, context);
       case 'device.pair': return this.pair(params);
+      case 'extension.install': return this.install(params, context);
       case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
@@ -1423,6 +1424,35 @@ export class Core {
     const device = `device:${ulid(this.now())}`;
     this.devices.pair(device, params.name, key, this.now());
     return { device };
+  }
+
+  /**
+   * `deep install` (#351): installs the package in a folder once the OS confirms you, the prompt naming it, after the
+   * CLI showed its source and permissions; with `trust_key`, the prompt names the publisher key its envelope names
+   * too, and your confirmation trusts that key for the package first. A deep command inside an agent's process tree
+   * acts as that session, and no agent installs a package. The installer's refusal comes back as the result.
+   */
+  private async install(params: Obj, context: CallContext): Promise<Obj> {
+    const from = params.from;
+    if (typeof from !== 'string' || !isAbsolute(from)) throw new Refused(refusal('type', '/params/from', 'Give the package folder as an absolute path.', from));
+    if (context.role !== 'cli') throw new Refused(refusal('role', '/method', 'An install counts from the CLI, once the OS confirms you.', 'extension.install'));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing was installed: this deep command runs inside agent session ${agent}'s process tree, and no agent installs a package. Install it from your own terminal.`, 'extension.install'));
+    // Only for the prompt's words: the installer reads the manifest again, as data, and refuses what it must.
+    const m = await readFile(join(from, 'deepbuild.json'), 'utf8').then((text) => JSON.parse(text) as { id?: unknown; version?: unknown; publisher_key?: unknown })
+      .catch(() => ({ id: undefined, version: undefined, publisher_key: undefined }));
+    const key = params.trust_key === true ? m.publisher_key : undefined;
+    if (params.trust_key === true && (typeof key !== 'string' || typeof m.id !== 'string')) throw new Refused(refusal('required', '/params/trust_key', 'Only a signed package names a publisher key to trust.', from));
+    const why = await confirmYou(`${key ? `trust the publisher key ${String(key)} for ${String(m.id)}, and ` : ''}install ${String(m.id)}@${String(m.version)} from ${from}`, this.options.confirm);
+    if (why) throw new Refused(refusal('unconfirmed', '', `Nothing was installed: the OS didn't confirm you (${why}).`, from, true));
+    if (!this.extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', from, true));
+    try {
+      if (key) await this.extensions.trustKey(this.connection('cli'), String(m.id), String(key));
+      const pkg = await this.extensions.install({ from, builtBy: null });
+      return { status: 'installed', id: pkg.id, version: pkg.version, digest: pkg.digest };
+    } catch (error) {
+      return { status: 'refused', reason: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   /**

@@ -70,15 +70,26 @@ function checkEnvironments(environments: unknown): ContractIssue[] {
 
 /** The manifest contract as one Validation: the schema's refusals, or else the rules the schema can't hold. */
 export function checkManifest(value: unknown): Validation {
-  // `templates` is hook.template@1's and `environments` the environment slot's (#331), each read beside
-  // extension.manifest@1, whose frozen shape lists neither.
+  // Read beside extension.manifest@1, whose frozen shape doesn't list them: `templates` is hook.template@1's,
+  // `environments` the environment slot's (#331), `conflicts` and `kernel` are extension.edges@1's and `signature` is
+  // package.signature@1's (#351). Each sits at the manifest's root, so its issues' paths are the manifest's.
   const object = typeof value === 'object' && value !== null && !Array.isArray(value);
-  const { templates, environments, ...rest } = object ? value as Record<string, unknown> : {};
-  const beside = object && (Object.hasOwn(value, 'templates') || Object.hasOwn(value, 'environments'));
-  const held = validate(MANIFEST, beside ? rest : value);
+  const { templates, environments, conflicts, kernel, signature, ...rest } = object ? value as Record<string, unknown> : {};
+  const held = validate(MANIFEST, object ? rest : value);
   if (!held.ok) return held;
+  const beside = (schema: string, fields: Record<string, unknown>): ContractIssue[] => {
+    const present = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
+    if (!Object.keys(present).length) return [];
+    const result = validate(schema, present);
+    return result.ok ? [] : result.issues;
+  };
   const m = value as Manifest;
-  const issues: ContractIssue[] = [...(templates === undefined ? [] : checkTemplates(templates)), ...(environments === undefined ? [] : checkEnvironments(environments))];
+  const issues: ContractIssue[] = [
+    ...(templates === undefined ? [] : checkTemplates(templates)),
+    ...(environments === undefined ? [] : checkEnvironments(environments)),
+    ...beside('extension.edges@1', { conflicts, kernel }),
+    ...beside('package.signature@1', { signature }),
+  ];
   const words = new Set(m.access?.words ?? []);
   (m.panels ?? []).forEach((panel, i) => {
     (panel.media ?? []).forEach((medium, j) => { if (!words.has(medium)) issues.push(issue('required', `/panels/${i}/media/${j}`, medium)); });

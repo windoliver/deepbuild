@@ -92,6 +92,33 @@ impl Drawn {
         }
         out
     }
+
+    /// Document units to the pixels of a snapshot of `size`: the frame scaled to fit.
+    pub fn scale(&self, size: [u16; 2]) -> f64 {
+        let [dw, dh] = self.frame.size;
+        (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh)
+    }
+}
+
+/// The most rows a snapshot's table of visible items holds (Render-back).
+pub const VISIBLE_ROWS: usize = 200;
+
+/// A snapshot's table of visible items: each item whose box, scaled into the snapshot's pixels,
+/// covers some of it, as `{id, box: [x, y, w, h]}`, sorted by ID, at most [`VISIBLE_ROWS`].
+pub fn visible(boxes: Vec<(String, [f64; 4])>, scale: f64, size: [u16; 2]) -> Value {
+    let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+    let mut rows: Vec<(String, [f64; 4])> = boxes
+        .into_iter()
+        .map(|(id, b)| (id, b.map(|v| v * scale)))
+        .filter(|(_, b)| b[0] < w && b[1] < h && b[0] + b[2] > 0.0 && b[1] + b[3] > 0.0)
+        .collect();
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    rows.truncate(VISIBLE_ROWS);
+    Value::Array(
+        rows.into_iter()
+            .map(|(id, b)| json!({"id": id, "box": b}))
+            .collect(),
+    )
 }
 
 pub struct Renderer {
@@ -237,9 +264,7 @@ impl Renderer {
             ctx.set_paint(color(g));
             ctx.fill_rect(&Rect::new(0.0, 0.0, f64::from(size[0]), f64::from(size[1])));
         }
-        let [dw, dh] = drawn.frame.size;
-        let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
-        let at = Affine::scale(scale);
+        let at = Affine::scale(drawn.scale(size));
         // The scopes each mark draws inside (#373): scissors, soft masks and group opacity.
         let mut scopes = Scopes::new(false);
         for d in drawn.frame.layers.iter().flat_map(|l| &l.marks) {
@@ -576,8 +601,7 @@ impl Renderer {
 /// A snapshot's entry in a reply: the PNG's hash and size, with the text snapshot of the status
 /// marks and the legend it drew, boxes in the PNG's pixels (The status-color rule).
 pub fn entry(sha: &str, drawn: &Drawn, size: [u16; 2]) -> Value {
-    let [dw, dh] = drawn.frame.size;
-    let scale = (f64::from(size[0]) / dw).min(f64::from(size[1]) / dh);
+    let scale = drawn.scale(size);
     let px = |b: [f64; 4]| json!(b.map(|v| v * scale));
     let text = |t: &str| (!t.is_empty()).then(|| t.to_string());
     let marks: Vec<Value> = drawn

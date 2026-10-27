@@ -1,0 +1,8 @@
+{
+  "id": "example/rpcpaths",
+  "version": "1.0.0",
+  "digest": "d1:67a4d0967913e1486c1e494b5795ebeec9c33ec5d0cbb2bea931b027fc01e0e9",
+  "checks": [
+    "ext.rpcpaths.relative"
+  ]
+}

@@ -9,7 +9,12 @@
 // the package registers (a check kind that replaces a shipped one runs check.kind@1's fixed part in the hub) and a
 // FAIL refuses the install. A resolver is forwarded to the asks core, whose gate decides; an adapter is held to the
 // adapter contract, and answers reach a session only through the adapter that gates it, by a route its flags allow.
-import { randomUUID } from 'node:crypto';
+//
+// Packages (#351): the installer reads the manifest as data and refuses, naming why, an envelope digest that isn't its
+// files', a signature that doesn't verify or a key other than the one trusted for the package, a piece of the
+// trusted ring or the done gate replaced, a conflict with an installed package, a check kind another package holds
+// that it doesn't declare it replaces, and a kernel contract version the kernel doesn't publish.
+import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
@@ -21,7 +26,7 @@ import type { AdapterCaps, HookRequestLine } from '@deepbuild/adapters';
 import type { Asks, Delivery, ResolverAnswer } from '@deepbuild/asks';
 import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
-import { canonicalize, checkManifest, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
+import { canonicalize, checkManifest, frozenDigests, hubSlots, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 import type { Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
@@ -34,7 +39,7 @@ export interface ReleaseEntry { id: string; version: string; digest: string }
 /** The planted wrong programs the criteria name, selected per host; tests only. */
 export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | 'first-party-appends-every-kind'
   | 'context-as-text' | 'writer-from-arguments' | JoinPlant | 'stop-provider-first'
-  | 'both-adapters-deliver' | 'first-to-bind-owns';
+  | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -104,6 +109,11 @@ export interface ExtensionHost {
   install(from: InstallFrom): Promise<Installed>;
   /** Kept across a restart: a new host on the same home. */
   installed(): Promise<Installed[]>;
+  /**
+   * Your answer on the trusted path, the app's card (writer `app`) or the CLI once the OS confirms you (writer `cli`):
+   * an update of `id` signed by `key` installs from now on.
+   */
+  trustKey(connection: Connection, id: string, key: string): Promise<void>;
   /** Runs its conformance on its files now; the result is kept for that digest. */
   check(pkg: Installed): Promise<Conformance>;
   load(pkg: Installed): Promise<Load>;
@@ -171,6 +181,11 @@ const ENDS_SESSION = 'SessionEnd';
 /** How long a kit's case may run past the deadline it gave the runner before the install counts it stuck. */
 const KIT_GRACE_MS = 5_000;
 const CHECK_KIND = 'check.kind@1';
+/** The trusted ring's pieces beyond the kernel, which no package replaces. */
+const RING = ['app-shell', 'canvas-core', 'supervisor', 'installer'];
+/** The done gate's interface, which no package provides until a second gate exists and it has a slot and a kit. */
+const GATE = 'gate@1';
+const PUBLISHER_KEY = /^ed25519:([0-9a-f]{64})$/;
 const ENVIRONMENT = 'environment@1';
 /** The wiki's index slot (#355): one fill, a package's that replaces the shipped index. */
 const INDEX = 'index@1';
@@ -188,8 +203,10 @@ export interface IndexFill extends SlotFill {
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
   provides?: { interface: string; kind: string }[]; uses?: { interface: string }[]; templates?: Template[];
+  conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string;
 }
-interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] } }
+/** An install: also the check kinds it holds, its own until a package that replaces one installs. */
+interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] }; holds: string[] }
 /** A session adapters bound: who bound it in order, who gates it, whether a turn runs, and the answers waiting for a route. */
 interface Bound { bound: string[]; gater: string | null; inTurn: boolean; waiting: Delivery[] }
 type Ask = (method: string, params: unknown) => Promise<unknown>;
@@ -364,6 +381,8 @@ function interpreter(folder: string): string[] {
 class Host implements ExtensionHost {
   private readonly entries: Record<string, Entry>;
   private readonly results: Record<string, Conformance>;
+  /** The publisher key trusted for each package ID: its first signed install's, or one you trusted since. */
+  private keys: Record<string, string>;
   private readonly exts = new Map<string, Ext>();
   private readonly loading = new Map<string, Promise<void>>();
   /** Packages' calls under way. */
@@ -381,7 +400,10 @@ class Host implements ExtensionHost {
 
   constructor(private readonly options: ExtensionHostOptions) {
     this.entries = this.read('installed.json');
+    // An install recorded before #351 holds the check kinds its manifest declares.
+    for (const e of Object.values(this.entries)) e.holds ??= (JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest).checks ?? [];
     this.results = this.read('checked.json');
+    this.keys = this.read('keys.json');
   }
 
   private read<T>(name: string): Record<string, T> {
@@ -406,14 +428,14 @@ class Host implements ExtensionHost {
     if (typeof id !== 'string' || !ID.test(id) || typeof version !== 'string' || !VERSION.test(version)) {
       throw Error(`${from.from}/deepbuild.json names no owner/name id and version to install under`);
     }
+    const project = from.project === undefined ? null : realpathSync(from.project);
     // Read as data before any of its code runs; a symlink anywhere refuses the install.
-    packageDigest(from.from);
+    this.admit(manifest as Manifest, packageDigest(from.from), project);
     // A quota that counts nothing would never refuse: each is a whole number of calls per a whole number of ms.
     for (const h of from.grant?.hosts ?? []) {
       const whole = (n: unknown): boolean => Number.isSafeInteger(n) && (n as number) > 0;
       if (typeof h?.host !== 'string' || !whole(h.quota?.calls) || !whole(h.quota?.per_ms)) throw Error(`${id}'s grant gives ${String(h?.host)} a quota that isn't a count of calls per a time`);
     }
-    const project = from.project === undefined ? null : realpathSync(from.project);
     // A folder of its own for each install, in use once installed.json names it: an install that fails, or stops
     // partway, leaves the one installed before as it was, its bytes with its grant and provenance.
     mkdirSync(join(this.options.home, 'extensions', id), { recursive: true });
@@ -423,15 +445,25 @@ class Host implements ExtensionHost {
     try {
       copyPackage(from.from, folder);
       const hosts = from.grant?.hosts?.map((h) => ({ host: h.host, quota: { calls: h.quota.calls, per_ms: h.quota.per_ms } }));
-      entry = { id, version, folder, digest: packageDigest(folder), builtBy: from.builtBy, project, kits: [], grant: { record: [...(from.grant?.record ?? [])], ...(hosts ? { hosts } : {}) } };
+      const digest = this.options.plant === 'trusts-envelope-digest' ? manifest.digest! : packageDigest(folder);
+      entry = { id, version, folder, digest, builtBy: from.builtBy, project, kits: [], grant: { record: [...(from.grant?.record ?? [])], ...(hosts ? { hosts } : {}) }, holds: [...(manifest.checks ?? [])] };
       // Each slot's kit runs on what it registers first: a FAIL refuses the install, and what was installed stays (#349).
       entry.kits = await this.installKits(entry, manifest as Manifest);
-      this.save('installed.json', { ...this.entries, [id]: entry });
+      // A kind it replaces is its own from now on, no longer the package's that held it (#351).
+      const replaced = Object.values(this.entries).filter((e) => e.id !== id && e.holds.some((k) => manifest.replaces?.includes(k)))
+        .map((e) => ({ ...e, holds: e.holds.filter((k) => !manifest.replaces!.includes(k)) }));
+      this.save('installed.json', { ...this.entries, ...Object.fromEntries(replaced.map((e) => [e.id, e])), [id]: entry });
+      for (const e of replaced) this.entries[e.id]!.holds = e.holds;
     } catch (e) {
       rmSync(folder, { recursive: true, force: true });
       throw e;
     }
     this.entries[id] = entry;
+    // A signed package's key is trusted on first use.
+    if (manifest.publisher_key !== undefined && this.keys[id] === undefined) {
+      this.keys = { ...this.keys, [id]: manifest.publisher_key };
+      this.save('keys.json', this.keys);
+    }
     if (before) rmSync(before.folder, { recursive: true, force: true });
     // The copy running is the install before: it stops, after any load of it under way.
     await this.serial(id, async () => {
@@ -439,6 +471,52 @@ class Host implements ExtensionHost {
       if (running && running.entry !== entry) await this.unload(running);
     });
     return this.installedOf(entry);
+  }
+  /**
+   * What the installer checks in the manifest and the files before any of the package is copied (#351); the first
+   * refusal throws, naming what refused it, and nothing is installed.
+   */
+  private admit(m: Manifest, files: string, project: string | null): void {
+    const { id } = m;
+    if (this.options.plant !== 'trusts-envelope-digest' && m.digest !== files) {
+      throw Error(`${id}'s envelope digest ${String(m.digest)} isn't its files' digest ${files}: it changed since it was built, so it isn't installed`);
+    }
+    if (m.publisher_key !== undefined || m.signature !== undefined) {
+      const raw = PUBLISHER_KEY.exec(m.publisher_key ?? '')?.[1];
+      const key = raw && createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: Buffer.from(raw, 'hex').toString('base64url') }, format: 'jwk' });
+      const envelope = canonicalize({ id, version: m.version, digest: m.digest ?? null, publisher_key: m.publisher_key ?? null });
+      const signed = key && /^[0-9a-f]{128}$/.test(m.signature ?? '') && verifySignature(null, envelope, key, Buffer.from(m.signature!, 'hex'));
+      if (!signed) throw Error(`${id}'s signature doesn't verify with the publisher key its envelope names, ${String(m.publisher_key)}, so it isn't installed`);
+    }
+    const trusted = this.keys[id];
+    if (trusted !== undefined && m.publisher_key !== trusted) {
+      throw Error(`${id}@${m.version} is signed by ${m.publisher_key ?? 'no key'}, not ${trusted}, the key trusted for ${id}; trust the new key on the trusted path (deep install --trust-key) to install it`);
+    }
+    const replaces = m.replaces ?? [];
+    for (const piece of RING) if (replaces.includes(piece)) throw Error(`${id} declares it replaces ${piece}, a piece of the trusted ring, which no package replaces`);
+    const gate = replaces.includes('done-gate') || (m.provides ?? []).some((p) => p.interface === GATE);
+    if (gate && this.options.plant !== 'refuses-only-the-ring' && !hubSlots().some((row) => row.interface === GATE)) {
+      throw Error(`${id} declares it replaces the done gate, or provides a second one beside it (${GATE}); no package does until a second gate exists and ${GATE} opens with its kit`);
+    }
+    const others = Object.values(this.entries).filter((e) => e.id !== id);
+    for (const e of others) {
+      const theirs = JSON.parse(readFileSync(join(e.folder, 'deepbuild.json'), 'utf8')) as Manifest;
+      if (m.conflicts?.includes(e.id) || theirs.conflicts?.includes(id)) throw Error(`${id} conflicts with ${e.id}, which is installed; remove one to install the other`);
+    }
+    // A user-level package's kinds are in use in every project; a project's, only in its own.
+    const overlaps = (e: Entry): boolean => e.project === null || project === null || e.project === project;
+    for (const kind of m.checks ?? []) {
+      const holder = others.find((e) => e.holds.includes(kind) && overlaps(e));
+      if (holder && !replaces.includes(kind)) throw Error(`${id} registers the check kind ${kind}, which ${holder.id} holds, and doesn't declare that it replaces it`);
+    }
+    const published = frozenDigests();
+    for (const contract of m.kernel ?? []) if (!Object.hasOwn(published, contract)) throw Error(`${id} runs on the kernel contract ${contract}, which this kernel doesn't publish`);
+  }
+  async trustKey(connection: Connection, id: string, key: string): Promise<void> {
+    if (connection.writer !== 'app' && connection.writer !== 'cli') throw Error(`a publisher key is trusted only by your answer on the trusted path, the app or the CLI, not by ${connection.writer}`);
+    if (!PUBLISHER_KEY.test(key)) throw Error(`${key} isn't a publisher key: ed25519:<64 lower-case hex>`);
+    this.keys = { ...this.keys, [id]: key };
+    this.save('keys.json', this.keys);
   }
   private installedOf(e: Entry): Installed {
     return { id: e.id, version: e.version, folder: e.folder, digest: e.digest, builtBy: e.builtBy, project: e.project, kits: structuredClone(e.kits ?? []) };
@@ -866,8 +944,11 @@ class Host implements ExtensionHost {
         if (typeof type !== 'string') throw Error('deep.registerCheck takes the check kind first');
         if (!conformance) {
           if (!(ext.manifest.checks ?? []).includes(type)) throw Error(`${type} isn't a check kind ${id}'s manifest declares`);
+          if (!ext.entry.holds.includes(type)) throw Error(`${type} was replaced by a package installed after ${id}`);
           const owner = this.kindOwner(type);
-          if (owner && owner !== ext) throw Error(`${type} is already registered by ${owner.entry.id}`);
+          if (owner && owner !== ext && owner.entry.holds.includes(type)) throw Error(`${type} is already registered by ${owner.entry.id}`);
+          // The package it replaced, still loaded, hands the kind over (#351).
+          if (owner && owner !== ext) owner.kinds = owner.kinds.filter((k) => k !== type);
         }
         if (!ext.kinds.includes(type)) ext.kinds.push(type);
         return null;
