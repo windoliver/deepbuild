@@ -191,3 +191,15 @@ Run once at `14561af`: see `BASE-FAILURE.txt` for the command, the result and wh
 - `fixtures/agent.mjs`: the Claude Code stand-in for AC9.
 - `version.test.ts` (AC5), `binding.test.ts` (AC9), `digests.test.ts` (AC10), `briefing.test.ts` (AC20).
 - `BASE-FAILURE.txt`, `tsconfig.json`.
+
+## Blind redrafts that replaced first drafts
+
+AC9's first draft seeded the wiki with a plain markdown line. Since #355 the hub's wiki indexes only claim lines, so
+that page could never be a hit on the merged base, whatever #18 did. It went to a blind redraft of this job (design:
+Dogfooding), written from the issue, the design and the merged base b7bccf9 without the work. On October 26 the owner
+asked to close #18's gaps, which took the redraft in place of the first draft, and the first draft was removed. For
+AC9, read the redraft.
+
+| Criterion | First draft (removed) | Why it couldn't hold | Redraft |
+|---|---|---|---|
+| `#18.7f5b2ce8` | `binding.test.ts` here | its wiki seed is a plain line, which #355's index never reads | `../binding/binding.test.ts`, with its own README |
