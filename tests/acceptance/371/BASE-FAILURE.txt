@@ -1,0 +1,354 @@
+Base commit: 14561af (Merge pull request #755 from windoliver/claude/issue-349-close)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/371 --no-file-parallelism --reporter=verbose
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci.
+Date: 2026-10-26T21:15:10Z  Node v23.9.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1   Tests: 14 failed, 7 passed (21)
+
+Why each fails at the base:
+- AC2 (motion.test.ts): `presented` adds a frame only when the revision or the view changes, so the sliding
+  scene presents 1 frame in its moving second (the control); under `view.reduced_motion` the slide still
+  moves (the snapshots at 0 s and 0.25 s differ).
+- AC3 (visible.test.ts): a deep_show snapshot reply has no `visible` table.
+- AC4 (view.test.ts): the board with a source refuses patches with record_view already, but opens with a
+  revision 0 row; a view of the record has no revisions.
+- AC6 (carried.test.ts): no `test-title-cap` feature, so its build fails (cargo: "none of the selected
+  packages contains this feature"); the base also returns no carried issues and has no planted admissions.
+- AC7 (actual.test.ts): circle@1's params aren't checked: `radius: -2`, and a field the kind doesn't define,
+  are presented with no issue; `planted: "issues_without_actual"` is an unknown value, answered bad_input.
+- AC8 (deprecated.test.ts): no `test-deprecated` feature, so its build fails.
+
+Passing at the base, because earlier issues built them (#393's writer layers and bands; #393's and #96's
+whole-revision diff over every map keyed by ID with the planted `diffs_items_only`; #96's patches; #383's
+`presented` count): AC1 (both tests), AC2's still-scene test, AC4's work-product test and AC5 (all three,
+its planted twin failing the check as it must).
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/371
+
+ ✓ motion.test.ts > AC2 a still scene draws no new frames, and under reduced motion nothing moves > AC2 a still scene presents one frame when a revision becomes current and none after it, over 2 s 1529ms
+ × motion.test.ts > AC2 a still scene draws no new frames, and under reduced motion nothing moves > AC2 control: a scene whose part slides presents frames while it moves, so the frame count sees motion 28ms
+   → frames presented while the box slides (of 60 vsyncs): 1: expected 1 to be greater than or equal to 30
+ × motion.test.ts > AC2 a still scene draws no new frames, and under reduced motion nothing moves > AC2 under reduced motion the sliding scene holds still: its snapshots at every time are one snapshot, and differ without it 87ms
+   → under reduced motion the frame at 0.25s is the frame at 0s: nothing moves: expected '9ad1d6cf85081f6f468c637ecc0b294240c7a…' to be 'd1c021036b6d61ca4de0592e886d879488496…' // Object.is equality
+ × view.test.ts > AC4 a board with a source is a view of the record that refuses patches with record_view; without one it is a work product a patch edits > AC4 a board with a source opens as a view of the record: it has no revisions, and patches to it are refused with record_view 1561ms
+   → a view of the record has no revisions: it is rebuilt from the record: expected [ { rev: +0, …(2) } ] to deeply equal []
+ ✓ view.test.ts > AC4 a board with a source is a view of the record that refuses patches with record_view; without one it is a work product a patch edits > AC4 the same board without a source opens as a work product: your patch edits it as a new current revision 19ms
+ × actual.test.ts > AC7 a document check's issue carries actual, the value refused at its path, cut at 8,192 characters > AC7 a circle@1 whose radius is -2 fails with out_of_range at items/c/params/radius and actual -2 1524ms
+   → the circle is refused: {"rev":1,"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["c"],"removed":[],"outcome":"presented","core":"core@0.0.0","set_digest":"8de4fe3c4e23a22e7d10ece734b44375f934307520bac3186e31b816173aafd5"}: expected 'presented' to be 'refused' // Object.is equality
+ × actual.test.ts > AC7 a document check's issue carries actual, the value refused at its path, cut at 8,192 characters > AC7 a value longer than 8,192 characters is cut there: actual holds its first 8,192 characters 21ms
+   → the circle with a field its kind doesn't define is refused: {"rev":1,"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["c"],"removed":[],"outcome":"presented","core":"core@0.0.0","set_digest":"8de4fe3c4e23a22e7d10ece734b44375f934307520bac3186e31b816173aafd5"}: expected 'presented' to be 'refused' // Object.is equality
+ × actual.test.ts > AC7 a document check's issue carries actual, the value refused at its path, cut at 8,192 characters > AC7 a planted check that returns issues without actual fails this test, naming the code 20ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × visible.test.ts > AC3 each deep_show snapshot reply carries a table of visible item IDs with their screen boxes, at most 200 rows sorted by ID > AC3 a snapshot reply lists the items that draw, sorted by ID, each with its box in the snapshot's pixels 1530ms
+   → the reply: visible is an array, got undefined: expected false to be true // Object.is equality
+ × visible.test.ts > AC3 each deep_show snapshot reply carries a table of visible item IDs with their screen boxes, at most 200 rows sorted by ID > AC3 the boxes are screen boxes: a snapshot at twice the document's size doubles them 47ms
+   → the reply: visible is an array, got undefined: expected false to be true // Object.is equality
+ × visible.test.ts > AC3 each deep_show snapshot reply carries a table of visible item IDs with their screen boxes, at most 200 rows sorted by ID > AC3 with 250 visible items the table holds 200 rows, sorted by ID by code point, each a visible item with its box 83ms
+   → the reply: visible is an array, got undefined: expected false to be true // Object.is equality
+ × carried.test.ts > AC6 show-time admission refuses a revision only for issues the last good one didn't have, matched by code and item IDs, and returns the others as carried > AC6 under a stricter title rule added after the board's last good revision, the typo fix is admitted with the title's issue carried, and a second long title is refused naming its ID 8ms
+   → the binary builds: deep-show with features full,test-title-cap: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × carried.test.ts > AC6 show-time admission refuses a revision only for issues the last good one didn't have, matched by code and item IDs, and returns the others as carried > AC6 a planted admission that counts every issue refuses the typo fix and fails this check, naming the patch 2ms
+   → the binary builds: deep-show with features full,test-title-cap: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × carried.test.ts > AC6 show-time admission refuses a revision only for issues the last good one didn't have, matched by code and item IDs, and returns the others as carried > AC6 a planted admission that matches carried issues by code alone admits the second title and fails this check, naming the patch 2ms
+   → the binary builds: deep-show with features full,test-title-cap: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × deprecated.test.ts > AC8 a kind with deprecated_since still loads, with a deprecated notice naming its replaced_by > AC8 a document using test.old@1 loads and becomes current, its reply carrying a deprecated notice naming test.new@1 10ms
+   → the binary builds: deep-show with features full,test-deprecated: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × deprecated.test.ts > AC8 a kind with deprecated_since still loads, with a deprecated notice naming its replaced_by > AC8 a planted check that loads the deprecated kind silently fails this test, naming the kind 2ms
+   → the binary builds: deep-show with features full,test-deprecated: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ ✓ layer.test.ts > AC1 an agent's deep_show scene appears as its own layer, outlined as the agent's > AC1 two agents' scenes, each on its own document, each appear as one layer of their own, outlined with that agent's name 1540ms
+ ✓ layer.test.ts > AC1 an agent's deep_show scene appears as its own layer, outlined as the agent's > AC1 an agent's scene on your board is its own layer beside yours: outlined as the agent's, while yours is not 33ms
+ ✓ removal.test.ts > AC5 a whole revision that leaves out controls and a bound value without naming them is refused with unintended_removal naming them > AC5 the 14-item board re-sent without two of its three controls and its bound value, unnamed, is refused naming exactly those three IDs, and the full revision stays current 1530ms
+ ✓ removal.test.ts > AC5 a whole revision that leaves out controls and a bound value without naming them is refused with unintended_removal naming them > AC5 the same re-send naming the three in removes is presented, listing them as removed and the 14 items as unchanged 32ms
+ ✓ removal.test.ts > AC5 a whole revision that leaves out controls and a bound value without naming them is refused with unintended_removal naming them > AC5 a planted diff over the items map alone presents the re-send and fails this check, naming c-team, c-scale and bv-total 33ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  actual.test.ts > AC7 a document check's issue carries actual, the value refused at its path, cut at 8,192 characters > AC7 a circle@1 whose radius is -2 fails with out_of_range at items/c/params/radius and actual -2
+AssertionError: the circle is refused: {"rev":1,"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["c"],"removed":[],"outcome":"presented","core":"core@0.0.0","set_digest":"8de4fe3c4e23a22e7d10ece734b44375f934307520bac3186e31b816173aafd5"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ actual.test.ts:30:95
+     28|   it('AC7 a circle@1 whose radius is -2 fails with out_of_range at ite…
+     29|     const [reply] = run(builds.bin(FULL), scenario(evidence(), { [DOC.…
+     30|     expect(outcome(reply!), `the circle is refused: ${JSON.stringify(r…
+       |                                                                                               ^
+     31|     const list = issues(reply!);
+     32|     const hit = errors(list).filter((i) => i.code === 'out_of_range' &…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  actual.test.ts > AC7 a document check's issue carries actual, the value refused at its path, cut at 8,192 characters > AC7 a value longer than 8,192 characters is cut there: actual holds its first 8,192 characters
+AssertionError: the circle with a field its kind doesn't define is refused: {"rev":1,"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[],"changed":[],"unchanged":[],"created":["c"],"removed":[],"outcome":"presented","core":"core@0.0.0","set_digest":"8de4fe3c4e23a22e7d10ece734b44375f934307520bac3186e31b816173aafd5"}: expected 'presented' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "presented"
+
+ ❯ actual.test.ts:42:132
+     40|     const root = evidence();
+     41|     const [reply] = run(builds.bin(FULL), scenario(root, { [DOC.a]: 'm…
+     42|     expect(outcome(reply!), `the circle with a field its kind doesn't …
+       |                                                                                                                                    ^
+     43|     const all = await allIssues(root, reply!);
+     44|     const there = all.filter((i) => i.path === 'items/c/params/note');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  actual.test.ts > AC7 a document check's issue carries actual, the value refused at its path, cut at 8,192 characters > AC7 a planted check that returns issues without actual fails this test, naming the code
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:138:101
+    136|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    137|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    138|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    139|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    140|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ actual.test.ts:54:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  carried.test.ts > AC6 show-time admission refuses a revision only for issues the last good one didn't have, matched by code and item IDs, and returns the others as carried > AC6 under a stricter title rule added after the board's last good revision, the typo fix is admitted with the title's issue carried, and a second long title is refused naming its ID
+AssertionError: the binary builds: deep-show with features full,test-title-cap: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-title-cap failed:
++ error: none of the selected packages contains this feature: test-title-cap
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:121:107
+    119|       const entry = made.get(nameOf(build));
+    120|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    121|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    122|       return entry.bin;
+    123|     },
+ ❯ play carried.test.ts:41:21
+ ❯ carried.test.ts:51:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  carried.test.ts > AC6 show-time admission refuses a revision only for issues the last good one didn't have, matched by code and item IDs, and returns the others as carried > AC6 a planted admission that counts every issue refuses the typo fix and fails this check, naming the patch
+AssertionError: the binary builds: deep-show with features full,test-title-cap: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-title-cap failed:
++ error: none of the selected packages contains this feature: test-title-cap
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:121:107
+    119|       const entry = made.get(nameOf(build));
+    120|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    121|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    122|       return entry.bin;
+    123|     },
+ ❯ play carried.test.ts:41:21
+ ❯ carried.test.ts:61:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  carried.test.ts > AC6 show-time admission refuses a revision only for issues the last good one didn't have, matched by code and item IDs, and returns the others as carried > AC6 a planted admission that matches carried issues by code alone admits the second title and fails this check, naming the patch
+AssertionError: the binary builds: deep-show with features full,test-title-cap: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-title-cap failed:
++ error: none of the selected packages contains this feature: test-title-cap
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:121:107
+    119|       const entry = made.get(nameOf(build));
+    120|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    121|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    122|       return entry.bin;
+    123|     },
+ ❯ play carried.test.ts:41:21
+ ❯ carried.test.ts:66:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  deprecated.test.ts > AC8 a kind with deprecated_since still loads, with a deprecated notice naming its replaced_by > AC8 a document using test.old@1 loads and becomes current, its reply carrying a deprecated notice naming test.new@1
+AssertionError: the binary builds: deep-show with features full,test-deprecated: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-deprecated failed:
++ error: none of the selected packages contains this feature: test-deprecated
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:121:107
+    119|       const entry = made.get(nameOf(build));
+    120|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    121|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    122|       return entry.bin;
+    123|     },
+ ❯ play deprecated.test.ts:27:21
+ ❯ deprecated.test.ts:35:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  deprecated.test.ts > AC8 a kind with deprecated_since still loads, with a deprecated notice naming its replaced_by > AC8 a planted check that loads the deprecated kind silently fails this test, naming the kind
+AssertionError: the binary builds: deep-show with features full,test-deprecated: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-deprecated failed:
++ error: none of the selected packages contains this feature: test-deprecated
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-motion, deep-canvas-scene3d, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-canvas-graph, deep-canvas-record, deep-canvas-sheet, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:121:107
+    119|       const entry = made.get(nameOf(build));
+    120|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    121|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    122|       return entry.bin;
+    123|     },
+ ❯ play deprecated.test.ts:27:21
+ ❯ deprecated.test.ts:41:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  motion.test.ts > AC2 a still scene draws no new frames, and under reduced motion nothing moves > AC2 control: a scene whose part slides presents frames while it moves, so the frame count sees motion
+AssertionError: frames presented while the box slides (of 60 vsyncs): 1: expected 1 to be greater than or equal to 30
+ ❯ motion.test.ts:71:117
+     69|     const moving = frames(replies[1]!).filter((f) => f.vsync <= FLICKS…
+     70|     // 60 vsyncs fall in the slide's first second; the app moves the p…
+     71|     expect(moving.length, `frames presented while the box slides (of $…
+       |                                                                                                                     ^
+     72|   });
+     73|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  motion.test.ts > AC2 a still scene draws no new frames, and under reduced motion nothing moves > AC2 under reduced motion the sliding scene holds still: its snapshots at every time are one snapshot, and differ without it
+AssertionError: under reduced motion the frame at 0.25s is the frame at 0s: nothing moves: expected '9ad1d6cf85081f6f468c637ecc0b294240c7a…' to be 'd1c021036b6d61ca4de0592e886d879488496…' // Object.is equality
+
+Expected: "d1c021036b6d61ca4de0592e886d8794884968f8bf8de0d7c87956ca114967d0"
+Received: "9ad1d6cf85081f6f468c637ecc0b294240c7afbe32915469e229656a59f2ed7a"
+
+ ❯ motion.test.ts:91:108
+     89|     const held = times.map((t, i) => sha(replies[1 + i]!, `the frame a…
+     90|     for (const [i, t] of times.entries()) {
+     91|       expect(held[i], `under reduced motion the frame at ${t} is the f…
+       |                                                                                                            ^
+     92|     }
+     93|     const early = sha(replies[1 + times.length]!, 'the frame at 0.25s'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  view.test.ts > AC4 a board with a source is a view of the record that refuses patches with record_view; without one it is a work product a patch edits > AC4 a board with a source opens as a view of the record: it has no revisions, and patches to it are refused with record_view
+AssertionError: a view of the record has no revisions: it is rebuilt from the record: expected [ { rev: +0, …(2) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "hash": "73c5946cfd3bde64a9592b89dbedf05c0cbe15aa6dba357d9a3405e6a1042b38",
++     "rev": 0,
++     "state": "current",
++   },
++ ]
+
+ ❯ view.test.ts:39:108
+     37|       { call: 'revisions', doc: DOC.a },
+     38|     ]));
+     39|     expect(revisions(replies[0]!), 'a view of the record has no revisi…
+       |                                                                                                            ^
+     40|     for (const [i, who] of [[2, 'your patch'], [3, "alpha's patch"]] a…
+     41|       const reply = replies[i]!;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  visible.test.ts > AC3 each deep_show snapshot reply carries a table of visible item IDs with their screen boxes, at most 200 rows sorted by ID > AC3 a snapshot reply lists the items that draw, sorted by ID, each with its box in the snapshot's pixels
+AssertionError: the reply: visible is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:42:100
+     40| }
+     41| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     42|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     43|   return value as JsonValue[];
+     44| }
+ ❯ visibleRows helpers.ts:261:10
+ ❯ visible.test.ts:43:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  visible.test.ts > AC3 each deep_show snapshot reply carries a table of visible item IDs with their screen boxes, at most 200 rows sorted by ID > AC3 the boxes are screen boxes: a snapshot at twice the document's size doubles them
+AssertionError: the reply: visible is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:42:100
+     40| }
+     41| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     42|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     43|   return value as JsonValue[];
+     44| }
+ ❯ visibleRows helpers.ts:261:10
+ ❯ visible.test.ts:53:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  visible.test.ts > AC3 each deep_show snapshot reply carries a table of visible item IDs with their screen boxes, at most 200 rows sorted by ID > AC3 with 250 visible items the table holds 200 rows, sorted by ID by code point, each a visible item with its box
+AssertionError: the reply: visible is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:42:100
+     40| }
+     41| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     42|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     43|   return value as JsonValue[];
+     44| }
+ ❯ visibleRows helpers.ts:261:10
+ ❯ visible.test.ts:72:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  6 failed | 2 passed (8)
+      Tests  14 failed | 7 passed (21)
+   Start at  14:14:15
+   Duration  54.22s (tests 100%)
+

@@ -1,0 +1,390 @@
+Acceptance tests for #351, run on the base commit 14561af (origin/main; no implementation of #351).
+
+Command:  PATH=$HOME/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/351 --no-file-parallelism
+          (with CLAUDECODE and AI_AGENT unset and NO_COLOR=1, after npm ci and npm run build --workspaces)
+Node:     v24.22.0
+Vitest:   5.0.5 darwin-arm64
+Date:     2026-10-26
+Machine:  Mac15,7
+
+Result: 7 of 7 files fail, 19 of 19 collected tests fail, nothing passes and nothing is skipped.
+
+Why each fails, all at an assertion, for the expected reason (the surface the README names doesn't exist here):
+- guide.test.ts (AC1 x6): docs/extension-guide/typescript and json-rpc, docs/extension-guide.md and
+  scripts/guide.mjs don't exist; each test fails at the assertion naming the missing path.
+- conflicts.test.ts (AC2 x1): the base installer ignores `conflicts`: test/beta installs beside test/alpha
+  ("expected null not to be null").
+- ring.test.ts (AC3 x4): a package declaring it replaces app-shell, canvas-core, supervisor or installer installs.
+- done-gate.test.ts (AC4 x2): the test gate installs, loads and judges (failed for the false done, passed for the
+  fix), then deepbuild/rival-gate, replacing done-gate, installs. The wrong-program test fails first: the base host
+  has no 'refuses-only-the-ring' plant, so it doesn't refuse the package replacing the supervisor either.
+- digest.test.ts (AC5 x2): the altered package installs. The wrong-program test's scenario fails as the twin's
+  should, but the base host has no 'trusts-envelope-digest' plant: its Installed digest is the hashed files', not
+  the envelope's, so the check that the twin is the twin fails.
+- signature.test.ts (AC6 x2): the base packageDigest counts deepbuild.json's `signature`, so signing a stamped
+  package changes its digest; each test fails at helpers.ts's assertion that it doesn't, before any install.
+- journey.test.ts (AC7 x2): deepbuild/journey-a installs, loads and runs a journey, then deepbuild/journey-b,
+  declaring no replaces, installs; with journey-c (replaces journey) installed and loaded, `journey` stays
+  journey-a's ("journey is deepbuild/journey-c's alone").
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/351/tsconfig.json exits 2 with 4 errors, each
+the missing surface:
+  tests/acceptance/351/digest.test.ts(41,51): error TS2322: Type '"trusts-envelope-digest"' is not assignable to type 'Plant | undefined'.
+  tests/acceptance/351/done-gate.test.ts(76,34): error TS2345: Argument of type '"refuses-only-the-ring"' is not assignable to parameter of type 'Plant | undefined'.
+  tests/acceptance/351/signature.test.ts(41,42): error TS2339: Property 'trustKey' does not exist on type 'ExtensionHost'.
+  tests/acceptance/351/signature.test.ts(45,13): error TS2339: Property 'trustKey' does not exist on type 'ExtensionHost'.
+
+---- vitest output ----
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/doneright/github-issue-351-205696/tests/acceptance/351
+
+ ❯ journey.test.ts (2 tests | 2 failed) 4513ms
+   ❯ AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys (2)
+     × AC7 a second journey that doesn't declare it replaces the first is refused at install, naming the first, which keeps running journeys 2668ms
+     × AC7 a second journey that declares it replaces the first installs, and only it runs journeys 1796ms
+ ❯ done-gate.test.ts (2 tests | 2 failed) 563ms
+   ❯ AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test (2)
+     × AC4 gate@1 hasn't opened; a package declaring it replaces the done gate, and one providing a second done gate beside it, are each refused at install naming the done gate, which keeps judging; without the declarations they install 313ms
+     × AC4 (wrong program) a host that refuses only the ring's pieces refuses a package replacing the supervisor, installs the one replacing the done gate, and fails this test 184ms
+ ❯ ring.test.ts (4 tests | 4 failed) 465ms
+   ❯ AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install (4)
+     × AC3 a package that declares it replaces the app shell (replaces: ["app-shell"]) is refused at install, inside the release or out; without the declaration it installs 118ms
+     × AC3 a package that declares it replaces the canvas core (replaces: ["canvas-core"]) is refused at install, inside the release or out; without the declaration it installs 85ms
+     × AC3 a package that declares it replaces the supervisor (replaces: ["supervisor"]) is refused at install, inside the release or out; without the declaration it installs 75ms
+     × AC3 a package that declares it replaces the installer (replaces: ["installer"]) is refused at install, inside the release or out; without the declaration it installs 75ms
+ ❯ conflicts.test.ts (1 test | 1 failed) 287ms
+   ❯ AC2 #351.83b84661 installing a package that conflicts with an installed one is refused, naming the conflict (1)
+     × AC2 a package declaring it conflicts with an installed one is refused at install, naming that one, which stays installed; with nothing it conflicts with installed, it installs 223ms
+ ❯ digest.test.ts (2 tests | 2 failed) 224ms
+   ❯ AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test (2)
+     × AC5 a package whose files changed after its envelope digest was written is refused at install, naming it; a package whose digest matches installs with that digest 107ms
+     × AC5 (wrong program) an installer that trusts the envelope's digest without hashing the files installs the altered package, carrying the envelope's digest, and fails this test 66ms
+ ❯ signature.test.ts (2 tests | 2 failed) 201ms
+   ❯ AC6 #351.838460c6 a package whose envelope names a publisher key with a signature that doesn't verify is refused at install naming the key; an update signed by another key than the one trusted on first use is refused until you trust the new key on the trusted path (2)
+     × AC6 a package naming a publisher key, signed by another key, is refused at install naming the key it names; signed by that key, it installs 95ms
+     × AC6 an update signed by another key than the one trusted on first use is refused, an agent's call doesn't trust the new key, and once you trust it on the trusted path the update installs 58ms
+ ❯ guide.test.ts (6 tests | 6 failed) 13ms
+   ❯ AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it (6)
+     × AC1 the TypeScript example builds, passes conformance and runs against the host 4ms
+     × AC1 the JSON-RPC example builds, passes conformance and runs against the host 0ms
+     × AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it 0ms
+     × AC1 a method the contract publishes with no guide entry fails the drift test, naming it 5ms
+     × AC1 a slot the contract publishes with no guide entry fails the drift test, naming it 1ms
+     × AC1 a guide entry for a method the contract doesn't publish fails the drift test, naming it 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  conflicts.test.ts > AC2 #351.83b84661 installing a package that conflicts with an installed one is refused, naming the conflict > AC2 a package declaring it conflicts with an installed one is refused at install, naming that one, which stays installed; with nothing it conflicts with installed, it installs
+AssertionError: test/beta, which conflicts with the installed test/alpha, is refused at install: expected null not to be null
+ ❯ conflicts.test.ts:23:104
+     21|     await h.install({ from: await pkg('plain', { manifest: { id: ALPHA…
+     22|     const refused = await installError(h, await beta());
+     23|     expect(refused, `${BETA}, which conflicts with the installed ${ALP…
+       |                                                                                                        ^
+     24|     expect(refused, `the refusal names the conflict, ${ALPHA}`).toCont…
+     25|     const ids = await installedIds(h);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  digest.test.ts > AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test > AC5 a package whose files changed after its envelope digest was written is refused at install, naming it; a package whose digest matches installs with that digest
+AssertionError: test/altered, whose envelope digest doesn't match its files, is refused at install: expected null not to be null
+ ❯ refusedNamingThePackage digest.test.ts:25:102
+     23| async function refusedNamingThePackage(h: ExtensionHost, dir: string, …
+     24|   const refused = await installError(h, dir);
+     25|   expect(refused, `${id}, whose envelope digest doesn't match its file…
+       |                                                                                                      ^
+     26|   expect(refused, `the refusal names the package ${id}`).toContain(id);
+     27|   expect(await installedIds(h), `${id} isn't installed`).not.toContain…
+ ❯ digest.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+ FAIL  digest.test.ts > AC5 #351.86308453 a package whose envelope digest doesn't match its files is refused at install, naming the package; an installer trusting the envelope's digest without hashing the files installs it and fails this test > AC5 (wrong program) an installer that trusts the envelope's digest without hashing the files installs the altered package, carrying the envelope's digest, and fails this test
+AssertionError: the planted installer took the envelope's digest as the package's, without hashing its files: expected 'd1:e24482a87bf81816035df12713703d8cea…' to be 'd1:a72b85c9dc886bf93d83b9adfbb69023a8…' // Object.is equality
+
+Expected: "d1:a72b85c9dc886bf93d83b9adfbb69023a885074542501af362dd7eabc355e356"
+Received: "d1:e24482a87bf81816035df12713703d8ceac15c278b31dcae6cc0adacf5fb33cb"
+
+ ❯ digest.test.ts:45:123
+     43|     await expect(refusedNamingThePackage(h, dir, 'test/altered-twin'))…
+     44|     const row = (await h.installed()).find((p) => p.id === 'test/alter…
+     45|     expect(row?.digest, 'the planted installer took the envelope\'s di…
+       |                                                                                                                           ^
+     46|   }, 120_000);
+     47| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+ FAIL  done-gate.test.ts > AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test > AC4 gate@1 hasn't opened; a package declaring it replaces the done gate, and one providing a second done gate beside it, are each refused at install naming the done gate, which keeps judging; without the declarations they install
+AssertionError: deepbuild/rival-gate, which declares it replaces the done gate, is refused at install: the done gate is not replaceable: expected null not to be null
+ ❯ refusedNamingTheDoneGate done-gate.test.ts:54:104
+     52| async function refusedNamingTheDoneGate(h: ExtensionHost, dir: string,…
+     53|   const refused = await installError(h, dir);
+     54|   expect(refused, `${id}, which ${what}, is refused at install: the do…
+       |                                                                                                        ^
+     55|   expect(refused, `the refusal of ${id} names the done gate`).toMatch(…
+     56|   expect(await installedIds(h), `${id} isn't installed`).not.toContain…
+ ❯ done-gate.test.ts:66:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/19]⎯
+
+ FAIL  done-gate.test.ts > AC4 #351.f151ca10 a package replacing the done gate, or providing a second one beside it, is refused at install naming the done gate until gate@1 opens; the installed test gate keeps judging; a host refusing only the ring's pieces fails this test > AC4 (wrong program) a host that refuses only the ring's pieces refuses a package replacing the supervisor, installs the one replacing the done gate, and fails this test
+AssertionError: the planted host is the twin the criterion names: it refuses a package replacing a ring piece, the supervisor: expected null not to be null
+ ❯ done-gate.test.ts:78:158
+     76|     const h = await withDoneGate('refuses-only-the-ring');
+     77|     const ring = await pkg('plain', { manifest: { id: 'deepbuild/ring-…
+     78|     expect(await installError(h, ring), 'the planted host is the twin …
+       |                                                                                                                                                              ^
+     79|     await expect(refusedNamingTheDoneGate(h, await replacer(), REPLACE…
+     80|     expect(await installedIds(h), `the planted host installed ${REPLAC…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/19]⎯
+
+ FAIL  guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it > AC1 the TypeScript example builds, passes conformance and runs against the host
+AssertionError: the guide's typescript example is a package folder with a deepbuild.json at ~/dev/claude-worktrees/doneright/github-issue-351-205696/docs/extension-guide/typescript: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ buildExample helpers.ts:255:140
+    253| export async function buildExample(name: ExampleName): Promise<string>…
+    254|   const source = join(EXAMPLES, name);
+    255|   expect(existsSync(join(source, 'deepbuild.json')), `the guide's ${na…
+       |                                                                                                                                            ^
+    256|   const dir = tempDir(`example-${name}`);
+    257|   cpSync(source, dir, { recursive: true });
+ ❯ buildsPassesAndRuns guide.test.ts:19:21
+ ❯ guide.test.ts:43:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/19]⎯
+
+ FAIL  guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it > AC1 the JSON-RPC example builds, passes conformance and runs against the host
+AssertionError: the guide's json-rpc example is a package folder with a deepbuild.json at ~/dev/claude-worktrees/doneright/github-issue-351-205696/docs/extension-guide/json-rpc: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ buildExample helpers.ts:255:140
+    253| export async function buildExample(name: ExampleName): Promise<string>…
+    254|   const source = join(EXAMPLES, name);
+    255|   expect(existsSync(join(source, 'deepbuild.json')), `the guide's ${na…
+       |                                                                                                                                            ^
+    256|   const dir = tempDir(`example-${name}`);
+    257|   cpSync(source, dir, { recursive: true });
+ ❯ buildsPassesAndRuns guide.test.ts:19:21
+ ❯ guide.test.ts:47:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/19]⎯
+
+ FAIL  guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it > AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it
+AssertionError: the extension guide is at ~/dev/claude-worktrees/doneright/github-issue-351-205696/docs/extension-guide.md: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ guide.test.ts:51:69
+     49|
+     50|   it('AC1 the guide is generated from the published contract and names…
+     51|     expect(existsSync(GUIDE), `the extension guide is at ${GUIDE}`).to…
+       |                                                                     ^
+     52|     const guide = readFileSync(GUIDE, 'utf8');
+     53|     for (const name of ['typescript', 'json-rpc']) expect(guide, `the …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/19]⎯
+
+ FAIL  guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it > AC1 a method the contract publishes with no guide entry fails the drift test, naming it
+AssertionError: the guide's generator and drift test is ~/dev/claude-worktrees/doneright/github-issue-351-205696/scripts/guide.mjs: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runGuideCheck helpers.ts:279:95
+    277| /** `node scripts/guide.mjs --check`, on the published contract or on …
+    278| export function runGuideCheck(contract?: { api: readonly ApiEntry[]; t…
+    279|   expect(existsSync(GUIDE_SCRIPT), `the guide's generator and drift te…
+       |                                                                                               ^
+    280|   const args = [GUIDE_SCRIPT, '--check'];
+    281|   if (contract) {
+ ❯ guide.test.ts:66:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/19]⎯
+
+ FAIL  guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it > AC1 a slot the contract publishes with no guide entry fails the drift test, naming it
+AssertionError: the guide's generator and drift test is ~/dev/claude-worktrees/doneright/github-issue-351-205696/scripts/guide.mjs: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runGuideCheck helpers.ts:279:95
+    277| /** `node scripts/guide.mjs --check`, on the published contract or on …
+    278| export function runGuideCheck(contract?: { api: readonly ApiEntry[]; t…
+    279|   expect(existsSync(GUIDE_SCRIPT), `the guide's generator and drift te…
+       |                                                                                               ^
+    280|   const args = [GUIDE_SCRIPT, '--check'];
+    281|   if (contract) {
+ ❯ guide.test.ts:74:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/19]⎯
+
+ FAIL  guide.test.ts > AC1 #351.1d3d1e53 the guide's two worked examples, in TypeScript and over JSON-RPC, build, pass conformance and run against the host; a published method or slot with no guide entry, and a guide entry for an unpublished method, each fail the drift test, naming it > AC1 a guide entry for a method the contract doesn't publish fails the drift test, naming it
+AssertionError: the guide's generator and drift test is ~/dev/claude-worktrees/doneright/github-issue-351-205696/scripts/guide.mjs: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runGuideCheck helpers.ts:279:95
+    277| /** `node scripts/guide.mjs --check`, on the published contract or on …
+    278| export function runGuideCheck(contract?: { api: readonly ApiEntry[]; t…
+    279|   expect(existsSync(GUIDE_SCRIPT), `the guide's generator and drift te…
+       |                                                                                               ^
+    280|   const args = [GUIDE_SCRIPT, '--check'];
+    281|   if (contract) {
+ ❯ guide.test.ts:82:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/19]⎯
+
+ FAIL  journey.test.ts > AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys > AC7 a second journey that doesn't declare it replaces the first is refused at install, naming the first, which keeps running journeys
+AssertionError: deepbuild/journey-b registers journey without declaring it replaces deepbuild/journey-a, and is refused at install: expected null not to be null
+ ❯ journey.test.ts:53:113
+     51|     expect(await runOne(h, a), `${A} runs journeys`).toEqual([1]);
+     52|     const refused = await installError(h, b.dir);
+     53|     expect(refused, `${B} registers journey without declaring it repla…
+       |                                                                                                                 ^
+     54|     expect(refused, `the refusal names the first, ${A}`).toContain(A);
+     55|     expect(await installedIds(h), `${B} isn't installed`).not.toContai…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/19]⎯
+
+ FAIL  journey.test.ts > AC7 #351.c5e40eeb a second package registering the check kind journey without declaring it replaces the first is refused at install naming the first; one that declares it installs, and only it runs journeys > AC7 a second journey that declares it replaces the first installs, and only it runs journeys
+AssertionError: journey is deepbuild/journey-c's alone: expected [ { kind: 'journey', …(1) } ] to deeply equal [ { kind: 'journey', …(1) } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "extension": "deepbuild/journey-c",
++     "extension": "deepbuild/journey-a",
+      "kind": "journey",
+    },
+  ]
+
+ ❯ journey.test.ts:63:95
+     61|     const { h, a, c } = await withFirstJourney();
+     62|     await installAndLoad(h, c.dir);
+     63|     expect((await h.checks()).filter((k) => k.kind === 'journey'), `jo…
+       |                                                                                               ^
+     64|     expect(await runOne(h, a, c), `only ${C} runs journeys`).toEqual([…
+     65|   }, 300_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/19]⎯
+
+ FAIL  ring.test.ts > AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install > AC3 a package that declares it replaces the app shell (replaces: ["app-shell"]) is refused at install, inside the release or out; without the declaration it installs
+AssertionError: deepbuild/ring-app-shell, which declares it replaces the app shell, is refused at install: expected null not to be null
+ ❯ ring.test.ts:26:117
+     24|       const h = await openHost(await openWorld(), { release: [await re…
+     25|       for (const [dir, id] of [[inRelease, `deepbuild/ring-${name}`], …
+     26|         expect(await installError(h, dir), `${id}, which declares it r…
+       |                                                                                                                     ^
+     27|         expect(await installedIds(h), `${id} isn't installed`).not.toC…
+     28|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/19]⎯
+
+ FAIL  ring.test.ts > AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install > AC3 a package that declares it replaces the canvas core (replaces: ["canvas-core"]) is refused at install, inside the release or out; without the declaration it installs
+AssertionError: deepbuild/ring-canvas-core, which declares it replaces the canvas core, is refused at install: expected null not to be null
+ ❯ ring.test.ts:26:117
+     24|       const h = await openHost(await openWorld(), { release: [await re…
+     25|       for (const [dir, id] of [[inRelease, `deepbuild/ring-${name}`], …
+     26|         expect(await installError(h, dir), `${id}, which declares it r…
+       |                                                                                                                     ^
+     27|         expect(await installedIds(h), `${id} isn't installed`).not.toC…
+     28|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/19]⎯
+
+ FAIL  ring.test.ts > AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install > AC3 a package that declares it replaces the supervisor (replaces: ["supervisor"]) is refused at install, inside the release or out; without the declaration it installs
+AssertionError: deepbuild/ring-supervisor, which declares it replaces the supervisor, is refused at install: expected null not to be null
+ ❯ ring.test.ts:26:117
+     24|       const h = await openHost(await openWorld(), { release: [await re…
+     25|       for (const [dir, id] of [[inRelease, `deepbuild/ring-${name}`], …
+     26|         expect(await installError(h, dir), `${id}, which declares it r…
+       |                                                                                                                     ^
+     27|         expect(await installedIds(h), `${id} isn't installed`).not.toC…
+     28|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/19]⎯
+
+ FAIL  ring.test.ts > AC3 #351.542cefd7 a package that declares it replaces the app shell, the canvas core, the supervisor or the installer is refused at install > AC3 a package that declares it replaces the installer (replaces: ["installer"]) is refused at install, inside the release or out; without the declaration it installs
+AssertionError: deepbuild/ring-installer, which declares it replaces the installer, is refused at install: expected null not to be null
+ ❯ ring.test.ts:26:117
+     24|       const h = await openHost(await openWorld(), { release: [await re…
+     25|       for (const [dir, id] of [[inRelease, `deepbuild/ring-${name}`], …
+     26|         expect(await installError(h, dir), `${id}, which declares it r…
+       |                                                                                                                     ^
+     27|         expect(await installedIds(h), `${id} isn't installed`).not.toC…
+     28|       }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/19]⎯
+
+ FAIL  signature.test.ts > AC6 #351.838460c6 a package whose envelope names a publisher key with a signature that doesn't verify is refused at install naming the key; an update signed by another key than the one trusted on first use is refused until you trust the new key on the trusted path > AC6 a package naming a publisher key, signed by another key, is refused at install naming the key it names; signed by that key, it installs
+AssertionError: writing the signature into deepbuild.json leaves packageDigest as it was, as writing the digest does (README: the signed envelope): expected 'd1:25ca515577e22267c8439407b6e4f4aada…' to be 'd1:dd562a1ff14a602813bc6b4bbc46169e49…' // Object.is equality
+
+Expected: "d1:dd562a1ff14a602813bc6b4bbc46169e49c44ae0e4efe315ceecf4dbb65b5092"
+Received: "d1:25ca515577e22267c8439407b6e4f4aada7319d69892c1d858d587fbe7267a0a"
+
+ ❯ signedPkg helpers.ts:216:164
+    214|   m.signature = sign(null, canonicalize(envelope), options.signer).toS…
+    215|   writeManifest(dir, m);
+    216|   expect(packageDigest(dir), 'writing the signature into deepbuild.jso…
+       |                                                                                                                                                                    ^
+    217|   return dir;
+    218| }
+ ❯ signature.test.ts:19:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/19]⎯
+
+ FAIL  signature.test.ts > AC6 #351.838460c6 a package whose envelope names a publisher key with a signature that doesn't verify is refused at install naming the key; an update signed by another key than the one trusted on first use is refused until you trust the new key on the trusted path > AC6 an update signed by another key than the one trusted on first use is refused, an agent's call doesn't trust the new key, and once you trust it on the trusted path the update installs
+AssertionError: writing the signature into deepbuild.json leaves packageDigest as it was, as writing the digest does (README: the signed envelope): expected 'd1:b467dafdb544a0ef8abdbcd62a8fe39362…' to be 'd1:663ce97eedcf664613cedbd1bb4512703b…' // Object.is equality
+
+Expected: "d1:663ce97eedcf664613cedbd1bb4512703b0886e4f83ede13db51328f70fb3668"
+Received: "d1:b467dafdb544a0ef8abdbcd62a8fe3936232b4fbf540df04fff2239965964e77"
+
+ ❯ signedPkg helpers.ts:216:164
+    214|   m.signature = sign(null, canonicalize(envelope), options.signer).toS…
+    215|   writeManifest(dir, m);
+    216|   expect(packageDigest(dir), 'writing the signature into deepbuild.jso…
+       |                                                                                                                                                                    ^
+    217|   return dir;
+    218| }
+ ❯ signature.test.ts:34:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/19]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  19 failed (19)
+   Start at  14:14:24
+   Duration  7.40s (tests 92%, import 7%, transform 1%)
+
+    Isolate  7 workers spawned · ~74ms startup each (spawn + environment, per file)
+             at least ~445ms faster with isolate: false — reuses workers across files instead of one per file
+

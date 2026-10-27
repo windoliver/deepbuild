@@ -861,3 +861,15 @@ describe('#350 review regressions', () => {
     expect(reply.failed.map((f) => f.extension)).toEqual(['test/gate']);
   }, 60_000);
 });
+
+describe('#351 the kernel contract versions a package runs on', () => {
+  it('a package that runs on a contract version the kernel doesn\'t publish is refused at install, naming it; one the kernel publishes installs', async () => {
+    const { h } = await world();
+    const none = 'export default function (_deep: unknown): void {}\n';
+    await expect(h.install({ from: pkgOf('test/future', none, { kernel: ['extension.manifest@1', 'hook.request@9'] }), builtBy: null })).rejects.toThrow(/hook\.request@9/);
+    expect(await h.installed()).toEqual([]);
+    const now = await h.install({ from: pkgOf('test/present', none, { kernel: ['extension.manifest@1', 'hook.request@3'] }), builtBy: null });
+    expect((await h.check(now)).passed, 'its kernel declaration passes conformance').toBe(true);
+    expect((await h.installed()).map((p) => p.id)).toEqual(['test/present']);
+  }, 60_000);
+});

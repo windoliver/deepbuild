@@ -1,0 +1,108 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Checks",
+  "description": "Checks by service, week by week, as the last release stored the board.",
+  "size": [
+    640,
+    360
+  ],
+  "layers": {
+    "you-main": {
+      "writer": "you:you",
+      "title": "You",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "you.title": {
+      "id": "you.title",
+      "kind": "text@1",
+      "name": "Title",
+      "order": "a0",
+      "layer": "you-main",
+      "params": {
+        "text": "Weekly checks by service",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 240,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          16,
+          16,
+          0
+        ]
+      }
+    },
+    "you.x-label": {
+      "id": "you.x-label",
+      "kind": "text@1",
+      "name": "X axis label",
+      "order": "a1",
+      "layer": "you-main",
+      "params": {
+        "text": "Wekk",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 240,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          330,
+          0
+        ]
+      }
+    },
+    "you.y-label": {
+      "id": "you.y-label",
+      "kind": "text@1",
+      "name": "Y axis label",
+      "order": "a2",
+      "layer": "you-main",
+      "params": {
+        "text": "Checks",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 240,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          16,
+          180,
+          0
+        ]
+      }
+    },
+    "you.plot": {
+      "id": "you.plot",
+      "kind": "rect@1",
+      "name": "Plot area",
+      "order": "a3",
+      "layer": "you-main",
+      "params": {
+        "box": [
+          80,
+          60,
+          520,
+          240
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  }
+}
