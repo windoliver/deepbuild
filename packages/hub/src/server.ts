@@ -32,7 +32,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
-  ['gates.off', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
@@ -80,14 +80,15 @@ interface Parsers { parse(chunks: Buffer[], first: boolean): Promise<Parsed>; cl
 /** A frame from the core: its event's JSON text. */
 type OnFrame = (sub: string, event: string) => void;
 
-function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void): CoreLink {
+function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[]) => void): CoreLink {
   const worker = new Worker(new URL('./core-worker.js', import.meta.url), { workerData: { core: options } });
   const pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   let n = 0;
   let started!: (v: { hooks: string[] }) => void;
   const ready = new Promise<{ hooks: string[] }>((resolve) => { started = resolve; });
-  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[] }) => {
+  worker.on('message', (m: { op?: string; n?: number; sub?: string; event?: string; message?: string; result?: unknown; error?: Refusal; hooks?: string[]; sessions?: string[] }) => {
     if (m.op === 'frame') return onFrame(m.sub!, m.event!);
+    if (m.op === 'asking') return onAsking(m.sessions ?? []);
     if (m.op === 'started') return started({ hooks: m.hooks ?? [] });
     if (m.op === 'fatal') return onFatal(m.message!);
     const waiting = pending.get(m.n!);
@@ -107,10 +108,10 @@ function coreWorker(options: CoreOptions, onFrame: OnFrame, onFatal: (why: strin
   };
 }
 /** The commit-on-event-loop plant: the core on the event loop, committing through the synchronous binding there. */
-async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void): Promise<CoreLink> {
+async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why: string) => void, onAsking: (sessions: string[]) => void): Promise<CoreLink> {
   const { Core } = await import('./core.js');
   const { answer, asRefusal } = await import('./core-worker.js');
-  const core = new Core(options, onFrame);
+  const core = new Core(options, onFrame, onAsking);
   const started = core.started().then(() => ({ hooks: core.hooks() }));
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
@@ -195,7 +196,7 @@ class Conn {
  */
 interface Sub { conn: Conn; id: unknown; queued: number; held: string[]; next: number; since: number; watch?: NodeJS.Timeout | undefined }
 /** What the hub reads of a guard@1 entry in rules.json. */
-interface Guard { match?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown }
+interface Guard { match?: unknown; mode?: unknown; reason?: unknown; next_step?: unknown; fail_closed?: unknown }
 
 class Hub {
   private readonly server = net.createServer({ allowHalfOpen: false });
@@ -208,13 +209,19 @@ class Hub {
   private stopping = false;
   /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
   private hooks = new Set<string>();
+  /** The sessions with an ask still to deliver, as the core last said: only their stops are held (#18, #19). */
+  private asking = new Set<string>();
+  /** `deep off` in effect (#19): every gate watch-only, while the floor (the fail_closed entries) holds. */
+  private off = false;
   readonly start = ulid(Date.now());
   private readonly helloLine = line({ hello: 'deep-hub', start: this.start, features: FEATURES });
 
   constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {}
 
   async open(clock: CoreOptions['clock']): Promise<void> {
-    const options: CoreOptions = { root: this.root.dir, clock, held: [this.token], ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
+    const held = [this.token, ...testHeld()];
+    this.off = gatesOff(this.root);
+    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
@@ -235,8 +242,9 @@ class Hub {
       process.stderr.write(`deep hub: the core stopped: ${why}\n`);
       this.exit(1);
     };
-    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal) : coreWorker(options, frame, fatal);
-    this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline([this.token], this.plant) : parserPool([this.token], this.plant);
+    const asking = (sessions: string[]) => { this.asking = new Set(sessions); };
+    this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking) : coreWorker(options, frame, fatal, asking);
+    this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant) : parserPool(held, this.plant);
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
     this.server.on('error', (error: NodeJS.ErrnoException) => {
@@ -343,6 +351,10 @@ class Hub {
     // A small line is copied out of the socket's buffer, so only its own bytes cross to the parser.
     const chunks = size > BIG ? parts : [parts.length === 1 ? Buffer.from(parts[0]!) : Buffer.concat(parts)];
     const parsed = await this.parsers.parse(chunks, first);
+    if (parsed.kind === 'hook' && this.plant === 'log-raw-command') {
+      // The planted wrong program: the command as the hook sent it, unscrubbed, in the hub's log.
+      try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
+    }
     if (parsed.kind === 'hook') return this.hook(conn, parsed);
     if (parsed.kind === 'refused') {
       conn.write({ id: parsed.id, error: parsed.error });
@@ -379,7 +391,7 @@ class Hub {
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
     const ruled = this.reply(meta);
-    const before = ruled === EMPTY_REPLY && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
+    const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const held = !before && parsed.drafts.length ? this.holdFor(meta) : null;
     const hold = before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
@@ -403,7 +415,10 @@ class Hub {
     if (meta.event !== 'Stop' || meta.agent === 'codex') return null;
     const relation = this.stopHold();
     if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
-    if (meta.watchOnly || !relation.holds) return null;
+    if (meta.watchOnly || !relation.holds || this.off) return null;
+    // Until you approve a repo's checks no verdict holds a stop: only an answer on its way back does (design: How it
+    // installs). The planted wrong program holds every stop, as gates on unapproved checks would.
+    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session)) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
@@ -461,8 +476,11 @@ class Hub {
       : meta.matched;
     const mode = (n: string): unknown => (this.plant === 'warn-as-block' && entries[n]?.mode === 'warn' ? 'block' : entries[n]?.mode);
     const words = (n: string): string => `${String(entries[n]!.reason)} ${String(entries[n]!.next_step)}${meta.notes?.[n] ? ` ${meta.notes[n]}` : ''} (guard ${n})`;
-    const blocks = matched.filter((n) => mode(n) === 'block');
+    // With `deep off` only the floor still denies, the fail_closed entries, which hold with the hub away too; no warns.
+    const floor = (n: string) => entries[n]?.fail_closed === true && this.plant !== 'off-guards-watch-only';
+    const blocks = matched.filter((n) => mode(n) === 'block' && (!this.off || floor(n)));
     if (blocks.length) return line({ exit: 2, stdout: '', stderr: blocks.map((n) => `DeepBuild blocked this: ${words(n)}\n`).join('') });
+    if (this.off) return EMPTY_REPLY;
     const warns = matched.filter((n) => mode(n) === 'warn');
     if (!warns.length || (meta.agent !== 'claude-code' && meta.agent !== 'claude')) return EMPTY_REPLY;
     const additionalContext = warns.map((n) => `DeepBuild warns: ${words(n)}`).join('\n');
@@ -549,8 +567,18 @@ class Hub {
       case 'hub.stop':
         conn.write({ id, result: { stopping: true } });
         return void this.stop('requested');
+      case 'gates.off':
+      case 'gates.on': {
+        const off = method === 'gates.off';
+        // The core asks the OS to confirm you; only then do the gates change.
+        return void reply(this.core.request({ op: 'call', method: 'you.confirm', params: { command: off ? 'deep off' : 'deep on' }, context: { role: conn.name, ...(conn.peer ? { peer: conn.peer } : {}) } }).then(() => {
+          this.off = off;
+          setGatesOff(this.root, off);
+          return { off };
+        }));
+      }
       case 'hub.health':
-        return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, ...(health as Obj) })));
+        return void reply(this.core.request({ op: 'health' }).then((health) => ({ pid: process.pid, start: this.start, off: this.off, ...(health as Obj) })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         conn.subs.add(sub);
@@ -594,6 +622,22 @@ class Hub {
     try { this.lock.release(); } catch { /* the OS drops it at exit anyway */ }
     process.exit(code);
   }
+}
+
+/** Values the hub holds by handle from its start, as tests name them in DEEP_HUB_TEST_HELD: scrubbed from all it writes. */
+function testHeld(): string[] {
+  const file = process.env.DEEP_HUB_TEST_HELD;
+  if (!file) return [];
+  try { return readFileSync(file, 'utf8').split('\n').map((v) => v.trim()).filter(Boolean); } catch { return []; }
+}
+/** Whether `deep off` is in effect: <root>/gates.json, which only the hub writes, once the OS confirmed you. */
+function gatesOff(root: Root): boolean {
+  try { return (JSON.parse(readFileSync(join(root.dir, 'gates.json'), 'utf8')) as { off?: unknown }).off === true; } catch { return false; }
+}
+function setGatesOff(root: Root, off: boolean): void {
+  const file = join(root.dir, 'gates.json');
+  writeFileSync(`${file}.tmp`, `${JSON.stringify({ off, since: Date.now() })}\n`, { mode: 0o600 });
+  renameSync(`${file}.tmp`, file);
 }
 
 /** Writes the control token: random, new each launch, readable only by you, never on a command line. */

@@ -6,7 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promises';
-import { homedir, networkInterfaces, userInfo } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
@@ -23,8 +23,10 @@ import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowRepor
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
-import { claudeSettings, installed, readJson, relations, restore, tampered, words } from './claude-settings.js';
+import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, tampered, words } from './claude-settings.js';
 import { confirmYou } from './confirm.js';
+import { keychain, ownHome } from './keychain.js';
+import { statusRows } from './status.js';
 import { addGuards } from './guards.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
@@ -37,19 +39,10 @@ import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, startOf, ulid, 
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-/** How long deep_ask and deep_wait wait for an answer before saying it's still waiting: under the 60 s agents give a tool call. */
-const ASK_WAIT = 40_000;
 /** A value quoted into SQL. */
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
-/** Whether HOME is your own account's home: a hub under a test's temp HOME never reads your credentials. */
-const ownHome = (): boolean => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } };
-/** Your login Keychain, only while HOME is your own account's home. */
-const keychain = (service: string): Promise<string | undefined> => {
-  if (process.platform !== 'darwin' || !ownHome()) return Promise.resolve(undefined);
-  return new Promise((done) => execFile('/usr/bin/security', ['find-generic-password', '-s', service, '-w'], { timeout: 5000 }, (error, out) => done(error ? undefined : out.trim())));
-};
 /** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
 const ghToken = (): Promise<string | undefined> => {
   if (!ownHome()) return Promise.resolve(undefined);
@@ -75,6 +68,8 @@ const CALL_GRACE = 2_000;
 const TURN_ENTRIES = 5_000;
 /** The agents whose hooks run Claude Code's entries but who aren't Claude Code: never a session's asks or claims. */
 const FOREIGN = new Set(['cursor', 'grok']);
+/** The commands that take effect only once the OS confirms you (#19), as `you.confirm` names them. */
+const AUTHORITY = new Set(['deep off', 'deep on', 'deep hub stop', 'deep hub use', 'deep setup --undo']);
 const REQUEST = Buffer.from('{"v":1,"agent":');
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -257,7 +252,11 @@ export class Core {
   /** Held stops and waiters, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
 
-  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void) {
+  /**
+   * `asking` hears the sessions with an ask still to deliver whenever that set changes, so the event loop holds a stop
+   * only where an answer may come back through it (#19: right after install no stop is held for anything else).
+   */
+  constructor(private readonly options: CoreOptions, private readonly emit: (sub: string, event: string) => void, private readonly asking: (sessions: string[]) => void = () => undefined) {
     this.root = rootOf(options.root);
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
@@ -280,7 +279,10 @@ export class Core {
     this.record = await openRecord({ path: this.root.ledger, now: this.now, evidence: this.store, commitEach: true, ...(storage ? { storage } : {}) });
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
-    this.record = streamed(this.record, () => this.stream());
+    this.record = streamed(this.record, (kind) => {
+      this.stream();
+      if (kind.startsWith('ask.') || kind.startsWith('delivery.')) this.askingSoon();
+    });
     // A start that finds the last run still marked running records that run's stop as a crash.
     try {
       // A cursor whose transcript is gone has no session left to judge.
@@ -293,6 +295,7 @@ export class Core {
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir });
+    this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
     const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
@@ -438,6 +441,8 @@ export class Core {
    * for that, not for the commit. Resolves once each append settled.
    */
   hook(drafts: Draft[], meta: HookMeta, writer: string): Promise<void> {
+    // A tool call or a new prompt resets Claude Code's count of consecutive stop-hook continuations.
+    if (meta.event === 'PreToolUse' || meta.event === 'UserPromptSubmit') this.continued.delete(meta.session);
     // What deep-hook spooled ran before this hook, so a replay this hook starts, or one running, goes first.
     this.replayLate();
     const replayed = this.replaying ?? Promise.resolve();
@@ -903,6 +908,28 @@ export class Core {
     }
     return `DeepBuild delivers your answers:\n${lines.join('\n')}`;
   }
+  /** Each session's held-stop send-backs since its last tool call or prompt. */
+  private readonly continued = new Map<string, number>();
+  private askingQueued = false;
+  private askingSent = '';
+  /** Sends the event loop the sessions with an ask still to deliver, once per turn of appends, when it changed. */
+  private askingSoon(): void {
+    if (this.askingQueued) return;
+    this.askingQueued = true;
+    setImmediate(() => {
+      this.askingQueued = false;
+      void this.askingNow().catch(() => undefined);
+    });
+  }
+  private async askingNow(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT DISTINCT session_id FROM asks WHERE session_id IS NOT NULL AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')`)) as { session_id: string }[];
+    const sessions = rows.map((r) => r.session_id).sort();
+    const key = sessions.join(' ');
+    if (key === this.askingSent) return;
+    this.askingSent = key;
+    this.asking(sessions);
+  }
+
   /**
    * What the hub says back to a hook it holds (#18): a session's start gets its briefing; a prompt gets the answers
    * waiting for it; a held stop waits until `until` for an answer to one of its session's open asks.
@@ -916,9 +943,19 @@ export class Core {
     }
     if (meta.event !== 'Stop') return {};
     const open = async () => ((await this.record.raw(`SELECT 1 FROM asks WHERE session_id = '${sql(meta.session)}' AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered') LIMIT 1`)) as unknown[]).length > 0;
+    // Past Claude Code's cap on consecutive stop-hook continuations it would end the turn and drop the send-back, so
+    // the one that would reach the cap goes by the next prompt (design: Timing relations, stop continuations).
+    const continued = this.continued.get(meta.session) ?? 0;
+    if (continued >= CONTINUATION_CAP - 1) {
+      await this.appendReading(meta.session, meta.agent, `This turn already continued ${continued} times through held stops, and Claude Code ends a turn at ${CONTINUATION_CAP} consecutive stop-hook continuations, so the next answer waits for the session's next prompt.`).catch(() => undefined);
+      return {};
+    }
     while (!this.stopping && Date.now() < until && await open()) {
       const block = await this.queue(() => this.deliverable(meta.session, 'stop_hold'));
-      if (block) return { block };
+      if (block) {
+        this.continued.set(meta.session, continued + 1);
+        return { block };
+      }
       await this.answerOrTimeout(meta.session, Math.min(until - Date.now(), 1000));
     }
     return {};
@@ -1223,8 +1260,9 @@ export class Core {
       case 'ask.undo': return this.undo(params, context);
       case 'device.pair': return this.pair(params);
       case 'extension.install': return this.install(params, context);
+      case 'you.confirm': return this.confirmCommand(params, context);
+      case 'status.read': return this.reflecting(async () => ({ rows: await statusRows((sql) => this.record.raw(sql), this.now()) }));
       case 'guard.add': return this.addGuard(params, context);
-      case 'gates.off': throw new Refused(refusal('unconfirmed', '/method', 'deep off takes effect only once the OS confirms you (#19); nothing changed.', 'gates.off'));
       case 'evidence.paste': return this.paste(params);
       case 'run.start': return this.runStart(params);
       case 'test.load': return this.testLoad(params);
@@ -1455,6 +1493,27 @@ export class Core {
     } catch (error) {
       return { status: 'refused', reason: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  /**
+   * `deep off`, `deep on`, `deep hub stop`, `deep hub use` and `deep setup --undo` (#19): each takes effect only once
+   * the OS confirms you, with a prompt naming the command. Run inside an agent's process tree it acts as that agent's
+   * session, and no agent switches DeepBuild off; the peer check alone never makes one count.
+   */
+  private async confirmCommand(params: Obj, context: CallContext): Promise<Obj> {
+    const command = params.command;
+    if (typeof command !== 'string' || !AUTHORITY.has(command)) throw new Refused(refusal('enum', '/params/command', `Name one of ${[...AUTHORITY].join(', ')}.`, command));
+    const what = typeof params.detail === 'string' ? `${command} ${params.detail.slice(0, 200)}` : command;
+    if (context.role !== 'cli') throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: from the app it counts only when a device you paired signs it; from your terminal, once the OS confirms you.`, command));
+    // A deep command names its process so the peer check can read whose it is; a call that names none counts for
+    // nothing, and asks the OS nothing.
+    if (!context.peer) throw new Refused(refusal('unconfirmed', '/method', `${what} changed nothing: the call names no process for the peer check; run the deep command itself.`, command));
+    const agent = await this.agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/params/command', `${what} changed nothing: it runs inside agent session ${agent}'s process tree, so it acts as that session, and no agent changes what watches it. Run it from your own terminal.`, command));
+    if (this.options.plant === 'acts-on-peer-check') return { confirmed: command };
+    const why = await confirmYou(what, this.options.confirm);
+    if (why) throw new Refused(refusal('unconfirmed', '/params/command', `${what} changed nothing: the OS didn't confirm you (${why}). It takes effect only once the OS confirms you; run it again and confirm.`, command, true));
+    return { confirmed: command };
   }
 
   /**
@@ -1696,6 +1755,8 @@ export class Core {
     const pinned = await this.pinOf(s.cwd, question);
     const ask = { ...raised, fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned };
     const handle = await this.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
+    // The event loop knows this session's stop may carry the answer back before the agent hears of its ask.
+    await this.askingNow().catch(() => undefined);
     await this.waiterNote(session, handle).catch(() => undefined);
     return this.waitFor(session, handle);
   }
@@ -1720,8 +1781,12 @@ export class Core {
    * deep_wait: the ask's answer once one arrives, or before the agent's tool timeout, that it's still waiting, with
    * its deadline and default. Only the session that raised an ask waits on it.
    */
+  /** How long deep_ask and deep_wait wait: none once Claude Code's MCP tool timeout leaves no room (the deep_ask relation). */
+  private askWait(): number {
+    return relations(this.root.dir).find((r) => r.name === 'deep_ask')?.holds === false ? 0 : ASK_WAIT_MS;
+  }
   private async waitFor(session: string, handle: string): Promise<Obj> {
-    const until = Date.now() + ASK_WAIT;
+    const until = Date.now() + this.askWait();
     for (;;) {
       const [row] = (await this.record.raw(`SELECT session_id, status, answer, deadline, default_option FROM asks WHERE id = '${sql(handle.slice(4))}'`)) as { session_id: string | null; status: string; answer: string | null; deadline: number; default_option: string | null }[];
       if (!row || row.session_id !== session) throw refuse('not_found', '/params/arguments/ask', 'Wait on an ask this session raised, by the handle deep_ask returned.', handle);
@@ -1800,7 +1865,7 @@ export class Core {
     const commit = String((JSON.parse(claim.data) as Obj).commit);
     const { run } = await this.runStart({ check: args.check, claim: `claim:${claim.id}`, commit, argv: ['/bin/sh', '-c', command], cwd });
     // The run's outcome once it finishes, so the agent needn't poll; past the wait, that it's still running.
-    const until = Date.now() + ASK_WAIT;
+    const until = Date.now() + this.askWait();
     for (;;) {
       const [done] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND subject = '${sql(String(run))}' LIMIT 1`)) as { data: string }[];
       if (done) {
@@ -2315,10 +2380,10 @@ function withAppend(record: RecordStore, append: RecordStore['append']): RecordS
 }
 
 /** The record, calling `appended` after each append it took. */
-function streamed(record: RecordStore, appended: () => void): RecordStore {
+function streamed(record: RecordStore, appended: (kind: string) => void): RecordStore {
   return withAppend(record, async (connection, input) => {
     const event = await record.append(connection, input);
-    appended();
+    appended(input.kind);
     return event;
   });
 }
