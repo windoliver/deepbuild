@@ -864,6 +864,18 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #377: the shipped canvas modules the plug-in's documents are checked in."
         },
+        "deep-canvas-graph": {
+          "spec": "* path=../deep-canvas-graph",
+          "why": "Issue #137: the graph canvas module, in the shipped set a host, the live view and the plug-in's documents are checked in, as deep_show's full build holds it."
+        },
+        "deep-canvas-record": {
+          "spec": "* path=../deep-canvas-record",
+          "why": "Issue #137: the record canvas module, in the shipped set a host, the live view and the plug-in's documents are checked in, as deep_show's full build holds it."
+        },
+        "deep-canvas-sheet": {
+          "spec": "* path=../deep-canvas-sheet",
+          "why": "Issue #137: the sheet canvas module, in the shipped set a host, the live view and the plug-in's documents are checked in, as deep_show's full build holds it."
+        },
         "deep-canvas-test-modules": {
           "spec": "* path=../deep-canvas-test-modules",
           "why": "Issue #379: the test canvas module test.gpu, whose texture, mesh and burn the meter's acceptance tests draw; optional, under the test-meter feature, so no shipped build holds it."
