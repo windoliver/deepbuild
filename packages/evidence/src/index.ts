@@ -3,6 +3,8 @@ import { isUtf8 } from 'node:buffer';
 import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { promisify } from 'node:util';
+import { zstdCompress, zstdDecompress } from 'node:zlib';
 import { detect, missingEnd, type MediaType } from './intake.js';
 import { scrub, scrubList, type Run } from './scrub.js';
 
@@ -123,6 +125,10 @@ const DAY = 86_400_000;
 const RETENTION_MS = 30 * DAY;
 // Uncited files of these kinds go sooner: a series' batches after a day, its minute rollups after a week (#262).
 const KEPT_MS: Readonly<Record<string, number>> = { 'reading.batch': DAY, 'reading.rollup.minute': 7 * DAY };
+// The archive's transcript copies are kept compressed (#20): a heavy month of them fits in under 2 GB on disk.
+const PACKED: ReadonlySet<string> = new Set(['transcript-copy']);
+const pack = promisify(zstdCompress);
+const unpack = promisify(zstdDecompress);
 const REDACTIONS: readonly unknown[] = ['complete', 'incomplete', 'unknown'];
 const HASH = /^[0-9a-f]{64}$/;
 const hashOf = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -134,6 +140,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   const root = options.root ?? join(homedir(), '.deepbuild', 'evidence');
   const now = options.now ?? Date.now;
   const fileOf = (sha: string) => join(root, sha.slice(0, 2), sha.slice(2));
+  // A packed file sits beside where its plain one would, with .zst added.
+  const packedOf = (sha: string) => `${fileOf(sha)}.zst`;
   // Each put appends its record, each removal its hash and each yes to a send its file, destination and
   // reasons to one journal; the last line for a hash wins.
   const journal = join(root, 'records.jsonl');
@@ -171,6 +179,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     await rename(temp, path);
   }
   const exists = (path: string) => access(path).then(() => true, () => false);
+  const onDisk = async (sha: string) => (await exists(fileOf(sha))) || exists(packedOf(sha));
 
   const refuse = (reason: string): PutResult => ({ status: 'refused', reason, slot: { state: 'missing', reason } });
   const unlabelled = (request: Common) =>
@@ -184,10 +193,10 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const steps = request.steps?.map(({ step, startMs, endMs }) => ({ step, startMs, endMs }));
     // An input that is gone or unknown might have been an agent's, so it counts as one.
     const fromAgent = derivedFrom.some((input) => (index.get(input)?.origin ?? 'agent') === 'agent');
-    const existed = await exists(fileOf(sha));
+    const existed = await onDisk(sha);
     await options.hooks?.afterExistsCheck?.(sha);
     return serial(sha, async () => {
-      if (!existed || !(await exists(fileOf(sha)))) await writeAtomic(fileOf(sha), bytes);
+      if (!existed || !(await onDisk(sha))) await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(bytes)) : writeAtomic(fileOf(sha), bytes));
       const earlier = index.get(sha);
       const record: Stored = {
         sha256: sha, size: bytes.length, type, kind: request.kind, source: request.source,
@@ -205,7 +214,11 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   }
 
   const read = async (sha: string): Promise<Uint8Array> => {
-    const bytes = HASH.test(sha) ? await readFile(fileOf(sha)).catch(() => undefined) : undefined;
+    let bytes = HASH.test(sha) ? await readFile(fileOf(sha)).catch(() => undefined) : undefined;
+    if (!bytes && HASH.test(sha)) {
+      const packed = await readFile(packedOf(sha)).catch(() => undefined);
+      if (packed) bytes = await unpack(packed).catch(() => { throw new EvidenceError('corrupt', `evidence ${sha} is corrupt: its file no longer unpacks`, sha); });
+    }
     if (!bytes) throw new EvidenceError('missing', `evidence ${sha} is missing`, sha);
     if (hashOf(bytes) !== sha) throw new EvidenceError('corrupt', `evidence ${sha} is corrupt: its bytes no longer match its hash`, sha);
     return new Uint8Array(bytes);
@@ -274,7 +287,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       await Promise.all([...index.keys()].filter(expired).map((sha) => serial(sha, async () => {
         if (!expired(sha)) return; // stored again since the pass began
         index.delete(sha);
-        await rm(fileOf(sha), { force: true });
+        await Promise.all([rm(fileOf(sha), { force: true }), rm(packedOf(sha), { force: true })]);
         await appendFile(journal, `${JSON.stringify({ removed: sha })}\n`);
         removed.push(sha);
       })));

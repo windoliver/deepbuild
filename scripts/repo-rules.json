@@ -298,6 +298,10 @@
           "spec": "0.0.0",
           "why": "Issue #16: the shipped adapters that map each hook request to its event kind, from each agent's facts."
         },
+        "@deepbuild/archive": {
+          "spec": "0.0.0",
+          "why": "Issue #20: the hub runs the transcript archive, a first-party extension on by default, once an hour on its record, evidence store and asks core."
+        },
         "@deepbuild/asks": {
           "spec": "0.0.0",
           "why": "Issue #236: the asks core the supervisor raises its unblock asks through, opened on the hub's record."
@@ -1048,6 +1052,26 @@
         }
       }
     },
+    "packages/archive/package.json": {
+      "dependencies": {
+        "@deepbuild/adapters": {
+          "spec": "0.0.0",
+          "why": "Issue #20: the archive's sources are each adapter's facts, its transcripts home and path, so a new adapter adds its folders with no change to the archive."
+        },
+        "@deepbuild/asks": {
+          "spec": "0.0.0",
+          "why": "Issue #20: a key pasted into chat opens a \"rotate this key\" ask through the asks core."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #20: each copy is stored as evidence by hash, scrubbed by the store's own text scrub, and read back."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #20: each copy is linked by a transcript.archived event, and what was already copied is read back from the record."
+        }
+      }
+    },
     "packages/wiki/package.json": {
       "dependencies": {
         "@deepbuild/extension-host": {
@@ -1085,6 +1109,12 @@
       "kind": "API key",
       "sha256": "b6ed1522e39bfb90264f23b3d61616e541544f92f2cd649feee07defeac421cc",
       "why": "Issue #159: a made-up API key prefix (dh159FAKE) the AC8 test sets in a job's environment, proving the runner names the variable and never its value."
+    },
+    {
+      "path": "tests/acceptance/20/generate.ts",
+      "kind": "home path",
+      "sha256": "1ee1a19bd298057a7a90734bccee13976a34914fd0c29fda5aebc848bbfd7961",
+      "why": "Issue #20: the generated sessions' working folder under the placeholder user dev, a made-up cwd written into seeded transcripts for the budgets; no real home."
     }
   ]
 }

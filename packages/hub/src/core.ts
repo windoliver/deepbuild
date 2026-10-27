@@ -9,6 +9,8 @@ import { open, readFile, realpath, stat, type FileHandle } from 'node:fs/promise
 import { homedir, networkInterfaces, userInfo } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { shipped } from '@deepbuild/adapters';
+import { openArchive } from '@deepbuild/archive';
 import { AskRefused, openAsks, type Asks } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
@@ -30,18 +32,25 @@ import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
 import { EXTENSION_HOOK_MS, refuse, Refused, refusal, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type HookMeta, type Refusal } from './wire.js';
 
-const DAY = 86_400_000;
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 /** How long deep_ask and deep_wait wait for an answer before saying it's still waiting: under the 60 s agents give a tool call. */
 const ASK_WAIT = 40_000;
 /** A value quoted into SQL. */
 const sql = (text: string): string => text.replace(/'/g, "''");
 /** A session ID as a handle holds it: letters and digits only. */
 const letters = (session: string): string => session.replace(/[^0-9A-Za-z]/g, '');
-/** Your login Keychain, only while HOME is your own account's home: a hub under a test's temp HOME never reads it. */
+/** Whether HOME is your own account's home: a hub under a test's temp HOME never reads your credentials. */
+const ownHome = (): boolean => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } };
+/** Your login Keychain, only while HOME is your own account's home. */
 const keychain = (service: string): Promise<string | undefined> => {
-  const own = (() => { try { return realpathSync(process.env.HOME ?? '') === realpathSync(userInfo().homedir); } catch { return false; } })();
-  if (process.platform !== 'darwin' || !own) return Promise.resolve(undefined);
+  if (process.platform !== 'darwin' || !ownHome()) return Promise.resolve(undefined);
   return new Promise((done) => execFile('/usr/bin/security', ['find-generic-password', '-s', service, '-w'], { timeout: 5000 }, (error, out) => done(error ? undefined : out.trim())));
+};
+/** The GitHub CLI's token, only while HOME is your own account's home: the archive reads CI logs with it (#20). */
+const ghToken = (): Promise<string | undefined> => {
+  if (!ownHome()) return Promise.resolve(undefined);
+  return new Promise((done) => execFile('gh', ['auth', 'token'], { timeout: 5000 }, (error, out) => done(error || !out.trim() ? undefined : out.trim())));
 };
 const YOU = { actor: 'you', scope: 'you' };
 const SECRETS_TTL = 10_000;
@@ -305,6 +314,25 @@ export class Core {
     await this.recoverRuns();
     await this.retain();
     this.timers.push(setInterval(() => void this.retain().catch(() => undefined), DAY));
+    // The transcript archive (#20) copies what the agents' cleanups would delete, and the CI runs of the GitHub repos
+    // recent sessions worked in before the forge's retention deletes them: at start, then once an hour, one pass at a time.
+    const env: Record<string, string | undefined> = { ...process.env };
+    const repos: string[] = [];
+    const archive = await openArchive({
+      record: this.record, evidence: this.store, asks, adapters: shipped(), env, connection: this.connection('ext:deepbuild/archive'), now: this.now,
+      held: () => this.options.held, forge: { api: this.options.forge ?? 'https://api.github.com', repos },
+    });
+    let archiving: Promise<void> | undefined;
+    const archivePass = () => {
+      archiving ??= (async () => {
+        env.GH_TOKEN = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? (await ghToken());
+        // With no token the forge's logs can't be read, so no run is asked for.
+        repos.splice(0, repos.length, ...(env.GH_TOKEN ? await this.forgeRepos() : []));
+        await archive.pass();
+      })().catch((error: unknown) => { process.stderr.write(`deep hub: archive: ${error instanceof Error ? error.message : String(error)}\n`); }).finally(() => { archiving = undefined; });
+    };
+    archivePass();
+    this.timers.push(setInterval(archivePass, HOUR));
     // While appends fail, a small synced write is tried every quarter second; the gates come back with it.
     this.timers.push(setInterval(() => { if (this.blocked && this.durable.probe(this.root.dir)) { this.blocked = undefined; this.replayLate(true); } }, 250));
     for (const timer of this.timers) timer.unref();
@@ -1671,14 +1699,25 @@ export class Core {
     }
   }
 
-  /** The retention pass: keeps the files decisions and verdicts cite and the transcripts transcript.archived links. */
+  /**
+   * The retention pass: keeps the files decisions and verdicts cite, the transcripts transcript.archived links and the
+   * CI logs ci.archived links, which outlive the forge's own retention only if ours keeps them.
+   */
   private async retain(): Promise<void> {
     const rows = (await this.record.raw("SELECT evidence FROM events WHERE kind IN ('decision.created', 'decision.applied', 'verdict.made') AND evidence IS NOT NULL")) as { evidence: string }[];
     const cited = new Set<string>(this.options.plant === 'empty-cited' ? [] : rows.flatMap((r) => JSON.parse(r.evidence) as string[]));
     const linked = (await this.record.raw("SELECT json_extract(data, '$.evidence') AS sha FROM events WHERE kind = 'transcript.archived'")) as { sha: string | null }[];
-    const archived = new Set(linked.flatMap((r) => (r.sha ? [r.sha] : [])));
+    const logs = (await this.record.raw("SELECT evidence FROM events WHERE kind = 'ci.archived' AND evidence IS NOT NULL")) as { evidence: string }[];
+    const archived = new Set([...linked.flatMap((r) => (r.sha ? [r.sha] : [])), ...logs.flatMap((r) => JSON.parse(r.evidence) as string[])]);
     const { removed } = await this.store.retain({ cited, archived });
     for (const sha256 of removed) await this.appendCore('evidence.removed', { sha256 }).catch(() => undefined);
+  }
+
+  /** The GitHub repos (owner/name) whose worktrees sessions worked in over the last 90 days, GitHub's default log retention. */
+  private async forgeRepos(): Promise<string[]> {
+    const rows = (await this.record.raw(`SELECT DISTINCT worktree FROM sessions WHERE worktree IS NOT NULL AND last_seen > ${this.now() - 90 * DAY}`)) as { worktree: string }[];
+    const origins = await Promise.all(rows.map(({ worktree }) => new Promise<string>((done) => execFile('git', ['-C', worktree, 'remote', 'get-url', 'origin'], { timeout: 2000 }, (error, out) => done(error ? '' : out.trim())))));
+    return [...new Set(origins.flatMap((url) => /github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/.exec(url)?.[1] ?? []))];
   }
 
   /** test.load: ten verdicts each in its own FULL commit, a checkpoint and a transcript backfill, as the hub would do them. */
