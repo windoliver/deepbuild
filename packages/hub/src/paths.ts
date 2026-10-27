@@ -1,7 +1,8 @@
 // Where a hub keeps its files, and the one setting every client reads the hub's address from.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
@@ -68,4 +69,12 @@ export function hubAddress(): { address: string; path: string } {
     throw Error(`${file}: hub.address must be unix:<absolute path>, not ${JSON.stringify(configured)}`);
   }
   return { address: configured, path: configured.slice(5) };
+}
+
+/** The deep-hook this checkout built, the newer of its release and debug builds. */
+export function deepHook(): string {
+  const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
+  if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
+  return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;
 }
