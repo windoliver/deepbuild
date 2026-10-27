@@ -1,0 +1,4 @@
+// A test package that registers nothing (#351). The tests give it an id, a version and the declarations under test
+// (`conflicts`, `replaces`, `provides`, `publisher_key`, `signature`) through its manifest; every refusal they
+// expect is the installer's, made on the manifest and the files, so nothing here needs to run.
+export default function (_deep: unknown): void {}

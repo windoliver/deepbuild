@@ -1,0 +1,29 @@
+{
+  "title": "extension.edges@1",
+  "description": "What a manifest declares about other pieces, beside extension.manifest@1, whose frozen shape doesn't list it: the packages it conflicts with, so an install beside an installed one is refused naming the conflict, and the kernel contract versions it runs on, each a contract entry the kernel must publish.",
+  "type": "object",
+  "properties": {
+    "conflicts": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+        "maxLength": 8192,
+        "description": "A package's owner/name ID: neither installs while the other is installed."
+      }
+    },
+    "kernel": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$",
+        "maxLength": 8192,
+        "description": "A kernel contract version the package runs on, as name@major: the install is refused when the kernel doesn't publish it."
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

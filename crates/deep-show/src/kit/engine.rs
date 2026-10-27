@@ -162,7 +162,7 @@ impl Engine<'_> {
             return out;
         }
         let after = self.incremental(&working, prev, &changed);
-        let refusals = blocking(&after, prev, &working, &layer, &changed);
+        let refusals = blocking(&after, prev, &working, &layer, &changed, None);
         if !refusals.is_empty() {
             let kept = if self.is(Planted::RefusedPatchWrites) {
                 Cow::Owned(working)
@@ -204,7 +204,7 @@ impl Engine<'_> {
         // It may put back an issue its base held.
         let mut allowed = out.after.clone();
         allowed.extend(base.iter().cloned());
-        let refusals = blocking(&after, &allowed, &doc, &layer, &changed);
+        let refusals = blocking(&after, &allowed, &doc, &layer, &changed, None);
         if refusals.is_empty() {
             Ok(doc)
         } else {
