@@ -1,6 +1,7 @@
-// The conformance package's public entry (#313, #314): kits and their reference fill, the slot kits and their
-// reference fills, the one runner in both forms, the fake proofs, the code families and their judgement, the
-// codes pages, the closure rules, the schema generator, the seeded cases and the stale rule.
+// The conformance package's public entry (#313, #314): kits and their reference fill, a shipped adapter's fill and
+// its planted twins (#18), the slot kits and their reference fills, the one runner in both forms, the fake proofs,
+// the code families and their judgement, the codes pages, the closure rules, the schema generator, the seeded cases
+// and the stale rule.
 export * from './types.js';
 export type {
   CheckContext, CheckResult, CheckRunnerFill, CheckSpec, Failure, Fixture, Judge, PlantedFill, RunOutcome, SeededCase, SlotCase, SlotCaseResult, SlotFill, SlotKit,
@@ -10,6 +11,7 @@ export type {
 export { fail, Finding } from './slot-types.js';
 export type { Random } from './generator.js';
 export { cleanFill, kits } from './kit.js';
+export { shippedFill } from './shipped.js';
 export { cleanFills, slotKits } from './slots/kits.js';
 export { slotProblems, type SlotProblem } from './slot-check.js';
 export { CHECK_RUNTIME } from './slots/check-kind.js';

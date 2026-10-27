@@ -8,6 +8,7 @@ import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rm
 import net from 'node:net';
 import { join } from 'node:path';
 import { Worker } from 'node:worker_threads';
+import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
@@ -37,10 +38,14 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
+  // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18).
+  ['session.wait', ['cli']],
 ]);
 
 /** How long before an acknowledged hold the extensions' reply must be on the socket, so it reaches deep-hook in time. */
 const HOLD_MARGIN = 100;
+/** How long a session's start or a prompt is held for the core's context: the briefing, or answers waiting for it. */
+const CONTEXT_HOLD_MS = 2000;
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
 const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
@@ -58,6 +63,8 @@ function agentReply(agent: string, reply: ExtensionReply): string {
   const additionalContext = reply.context.map((b) => `[${b.extension}] ${b.text}`).join('\n');
   return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
 }
+/** Context Claude Code adds to the session: at a session's start or a prompt, never a decision. */
+const contextReply = (event: string, text: string): string => line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } }), stderr: '' });
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
@@ -366,18 +373,59 @@ class Hub {
     // A deep-hook gone before its acknowledgement spooled the request marked late: that copy is the one recorded.
     if (conn.done || !conn.sock.writable) return;
     conn.done = true;
-    // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); every
-    // other hook gets the acknowledgement and the reply in one write, which also ends the connection.
-    const ruled = this.reply(parsed.meta);
+    // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); a
+    // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
+    // the acknowledgement and the reply in one write, which also ends the connection.
+    const meta = parsed.meta;
+    const ruled = this.reply(meta);
     const before = ruled === EMPTY_REPLY && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
-    const hold = before ? Date.now() + EXTENSION_HOLD_MS : null;
-    if (hold === null) conn.sock.end(line({ ack: parsed.meta.id, hold_until_ms: null }) + ruled);
-    else conn.sock.write(line({ ack: parsed.meta.id, hold_until_ms: hold }));
+    const held = !before && parsed.drafts.length ? this.holdFor(meta) : null;
+    const hold = before ? Date.now() + EXTENSION_HOLD_MS : held;
+    if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
+    else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
-    const writer = this.plant === 'writer-from-payload' && parsed.meta.payloadWriter ? parsed.meta.payloadWriter : 'hook';
-    this.core.post({ op: 'hook', drafts: parsed.drafts, meta: parsed.meta, writer });
-    if (hold !== null) void this.extensionReply(conn, parsed.meta, before!.data, hold);
+    const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
+    this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
+    if (before) void this.extensionReply(conn, meta, before.data, hold!);
+    else if (held !== null) void this.coreReply(conn, meta, held);
+  }
+
+  /**
+   * The hold the hub takes on a hook it answers from the core, or null: a session's start and a prompt for their
+   * context; a stop while the stop-hold relation holds, ending at least 5 s before the Stop entry's timeout. A
+   * session past its facts, or a broken relation, is watch-only: its stop is let through at once.
+   */
+  private holdFor(meta: HookMeta): number | null {
+    const now = Date.now();
+    if (meta.event === 'SessionStart' || meta.event === 'UserPromptSubmit') return now + CONTEXT_HOLD_MS;
+    if (meta.event !== 'Stop' || meta.agent === 'codex') return null;
+    const relation = this.stopHold();
+    if (this.plant === 'holds-stop-anyway') return now + STOP_HOLD_MS;
+    if (meta.watchOnly || !relation.holds) return null;
+    return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
+  }
+  private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
+  /** The stop-hold relation our Stop entry keeps, read again only when Claude Code's settings or our record change. */
+  private stopHold(): Relation {
+    const files = [claudeSettings(), join(this.root.dir, 'claude-hooks.json')];
+    const key = files.map((f) => { try { const s = statSync(f); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } }).join('|');
+    if (key !== this.settingsSeen.key) {
+      const relation = relations(this.root.dir, readJson(files[0]!)).find((r) => r.name === 'stop hold');
+      this.settingsSeen = { key, relation: relation ?? { name: 'stop hold', holds: true, timeoutS: 600, text: '' } };
+    }
+    return this.settingsSeen.relation;
+  }
+  /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
+  private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
+    const asked = this.core.request({ op: 'hook-reply', meta, until: hold - HOLD_MARGIN * 5 }).catch(() => null) as Promise<{ context?: string; block?: string } | null>;
+    const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    if (!conn.sock.writable) return;
+    if (reply?.block) conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ decision: 'block', reason: reply.block }), stderr: '' }));
+    else if (reply?.context) conn.sock.end(contextReply(meta.event, reply.context));
+    else conn.sock.end(EMPTY_REPLY);
   }
 
   /**
@@ -398,7 +446,12 @@ class Hub {
    * next step; watch and warn are #304's.
    */
   private reply(meta: HookMeta): string {
-    if (meta.event !== 'PreToolUse' || !meta.matched.length) return EMPTY_REPLY;
+    // The planted wrong program answers a permission prompt itself, where the watch-only adapter only records it.
+    if (this.plant === 'adapter-decides' && meta.event === 'PermissionRequest') {
+      return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }), stderr: '' });
+    }
+    // A session past its facts is watch-only: a matched entry is recorded, never a block.
+    if (meta.event !== 'PreToolUse' || !meta.matched.length || meta.watchOnly) return EMPTY_REPLY;
     const entries = this.rules();
     const name = meta.matched.find((n) => entries[n]?.mode === 'block');
     if (name === undefined) return EMPTY_REPLY;

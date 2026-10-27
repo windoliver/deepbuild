@@ -1,0 +1,18 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "agent.stop",
+  "subject": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "seq": "1760013451123456789",
+  "data": {
+    "turn": 17,
+    "did_work": true,
+    "cause": "timed_out",
+    "usage": null,
+    "outcome": "finished"
+  }
+}

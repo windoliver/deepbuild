@@ -1,0 +1,101 @@
+Base commit: 14561af (origin/main, no implementation of #18)
+Command: cargo build --locked -q -p deep-hook (warm), then, with Node 24.22.0 first on PATH:
+  npx vitest run --root tests/acceptance/18/session --no-file-parallelism
+Date: 2026-10-26  Node v24.22.0  vitest 5.0.5  darwin-arm64. The checkout's packages were already built (npm run
+build was not run by this job; three other blind jobs share the checkout). The machine was loaded by other sessions.
+Scope: AC5, AC9, AC10, AC20 of #18. The other criteria are in tests/acceptance/18/mapping, install and kit.
+Exit code: 1
+Result: 4 files, 5 tests, 3 failed, 2 passed, 0 skipped.
+
+Why each test fails at the base:
+- AC5 (version.test.ts) fails at its first assertion: the first matched Bash call of the session on Claude Code
+  2.1.305 (one patch past the facts' newest, 2.1.304) is blocked, "exit 2 ... DeepBuild blocked this: ... (guard
+  deep18-<tag>)". The base hub reads every hook as the newest covered version (hookmap.ts newest()), so a session
+  past its facts stays gated and nothing is marked unverified for its version. Expected reason: #18 makes such a
+  session watch-only.
+  Checked beside the run (a scratch copy of the scenario, not part of the suite): at the base the uncovered and the
+  covered session alike are blocked, and all their events (session.start, user.ask, tool.before, tool.after,
+  agent.stop) are recorded verified, with no version reading. So past the first assertion the test would also fail
+  at "every event ... is marked unverified" and "one reading"; its covered-session and widened-session parts are
+  controls the base already meets (blocked, verified).
+- AC10 (digests.test.ts) fails: "one event of session ..., recorded for its SessionStart, gives the digests of the
+  skills it loads ...; its events: session.start {agent, worktree, branch, thread, billing}". The base records no
+  digests of skills (or of instruction files, hooks or MCP servers) at SessionStart. Expected reason. (It waits 30 s
+  for the event first, so it takes ~31 s.)
+- AC20 (briefing.test.ts) fails: "deep-hook printed nothing at SessionStart ...: the agent got no briefing (exit 0
+  after 11 ms, stdout "", stderr "")". The base hub answers SessionStart with an empty reply. Expected reason.
+
+The two tests that pass at the base: both of AC9 (binding.test.ts). #26 built the binding of deep mcp by parent
+process and start time, the unbound reads, and the planted program unbound-reads-all, and they hold for Claude Code
+sessions through the real deep-hook. They stay as the criterion's proof (README: Disputes, Wrong programs); the
+proof's before lane needs a planted twin for #18.7f5b2ce8 in tests/acceptance/18/twins.json, which the implementer
+writes (README: Wrong programs). The wrong-program test did fail its scenario on DEEP_HUB_PLANT=unbound-reads-all,
+naming the open item and the session, which is what it asserts.
+
+No live file: none was written (README: Not tested here), so none was run.
+Type-check: npx tsc -p tests/acceptance/18/session/tsconfig.json reports no errors.
+No implementation was run against the suite; no test has been seen to pass on a correct program.
+
+---- The run ----
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/18/session
+
+ ❯ version.test.ts (1 test | 1 failed) 4229ms
+   × AC5 #18.9702095f a session past its facts is recorded unverified, its blocks go watch-only with one health reading; after the range widens the next session is gated again 745ms
+ ❯ digests.test.ts (1 test | 1 failed) 33612ms
+   × AC10 #18.e314a15a changing a skill between two sessions shows a different digest in the second session's start event 30894ms
+ ❯ briefing.test.ts (1 test | 1 failed) 3187ms
+   × AC20 #18.9a7f6c86 at session start the agent gets a short briefing of its repo's active checks and how to declare a claim 1126ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  briefing.test.ts > AC20 #18.9a7f6c86 at session start the agent gets a short briefing of its repo's active checks and how to declare a claim
+AssertionError: deep-hook printed nothing at SessionStart for session 7f0fcbd5-c058-478e-be5a-df97bd69c85d in repo a: the agent got no briefing (exit 0 after 11 ms, stdout "", stderr ""): expected '' not to be '' // Object.is equality
+ ❯ briefing briefing.test.ts:22:118
+     20|   expect(r.code, `deep-hook's SessionStart for ${what} exits 0, so Cla…
+     21|   const text = r.stdout.trim();
+     22|   expect(text, `deep-hook printed nothing at SessionStart for ${what}:…
+       |                                                                                                                      ^
+     23|   const json = parse(text);
+     24|   if (!json) return text;
+ ❯ briefing.test.ts:43:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  digests.test.ts > AC10 #18.e314a15a changing a skill between two sessions shows a different digest in the second session's start event
+AssertionError: one event of session 314ff7d4-ba6e-40da-86e7-4f1d36d624a2, recorded for its SessionStart, gives the digests of the skills it loads (skillad26eaabe56, skillb3da1723c49); its events: session.start {"agent":"claude-code","worktree":"/private/tmp/dh18s-n6nY1D/wt","branch":null,"thread":"314ff7d4-ba6e-40da-86e7-4f1d36d624a2","billing":{"ANTHROPIC_API_KEY":false,"ANTHROPIC_AUTH_TOKEN":false,"CLAUDE_CODE_USE_BEDROCK":false,"CLAUDE_CODE_USE_VERTEX":false,"OPENAI_API_KEY":false}}: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ startDigests digests.test.ts:59:206
+
+ ❯ digests.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  version.test.ts > AC5 #18.9702095f a session past its facts is recorded unverified, its blocks go watch-only with one health reading; after the range widens the next session is gated again
+AssertionError: call 1 of session c63c73e2-66b1-40ba-9daf-4769c471928e, on Claude Code 2.1.305 (past the facts, which cover up to 2.1.304), matched a block entry and must run watch-only, not be blocked: exit 2 after 9 ms, stdout "", stderr "DeepBuild blocked this: The g3c3b8628f6 commands are guarded in this test. Leave them. (guard deep18-g3c3b8628f6)\n": expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ version.test.ts:57:234
+
+ ❯ version.test.ts:57:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed | 1 passed (4)
+      Tests  3 failed | 2 passed (5)
+   Start at  14:14:16
+   Duration  47.02s (tests 100%)
+

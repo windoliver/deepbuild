@@ -1,0 +1,13 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "session.attention",
+  "subject": "session:01K74G1Z3X5V7T9R1P3N5M7K9H",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "state": "working"
+  }
+}
