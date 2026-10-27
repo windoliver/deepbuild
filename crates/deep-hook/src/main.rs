@@ -37,6 +37,25 @@ const BILLING_KEYS: &[&str] = &[
     "OPENAI_API_KEY",
 ];
 
+/// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
+/// Code may come from either. Each sets variables of its own in its hooks' environment, and Claude Code sets
+/// CLAUDECODE; a hook that has another tool's and not Claude Code's is sent under that tool's name.
+const CALLERS: &[(&str, &[&str])] = &[
+    ("grok", &["GROK_HOOK_EVENT", "GROK_SESSION_ID"]),
+    ("cursor", &["CURSOR_VERSION", "CURSOR_PROJECT_DIR"]),
+];
+
+/// The agent a hook comes from: the one its command names, unless another tool's variables say it runs it.
+fn caller(agent: &str) -> &str {
+    if agent != "claude-code" || env::var_os("CLAUDECODE").is_some() {
+        return agent;
+    }
+    CALLERS
+        .iter()
+        .find(|(_, vars)| vars.iter().any(|v| env::var_os(v).is_some()))
+        .map_or(agent, |(name, _)| name)
+}
+
 /// The features this build supports; the request carries only those the hub lists too.
 const FEATURES: &[&str] = if cfg!(feature = "plant-f-test") {
     &["f_test"]
@@ -661,6 +680,7 @@ fn sleep_until(start: Instant, after: Duration) {
 
 fn forward(agent: &str, event: &str) -> ExitCode {
     let start = Instant::now();
+    let agent = caller(agent);
     // Guards hold a tool's call before it runs, so only a PreToolUse reads rules.json: no other hook waits on it.
     // It is marked before the watchdog starts and before rules.json is read, then the call: until the call is read
     // and matched, the watchdog doesn't let it through while a fail_closed entry is installed.

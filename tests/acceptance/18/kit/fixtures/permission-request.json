@@ -1,0 +1,30 @@
+{
+  "session_id": "91f2090e-a2d2-4a41-8794-29ef39f50422",
+  "transcript_path": "~/.claude/projects/-private-tmp-deep-corpus-e22gqI-tools-work/91f2090e-a2d2-4a41-8794-29ef39f50422.jsonl",
+  "cwd": "/private/tmp/deep-corpus-e22gqI/tools/work",
+  "scratchpad_dir": "/private/tmp/claude-502/-private-tmp-deep-corpus-e22gqI-tools-work/91f2090e-a2d2-4a41-8794-29ef39f50422/scratchpad",
+  "prompt_id": "9036101c-059f-4335-8c6c-6d1e836db8ca",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "git push origin main",
+    "description": "Push main to origin"
+  },
+  "permission_suggestions": [
+    {
+      "type": "addRules",
+      "rules": [
+        {
+          "toolName": "Bash",
+          "ruleContent": "git push:*"
+        }
+      ],
+      "behavior": "allow",
+      "destination": "session"
+    }
+  ]
+}

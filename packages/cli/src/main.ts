@@ -108,9 +108,11 @@ async function run(path: string): Promise<number> {
 async function doctor(json: boolean): Promise<number> {
   const { doctor: telemetryDoctor } = await import('@deepbuild/otlp');
   const agents: Record<string, string> = { 'claude-code': 'Claude Code' };
-  const items = telemetryDoctor(process.env);
+  // The timing relations Claude Code's hook entries keep (#18), beside the telemetry items.
+  const { relationItems } = await import('@deepbuild/hub');
+  const items = [...telemetryDoctor(process.env), ...relationItems()];
   for (const i of items) {
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} telemetry (${i.item}): ${i.level.toUpperCase()} ${i.code}\n  ${i.evidence}\n  Fix: ${i.fix}`);
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item.startsWith('timing.') ? 'timing' : 'telemetry'} (${i.item}): ${i.level.toUpperCase()} ${i.code}\n  ${i.evidence}\n  Fix: ${i.fix}`);
   }
   return items.some((i) => i.level === 'fail') ? 1 : 0;
 }
@@ -145,7 +147,7 @@ async function debugBundle(): Promise<number> {
 }
 
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep setup  install DeepBuild's hooks into Claude Code's user settings, beside yours\n       deep waiter the background Stop entry that wakes an idle session with your answer\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor' && args.slice(1).every((arg) => arg === '--json') && args.length <= 2) {
   process.exitCode = await doctor(args.includes('--json'));
 } else if (args.length === 1 && args[0] === '--version') {
@@ -162,6 +164,12 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
 } else if (args[0] === 'inbox') {
   const { inboxCommand } = await import('@deepbuild/hub');
   process.exitCode = await inboxCommand(args.slice(1));
+} else if (args.length === 1 && args[0] === 'setup') {
+  const { setupCommand } = await import('@deepbuild/hub');
+  process.exitCode = await setupCommand(fileURLToPath(import.meta.url));
+} else if (args.length === 1 && args[0] === 'waiter') {
+  const { waiterCommand } = await import('@deepbuild/hub');
+  process.exitCode = await waiterCommand();
 } else if (args[0] === 'install') {
   const { installCommand } = await import('@deepbuild/hub');
   process.exitCode = await installCommand(args.slice(1));

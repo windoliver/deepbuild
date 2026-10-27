@@ -41,6 +41,12 @@ export interface TurnUsage {
 }
 export interface Skill { name: string; source: string }
 
+/** What the adapter is handed for a permission request: the asks core's delivery, plus the chosen option's label. */
+export interface PermissionAnswer {
+  ask: string; session: string; option: string | null; label: string | null;
+  decision: 'allow' | 'deny' | 'none'; words: string | null; provisional: boolean; undoes: string | null;
+}
+
 export interface Adapter {
   facts: JsonValue;
   caps: AdapterCaps;
@@ -50,11 +56,13 @@ export interface Adapter {
   readUsage?(transcript: readonly JsonValue[]): TurnUsage[];
   classifyStop?(payload: JsonValue, transcript?: readonly JsonValue[]): StopReading;
   skills?(home: string): Skill[];
+  /** The hook output the agent reads for a permission request answered with `answer`: allow only from its decision. */
+  permissionReply?(answer: PermissionAnswer, request: HookRequestLine): JsonValue;
 }
 /** The parts of an adapter that aren't data; everything else comes from its facts file. */
 export interface AdapterParts {
   caps: AdapterCaps; unsupported: Unsupported; doctor(): DoctorItem[];
-  readUsage?: Adapter['readUsage']; classifyStop?: Adapter['classifyStop']; skills?: Adapter['skills'];
+  readUsage?: Adapter['readUsage']; classifyStop?: Adapter['classifyStop']; skills?: Adapter['skills']; permissionReply?: Adapter['permissionReply'];
 }
 
 export interface AdapterRegistry {
