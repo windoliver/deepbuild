@@ -13,6 +13,7 @@ import net from 'node:net';
 import { dirname, join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { expect } from 'vitest';
 
 export const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
 export const CLI = join(REPO, 'packages/cli/dist/main.js');
@@ -202,7 +203,7 @@ export async function runSetup(home: string, o: { env?: Record<string, string | 
 }
 export async function setup(home: string, o: { env?: Record<string, string | undefined>; cwd?: string } = {}): Promise<Ran> {
   const r = await runSetup(home, o);
-  if (r.code !== 0) throw Error(`deep setup must exit 0 and install DeepBuild: ${shown(r)}`);
+  if (r.code !== 0) expect.fail(`deep setup must exit 0 and install DeepBuild: ${shown(r)}`);
   return r;
 }
 /** `deep setup --undo`, the OS confirmation stubbed `confirmed` (README: The OS confirmation). */
@@ -214,7 +215,7 @@ export function undo(home: string, o: { env?: Record<string, string | undefined>
 export function readSettings(home: string): Line {
   const text = readFileSync(settingsFile(home), 'utf8');
   const parsed = parseObject(text);
-  if (!parsed) throw Error(`${settingsFile(home)} is no longer a JSON object: ${text.slice(0, 500)}`);
+  if (!parsed) expect.fail(`${settingsFile(home)} is no longer a JSON object: ${text.slice(0, 500)}`);
   return parsed;
 }
 /** Whether a command is DeepBuild's: it runs deep-hook, or the deep CLI (by its built file or as `deep`). */
@@ -326,7 +327,7 @@ export async function installedHub(home: string, timeoutMs = 30_000): Promise<{ 
     if (await answers(socketOf(home))) return { pid: hubJobs(home)[0]?.pid ?? null };
     await sleep(200);
   }
-  throw Error(`deep setup must start the hub through its login service: no hub answers at ${socketOf(home)}; login service definitions ${JSON.stringify(hubPlists(home))}, launchd ${JSON.stringify(launchdState(home))}, calls ${JSON.stringify(callsLog(home).slice(-1500))}`);
+  expect.fail(`deep setup must start the hub through its login service: no hub answers at ${socketOf(home)}; login service definitions ${JSON.stringify(hubPlists(home))}, launchd ${JSON.stringify(launchdState(home))}, calls ${JSON.stringify(callsLog(home).slice(-1500))}`);
 }
 export class Conn {
   private buffer = '';

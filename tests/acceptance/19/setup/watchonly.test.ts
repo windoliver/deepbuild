@@ -67,14 +67,14 @@ async function stopGoesThrough(w: World): Promise<void> {
   const stopping = claude.hook('Stop', payload(s, 'Stop'));
   const ack = await waitFor(() => stopAck(w.fwd, s.id, 1), 30_000, `the hub's acknowledgement of session ${s.id}'s Stop`);
   if (ack.hold_until_ms !== null) {
-    throw Error(`AC6 right after install the hub held the Stop of session ${s.id} (hold_until_ms ${ack.hold_until_ms}) in a repo whose checks you haven't approved: the hooks start watch-only, so no stop is held until you approve something`);
+    expect.fail(`AC6 right after install the hub held the Stop of session ${s.id} (hold_until_ms ${ack.hold_until_ms}) in a repo whose checks you haven't approved: the hooks start watch-only, so no stop is held until you approve something`);
   }
   const fired = await stopping;
   const foreground = ours(fired).filter((r) => !r.async);
-  if (!foreground.length) throw Error(`deep setup must install a foreground Stop entry of DeepBuild's in ~/.claude/settings.json: ${firedShown(fired)}`);
+  if (!foreground.length) expect.fail(`deep setup must install a foreground Stop entry of DeepBuild's in ~/.claude/settings.json: ${firedShown(fired)}`);
   for (const r of foreground) {
     if (/"decision"\s*:/.test(r.stdout) || r.code === 2) {
-      throw Error(`AC6 right after install a verdict blocked the Stop of session ${s.id}, in a repo whose checks you haven't approved: DeepBuild's Stop entry answered exit ${r.code}, ${JSON.stringify(r.stdout.slice(0, 400))} ${JSON.stringify(r.stderr.slice(0, 400))}`);
+      expect.fail(`AC6 right after install a verdict blocked the Stop of session ${s.id}, in a repo whose checks you haven't approved: DeepBuild's Stop entry answered exit ${r.code}, ${JSON.stringify(r.stdout.slice(0, 400))} ${JSON.stringify(r.stderr.slice(0, 400))}`);
     }
     expect({ code: r.code, timedOut: r.timedOut }, `AC6 DeepBuild's Stop entry must answer at once, exit 0: ${firedShown(fired)}`).toEqual({ code: 0, timedOut: false });
   }

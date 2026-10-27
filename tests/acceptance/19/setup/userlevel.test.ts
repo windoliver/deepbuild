@@ -56,7 +56,7 @@ async function setupInRepos(env: Record<string, string | undefined> = {}): Promi
   expect(deepEntries(readSettings(home)).length, `deep setup must write DeepBuild's hook entries into your user settings, ${settingsFile(home)}`).toBeGreaterThan(0);
   for (const [name, dir] of [['shop', shop], ['blog', blog]] as const) {
     const changed = changes(before[name], snapshot(dir, { times: true, keep, enter }));
-    if (changed.length) throw Error(`AC13 deep setup must change no file inside a repo; in ${dir}: ${changed.join('; ')}`);
+    if (changed.length) expect.fail(`AC13 deep setup must change no file inside a repo; in ${dir}: ${changed.join('; ')}`);
   }
 }
 

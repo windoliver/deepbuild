@@ -16,15 +16,15 @@ export async function setupThenUndo(env: Record<string, string | undefined> = {}
   // The control: setup did write your settings, so putting them back is something to test.
   const installed = readSettings(home);
   if (!deepEntries(installed).length || !forwarderInstalled(installed)) {
-    throw Error(`deep setup must add DeepBuild's hook entries and its status line forwarder to ${settingsFile(home)} (the control): ${JSON.stringify(installed).slice(0, 1500)}`);
+    expect.fail(`deep setup must add DeepBuild's hook entries and its status line forwarder to ${settingsFile(home)} (the control): ${JSON.stringify(installed).slice(0, 1500)}`);
   }
   const undone = await undo(home, { env });
   expect(undone.code, `AC5 deep setup --undo, confirmed, must exit 0: ${shown(undone)}`).toBe(0);
   for (const [path, was] of yours) {
-    if (!existsSync(path)) throw Error(`AC5 deep setup --undo must leave ${path} byte-for-byte as it was before setup; it is gone`);
-    if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) throw Error(`AC5 deep setup --undo must leave ${path} the plain file it was`);
+    if (!existsSync(path)) expect.fail(`AC5 deep setup --undo must leave ${path} byte-for-byte as it was before setup; it is gone`);
+    if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) expect.fail(`AC5 deep setup --undo must leave ${path} the plain file it was`);
     const now = readFileSync(path);
-    if (!now.equals(was)) throw Error(`AC5 deep setup --undo must leave ${path} byte-for-byte as it was before setup: ${firstDifference(was, now)}`);
+    if (!now.equals(was)) expect.fail(`AC5 deep setup --undo must leave ${path} byte-for-byte as it was before setup: ${firstDifference(was, now)}`);
   }
   return { home, undone };
 }

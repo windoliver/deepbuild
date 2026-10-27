@@ -54,8 +54,11 @@ describe(`${ID} deep status puts what needs you, what's stuck and what's flagged
     const fromInstalled = installed.filter((s) => r.stdout.toLowerCase().includes(prefixOf(s.id)));
     expect(fromInstalled.map((s) => `${s.id} (${s.repo}, ${s.state})`), 'deep status reads the dev hub the address names, not the installed hub\'s database').toEqual([]);
   }, 180_000);
+});
 
-  it(`${ID} (wrong programs) the judge fails a listing in log order, one that doesn't fold the quiet sessions, one that doesn't group by repo and one that doesn't name the hub, and passes a right one`, async () => {
+// The judge's own check on planted outputs, written here from the seed: no wrong program of `deep status` reaches it.
+describe(`the status judge (self-check)`, () => {
+  it(`fails a listing in log order, one that doesn't fold the quiet sessions, one that doesn't group by repo and one that doesn't name the hub, and passes a right one`, async () => {
     // The judge alone, on outputs written here from the seed (planted twins of `deep status`): no hub needed.
     const h = makeHome();
     const sessions = await seedSessions(h.root, THIRTY, Date.now());
@@ -89,8 +92,8 @@ describe(`${ID} deep status puts what needs you, what's stuck and what's flagged
 
 // The seed's own shape, read back from the record the hub reads: so a failure above is about `deep status`, not
 // about a seed the record took differently (README: The 30 sessions).
-describe(`${ID} the seed`, () => {
-  it(`${ID} the record holds the 30 sessions as seeded: open asks for those that need you, stuck, failed stops and a gone process, quiet ones last seen days ago`, async () => {
+describe(`the seed (self-check)`, () => {
+  it(`the record holds the 30 sessions as seeded: open asks for those that need you, stuck, failed stops and a gone process, quiet ones last seen days ago`, async () => {
     const h = makeHome();
     const now = Date.now();
     const sessions = await seedSessions(h.root, THIRTY, now);

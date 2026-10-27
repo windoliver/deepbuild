@@ -31,15 +31,15 @@ async function relationAt(seconds: number, plant?: string): Promise<void> {
     const items = d.items.filter((i) => stopHold(itemText(i)));
     if (seconds <= 64) {
       const broken = items.find((i) => i.code === 'timing_relation_broken' && i.level === 'fail' && namesBoth(itemText(i), seconds) && givesReason(itemText(i)));
-      if (!broken) throw Error(`AC15 at ${seconds} s against the ${HOLD} hold, deep doctor must show the stop-hold relation broken (timing_relation_broken, fail), naming the ${HOLD} hold, the ${seconds} s timeout and the reason: ${shown(d.ran)}`);
-      if (d.ran.code !== 1) throw Error(`AC15 at ${seconds} s deep doctor must exit 1 with the stop-hold relation broken: ${shown(d.ran)}`);
+      if (!broken) expect.fail(`AC15 at ${seconds} s against the ${HOLD} hold, deep doctor must show the stop-hold relation broken (timing_relation_broken, fail), naming the ${HOLD} hold, the ${seconds} s timeout and the reason: ${shown(d.ran)}`);
+      if (d.ran.code !== 1) expect.fail(`AC15 at ${seconds} s deep doctor must exit 1 with the stop-hold relation broken: ${shown(d.ran)}`);
       const atStart = await eventually(async () => (await readingTexts(w.hub!)).some((t) => brokenReading(t, seconds)), 20_000);
-      if (!atStart) throw Error(`AC15 at ${seconds} s the hub started on the same fixture must show the same reading, the stop-hold relation broken naming the ${HOLD} hold and the ${seconds} s timeout: ${JSON.stringify(await readingTexts(w.hub!)).slice(0, 3000)}`);
+      if (!atStart) expect.fail(`AC15 at ${seconds} s the hub started on the same fixture must show the same reading, the stop-hold relation broken naming the ${HOLD} hold and the ${seconds} s timeout: ${JSON.stringify(await readingTexts(w.hub!)).slice(0, 3000)}`);
     } else {
-      if (items.some((i) => i.code === 'timing_relation_broken')) throw Error(`AC15 at ${seconds} s the stop-hold relation holds, and deep doctor must not show it broken: ${shown(d.ran)}`);
-      if (!items.some((i) => i.level === 'ok' && itemText(i).includes(`${seconds} s`))) throw Error(`AC15 at ${seconds} s deep doctor must show the stop-hold relation as an ok item naming the ${seconds} s timeout: ${shown(d.ran)}`);
+      if (items.some((i) => i.code === 'timing_relation_broken')) expect.fail(`AC15 at ${seconds} s the stop-hold relation holds, and deep doctor must not show it broken: ${shown(d.ran)}`);
+      if (!items.some((i) => i.level === 'ok' && itemText(i).includes(`${seconds} s`))) expect.fail(`AC15 at ${seconds} s deep doctor must show the stop-hold relation as an ok item naming the ${seconds} s timeout: ${shown(d.ran)}`);
       const texts = await readingTexts(w.hub!);
-      if (texts.some((t) => brokenReading(t, seconds))) throw Error(`AC15 at ${seconds} s the hub must not show the stop-hold relation broken: ${JSON.stringify(texts).slice(0, 3000)}`);
+      if (texts.some((t) => brokenReading(t, seconds))) expect.fail(`AC15 at ${seconds} s the hub must not show the stop-hold relation broken: ${JSON.stringify(texts).slice(0, 3000)}`);
     }
   } finally {
     await stopHub(w.hub!);

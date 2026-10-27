@@ -35,11 +35,11 @@ async function uninstall(env: Record<string, string | undefined> = {}): Promise<
 
   // The controls: setup installed each of the four things the undo must remove.
   const services = hubPlists(home);
-  if (!services.length || !hubJobs(home).length) throw Error(`deep setup must register the hub's login service in ${agentsDir(home)} and load it (the control): ${JSON.stringify({ services, jobs: hubJobs(home) })}`);
+  if (!services.length || !hubJobs(home).length) expect.fail(`deep setup must register the hub's login service in ${agentsDir(home)} and load it (the control): ${JSON.stringify({ services, jobs: hubJobs(home) })}`);
   const registered = [...deepMcpServers(home), ...mcpCalls(home).added];
-  if (!registered.length) throw Error(`deep setup must register DeepBuild's MCP server at user scope, in ~/.claude.json or through claude mcp add (the control)`);
-  if (!deepSkills(home).length) throw Error(`deep setup must install DeepBuild's skill under ${skillsDir(home)} (the control)`);
-  if (!forwarderInstalled(readSettings(home))) throw Error(`deep setup must install the status line forwarder as ~/.claude/settings.json's statusLine (the control): ${JSON.stringify(readSettings(home).statusLine)}`);
+  if (!registered.length) expect.fail(`deep setup must register DeepBuild's MCP server at user scope, in ~/.claude.json or through claude mcp add (the control)`);
+  if (!deepSkills(home).length) expect.fail(`deep setup must install DeepBuild's skill under ${skillsDir(home)} (the control)`);
+  if (!forwarderInstalled(readSettings(home))) expect.fail(`deep setup must install the status line forwarder as ~/.claude/settings.json's statusLine (the control): ${JSON.stringify(readSettings(home).statusLine)}`);
 
   // What ~/.deepbuild holds by the undo: a session's events in the record, a pasted image in the evidence, a wiki page.
   const claude = Claude.start(home, env);
@@ -64,12 +64,12 @@ async function uninstall(env: Record<string, string | undefined> = {}): Promise<
   const loaded = hubJobs(home);
   const names = services.map((x) => `${x.label} (${x.file})`).join(', ');
   if (left.length || loaded.length) {
-    throw Error(`AC23 deep setup --undo must unload and remove the hub's login service ${names}: ${left.length ? `its definition is still at ${left.map((x) => x.file).join(', ')}` : ''}${loaded.length ? ` launchd still has ${loaded.map((j) => j.label).join(', ')} loaded` : ''}; it starts the hub again at the next login`);
+    expect.fail(`AC23 deep setup --undo must unload and remove the hub's login service ${names}: ${left.length ? `its definition is still at ${left.map((x) => x.file).join(', ')}` : ''}${loaded.length ? ` launchd still has ${loaded.map((j) => j.label).join(', ')} loaded` : ''}; it starts the hub again at the next login`);
   }
   relogin(home);
   await sleep(1500);
   if (hubJobs(home).length || (await answers(socketOf(home)))) {
-    throw Error(`AC23 after deep setup --undo, the next login started the hub again through the login service ${names}: ${JSON.stringify(hubJobs(home))}`);
+    expect.fail(`AC23 after deep setup --undo, the next login started the hub again through the login service ${names}: ${JSON.stringify(hubJobs(home))}`);
   }
 
   // The MCP registration, the skill and the status line forwarder: gone, your own back.
