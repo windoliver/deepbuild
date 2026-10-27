@@ -59,7 +59,7 @@ fn register(r: &mut Registrar) {
     r.operator(
         "channels",
         "items",
-        &["motion.program", "t"],
+        &["motion.program", "t", "view(reduced_motion)"],
         &["motion.at", "motion.fields"],
     )
     .applies(is_target)
@@ -187,11 +187,15 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
 
 /// The item's own transform and fields at t, as the core's contributions.
 fn channels(v: &mut View<'_>) -> Result<(), OpError> {
-    let t = v.t()?;
+    let mut t = v.t()?;
     let id = v.id().unwrap_or_default().to_string();
     let Some(program) = v.typed::<Arc<Program>>("motion.program")? else {
         return Err(OpError::new("input_missing", format!("items/{id}")));
     };
+    let transport = program.motion.transport;
+    if transport.holds && v.reduced_motion()? {
+        t = transport.start;
+    }
     let mut state = program.state();
     program.evaluate_local(t, Validity::Full, &mut state);
     let Some((transform, fields)) = program.item_values(&state, &id) else {

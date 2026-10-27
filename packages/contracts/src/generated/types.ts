@@ -1822,6 +1822,12 @@ export interface EvidenceStored {
 /** exit.code@1 */
 export type ExitCode = "0" | "1" | "2" | "3";
 
+/** extension.edges@1 */
+export interface ExtensionEdges {
+  conflicts?: Array<string>;
+  kernel?: Array<string>;
+}
+
 /** extension.manifest@1 */
 export interface ExtensionManifest {
   id: string;
@@ -2608,6 +2614,11 @@ export interface PackageEnvelope {
   version: string;
   digest: string;
   publisher_key?: string;
+}
+
+/** package.signature@1 */
+export interface PackageSignature {
+  signature: string;
 }
 
 /** permission.answer@1 */

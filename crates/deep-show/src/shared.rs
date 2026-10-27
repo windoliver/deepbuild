@@ -216,6 +216,8 @@ struct Applied {
     undo: Vec<Value>,
     ids: Map<String, Value>,
     current_at: Option<i64>,
+    /// The issues the last good revision had too, returned marked carried.
+    carried: Vec<Issue>,
 }
 
 /// A writer as a layer's `writer` holds it: `kind:id`.
@@ -368,9 +370,14 @@ pub fn ulid_of(seed: &str) -> String {
     out
 }
 
-/// The key an issue is matched by across revisions: its code and IDs.
-fn key(issue: &Issue) -> (String, Vec<String>) {
-    (issue.code.to_string(), issue.ids.clone())
+/// The key an issue is matched by across revisions: its code and IDs. The planted admission
+/// that matches carried issues by code alone drops the IDs.
+fn key(issue: &Issue, planted: Option<Planted>) -> (String, Vec<String>) {
+    let ids = match planted {
+        Some(Planted::MatchesCarriedByCode) => Vec::new(),
+        _ => issue.ids.clone(),
+    };
+    (issue.code.to_string(), ids)
 }
 
 /// The errors of `issues` a writer's revision is refused for: ones the last good revision didn't
@@ -384,8 +391,10 @@ pub fn blocking(
     doc: &Value,
     layer: &str,
     changed: &BTreeSet<String>,
+    planted: Option<Planted>,
 ) -> Vec<Issue> {
-    let had: BTreeSet<(String, Vec<String>)> = last.iter().map(key).collect();
+    let had: BTreeSet<(String, Vec<String>)> = last.iter().map(|i| key(i, planted)).collect();
+    let counts_every = planted == Some(Planted::CountsEveryIssue);
     let mine = |id: &String| {
         changed.contains(id)
             || doc
@@ -397,9 +406,26 @@ pub fn blocking(
     };
     issues
         .iter()
-        .filter(|i| i.severity == "error" && (i.code == "module_missing" || !had.contains(&key(i))))
+        .filter(|i| {
+            i.severity == "error"
+                && (counts_every || i.code == "module_missing" || !had.contains(&key(i, planted)))
+        })
         .filter(|i| i.ids.is_empty() || i.ids.iter().any(mine))
         .cloned()
+        .collect()
+}
+
+/// The issues of `issues` the last good revision had too, matched by code and IDs, marked
+/// carried: show-time admission returns them and refuses for none of them (Revision).
+pub fn carried(issues: &[Issue], last: &[Issue], planted: Option<Planted>) -> Vec<Issue> {
+    let had: BTreeSet<(String, Vec<String>)> = last.iter().map(|i| key(i, planted)).collect();
+    issues
+        .iter()
+        .filter(|i| had.contains(&key(i, planted)))
+        .map(|i| Issue {
+            carried: true,
+            ..i.clone()
+        })
         .collect()
 }
 
@@ -616,9 +642,10 @@ impl Hub<'_> {
                     undo,
                     ids,
                     current_at,
+                    carried,
                 } = *a;
                 reply.insert("cost_delta".into(), cost);
-                ("applied", rev, achieved, undo, Vec::new(), ids, current_at)
+                ("applied", rev, achieved, undo, carried, ids, current_at)
             }
             Outcome::Refused(issues) => (
                 "refused",
@@ -884,11 +911,13 @@ impl Hub<'_> {
         if let Some(t) = undoing.filter(|t| *t > 0) {
             allowed.extend(shared.revs[t - 1].issues.iter().cloned());
         }
-        let refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed);
+        let planted = self.scenario.planted;
+        let refusals = blocking(&issues, &allowed, &shared.doc, &layer, &changed, planted);
         if !refusals.is_empty() {
             take_back(shared, &patched);
             return Outcome::Refused(refusals);
         }
+        let kept = carried(&issues, &allowed, planted);
         // The marks module checks what the patch wrote, and counts what it costs.
         let cost = match marks_check(
             &shared.doc,
@@ -936,6 +965,7 @@ impl Hub<'_> {
                 undo: Vec::new(),
                 ids,
                 current_at: None,
+                carried: kept,
             }));
         }
         if shared.older.contains(&layer) {
@@ -984,6 +1014,7 @@ impl Hub<'_> {
             undo,
             ids,
             current_at,
+            carried: kept,
         }))
     }
 
@@ -1269,7 +1300,16 @@ impl Hub<'_> {
         };
         let changed = changed_between(was_doc, &doc);
         let result = check_in(&doc, &self.startup.sealed);
-        issues.extend(blocking(&result.issues, &last, &doc, &layer, &changed));
+        let planted = self.scenario.planted;
+        issues.extend(blocking(
+            &result.issues,
+            &last,
+            &doc,
+            &layer,
+            &changed,
+            planted,
+        ));
+        issues.extend(carried(&result.issues, &last, planted));
         issues.extend(foreign_writes(&doc, &owners, &layer));
         let mine = |id: &String| {
             ["bound_values", "status_bindings"]
@@ -1281,7 +1321,7 @@ impl Hub<'_> {
         let mut drawn = None;
         // A revision with 3D writer layers renders back on the GPU (#378), as a sole writer's does.
         let three = deep_canvas_scene3d::scene::has_3d(&doc);
-        if !three && !issues.iter().any(|i| i.severity == "error") {
+        if !three && !issues.iter().any(|i| i.severity == "error" && !i.carried) {
             let shown = drawable(&doc);
             match self.renderer.prepare(
                 shown.as_object().expect("a document is an object"),
@@ -1296,6 +1336,10 @@ impl Hub<'_> {
             }
         }
         reply.insert("rev".into(), json!(cur));
+        let notices = self.notices_reply(&result.notices);
+        if !notices.is_empty() {
+            reply.insert("notices".into(), Value::Array(notices));
+        }
         if self.issue_reply(&issues, &mut reply) {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
@@ -1434,9 +1478,13 @@ impl Hub<'_> {
         json!({"writers": rows})
     }
 
-    /// `revisions` of a shared document: every committed revision, the newest current.
+    /// `revisions` of a shared document: every committed revision, the newest current. A view of
+    /// the record has none: it's rebuilt from projections as of an event (Revision).
     pub fn shared_revisions(&self, doc: &str) -> Value {
         let shared = &self.shared[doc];
+        if shared.doc.get("source").is_some() {
+            return json!({"revisions": []});
+        }
         let last = shared.current().rev;
         let rows: Vec<Value> = shared
             .revs

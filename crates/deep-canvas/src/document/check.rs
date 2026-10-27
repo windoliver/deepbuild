@@ -199,14 +199,20 @@ fn module_checks(
         };
         for (module, rule) in sealed.rules_for(&full) {
             for r in rule(lowered, id, item) {
+                // The value refused at the issue's path, as the document holds it.
+                let actual = lowered
+                    .pointer(&format!("/{}", r.path))
+                    .cloned()
+                    .unwrap_or(Value::Null);
                 if r.severity == "notice" {
                     notices.push(Notice {
                         code: r.code,
                         ids: vec![id.clone()],
                         path: r.path,
-                        actual: Value::Null,
+                        actual,
                         what: r.what,
                         migration: None,
+                        replaced_by: None,
                     });
                     continue;
                 }
@@ -216,7 +222,7 @@ fn module_checks(
                     .iter()
                     .find(|c| c.code == r.code)
                     .map(|c| c.fix.clone());
-                let mut issue = Issue::error(r.code, id, r.path, Value::Null, &r.what);
+                let mut issue = Issue::error(r.code, id, r.path, actual, &r.what);
                 issue.severity = if r.severity == "warning" {
                     "warning"
                 } else {
@@ -830,6 +836,7 @@ pub(super) fn migrate_item(
                 step.to
             ),
             migration: Some((entry.full_name(), step.from, step.to)),
+            replaced_by: None,
         });
     }
 }
@@ -927,6 +934,7 @@ fn check_item(
                 actual: json!(text),
                 what: format!("kind `{text}` is not registered in this build; the item is skipped"),
                 migration: None,
+                replaced_by: None,
             });
             None
         }
@@ -956,6 +964,20 @@ fn check_item(
         }
         Lookup::Known { entry, saved } => Some((entry, saved)),
     };
+    // A deprecated kind still loads, and says so, naming what replaces it.
+    if let Some((entry, _)) = known {
+        if let Some((since, replaced_by)) = ctx.sealed.deprecation_of(&entry.full_name()) {
+            notices.push(Notice {
+                code: "deprecated",
+                ids: vec![key.to_string()],
+                path: at("kind"),
+                actual: json!(text),
+                what: format!("kind `{text}` is deprecated since {since}; use {replaced_by}"),
+                migration: None,
+                replaced_by: Some((replaced_by.clone(), since.clone())),
+            });
+        }
+    }
 
     for (field, value) in fields {
         if !ITEM_KEYS.contains(&field.as_str()) {
@@ -1239,6 +1261,7 @@ fn check_params(
                         version.minor
                     ),
                     migration: None,
+                    replaced_by: None,
                 });
                 dropped.push(name.clone());
             } else {
