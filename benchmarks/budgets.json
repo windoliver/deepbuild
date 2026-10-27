@@ -588,6 +588,26 @@
       "initialReason": "Issue #20 first measurement: the merge base has no transcript archive. One process archives a 100 MB backlog of twenty 5 MB transcripts in one pass, failing unless each copy reads back as its transcript, redacted. The issue's 1 GB in 5 minutes stays in tests/acceptance/20/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "deep-status-30",
+      "command": [
+        "node",
+        "benchmarks/status.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #19 first measurement: the merge base has no deep status. One process seeds a heavy month (20 sessions a day, each with a prompt, a tool call and a finished stop) and 30 live sessions (three with an open ask, three stuck), starts the hub on it and times five deep status runs after a warm-up, failing unless each shows every session that needs you or is stuck within its first 20 lines; p50 includes the seeding and the hub's start. The issue's 200 ms and 100 MB stay in tests/acceptance/19/status/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-doctor",
+      "command": [
+        "node",
+        "benchmarks/doctor.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #19 first measurement: the merge base has no doctor task. One process makes a home with stand-ins for claude and codex, starts the hub, runs deep setup and times five deep doctor --json runs after a warm-up; p50 includes the setup and the hub's start. The issue's 2 s and 100 MB stay in tests/acceptance/19/status/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "reading-slice",
       "command": [
         "node",
