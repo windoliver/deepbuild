@@ -486,6 +486,25 @@ export interface AnswerRefused {
   evidence?: Array<string>;
 }
 
+/** archive.quiet@1 */
+export interface ArchiveQuiet {
+  v: 1;
+  id: string;
+  kind: "archive.quiet";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    agent: string;
+    last: number;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.answered@1 */
 export interface AskAnswered {
   v: 1;
@@ -1160,6 +1179,30 @@ export interface Check {
   depth: string;
   oracle: "code" | "model" | "person";
   contract: string | null;
+}
+
+/** ci.archived@1 */
+export interface CiArchived {
+  v: 1;
+  id: string;
+  kind: "ci.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    repo: string;
+    run: string;
+    result: string;
+    logs: Array<{
+      job: string;
+      evidence: string;
+    }>;
+  };
+  evidence?: Array<string>;
 }
 
 /** claim.made@1 */
@@ -3271,6 +3314,29 @@ export interface TranscriptArchived {
   data: {
     session: string;
     evidence: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** transcript.archived@2 */
+export interface TranscriptArchivedV2 {
+  v: 2;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+    };
   };
   evidence?: Array<string>;
 }

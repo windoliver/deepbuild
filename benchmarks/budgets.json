@@ -520,6 +520,39 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #383 first measurement: the merge base loads no level by reference. One process generates a city of 64 parts, 768 tables and 6,144 columns over 833 documents, each part and table opening its own document, and draws 60 frames of its deepest level in the reference window (3024 x 1964) through `deep-gpu run`'s view3d on Metal, failing unless the view settles with the deepest document resident; p50 includes Node's and the binary's start and the city's generation. The issue's window-sized GPU budget (2 ms of GPU per frame at p95, 256 MB of GPU memory) stays in tests/acceptance/383/city.test.ts, read from the device's timestamps and its allocated size. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "archive-live",
+      "command": [
+        "node",
+        "benchmarks/archive.mjs",
+        "live"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #20 first measurement: the merge base has no transcript archive. One process writes ten 1 MB Claude Code transcripts, archives them, then for five minutes on its clock adds 12 lines a minute to each and runs one pass a minute, failing unless every newest copy reads back as its transcript, redacted; p50 includes Node's start. The issue's 1% of a core for 10 live sessions stays in tests/acceptance/20/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "archive-month",
+      "command": [
+        "node",
+        "benchmarks/archive.mjs",
+        "month"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #20 first measurement: the merge base has no transcript archive. One process archives four 5 MB transcripts at half and at full size, as a heavy day leaves them, failing unless each newest copy reads back as its transcript, redacted. The issue's 2 GB for 30 days stays in tests/acceptance/20/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "archive-backlog",
+      "command": [
+        "node",
+        "benchmarks/archive.mjs",
+        "backlog"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #20 first measurement: the merge base has no transcript archive. One process archives a 100 MB backlog of twenty 5 MB transcripts in one pass, failing unless each copy reads back as its transcript, redacted. The issue's 1 GB in 5 minutes stays in tests/acceptance/20/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

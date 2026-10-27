@@ -142,4 +142,6 @@ export interface CoreOptions {
   confirm?: string;
   /** A module whose default export returns the index@1 fill deep_search reads the wiki through, from DEEP_HUB_TEST_INDEX; only tests set it. */
   index?: string;
+  /** The forge's REST API the archive copies CI runs from, from DEEP_HUB_TEST_FORGE; only tests set it. */
+  forge?: string;
 }
