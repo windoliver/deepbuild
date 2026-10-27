@@ -13,6 +13,9 @@ const CLI = join(REPO, 'packages/cli/dist/main.js');
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const newest = (agent) => JSON.parse(readFileSync(join(REPO, 'adapters', `${agent}.facts.json`), 'utf8')).versions.filter((v) => /^\d+\.\d+\.\d+$/.test(v)).at(-1);
 
+// Setup's entries run deep-hook; a fresh checkout builds it once, with this process's own HOME.
+const built = spawnSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, encoding: 'utf8' });
+if (built.status !== 0) throw Error(`cargo build -p deep-hook failed: ${built.stderr}`);
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-doctor-bench-')));
 const bin = join(dir, 'bin');
 mkdirSync(bin);
