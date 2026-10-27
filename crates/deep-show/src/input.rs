@@ -3,9 +3,14 @@
 //! a frame at vsync v draws what was current at its latch, v − lead: the revision and the camera
 //! the latest input before it left (Frame clock and scheduler; Frame callback and presentation
 //! feedback). A view scrubbed back in time shows the revision current then, and a view comparing
-//! shows the revision it compares against as before.
+//! shows the revision it compares against as before. A revision whose parts move presents a
+//! frame at each vsync until they settle; a still one presents none after its first.
+
+use std::collections::BTreeMap;
 
 use deep_canvas::scope::{self, Event, Phase, Scope};
+use deep_canvas_motion::eval::Validity;
+use deep_canvas_motion::program::Program;
 use serde_json::{json, Value};
 
 use crate::hub::{Hub, Planted};
@@ -281,9 +286,21 @@ impl Hub<'_> {
         }
     }
 
+    /// Revision `rev` of `doc`'s motion, compiled; `None` when it has none to read.
+    fn motion_at(&self, doc: &str, rev: u64) -> Option<Program> {
+        let compile = |d: &Value| d.as_object().and_then(|m| Program::compile(m).ok());
+        match self.shared.get(doc) {
+            Some(s) => {
+                let k = s.revs.iter().position(|r| r.rev == rev)?;
+                compile(&s.at(k).0)
+            }
+            None => compile(&self.revisions.get(doc)?.iter().find(|r| r.rev == rev)?.doc),
+        }
+    }
+
     /// `presented`: every frame presented for a panel's document up to now. A frame presents at
     /// a vsync when what its latch sees, the revision, the camera and the view, differs from the
-    /// last one. A scrubbed view draws the revision current at its time; a comparing view names
+    /// last one, or when the last frame's `valid_until` has passed: its parts moved. A scrubbed view draws the revision current at its time; a comparing view names
     /// its before.
     pub fn presented(&mut self, panel: &str) -> Value {
         let Some(clock) = self.scenario.clock else {
@@ -307,6 +324,8 @@ impl Hub<'_> {
         };
         let mut frames = Vec::new();
         let mut last: Option<(u64, &Seen)> = None;
+        let mut until: Option<i64> = None;
+        let mut motion: BTreeMap<u64, Option<Program>> = BTreeMap::new();
         let mut k = 1;
         while k * period <= now {
             let vsync = k * period;
@@ -324,10 +343,19 @@ impl Hub<'_> {
             let Some(rev) = rev else {
                 continue;
             };
-            if last.is_some_and(|(r, v)| r == rev && v == view) {
+            if last.is_some_and(|(r, v)| r == rev && v == view) && until.is_none_or(|u| shows < u) {
                 continue;
             }
             last = Some((rev, view));
+            until = motion
+                .entry(rev)
+                .or_insert_with(|| self.motion_at(&doc, rev))
+                .as_ref()
+                .and_then(|p| {
+                    let mut state = p.state();
+                    p.evaluate(shows, Validity::Full, &mut state);
+                    state.valid_until
+                });
             let mut frame = json!({"vsync": vsync, "rev": rev, "camera": view.camera});
             if let Some(before) = view.compare {
                 frame["before"] = json!(before);
