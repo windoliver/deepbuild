@@ -1,0 +1,33 @@
+{
+  "readBy": "an MCP call's count class (read, change, send or destructive) and effect class (push, merge, dispatch, send or delete): a server is one of these only when the agent loads it under this name from a scope listed here with this config; any other server, and a tool not listed, counts as change",
+  "servers": {
+    "github": {
+      "readBy": "GitHub's official remote server, as GitHub's install docs write it into Claude Code's user or local MCP config",
+      "scopes": ["user", "local"],
+      "match": { "url": "https://api.githubcopilot.com/mcp/" },
+      "tools": {
+        "get_me": { "counts": "read" },
+        "get_pull_request": { "counts": "read" },
+        "get_pull_request_diff": { "counts": "read" },
+        "get_pull_request_files": { "counts": "read" },
+        "get_pull_request_status": { "counts": "read" },
+        "list_pull_requests": { "counts": "read" },
+        "get_issue": { "counts": "read" },
+        "list_issues": { "counts": "read" },
+        "get_file_contents": { "counts": "read" },
+        "search_code": { "counts": "read" },
+        "search_repositories": { "counts": "read" },
+        "list_commits": { "counts": "read" },
+        "create_pull_request": { "counts": "change" },
+        "update_pull_request": { "counts": "change" },
+        "create_issue": { "counts": "change" },
+        "add_issue_comment": { "counts": "send", "effect": "send" },
+        "merge_pull_request": { "counts": "change", "effect": "merge" },
+        "push_files": { "counts": "change", "effect": "push" },
+        "create_or_update_file": { "counts": "change", "effect": "push" },
+        "delete_file": { "counts": "destructive", "effect": "delete" },
+        "run_workflow": { "counts": "change", "effect": "dispatch" }
+      }
+    }
+  }
+}

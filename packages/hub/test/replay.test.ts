@@ -94,7 +94,7 @@ describe('a running hub', () => {
       } finally {
         db.close();
       }
-      expect(row, 'the spooled late call is in the record while the hub runs').toEqual({ v: 2, late: 1, matched: '["listing-noted"]' });
+      expect(row, 'the spooled late call is in the record while the hub runs').toEqual({ v: 3, late: 1, matched: '["listing-noted"]' });
       expect(order, 'the spooled call ran first, so it is recorded before the hook that started the replay').toEqual(['01K74FKZVKZGATTBZAEGPRET62', '01K74FKZVKZGATTBZAEGPRET63']);
       expect(left, 'the replayed spool is removed').toEqual([]);
     });
