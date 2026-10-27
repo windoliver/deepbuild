@@ -225,6 +225,9 @@ base it reads `--dh19-no-such-flag` as an ask and exits 3, which the contract te
 7. **AC15 at the base.** The base's #18 relation already uses the 5 s margin, so the three fixture tests pass at the
    base; the plant tests fail there (the hub refuses the unknown plant names, BLOCKED), and pass once the plants
    exist and the tests catch them.
+8. **How checks fail (redraft, Oct 27).** The proof lane counts only an assertion failure as a test failing on a wrong
+   program, so the AC9, AC12, AC15, AC16 and AC18 scenario checks now fail with `expect.fail(msg)` instead of
+   `throw Error(msg)`, messages unchanged; BLOCKED throws stay plain errors.
 
 ## Files
 

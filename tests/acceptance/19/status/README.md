@@ -179,6 +179,9 @@ implementation exists. `BASE-FAILURE.txt` holds the base run.
   `deep` process.
 - **The month behind `deep status`'s budget** is #16's heavy month (20 sessions a day for 30 days), each session with
   a prompt, eight tool calls and a finished stop, then quiet: the design's numbers are "with 30 days of history".
+- **Redraft, Oct 27: self-checks untagged.** The judge's planted-output test and the seed read-back test check only
+  this folder's judge and seed, so no wrong program of `deep status` can fail them; they no longer carry AC8's tag,
+  and the judge's test moved to its own describe block to drop the tag its old block's name gave it. Bodies unchanged.
 
 ## Files
 

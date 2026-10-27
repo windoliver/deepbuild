@@ -220,6 +220,9 @@ Each ID is `#19.<first 8 hex of SHA-256 of the criterion's text>`, as `scripts/p
    that calls `/bin/launchctl` by path would escape it; that is listed as an addition, not tested.
 8. **AC13's `.git`.** Git's own bookkeeping (index, logs) is excluded. Setup may read a repo with git, which can
    refresh the index. A git hook, or a change to `.git/config`, counts.
+9. **Redraft, Oct 27: how checks fail.** Each criterion check that threw a plain `Error` (in the tests, `setup()`,
+   `readSettings`, `installedHub` and `setupThenUndo`) now fails through vitest's `expect.fail` with the same message, so
+   the proof lane sees an assertion failure on a planted wrong program. BLOCKED throws and conditions are unchanged.
 
 ## Files
 

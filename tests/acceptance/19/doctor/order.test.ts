@@ -63,12 +63,12 @@ async function orderReported(plant?: string): Promise<void> {
   if (fileOrder(settings, 'UserPromptSubmit') !== 'herd' || fileOrder(settings, 'Stop') !== 'ours') throw Error(`BLOCKED: the fixture's order isn't as written: ${JSON.stringify(settings.hooks)}`);
   const d = await doctor(w.h);
   const about = d.items.filter((i) => itemText(i).includes('herd-hook'));
-  if (!about.length) throw Error(`AC18 deep doctor must detect the other hook-based tool, ${herd(w.h)}, in Claude Code's user settings: ${shown(d.ran)}`);
+  if (!about.length) expect.fail(`AC18 deep doctor must detect the other hook-based tool, ${herd(w.h)}, in Claude Code's user settings: ${shown(d.ran)}`);
   const text = about.map(itemText).join('\n');
   for (const [event, first] of Object.entries(expected)) {
     const said = reportedOrders(text, event);
-    if (!said.length) throw Error(`AC18 deep doctor must report the order hooks run in on ${event}, naming herd-hook and DeepBuild's entry: ${itemsShown(about)}`);
-    if (said.some((o) => o !== first)) throw Error(`AC18 on ${event} the file has ${first === 'herd' ? 'herd-hook before DeepBuild' : 'DeepBuild before herd-hook'}, and deep doctor reports the other order: ${itemsShown(about)}`);
+    if (!said.length) expect.fail(`AC18 deep doctor must report the order hooks run in on ${event}, naming herd-hook and DeepBuild's entry: ${itemsShown(about)}`);
+    if (said.some((o) => o !== first)) expect.fail(`AC18 on ${event} the file has ${first === 'herd' ? 'herd-hook before DeepBuild' : 'DeepBuild before herd-hook'}, and deep doctor reports the other order: ${itemsShown(about)}`);
   }
 }
 

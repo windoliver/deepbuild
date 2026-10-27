@@ -47,7 +47,7 @@ async function linked(env: Record<string, string | undefined> = {}): Promise<voi
 
   const s = lstatSync(link, { throwIfNoEntry: false });
   if (!s?.isSymbolicLink() || readlinkSync(link) !== LINK_TARGET) {
-    throw Error(`AC20 ${link} must still be the symlink to ${LINK_TARGET} after deep setup: ${s ? (s.isSymbolicLink() ? `it now points to ${readlinkSync(link)}` : 'setup replaced the link with a plain file') : 'it is gone'}`);
+    expect.fail(`AC20 ${link} must still be the symlink to ${LINK_TARGET} after deep setup: ${s ? (s.isSymbolicLink() ? `it now points to ${readlinkSync(link)}` : 'setup replaced the link with a plain file') : 'it is gone'}`);
   }
   expect(ran.code, `deep setup must exit 0 with your settings linked from a dotfiles folder: ${shown(ran)}`).toBe(0);
   const written = parseObject(readFileSync(target, 'utf8'));

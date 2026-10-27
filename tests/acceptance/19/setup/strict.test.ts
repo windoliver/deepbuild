@@ -46,7 +46,7 @@ async function strict(text: string, key: string, env: Record<string, string | un
   const ran = await runSetup(home, { env });
   const now = readFileSync(file);
   if (!now.equals(was)) {
-    throw Error(`AC14 deep setup must leave ${file}, which repeats the key "${key}", byte-for-byte as it was: ${firstDifference(was, now)}; ${shown(ran)}`);
+    expect.fail(`AC14 deep setup must leave ${file}, which repeats the key "${key}", byte-for-byte as it was: ${firstDifference(was, now)}; ${shown(ran)}`);
   }
   const copies = copiesOf(home, was, file);
   expect(copies.length, `AC14 deep setup must keep a copy of ${file}, which it couldn't parse strictly, somewhere under ${home}`).toBeGreaterThan(0);

@@ -25,10 +25,10 @@ const unrun = (d: Doctored) => d.items.filter((i) => i.code === 'not_checked');
 async function onlyNotChecked(plant?: string): Promise<void> {
   const w = await world({ telemetry: false, ...(plant ? { plant } : {}) });
   const d = await doctor(w.h);
-  if (failed(d).length) throw Error(`AC16 the "only not checked" world must have no failed item, yet: ${itemsShown(failed(d))}`);
-  if (!unrun(d).length) throw Error(`AC16 with Claude Code's telemetry off and no --prompt, an item must read not checked: ${shown(d.ran)}`);
-  if (d.ran.code === 0) throw Error(`AC16 deep doctor exited 0 with an item not checked: ${unrun(d).map((i) => `${i.item} (${i.code})`).join(', ')}; it must exit 3`);
-  if (d.ran.code !== 3) throw Error(`AC16 deep doctor must exit 3 with only items not checked (${unrun(d).map((i) => i.item).join(', ')}): ${shown(d.ran)}`);
+  if (failed(d).length) expect.fail(`AC16 the "only not checked" world must have no failed item, yet: ${itemsShown(failed(d))}`);
+  if (!unrun(d).length) expect.fail(`AC16 with Claude Code's telemetry off and no --prompt, an item must read not checked: ${shown(d.ran)}`);
+  if (d.ran.code === 0) expect.fail(`AC16 deep doctor exited 0 with an item not checked: ${unrun(d).map((i) => `${i.item} (${i.code})`).join(', ')}; it must exit 3`);
+  if (d.ran.code !== 3) expect.fail(`AC16 deep doctor must exit 3 with only items not checked (${unrun(d).map((i) => i.item).join(', ')}): ${shown(d.ran)}`);
 }
 
 describe('AC16 #19.26a372c6 `deep doctor` exits 1 with one failed item, 3 with only an item not checked, 1 with both, 0 with every item ok, and 2 for an unknown flag, having checked nothing; `deep status` with the hub down and no database exits 3', () => {

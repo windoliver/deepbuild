@@ -19,16 +19,16 @@ async function notCheckedReads(plant?: string): Promise<void> {
   const w = await world(plant ? { plant } : {});
   const d = await doctor(w.h);
   const item = promptItem(d.items);
-  if (!item) throw Error(`AC9 deep doctor must list Claude Code's test prompt as an item even when it doesn't run it: ${shown(d.ran)}`);
+  if (!item) expect.fail(`AC9 deep doctor must list Claude Code's test prompt as an item even when it doesn't run it: ${shown(d.ran)}`);
   if (item.code !== 'not_checked' || item.level !== 'skip') {
-    throw Error(`AC9 the item ${item.item} didn't run (no --prompt) and must read not checked (not_checked, skip), never ${item.level} ${item.code}: ${JSON.stringify(item)}`);
+    expect.fail(`AC9 the item ${item.item} didn't run (no --prompt) and must read not checked (not_checked, skip), never ${item.level} ${item.code}: ${JSON.stringify(item)}`);
   }
   const unrun = d.items.filter((i) => i.code === 'not_checked');
   const wrong = unrun.filter((i) => i.level !== 'skip');
-  if (wrong.length) throw Error(`AC9 an item not checked must never read ${wrong.map((i) => `${i.item}: ${i.level}`).join(', ')}: ${itemsShown(wrong)}`);
+  if (wrong.length) expect.fail(`AC9 an item not checked must never read ${wrong.map((i) => `${i.item}: ${i.level}`).join(', ')}: ${itemsShown(wrong)}`);
   const words = await doctor(w.h, [], { json: false });
   const said = (words.ran.stdout.match(/not checked/gi) ?? []).length;
-  if (said < unrun.length) throw Error(`AC9 deep doctor (for a person) must say "not checked" for each of the ${unrun.length} items not checked (${unrun.map((i) => i.item).join(', ')}); it says it ${said} times: ${shown(words.ran)}`);
+  if (said < unrun.length) expect.fail(`AC9 deep doctor (for a person) must say "not checked" for each of the ${unrun.length} items not checked (${unrun.map((i) => i.item).join(', ')}); it says it ${said} times: ${shown(words.ran)}`);
 }
 
 describe('AC9 #19.dfcae9ef An item that didn\'t run reads "not checked", never OK, and `deep doctor` exits non-zero when any item failed', () => {

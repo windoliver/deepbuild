@@ -23,8 +23,8 @@ async function repoDisable(plant?: string): Promise<void> {
   writeFileSync(file, `${JSON.stringify({ disableAllHooks: true }, null, 2)}\n`);
   const d = await doctor(w.h, ['--prompt'], { cwd: w.h.work });
   const shownIn = d.items.filter((i) => i.level === 'fail' && itemText(i).includes('disableAllHooks') && itemText(i).includes(w.h.work));
-  if (!shownIn.length) throw Error(`AC12 deep doctor must show that hooks won't run in ${w.h.work}, naming disableAllHooks in ${file}, as a failed item: ${shown(d.ran)}`);
-  if (d.ran.code !== 1) throw Error(`AC12 deep doctor must exit non-zero (1) with hooks that won't run in ${w.h.work}: ${shown(d.ran)}\n${itemsShown(shownIn)}`);
+  if (!shownIn.length) expect.fail(`AC12 deep doctor must show that hooks won't run in ${w.h.work}, naming disableAllHooks in ${file}, as a failed item: ${shown(d.ran)}`);
+  if (d.ran.code !== 1) expect.fail(`AC12 deep doctor must exit non-zero (1) with hooks that won't run in ${w.h.work}: ${shown(d.ran)}\n${itemsShown(shownIn)}`);
 }
 /** An agent policy that allows only managed hooks: DeepBuild's user-level hooks don't run anywhere. */
 async function policyManagedOnly(plant?: string): Promise<void> {
@@ -32,8 +32,8 @@ async function policyManagedOnly(plant?: string): Promise<void> {
   writeFileSync(w.h.managed, `${JSON.stringify({ allowManagedHooksOnly: true }, null, 2)}\n`);
   const d = await doctor(w.h, ['--prompt']);
   const shownIn = d.items.filter((i) => i.level === 'fail' && itemText(i).includes('allowManagedHooksOnly'));
-  if (!shownIn.length) throw Error(`AC12 deep doctor must show that DeepBuild's hooks won't run under Claude Code's policy, naming allowManagedHooksOnly, as a failed item: ${shown(d.ran)}`);
-  if (d.ran.code !== 1) throw Error(`AC12 deep doctor must exit non-zero (1) when a policy allows only managed hooks: ${shown(d.ran)}\n${itemsShown(shownIn)}`);
+  if (!shownIn.length) expect.fail(`AC12 deep doctor must show that DeepBuild's hooks won't run under Claude Code's policy, naming allowManagedHooksOnly, as a failed item: ${shown(d.ran)}`);
+  if (d.ran.code !== 1) expect.fail(`AC12 deep doctor must exit non-zero (1) when a policy allows only managed hooks: ${shown(d.ran)}\n${itemsShown(shownIn)}`);
 }
 
 describe('AC12 #19.5800e7ab A repo whose `.claude/settings.json` sets `disableAllHooks`, and an agent policy that allows only managed hooks, each show in `deep doctor` as hooks that won\'t run there, naming the setting, and `deep doctor` exits non-zero', () => {
