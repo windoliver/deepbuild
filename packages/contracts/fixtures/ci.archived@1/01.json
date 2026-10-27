@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ci.archived",
+  "writer": "ext:deepbuild/archive",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "repo": "octo/shop",
+    "run": "731904",
+    "result": "failure",
+    "logs": [{ "job": "2201", "evidence": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" }]
+  },
+  "evidence": ["9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"]
+}

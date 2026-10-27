@@ -9,7 +9,10 @@ a check runs against; Extension API, `deep.registerEnvironment` and `deep.lease`
 #314 for their conventions and surfaces, and `packages/supervisor`, `packages/conformance`, `packages/hub` and
 `packages/cli` as they are at the base commit `bddb8099fd259985b5e3155247a99b62d938e47c`, by a job that never saw
 an implementation of #331. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute goes to a
-blind redraft of this job.
+blind redraft of this job. One redraft has happened: on October 26, 2026, with #348 (the extension host) and #349
+(extension slots) on main at `bc765d2`, a blind job wrote AC4's "at install" half (`install.test.ts`) against the
+surfaces those issues' acceptance READMEs publish, reading no implementation of any of the three; AC9's child-session
+half stays in `blocked.test.ts`.
 
 The issue has 11 checkbox criteria, AC1 to AC11 in the body's order.
 
@@ -137,6 +140,31 @@ The reference fill and env-local pass it, fixed and seeded parts. How the kit's 
 can start (a `done.yaml` in the checkout it made, say) is the kit's to choose; the tests require only that
 env-local passes.
 
+### Installing an environment (the extension host, #348 and #349)
+
+An environment reaches the hub as an extension package: `deepbuild.json` (extension.manifest@1) and an `index.ts`
+whose default export calls `deep.registerEnvironment(name, env)`, `env` an `environment@1` fill (`slot`, `revision`,
+`up(spec, lease, checkout)`, `down(handle)`), as the design's Extension API and the hub-slot table
+(`packages/contracts/hub-slots.json`: method `deep.registerEnvironment`, interface `environment@1`, fills one, kit
+`environment@1`, planted the four above) name it. The package declares what it registers in its manifest under
+**`environments`**, a list of the names it registers (`"environments": ["local"]`), the same shape as `checks` for
+`deep.registerCheck`; nothing in the manifest or the design names another key, so this is the smallest consistent
+one, and a package registering an environment with no such entry is the manifest contract's to refuse. The install
+(`host.install({ from, builtBy })` on `openExtensionHost`, #348's entry) runs the slot's kit on what the package
+registers, as it runs `check.kind@1` on a check kind (#349 AC4): a FAIL refuses the install, the error carrying the
+kit's finding, so each planted environment's refusal carries its plant's message and names the route, the port,
+`pid <n>` or the worktree, as the kit's FAIL does; a PASS puts `{ slot: 'environment@1', fill: <name>, verdict:
+'PASS' }` on `Installed.kits`. A refused package is not in `host.installed()`.
+
+The packages are first-party (listed in the host's release, so they run in the hub's process), copied from
+`fixtures/environment` (one of the kit's own planted fills, by the name `environment.json` gives, imported lazily
+from the built conformance entry `environment.json` names, registered under the manifest's one `environments`
+entry) and `fixtures/env-local` (`envLocal({ host })` registered as `local`). The published `deep` hands a package no
+Host, so the env-local package opens its own supervisor, lazily on its first `up`, on a record beside itself through
+the built record, asks, supervisor and env-local entries `env-local.json` names, as `kit.test.ts`'s third test opens
+one; when the hub gives a first-party environment its supervisor another way, the package can take it instead, and
+the test changes nothing.
+
 ## Criteria to tests
 
 Each test's name starts with its criterion's number, and each `describe` carries the criterion's ID,
@@ -150,7 +178,7 @@ fails that test.
 | AC1 `#331.cc7309c3` | two worktrees, different ports, both up | `stacks.test.ts` AC1 (1): both ups at once, each health route answering from its own worktree, both ports in the lease table | fails: no `deep env` |
 | AC2 `#331.86737f8a` | teardown stops only what it started | `stacks.test.ts` AC2 (1): the stack's server and child stopped; a look-alike (same program, flags and folder, no token) left running | fails: no `deep env` |
 | AC3 `#331.5001b4d0` | failed health check → dependent checks BLOCKED with the cause | `health.test.ts` (3): `deep env up` BLOCKED, exit 3, the cause naming `/health` and 503, nothing left; a `run.start` with `environment: true` finishing `missing` with the cause, its process never run; the control on a healthy stack | fail: no `deep env`; `run.start` ignores `environment` (the run finishes `failed`, with no port) |
-| AC4 `#331.5c02ca8a` | env-local passes environment@1; four plants fail it, naming route, port, process, worktree, at install | `kit.test.ts` (3): the four plants and the checkout argument; each plant's FAIL names its thing; env-local passes. `blocked.test.ts` AC4 (1): at install | fail: no `starts-in-worktree` plant, no checkout, no `packages/env-local`; at install BLOCKED on #348, #349 |
+| AC4 `#331.5c02ca8a` | env-local passes environment@1; four plants fail it, naming route, port, process, worktree, at install | `kit.test.ts` (3): the four plants and the checkout argument; each plant's FAIL names its thing; env-local passes. `install.test.ts` (5): each plant, as a package registering it through `deep.registerEnvironment`, refused at install naming its thing and not installed; env-local's package installs with the kit PASS on `Installed.kits` | fail: no `starts-in-worktree` plant, no checkout, no `packages/env-local` (the first draft's base); at the redraft's base (`bc765d2`) the host installs every plant with `kits: []`, running no `environment@1` kit, and the manifest contract has no `environments` field (BASE-FAILURE-AC4.txt) |
 | AC5 `#331.ba119c50` | a port held past expiry is kept; sibling gets another; stale lease is a reading | `leases.test.ts` AC5 (1): a 4 s build on a 1.5 s lease | fails: no `deep env` |
 | AC6 `#331.6e85fa63` | a port another program listens on is never leased | `stacks.test.ts` AC6 (3): the test's listener on 127.0.0.1, `0.0.0.0` and `::` at the port the hub would lease first | fails: no `deep env` |
 | AC7 `#331.cba94b5d` | a hub killed mid-start reaps or reports on restart | `crash.test.ts` (2): killed before the spawn; killed after the spawn, before tracking | fails: no `deep env` |
@@ -171,7 +199,13 @@ fails that test.
   checkout. Missing is BLOCKED by the verdict table (#28) and `families.ts`. The control proves the path isn't
   BLOCKED for everything: the check gets its port in `web`, reaches the stack, passes, and the stack is gone after.
 - **AC4.** "Naming the route, the port, the process or the worktree" is read off each FAIL's message, as above.
-  "Each fail it at install" needs the extension host's conformance step, which isn't built (blocked.test.ts).
+  "Each fail it at install": each plant is a package registering it through `deep.registerEnvironment`
+  (`environments` in its manifest), installed through `host.install` on a host whose release lists it; the install
+  must reject, the error carrying the plant's own message (the kit's `planted[].message`) and naming the route
+  (a path), `port` with the number, `pid <n>` or the word worktree with an absolute path, and the package must not
+  be in `host.installed()`. env-local's package, installed the same way, resolves with `{ slot: 'environment@1',
+  fill: 'local', verdict: 'PASS' }` among `Installed.kits`. One host serves the five installs, the plants first:
+  a refused plant must leave the one-fill slot free for env-local.
 - **AC5.** "A long build": the stack's server waits 4 s before it listens, past a 1.5 s lease term
   (`DEEP_HUB_TEST_LEASE_MS`). Then: `lease.stale@1` for its port with its holder, no `lease.released@1`, the stack
   still answering there, and a sibling worktree's up getting another port while the first still answers.
@@ -225,8 +259,6 @@ command, no env-local, a `run.start` that ignores `environment`, and a kit whose
 
 ## What depends on other issues
 
-- **#348, the extension host**, and **#349, extension slots**: AC4's "at install". `blocked.test.ts` fails BLOCKED
-  until they land; the kit half is tested here through `runKit`.
 - **#18, child sessions**, and **#26, `deep_env` in `deep mcp`**: AC9's child agent. BLOCKED until they land; the
   worktree half is tested here through `deep env up`.
 - **#237, the lease table**: not built at this base (the supervisor of #236 keeps fixed pools). These tests demand
@@ -236,18 +268,22 @@ command, no env-local, a `run.start` that ignores `environment`, and a kit whose
   BLOCKED.
 - **The reference Mac**: AC8's numbers count only there, in the local preflight.
 
-So a PR for #331 that passes everything else says `Part of #331` and lists AC4's install half, AC9's child-session
-half, and (until it runs where Docker is up) AC11 as open.
+So a PR for #331 that passes everything else says `Part of #331` and lists AC9's child-session half and (until it
+runs where Docker is up) AC11 as open. AC4's install half is testable now that #348 and #349 are on main
+(`install.test.ts`).
 
 ## Files
 
 - `helpers.ts`: temp folders, test repos and worktrees, the escape fixture's build, PID files and `ps`/`lsof`, ports
   and listeners, the hub as a process and its line protocol, `deep env up`/`down` as a person runs them, Docker's
   reachability, the reference-Mac gate and the timing judge.
-- `stacks.test.ts` (AC1, AC2, AC6, AC9), `health.test.ts` (AC3), `kit.test.ts` (AC4), `leases.test.ts` (AC5, AC10),
-  `crash.test.ts` (AC7), `budgets.test.ts` (AC8), `compose.test.ts` (AC11), `blocked.test.ts` (AC4, AC9).
+- `stacks.test.ts` (AC1, AC2, AC6, AC9), `health.test.ts` (AC3), `kit.test.ts` and `install.test.ts` (AC4),
+  `leases.test.ts` (AC5, AC10), `crash.test.ts` (AC7), `budgets.test.ts` (AC8), `compose.test.ts` (AC11),
+  `blocked.test.ts` (AC9).
 - `fixtures/server.mjs` (the repo's dev server: a child, a long build, an unhealthy route), `fixtures/check.mjs`
-  (AC3's check that needs the app), `fixtures/escape.c` (AC10's escaping helper).
+  (AC3's check that needs the app), `fixtures/escape.c` (AC10's escaping helper), `fixtures/environment` and
+  `fixtures/env-local` (AC4's extension packages; their `index.ts.fixture` is renamed `index.ts` in the copy the
+  test installs, so neither Vitest nor the type check picks the packages' code up).
 - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`; at this base its only error is
   the missing `packages/env-local`.
-- `BASE-FAILURE.txt`: the run on the base commit.
+- `BASE-FAILURE.txt`: the run on the base commit. `BASE-FAILURE-AC4.txt`: `install.test.ts` on the redraft's base.

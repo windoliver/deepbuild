@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "archive.quiet",
+  "writer": "ext:deepbuild/archive",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760099851123,
+  "data": { "agent": "claude", "last": 1760013451123 }
+}

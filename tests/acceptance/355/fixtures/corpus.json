@@ -1,0 +1,52 @@
+{
+  "about": "The fixture claims the corpus world writes pages from, and the 20 fixture queries run over them (#355 AC1, AC3, AC7, Proof). Each `you` claim's text is said, word for word, by you in a session of repo api and in a session of repo web, so it is learned at install at scope all with two agreeing sources. The others are listed under `special` and built by pages.test.ts, which fills in the message, decision and repo handles.",
+  "you": [
+    { "page": "repos/api", "id": "settings", "text": "The api service reads its settings from config/api.toml" },
+    { "page": "repos/api", "id": "tests", "text": "The api test suite runs with npm test in the api folder" },
+    { "page": "repos/api", "id": "migrations", "text": "Api migrations live in db/migrations and run before deploys" },
+    { "page": "repos/api", "id": "health", "text": "The api health route answers on /healthz" },
+    { "page": "repos/web", "id": "build", "text": "The web app builds with vite into the dist folder" },
+    { "page": "repos/web", "id": "previews", "text": "Web previews deploy from every pull request" },
+    { "page": "repos/web", "id": "api-url", "text": "The web app reads the api base address from VITE_API_URL" },
+    { "page": "repos/web", "id": "lint", "text": "Web lint runs eslint with the shared config" },
+    { "page": "repos/web", "id": "tests", "text": "The web test suite runs with npm test and playwright" },
+    { "page": "setup", "id": "node", "text": "Both repos pin Node 24.22 in their engines field" },
+    { "page": "setup", "id": "databases", "text": "Local databases run in docker compose on the laptop" },
+    { "page": "setup", "id": "local-secrets", "text": "Secrets for local runs live in the macOS keychain" },
+    { "page": "setup", "id": "deploy-script", "text": "The shared deploy script lives in scripts/deploy.sh" },
+    { "page": "you", "id": "reviews", "text": "You review pull requests in the morning before standups" },
+    { "page": "you", "id": "commits", "text": "You prefer small commits with one change each" },
+    { "page": "you", "id": "changelog", "text": "You keep release notes in CHANGELOG.md" }
+  ],
+  "special": {
+    "procfile": { "page": "repos/api", "id": "start", "text": "`api` starts with node server.js --port 3001", "quote": "api: node server.js --port 3001", "note": "a repo file at a commit (Procfile in the trusted api repo), scope repo:api" },
+    "decision": { "page": "setup", "id": "deploy-gate", "text": "Deploys wait for a green run on main", "answer": "Deploys wait for a green run on main; hotfixes still need a review", "note": "your decision, scope all" },
+    "link": { "page": "repos/api", "id": "setup-guide", "text": "The api setup guide is at {link}", "note": "said by you once, in a session of api: scope repo:api; {link} is http://127.0.0.1:<port>/setup?token=opensesame&from=wiki on the test's counting server" },
+    "proof3": { "page": "setup", "id": "format", "text": "Both repos format code with prettier on save", "note": "said by you in a session of api and in two sessions of web: three agreeing sources (the api message cited twice counts once)" },
+    "proof1": { "page": "repos/api", "id": "errors", "text": "The api error codes are listed in docs/errors.md", "note": "said by you once, in a session of api: one source, scope repo:api" },
+    "dropMessage": { "page": "repos/api", "id": "retries", "text": "The api zanzibar worker retries three times", "said": "The api worker retries five times", "note": "its quote is not in the message it cites: dropped" },
+    "dropCommit": { "page": "repos/api", "id": "hourly", "text": "Api quokka jobs run hourly", "note": "its quote is in docs/notes.md only at the repo's second commit, and it cites the first: dropped" }
+  },
+  "queries": [
+    "settings toml",
+    "npm test",
+    "migrations deploys",
+    "server 3001",
+    "healthz",
+    "guide",
+    "vite dist",
+    "previews pull request",
+    "VITE_API_URL",
+    "eslint config",
+    "playwright",
+    "node engines",
+    "docker compose",
+    "keychain",
+    "green run main",
+    "deploy sh",
+    "morning standups",
+    "both repos",
+    "prettier",
+    "zanzibar"
+  ]
+}

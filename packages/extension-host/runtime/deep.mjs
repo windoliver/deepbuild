@@ -18,6 +18,8 @@ export const API = Object.freeze([
   { method: 'deep.registerView', needs: null },
   { method: 'deep.registerAdapter', needs: null },
   { method: 'deep.registerRoute', needs: null },
+  // #355: the wiki's index, in place of the shipped one.
+  { method: 'deep.registerIndex', needs: null },
   { method: 'deep.record.append', needs: 'record' },
   { method: 'deep.record.query', needs: 'record' },
   { method: 'deep.evidence.put', needs: 'files' },
@@ -45,11 +47,15 @@ export function extensionSide(call, load) {
   const routes = new Map();
   const actions = new Map();
   const outputs = new Map();
+  // Its environments by name (#331): their up and down stay here, asked by the host at the kit and at a stack's start.
+  const environments = new Map();
   const scope = new AsyncLocalStorage();
   const keeper = (map) => (name, fn) => { map.set(name, fn); return () => { if (map.get(name) === fn) map.delete(name); }; };
   // The package's resolvers in order, and its adapters by name: their functions stay here (#349).
   let resolvers = [];
   const adapters = new Map();
+  // Its index's methods stay here too (#355); the host asks for each call by name.
+  const indexes = new Map();
   // Each returns how to drop what it kept.
   const keep = {
     'deep.registerCheck': keeper(checks),
@@ -57,7 +63,9 @@ export function extensionSide(call, load) {
     'deep.registerAction': (name, _declared, fn) => keeper(actions)(name, fn),
     'deep.provide': (name, _kind, _schema, fn) => keeper(outputs)(name, fn),
     'deep.registerResolver': (resolver) => { resolvers = [...resolvers, resolver]; return () => { resolvers = resolvers.filter((r) => r !== resolver); }; },
+    'deep.registerIndex': keeper(indexes),
     'deep.registerAdapter': (name, adapter) => { adapters.set(name, adapter); return () => { if (adapters.get(name) === adapter) adapters.delete(name); }; },
+    'deep.registerEnvironment': keeper(environments),
     'deep.on': (kind, handler) => {
       handlers.set(kind, [...(handlers.get(kind) ?? []), handler]);
       return () => handlers.set(kind, (handlers.get(kind) ?? []).filter((h) => h !== handler));
@@ -88,6 +96,11 @@ export function extensionSide(call, load) {
         const runner = checks.get(params?.type);
         if (!runner) throw Error(`no check kind ${params?.type} is registered here`);
         return await runner(params.spec, params.ctx);
+      }
+      if (method === 'env.up' || method === 'env.down') {
+        const env = environments.get(params?.name);
+        if (!env) throw Error(`no environment ${params?.name} is registered here`);
+        return method === 'env.up' ? await env.up(params.spec, params.lease, params.checkout) : (await env.down(params.handle)) ?? null;
       }
       if (method === 'deliver') {
         for (const event of params.events) for (const handler of handlers.get(event.kind) ?? []) await handler(event);
@@ -124,6 +137,11 @@ export function extensionSide(call, load) {
             .then((r) => (Date.now() - start > deadline ? { $handler: 'late' } : r ?? null), () => ({ $handler: 'threw' }));
           return Promise.race([replied, late]).finally(() => clearTimeout(timer));
         }));
+      }
+      if (method === 'index') {
+        const index = indexes.get(params?.name);
+        if (!index || !['rebuild', 'upsert', 'search', 'dropSource'].includes(params?.op)) throw Error(`no index ${params?.name} with ${params?.op} is registered here`);
+        return (await index[params.op](...(params.args ?? []))) ?? null;
       }
       if (method === 'action') {
         const fn = actions.get(params?.name);
