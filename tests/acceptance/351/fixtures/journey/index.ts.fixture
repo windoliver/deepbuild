@@ -1,0 +1,21 @@
+// A first-party test package (#351 AC7): an implementation of the check kind `journey`, as #349's. Its runner is
+// the conformance package's reference check.kind@1 fill, imported from the built entry journey.json names, lazily
+// (so registering needs no import), and it appends one line to the file journey.json's `seen` names each time it
+// runs, so a test can tell which implementation ran a journey.
+import { appendFileSync, readFileSync } from 'node:fs';
+
+interface Settings { conformance: string; seen: string }
+let run: ((spec: unknown, ctx: unknown) => unknown) | undefined;
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./journey.json', import.meta.url), 'utf8'));
+  deep.registerCheck('journey', async (spec: unknown, ctx: unknown) => {
+    appendFileSync(settings.seen, 'ran\n');
+    if (!run) {
+      const { slotKits, cleanFills } = await import(settings.conformance);
+      const kit = slotKits().find((k: { slot: string }) => k.slot === 'check.kind@1');
+      run = cleanFills(kit)[0].run;
+    }
+    return run!(spec, ctx);
+  });
+}

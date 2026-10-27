@@ -1,0 +1,18 @@
+// The done gate already installed, a test gate here (#351 AC4): a first-party package in the hub that judges a
+// claim through its check kind `ext.done-gate.verdict`. It reads report.json in the checkout it is given, the
+// claim's test report `{ passed, failed }`, and answers failed with one failure per failing test, or passed when
+// none failed, so a false done (a claim with a failing test) and the real fix get different verdicts.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+interface Report { passed: number; failed: number }
+
+export default function (deep: any): void {
+  deep.registerCheck('ext.done-gate.verdict', async (_spec: unknown, ctx: { checkout: string }) => {
+    const report: Report = JSON.parse(readFileSync(join(ctx.checkout, 'report.json'), 'utf8'));
+    const failures = Array.from({ length: report.failed }, (_, i) => ({
+      test: `claimed test ${i + 1}`, file: 'report.json', line: 1, stack: null, assertion: true, message: 'a test the claim rests on failed',
+    }));
+    return { outcome: report.failed ? 'failed' : 'passed', testsRun: report.passed + report.failed, failures, evidence: [], read: ['report.json'], mask: null };
+  });
+}
