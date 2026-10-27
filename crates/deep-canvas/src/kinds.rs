@@ -295,6 +295,29 @@ fn camera() -> Entry {
     }
 }
 
+/// R1's circle (Circle `circle@1`): a dot or a ring, its radius never below 0. Its paint, status,
+/// arc and path ops are read by the marks it draws as.
+fn circle() -> Entry {
+    Entry {
+        family: "",
+        name: "circle",
+        versions: vec![Version {
+            major: 1,
+            minor: 0,
+            params: vec![
+                json_param("center", json!([0, 0])),
+                f32_param("r", "u", 0.0, 0.0, 100_000.0, 0),
+                f32_param("inner_r", "u", 0.0, 0.0, 100_000.0, 0),
+                json_param("arc", Value::Null),
+                json_param("paint", Value::Null),
+                json_param("status", Value::Null),
+                json_param("ops", Value::Null),
+            ],
+        }],
+        migrations: vec![],
+    }
+}
+
 /// The two flat test kinds of the #372 acceptance README: a 2D rectangle from its top-left
 /// corner and a 3D disc about its position, each with an sRGB fill.
 fn test_shapes() -> [Entry; 2] {
@@ -385,7 +408,7 @@ fn build() -> Registry {
         ],
     };
     Registry {
-        entries: vec![slab, camera(), rect, dot],
+        entries: vec![slab, camera(), circle(), rect, dot],
     }
 }
 
