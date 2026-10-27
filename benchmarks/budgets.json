@@ -522,6 +522,28 @@
       "initialReason": "Issue #383 first measurement: the merge base loads no level by reference. One process generates a city of 64 parts, 768 tables and 6,144 columns over 833 documents, each part and table opening its own document, and draws 60 frames of its deepest level in the reference window (3024 x 1964) through `deep-gpu run`'s view3d on Metal, failing unless the view settles with the deepest document resident; p50 includes Node's and the binary's start and the city's generation. The issue's window-sized GPU budget (2 ms of GPU per frame at p95, 256 MB of GPU memory) stays in tests/acceptance/383/city.test.ts, read from the device's timestamps and its allocated size. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "claude-code-map",
+      "command": [
+        "node",
+        "benchmarks/claude-code.mjs",
+        "map"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #18 first measurement: the merge base has no Claude Code bench. One process maps the corpus's recorded payloads of the newest Claude Code version the facts cover, all nine hooks the issue maps among them, through the shipped adapters as the hub's parser maps a hook, timing 1,045 one at a time after a warm-up, so p50 includes Node's start; the issue's 1 ms p95 per hook stays in tests/acceptance/18/kit/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "claude-code-backfill",
+      "command": [
+        "node",
+        "benchmarks/claude-code.mjs",
+        "backfill"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #18 first measurement: the merge base has no Claude Code bench. One process writes 100 sessions' transcripts over 30 days, each 2,000 lines of the corpus's recorded tools transcript, starts the hub on a temp home under the test VFS and backfills each through test.load, then counts the events through events.read, so p50 includes the writing, the hub's start and Node's; the issue's 2 minutes stays in tests/acceptance/18/kit/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "archive-live",
       "command": [
         "node",

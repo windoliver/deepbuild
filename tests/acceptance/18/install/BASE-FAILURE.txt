@@ -1,0 +1,41 @@
+Base commit: 14561afb375ef522335beb36b04cb222ce4b6bad (origin/main), workspaces built, Node 24.22.0, target/debug/deep-hook built.
+
+Command:
+  npx vitest run --root tests/acceptance/18/install --no-file-parallelism
+
+Result:
+  Test Files  7 failed (7)
+       Tests  11 failed (11)
+
+Why each test fails at the base:
+
+AC3  install.test.ts             deep setup: exit 2, "Unsupported command." The base CLI has no setup. The controls
+                                 before it pass at the base: your hooks run through the stand-in, one log line per
+                                 run on 11 of the 12 hooks, and your guard denies the rm -rf.
+AC8  disable.test.ts (agent)     deep setup: exit 2, "Unsupported command."
+AC8  disable.test.ts (yours)     deep setup: exit 2, "Unsupported command." Past setup this test holds against a
+                                 hub that leaves the flag alone, so at the base its only failure is the missing
+                                 setup; it is the guard against a hub that reverts every disable, yours too.
+AC14 stophold.test.ts            deep setup: exit 2, "Unsupported command."
+AC14 stophold.test.ts (plant)    deep setup: exit 2, before the planted hub starts; past setup, the hub refuses
+                                 DEEP_HUB_PLANT=holds-stop-anyway as naming no planted program (BLOCKED).
+AC15 waiter.test.ts              deep setup: exit 2, "Unsupported command."
+AC19 coexist.test.ts             deep setup: exit 2, "Unsupported command."
+AC22 tamper.test.ts (fast)       deep setup: exit 2, "Unsupported command."
+AC22 tamper.test.ts (plant)      BLOCKED: the hub refuses DEEP_HUB_PLANT=restores-at-session-start-only, which
+                                 names no planted program (the hub starts before setup in this test).
+AC22 tamper.live.test.ts (two)   BLOCKED: no DEEP_HARNESS_LIVE=1. The live file was not run with the opt-in at
+                                 the base: it spends plan usage, and it can't pass there, since the base harness
+                                 has no settings-tamper scenario (unknown --scenario: no run line, BLOCKED), the
+                                 base CLI has no setup, and the base hub has neither the watch nor the plant.
+
+Past the missing setup (checked once by hand, not kept): with a throwaway setup that merged deep-hook entries and a
+waiter into the settings file the way the README describes, the base hub fails each test at its criterion:
+  AC3   passes (the merge and the runs are the stand-in's and the throwaway setup's, not the hub's)
+  AC8   agent: the flag is still there after the next SessionStart ("must be put back by the next SessionStart");
+        yours: passes
+  AC14  no reading at hub start ("must show the stop-hold relation broken at its start")
+  AC15  no reading at hub start ("the waiter relation must show broken at hub start")
+  AC19  the session reads "running" while the prompt is open ("must read waiting")
+  AC22  both next calls ran unguarded (no watch puts the entry back) and no reading names the running call
+  plants: the hub refuses both names (BLOCKED)

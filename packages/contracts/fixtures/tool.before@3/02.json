@@ -1,0 +1,20 @@
+{
+  "v": 3,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "tool.before",
+  "writer": "hook",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "seq": "1760013451123456789",
+  "data": {
+    "kind": "mcp",
+    "paths": [],
+    "command": null,
+    "call": "toolu_01B2dF4Lr8nY",
+    "server": "github",
+    "tool": "merge_pull_request",
+    "counts": "change",
+    "effect": "merge"
+  }
+}

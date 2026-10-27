@@ -1,0 +1,11 @@
+{
+  "readBy": "loop facts for the gate runner (#29), from a session's own tool calls: a wake-up or cron job it scheduled, with when it fires; one it cancelled; and a background subagent it started, which keeps the session looping until its report arrives as a subagent prompt",
+  "agents": {
+    "claude": {
+      "wakeups": { "ScheduleWakeup": { "delaySeconds": "tool_input.delaySeconds" } },
+      "crons": { "CronCreate": { "due": "tool_response.nextFireAt", "id": "tool_response.id", "recurring": "tool_input.recurring" } },
+      "cancels": { "CronDelete": { "id": "tool_input.id" } },
+      "background": { "Agent": "tool_input.run_in_background", "Task": "tool_input.run_in_background" }
+    }
+  }
+}
