@@ -575,6 +575,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #20 first measurement: the merge base has no transcript archive. One process archives a 100 MB backlog of twenty 5 MB transcripts in one pass, failing unless each copy reads back as its transcript, redacted. The issue's 1 GB in 5 minutes stays in tests/acceptance/20/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "reading-slice",
+      "command": [
+        "node",
+        "benchmarks/reading.mjs",
+        "slice"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

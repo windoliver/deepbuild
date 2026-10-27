@@ -23,6 +23,8 @@ export type Peer =
 export interface EvidenceStoreOptions {
   root?: string;
   now?: () => number;
+  /** For a caller that only gets and reads, such as `deep read`: opening makes no folder and never compacts the journal. */
+  readOnly?: boolean;
   /** Test hook: awaited by every put after its existence check and before its write. */
   hooks?: { afterExistsCheck?(sha256: string): void | Promise<void> };
 }
@@ -146,7 +148,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   // reasons to one journal; the last line for a hash wins.
   const journal = join(root, 'records.jsonl');
   const folders = new Set<string>(); // made in this process
-  await mkdir(root, { recursive: true });
+  if (!options.readOnly) await mkdir(root, { recursive: true });
   const index = new Map<string, Stored>();
   // Your yes per file and destination, by the reasons it answered.
   const approved = new Map<string, Set<string>>();
@@ -158,7 +160,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     else if ('approved' in entry) for (const reason of entry.reasons) (approved.get(entry.approved) ?? approved.set(entry.approved, new Set()).get(entry.approved)!).add(reason);
     else index.set(entry.sha256, entry);
   }
-  if (lines.length > 2 * (index.size + approved.size) + 1000) {
+  if (!options.readOnly && lines.length > 2 * (index.size + approved.size) + 1000) {
     const kept = [...index.values(), ...[...approved].map(([pair, reasons]): Approval => ({ approved: pair, reasons: [...reasons] }))];
     await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''));
   }
