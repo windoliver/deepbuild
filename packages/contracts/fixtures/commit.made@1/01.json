@@ -9,7 +9,7 @@
   "ts": 1760013451123,
   "data": {
     "sha": "2f4c8a1e9b7d6c5a4f3e2d1c0b9a8f7e6d5c4b3a",
-    "worktree": "/Users/you/src/shop",
+    "worktree": "~/src/shop",
     "branch": "main"
   }
 }

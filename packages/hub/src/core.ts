@@ -622,7 +622,7 @@ export class Core {
         if (!foreign) await this.recheck().catch(() => undefined);
         if (session) {
           data.thread = session.thread = await this.threadOf(session, meta.fields?.source);
-          live.reading = (live.reading ?? Promise.resolve()).then(() => this.childOf(session, live.agent)).catch(() => undefined);
+          void this.childOf(session, live.agent).catch(() => undefined);
         }
       } else if (draft.kind === 'user.ask') {
         // The origin joins the prompt to its transcript entry; one it can't place is unknown and opens no ask.

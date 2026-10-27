@@ -19,13 +19,13 @@
       {
         "kind": "skill",
         "name": "release-notes",
-        "source": "/Users/you/.claude/skills/release-notes/SKILL.md",
+        "source": "~/.claude/skills/release-notes/SKILL.md",
         "digest": "sha256:3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b"
       },
       {
         "kind": "mcp",
         "name": "github",
-        "source": "/Users/you/.claude.json (user)",
+        "source": "~/.claude.json (user)",
         "digest": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
       }
     ]
