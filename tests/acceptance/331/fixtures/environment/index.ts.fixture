@@ -1,0 +1,28 @@
+// A first-party test package (#331 AC4): one of environment@1's planted environments, registered through
+// `deep.registerEnvironment` under the name the manifest's `environments` declares. The fill is the kit's own
+// planted fill of the name environment.json says (`planted`), taken from the conformance package's built entry
+// (`conformance`) lazily, when the environment is first brought up, so registering needs no import.
+import { readFileSync } from 'node:fs';
+
+interface Settings { conformance: string; planted: string }
+let fill: any;
+async function planted(settings: Settings): Promise<any> {
+  if (!fill) {
+    const { slotKits } = await import(settings.conformance);
+    const kit = slotKits().find((k: { slot: string }) => k.slot === 'environment@1');
+    const p = kit?.planted.find((x: { name: string }) => x.name === settings.planted);
+    if (!p) throw Error(`environment@1 plants no ${settings.planted}`);
+    fill = p.fill;
+  }
+  return fill;
+}
+
+export default function (deep: any): void {
+  const settings: Settings = JSON.parse(readFileSync(new URL('./environment.json', import.meta.url), 'utf8'));
+  const manifest = JSON.parse(readFileSync(new URL('./deepbuild.json', import.meta.url), 'utf8')) as { environments: string[] };
+  deep.registerEnvironment(manifest.environments[0], {
+    slot: 'environment@1', revision: 1,
+    up: async (spec: unknown, lease: unknown, checkout: string) => (await planted(settings)).up(spec, lease, checkout),
+    down: async (handle: unknown) => (await planted(settings)).down(handle),
+  });
+}

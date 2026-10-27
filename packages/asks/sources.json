@@ -672,6 +672,42 @@
     }
   },
   {
+    "source": "deep_propose.choice",
+    "kind": "choice",
+    "fixture": {
+      "ask": {
+        "kind": "choice",
+        "question": "Apply this change an agent proposed to wiki:repos/api#start-port? api starts on port 3002",
+        "options": [
+          {
+            "id": "apply",
+            "label": "Apply it",
+            "decision": "none"
+          },
+          {
+            "id": "keep",
+            "label": "Keep it as it is",
+            "decision": "none"
+          }
+        ],
+        "recommended": "keep",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "keep",
+        "provisional": false,
+        "owner": "you",
+        "key": "a509b23ca24d3ee3d24c252379185ae0a988b093253fd8fbb8846f2876fae338",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "50f11cdfeed794442f1aa056e860d40f66371afd97f1c0a1fa959e4a42ae9b7e"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "definition.draft",
     "kind": "definition",
     "fixture": {
