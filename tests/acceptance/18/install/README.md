@@ -160,6 +160,10 @@ trimmed, whitespace collapsed, the leading "- [ ] " dropped>`, as `scripts/proof
 
 ## Disputes
 
+0. **AC8, redrafted Oct 27, 2026 (#19).** `deep setup` now installs the shipped guard entries, so the floor's
+   `no-agent-config-write` denies the agent's Edit the original control let through. A blind redraft, swapped in with
+   the owner's approval, has you take that entry out of `rules.json` first; every other check is the original's.
+
 1. **AC14 and watch-only.** The design says the hooks start watch-only, "so no verdict blocks and no stop is held
    until you approve something", yet the criterion needs stops held at 65 s. The tests use the answer route's hold
    (item 7 above), the one hold that needs no approval. A held stop's reply would carry `decision: block` with the
