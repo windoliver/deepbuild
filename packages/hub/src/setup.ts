@@ -6,7 +6,7 @@
 // items and `deep waiter`, the background entry that wakes an idle session with an answer, live here too.
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,7 +109,10 @@ function builtHook(): string {
   try {
     return deepHook();
   } catch {
-    execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, stdio: 'ignore', timeout: 900_000 });
+    // Cargo and rustup live in your account's home, whatever HOME a script runs setup with.
+    const home = userInfo().homedir;
+    const env = { ...process.env, CARGO_HOME: process.env.CARGO_HOME ?? join(home, '.cargo'), RUSTUP_HOME: process.env.RUSTUP_HOME ?? join(home, '.rustup') };
+    execFileSync('cargo', ['build', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'ignore', timeout: 900_000 });
     return deepHook();
   }
 }
