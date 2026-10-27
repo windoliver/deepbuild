@@ -105,6 +105,9 @@ pub struct Transport {
     pub start: i64,
     pub span: Option<i64>,
     pub wrap: bool,
+    /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
+    /// profile but a film, which still plays its timeline (Transport).
+    pub holds: bool,
 }
 
 /// Everything motion reads, with each map in ID order.
@@ -343,11 +346,17 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             .map(|m| (m.id.clone(), (m.start, m.end)))
             .collect(),
     };
+    let holds = doc.get("profile").and_then(Value::as_str) != Some("film")
+        && transport_map
+            .and_then(|t| t.get("reduced_motion"))
+            .and_then(Value::as_str)
+            != Some("slow");
     let transport = match transport_map {
         None => Transport {
             start: 0,
             span: None,
             wrap: false,
+            holds,
         },
         Some(t) => {
             let start = match t.get("start") {
@@ -367,7 +376,12 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             if wrap && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
-            Transport { start, span, wrap }
+            Transport {
+                start,
+                span,
+                wrap,
+                holds,
+            }
         }
     };
     let mut channels = Vec::new();

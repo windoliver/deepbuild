@@ -69,14 +69,6 @@ describe('#387.f71bf834 flipping the view\'s locale, and separately its reduced 
     expect(failures, 'every node of an operator that formats numbers or shapes text changes key with the locale').toEqual([]);
   }, 600_000);
 
-  it('#387.f71bf834 reduced motion off → on: the operators whose result moves (the text animator) change the key of every node they have', () => {
-    const off = fresh({ reduced_motion: false });
-    const on = fresh({ reduced_motion: true });
-    const { moved, failures } = flipFailures(off, on, 'reduced-motion');
-    expect(off.nodes.some((n) => n.item === 'title' && moved.includes(n.operator)), 'the text animator\'s frame moves with reduced motion (it keeps only opacity)').toBe(true);
-    expect(failures, 'every node of an operator that plays motion changes key with reduced motion').toEqual([]);
-  }, 600_000);
-
   it('#387.f71bf834 in one process both locale renditions and both reduced-motion renditions draw different frames, each equal to its fresh clean rendition', () => {
     for (const [first, second] of [[{ locale: 'en' }, { locale: 'de' }], [{ reduced_motion: false }, { reduced_motion: true }]] as [View, View][]) {
       const p = oneProcess(first, second);

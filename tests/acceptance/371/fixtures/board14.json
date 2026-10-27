@@ -1,0 +1,333 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Checks by team",
+  "description": "Seven bars, six labels and a count bound to a reading, with three view controls, drawn by a test agent through deep_show.",
+  "size": [
+    640,
+    400
+  ],
+  "items": {
+    "bar-1": {
+      "id": "bar-1",
+      "kind": "rect@1",
+      "name": "Alpha bar",
+      "order": "a10",
+      "params": {
+        "box": [
+          16,
+          16,
+          120,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-1": {
+      "id": "label-1",
+      "kind": "text@1",
+      "name": "Alpha label",
+      "order": "a15",
+      "params": {
+        "text": "Alpha",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          20,
+          0
+        ]
+      }
+    },
+    "bar-2": {
+      "id": "bar-2",
+      "kind": "rect@1",
+      "name": "Bravo bar",
+      "order": "a20",
+      "params": {
+        "box": [
+          16,
+          60,
+          144,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-2": {
+      "id": "label-2",
+      "kind": "text@1",
+      "name": "Bravo label",
+      "order": "a25",
+      "params": {
+        "text": "Bravo",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          64,
+          0
+        ]
+      }
+    },
+    "bar-3": {
+      "id": "bar-3",
+      "kind": "rect@1",
+      "name": "Charlie bar",
+      "order": "a30",
+      "params": {
+        "box": [
+          16,
+          104,
+          168,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-3": {
+      "id": "label-3",
+      "kind": "text@1",
+      "name": "Charlie label",
+      "order": "a35",
+      "params": {
+        "text": "Charlie",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          108,
+          0
+        ]
+      }
+    },
+    "bar-4": {
+      "id": "bar-4",
+      "kind": "rect@1",
+      "name": "Delta bar",
+      "order": "a40",
+      "params": {
+        "box": [
+          16,
+          148,
+          192,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-4": {
+      "id": "label-4",
+      "kind": "text@1",
+      "name": "Delta label",
+      "order": "a45",
+      "params": {
+        "text": "Delta",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          152,
+          0
+        ]
+      }
+    },
+    "bar-5": {
+      "id": "bar-5",
+      "kind": "rect@1",
+      "name": "Echo bar",
+      "order": "a50",
+      "params": {
+        "box": [
+          16,
+          192,
+          216,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-5": {
+      "id": "label-5",
+      "kind": "text@1",
+      "name": "Echo label",
+      "order": "a55",
+      "params": {
+        "text": "Echo",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          196,
+          0
+        ]
+      }
+    },
+    "bar-6": {
+      "id": "bar-6",
+      "kind": "rect@1",
+      "name": "Foxtrot bar",
+      "order": "a60",
+      "params": {
+        "box": [
+          16,
+          236,
+          240,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "label-6": {
+      "id": "label-6",
+      "kind": "text@1",
+      "name": "Foxtrot label",
+      "order": "a65",
+      "params": {
+        "text": "Foxtrot",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          240,
+          0
+        ]
+      }
+    },
+    "bar-7": {
+      "id": "bar-7",
+      "kind": "rect@1",
+      "name": "Golf bar",
+      "order": "a70",
+      "params": {
+        "box": [
+          16,
+          280,
+          264,
+          28
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "total": {
+      "id": "total",
+      "kind": "text@1",
+      "name": "Open checks",
+      "order": "a75",
+      "params": {
+        "text": "",
+        "font": "body",
+        "size": 13,
+        "box": {
+          "w": 120,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          340,
+          344,
+          0
+        ]
+      }
+    }
+  },
+  "controls": {
+    "c-week": {
+      "kind": "slider",
+      "class": "view",
+      "label": "Week",
+      "range": [
+        1,
+        52
+      ],
+      "default": 1
+    },
+    "c-team": {
+      "kind": "choice",
+      "class": "view",
+      "label": "Team",
+      "options": [
+        "core",
+        "canvas"
+      ],
+      "default": "core"
+    },
+    "c-scale": {
+      "kind": "toggle",
+      "class": "view",
+      "label": "Log scale",
+      "default": false
+    }
+  },
+  "bound_values": {
+    "bv-total": {
+      "target": "items/total/params/text",
+      "source": "reading:01JB71R0000000000000000001"
+    }
+  }
+}
