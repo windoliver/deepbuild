@@ -294,6 +294,7 @@ removed. The criteria table above describes the first drafts; for these two test
 |---|---|---|---|---|
 | `#387.a0eea545` | `canonical.test.ts`, first test | compared the revision hash of the +0 board on `DOC.a` with the −0 board's on `DOC.b`; the canonical document holds its `id`, which `deep_show` stamps from the call's doc ID, so two doc IDs always hash apart | `canonical-redraft.test.ts` | `A9-REDRAFT.md` |
 | `#387.15327229` | `history.test.ts`, first test | compared the short history's revision hash on `DOC.a` with the long one's on `DOC.b`, the same impossibility | `history-redraft.test.ts` | `A4-REDRAFT.md` |
+| `#387.f71bf834` | `view.test.ts`, the reduced-motion flip test (removed October 26, owner's go-ahead on #371) | counted every operator whose result moved with the flip as one that plays motion; once a board holds still under reduced motion (#371 AC2), `core.world` moves on the slid rect only because its input did, and the test demanded its key change on nodes whose reads didn't | `view-reduced-motion-redraft.test.ts` | `RM-REDRAFT.md` |
 
 ## Readings where the issue and design leave a choice
 
