@@ -1,0 +1,100 @@
+Acceptance tests for #19 (folder status: AC7, AC8, AC17, AC25) on the base 0350cf0 (origin/main: the hub of #16, the
+asks core, deep-hook of #315, the Claude Code adapter of #18, `deep debug bundle` of #34's slice; no `deep status`), run
+on 2026-10-27 on a Mac15,7 (Apple M3 Pro, 36 GB) drawing from its battery, 1-minute load 156 on 12 cores (other jobs
+running), Node 23.9.0 first on PATH (the repo pins 24.22.0), after `npm run build --workspaces` and
+`cargo build --locked -q -p deep-hook`:
+
+  npx vitest run --root tests/acceptance/19/status --no-file-parallelism
+  node node_modules/typescript/bin/tsc -p tests/acceptance/19/status/tsconfig.json
+
+Trimmed to each failure's reason. Temporary paths are as the run printed them (/tmp/dh19t-*, removed after it).
+
+
+== tsc: no errors (exit 0). The tests import no code #19 adds: only the record, the asks core and #15's gitleaks fixture.
+
+== vitest: Test Files 4 failed (4); Tests 7 failed | 3 passed | 1 skipped (11); about 27 s
+
+FAIL  status.test.ts  AC8 #19.21db8bc2 with 30 sessions in three repos, every session that needs you, is stuck or is
+                      flagged is within the first 20 lines, grouped by repo, the quiet ones folded, naming the hub; and
+                      the same with the hub down, from the database
+  AssertionError: deep status with the hub up exits 0 (ok in the exit-code table): exit 2; stdout:
+  stderr:
+  Unsupported command. Run deep --help for available commands.
+  (Expected: the base has no `deep status`. The 30 sessions were seeded and the hub started on them first.)
+
+FAIL  status.test.ts  AC8 #19.21db8bc2 reads the hub the address setting names, a dev hub started with --root, and says so
+  AssertionError: deep status against the dev hub exits 0: exit 2; stdout:
+  stderr:
+  Unsupported command. Run deep --help for available commands.
+  (Expected: the same. The dev hub, `deep hub run --root <tmp>/dev`, started and the address setting named it.)
+
+PASS  status.test.ts  AC8 #19.21db8bc2 (wrong programs) the judge fails a listing in log order, one that doesn't fold the
+                      quiet sessions, one that doesn't group by repo and one that doesn't name the hub, and passes a right one
+PASS  status.test.ts  AC8 #19.21db8bc2 the record holds the 30 sessions as seeded: open asks for those that need you,
+                      stuck, failed stops and a gone process, quiet ones last seen days ago
+  (Expected: these two check the judge and the seed, not #19's code: the twins are written by the test, and the record
+  is the base's. They pass at the base and keep the other two honest.)
+
+PASS  bundle.test.ts  AC7 #19.a34ae696 with a key for each of the 221 gitleaks rules in the logs, keys in the
+                      environment, in Claude Code's settings and in what the sign-in commands print, the bundle holds
+                      its logs and the doctor's output but none of the keys, in any form
+  (Expected: the base's `deep debug bundle` already scrubs its logs and holds the telemetry doctor's one item, and its
+  doctor reads neither the sign-in commands nor the billing keys. Kept as regression protection for #19's doctor
+  items; README, Disputes.)
+
+FAIL  bundle.test.ts  AC7 #19.a34ae696 (wrong program) a bundle that copies the logs unscrubbed,
+                      DEEP_CLI_PLANT=bundle-raw-logs, fails the search, naming the keys
+  AssertionError: the planted bundle keeps the log's keys, and the search names them:
+  : expected 0 to be greater than 0
+  (Expected: the base CLI has no DEEP_CLI_PLANT, so the bundle it writes is scrubbed and the search finds nothing.)
+
+FAIL  budgets.test.ts AC17 #19.26a1fd32 the perf lane has the tasks deep-status-30 and deep-doctor, #19 first
+                      measurements valid against the merge base's budgets, and each runs
+  AssertionError: benchmarks/budgets.json has a task deep-status-30: expected undefined to be defined
+  (Expected: no task yet. validateBudgets against the merge base's file passed before it.)
+
+FAIL  budgets.test.ts AC17 #19.26a1fd32 deep status answers in under 200 ms and under 100 MB peak memory, with 30
+                      sessions on a month of history
+  AssertionError: deep status exits 0: exit 2; stdout:
+  stderr:
+  Unsupported command. Run deep --help for available commands.
+          0.03 real         0.02 user         0.00 sys
+              39714816  maximum resident set size
+  (Expected: the command fails on the untimed first run, before any machine check. The month, 600 sessions and
+  7,200 events plus the 30, was seeded and the hub started on it first, in about 2.5 s.)
+
+SKIP  budgets.test.ts AC17 #19.26a1fd32 deep doctor answers in under 2 s and under 100 MB peak memory, on a home setup
+                      installed into with the hub up
+  INCONCLUSIVE (reading only): not on mains power: Now drawing from 'Battery Power'
+  (Expected on this machine: `deep setup` exited 0, `deep doctor --json` printed its items and the untimed run ran;
+  the timed part counts only on a reference Mac on mains power, and is never passed elsewhere.)
+
+FAIL  canary.test.ts  AC25 #19.18335781 with the hub up, then down and back up, no file under the state folder holds
+                      any scrubbed form of the scrub-list value or the key
+  AssertionError: canary forms found under /private/tmp/dh19t-u2mdXY/h/.deepbuild:
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db: the scrub-list value (raw)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db: the scrub-list value (URL-encoded, upper-case hex)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db: the scrub-list value (base64 at offset 1)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db-wal: the scrub-list value (raw)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db-wal: the scrub-list value (URL-encoded, upper-case hex)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db-wal: the scrub-list value (base64 at offset 1)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db: the scrub-list value (raw) (after the hub stopped)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db: the scrub-list value (URL-encoded, upper-case hex) (after the hub stopped)
+  /private/tmp/dh19t-u2mdXY/h/.deepbuild/ledger.db: the scrub-list value (base64 at offset 1) (after the hub stopped)
+  (Expected: the base hub holds only its control token, so the value DEEP_HUB_TEST_HELD names reaches the record
+  unscrubbed in the prompt and command, live and from the replayed spool. The key, matched by the gitleaks rules, was
+  scrubbed: no hit. The run itself went as designed: three or more spooled lines while the hub was down, both turns in
+  the record and none left in the spool after the restart, and `deep debug bundle` exited 0. At load 184 the hub-up
+  turn was spooled late (the test logged "AC25: the hub-up turn was spooled late (machine load 183.9); it is recorded
+  from the spool at the restart"), so here both turns reached the record through the replayed spool.)
+
+FAIL  canary.test.ts  AC25 #19.18335781 (wrong program) a hub that scrubs evidence but writes the raw command to its
+                      log, DEEP_HUB_PLANT=log-raw-command, fails the sweep, naming the log
+  Error: BLOCKED: the hub didn't start (deep hub run, DEEP_HUB_PLANT=log-raw-command): …
+  Error: DEEP_HUB_PLANT=log-raw-command names no planted program
+  (Expected: the base hub's plant list doesn't have it.)
+
+An earlier run in the same session, at load near 98, stopped BLOCKED: the hub-up turn wasn't in the record after 15 s.
+canary.test.ts now waits for the hub to record that turn or for deep-hook to spool it late, and requires both turns in
+the record after the restart; the run above is the later one, and it took the late path. A run with the hub-up turn
+recorded live (at load 98, minutes before) found the same nine hits.

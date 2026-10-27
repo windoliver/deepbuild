@@ -13623,6 +13623,13 @@ pub enum DoctorItemCode {
     TimingRelationBroken,
     TelemetryUnreadable,
     NotChecked,
+    HubUnreachable,
+    DiskLow,
+    PortsTaken,
+    BillingApiKey,
+    BinaryDiffers,
+    TokenExpiring,
+    PromptFailed,
     Unknown,
 }
 
@@ -13642,6 +13649,13 @@ impl Contract for DoctorItemCode {
             "timing_relation_broken" => Ok(Self::TimingRelationBroken),
             "telemetry_unreadable" => Ok(Self::TelemetryUnreadable),
             "not_checked" => Ok(Self::NotChecked),
+            "hub_unreachable" => Ok(Self::HubUnreachable),
+            "disk_low" => Ok(Self::DiskLow),
+            "ports_taken" => Ok(Self::PortsTaken),
+            "billing_api_key" => Ok(Self::BillingApiKey),
+            "binary_differs" => Ok(Self::BinaryDiffers),
+            "token_expiring" => Ok(Self::TokenExpiring),
+            "prompt_failed" => Ok(Self::PromptFailed),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -13661,6 +13675,13 @@ impl Contract for DoctorItemCode {
             Self::TimingRelationBroken => "timing_relation_broken",
             Self::TelemetryUnreadable => "telemetry_unreadable",
             Self::NotChecked => "not_checked",
+            Self::HubUnreachable => "hub_unreachable",
+            Self::DiskLow => "disk_low",
+            Self::PortsTaken => "ports_taken",
+            Self::BillingApiKey => "billing_api_key",
+            Self::BinaryDiffers => "binary_differs",
+            Self::TokenExpiring => "token_expiring",
+            Self::PromptFailed => "prompt_failed",
             Self::Unknown => "unknown",
         }.to_string())
     }

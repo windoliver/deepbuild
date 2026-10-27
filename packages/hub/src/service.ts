@@ -2,7 +2,7 @@
 // never as a child of the terminal or hook that first needed it: launchd on macOS, a systemd user service on
 // Linux. A dev hub (--root) is started in a session of its own, so it outlives its terminal too.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -227,4 +227,22 @@ export async function stopHub(options: { root: string }): Promise<number> {
   const deadline = Date.now() + WAIT_MS;
   while (Date.now() < deadline && (await answers(root.socket))) await new Promise((done) => setTimeout(done, 100));
   return 0;
+}
+
+/** Unloads the hub's login service and removes its definition, so no login starts the hub again (`deep setup --undo`). */
+export function removeService(): void {
+  const { file } = definition([], '');
+  const run = (command: string, args: string[]) => spawnSync(command, args, { encoding: 'utf8' });
+  if (process.platform === 'darwin') run('launchctl', ['bootout', `gui/${process.getuid!()}`, file]);
+  if (process.platform === 'linux') run('systemctl', ['--user', 'disable', '--now', UNIT]);
+  rmSync(file, { force: true });
+  if (process.platform === 'linux') run('systemctl', ['--user', 'daemon-reload']);
+}
+/** Stops the hub at `root` if one answers there, and waits for its socket to go quiet. */
+export async function stopIfRunning(root: string): Promise<void> {
+  const at = rootOf(root);
+  if (!(await answers(at.socket))) return;
+  try { await control(at.socket, at.token, 'hub.stop'); } catch { return; }
+  const deadline = Date.now() + WAIT_MS;
+  while (Date.now() < deadline && (await answers(at.socket))) await new Promise((done) => setTimeout(done, 100));
 }
