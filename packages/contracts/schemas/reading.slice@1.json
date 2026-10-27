@@ -1,0 +1,87 @@
+{
+  "title": "reading.slice@1",
+  "description": "One slice of what a handle names (#63), as deep read --json prints it and a reading job's read tool returns it: at most 8,192 characters by default, and a cursor to continue a cut one.",
+  "type": "object",
+  "properties": {
+    "handle": {
+      "type": "string",
+      "description": "The handle as asked.",
+      "maxLength": 8192,
+      "minLength": 1
+    },
+    "covers": {
+      "type": "string",
+      "description": "Which part of its source the slice covers, in words.",
+      "maxLength": 8192,
+      "minLength": 1
+    },
+    "text": {
+      "type": "string",
+      "description": "The slice: redacted, as the evidence store holds it.",
+      "maxLength": 8192
+    },
+    "next": {
+      "type": "string",
+      "description": "The cursor that continues it; absent when nothing is left.",
+      "maxLength": 8192,
+      "minLength": 1
+    },
+    "messages": {
+      "type": "array",
+      "description": "For a transcript: each message the slice holds, in order.",
+      "maxItems": 8192,
+      "items": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "description": "The message handle, session:<id>#<message>.",
+            "maxLength": 8192,
+            "minLength": 1
+          },
+          "role": {
+            "type": "string",
+            "description": "The transcript entry's role.",
+            "maxLength": 8192,
+            "minLength": 1
+          },
+          "outside": {
+            "type": "boolean",
+            "description": "Whether it is no first-hand source: outside content a tool brought, or the agent's own words."
+          },
+          "tool": {
+            "type": "string",
+            "description": "The tool whose result it holds, when it holds one.",
+            "maxLength": 8192
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Where its text starts in `text`, in UTF-16 code units."
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Where its text ends in `text`."
+          }
+        },
+        "required": [
+          "at",
+          "role",
+          "outside",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "handle",
+    "covers",
+    "text"
+  ],
+  "additionalProperties": false
+}

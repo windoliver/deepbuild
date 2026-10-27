@@ -10,6 +10,8 @@ export type Agent = 'claude-code' | 'codex';
 export type JobKind = 'draft' | 'review' | 'read' | 'smoke';
 /** A stdio MCP server, as Claude Code's mcpServers entries take it. */
 export interface McpServer { command: string; args?: string[]; env?: Record<string, string> }
+/** A sub-agent, as Claude Code's `--agents` entries take it. */
+export interface Subagent { description: string; prompt: string; model: string }
 export interface JobSpec {
   kind: JobKind;
   agent: Agent;
@@ -26,8 +28,12 @@ export interface JobSpec {
   claim?: string;
   /** When it needs code: its folder is a checkout of this commit of this repo, and nothing else of it. */
   checkout?: { repo: string; commit: string };
-  /** The only MCP servers it gets. */
+  /** The only MCP servers it gets; their tools are allowed without asking. */
   mcp?: Record<string, McpServer>;
+  /** Sub-agents it may hand work to, by name, each on its own model: Claude Code's `--agents`, with its Task tool. */
+  subagents?: Record<string, Subagent>;
+  /** What its MCP servers need besides its own folder: the programs they run from, and the sockets they reach. */
+  grant?: { read?: string[]; sockets?: string[] };
   /** Held through the supervisor while any of its processes runs. */
   leases?: { kind: string; key?: string }[];
   /** From its start; the deadline stops its group. */
@@ -126,6 +132,8 @@ export interface Runner {
   /** Its stdout, as the runner read it. */
   output(job: string): Promise<string>;
   report(reading: WindowReport): Promise<void>;
+  /** The newest reading of each account's 5-hour window, by account: used percent, reset and when it was read, by the clock. */
+  planWindows(): Map<string, { used: number; resets: number | null; at: number }>;
   /** Re-reads the clock, windows, answers and budgets, and starts what may start. */
   tick(): Promise<void>;
   close(): Promise<void>;

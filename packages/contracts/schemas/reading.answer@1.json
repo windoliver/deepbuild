@@ -1,0 +1,58 @@
+{
+  "title": "reading.answer@1",
+  "description": "A reading job's answer (#63): only findings, each citing a handle and the exact quote at it. Nothing in it is written before each quote is checked at its handle and each handle against what that job was delivered.",
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "description": "What it found.",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The finding, in words.",
+            "maxLength": 8192,
+            "minLength": 1
+          },
+          "cites": {
+            "type": "array",
+            "description": "What it rests on.",
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "description": "The handle the quote is at; a transcript quote cites its message, session:<id>#<message>.",
+                  "maxLength": 8192,
+                  "minLength": 1
+                },
+                "quote": {
+                  "type": "string",
+                  "description": "The exact words at that handle.",
+                  "maxLength": 8192
+                }
+              },
+              "required": [
+                "at",
+                "quote"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "text",
+          "cites"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "findings"
+  ],
+  "additionalProperties": false
+}

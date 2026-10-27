@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "reading.dropped",
+  "writer": "core",
+  "actor": "deepbuild",
+  "scope": "you",
+  "ts": 1760099851123,
+  "data": {
+    "reading": "reading:01K74FKZVK8Q2X5R7M3N9P4T6V",
+    "at": "session:abc123#m2",
+    "quote": "api starts with `yarn dev`",
+    "reason": "the quote \"api starts with `yarn dev`\" is not at session:abc123#m2"
+  }
+}

@@ -2756,6 +2756,17 @@ export interface ProcessTracked {
   evidence?: Array<string>;
 }
 
+/** reading.answer@1 */
+export interface ReadingAnswer {
+  findings: Array<{
+    text: string;
+    cites: Array<{
+      at: string;
+      quote: string;
+    }>;
+  }>;
+}
+
 /** reading.batch@1 */
 export interface ReadingBatch {
   v: 1;
@@ -2772,6 +2783,60 @@ export interface ReadingBatch {
     source: string;
     as_of: number;
     file: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** reading.dropped@1 */
+export interface ReadingDropped {
+  v: 1;
+  id: string;
+  kind: "reading.dropped";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    at: string;
+    quote: string;
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** reading.finished@1 */
+export interface ReadingFinished {
+  v: 1;
+  id: string;
+  kind: "reading.finished";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    reading: string;
+    kind: "install" | "replay" | "premise" | "summary";
+    runs: Array<string>;
+    state: string;
+    findings: number;
+    dropped: number;
+    undelivered: number;
+    plan: {
+      five_hour_pct: number;
+    } | null;
+    models: {
+      final: string;
+      subreads: Array<string>;
+    };
+    written: number;
+    invalid?: string;
   };
   evidence?: Array<string>;
 }
@@ -2819,6 +2884,22 @@ export interface ReadingRollup {
     file: string;
   };
   evidence?: Array<string>;
+}
+
+/** reading.slice@1 */
+export interface ReadingSlice {
+  handle: string;
+  covers: string;
+  text: string;
+  next?: string;
+  messages?: Array<{
+    at: string;
+    role: string;
+    outside: boolean;
+    tool?: string;
+    start: number;
+    end: number;
+  }>;
 }
 
 /** request.cost@1 */

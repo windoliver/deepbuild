@@ -1,0 +1,37 @@
+
+ RUN  v5.0.5 <base checkout>/tests/acceptance/63
+
+ ❯ quotes-redraft.test.ts (1 test | 1 failed) 258ms
+   ❯ AC10 #63.46c00344 a quote is at its handle only as a byte-exact substring of the redacted slice it names, after NFC and whitespace collapse, citing its message (redraft) (1)
+     × AC10 the reading job keeps each quote at its handle (exact, a line break apart, NFC either way, a whitespace run either side, the redacted text) and refuses the rest naming the handle (a word changed, 'Port 3000', the whole session, another message, NFKC, the unredacted secret); (wrong program) a case-folded check accepts 'Port 3000' and fails 161ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  quotes-redraft.test.ts > AC10 #63.46c00344 a quote is at its handle only as a byte-exact substring of the redacted slice it names, after NFC and whitespace collapse, citing its message (redraft) > AC10 the reading job keeps each quote at its handle (exact, a line break apart, NFC either way, a whitespace run either side, the redacted text) and refuses the rest naming the handle (a word changed, 'Port 3000', the whole session, another message, NFKC, the unredacted secret); (wrong program) a case-folded check accepts 'Port 3000' and fails
+AssertionError: deep read session:e46b52c768e14997841a712152f95e1b#m7 --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readSlice helpers.ts:193:88
+    191| export function readSlice(root: string, handle: string, cursor?: strin…
+    192|   const r = deep(['read', handle, '--slice', ...(cursor === undefined …
+    193|   expect(r.status, `deep read ${handle} --slice ${cursor ?? ''} exits …
+       |                                                                                        ^
+    194|   let parsed: SliceJson;
+    195|   try { parsed = JSON.parse(r.stdout) as SliceJson; } catch { throw Er…
+ ❯ readAll helpers.ts:200:32
+ ❯ quotes-redraft.test.ts:78:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:51:56
+   Duration  437ms (tests 69%, import 20%, transform 11%, worker 1%)
+
