@@ -1,0 +1,267 @@
+The #63 acceptance suite on the base commit b7bccf9 (origin/main), before any #63 code: 15 of 17 tests fail, each for a missing reading surface (no @deepbuild/reading, deep read unsupported, no #63 budget task). The two that pass check the corpus and the pasting twin, which need no #63 code.
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/63 --no-file-parallelism --reporter=verbose (Node 24.22.0, macOS), Oct 26 2026.
+
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63
+
+ ✓ install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 the fixture corpus is 212 recorded sessions, each archived and linked by a transcript.archived event 3ms
+ × install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 install reads every one of the 212 sessions, through the runner only, spending under 5% of one 5-hour window, and shows its plan usage 254ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ × install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 every wiki line the install wrote cites a handle it was delivered, the quote at that handle, and each project's fact is on the wiki 0ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ × install.test.ts > AC4 #63.e6ad4b93 no reading job puts more than the capped slices of the record into any prompt > AC4 the install read and a trial replay: no prompt holds more of the record than a capped slice, and no reply is past the cap 0ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ ✓ install.test.ts > AC4 #63.e6ad4b93 no reading job puts more than the capped slices of the record into any prompt > AC4 (wrong program) a job that pastes the whole session into its prompt fails the check, naming the job 211ms
+ × quotes.test.ts > AC2 #63.084da449 a finding whose quote isn't at its handle is dropped and logged, never written > AC2 the install drops a finding quoting what its handle does not hold, logs it naming the handle, and writes it nowhere 355ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ × quotes.test.ts > AC10 #63.46c00344 a quote is at its handle only as a byte-exact substring of the redacted slice, after NFC and whitespace collapse, citing its message > AC10 the reading job keeps the quotes at their handles and refuses the rest, each refusal naming the handle; (wrong program) a case-folded check accepts 'Port 3000' and fails 84ms
+   → deep read session:f4e00f3aa88d45f78bcbd2247457bca6#m4 --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+ × budgets.test.ts > AC8 #63.82892e51 budgets, compared with the merge base in the local preflight > AC8 the perf lane has the slice read's task, a #63 first measurement running benchmarks/reading.mjs, valid against the merge base's budgets 345ms
+   → budgets.json has a #63 task for the slice read: expected 0 to be greater than 0
+ × budgets.test.ts > AC8 #63.82892e51 budgets, compared with the merge base in the local preflight > AC8 each of the reading's perf-lane tasks runs and exits 0 0ms
+   → the reading has perf-lane tasks to run: expected 0 to be greater than 0
+ × budgets.test.ts > AC8 #63.82892e51 the issue's numbers > AC8 by default a slice holds at most 8,192 characters, a reply cut at the cap says where to continue, and the slices joined are what the handle names 49ms
+   → deep read session:3a8bbe4ef53c49d184a2ce2195ff5b63#m3 --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+ × budgets.test.ts > AC8 #63.82892e51 the issue's numbers > AC8 a slice read returns in under 200 ms, on a record of the 212-session corpus and a 1,000-message session 24ms
+   → deep read exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+ × transcript.test.ts > AC3 #63.52524f64 a session handle resolves through the record, by its transcript.archived link, never through a folder > AC3 a deleted transcript reads from the evidence its link names; an unlinked session is an error naming the handle; (wrong program) a reader of the archive's folder or the agent's path fails 112ms
+   → deep read of the deleted session: expected [ Array(1) ] to deeply equal []
+ × outside.test.ts > AC5 #63.69997dd3 a finding quoting a tool result inside a transcript is marked outside content, never as your words > AC5 the slice marks the tool's result; the finding quoting a fetch's result is outside content, one quoting a command's result is never yours, and yours is yours 120ms
+   → deep read session:34295c52801b4aa18c18ccae5f66927b --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+ × models.test.ts > AC7 #63.b0064604 sub-reads on a smaller model, the final answer and premise reviews on the strongest, each named in the record > AC7 a summary job of eight sessions: its sub-reads answer on a smaller model, its final answer on the strongest, and reading.finished names each 349ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ × models.test.ts > AC7 #63.b0064604 sub-reads on a smaller model, the final answer and premise reviews on the strongest, each named in the record > AC7 a premise job of eight sessions: its sub-reads answer on a smaller model, its premise review on the strongest, and reading.finished names each 301ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ × delivered.test.ts > AC6 #63.d01b86b0 every finding cites a handle delivered to it in that job; one that doesn't is dropped and counted > AC6 findings citing a session never delivered, a session delivered only to an earlier job, or no handle at all are dropped and counted 313ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ × marker.test.ts > AC9 #63.d3ce9787 a marker in message 900 that no delivered slice covers appears in no prompt the job sent > AC9 the reading job's prompts never hold the marker; (wrong program) a job pasting the whole session fails, naming the job 377ms
+   → Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC8 #63.82892e51 budgets, compared with the merge base in the local preflight > AC8 the perf lane has the slice read's task, a #63 first measurement running benchmarks/reading.mjs, valid against the merge base's budgets
+AssertionError: budgets.json has a #63 task for the slice read: expected 0 to be greater than 0
+ ❯ budgets.test.ts:43:85
+     41|     const base = execFileSync('/usr/bin/git', ['merge-base', 'HEAD', '…
+     42|     validateBudgets(current, JSON.parse(execFileSync('/usr/bin/git', […
+     43|     expect(readingTasks().length, 'budgets.json has a #63 task for the…
+       |                                                                                     ^
+     44|   });
+     45|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  budgets.test.ts > AC8 #63.82892e51 budgets, compared with the merge base in the local preflight > AC8 each of the reading's perf-lane tasks runs and exits 0
+AssertionError: the reading has perf-lane tasks to run: expected 0 to be greater than 0
+ ❯ budgets.test.ts:48:68
+     46|   it("AC8 each of the reading's perf-lane tasks runs and exits 0", () …
+     47|     const tasks = readingTasks();
+     48|     expect(tasks.length, 'the reading has perf-lane tasks to run').toB…
+       |                                                                    ^
+     49|     for (const task of tasks) {
+     50|       const [cmd, ...args] = task.command;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  budgets.test.ts > AC8 #63.82892e51 the issue's numbers > AC8 by default a slice holds at most 8,192 characters, a reply cut at the cap says where to continue, and the slices joined are what the handle names
+AssertionError: deep read session:3a8bbe4ef53c49d184a2ce2195ff5b63#m3 --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readSlice helpers.ts:193:88
+    191| export function readSlice(root: string, handle: string, cursor?: strin…
+    192|   const r = deep(['read', handle, '--slice', ...(cursor === undefined …
+    193|   expect(r.status, `deep read ${handle} --slice ${cursor ?? ''} exits …
+       |                                                                                        ^
+    194|   let parsed: SliceJson;
+    195|   try { parsed = JSON.parse(r.stdout) as SliceJson; } catch { throw Er…
+ ❯ budgets.test.ts:63:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  budgets.test.ts > AC8 #63.82892e51 the issue's numbers > AC8 a slice read returns in under 200 ms, on a record of the 212-session corpus and a 1,000-message session
+AssertionError: deep read exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ budgets.test.ts:87:64
+     85|   it('AC8 a slice read returns in under 200 ms, on a record of the 212…
+     86|     const first = deep(['read', `${s.handle}#m1`, '--slice', '--json',…
+     87|     expect(first.status, `deep read exits 0: ${first.stderr}`).toBe(0);
+       |                                                                ^
+     88|     const problem = environmentProblem();
+     89|     if (problem) ctx.skip(`INCONCLUSIVE (not measured: ${problem})`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  delivered.test.ts > AC6 #63.d01b86b0 every finding cites a handle delivered to it in that job; one that doesn't is dropped and counted > AC6 findings citing a session never delivered, a session delivered only to an earlier job, or no handle at all are dropped and counted
+Error: Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ ❯ Object.reading world.ts:96:31
+     94|     },
+     95|     async reading() {
+     96|       const { openReading } = await readingModule();
+       |                               ^
+     97|       return openReading({ record, runner, root, wiki, now: clock.now …
+     98|     },
+ ❯ runReading world.ts:154:21
+ ❯ delivered.test.ts:17:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 install reads every one of the 212 sessions, through the runner only, spending under 5% of one 5-hour window, and shows its plan usage
+ FAIL  install.test.ts > AC1 #63.f697c796 install reads 212 recorded sessions within 5% of one 5-hour window, and every wiki line cites a handle > AC1 every wiki line the install wrote cites a handle it was delivered, the quote at that handle, and each project's fact is on the wiki
+ FAIL  install.test.ts > AC4 #63.e6ad4b93 no reading job puts more than the capped slices of the record into any prompt > AC4 the install read and a trial replay: no prompt holds more of the record than a capped slice, and no reply is past the cap
+Error: Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ ❯ Object.reading world.ts:96:31
+     94|     },
+     95|     async reading() {
+     96|       const { openReading } = await readingModule();
+       |                               ^
+     97|       return openReading({ record, runner, root, wiki, now: clock.now …
+     98|     },
+ ❯ runReading world.ts:154:21
+ ❯ install.test.ts:42:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  marker.test.ts > AC9 #63.d3ce9787 a marker in message 900 that no delivered slice covers appears in no prompt the job sent > AC9 the reading job's prompts never hold the marker; (wrong program) a job pasting the whole session fails, naming the job
+Error: Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ ❯ Object.reading world.ts:96:31
+     94|     },
+     95|     async reading() {
+     96|       const { openReading } = await readingModule();
+       |                               ^
+     97|       return openReading({ record, runner, root, wiki, now: clock.now …
+     98|     },
+ ❯ runReading world.ts:154:21
+ ❯ marker.test.ts:21:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  models.test.ts > AC7 #63.b0064604 sub-reads on a smaller model, the final answer and premise reviews on the strongest, each named in the record > AC7 a summary job of eight sessions: its sub-reads answer on a smaller model, its final answer on the strongest, and reading.finished names each
+ FAIL  models.test.ts > AC7 #63.b0064604 sub-reads on a smaller model, the final answer and premise reviews on the strongest, each named in the record > AC7 a premise job of eight sessions: its sub-reads answer on a smaller model, its premise review on the strongest, and reading.finished names each
+Error: Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ ❯ Object.reading world.ts:96:31
+     94|     },
+     95|     async reading() {
+     96|       const { openReading } = await readingModule();
+       |                               ^
+     97|       return openReading({ record, runner, root, wiki, now: clock.now …
+     98|     },
+ ❯ runReading world.ts:154:21
+ ❯ models.test.ts:27:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  outside.test.ts > AC5 #63.69997dd3 a finding quoting a tool result inside a transcript is marked outside content, never as your words > AC5 the slice marks the tool's result; the finding quoting a fetch's result is outside content, one quoting a command's result is never yours, and yours is yours
+AssertionError: deep read session:34295c52801b4aa18c18ccae5f66927b --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readSlice helpers.ts:193:88
+    191| export function readSlice(root: string, handle: string, cursor?: strin…
+    192|   const r = deep(['read', handle, '--slice', ...(cursor === undefined …
+    193|   expect(r.status, `deep read ${handle} --slice ${cursor ?? ''} exits …
+       |                                                                                        ^
+    194|   let parsed: SliceJson;
+    195|   try { parsed = JSON.parse(r.stdout) as SliceJson; } catch { throw Er…
+ ❯ outside.test.ts:37:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  quotes.test.ts > AC2 #63.084da449 a finding whose quote isn't at its handle is dropped and logged, never written > AC2 the install drops a finding quoting what its handle does not hold, logs it naming the handle, and writes it nowhere
+Error: Cannot find module 'file://~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/packages/reading/src/index.ts' imported from ~/private/deepbuild-core/.claude/worktrees/issue-63-read-by-reference/tests/acceptance/63/world.ts
+ ❯ Object.reading world.ts:96:31
+     94|     },
+     95|     async reading() {
+     96|       const { openReading } = await readingModule();
+       |                               ^
+     97|       return openReading({ record, runner, root, wiki, now: clock.now …
+     98|     },
+ ❯ runReading world.ts:154:21
+ ❯ quotes.test.ts:32:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  quotes.test.ts > AC10 #63.46c00344 a quote is at its handle only as a byte-exact substring of the redacted slice, after NFC and whitespace collapse, citing its message > AC10 the reading job keeps the quotes at their handles and refuses the rest, each refusal naming the handle; (wrong program) a case-folded check accepts 'Port 3000' and fails
+AssertionError: deep read session:f4e00f3aa88d45f78bcbd2247457bca6#m4 --slice  exits 0: Unsupported command. Run deep --help for available commands.
+: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readSlice helpers.ts:193:88
+    191| export function readSlice(root: string, handle: string, cursor?: strin…
+    192|   const r = deep(['read', handle, '--slice', ...(cursor === undefined …
+    193|   expect(r.status, `deep read ${handle} --slice ${cursor ?? ''} exits …
+       |                                                                                        ^
+    194|   let parsed: SliceJson;
+    195|   try { parsed = JSON.parse(r.stdout) as SliceJson; } catch { throw Er…
+ ❯ readAll helpers.ts:200:32
+ ❯ quotes.test.ts:79:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  transcript.test.ts > AC3 #63.52524f64 a session handle resolves through the record, by its transcript.archived link, never through a folder > AC3 a deleted transcript reads from the evidence its link names; an unlinked session is an error naming the handle; (wrong program) a reader of the archive's folder or the agent's path fails
+AssertionError: deep read of the deleted session: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "session:c3acd935e6b1429d886c8ba6d3f888f6: the read exited 2: Unsupported command. Run deep --help for available commands.
++ ",
++ ]
+
+ ❯ transcript.test.ts:45:132
+     43|       const real = (handle: string) => deep(['read', handle, '--slice'…
+     44|       const readA = real(a.handle);
+     45|       expect(sessionSliceProblems(a.handle, readA, stored.messages, ['…
+       |                                                                                                                                    ^
+     46|       expect(readA.stdout, 'the slice is the redacted copy').not.toCon…
+     47|       const plain = deep(['read', a.handle, '--slice', '--root', w.roo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  15 failed | 2 passed (17)
+   Start at  22:23:09
+   Duration  6.81s (tests 85%, import 9%, transform 5%)
+
+    Isolate  8 workers spawned · ~50ms startup each (spawn + environment, per file)
+             at least ~347ms faster with isolate: false — reuses workers across files instead of one per file
+
