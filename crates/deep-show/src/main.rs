@@ -6,6 +6,7 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod access;
 mod ask;
 mod costs;
 mod evidence;
@@ -262,6 +263,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
         "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
+        "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
             let pointer = match c.get("pointer") {
@@ -719,6 +721,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "matches_carried_by_code" => Planted::MatchesCarriedByCode,
             "issues_without_actual" => Planted::IssuesWithoutActual,
             "loads_deprecated_silently" => Planted::LoadsDeprecatedSilently,
+            "announces_every_frame" => Planted::AnnouncesEveryFrame,
             "box_folds_quote" => Planted::BoxFoldsQuote,
             "box_drops_t" => Planted::BoxDropsT,
             "box_drops_doc_rev" => Planted::BoxDropsDocRev,

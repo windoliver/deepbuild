@@ -324,7 +324,15 @@ impl Hub<'_> {
         let Some(doc) = self.panel_doc(panel) else {
             return refused("unknown_panel");
         };
+        if !self.scenario.panels.contains_key(panel) {
+            return refused("unknown_panel");
+        }
         let currents = self.currents(&doc);
+        // A document with no revision current yet, every one refused, has presented nothing
+        // (#376: a refused figure never shows).
+        if currents.is_empty() {
+            return json!({"frames": []});
+        }
         let now = self.now;
         let seen = match self.panel_scope(panel) {
             Ok(s) => s.seen.clone(),
