@@ -57,6 +57,7 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 | claude-code `subagent` | a background subagent's calls under its `agent_id` and its hand-back report |
 | claude-code `loop` | a `/loop` and one of its iterations |
 | claude-code `compact` | `/compact` mid-session: SessionStart from `compact` and the summary turn |
+| claude-code 2.1.304 `clear` | `/clear` mid-session (SessionEnd from `clear`, then SessionStart from `clear` under a new ID in the same process), then `--fork-session` of the second session: a new process and ID, SessionStart from `fork`, and a transcript that starts with copies of the forked session's entries carrying the fork's first prompt ID |
 | claude-code `stop-failure` | a turn that ends on an API error (`model_not_found`) |
 | claude-code `crash` | the agent killed in the middle of a tool call: a PreToolUse with no PostToolUse or Stop |
 | claude-code 2.1.304 `child-gates` | a task created and marked completed (TaskCompleted), and a background subagent that runs, stops (SubagentStop) and reports back |

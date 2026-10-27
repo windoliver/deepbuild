@@ -1,0 +1,46 @@
+The #18 kit suite (AC16, AC17, AC18) on the base commit 14561af (origin/main), before any implementation.
+
+Machine: Mac15,7 (Apple M3 Pro, 36 GiB) on battery, load average about 47 from other sessions; Node v24.22.0.
+The workspaces were already built (dist/ as at the base); nothing was rebuilt.
+
+Commands, from the checkout's root, with Node 24.22.0 first on PATH:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/18/kit/tsconfig.json
+  -> exit 0
+
+  npx vitest run --root tests/acceptance/18/kit --no-file-parallelism
+  -> Test Files  3 failed (3)
+           Tests  10 failed (10)
+     exit 1
+
+Every test fails at its own assertion (an AssertionError thrown in this folder), for a missing surface:
+
+kit.test.ts (AC16 #18.d4f60451), 3 failed
+  - the twin duplicate-event-id ...                     AssertionError: @deepbuild/conformance exports
+  - the twin event-after-stop ...                         shippedFill(agent, { planted }), the fill of a shipped
+  - (wrong program) a kit that checks only reply shapes   adapter (#18, README): expected 'undefined' to be 'function'
+  Why: the conformance package has no fill of a shipped adapter and no planted twins of it. (A scratch run of
+  adapter@1 on a fill built by hand from today's shipped Claude Code adapter is described in the README's Notes:
+  it doesn't load in the runner, and with that bypassed it fails "event after stop" itself.)
+
+permission.test.ts (AC17 #18.c798e28d), 4 failed
+  - the three replies to the recorded request            AssertionError: ... exports shippedFill ...: expected
+  - (wrong program) the reply assertion on both twins      'undefined' to be 'function'
+  - the runner on the allow-from-label twin             AssertionError: deep-conformance run on the twin
+  - the runner on the allow-from-yes twin                 allow-from-label exits 1 (FAIL): deep-conformance: The
+                                                          requested module '.../packages/conformance/dist/index.js'
+                                                          does not provide an export named 'shippedFill':
+                                                          expected 3 to be 1
+  Why: no shippedFill, so no adapter permissionReply and no twins; the runner can't load the fill module (exit 3).
+
+budgets.test.ts (AC18 #18.42323f56), 3 failed
+  - the perf lane's two tasks                           AssertionError: benchmarks/budgets.json has a task
+                                                          claude-code-map: expected undefined to be defined
+  - the map budget                                      AssertionError: node benchmarks/claude-code.mjs map exits 0:
+  - the backfill budget                                   Error: Cannot find module '.../benchmarks/claude-code.mjs'
+                                                          (and the same for backfill): expected 1 to be +0
+  Why: no tasks in budgets.json and no bench. Both budget tests run the bench's warm-up before the machine gate, so
+  they fail here on any machine; on this one (battery) an implemented suite would then skip them as INCONCLUSIVE.
+
+No live file: none of AC16-AC18 needs a real Claude Code session, so this folder has no *.live.test.* file and
+started no model session.

@@ -104,13 +104,17 @@ function startedBy(rule, turn, transcript) {
   return source ? { from: rule.values[source], rule: pointer('turnWithoutPrompt', 'values', source) } : { from: rule.otherwise, rule: pointer('turnWithoutPrompt', 'otherwise') };
 }
 
-// Where the turn a payload names lies in the transcript: from the first entry that carries its join value
-// to the next entry that carries another. A payload carrying the `elsewhere` field ran in another
-// transcript, so none of this one's entries is its turn.
-function turnOf(turn, payload, transcript) {
+// Where the turn a payload names lies in the transcript: from the entry that opens it to the next entry
+// that carries another join value. The opening entry is the last one carrying its value that an origin
+// rule names, since a fork's transcript starts with copies of the forked session's entries, which carry
+// the fork's first prompt's value too; with none named, the first entry carrying it. A payload carrying
+// the `elsewhere` field ran in another transcript, so none of this one's entries is its turn.
+function turnOf(turn, payload, transcript, openers) {
   if (turn.elsewhere && payload[turn.elsewhere] !== undefined) return { start: 0, end: 0 };
   const value = payload[turn.payload];
-  const start = value === undefined ? -1 : transcript.findIndex((entry) => get(entry, turn.transcript) === value);
+  const carries = (entry) => value !== undefined && get(entry, turn.transcript) === value;
+  const opened = transcript.findLastIndex((entry) => carries(entry) && openers.some((match) => holds(entry, match)));
+  const start = opened >= 0 ? opened : transcript.findIndex(carries);
   if (start < 0) return { start: 0, end: 0 };
   const after = transcript.slice(start + 1).findIndex((entry) => ![undefined, value].includes(get(entry, turn.transcript)));
   return { start, end: after < 0 ? transcript.length : start + 1 + after };
@@ -192,7 +196,8 @@ function map(facts, payload, transcript) {
     Object.assign(event, { data: { ...event.data, kind: 'question' }, rule: pointer('questionTools', 'tools', questions.indexOf(payload.tool_name)) });
   }
   if (rule.stop) {
-    const { start, end } = turnOf(facts.stop.turn, payload, transcript);
+    const openers = (facts.mapping.UserPromptSubmit?.origin?.rules ?? []).flatMap((one) => (one.match ? [one.match] : []));
+    const { start, end } = turnOf(facts.stop.turn, payload, transcript, openers);
     const found = cause(facts.stop.cause, payload, transcript.slice(start, end));
     const counted = transcript.slice(facts.stop.usage.covers === 'session' ? 0 : start, end);
     const { rule: decided, ...named } = found;

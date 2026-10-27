@@ -1,7 +1,7 @@
 // What crosses the socket and the threads: every socket line is one JSON object with `v`, and every refusal
 // is error@3's shape. Shared by the main thread, the parser workers and the core.
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 export const VERSION = 1;
 /** The features the hub lists in its hello; a client turns off any of its own the hub doesn't list. */
@@ -58,7 +58,7 @@ export function ulidTime(id: string): number {
 }
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
-export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' }
+export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads' }
 /** What the parser read of a hook request that the core needs to check and bind it. */
 export interface HookMeta {
   id: string;
@@ -81,6 +81,14 @@ export interface HookMeta {
   late?: { matched: string[] };
   /** Only the writer-from-payload plant reads it. */
   payloadWriter?: string;
+  /** The agent version the session's transcript names; unset until it holds an entry. */
+  version?: string;
+  /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
+  watchOnly?: boolean;
+  /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent. */
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string };
+  /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
+  loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }
 /** A parser's answer for one line. */
 export type Parsed =
@@ -95,7 +103,8 @@ export type Plant =
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project'
   | 'stops-at-first-bad-line' | 'remove-spool-after-normal' | 'drops-post-tool-use' | 'replay-appends-twice'
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
-  | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index';
+  | 'evidence-checks-path-first' | 'binds-first-stamp' | 'unbound-reads-all' | 'errors-without-actual' | 'errors-unscrubbed' | 'trusts-index'
+  | 'adapter-decides' | 'unknown-tool-read' | 'unplaced-is-person' | 'loop-from-origins' | 'holds-stop-anyway' | 'restores-at-session-start-only';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -103,11 +112,23 @@ const PLANTS: readonly string[] = [
   'stops-at-first-bad-line', 'remove-spool-after-normal', 'drops-post-tool-use', 'replay-appends-twice',
   'answer-on-peer-check', 'answer-on-token', 'answer-inside-session', 'skip-default-at-deadline',
   'evidence-checks-path-first', 'binds-first-stamp', 'unbound-reads-all', 'errors-without-actual', 'errors-unscrubbed', 'trusts-index',
+  'adapter-decides', 'unknown-tool-read', 'unplaced-is-person', 'loop-from-origins', 'holds-stop-anyway', 'restores-at-session-start-only',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
   if (!PLANTS.includes(value)) throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
   return value as Plant;
+}
+
+/**
+ * An error signature: the same for the same failure in any session. IDs, hex runs, numbers past three digits and the
+ * session's own folder are taken out of the text first, so it names the failure, never the session or the call.
+ */
+export function signature(what: string, text: string, cwd = ''): string {
+  let plain = cwd ? text.replaceAll(cwd, '<cwd>') : text;
+  plain = plain.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/\b(toolu|msg|req)_[0-9A-Za-z]+/g, '<id>')
+    .replace(/\b[0-9a-f]{8,}\b/gi, '<hex>').replace(/\d{4,}/g, '<n>');
+  return `sig:${createHash('sha256').update(`${what}\0${plain}`).digest('hex').slice(0, 16)}`;
 }
 
 /** What the agent gets of the extensions' joined tool.before reply (#350): their denies and their context blocks. */
