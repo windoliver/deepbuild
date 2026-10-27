@@ -147,7 +147,7 @@ async function debugBundle(): Promise<number> {
 }
 
 if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
-  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep setup  install DeepBuild's hooks into Claude Code's user settings, beside yours\n       deep waiter the background Stop entry that wakes an idle session with your answer\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
+  console.log(`${banner()}\nUsage: deep [--help | --version]\n       deep doctor [--json]\n       deep explain <recorded session folder> [--json]\n       deep run --result <run.finished event file>\n       deep hub run | start | status [--root <folder>]\n       deep hub stop --root <folder>\n       deep setup  install DeepBuild's hooks into Claude Code's user settings, beside yours\n       deep waiter the background Stop entry that wakes an idle session with your answer\n       deep mcp    the MCP server an agent starts, on stdio\n       deep env up | down [--root <folder>] [--json]   this worktree's stack, through the hub\n       deep inbox  your open asks\n       deep inbox answer <ask> <option>   answer one, once the OS confirms you\n       deep inbox undo <ask>   open a defaulted ask again, once the OS confirms you\n       deep install [--trust-key] <package folder>   its source and permissions, then installed once the OS confirms you\n       deep guard add <file>   guard entries you wrote, each checked on its planted call and twin, added once the OS confirms you\n       deep debug bundle   redacted logs, versions and doctor output, for a bug report\n       deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>]   one slice of what a handle names\n       deep find <query> [--slice [<cursor>]] [--json] [--root <folder>]   handles whose text holds it\n\nRepository skeleton.`);
 } else if (args[0] === 'doctor' && args.slice(1).every((arg) => arg === '--json') && args.length <= 2) {
   process.exitCode = await doctor(args.includes('--json'));
 } else if (args.length === 1 && args[0] === '--version') {
@@ -173,6 +173,9 @@ if (args.length === 0 || (args.length === 1 && args[0] === '--help')) {
 } else if (args[0] === 'install') {
   const { installCommand } = await import('@deepbuild/hub');
   process.exitCode = await installCommand(args.slice(1));
+} else if (args[0] === 'guard') {
+  const { guardCommand } = await import('@deepbuild/hub');
+  process.exitCode = await guardCommand(args.slice(1));
 } else if (args.length === 1 && args[0] === 'mcp') {
   const { runMcp } = await import('@deepbuild/hub');
   process.exitCode = await runMcp();
