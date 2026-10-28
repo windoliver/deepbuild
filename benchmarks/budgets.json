@@ -111,7 +111,7 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 \u00b5s at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #311 first measurement: a new task, with nothing to compare against: before this change there are no event kinds for it to validate. One process validates the first fixture of each of the 59 event kinds 1,000 times, so p50 includes Node's start and the per-event limit (20 µs at p95 on the reference Mac) stays in tests/acceptance/311/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "corpus-replay",
@@ -257,6 +257,17 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "hub-prompt",
+      "command": [
+        "node",
+        "benchmarks/hub.mjs",
+        "prompt"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #303 first measurement: the merge base's prompt hook opens no ask-task and has no task for it. One process starts the hub on a temp home and sends 1,000 UserPromptSubmit requests, each a new prompt that asks for a change, one connection each as deep-hook makes them, after 20 to warm up, then stops it; the issue's under 5 ms added to the prompt hook against the merge base stays in tests/acceptance/303/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
       "id": "otlp-receive-20k-spans",
