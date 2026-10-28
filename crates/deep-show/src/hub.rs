@@ -1433,6 +1433,7 @@ impl<'a> Hub<'a> {
                     reply.insert("reason".into(), json!("timeout"));
                 }
                 Ok(()) => {
+                    let mut batches = Vec::new();
                     let pixels = match drawn3d {
                         Some(drawn3d) => drawn3d.ok(),
                         None => {
@@ -1445,7 +1446,15 @@ impl<'a> Hub<'a> {
                                 ]
                             });
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            let rgba = self.renderer.raster(drawn, size, Some(ground));
+                            let instanced = crate::packs::instanced(
+                                self.expansions
+                                    .get(&show.doc)
+                                    .map_or(&[][..], Vec::as_slice),
+                            );
+                            let (rgba, drew) =
+                                self.renderer
+                                    .raster_batched(drawn, size, Some(ground), &instanced);
+                            batches = drew;
                             Some((rgba, size, Vec::new()))
                         }
                     };
@@ -1475,11 +1484,9 @@ impl<'a> Hub<'a> {
                             };
                             reply.insert("snapshots".into(), json!([entry]));
                             reply.insert("visible".into(), rows);
-                            let expansions = self.expansions.get(&show.doc);
-                            reply.insert(
-                                "batches".into(),
-                                crate::packs::batches(expansions.map_or(&[][..], Vec::as_slice)),
-                            );
+                            // The instanced batches the 2D draw made: none for a 3D frame, which
+                            // scene3d draws and reports on its own (#378).
+                            reply.insert("batches".into(), crate::packs::batches(&batches));
                             snapshot_taken = true;
                             reply.insert("outcome".into(), json!("presented"));
                         }
