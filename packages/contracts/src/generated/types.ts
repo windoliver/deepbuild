@@ -1096,6 +1096,148 @@ export interface AskCreatedV3 {
   evidence?: Array<string>;
 }
 
+export type AskCreatedV4PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedV4Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskCreatedV4SubjectEffect = {
+  effect: string;
+  target: {
+    kind: string;
+    ref: string;
+    owner: string;
+  };
+  change: {
+    kind: string;
+    lines: number;
+    paths: Array<string>;
+  } | null;
+};
+
+export type AskCreatedV4SubjectTaste = {
+  screen: string;
+  element: string;
+};
+
+export type AskCreatedV4SubjectPoint = {
+  point: string;
+};
+
+/** ask.created@4 */
+export interface AskCreatedV4 {
+  v: 4;
+  id: string;
+  kind: "ask.created";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "authority";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    subject?: AskCreatedV4SubjectEffect;
+  } | {
+    kind: "unblock";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+    cost_usd?: number;
+  } | {
+    kind: "taste";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    dropped?: Array<{
+      option: string;
+      same_as: string;
+    }>;
+    subject?: AskCreatedV4SubjectTaste;
+  } | {
+    kind: "exception";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+  } | {
+    kind: "choice";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    subject?: AskCreatedV4SubjectPoint;
+  } | {
+    kind: "definition";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    subject?: AskCreatedV4SubjectPoint;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.defaulted@1 */
 export interface AskDefaulted {
   v: 1;
@@ -1507,6 +1649,40 @@ export interface DecisionCreated {
   evidence?: Array<string>;
 }
 
+/** decision.judged@1 */
+export interface DecisionJudged {
+  v: 1;
+  id: string;
+  kind: "decision.judged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+    state: "active" | "frozen" | "revoked";
+    verdict: "widen" | "undecided" | "FAIL";
+    rule: {
+      cases: number;
+      broke: number;
+      lower: number;
+      upper: number;
+    };
+    yours: {
+      cases: number;
+      broke: number;
+      upper: number;
+    };
+    margin: number;
+    limit: number;
+    more: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** decision.overruled@1 */
 export interface DecisionOverruled {
   v: 1;
@@ -1521,6 +1697,25 @@ export interface DecisionOverruled {
   log_pos?: number;
   data: {
     decision: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** decision.overruled@2 */
+export interface DecisionOverruledV2 {
+  v: 2;
+  id: string;
+  kind: "decision.overruled";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+    at: string;
   };
   evidence?: Array<string>;
 }
@@ -4123,6 +4318,25 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** work.broke@1 */
+export interface WorkBroke {
+  v: 1;
+  id: string;
+  kind: "work.broke";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    cause: "revert" | "follow_up_fix" | "is_it_done" | "issue";
+  };
+  evidence?: Array<string>;
+}
 
 /** worktree.created@1 */
 export interface WorktreeCreated {
