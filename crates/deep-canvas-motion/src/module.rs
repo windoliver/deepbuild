@@ -56,6 +56,14 @@ fn register(r: &mut Registrar) {
         .document()
         .applies(has_motion)
         .run(compile);
+    // Issue #488: the frame's `valid_until` (Transport: "Each frame returns `valid_until`, and
+    // the app sleeps until then"), the earliest flick anything motion moves changes next, or
+    // null once nothing does; the frame clock arms the next frame from it.
+    r.array("motion.next", "i64", "document", "time", "items");
+    r.operator("clock", "items", &["motion.program", "t"], &["motion.next"])
+        .document()
+        .applies(has_motion)
+        .run(clock);
     r.operator(
         "channels",
         "items",
@@ -183,6 +191,17 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
     let program = Program::compile(doc).map_err(|r| OpError::new(r.code, r.path))?;
     let bytes = format!("{program:?}").into_bytes();
     v.write("motion.program", Val::typed(Arc::new(program), bytes))
+}
+
+/// The frame's `valid_until` at t: when anything motion moves changes next.
+fn clock(v: &mut View<'_>) -> Result<(), OpError> {
+    let t = v.t()?;
+    let Some(program) = v.typed::<Arc<Program>>("motion.program")? else {
+        return Err(OpError::new("input_missing", ""));
+    };
+    let mut state = program.state();
+    program.evaluate_local(t, Validity::Full, &mut state);
+    v.write("motion.next", Val::json(json!(state.valid_until)))
 }
 
 /// The item's own transform and fields at t, as the core's contributions.
