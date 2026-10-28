@@ -1366,11 +1366,18 @@ impl Hub<'_> {
         }
         let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
         crate::packs::reply(&result.expansions, Some(check_ms), timing, &mut reply);
+        // #403: in a claim that names the document, an item of a kind this build doesn't know
+        // blocks its checks, naming the kind, as on a sole writer's revision.
+        let blocked = self.blocked_in_claim(show, &result.notices);
+        if !blocked.is_empty() {
+            reply.insert("blocked".into(), Value::Array(blocked));
+        }
         if self.issue_reply(&issues, &mut reply) {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
-                // A check that needs a module or a pack version the build lacks is BLOCKED.
-                let blocked = crate::packs::blocked(&issues);
+                // A check that needs a module or a pack version the build lacks, or that an
+                // unknown item kind blocks, is BLOCKED, never a FAIL.
+                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
                 reply.insert(
                     "result".into(),
                     json!(if blocked { "BLOCKED" } else { "FAIL" }),

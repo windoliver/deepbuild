@@ -143,6 +143,12 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
+    VerdictKeyedByDoc,
+    /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
+    ChecksSkipUnknownKind,
+    /// #403: a check kind no module in the build registers is INCONCLUSIVE.
+    MissingKindInconclusive,
     /// #306: a derived item's seed comes from a counter over expansion order.
     SeedsByExpansionOrder,
     /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
@@ -228,6 +234,14 @@ pub struct RecordObject {
 
 pub struct Claim {
     pub deliverables: Vec<String>,
+    /// The locked definition's requirements, each one check input (#403).
+    pub requirements: Vec<Requirement>,
+}
+
+/// One requirement of a claim's definition: its handle and its check input.
+pub struct Requirement {
+    pub id: String,
+    pub check: Value,
 }
 
 pub struct Card {
@@ -434,6 +448,10 @@ pub enum Call {
     Manifest,
     /// The check catalog (#138).
     Catalog,
+    /// Judges a claim on its deliverables' current revisions and records the verdict (#403).
+    Verdict(String),
+    /// Every verdict made on a claim, `stale` as of now (#403).
+    Verdicts(String),
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -583,6 +601,8 @@ pub struct Hub<'a> {
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
     /// The messages each session was sent from an ask box, by session ID (#384).
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
+    /// The verdicts made on each claim, in the order made, each as recorded (#403).
+    pub verdicts_made: BTreeMap<String, Vec<Value>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -681,6 +701,7 @@ impl<'a> Hub<'a> {
             serial: 0,
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
+            verdicts_made: BTreeMap::new(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             expansions: BTreeMap::new(),
@@ -1041,6 +1062,8 @@ impl<'a> Hub<'a> {
             } => self.render_back(session, doc, *t, *rev, *size),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
+            Call::Verdict(claim) => self.verdict_call(claim),
+            Call::Verdicts(claim) => self.verdicts_call(claim),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -1179,6 +1202,11 @@ impl<'a> Hub<'a> {
             &title,
         );
         let mut notices = Vec::new();
+        // #403: in a claim that names the document, an item of a kind this build doesn't know
+        // blocks its checks, naming the kind, while the rest still draws.
+        let mut blocked: Vec<Value> = Vec::new();
+        // The items the check skipped as `unknown_kind`: kept as written, never drawn (#389).
+        let mut skipped: Vec<String> = Vec::new();
         // The revision's expansions and its check's time (#306): the document's once it is current.
         let mut fresh: Option<(Vec<Expansion>, f64)> = None;
         let (stamped, mut issues, diff) = match stamped {
@@ -1198,6 +1226,8 @@ impl<'a> Hub<'a> {
                 };
                 fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
                 notices = self.notices_reply(&result.notices);
+                skipped = crate::verdict::unknown_items(&result.notices);
+                blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
@@ -1259,10 +1289,13 @@ impl<'a> Hub<'a> {
         // module's fault, not the document's, so it fails the frame and refuses nothing.
         let visible = self.doc_visible(&show.doc);
         // The form that draws: the document with each recipe instance's derived items in its
-        // place (#306).
+        // place (#306), less the items skipped as `unknown_kind` (#403).
         let drawn_form = stamped.as_ref().map(|doc| {
             let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
-            crate::packs::drawn(doc, expansions.unwrap_or(&[]))
+            crate::verdict::without(
+                &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
+                &skipped,
+            )
         });
         if let Some(doc) = stamped
             .as_ref()
@@ -1291,6 +1324,9 @@ impl<'a> Hub<'a> {
         let mut reply = Map::new();
         if !notices.is_empty() {
             reply.insert("notices".into(), Value::Array(notices));
+        }
+        if !blocked.is_empty() {
+            reply.insert("blocked".into(), Value::Array(blocked));
         }
         // A payload refused before it could be stamped makes no revision.
         if stamped.is_some() {
@@ -1329,9 +1365,10 @@ impl<'a> Hub<'a> {
         if error {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
-                // A check that needs a canvas module or a pack version the build lacks is
-                // BLOCKED, never a FAIL (technical design: Canvas modules; #305; #306).
-                let blocked = crate::packs::blocked(&issues);
+                // A check that needs a canvas module or a pack version the build lacks, or that
+                // an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
+                // design: Canvas modules; #305; #306).
+                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
                 reply.insert(
                     "result".into(),
                     json!(if blocked { "BLOCKED" } else { "FAIL" }),
@@ -1509,6 +1546,8 @@ impl<'a> Hub<'a> {
                 .and_then(Value::as_array)
                 .is_some_and(|l| l.iter().any(|i| i["severity"] == "error"));
             let verdict = match self.verdict(show, snapshot_taken) {
+                // A check an unknown kind kept from running decides nothing (#403).
+                "PASS" if reply.contains_key("blocked") => "BLOCKED",
                 "PASS" if errors => "FAIL",
                 v => v,
             };
