@@ -1,0 +1,7 @@
+#!/bin/sh
+# Planted twin of the app's Set up click (README: Wrong programs). It installs the hooks with the gates on: the hub it
+# starts holds a stop, or blocks it, on a repo's checks nobody approved. It does so through the hub's merged wrong
+# program `gates-before-approval` (#19), which the login service inherits from setup's environment. It says one line.
+[ "$1" = --set-up ] || { echo "usage: $0 --set-up" >&2; exit 2; }
+out=$(DEEP_HUB_PLANT=gates-before-approval deep setup 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }
+echo "DeepBuild added its hooks in watch-only mode and started the hub; deep setup --undo removes it."

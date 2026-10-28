@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { zstdCompress, zstdDecompress } from 'node:zlib';
 import { detect, missingEnd, type MediaType } from './intake.js';
-import { scrub, scrubList, type Run } from './scrub.js';
+import { patternMatches as matchesOf, scrub, scrubList, type Run } from './scrub.js';
 
 export type { MediaType };
 export type Origin = 'deepbuild' | 'you' | 'agent';
@@ -114,6 +114,14 @@ export class EvidenceError extends Error {
  */
 export function scrubText(text: string, run?: Run): string {
   return scrub(Buffer.from(text, 'utf8'), scrubList(run)).toString('utf8');
+}
+/**
+ * Each pattern rule's match in `scrubText(text)`, once, with its UTF-8 byte offset, and whether a field name's mask
+ * covers part of it: the archive asks to rotate the keys among them (#20).
+ */
+export function patternMatches(text: string): { match: string; at: number; field: boolean }[] {
+  const bytes = Buffer.from(text, 'utf8');
+  return matchesOf(bytes).map(([match, field]) => ({ match: match.toString('utf8'), at: match.byteOffset - bytes.byteOffset, field }));
 }
 /**
  * Text scrubbed by value alone, in every printed form, with no pattern pass: a check run's output before its

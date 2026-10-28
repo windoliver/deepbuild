@@ -1,0 +1,218 @@
+{
+  "ask.created": {
+    "v": 3,
+    "id": "01MD3260000000000000000000",
+    "kind": "ask.created",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "kind": "unblock",
+      "question": "Create a registry token for the publish check?",
+      "options": [
+        {
+          "id": "done",
+          "label": "I did it",
+          "decision": "none"
+        },
+        {
+          "id": "wait",
+          "label": "Leave it blocked",
+          "decision": "none"
+        }
+      ],
+      "recommended": "done",
+      "deadline": 1800172800000,
+      "fallback": "you",
+      "default": "wait",
+      "provisional": false,
+      "owner": "you",
+      "key": "c0ffee0000000000000000000000000000000000000000000000000000000000",
+      "pinned_to": {
+        "kind": "commit",
+        "ref": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b"
+      },
+      "steps": [
+        "Create a token on the package registry, signed in as yourself",
+        "Answer \"I did it\": the publish check runs again"
+      ],
+      "where": "the package registry",
+      "why": "the publish check needs a registry token only you can create",
+      "unblocks": [
+        "task:01MD326TASK00000000000N01"
+      ],
+      "proves": "publish"
+    }
+  },
+  "ask.answered": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "ask.answered",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "answer": "done",
+      "plan_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "decision": "none"
+    },
+    "subject": "ask:01MD3260000000000000000000"
+  },
+  "agent.stop": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "agent.stop",
+    "writer": "hook",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "turn": 1,
+      "did_work": true
+    },
+    "subject": "session:01MD326SESS000000000000N01",
+    "seq": "1800000000000000000"
+  },
+  "claim.made": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "claim.made",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "task_ref": "task:01MD326TASK00000000000N01",
+      "attempt": 1,
+      "commit": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
+      "scope": "session"
+    }
+  },
+  "run.started": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "run.started",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "run": "run:01MD326RUN000000000000N01",
+      "check": "unit",
+      "claim": "claim:01MD326CLM000000000000N01",
+      "commit": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b"
+    }
+  },
+  "run.finished": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "run.finished",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "run": "run:01MD326RUN000000000000N01",
+      "outcome": "passed",
+      "tests_run": 12,
+      "passed": 12,
+      "runs": 1,
+      "evidence": [
+        "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+      ],
+      "check": "unit",
+      "assertion": null,
+      "expected": null,
+      "actual": null,
+      "step": null,
+      "points_to": null,
+      "findings": [],
+      "environment": "node-24.22.0/darwin-arm64"
+    }
+  },
+  "verdict.made": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "verdict.made",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "outcome": "PASS",
+      "verdict": "verdict:01MD326VRD000000000000N01",
+      "claim": "claim:01MD326CLM000000000000N01",
+      "reasons": [
+        "every requirement passed"
+      ],
+      "requirements": [
+        {
+          "req": "req:01K74G0A1B2C3D4E5F6G7H8J9K#R2",
+          "outcome": "PASS",
+          "check": "unit",
+          "depth": "unit",
+          "oracle": "code",
+          "runs": {
+            "clean": 0,
+            "needed": 3,
+            "counted": [
+              "run:01MD326RUN000000000000N01"
+            ]
+          },
+          "smallest": "seq \"01\" accepted",
+          "points_to": "packages/contracts/src/validate.ts:12",
+          "evidence": [
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+          ],
+          "proof": "test_run"
+        }
+      ],
+      "smallest": null,
+      "points_to": null,
+      "commit": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
+      "key": {
+        "commit": "3f2a1c0b9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b",
+        "doc_revisions": [],
+        "check_digests": [
+          "d1:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        ],
+        "state_digests": [],
+        "environment": "node-25.7.0/darwin-arm64",
+        "tools": [
+          "vitest@5.0.5"
+        ]
+      }
+    }
+  },
+  "notice.subscribed": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "notice.subscribed",
+    "writer": "app",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "notice_kind": "verdict",
+      "key": "task:01MD326TASK00000000000N02",
+      "by": "you"
+    }
+  },
+  "notice.sent": {
+    "v": 1,
+    "id": "01MD3260000000000000000000",
+    "kind": "notice.sent",
+    "writer": "core",
+    "actor": "you",
+    "scope": "you",
+    "ts": 1800000000000,
+    "data": {
+      "notice": "notice:01MD326NTC000000000000N01",
+      "cites": [
+        "verdict:01MD326VRD000000000000N02"
+      ]
+    }
+  }
+}

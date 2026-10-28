@@ -9,10 +9,14 @@
 //! ([`canvas`]), and `needs_you` in the `deepbuild` module for the fixture panels.
 
 pub mod canvas;
+pub mod card;
 pub mod events;
 pub mod gpu_view;
 pub mod hub;
+pub mod notify;
 pub mod record;
+pub mod setup;
+pub mod states;
 pub mod text;
 pub mod views;
 
@@ -198,6 +202,7 @@ pub fn new_runtime() -> anyhow::Result<Rc<ShellRuntime>> {
 pub fn init(cx: &mut App) {
     gpui_shell::components::init(cx);
     views::register_views(cx);
+    card::init(cx);
     gpui_shell::policy::set_default(
         Policy::new()
             .with_application("deepbuild-panel")
@@ -206,15 +211,35 @@ pub fn init(cx: &mut App) {
     );
 }
 
-/// Loads a panel directory's `main.js` and mounts its view.
+/// Loads a panel directory's `main.js` and mounts its view. A panel loads nothing from the network: one whose
+/// gpui-shell manifest lists a Git dependency is refused before gpui-shell reads it, so nothing is fetched (#326).
 pub fn mount_panel(
     runtime: &Rc<ShellRuntime>,
     dir: &Path,
     window: &mut Window,
     cx: &mut App,
 ) -> anyhow::Result<Entity<ScriptView>> {
+    if let Some(dependency) = fetched_dependency(dir) {
+        anyhow::bail!("{}", fetch_refusal(&dependency));
+    }
     let loaded = runtime.load_application(dir, "main.js")?;
     runtime.mount_application(&loaded, window, cx)
+}
+
+/// The first dependency a panel's gpui-shell manifest fetches from a repository, by name.
+pub fn fetched_dependency(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join("gpui-shell.json")).ok()?;
+    let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
+    manifest["dependencies"]
+        .as_object()?
+        .iter()
+        .find(|(_, dependency)| dependency.get("git").is_some())
+        .map(|(name, _)| name.clone())
+}
+
+/// Why a panel whose manifest fetches a dependency is refused.
+pub fn fetch_refusal(dependency: &str) -> String {
+    format!("its manifest lists the Git dependency {dependency}; a panel loads nothing from the network")
 }
 
 /// The spike's report, a static page the browser opens. The app itself has no web view.
@@ -249,8 +274,26 @@ pub fn write_report(sessions: &[Session], panel: Option<&str>) -> std::io::Resul
 }
 
 /// The welcome screen, shown where a panel would be until one is mounted: the kit's stacked
-/// lockup in Ink on Paper, an approved pairing, with the D at `brand::WELCOME_D_PX`.
-fn welcome() -> impl IntoElement {
+/// lockup in Ink on Paper, an approved pairing, with the D at `brand::WELCOME_D_PX`. On the first
+/// launch it holds the one Set up button (#326), and after the click, the line it said.
+fn welcome(cx: &mut Context<Spike>, said: Option<&str>) -> impl IntoElement {
+    let button = (said.is_none() && setup::needed()).then(|| {
+        div()
+            .id("set-up")
+            .test_support()
+            .role(Role::Button)
+            .aria_label("Set up")
+            .px_4()
+            .py_1()
+            .rounded_md()
+            .bg(rgb(brand::INK))
+            .text_color(rgb(brand::PAPER))
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.set_up = Some(setup::set_up().map_or_else(|error| error, str::to_owned));
+                cx.notify();
+            }))
+            .child("Set up")
+    });
     div()
         .id("welcome")
         .test_support()
@@ -271,6 +314,8 @@ fn welcome() -> impl IntoElement {
                 .text_color(rgb(brand::INK)),
         )
         .child(div().text_sm().child("Where your agents show, not tell."))
+        .children(button)
+        .children(said.map(|line| div().text_sm().child(line.to_owned())))
 }
 
 /// The title bar with the mark: the small cut, drawn 24 px with the D at 18 px, in Ink on the
@@ -297,6 +342,8 @@ pub struct Spike {
     panel: Option<Entity<ScriptView>>,
     panel_name: Option<String>,
     report: Option<String>,
+    /// What the Set up click said, once clicked.
+    set_up: Option<String>,
 }
 
 impl Spike {
@@ -308,6 +355,7 @@ impl Spike {
             panel,
             panel_name,
             report: None,
+            set_up: None,
         }
     }
 
@@ -369,7 +417,7 @@ impl Render for Spike {
                 .h_full()
                 .child(panel.clone())
                 .into_any_element(),
-            None => welcome().into_any_element(),
+            None => welcome(cx, self.set_up.as_deref()).into_any_element(),
         };
         div()
             .id("spike")
