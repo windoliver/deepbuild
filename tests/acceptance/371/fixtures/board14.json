@@ -301,6 +301,7 @@
       "kind": "slider",
       "class": "view",
       "label": "Week",
+      "role": "slider",
       "range": [
         1,
         52
@@ -311,6 +312,7 @@
       "kind": "choice",
       "class": "view",
       "label": "Team",
+      "role": "listbox",
       "options": [
         "core",
         "canvas"
@@ -321,6 +323,7 @@
       "kind": "toggle",
       "class": "view",
       "label": "Log scale",
+      "role": "switch",
       "default": false
     }
   },

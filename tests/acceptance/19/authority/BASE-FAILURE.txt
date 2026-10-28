@@ -1,0 +1,43 @@
+Base commit: 0350cf0 (this worktree, unmodified), workspaces built, Node 24.22.0, target/debug/deep-hook built.
+Machine: macOS 26 (Darwin 25.6.0), load average 46-66 during the run.
+
+Command:
+  PATH=<node 24.22.0>/bin:$PATH npx vitest run --root tests/acceptance/19/authority --no-file-parallelism
+
+Result (vitest 5.0.5, 56.6 s):
+  Test Files  4 failed | 1 passed (5)
+       Tests  7 failed | 4 passed (11)
+
+Why each test fails, or passes, at the base:
+
+AC1  off.test.ts                 FAIL  deep off: exit 2, "Unsupported command. Run deep --help for available
+                                       commands." The controls before it pass at the base: your gate's block on
+                                       `make release` is denied by the hub, and the stop of a session with an open
+                                       deep_ask is held (a number in the acknowledgement).
+AC2  answer.test.ts              PASS  #24 already refuses an agent's `deep inbox answer`, exit 3, naming the agent
+                                       session; the same answer by you counts once. Its wrong program is below.
+AC19 answer.test.ts              PASS  #24 already counts a double-forked answer only once the OS confirms you. The
+                                       double fork was adopted by launchd (its ancestors end at PID 1, without the
+                                       stand-in). Its wrong program is below.
+AC21 authority.test.ts           FAIL  double-forked `deep off`, cancelled: the next reply is still gated (nothing
+                                       ran), then exit 2, "Unsupported command.", not 3 with a word about the
+                                       confirmation.
+AC22 authority.test.ts           FAIL  double-forked `deep hub use --root <dev>`, cancelled: the worktree's next
+                                       session still reaches the installed hub (nothing ran), then exit 2 with the
+                                       base's `deep hub` usage, not 3 with a word about the confirmation.
+AC24 guards.test.ts              FAIL  deep off: exit 2, "Unsupported command." The control before it passes: the
+                                       stop of a session with an open deep_ask is held.
+
+Wrong programs (plants.test.ts):
+AC2  answer-inside-session       PASS  the planted hub counts the agent's answer, and the AC2 check fails naming the
+                                       ask ("ask ask:… (answered decline by deep inbox answer, run inside agent
+                                       session …) counted").
+AC19 answer-on-peer-check        PASS  the planted hub counts the double-forked answer with the prompt cancelled, and
+                                       the AC19 check fails naming the ask.
+AC21 acts-on-peer-check          FAIL  BLOCKED: the hub refuses DEEP_HUB_PLANT=acts-on-peer-check, which names no
+                                       planted program at the base.
+AC22 acts-on-peer-check          FAIL  BLOCKED, as above.
+AC24 off-guards-watch-only       FAIL  BLOCKED: the hub refuses DEEP_HUB_PLANT=off-guards-watch-only.
+
+Not verified: no implementation of #19 exists, so the passing side of AC1, AC21, AC22 and AC24, and the failure of
+each new plant, are unverified until it does.

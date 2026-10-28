@@ -1,0 +1,59 @@
+Base commit: 0350cf0c68e82b886bba712b37425c2b9ab52acf (merge of #764), workspaces built (npm ci; npm run build
+--workspaces), Node 24.22.0, target/debug/deep-hook built (cargo build --locked -q -p deep-hook), macOS (Darwin 25.6).
+
+Command:
+  npx vitest run --root tests/acceptance/19/setup --no-file-parallelism
+
+Result:
+  Test Files  6 failed (6)
+       Tests  13 failed | 1 passed (14)
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/19/setup/tsconfig.json reports no errors.
+
+Why each test fails at the base. The base `deep setup` (#18's part) merges hook entries into ~/.claude/settings.json and
+exits 0. It does not register a login service, start the hub, install rules.json, register the MCP server or the
+skill, or install the status line forwarder, and there is no `deep setup --undo`. It loads the file with JSON.parse,
+so the last duplicate wins, and writes ~/.claude/settings.json.deepbuild-<pid>.tmp, then renames it over the path,
+link or not.
+
+AC5  undo.test.ts (yours)          "deep setup must start the hub through its login service: no hub answers ...;
+                                   login service definitions [], launchd []". The base setup starts no hub.
+AC5  undo.test.ts (fresh)          the same.
+AC5  undo.test.ts (plant)          the same failure. The plant check expects the AC5 byte-for-byte message instead.
+                                   Past setup, the hub would refuse DEEP_HUB_PLANT=undo-reserializes as unknown.
+AC6  watchonly.test.ts             "deep setup must start the hub through its login service".
+AC6  watchonly.test.ts (plant)     the same.
+AC13 userlevel.test.ts             "deep setup must start the hub through its login service".
+AC13 userlevel.test.ts (plant)     the same failure. The plant check expects the AC13 message instead.
+AC14 strict.test.ts (top-level)    "AC14 deep setup must leave .../.claude/settings.json, which repeats the key
+                                   "cleanupPeriodDays", byte-for-byte as it was: 181 bytes before, 3127 now". The
+                                   base parser keeps the last duplicate (30 became 90) and writes the file back.
+AC14 strict.test.ts (nested)       the same for "MY_TOOL_HOME": 158 bytes before, 3077 now.
+AC14 strict.test.ts (plant)        "deep setup must start the hub through its login service", in the undo half that the
+                                   plant must pass.
+AC20 symlink.test.ts               "AC20 .../.claude/settings.json must still be the symlink to
+                                   ../../dotfiles/claude/settings.json after deep setup: setup replaced the link with
+                                   a plain file". This is the criterion's own wrong program.
+AC20 symlink.test.ts (plant)       PASSES at the base. The base setup is the planted wrong program: it renames its
+                                   temporary file over the link. So the check fails on it with the expected message,
+                                   which is what this test asserts. It is the one test that passes at the base.
+AC23 uninstall.test.ts             "deep setup must start the hub through its login service".
+AC23 uninstall.test.ts (plant)     the same failure. The plant check expects the AC23 login-service message instead.
+
+Past the missing hub start (checked once by hand, not kept): a throwaway copy of this folder had its setup run
+`deep hub start` first. The merged service.ts then writes com.deepbuild.hub.plist and bootstraps it through the
+launchd stand-in. With that, the base fails each test as follows:
+  AC5 (yours)    the control: "deep setup must add DeepBuild's hook entries and its status line forwarder" (no forwarder)
+  AC5 (fresh)    "deep setup --undo, confirmed, must exit 0: exit 2, Unsupported command."
+  AC6            "AC6 right after install the hub held the Stop of session <id> (hold_until_ms ...) in a repo whose
+                 checks you haven't approved". The claim and the failed run of the drafted check went through, and so
+                 did the next Edit and ls. With rules.json copied in by hand from crates/deep-hook/default-rules.json,
+                 pkill -f vite is denied with the hub up and down and the denial names "name or port".
+  AC13           passes. The base setup writes only ~/.claude/settings.json and changes no file in either repo. This
+                 test guards against a wrong program (the plant).
+  AC14           as above, at the criterion's own check.
+  AC20           as above, at the criterion's own check.
+  AC23           the control: "deep setup must register DeepBuild's MCP server at user scope"
+  plants         BLOCKED: the hub exits at start on each name it doesn't know, so no hub answers.
+
+The passing side of each test, and each plant's failure, can't be verified until the implementation exists.

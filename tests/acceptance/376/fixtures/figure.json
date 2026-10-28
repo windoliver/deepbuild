@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Light through a lens",
+  "description": "A beam of light passes through a convex lens onto a screen. A readout counts the rays; two controls set the number of rays and show or hide the labels.",
+  "size": [480, 270],
+  "data": {
+    "count": { "value": 3, "source": "story" }
+  },
+  "items": {
+    "back": {
+      "id": "back",
+      "kind": "rect@1",
+      "name": "Backdrop",
+      "role": "decoration",
+      "order": "a0",
+      "params": { "box": [0, 0, 480, 270], "paint": { "fill": { "role": "muted" } } }
+    },
+    "beam": {
+      "id": "beam",
+      "kind": "rect@1",
+      "name": "Light beam",
+      "role": "part",
+      "order": "a1",
+      "params": { "box": [16, 130, 184, 8], "paint": { "fill": { "role": "ink" } } }
+    },
+    "lens": {
+      "id": "lens",
+      "kind": "rect@1",
+      "name": "Convex lens",
+      "role": "part",
+      "order": "a2",
+      "params": { "box": [200, 40, 24, 190], "paint": { "fill": { "role": "ink" } } }
+    },
+    "screen": {
+      "id": "screen",
+      "kind": "rect@1",
+      "name": "Screen",
+      "role": "part",
+      "order": "a3",
+      "params": { "box": [420, 40, 12, 190], "paint": { "fill": { "role": "ink" } } }
+    },
+    "caption": {
+      "id": "caption",
+      "kind": "text@1",
+      "name": "Caption",
+      "role": "label",
+      "order": "a4",
+      "params": { "text": "The rays meet on the screen", "font": "body", "size": 13, "box": { "w": 240, "h": 20 } },
+      "at": { "pos": [16, 16, 0] }
+    },
+    "count": {
+      "id": "count",
+      "kind": "text@1",
+      "name": "Rays counted",
+      "role": "data",
+      "order": "a5",
+      "params": { "template": "Rays: {data/count}", "font": "body", "size": 13, "box": { "w": 120, "h": 20 } },
+      "at": { "pos": [16, 240, 0] }
+    }
+  },
+  "controls": {
+    "c-rays": {
+      "kind": "slider",
+      "class": "view",
+      "label": "Number of rays",
+      "role": "slider",
+      "range": [1, 9],
+      "default": 3,
+      "increment": 1
+    },
+    "c-labels": {
+      "kind": "toggle",
+      "class": "view",
+      "label": "Show labels",
+      "role": "switch",
+      "default": true
+    }
+  }
+}
