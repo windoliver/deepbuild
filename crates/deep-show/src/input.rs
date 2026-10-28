@@ -462,7 +462,15 @@ impl Hub<'_> {
         let doc = self
             .panel_doc(panel)
             .ok_or_else(|| refused("unknown_panel"))?;
+        if !self.scenario.panels.contains_key(panel) {
+            return Err(refused("unknown_panel"));
+        }
         let currents = self.currents(&doc);
+        // A document with no revision current yet, every one refused, has presented nothing
+        // (#376: a refused figure never shows).
+        if currents.is_empty() {
+            return Ok(Vec::new());
+        }
         let now = self.now;
         let seen = self.panel_scope(panel)?.seen.clone();
         // The planted twin draws a revision current at a latch one frame later than it may.

@@ -51,6 +51,20 @@ export function hubAdapters(): AdapterRegistry {
 }
 const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
 
+/**
+ * What each tool the agents' facts list counts as where it isn't change (#304), for rules.json: a read or a search
+ * counts as read. Any other tool, one they don't list included, counts as change.
+ */
+export function toolClasses(): Record<string, 'read'> {
+  const classes: Record<string, 'read'> = {};
+  for (const name of registry().names()) {
+    const kinds = (registry().get(name).facts as JsonObject).toolKinds;
+    const tools = isObj(kinds) && isObj(kinds.tools) ? kinds.tools : {};
+    for (const [tool, kind] of Object.entries(tools)) if (kind === 'read' || kind === 'search') classes[tool] = 'read';
+  }
+  return classes;
+}
+
 /** The loop facts (adapters/loops.facts.json): the tools that schedule, cancel and run in the background, per agent. */
 let loopFacts: JsonObject | undefined;
 const loopsOf = (name: string): JsonObject => {
@@ -153,6 +167,7 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
   const tool = str(payload.tool_name);
   if (request.event === 'PreToolUse' && tool.startsWith('mcp__deep__')) meta.stamp = { tool: tool.slice('mcp__deep__'.length), digest: sha256Hex(canonicalize((payload.tool_input ?? null) as JsonValue)) };
   if (plant === 'writer-from-payload' && typeof payload.writer === 'string') meta.payloadWriter = payload.writer;
+  if (plant === 'matches-text' && tool === 'Bash' && isObj(payload.tool_input)) meta.command = str(payload.tool_input.command);
   // A session on a version its agent's facts don't cover has its holds and blocks watch-only. Only a reply that holds
   // or blocks reads the version here; the core reads it for every other hook, off the acknowledgement's path.
   const replies = request.event === 'Stop' || (request.event === 'PreToolUse' && request.matched.length > 0);
@@ -199,11 +214,13 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
         const server = str(call.server) || 'unknown';
         const named = str(call.tool) || str(call.name) || tool || 'unknown';
         Object.assign(data, { server, tool: named });
-        if (kind === 'tool.before') Object.assign(data, countMcp(server, named, meta.cwd, plant === 'unknown-tool-read' ? 'read' : 'change'));
+        if (kind === 'tool.before') Object.assign(data, countMcp(server, named, meta.cwd, plant === 'unknown-tool-read' ? 'read' : 'change', plant === 'trusts-hints'));
       }
       if (kind === 'tool.before') {
-        // A call deep-hook let through because the hub was late names the guard entries it matched.
+        // A call names the guard entries deep-hook matched, so a watched match is recorded; one deep-hook let
+        // through because the hub was late is marked late.
         if (request.late === true) Object.assign(data, { late: true, matched: request.matched });
+        else if (request.matched.length) data.matched = request.matched;
         v = 3;
       } else {
         Object.assign(data, failure(mapped.outcome === 'failed', payload, callKind, meta.cwd));
