@@ -33,6 +33,8 @@ pub struct View<'a> {
     step: Option<StepCtx<'a>>,
     /// What a step noted for the log: its count and the other count it read.
     noted: Option<(i64, i64)>,
+    /// The tails the operator wrote this frame, by key.
+    tails: Vec<(String, Val)>,
 }
 
 impl<'a> View<'a> {
@@ -59,13 +61,55 @@ impl<'a> View<'a> {
             out: vec![Val::None; sop.op.writes.len()],
             step,
             noted: None,
+            tails: Vec::new(),
         }
     }
 
-    /// What the operator wrote, in its writes' order, every read it made, and what a step
-    /// noted.
-    pub(super) fn finish(self) -> (Vec<Val>, Vec<Access>, Option<(i64, i64)>) {
-        (self.out, self.access, self.noted)
+    /// What the operator wrote, in its writes' order, every read it made, what a step noted,
+    /// and the tails it wrote.
+    pub(super) fn finish(
+        self,
+    ) -> (
+        Vec<Val>,
+        Vec<Access>,
+        Option<(i64, i64)>,
+        Vec<(String, Val)>,
+    ) {
+        (self.out, self.access, self.noted, self.tails)
+    }
+
+    /// Carried state of kind `tail` this operator's module declared under `key`, as the last
+    /// node that wrote it left it, in this frame or an earlier one (Carried state); `None`
+    /// before any node wrote it, and in a clean evaluation. Only the module's own: another
+    /// module's key is `None`.
+    pub fn tail(&self, key: &str) -> Option<Val> {
+        if !self.owns_tail(key) {
+            return None;
+        }
+        self.session.tails.get(key).cloned()
+    }
+
+    /// Writes the module's tail `key` for the session's next frames; `not_own_array` for a key
+    /// its module didn't declare as a tail.
+    pub fn set_tail(&mut self, key: &str, value: Val) -> Result<(), OpError> {
+        if !self.owns_tail(key) {
+            return Err(OpError::new("not_own_array", key));
+        }
+        self.tails.push((key.to_string(), value));
+        Ok(())
+    }
+
+    fn owns_tail(&self, key: &str) -> bool {
+        self.sealed
+            .modules
+            .iter()
+            .find(|m| m.name == self.sop.module)
+            .is_some_and(|m| {
+                m.shapes
+                    .carried
+                    .iter()
+                    .any(|c| c.kind == "tail" && c.key == key)
+            })
     }
 
     fn note(&mut self, read: &str) {

@@ -269,6 +269,9 @@ pub struct Planted {
     pub steps_by_name: bool,
     /// A node's key holds its item without the item's params (#138's planted stale cache).
     pub key_without_params: bool,
+    /// A seek restores the checkpoint nearest to t by distance, the earlier of two equally
+    /// near, instead of the last one at or before t (#488's planted seek).
+    pub checkpoint_nearest: bool,
 }
 
 /// Called as an operator's node starts (`done` false) and ends: its index in the sealed set's
@@ -752,6 +755,10 @@ pub struct Session {
     outside_key: Key,
     reading_at: u32,
     steps: steps::Steps,
+    /// Carried state of kind `tail` a canvas module keeps between a session's frames, by its
+    /// declared key (Carried state); never read by another module, and never a session's
+    /// history.
+    tails: BTreeMap<String, Val>,
     /// The frame counter, for which nodes a frame visited.
     frames: u64,
     /// Each operator's epoch of its last run, by the sealed set's index.
@@ -838,6 +845,7 @@ impl Session {
             outside_key,
             reading_at: epoch_start,
             steps: steps::Steps::default(),
+            tails: BTreeMap::new(),
             frames: 0,
             group_run: Vec::new(),
             perturb: None,
@@ -1199,6 +1207,7 @@ impl Session {
         let mut scratch = self.clone();
         scratch.mode = Mode::Clean;
         scratch.steps = steps::Steps::default();
+        scratch.tails = BTreeMap::new();
         scratch.t = t;
         scratch.view = view.clone();
         scratch.report = Report::default();
@@ -1390,7 +1399,8 @@ impl Session {
                 return;
             }
         }
-        let (out, err) = self.run_node(s, n, report);
+        let (out, err, tails) = self.run_node(s, n, report);
+        self.tails.extend(tails);
         report.ran += 1;
         if self.mode == Mode::Live {
             s.cache.insert(key, (out.clone(), err.clone(), 0));
@@ -1601,9 +1611,9 @@ impl Session {
         s: &mut Scheduler<'_>,
         n: usize,
         report: &mut Report,
-    ) -> (Vec<Val>, Option<OpError>) {
-        let (out, err, _) = self.call(s, n, None, report);
-        (out, err)
+    ) -> (Vec<Val>, Option<OpError>, Vec<(String, Val)>) {
+        let (out, err, _, tails) = self.call(s, n, None, report);
+        (out, err, tails)
     }
 
     /// Calls a node's operator on its view (with a step's context, for a step). A panic is
@@ -1614,12 +1624,17 @@ impl Session {
         n: usize,
         step: Option<view::StepCtx<'_>>,
         report: &mut Report,
-    ) -> (Vec<Val>, Option<OpError>, Option<(i64, i64)>) {
+    ) -> (
+        Vec<Val>,
+        Option<OpError>,
+        Option<(i64, i64)>,
+        Vec<(String, Val)>,
+    ) {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
         let Some(run) = sealed.ops[node.op].op.run else {
-            return (Vec::new(), None, None);
+            return (Vec::new(), None, None, Vec::new());
         };
         let mut tables = BTreeMap::new();
         for b in &node.reads {
@@ -1638,14 +1653,19 @@ impl Session {
         if let Some(timing) = s.options.timing {
             timing(node.op, item, true);
         }
-        let (out, access, noted) = view.finish();
+        let (out, access, noted, tails) = view.finish();
         if s.options.access_log {
             report.access.extend(access);
         }
         match result {
-            Ok(Ok(())) => (out, None, noted),
-            Ok(Err(e)) => (out, Some(e), noted),
-            Err(_) => (Vec::new(), Some(OpError::new("operator_panic", "")), noted),
+            Ok(Ok(())) => (out, None, noted, tails),
+            Ok(Err(e)) => (out, Some(e), noted, tails),
+            Err(_) => (
+                Vec::new(),
+                Some(OpError::new("operator_panic", "")),
+                noted,
+                Vec::new(),
+            ),
         }
     }
 
