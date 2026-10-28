@@ -319,17 +319,34 @@ async function readStored(store: EvidenceStore | undefined, transcripts: Transcr
     const b = await bytesOf(where.sha);
     return b ? { text: Buffer.from(b).toString('utf8'), outside: false } : undefined;
   }
-  // Only a parsed transcript is kept: a file the store doesn't hold yet, or a failed read, is asked for again.
-  let parsed = transcripts.get(where.sha);
+  return (await parsedTranscript(store, transcripts, where.sha))?.get(where.message);
+}
+/** A transcript in the store, parsed once by hash. Only a parsed one is kept: a file the store doesn't hold yet, or a failed read, is asked for again. */
+function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcripts, sha: string): Promise<Map<string, Entry> | undefined> {
+  let parsed = transcripts.get(sha);
   if (!parsed) {
-    parsed = bytesOf(where.sha).then((b) => {
-      if (!b) transcripts.delete(where.sha);
+    parsed = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
+      if (!b) transcripts.delete(sha);
       return b ? readTranscript(b) : undefined;
     });
-    transcripts.set(where.sha, parsed);
-    parsed.catch(() => transcripts.delete(where.sha));
+    transcripts.set(sha, parsed);
+    parsed.catch(() => transcripts.delete(sha));
   }
-  return (await parsed)?.get(where.message);
+  return parsed;
+}
+
+/** One message of an archived transcript: its ID (`session:<id>#<message>`) and what it holds. */
+export interface Message extends Entry { id: string }
+/**
+ * A session's archived transcript (design: Reading by reference): the evidence its newest transcript.archived event
+ * links, and each message that holds text, in order. Undefined for a session no such event links.
+ */
+export async function sessionTranscript(db: Db, store: EvidenceStore | undefined, transcripts: Transcripts, session: string): Promise<Message[] | undefined> {
+  const row = db.prepare('SELECT transcript FROM sessions WHERE id = ?').get(session) as { transcript: string | null } | undefined;
+  if (!row?.transcript) return undefined;
+  const parsed = await parsedTranscript(store, transcripts, row.transcript);
+  if (!parsed) return undefined;
+  return [...parsed].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
 }
 
 /**

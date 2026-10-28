@@ -1,7 +1,8 @@
 // Where a hub keeps its files, and the one setting every client reads the hub's address from.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
@@ -48,18 +49,24 @@ export function rootOf(dir: string): Root {
 /**
  * The hub's address: `hub.address` in ~/.deepbuild/config.json, `unix:<absolute path>`; absent, the installed
  * hub's socket. deep-hook, `deep mcp`, the app and the CLI all read this one setting, and none assumes the hub
- * is on this machine: a forwarded socket named here works for each.
+ * is on this machine: a forwarded socket named here works for each. A worktree that `deep hub use --root` sent to a
+ * dev hub (`hub.use`, `{<worktree>: "unix:<path>"}`) reads that hub from inside it, unless `cwd` is null.
  */
-export function hubAddress(): { address: string; path: string } {
+export function hubAddress(cwd: string | null = process.cwd()): { address: string; path: string } {
   const file = join(installedRoot(), 'config.json');
   let configured: unknown;
+  let uses: unknown;
   if (existsSync(file)) {
     try {
-      configured = (JSON.parse(readFileSync(file, 'utf8')) as { hub?: { address?: unknown } }).hub?.address;
+      const hub = (JSON.parse(readFileSync(file, 'utf8')) as { hub?: { address?: unknown; use?: unknown } }).hub;
+      configured = hub?.address;
+      uses = hub?.use;
     } catch (error) {
       throw Error(`${file} is not JSON: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  const used = cwd !== null && typeof uses === 'object' && uses !== null ? worktreeHub(uses as Record<string, unknown>, cwd) : undefined;
+  if (used) return { address: used, path: used.slice(5) };
   if (configured === undefined) {
     const path = rootOf(installedRoot()).socket;
     return { address: `unix:${path}`, path };
@@ -68,4 +75,22 @@ export function hubAddress(): { address: string; path: string } {
     throw Error(`${file}: hub.address must be unix:<absolute path>, not ${JSON.stringify(configured)}`);
   }
   return { address: configured, path: configured.slice(5) };
+}
+
+/** The dev hub a worktree holding `cwd` was sent to, the longest such worktree winning. */
+function worktreeHub(uses: Record<string, unknown>, cwd: string): string | undefined {
+  let real = cwd;
+  try { real = realpathSync(cwd); } catch { /* gone: as given */ }
+  const holds = (worktree: string) => [cwd, real].some((p) => p === worktree || p.startsWith(worktree.endsWith(sep) ? worktree : worktree + sep));
+  const found = Object.entries(uses).filter(([worktree, address]) => typeof address === 'string' && address.startsWith('unix:') && holds(worktree))
+    .sort(([a], [b]) => b.length - a.length)[0];
+  return found?.[1] as string | undefined;
+}
+
+/** The deep-hook this checkout built, the newer of its release and debug builds. */
+export function deepHook(): string {
+  const repo = fileURLToPath(new URL('../../../', import.meta.url));
+  const built = ['release', 'debug'].map((p) => join(repo, 'target', p, 'deep-hook')).filter((p) => existsSync(p));
+  if (!built.length) throw Error(`no deep-hook is built under ${join(repo, 'target')}; run cargo build -p deep-hook first`);
+  return built.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]!;
 }
