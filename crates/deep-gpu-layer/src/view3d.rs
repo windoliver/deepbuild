@@ -221,6 +221,7 @@ pub(crate) fn apply_patch(
         you: false,
         base: None,
         knows: &knows,
+        packs: None,
     };
     apply_ops(doc, &patch, "patches/0", &id, &writing)
         .map(|_| ())

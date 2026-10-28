@@ -16,7 +16,9 @@ use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use deep_canvas::cost::Coefficients;
-use deep_canvas::document::{canonical_in, check_costed, check_in, Issue, Notice};
+use deep_canvas::document::{
+    canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
+};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::schedule::{
@@ -138,6 +140,14 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #306: a derived item's seed comes from a counter over expansion order.
+    SeedsByExpansionOrder,
+    /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
+    ReexpansionOverwritesBrokenOut,
+    /// #306: the pack check never reads `requires.modules`.
+    PackCheckSkipsRequiresModules,
+    /// #306: the store and a document's `packs` are keyed by the name half alone.
+    PacksKeyedByName,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -270,6 +280,13 @@ pub enum Call {
     Revisions(String),
     /// The sealed set as the build holds it (#305).
     Registry,
+    /// #306: the pack store's rows.
+    Packs,
+    /// #306: one pack version installed mid-run.
+    InstallPack {
+        id: String,
+        dir: PathBuf,
+    },
     Screen,
     /// The sealed plan as published at `deep://schedule/<core version>` (#387).
     Schedule,
@@ -426,6 +443,8 @@ pub struct Scenario {
     pub commit: Option<String>,
     /// The machine the hub runs on, its environment fingerprint (#379); this machine without it.
     pub machine: Option<Map<String, Value>>,
+    /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
+    pub packs: Vec<(String, PathBuf)>,
 }
 
 /// One revision of a document (Revision).
@@ -472,6 +491,11 @@ pub struct Hub<'a> {
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
     /// The messages each session was sent from an ask box, by session ID (#384).
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
+    /// The pack store (#306): the versions admitted, and one row per offer.
+    pub packs: Packs,
+    pub pack_rows: Vec<crate::packs::Row>,
+    /// Each document's expansions at its last check, for the replies that carry them.
+    pub expansions: BTreeMap<String, Vec<Expansion>>,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -535,7 +559,13 @@ impl<'a> Hub<'a> {
         {
             sched.look_hook = Some(crate::planted::look_hook);
         }
-        Hub {
+        let pack_planted = PackPlanted {
+            seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+            overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
+            skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
+            key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+        };
+        let mut hub = Hub {
             scenario,
             startup,
             revisions: BTreeMap::new(),
@@ -554,7 +584,27 @@ impl<'a> Hub<'a> {
             serial: 0,
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
+            packs: Packs::new(pack_planted),
+            pack_rows: Vec::new(),
+            expansions: BTreeMap::new(),
+        };
+        // The store's packs, each checked once here and never on a document's open.
+        for (id, dir) in &scenario.packs {
+            hub.install_pack(id, dir);
         }
+        hub
+    }
+
+    /// `install_pack` (#306): one pack version read from its folder and put through the pack
+    /// check once.
+    pub fn install_pack(&mut self, id: &str, dir: &std::path::Path) -> Value {
+        crate::packs::install(
+            &mut self.packs,
+            &mut self.pack_rows,
+            &self.startup.sealed,
+            id,
+            dir,
+        )
     }
 
     /// The GPU 3D revisions draw on, opened on first use.
@@ -752,6 +802,8 @@ impl<'a> Hub<'a> {
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
+            Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
@@ -955,20 +1007,24 @@ impl<'a> Hub<'a> {
             &title,
         );
         let mut notices = Vec::new();
+        // The revision's expansions and its check's time (#306): the document's once it is current.
+        let mut fresh: Option<(Vec<Expansion>, f64)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(doc) => {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
+                let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
                         let coefficients = Coefficients::reference()
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_in(&doc, &self.startup.sealed),
+                    _ => check_packed(&doc, &self.startup.sealed, &self.packs),
                 };
+                fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
                 notices = self.notices_reply(&result.notices);
                 let mut issues = result.issues;
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
@@ -1014,11 +1070,18 @@ impl<'a> Hub<'a> {
         // too, naming the operator's module (#387). A read an operator didn't declare is the
         // module's fault, not the document's, so it fails the frame and refuses nothing.
         let visible = self.doc_visible(&show.doc);
+        // The form that draws: the document with each recipe instance's derived items in its
+        // place (#306).
+        let drawn_form = stamped.as_ref().map(|doc| {
+            let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
+            crate::packs::drawn(doc, expansions.unwrap_or(&[]))
+        });
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
         {
-            let (op_issues, drawing) = self.probe(doc, show.t, visible, None);
+            let (op_issues, drawing) =
+                self.probe(drawn_form.as_ref().unwrap_or(doc), show.t, visible, None);
             for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
                 issues.push(op_issue(i));
             }
@@ -1044,8 +1107,20 @@ impl<'a> Hub<'a> {
         // A payload refused before it could be stamped makes no revision.
         if stamped.is_some() {
             reply.insert("rev".into(), json!(rev));
+            let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
+            crate::packs::reply(
+                fresh.as_ref().map_or(&[][..], |(e, _)| e.as_slice()),
+                fresh.as_ref().map(|(_, ms)| *ms),
+                timing,
+                &mut reply,
+            );
         }
         let error = self.issue_reply(&issues, &mut reply);
+        if !error {
+            if let Some((expansions, _)) = fresh {
+                self.expansions.insert(show.doc.clone(), expansions);
+            }
+        }
         let rows = self.revisions.entry(show.doc.clone()).or_default();
         let state = if error { "refused" } else { "current" };
         if !error {
@@ -1066,9 +1141,9 @@ impl<'a> Hub<'a> {
         if error {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
-                // A check that needs a canvas module the build lacks is BLOCKED, never a FAIL
-                // (technical design: Canvas modules; #305).
-                let blocked = issues.iter().any(|i| i.code == "module_missing");
+                // A check that needs a canvas module or a pack version the build lacks is
+                // BLOCKED, never a FAIL (technical design: Canvas modules; #305; #306).
+                let blocked = crate::packs::blocked(&issues);
                 reply.insert(
                     "result".into(),
                     json!(if blocked { "BLOCKED" } else { "FAIL" }),
@@ -1088,7 +1163,7 @@ impl<'a> Hub<'a> {
             self.sessions.insert(show.doc.clone(), fresh);
         }
         if let Some(session) = self.sessions.get_mut(&show.doc) {
-            session.load(&mut self.sched, &doc);
+            session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
@@ -1212,6 +1287,11 @@ impl<'a> Hub<'a> {
                             };
                             reply.insert("snapshots".into(), json!([entry]));
                             reply.insert("visible".into(), rows);
+                            let expansions = self.expansions.get(&show.doc);
+                            reply.insert(
+                                "batches".into(),
+                                crate::packs::batches(expansions.map_or(&[][..], Vec::as_slice)),
+                            );
                             snapshot_taken = true;
                             reply.insert("outcome".into(), json!("presented"));
                         }

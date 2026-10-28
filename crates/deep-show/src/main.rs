@@ -13,6 +13,7 @@ mod frames;
 mod hub;
 mod input;
 mod kit;
+mod packs;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod scene3d;
@@ -305,6 +306,13 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "screen" => return Some(Call::Screen),
         "registry" => return Some(Call::Registry),
+        "packs" => return Some(Call::Packs),
+        "install_pack" => {
+            return Some(Call::InstallPack {
+                id: c.get("id")?.as_str()?.to_string(),
+                dir: PathBuf::from(c.get("dir")?.as_str()?),
+            })
+        }
         "costs" => return Some(Call::Costs),
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
@@ -725,6 +733,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "box_sends_every_id" => Planted::BoxSendsEveryId,
             "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
             "resolver_closes_task" => Planted::ResolverClosesTask,
+            "seeds_by_expansion_order" => Planted::SeedsByExpansionOrder,
+            "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
+            "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
+            "packs_keyed_by_name" => Planted::PacksKeyedByName,
             _ => return None,
         }),
     };
@@ -760,8 +772,23 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             _ => None,
         })
         .collect::<Option<_>>()?;
+    // #306: the packs installed in the store before the first call, each `{id, dir}`.
+    let packs = match input.get("packs") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|p| {
+                Some((
+                    p.get("id")?.as_str()?.to_string(),
+                    PathBuf::from(p.get("dir")?.as_str()?),
+                ))
+            })
+            .collect::<Option<_>>()?,
+    };
     Some(Scenario {
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
+        packs,
         sessions,
         processes,
         panels,
