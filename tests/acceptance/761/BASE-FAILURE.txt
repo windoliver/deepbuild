@@ -1,7 +1,8 @@
 # #761 acceptance suite on the base commit b7bccf9 (origin/main), 2026-10-26, Node 24.22.0, Mac15,12.
 # Part 1: the suite on the base. AC1 fails naming the first line kept (all nine are kept, as the issue says).
 # AC2 passes on the base, which has no field rules; its wrong program is the planted twin in part 2.
-# AC3 is skipped INCONCLUSIVE: this is not the reference Mac.
+# AC3's budgets.test.ts was redrafted after this run; its base run is part 3. The one line part 1 printed for the
+# first draft's budget test is cut, and part 1's totals still count that draft's one skipped test.
 # Paths under the scratch folder are this job's temporary copies, since removed.
 
 == base b7bccf9, v24.22.0, Mac15,12
@@ -9,7 +10,7 @@ $ node node_modules/vitest/vitest.mjs run tests/acceptance/761 --reporter=verbos
 
  RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a02a6b7eebc3e6833
 
- ↓ tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac > AC3 with the field rules, redaction still adds under 10 ms per MB of text 1ms [INCONCLUSIVE: not the reference Mac (model Mac15,12)]
+ [one line for the first draft of budgets.test.ts cut here; the redrafted test's run is part 3]
 stdout | tests/acceptance/761/redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root
 printed: Authorization: Bearer q7Zp2LmX9vR4tY8w
 stored:  Authorization: Bearer q7Zp2LmX9vR4tY8w
@@ -243,21 +244,55 @@ undefined
 
 exit 1
 
-# Part 3: a reading, not a result. AC3's body on the base, in a scratch copy with the reference-Mac gate removed,
-# to show the test runs; the base has no field rules, so this is the gitleaks and by-value scrub alone.
+# Part 3: the redrafted budgets.test.ts on the base, 2026-10-28, Node 24.22.0, Mac15,12, in a non-git export of
+# b7bccf9 with this checkout's node_modules linked in. The timing test fails at its proof step: the base has no
+# field rules, so 3,257 of the 3,980 field values are stored as printed (the other 723 are caught by the base's
+# own rules), and nothing is timed. The merge-base test is BLOCKED here only because the export isn't a git
+# repo, so `git merge-base HEAD origin/main` has nothing to read; in a checkout it reads the merge base.
 
-load { 4.56 7.51 7.56 }; Now drawing from 'AC Power'
+== base b7bccf9 (export, no .git), v24.22.0, Mac15,12
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/761/budgets.test.ts --reporter=verbose
 
- RUN  v5.0.5 /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/reading-copy/tests/acceptance/761
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base
 
-stdout | budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac > AC3 with the field rules, redaction still adds under 10 ms per MB of text
-AC3 redaction with field rules (ms per MB): 6.29, 5.72, 5.66, 6.88, 6.19 against 10 (margin 22%)
+ × tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 the perf lane still has #15's evidence-redact-text task, unchanged, and the budgets are valid against the merge base's 70ms
+   → BLOCKED: no merge base to compare with (git merge-base HEAD origin/main in /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base/): Command failed: git merge-base HEAD origin/main
+ × tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 with the field rules, redaction adds under 10 ms per MB of text (five runs after a warm-up) 841ms
+   → field values kept in the stored text: 3257 of 3980, first in the line "Authorization: Bearer v7_c1KevCzRDktKb99S"; the field rules didn't run, so the time measured isn't redaction with the field rules: expected 3257 to be +0 // Object.is equality
 
- ✓ budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac > AC3 with the field rules, redaction still adds under 10 ms per MB of text 768ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
 
- Test Files  1 passed (1)
-      Tests  1 passed (1)
-   Start at  22:19:07
-   Duration  880ms (tests 93%, transform 5%, import 2%)
+ FAIL  tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 the perf lane still has #15's evidence-redact-text task, unchanged, and the budgets are valid against the merge base's
+Error: BLOCKED: no merge base to compare with (git merge-base HEAD origin/main in /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/redraft-761/base/): Command failed: git merge-base HEAD origin/main
+ ❯ tests/acceptance/761/budgets.test.ts:109:13
+    107|       baseBudgets = JSON.parse(execFileSync('git', ['show', `${base}:b…
+    108|     } catch (e) {
+    109|       throw Error(`BLOCKED: no merge base to compare with (git merge-b…
+       |             ^
+    110|     }
+    111|     validateBudgets(current, baseBudgets);
 
-exit 0
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac in the local preflight, compared with the merge base > AC3 with the field rules, redaction adds under 10 ms per MB of text (five runs after a warm-up)
+AssertionError: field values kept in the stored text: 3257 of 3980, first in the line "Authorization: Bearer v7_c1KevCzRDktKb99S"; the field rules didn't run, so the time measured isn't redaction with the field rules: expected 3257 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3257
+
+ ❯ tests/acceptance/761/budgets.test.ts:131:240
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  02:29:52
+   Duration  1.08s (tests 93%, transform 4%, import 3%)
+
+exit 1
+
