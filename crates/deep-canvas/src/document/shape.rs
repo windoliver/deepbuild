@@ -113,6 +113,7 @@ impl Shape for DocShape<'_> {
             ["items", _, "role"] => Some(&d.decoration),
             ["items", _, "visible"] | ["items", _, "pickable"] => Some(&d.true_),
             ["items", _, "at"] => Some(&d.empty_object),
+            ["items", _, "broken_out"] => Some(&d.empty_list),
             ["items", _, "at", "pos"] | ["items", _, "at", "rot"] | ["items", _, "at", "pivot"] => {
                 Some(&d.zero3)
             }

@@ -11,6 +11,7 @@ use serde_json::{json, Map, Value};
 
 use super::check::{check, migrate_item};
 use super::order::key_between;
+use super::packs::{self, Packs, Resolved};
 use super::requires::write_required_kinds;
 use super::shape::DocShape;
 use super::{kind_text, member, Issue, AT_VECTORS, ITEM_OPTIONAL_FIELDS, ITEM_OWN_FIELDS};
@@ -69,6 +70,9 @@ pub struct Writing<'a> {
     pub base: Option<&'a Value>,
     /// Whether this build knows a kind: an item of a kind it doesn't is never targeted.
     pub knows: &'a dyn Fn(&str) -> bool,
+    /// The packs the build admitted (Pack): a recipe instance's kind is known through them,
+    /// its derived items are never targeted, and `break_out` copies one from its expansion.
+    pub packs: Option<&'a Packs>,
 }
 
 /// One patch applied in place, before any check: what [`rollback`] needs to take it back.
@@ -205,6 +209,7 @@ pub fn apply(doc: &Value, writer: &str, patches: &[Value]) -> ApplyResult {
             you: writer.starts_with("you:"),
             base: None,
             knows: &knows,
+            packs: None,
         };
         // A refusal returns before `working` is read again, so the ops apply to it in place.
         let at = format!("patches/{i}");
@@ -286,12 +291,18 @@ pub fn apply_ops(
         .iter()
         .any(|o| member(o, "op").and_then(Value::as_str) == Some("reorder"));
     let pre = (writing.base.is_none() && reorders).then(|| doc.clone());
+    // The packs the document names, for its recipe instances: a pack kind is known through its
+    // pack, and a derived item is no patch's target (Patch: it can never target a derived item).
+    let empty = Packs::default();
+    let resolved = packs::resolve(doc, writing.packs.unwrap_or(&empty), None, &mut Vec::new());
+    let knows = |kind: &str| (writing.knows)(kind) || resolved.recipe(kind).is_some();
     let writing = &Writing {
         layer: writing.layer,
         writer: writing.writer,
         you: writing.you,
         base: writing.base.or(pre.as_ref()),
-        knows: writing.knows,
+        knows: &knows,
+        packs: writing.packs,
     };
     let ids = mint_ids(doc, ops, writing, patch_id);
     let mut done = Patched {
@@ -300,8 +311,24 @@ pub fn apply_ops(
     };
     for (j, op) in ops.iter().enumerate() {
         let op = with_ids(op, &ids);
+        if let Some(items) = member(doc, "items").and_then(Value::as_object) {
+            let target = member(&op, "id")
+                .or_else(|| member(&op, "item").and_then(|i| member(i, "id")))
+                .and_then(Value::as_str);
+            if let Some(instance) = target.and_then(|t| packs::is_derived(items, t, &resolved)) {
+                let id = target.unwrap_or_default();
+                rollback(doc, &done);
+                return Err(Box::new(Issue::error(
+                    "derived_item",
+                    id,
+                    format!("items/{id}"),
+                    json!(id),
+                    &format!("`{id}` is derived from the recipe instance `{instance}`, which writes it; patch the instance's inputs, or break it out first"),
+                )));
+            }
+        }
         let seed = format!("{}|{patch_id}|{j}", writing.writer);
-        if let Err(issue) = apply_op(doc, writing, j, &op, &seed, &mut done) {
+        if let Err(issue) = apply_op(doc, writing, &resolved, j, &op, &seed, &mut done) {
             rollback(doc, &done);
             return Err(issue);
         }
@@ -387,6 +414,9 @@ pub fn touched(patch: &Value, targets_only: bool) -> BTreeSet<String> {
         };
         take(member(op, "id"));
         take(item.and_then(|i| member(i, "id")));
+        // A break-out targets its instance and the derived item it takes.
+        take(member(op, "instance"));
+        take(item.filter(|i| i.is_string()));
         if !targets_only {
             take(item.and_then(|i| member(i, "parent")));
             if member(op, "op").and_then(Value::as_str) == Some("move") {
@@ -570,6 +600,7 @@ fn op_fields(name: &str) -> Option<&'static [&'static str]> {
         "move" => Some(&["op", "id", "parent", "keep"]),
         "reorder" => Some(&["op", "id", "after", "before"]),
         "rows" => Some(&["op", "id", "append", "set", "remove"]),
+        "break_out" => Some(&["op", "instance", "item"]),
         _ => None,
     }
 }
@@ -598,7 +629,7 @@ fn check_op_fields(j: usize, op: &Map<String, Value>, name: &str) -> Result<(), 
             "unknown_field",
             format!("ops/{j}/op"),
             json!(name),
-            "not an op of this slice (create, set, unset, delete, move, reorder, rows)",
+            "not an op of this slice (create, set, unset, delete, move, reorder, rows, break_out)",
         )));
     };
     if let Some(key) = op.keys().find(|k| !fields.contains(&k.as_str())) {
@@ -794,6 +825,7 @@ fn unresolved(id: &str, op: &Value) -> Refused {
 fn apply_op(
     doc: &mut Value,
     writing: &Writing<'_>,
+    resolved: &Resolved<'_>,
     j: usize,
     op: &Value,
     seed: &str,
@@ -823,6 +855,7 @@ fn apply_op(
         "move" => move_to(doc, writing, j, op, done),
         "reorder" => reorder(doc, writing, j, op, seed, done),
         "rows" => rows_op(doc, writing, j, op, done),
+        "break_out" => break_out(doc, writing, resolved, j, op, done),
         _ => delete(doc, writing, j, op, done),
     }
 }
@@ -1215,6 +1248,73 @@ fn delete(
             done.removed.push((id, at));
         }
     }
+    Ok(())
+}
+
+/// `break_out {instance, item}` (Patch; Recipe): the derived item becomes the writer's own,
+/// with the same ID and the values it was expanded with, and the instance lists it in
+/// `broken_out` and stops writing it. The undo is the inverse: the item deleted and
+/// `broken_out` set back, which hands it back as expanded.
+fn break_out(
+    doc: &mut Value,
+    writing: &Writing<'_>,
+    resolved: &Resolved<'_>,
+    j: usize,
+    op: &Value,
+    done: &mut Patched,
+) -> Result<(), Refused> {
+    let instance = op_text(j, op, "instance")?;
+    let item_id = op_text(j, op, "item")?;
+    let items = items_mut(doc)?;
+    let Some(derived) = packs::derived_of(items, &instance, resolved) else {
+        return Err(Box::new(Issue::error(
+            "ref_unresolved",
+            &instance,
+            format!("ops/{j}/instance"),
+            json!(instance),
+            "not a recipe instance that expands in this build",
+        )));
+    };
+    let Some(expanded) = derived.get(&item_id) else {
+        return Err(Box::new(Issue::error(
+            "ref_unresolved",
+            &item_id,
+            format!("ops/{j}/item"),
+            json!(item_id),
+            &format!("not a derived item of `{instance}`"),
+        )));
+    };
+    let mut expanded = expanded.clone();
+    let already = items.contains_key(&item_id);
+    let fields = writable(items, &instance, writing, done)?;
+    let list = fields
+        .entry("broken_out".to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Some(list) = list.as_array_mut() else {
+        return Err(Box::new(Issue::error(
+            "out_of_range",
+            &instance,
+            format!("items/{instance}/broken_out"),
+            list.clone(),
+            "not a list",
+        )));
+    };
+    if already || list.iter().any(|v| v.as_str() == Some(&item_id)) {
+        return Err(Box::new(Issue::error(
+            "out_of_range",
+            &item_id,
+            format!("ops/{j}/item"),
+            json!(item_id),
+            "already broken out",
+        )));
+    }
+    list.push(json!(item_id));
+    list.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+    if let Some(fields) = expanded.as_object_mut() {
+        fields.insert("layer".into(), json!(writing.layer));
+    }
+    done.before.entry(item_id.clone()).or_insert(None);
+    items.insert(item_id, expanded);
     Ok(())
 }
 

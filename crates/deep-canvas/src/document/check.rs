@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::packs::{self, Expansion, Packs, Resolved};
 use super::{
     kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_VECTORS,
     ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
@@ -44,6 +45,9 @@ pub struct CheckResult {
     pub core: String,
     /// The module-set digest of that build.
     pub set_digest: String,
+    /// Each recipe instance's expansion (Recipe): its key and its derived items, which
+    /// `lowered` holds after the instance.
+    pub expansions: Vec<Expansion>,
 }
 
 impl CheckResult {
@@ -56,6 +60,7 @@ impl CheckResult {
             "notices": self.notices.iter().map(Notice::to_json).collect::<Vec<_>>(),
             "draws": self.draws,
             "lowered": self.lowered,
+            "expansions": self.expansions.iter().map(Expansion::to_json).collect::<Vec<_>>(),
         })
     }
 }
@@ -69,19 +74,31 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), None)
+    check_by(doc, sealed, &sealed.kinds(), None, &Packs::default())
+}
+
+/// [`check_in`] in a build that admitted `packs` (Pack): a document's `packs` resolve through
+/// them, and each recipe instance expands at check into its derived items.
+pub fn check_packed(doc: &Value, sealed: &Sealed, packs: &Packs) -> CheckResult {
+    check_by(doc, sealed, &sealed.kinds(), None, packs)
 }
 
 /// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
 /// Mac's (`deep-show`'s planted check that estimates on its own machine).
 pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), Some(coefficients))
+    check_by(
+        doc,
+        sealed,
+        &sealed.kinds(),
+        Some(coefficients),
+        &Packs::default(),
+    )
 }
 
 /// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
 /// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
 pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
-    check_by(doc, &registry::core(), kinds, None)
+    check_by(doc, &registry::core(), kinds, None, &Packs::default())
 }
 
 /// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
@@ -91,6 +108,7 @@ fn check_by(
     sealed: &Sealed,
     kinds: &Registry,
     coefficients: Option<&Coefficients>,
+    packs: &Packs,
 ) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
@@ -99,31 +117,17 @@ fn check_by(
 
     check_envelope(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
+    let resolved = packs::resolve(doc, packs, Some(sealed), &mut issues);
+    let mut expansions = Vec::new();
     // The canvas modules the document declares, which every module kind it uses must be among.
     let declared: BTreeSet<String> = member(doc, "requires")
         .and_then(|r| member(r, "modules"))
         .and_then(Value::as_object)
         .map(|m| m.keys().cloned().collect())
         .unwrap_or_default();
+    // A pack declares the modules its recipes' kinds need, for the items they derive (#306).
+    let pack_declared: BTreeSet<String> = resolved.modules().cloned().collect();
     let layer_ids = check_layers(doc, &mut issues);
-    let item_ids: BTreeSet<String> = member(doc, "items")
-        .and_then(Value::as_object)
-        .map(|items| items.keys().cloned().collect())
-        .unwrap_or_default();
-    // The parents as written, for the cycle walk.
-    let parents: BTreeMap<String, String> = member(doc, "items")
-        .and_then(Value::as_object)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|(k, v)| {
-                    member(v, "parent")
-                        .and_then(Value::as_str)
-                        .map(|p| (k.clone(), p.to_string()))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
 
     match lowered.get_mut("items") {
         None => {}
@@ -131,14 +135,35 @@ fn check_by(
             for (key, item) in items.iter_mut() {
                 migrate_item(key, item, &mut notices, kinds);
             }
+            // Expansion at check, never per frame (Recipe): the derived items join the lowered
+            // items before any item is checked, so they meet the item contract, the module
+            // checks and the budget as any item does.
+            expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            let derived: BTreeSet<String> = expansions
+                .iter()
+                .flat_map(|e| e.derived.keys().cloned())
+                .collect();
+            let item_ids: BTreeSet<String> = items.keys().cloned().collect();
+            // The parents as written, for the cycle walk.
+            let parents: BTreeMap<String, String> = items
+                .iter()
+                .filter_map(|(k, v)| {
+                    member(v, "parent")
+                        .and_then(Value::as_str)
+                        .map(|p| (k.clone(), p.to_string()))
+                })
+                .collect();
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
                 item_ids: &item_ids,
                 parents: &parents,
                 required: &required,
                 declared: &declared,
+                pack_declared: &pack_declared,
+                derived: &derived,
                 sealed,
                 kinds,
+                resolved: &resolved,
             };
             for (key, item) in items.iter_mut() {
                 if check_item(key, item, &ctx, &mut issues, &mut notices) {
@@ -173,6 +198,7 @@ fn check_by(
         lowered,
         core: core_name(),
         set_digest: sealed.set_digest.clone(),
+        expansions,
     }
 }
 
@@ -356,8 +382,12 @@ fn recheck_by(
             .and_then(Value::as_object)
             .is_none_or(Map::is_empty)
     });
-    // The budget estimate sums the whole document, so a build whose modules cost needs it whole.
-    if !maps_empty || sealed.has_costs() {
+    // The budget estimate sums the whole document, so a build whose modules cost needs it whole;
+    // a document that names packs expands at check, so a patch to it re-expands whole.
+    let packed = member(doc, "packs")
+        .and_then(Value::as_array)
+        .is_some_and(|p| !p.is_empty());
+    if !maps_empty || sealed.has_costs() || packed {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
@@ -847,8 +877,14 @@ struct ItemContext<'a> {
     parents: &'a BTreeMap<String, String>,
     required: &'a BTreeMap<String, u32>,
     declared: &'a BTreeSet<String>,
+    /// The modules the document's packs declare, which cover the items they derive.
+    pack_declared: &'a BTreeSet<String>,
+    /// The IDs expansion wrote.
+    derived: &'a BTreeSet<String>,
     sealed: &'a Sealed,
     kinds: &'a crate::kinds::Registry,
+    /// The packs the document resolved: an item of a pack kind is a recipe instance.
+    resolved: &'a Resolved<'a>,
 }
 
 /// Checks one lowered item in place; true when it draws.
@@ -889,10 +925,22 @@ fn check_item(
         ));
         return false;
     };
+    // A recipe instance (Recipe): expansion checked its params against the recipe's inputs and
+    // wrote its derived items, which draw in its place; the instance itself draws nothing.
+    let instance = ctx.resolved.recipe(&text).is_some();
+    if let Some(value) = fields.get("broken_out").filter(|_| !instance) {
+        issues.push(Issue::error(
+            "unknown_field",
+            key,
+            at("broken_out"),
+            value.clone(),
+            "only a recipe instance lists the derived items a patch broke out",
+        ));
+    }
     // A kind of a canvas module this build lacks is refused, naming the module, and nothing of
     // the item is read past its kind: a logic program's bytes, for one, are never opened. Text
     // outside the kind grammar is no module's kind; the lookup below refuses it.
-    if let Some((name, _)) = parse_kind(&text) {
+    if let Some((name, _)) = parse_kind(&text).filter(|_| !instance) {
         if let Some(module) = ctx.sealed.missing_for_kind(&name) {
             issues.push(Issue::error(
                 "module_missing",
@@ -908,7 +956,8 @@ fn check_item(
         // A document declares the canvas modules its kinds need (Document envelope), so a
         // build without the module has the name to refuse with.
         if let Some(module) = ctx.sealed.module_of_kind(&name) {
-            if !ctx.declared.contains(module) {
+            let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
+            if !ctx.declared.contains(module) && !by_pack {
                 issues.push(Issue::error(
                     "out_of_range",
                     key,
@@ -926,6 +975,7 @@ fn check_item(
     // only at a lower major, still meets the item contract core defines (its keys, its id, its
     // layer and parent, its common fields), and is kept byte for byte, its params unread.
     let known = match lookup(ctx.kinds, &text) {
+        Lookup::UnknownKind if instance => None,
         Lookup::UnknownKind => {
             notices.push(Notice {
                 code: "unknown_kind",

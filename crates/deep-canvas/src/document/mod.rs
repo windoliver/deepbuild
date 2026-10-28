@@ -20,6 +20,7 @@ mod apply;
 mod check;
 mod merge;
 mod order;
+pub mod packs;
 mod requires;
 mod rows;
 mod rules;
@@ -33,11 +34,12 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_with, duration, recheck, recheck_skipping_referrers,
-    CheckResult,
+    check, check_costed, check_in, check_packed, check_with, duration, recheck,
+    recheck_skipping_referrers, CheckResult,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
+pub use packs::{Expansion, Pack, PackId, Packs, Planted as PackPlanted};
 pub use requires::{derived_kinds, write_required_kinds};
 pub use rules::STATUS_ROLE;
 pub use shape::{canonical, canonical_in, extends_by_default, Canonical, DocShape};
@@ -114,18 +116,45 @@ pub const ID_MAPS: &[&str] = &[
 ];
 
 pub const ITEM_KEYS: &[&str] = &[
-    "id", "kind", "layer", "parent", "name", "role", "params", "at", "adjust", "visible",
-    "pickable", "order",
+    "id",
+    "kind",
+    "layer",
+    "parent",
+    "name",
+    "role",
+    "params",
+    "at",
+    "adjust",
+    "visible",
+    "pickable",
+    "order",
+    "broken_out",
 ];
 
 /// The item fields a path or an op may reach besides `params` and `at`.
 pub const ITEM_OWN_FIELDS: &[&str] = &[
-    "id", "kind", "layer", "parent", "name", "role", "visible", "pickable", "order",
+    "id",
+    "kind",
+    "layer",
+    "parent",
+    "name",
+    "role",
+    "visible",
+    "pickable",
+    "order",
+    "broken_out",
 ];
 
 /// The item fields `unset` may remove (every one with a default).
-pub const ITEM_OPTIONAL_FIELDS: &[&str] =
-    &["parent", "role", "visible", "pickable", "at", "adjust"];
+pub const ITEM_OPTIONAL_FIELDS: &[&str] = &[
+    "parent",
+    "role",
+    "visible",
+    "pickable",
+    "at",
+    "adjust",
+    "broken_out",
+];
 
 /// An item's color adjustments (Item and kind: adjust), each a channel; `invert` a bool one.
 pub const ADJUST_FIELDS: &[&str] = &[
@@ -290,6 +319,14 @@ pub const CORE_CODES: &[(&str, &str)] = &[
         "The document needs a canvas module this build lacks.",
     ),
     (
+        "pack_missing",
+        "The document names a pack version this build lacks.",
+    ),
+    (
+        "derived_item",
+        "A patch targets an item a recipe instance expands to, which only a break-out makes a writer's own.",
+    ),
+    (
         "out_of_range",
         "A value outside its type or range, or a required field absent.",
     ),
@@ -368,6 +405,8 @@ pub fn fix_for(code: &str) -> String {
         "unknown_kind" => "Register the kind, or remove the item.",
         "kind_too_new" => "Save the item at a major this build knows.",
         "module_missing" => "Open the document in a build with the module, or remove the field.",
+        "pack_missing" => "Install the pack at that version, or open the document where it is installed; never draw it with another version.",
+        "derived_item" => "Patch the instance's inputs, or break the item out first with `break_out {instance, item}`.",
         "out_of_range" => "Give the field a value of its type inside its range.",
         "ref_unresolved" => "Name an ID the document holds, or remove the reference.",
         "cycle" => "Give the item a parent that does not descend from it.",
@@ -484,6 +523,7 @@ mod tests {
                 you: false,
                 base: None,
                 knows: &knows,
+                packs: None,
             };
             let was = doc.clone();
             let Ok(patched) = apply_ops(&mut doc, &patch, "patch", "doc-1", &writing) else {
@@ -524,6 +564,7 @@ mod tests {
             you: false,
             base: None,
             knows: &knows,
+            packs: None,
         };
         apply_ops(&mut out, &patch, "patch", "doc-1", &writing).map(|_| out)
     }
@@ -589,6 +630,7 @@ mod tests {
             you: false,
             base: None,
             knows: &knows,
+            packs: None,
         };
         let patch = |extra: Value| {
             let mut p = json!({"patch": "01J9Z00000000000000000AC96", "doc": "doc-1", "base": 0, "reason": "r", "ops": []});
@@ -796,7 +838,7 @@ mod tests {
         );
         assert_eq!(
             refused_at(json!({"op": "break_out", "id": "a"})),
-            ("unknown_field", "ops/0/op".to_string())
+            ("unknown_field", "ops/0/id".to_string())
         );
         assert_eq!(
             refused_at(json!({"op": "move", "id": "a"})),
