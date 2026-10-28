@@ -5,22 +5,63 @@
 //! that read nothing of each other's at one time keep the plan's tie order (canvas-module name,
 //! or a shuffle), which no result depends on. A step reads another's array as earlier steps left
 //! it through `earlier(…)`. What the steps write is carried state: a frame steps on from where
-//! the last frame stopped, and a frame before it starts again from the timeline's start.
+//! the last frame stopped. A frame before it is a seek (issue #488; Carried state, Logic:
+//! checkpoints and bake): where a stepping module declares `checkpoint` carried state the
+//! session keeps a checkpoint of every stepping array at every multiple of the input track's
+//! spacing, each holding the state as of its flick, and the seek restores the last one at or
+//! before the frame's time and steps forward from it, so seeking equals playing; without
+//! checkpoints it starts again from the timeline's start.
 
 use std::collections::BTreeMap;
 
 use super::view::StepCtx;
 use super::{Mode, Report, Run, Scheduler, Session, StepLog, Val};
 use crate::registry::Sealed;
+use crate::time::CHECKPOINT_EVERY;
 
-/// The stepping operators' carried state: what each array held after the last step, and the
-/// time the session last stepped to.
+/// The stepping operators' carried state: what each array held after the last step, the time
+/// the session last stepped to, and the checkpoints taken so far.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Steps {
     at: Option<i64>,
     values: BTreeMap<String, Val>,
     /// The frame the steps last ran in, so they run once a frame for every stepping operator.
     frame: u64,
+    /// Each checkpoint by its flick: the stepping arrays as of that flick.
+    checkpoints: BTreeMap<i64, BTreeMap<String, Val>>,
+    /// The last checkpoint flick taken, so the next frame takes the ones after it.
+    checkpointed: Option<i64>,
+}
+
+impl Steps {
+    /// Takes the checkpoint at every multiple of the spacing in (checkpointed, upto] from the
+    /// state as it stands: the steps at or before each such flick have all run.
+    fn checkpoint_through(&mut self, upto: i64) {
+        let mut c = match self.checkpointed {
+            None => 0,
+            Some(last) => last + CHECKPOINT_EVERY,
+        };
+        while c <= upto {
+            self.checkpoints.insert(c, self.values.clone());
+            self.checkpointed = Some(c);
+            c += CHECKPOINT_EVERY;
+        }
+    }
+
+    /// The checkpoint a seek to `to` restores: the last at or before `to`; planted, the nearest
+    /// by distance, the earlier of two equally near.
+    fn restore_point(&self, to: i64, nearest: bool) -> Option<i64> {
+        if nearest {
+            let before = self.checkpoints.range(..=to).next_back().map(|(c, _)| *c);
+            let after = self.checkpoints.range(to + 1..).next().map(|(c, _)| *c);
+            return match (before, after) {
+                (Some(b), Some(a)) if a - to < to - b => Some(a),
+                (Some(b), _) => Some(b),
+                (None, a) => a,
+            };
+        }
+        self.checkpoints.range(..=to).next_back().map(|(c, _)| *c)
+    }
 }
 
 impl Session {
@@ -82,9 +123,40 @@ impl Session {
         if s.options.planted.steps_by_name {
             steppers.sort_by(|a, b| a.2.cmp(&b.2));
         }
-        if self.mode == Mode::Clean || self.steps.at.is_some_and(|at| at > to) {
-            self.steps.at = None;
-            self.steps.values.clear();
+        // Checkpoints are kept where a stepping module declares them (Carried state).
+        let checkpoints = steppers.iter().any(|(_, _, module)| {
+            sealed
+                .modules
+                .iter()
+                .find(|m| &m.name == module)
+                .is_some_and(|m| m.shapes.carried.iter().any(|c| c.kind == "checkpoint"))
+        });
+        if self.mode == Mode::Clean {
+            // A clean evaluation steps from the start; the frame stays, since it is the guard
+            // that runs the steps once a frame for every stepping operator.
+            self.steps = Steps {
+                frame: self.steps.frame,
+                ..Steps::default()
+            };
+        } else if self.steps.at.is_some_and(|at| at > to) {
+            // A seek: restore the checkpoint and step forward from it, or start again.
+            match self
+                .steps
+                .restore_point(to, s.options.planted.checkpoint_nearest)
+                .filter(|_| checkpoints)
+            {
+                Some(c) => {
+                    self.steps.values = self.steps.checkpoints[&c].clone();
+                    self.steps.at = Some(c);
+                    self.steps.checkpointed = Some(c);
+                }
+                None => {
+                    self.steps.at = None;
+                    self.steps.values.clear();
+                    self.steps.checkpoints.clear();
+                    self.steps.checkpointed = None;
+                }
+            }
         }
         let mut from = self.steps.at;
         loop {
@@ -99,6 +171,9 @@ impl Session {
             let Some(time) = next.filter(|t| *t <= to) else {
                 break;
             };
+            if checkpoints {
+                self.steps.checkpoint_through(time - 1);
+            }
             let earlier = self.steps.values.clone();
             for (n, step, module) in &steppers {
                 if time % step != 0 {
@@ -110,10 +185,11 @@ impl Session {
                     current: &current,
                     earlier: &earlier,
                 };
-                let (out, err, noted) = self.call(s, *n, Some(ctx), report);
+                let (out, err, noted, tails) = self.call(s, *n, Some(ctx), report);
                 if err.is_some() {
                     continue;
                 }
+                self.tails.extend(tails);
                 let op = self.loaded.as_ref().expect("loaded").nodes[*n].op;
                 for (w, v) in sealed.ops[op].op.writes.iter().zip(out) {
                     self.steps.values.insert(w.clone(), v);
@@ -127,6 +203,12 @@ impl Session {
                 });
             }
             from = Some(time);
+            if checkpoints {
+                self.steps.checkpoint_through(time);
+            }
+        }
+        if checkpoints {
+            self.steps.checkpoint_through(to);
         }
         self.steps.at = from.or(self.steps.at);
     }
