@@ -11,7 +11,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { shipped, type AdapterRegistry } from '@deepbuild/adapters';
 import { openArchive } from '@deepbuild/archive';
-import { AskRefused, openAsks, type Asks, type Delivery } from '@deepbuild/asks';
+import { AskRefused, openAsks, subjectKey, type Asks, type Delivery, type Resolver } from '@deepbuild/asks';
 import { openLedger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
@@ -33,7 +33,7 @@ import { Holds } from './holds.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
-import { aboutCall, aboutPermission, standingRules } from './standing.js';
+import { aboutCall, aboutPermission, standingRules, type About } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
@@ -282,8 +282,16 @@ export class Core {
   private readonly handed = new Map<string, { session: string; at: number; timer: NodeJS.Timeout }>();
   /** The repo each session works in, from its hooks' folder: what its events carry as their project (#23). */
   private readonly projects = new Map<string, string>();
-  /** The permission prompts held for their asks, by ask handle: their answer goes back through the prompt (#23). */
+  /** The asks raised for permission prompts and saved offers, by handle: their answer is never delivered as a message (#23). */
   private readonly prompts = new Set<string>();
+  /** Prompts no decision covered, by session and what the call is, until the call runs and is offered back (#23). */
+  private readonly pending = new Map<string, { meta: HookMeta; about: About }>();
+  /** Permissions you said yes to in the terminal, offered back as decisions to save, by handle (#23). */
+  private readonly offers = new Map<string, { meta: HookMeta; about: About; scope: string }>();
+  /** The typed-saves-decision plant's sessions you typed words in. */
+  private readonly typedAt = new Map<string, number>();
+  /** resolver-decisions with no ledger, asked whether a saved decision covers a prompt before anything is raised (#23). */
+  private precheck!: Resolver;
 
   /**
    * `asking` hears the sessions with an ask still to deliver whenever that set changes, so the event loop holds a stop
@@ -375,6 +383,7 @@ export class Core {
     // resolver-decisions ships on by default (#23): your saved decisions, and the budgets you approved, answer the
     // asks they cover, each answer gated by the core.
     asks.registerResolver('resolver-decisions', resolverDecisions({ record: this.record, ledger }));
+    this.precheck = resolverDecisions({ record: this.record });
     await this.syncStanding().catch(() => undefined);
     this.timers.push(setInterval(() => void this.judgeRules().catch(() => undefined), HOUR));
     // The runner reaps or reports what a crash cut, and ticks itself.
@@ -559,6 +568,12 @@ export class Core {
         if (meta.late && Number((known[0] as { late?: unknown }).late) !== 1) return { settled: this.lateAnswered(meta, meta.late.matched) };
         return { settled: Promise.resolve() };
       }
+    }
+    // A call whose prompt went to you has run, live or replayed: offered back as a decision to save (#23).
+    if (meta.event === 'PostToolUse' && meta.call) void this.offerBack(meta).catch(() => undefined);
+    if (meta.event === 'UserPromptSubmit' && this.options.plant === 'typed-saves-decision') {
+      this.typedAt.set(meta.session, Date.now());
+      void this.typedSaves(meta.session).catch(() => undefined);
     }
     const whose = await this.whose(meta, drafts.find((d) => d.seq !== undefined)?.seq);
     if (whose.job) {
@@ -1182,41 +1197,82 @@ export class Core {
   }
 
   /**
-   * A permission prompt held for its ask (#23): answered at once by a saved decision that covers it, else by your
-   * answer before `until`; with none by then the ask is cancelled, and the prompt goes to the agent's own dialog.
-   * Its answer goes back through the prompt, never as a message.
+   * A permission prompt (#23): answered through the hook only from a saved decision that covers it, logged as decided
+   * for you. One no decision covers opens no ask: the agent's own prompt asks you in the terminal (#18), and once the
+   * call you said yes to runs it is offered back as a decision you save with one click (`deep inbox save`).
    */
-  async permission(meta: HookMeta, until: number): Promise<{ decision: 'allow' | 'deny' | 'cancel'; because?: string }> {
+  async permission(meta: HookMeta): Promise<{ decision: 'allow' | 'deny' | 'none'; because?: string }> {
     await this.ready;
-    if (FOREIGN.has(meta.agent) || !meta.session || !meta.call) return { decision: 'cancel' };
-    const asked = await this.holds.asked(meta, aboutPermission(meta.call.tool, meta.call.input));
+    if (FOREIGN.has(meta.agent) || !meta.session || !meta.call) return { decision: 'none' };
+    const about = aboutPermission(meta.call.tool, meta.call.input);
+    if (!(await this.covered(meta.session, about))) {
+      this.pending.set(`${meta.session}|${about.subject.target.owner}`, { meta, about });
+      return { decision: 'none' };
+    }
+    const asked = await this.holds.asked(meta, about);
     this.prompts.add(asked.ask);
     if (asked.decision) return { decision: asked.option === 'approve' ? 'allow' : 'deny', because: asked.decision };
-    const id = sql(asked.ask.slice(4));
-    while (!this.stopping) {
-      const [row] = (await this.record.raw(`SELECT status, decision FROM asks WHERE id = '${id}'`)) as { status: string; decision: string | null }[];
-      if (row?.status === 'decided') {
-        const applied = await this.holds.applied(asked.ask);
-        return { decision: applied.option === 'approve' ? 'allow' : 'deny', ...(applied.decision ? { because: applied.decision } : {}) };
-      }
-      if (row && row.status !== 'open' && row.status !== 'later') return { decision: row.decision === 'allow' ? 'allow' : row.status === 'cancelled' ? 'cancel' : 'deny' };
-      // The planted wrong program saves words you type in the session as the decision for the ask they approve.
-      if (this.options.plant === 'typed-saves-decision') await this.typedSaves(meta.session, asked.ask);
-      if (Date.now() >= until) break;
-      await new Promise((done) => setTimeout(done, Math.min(250, Math.max(0, until - Date.now()))));
-    }
+    // The core's gate refused what looked covered, as when two decisions disagree: the prompt goes to you, and its ask with it.
     const ts = this.now();
     await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'ask.cancelled', subject: asked.ask, ts, data: { answer: 'decline', plan_hash: null, decision: 'none' } });
-    return { decision: 'cancel' };
+    return { decision: 'none' };
   }
-  /** The typed-saves-decision plant: words typed after the ask was raised saved as your yes to it, with no click. */
-  private async typedSaves(session: string, ask: string): Promise<void> {
-    const [typed] = (await this.record.raw(`SELECT 1 FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask' AND log_pos > (SELECT log_pos FROM events WHERE id = '${sql(ask.slice(4))}') LIMIT 1`)) as unknown[];
-    const [saved] = (await this.record.raw(`SELECT 1 FROM events WHERE kind = 'decision.created' AND subject = '${sql(ask)}' LIMIT 1`)) as unknown[];
-    const [row] = (await this.record.raw(`SELECT key FROM asks WHERE id = '${sql(ask.slice(4))}'`)) as { key: string }[];
-    if (!typed || saved || !row) return;
-    const project = this.projects.get(session);
-    await this.appendCore('decision.created', { key: row.key, scope: project ? `repo:${project}` : `session:${letters(session)}`, answer: 'approve', ask }, { subject: ask });
+  /** Whether a saved decision covers what a prompt is about, asked of resolver-decisions with nothing raised. */
+  private async covered(session: string, about: About): Promise<boolean> {
+    const options = [{ id: 'approve', label: about.options[0], decision: 'allow' as const }, { id: 'decline', label: about.options[1], decision: 'deny' as const }];
+    const key = subjectKey({ kind: 'authority', subject: about.subject, options } as unknown as Parameters<typeof subjectKey>[0], '');
+    const answer = await this.precheck({
+      ask: 'ask:0', kind: 'authority', options, plan: null, words: [], changed: null, folded: [], undo: false, cost_usd: null, suggested: null, conflict: [],
+      needs_person: [], budget: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
+    });
+    return answer !== undefined && !answer.also?.length;
+  }
+  /** A call whose prompt no decision covered has run: you said yes in the terminal, so it is offered back to save. */
+  private async offerBack(meta: HookMeta): Promise<void> {
+    // The prompt and the call that ran are matched by session and call: a prompt's payload names no tool_use_id.
+    const key = `${meta.session}|${aboutPermission(meta.call!.tool, meta.call!.input).subject.target.owner}`;
+    const pending = this.pending.get(key);
+    if (!pending) return;
+    this.pending.delete(key);
+    const project = this.projects.get(meta.session);
+    const handle = `offer:${ulid(this.now())}`;
+    this.offers.set(handle, { ...pending, scope: project ? `repo:${project}` : `session:${letters(meta.session)}` });
+    // The typed-saves-decision plant, when your words came in before the call's run did.
+    if (this.options.plant === 'typed-saves-decision' && this.typedAt.has(meta.session)) await this.typedSaves(meta.session);
+  }
+  /** The typed-saves-decision plant: words you type in the session save what it offers back, with no click. */
+  private async typedSaves(session: string): Promise<void> {
+    for (const [handle, offer] of [...this.offers]) if (offer.meta.session === session) await this.saveOffer(handle, this.connection('cli'));
+  }
+  /** The offers still open: each one no saved decision covers yet. */
+  private async openOffers(): Promise<Obj[]> {
+    const open: Obj[] = [];
+    for (const [offer, o] of this.offers) {
+      if (await this.covered(o.meta.session, o.about)) this.offers.delete(offer);
+      else open.push({ offer, session: o.meta.session, command: o.about.subject.target.ref, scope: o.scope });
+    }
+    return open;
+  }
+  /** offers/:id/save, from the app or `deep inbox save`: your one click, once the trusted path allows it, saves the offered permission for its repo. */
+  private async saveOffered(params: Obj, context: CallContext): Promise<Obj> {
+    const handle = params.offer;
+    if (typeof handle !== 'string' || !/^offer:[0-9A-Za-z]+$/.test(handle)) throw new Refused(refusal('handle_syntax', '/params/offer', 'Name the offer by its handle, offer:<id>, as deep inbox lists it.', handle));
+    const offer = this.offers.get(handle);
+    if (!offer) throw new Refused(refusal('not_found', '/params/offer', `No offer ${handle}; save one deep inbox lists.`, handle));
+    await this.trusted(params, context, `save “${offer.about.subject.target.ref.slice(0, 120)}” as a decision for ${offer.scope}`, handle);
+    return this.saveOffer(handle, this.connection(context.role === 'app' ? 'app' : 'cli'));
+  }
+  /** The offer saved: its permission raised as an authority ask and answered yes on the trusted path, which saves it for the repo. */
+  private async saveOffer(handle: string, as: Connection): Promise<Obj> {
+    const offer = this.offers.get(handle)!;
+    this.offers.delete(handle);
+    const asked = await this.holds.asked(offer.meta, offer.about);
+    // Its answer is yours, given here: nothing is delivered to the session.
+    this.prompts.add(asked.ask);
+    if (!asked.decision) await this.asks.answer(as, asked.ask, { option: 'approve', plan_hash: null, token: `os-confirm:${ulid(this.now())}` }).catch((error: unknown) => { throw asRefused(error); });
+    await this.syncStanding().catch(() => undefined);
+    const [saved] = (await this.record.raw(`SELECT id, data FROM events WHERE kind = 'decision.created' AND subject = '${sql(asked.ask)}' ORDER BY log_pos DESC LIMIT 1`)) as { id: string; data: string }[];
+    return { offer: handle, ask: asked.ask, decision: saved ? `decision:${saved.id}` : asked.decision ?? null, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : offer.scope };
   }
 
   /** Copies your standing rules for cloud resources into rules.json, so deep-hook honours them with the hub down (#23). */
@@ -1645,6 +1701,7 @@ export class Core {
       case 'ask.answer': return this.answer(params, context);
       case 'decision.overrule': return this.overrule(params, context);
       case 'ask.undo': return this.undo(params, context);
+      case 'offer.save': return this.saveOffered(params, context);
       case 'device.pair': return this.pair(params);
       case 'extension.install': return this.install(params, context);
       case 'you.confirm': return this.confirmCommand(params, context);
@@ -1786,6 +1843,8 @@ export class Core {
         const text = texts.get(row.ask.slice(4));
         return { ...row, question: text?.question ?? '', options: text?.options ? (JSON.parse(text.options) as { id: string }[]).map((o) => o.id) : [] };
       }),
+      // Permissions you said yes to in the terminal, offered back as decisions to save: never asks (#23).
+      offers: await this.openOffers(),
     };
   }
 

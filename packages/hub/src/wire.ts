@@ -90,8 +90,8 @@ export interface HookMeta {
   /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
   fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
   /**
-   * A tool call's own fields, for a PreToolUse or a PermissionRequest (#23): the session's permission mode, the tool,
-   * its input, and the options the agent offers in its own permission dialog.
+   * A tool call's own fields, for a PreToolUse, a PermissionRequest or a PostToolUse (#23): the session's permission
+   * mode, the tool, its input, and the options the agent offers in its own permission dialog.
    */
   call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
