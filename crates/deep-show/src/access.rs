@@ -48,7 +48,7 @@ fn heard<'a>(doc: &'a Value, hidden: &[String]) -> Vec<(&'a String, &'a Value)> 
 /// The accessibility tree of a document: its own node first (its title as the name, with its
 /// description), then one node per item heard, in reading order, and then one per control,
 /// named by its label and with its ARIA role.
-fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
+pub(crate) fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
     let mut nodes = vec![json!({
         "id": text(doc.get("id")),
         "role": "document",
@@ -73,7 +73,7 @@ fn tree(doc: &Value, hidden: &[String]) -> Vec<Value> {
 /// Every readout heard with what it says: a text item in the tree whose `template` fills from
 /// the document's values (Text `text@1`; Overlay: "a readout and the parts it describes come
 /// from one model"), expanded as the frame shows it.
-fn readouts(doc: &Value, hidden: &[String]) -> BTreeMap<String, String> {
+pub(crate) fn readouts(doc: &Value, hidden: &[String]) -> BTreeMap<String, String> {
     heard(doc, hidden)
         .into_iter()
         .filter_map(|(id, item)| {
