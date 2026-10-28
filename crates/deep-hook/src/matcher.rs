@@ -25,7 +25,9 @@
 //! - `effect:<class>`: a call with that effect: `cloud-resource` (a command that creates one), `dependency`
 //!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
-//!   the line can't know, so what it deletes can't be worked out before it runs).
+//!   the line can't know, so what it deletes can't be worked out before it runs), or one that needs your
+//!   authority (#321): `push` (`git push`), `merge` (`gh pr merge`), `send` (`gh pr comment`, `gh issue comment`,
+//!   `gh pr review`) or `delete` (`gh repo delete`, `gh release delete`, `gh issue delete`).
 //! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
 //!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
 //!
@@ -71,6 +73,10 @@ const EFFECTS: &[&str] = &[
     "service",
     "top-level-folder",
     "unknown-reach-delete",
+    "push",
+    "merge",
+    "send",
+    "delete",
 ];
 
 /// The hub's login service, as `deep hub start` installs it (packages/hub/src/service.ts).
@@ -300,6 +306,27 @@ impl Call {
             "service" => self.runs.iter().find(|r| starts_service(r)),
             "unknown-reach-delete" => self.runs.iter().find(|r| {
                 deletes(r) && (r.scripted || r.args.iter().any(|a| a.glob || a.text.is_none()))
+            }),
+            "push" => self
+                .runs
+                .iter()
+                .find(|r| r.is("git") && git_rest(r).first().map(String::as_str) == Some("push")),
+            "merge" => self.runs.iter().find(|r| gh(r, &[&["pr", "merge"]])),
+            "send" => self.runs.iter().find(|r| {
+                gh(
+                    r,
+                    &[&["pr", "comment"], &["issue", "comment"], &["pr", "review"]],
+                )
+            }),
+            "delete" => self.runs.iter().find(|r| {
+                gh(
+                    r,
+                    &[
+                        &["repo", "delete"],
+                        &["release", "delete"],
+                        &["issue", "delete"],
+                    ],
+                )
             }),
             "top-level-folder" => {
                 let root = checkout(self.cwd.as_deref()?)?.root;
@@ -548,6 +575,13 @@ fn creates_cloud(run: &Run) -> bool {
         || (run.is("pulumi") && op(0) == "up")
         || ((run.is("cdk") || run.is("sam") || run.is("serverless") || run.is("sls"))
             && op(0) == "deploy")
+}
+
+/// A `gh` run whose first two plain words are one of `subs`.
+fn gh(run: &Run, subs: &[&[&str]]) -> bool {
+    let words = run.words();
+    let plain = plain(&words);
+    run.is("gh") && subs.iter().any(|s| plain.len() >= 2 && plain[..2] == **s)
 }
 
 /// A command that adds a package: one it names, not a reinstall of the lockfile's.
@@ -1092,6 +1126,26 @@ mod tests {
             .matches("effect:service")
             .is_some());
         assert!(bash("docker ps").matches("effect:service").is_none());
+        assert!(bash("git -C ../shop push origin main")
+            .matches("effect:push")
+            .is_some());
+        assert!(bash("echo 'git push origin main'")
+            .matches("effect:push")
+            .is_none());
+        assert!(bash("git commit -m push").matches("effect:push").is_none());
+        assert!(bash("gh pr merge 12 --squash")
+            .matches("effect:merge")
+            .is_some());
+        assert!(bash("gh pr view 12").matches("effect:merge").is_none());
+        assert!(bash("gh issue comment 3 --body hi")
+            .matches("effect:send")
+            .is_some());
+        assert!(bash("gh repo delete acme/shop --yes")
+            .matches("effect:delete")
+            .is_some());
+        assert!(bash("gh repo view acme/shop")
+            .matches("effect:delete")
+            .is_none());
         assert!(bash("rm -rf \"$OUT\"")
             .matches("effect:unknown-reach-delete")
             .is_some());
