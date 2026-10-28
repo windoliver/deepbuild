@@ -64,6 +64,8 @@ The tests reach DeepBuild only through these:
   the base has, and two new ones, `DEEP_HUB_TEST_DRAFTS` and `DEEP_HUB_TEST_WORK` (below). Each test passes both new
   ones to every hub it starts.
 - **The socket**, as the cli role with the control token: `events.read`, and `evidence.read` (AC12).
+- **The run records** the base's catalogue names for check runs (AC12): `run.started@1` (`run`, `check`, `claim`,
+  `commit`) and `run.finished@1` (`run`, `outcome`, …), read through `events.read`.
 - **`deep inbox answer <ask> <option>`** (#24): your answer on the trusted path (AC5), the OS confirmation stubbed
   `confirmed` (`DEEP_HUB_TEST_CONFIRM`), as #321's and #24's suites stub it.
 - **The contracts package's public entry**, `packages/contracts/src/index.ts`: `listSchemas`, `getSchema`, `validate`
@@ -173,6 +175,14 @@ a JSON file named by `DEEP_HUB_TEST_WORK`, which only tests set, holding the rea
   the open asks' requirement IDs again": it must name each requirement ID of the locked definition, as a word.
 - **The approved bytes kept by digest** (AC12): the locked definition's R1 names the SHA-256 of the check file's bytes
   at the lock, and `evidence.read` with that SHA-256 finds it in the hub's evidence store.
+- **The claim's run of R1's check** (AC12): a `run.started` after the claim's stop whose `data.claim` is `claim:<id>`,
+  where `<id>` is the ID of an event after that stop whose `data.task_ref` is the task's (a claim of the task, such as
+  `claim.made`, or the event carrying the recomputed hash), and whose `data.check` names R1's check (contains
+  `.deepbuild/checks/expired-token.sh`, or is `R1` or ends in `#R1` or `:R1`); and the `run.finished` whose `data.run`
+  is that run's. "The claim's checks run the approved bytes": the approved file fails (`src/auth.js` has no
+  `rejectsExpired`) and python -c rewrites it to `exit 0`, so that run's `outcome` must be `failed`, the approved
+  check's, as the control claim's run of the untouched file is too. The design's Protection row: "the claim is judged
+  on the approved bytes".
 - **A proposal naming the file** (AC12): an event of a kind ending in `.proposed`, after the change, whose data names
   `.deepbuild/checks/expired-token.sh`. The base's `deep_propose` records `learn.proposed`.
 
@@ -229,6 +239,7 @@ names. `failureOf` rethrows BLOCKED and INCONCLUSIVE, so neither counts as the p
 | `hash-ids-only` | AC9 | the lock and its recompute hash only the requirement IDs | `requirement R2 of session:…, edited in the store after the lock …, must give another hash …`; the test requires `R2` |
 | `claim-on-tool-calls` | AC10 | the stop rule reads every stop whose turn made a tool call as a claim | `stop D, the answer to your typed question … (agent.stop <id>) must read as no claim (claim: false)`; the test requires the stop's event ID |
 | `role-from-text` | AC5 | the lock reads an author's role from the text it wrote ("the repo owner"), not from its work.item@1 reading | the signed comment's definition locks with no answer, or drive-by isn't marked outside; the test requires a failure on the wait or the role |
+| `runs-disk-bytes` | AC12 | a claim's checks run the check file as it is on disk, not the approved bytes kept by digest | `the claim's checks run the approved bytes of .deepbuild/checks/expired-token.sh … R1's run must record the approved check's outcome, failed; it recorded …`; the test requires the file's path |
 | `hash-check-paths` | AC12 | the lock hashes requirement records with their check paths but not the checks' bytes | `.deepbuild/checks/expired-token.sh, changed by python -c after the lock, must make the next claim's recomputed hash differ …`; the test requires the file's path |
 
 The issue names no wrong program for AC1, AC2, AC3, AC4, AC6 and AC11. The base is theirs (`BASE-FAILURE.txt`):
@@ -255,12 +266,10 @@ failure message starts with them too.
 | AC9 `#303.8c347a59` | `definition.locked` carries hash, issue revision, base commit, each required by its schema; the recomputed hash matches, an edit in the store changes it; ID-only hashing fails naming the requirement | `lock.test.ts` (3) | the newest schema's fixture; the recorded event; a claim recomputes the locked hash; R2 edited in `definitions`; the next claim recomputes another; the wrong program `hash-ids-only` |
 | AC10 `#303.fd687f1e` | the stop rule: after startup, resume, /clear and an answer, no claim; the same question with an edit, a claim; the tool-call rule fails naming the stop | `stops.test.ts` (2) | turns A to E above; `agent.stop`'s `claim`; the wrong program `claim-on-tool-calls` |
 | AC11 `#303.447eb97a` | turning a message into a task adds under 5 ms to the prompt hook, against the merge base | `budgets.test.ts` (2) | the perf lane's task naming #303, valid and running; the timing against a merge-base build, INCONCLUSIVE where it can't count |
-| AC12 `#303.323ca6a1` | a drafted check file changed by `python -c` after the lock: the next claim's hash differs, the approved bytes kept by digest, a proposal naming the file; path-only hashing fails | `checkfile.test.ts` (2) | R1's check is the drafted file; a control claim; `python3 -c` as an allowed Bash call; the next claim; `evidence.read`; the `*.proposed` event; the wrong program `hash-check-paths` |
+| AC12 `#303.323ca6a1` | a drafted check file changed by `python -c` after the lock: the next claim's hash differs, the approved bytes kept by digest, a proposal naming the file; path-only hashing fails | `checkfile.test.ts` (3) | R1's check is the drafted file; a control claim and its run of R1 (failed); `python3 -c` as an allowed Bash call; the next claim; `evidence.read`; the `*.proposed` event; the claim's run of R1 records failed; the wrong programs `hash-check-paths` and `runs-disk-bytes` |
 
 ## What this suite could not encode
 
-- **"The claim's checks run the approved bytes."** No gate runner (#29) runs checks yet, so the suite reads only that
-  the hub keeps the approved bytes by digest and that the locked definition names them, never a run of them.
 - **The issue's revision.** `issue_rev` is required and must be present, but its value isn't asserted: the issue says
   "the issue's revision" without saying what a message handle's task carries, or how a test source's reading gives one.
 - **"Every attempt on the task shares it"** and **"it changes after the lock only through a dispute you answer"** are
@@ -271,6 +280,15 @@ failure message starts with them too.
 - **Codex and other agents.** Every session is Claude Code's.
 - **A message typed mid-turn that Claude Code later also submits as a prompt** is not replayed; the base already reads
   the queue and the prompt as one message.
+
+## Redraft
+
+**2026-10-28: AC12's "the claim's checks run the approved bytes" encoded.** The first draft listed the clause as not
+encoded. At the owner's request, still blind (the issue, the design and the base commit only), it is now asserted
+through the run records the base's catalogue names, `run.started` and `run.finished`, tied to the claim the stop made
+(The surface under test, above), with a new wrong program, `runs-disk-bytes`. Only `checkfile.test.ts` changed: its
+scenario now also waits for each claim's run of R1's check, the first test asserts its outcome, and a third test runs
+the plant. Every other test and expected value is unchanged. `BASE-FAILURE.txt` has the AC12 run on the base.
 
 ## Files
 
