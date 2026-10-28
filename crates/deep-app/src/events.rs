@@ -73,6 +73,18 @@ impl Fixture {
             .unwrap_or(0)
     }
 
+    /// The record's events, each with its session as the events table's `session` column, as the hub sends them.
+    pub fn events(&self) -> Vec<Value> {
+        self.rows
+            .iter()
+            .map(|row| {
+                let mut event = row.event.clone();
+                event["session"] = Value::String(row.session_id.clone());
+                event
+            })
+            .collect()
+    }
+
     /// Session ids in the order they first appear.
     pub fn sessions(&self) -> Vec<String> {
         let mut sessions: Vec<String> = Vec::new();

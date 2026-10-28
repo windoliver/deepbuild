@@ -37,6 +37,15 @@ pub struct View<'a> {
     tails: Vec<(String, Val)>,
 }
 
+/// What an operator left when its view finished: its writes, its reads, what a step noted and
+/// the tails it wrote.
+pub(super) type Finished = (
+    Vec<Val>,
+    Vec<Access>,
+    Option<(i64, i64)>,
+    Vec<(String, Val)>,
+);
+
 impl<'a> View<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
@@ -67,14 +76,7 @@ impl<'a> View<'a> {
 
     /// What the operator wrote, in its writes' order, every read it made, what a step noted,
     /// and the tails it wrote.
-    pub(super) fn finish(
-        self,
-    ) -> (
-        Vec<Val>,
-        Vec<Access>,
-        Option<(i64, i64)>,
-        Vec<(String, Val)>,
-    ) {
+    pub(super) fn finish(self) -> Finished {
         (self.out, self.access, self.noted, self.tails)
     }
 

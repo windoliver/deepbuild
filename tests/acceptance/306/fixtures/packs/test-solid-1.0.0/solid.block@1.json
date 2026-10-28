@@ -1,0 +1,35 @@
+{
+  "id": "solid.block",
+  "version": "1.0",
+  "title": "Block",
+  "license": "MIT",
+  "author": "the #306 acceptance suite",
+  "description": "One 3D box of the given side, a mark of scene3d's mark.box@1.",
+  "inputs": {
+    "side": {
+      "type": "number",
+      "unit": "m",
+      "default": 1,
+      "min": 0.1,
+      "max": 100,
+      "about": "the box's side"
+    }
+  },
+  "steps": {
+    "box": {
+      "op": "mark",
+      "kind": "mark.box@1",
+      "params": {
+        "size": ["side", "side", "side"],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["box"]
+  }
+}

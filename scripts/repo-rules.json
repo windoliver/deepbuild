@@ -93,6 +93,10 @@
         "deep-marks-gpui": {
           "spec": "* path=../deep-marks-gpui",
           "why": "Issue #380: the session line is a stroke of the canvas's marks, never a path the view paints itself."
+        },
+        "deep-canvas-marks": {
+          "spec": "* path=../deep-canvas-marks",
+          "why": "Issue #326: every surface draws a state with the look's status-map entry, its glyph and color, from the shipped clean look."
         }
       },
       "dev-dependencies": {

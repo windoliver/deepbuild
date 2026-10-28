@@ -1,0 +1,87 @@
+#321 acceptance suite on the base commit debda22 (origin/main), 2026-10-28 (UTC), before any #321 code.
+Run: npx vitest run --root tests/acceptance/321 --no-file-parallelism   (Node 24.22.0; 1-minute load 23-56 on 12 cores)
+Result: Test Files 5 failed (5); Tests 9 failed (9); 198 s. Every test fails at a named assertion, or BLOCKED on a
+plant the base doesn't list. None crashes the runner. Trimmed to each test's failing assertion.
+
+proceed.test.ts (AC1 #321.69952336)
+  x AC1 a planted sorter's proceed is recorded with its rule; in the turn it starts, git push origin main is held ...
+    Error: AC1 #321.69952336 the planted sorter's proceed for "want me to push to main?" must be recorded with the
+    question and the rule that sorted it (planted-proceed-23ba795d): 30 s after the stop, no event names both
+    -> the base has no sorter and no DEEP_HUB_TEST_SORTER; nothing is recorded, and the stop's reply carries nothing.
+  x AC1 (wrong program) ... (DEEP_HUB_PLANT=proceed-covers-turn) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=proceed-covers-turn did not start: ...
+    Error: DEEP_HUB_PLANT=proceed-covers-turn names no planted program
+
+delete-repo.test.ts (AC2 #321.d75b4c41)
+  x AC2 forge updated to add delete_repo: delete_repo held by one ask ...
+    Error: AC2 #321.d75b4c41 [forge] the session start must record forge's tool list (list_issues, get_issue,
+    create_issue): 30 s after it, no event names forge with list_issues, get_issue, create_issue
+    -> the base records each server's config digest at session start (loads), never its tool list.
+
+read-only-hint.test.ts (AC3 #321.876b8dcb)
+  x AC3 forge updated to add post_update (readOnlyHint: true, no facts entry) ...
+    Error: AC3 #321.876b8dcb [forge] the session start must record forge's tool list (list_issues, get_issue): 30 s
+    after it, no event names forge with list_issues, get_issue
+  x AC3 (wrong program) ... (DEEP_HUB_PLANT=trusts-hints) ... fails this test on the fake server's request count
+    Error: #321.876b8dcb the planted classifier must fail this test on the fake server's request count for
+    post_update; it failed with: AC3 #321.876b8dcb [forge] the session start must record forge's tool list ...
+    -> trusts-hints exists at the base (#304's), so the hub starts; the scenario fails earlier than the request count.
+
+yours.test.ts (AC4 #321.ed0f414b)
+  x AC4 tracker (yours, local scope) and forge (synced, user scope) each add delete_repo ...
+    Error: AC4 #321.ed0f414b the session start must record forge's tool list (list_issues, create_issue): 30 s
+    after it, no event names forge with list_issues, create_issue
+  x AC4 (wrong program) ... (DEEP_HUB_PLANT=holds-synced-only) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=holds-synced-only did not start: ...
+    Error: DEEP_HUB_PLANT=holds-synced-only names no planted program
+
+deadline.test.ts (AC5 #321.e6090cff)
+  x AC5 git push origin main, gh pr merge 12, and forge's new delete_repo and post_update, held with nobody answering ...
+    Error: AC5 #321.e6090cff the session start must record forge's tool list (list_issues): 30 s after it, no
+    event names forge with list_issues
+  x AC5 (wrong program) ... (DEEP_HUB_PLANT=hold-as-choice) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=hold-as-choice did not start: ...
+    Error: DEEP_HUB_PLANT=hold-as-choice names no planted program
+
+The later judgements on the base, past the first failing assertion. A throwaway probe was kept outside this folder
+and not committed. It ran the suite's own helpers on the base hub, skipping the tool-list and proceed steps the base
+fails first. Each hold judgement failed as the README says, and each "runs with no ask" judgement passed:
+  expectHeld(git push origin main) ->
+    P1 `git push origin main` ran before you answered: deep-hook allowed it at PreToolUse with nothing held (exit 0 after 16 ms ...)
+  expectHeld(mcp__forge__delete_repo) ->
+    P2 the fake server forge received 1 tools/call request(s) for delete_repo before you answered: deep-hook allowed mcp__forge__delete_repo at PreToolUse (exit 0 after 34 ms ...)
+  expectHeld(mcp__tracker__delete_repo) ->
+    P3 the fake server tracker received 1 tools/call request(s) for delete_repo before you answered: deep-hook allowed mcp__tracker__delete_repo at PreToolUse (exit 0 after 62 ms ...)
+  expectFree(npm test), expectFree(mcp__forge__list_issues) -> passed (allowed, received by the server, no ask)
+  The fake server's log: initialize, notifications/initialized, tools/call delete_repo; initialize,
+  notifications/initialized, tools/call list_issues. Base deep-hook allowed each call, and the not-late check found
+  each call's tool.before unmarked.
+So, past their setup, the criteria fail on the base:
+  - AC1's push assertion fails naming the call.
+  - AC2's, AC3's and AC4's hold assertions fail on the fake server's request count.
+  - AC4's names the server.
+
+Redraft, 2026-10-28 (README, Redraft): each session's hooks now run under its own process, fixtures/agent.mjs, so
+your yes through `deep inbox answer` comes from outside every session's process tree.
+Run on the base: a temporary `git worktree add --detach /tmp/dh321-basewt debda22`, built from scratch (npm ci,
+npm run build --workspaces, cargo build --locked -p deep-hook), with this folder copied in; this checkout untouched.
+  npx vitest run --root tests/acceptance/321 --no-file-parallelism proceed delete-repo read-only-hint yours
+  (1-minute load 24-32 on 12 cores). Type-check: tsc -p tests/acceptance/321/tsconfig.json, no errors.
+Result: Test Files 4 failed (4); Tests 7 failed (7); 167 s.
+  Every test fails at the same assertion as in the first run above:
+  - AC1: the proceed isn't recorded.
+  - AC2, AC3 and AC4: forge's tool list isn't recorded at the session start.
+  - AC3's trusts-hints test fails without naming the request count.
+  - proceed-covers-turn and holds-synced-only are BLOCKED: no planted program by that name.
+  None reaches `approve` on the base, so the dispute's failure (exit 3, "runs inside agent session …'s process
+  tree") couldn't show here; it showed only past the base, where the coordinator saw it.
+
+The fix, proven on the same base build. A throwaway probe was kept outside the folder and not committed. It ran
+`deep off`, which takes the same peer check (agentAbove) as `deep inbox answer`, from the test process with the OS
+confirmation stubbed:
+  with the session's hooks run by its own process (this redraft):
+    REDRAFT deep off: exit 0 after 405 ms, stdout "DeepBuild is off: every gate is watch-only, ..."
+  with deep-hook a child of the test process (the first draft):
+    FIRST DRAFT deep off: exit 3 after 494 ms, stderr "deep off changed nothing: it runs inside agent session
+    e0c6fcfe-…'s process tree, so it acts as that session, and no agent changes what watches it. ..."
+deadline.test.ts (AC5) was not re-run: it never reaches your yes, and its harness change is the same `fire`.

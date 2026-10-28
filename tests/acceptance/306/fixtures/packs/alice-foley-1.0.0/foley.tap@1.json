@@ -1,0 +1,34 @@
+{
+  "id": "foley.tap",
+  "version": "1.0",
+  "title": "Tap (alice)",
+  "license": "MIT",
+  "author": "alice",
+  "description": "alice's tap: one rect of the given side.",
+  "inputs": {
+    "size": {
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "about": "the tap's side"
+    }
+  },
+  "steps": {
+    "tap": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [0, 0, "size", "size"],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["tap"]
+  }
+}

@@ -16,7 +16,9 @@ use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use deep_canvas::cost::Coefficients;
-use deep_canvas::document::{canonical_in, check_costed, check_in, Issue, Notice};
+use deep_canvas::document::{
+    canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
+};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::schedule::{
@@ -32,6 +34,7 @@ use serde_json::{json, Map, Value};
 
 use crate::evidence;
 use crate::frames::{op_issue, overflows, unfit_issue};
+use crate::placement::{self, Placement};
 use crate::shared::{self, Clock, CommitFault, Quota, Shared};
 use crate::snapshot::{self, Drawn, Renderer, Unfit};
 
@@ -140,6 +143,20 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #403: a verdict's key names each deliverable by doc ID alone, with no revision.
+    VerdictKeyedByDoc,
+    /// #403: checks in a claim skip an `unknown_kind` item and judge the rest.
+    ChecksSkipUnknownKind,
+    /// #403: a check kind no module in the build registers is INCONCLUSIVE.
+    MissingKindInconclusive,
+    /// #306: a derived item's seed comes from a counter over expansion order.
+    SeedsByExpansionOrder,
+    /// #306: a change of inputs re-expands the broken-out item too, over the writer's own.
+    ReexpansionOverwritesBrokenOut,
+    /// #306: the pack check never reads `requires.modules`.
+    PackCheckSkipsRequiresModules,
+    /// #306: the store and a document's `packs` are keyed by the name half alone.
+    PacksKeyedByName,
     /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
     CheckpointNearestInDistance,
     /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
@@ -217,12 +234,31 @@ pub struct RecordObject {
 
 pub struct Claim {
     pub deliverables: Vec<String>,
+    /// The locked definition's requirements, each one check input (#403).
+    pub requirements: Vec<Requirement>,
+}
+
+/// One requirement of a claim's definition: its handle and its check input.
+pub struct Requirement {
+    pub id: String,
+    pub check: Value,
 }
 
 pub struct Card {
     pub question: String,
     pub options: Vec<String>,
-    pub rect: [f64; 4],
+    pub slot: Slot,
+}
+
+/// Where the card draws: the slot its view reserved (#393), or, with `displays`, where the
+/// shell places the card of `ask`, measured `size` points, created at `at` (#400).
+pub enum Slot {
+    Reserved([f64; 4]),
+    Placed {
+        ask: String,
+        size: [f64; 2],
+        at: i64,
+    },
 }
 
 /// Who a call came from: an MCP call and the session it bound to, or a `deep` command and its
@@ -280,6 +316,13 @@ pub enum Call {
     Revisions(String),
     /// The sealed set as the build holds it (#305).
     Registry,
+    /// #306: the pack store's rows.
+    Packs,
+    /// #306: one pack version installed mid-run.
+    InstallPack {
+        id: String,
+        dir: PathBuf,
+    },
     Screen,
     /// The sealed plan as published at `deep://schedule/<core version>` (#387).
     Schedule,
@@ -345,6 +388,43 @@ pub enum Call {
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// Your pop-out of a panel's view onto a display, with your input's serial (#400).
+    PopOut {
+        panel: String,
+        display: String,
+        serial: Option<u64>,
+        full_screen: bool,
+        /// The call carries a session: an agent asking.
+        agent: bool,
+    },
+    /// The window server's report of your drag of a window (#400).
+    MoveWindow {
+        window: String,
+        rect: [f64; 4],
+        agent: bool,
+    },
+    /// The window server's report of the key window, `None` for another app's (#400).
+    Activate {
+        window: Option<String>,
+        agent: bool,
+    },
+    /// The OS's report of the thermal state: whether the Mac is hot (#400).
+    Thermal {
+        hot: bool,
+        agent: bool,
+    },
+    /// The window server's report that you hid a window or showed it again (#400).
+    HideWindow {
+        window: String,
+        hidden: bool,
+        agent: bool,
+    },
+    /// Every open window (#400).
+    Windows,
+    /// The layout as the app would save it now (#400).
+    Layout,
+    /// The question card as it stands now (#400).
+    CardState,
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
     /// Your words from a panel's ask box to a session, about what you point at (#384).
@@ -368,6 +448,10 @@ pub enum Call {
     Manifest,
     /// The check catalog (#138).
     Catalog,
+    /// Judges a claim on its deliverables' current revisions and records the verdict (#403).
+    Verdict(String),
+    /// Every verdict made on a claim, `stale` as of now (#403).
+    Verdicts(String),
     /// A fixture's snapshot on a backend, judged against the golden store (#138).
     Golden {
         fixture: String,
@@ -438,6 +522,12 @@ pub struct Scenario {
     /// record states it read (#383: what a change to a selected value would make stale).
     pub verdicts: Map<String, Value>,
     pub card: Option<Card>,
+    /// The displays connected, the first the main display (#400); empty without them.
+    pub displays: Vec<placement::Display>,
+    /// A layout an earlier run saved, which the app reopens from (#400).
+    pub layout: Option<placement::Layout>,
+    /// #400's wrong programs.
+    pub placement_planted: placement::Planted,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
     pub calls: Vec<Call>,
@@ -463,6 +553,8 @@ pub struct Scenario {
     pub commit: Option<String>,
     /// The machine the hub runs on, its environment fingerprint (#379); this machine without it.
     pub machine: Option<Map<String, Value>>,
+    /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
+    pub packs: Vec<(String, PathBuf)>,
 }
 
 /// One revision of a document (Revision).
@@ -509,6 +601,15 @@ pub struct Hub<'a> {
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
     /// The messages each session was sent from an ask box, by session ID (#384).
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
+    /// The verdicts made on each claim, in the order made, each as recorded (#403).
+    pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// The pack store (#306): the versions admitted, and one row per offer.
+    pub packs: Packs,
+    pub pack_rows: Vec<crate::packs::Row>,
+    /// Each document's expansions at its last check, for the replies that carry them.
+    pub expansions: BTreeMap<String, Vec<Expansion>>,
+    /// The displays, the windows on them and the card's placement (#400).
+    pub placement: Placement,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -575,7 +676,13 @@ impl<'a> Hub<'a> {
         {
             sched.look_hook = Some(crate::planted::look_hook);
         }
-        Hub {
+        let pack_planted = PackPlanted {
+            seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+            overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
+            skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
+            key_by_name: scenario.planted == Some(Planted::PacksKeyedByName),
+        };
+        let mut hub = Hub {
             scenario,
             startup,
             revisions: BTreeMap::new(),
@@ -594,7 +701,60 @@ impl<'a> Hub<'a> {
             serial: 0,
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
+            verdicts_made: BTreeMap::new(),
+            packs: Packs::new(pack_planted),
+            pack_rows: Vec::new(),
+            expansions: BTreeMap::new(),
+            placement: Placement::open(
+                scenario.displays.clone(),
+                scenario.window,
+                scenario.layout.as_ref(),
+                scenario.placement_planted,
+            ),
+        };
+        // The store's packs, each checked once here and never on a document's open.
+        for (id, dir) in &scenario.packs {
+            hub.install_pack(id, dir);
         }
+        hub
+    }
+
+    /// The card's slot to draw: the one its view reserved, or where the shell placed it (#400),
+    /// once presented.
+    pub fn card_slot(&self) -> Option<(String, Vec<String>, [f64; 4])> {
+        let c = self.scenario.card.as_ref()?;
+        let rect = match &c.slot {
+            Slot::Reserved(r) => *r,
+            // Placed in global points; the headless window draws the main window alone, in its
+            // px, so a card in a popped window draws off its picture.
+            Slot::Placed { .. } => {
+                let card = self.card_json().filter(|c| !c.states.is_empty())?;
+                let main = self.placement.main_window()?.rect;
+                let r = card.rect;
+                [r[0] - main[0], r[1] - main[1], r[2], r[3]]
+            }
+        };
+        Some((c.question.clone(), c.options.clone(), rect))
+    }
+
+    /// `card`: the question card as it stands now, or `None` before its ask (#400).
+    pub fn card_json(&self) -> Option<placement::CardState> {
+        match &self.scenario.card.as_ref()?.slot {
+            Slot::Reserved(_) => None,
+            Slot::Placed { ask, size, at } => self.placement.card(ask, *at, *size, self.now),
+        }
+    }
+
+    /// `install_pack` (#306): one pack version read from its folder and put through the pack
+    /// check once.
+    pub fn install_pack(&mut self, id: &str, dir: &std::path::Path) -> Value {
+        crate::packs::install(
+            &mut self.packs,
+            &mut self.pack_rows,
+            &self.startup.sealed,
+            id,
+            dir,
+        )
     }
 
     /// A fresh scheduler's options: the hub's own (#488's comparisons run each side on its own
@@ -798,6 +958,8 @@ impl<'a> Hub<'a> {
             Call::History { doc, item } => self.history(doc, item),
             Call::ByWriter(doc) => self.by_writer(doc),
             Call::Registry => self.registry_reply(),
+            Call::Packs => crate::packs::rows_reply(&self.pack_rows, &self.packs),
+            Call::InstallPack { id, dir } => self.install_pack(id, dir),
             Call::Costs => crate::costs::measure(self.startup),
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
@@ -856,6 +1018,32 @@ impl<'a> Hub<'a> {
             Call::Input { panel, event } => self.input(panel, event),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::PopOut {
+                panel,
+                display,
+                serial,
+                full_screen,
+                agent,
+            } => self.pop_out(panel, display, *serial, *full_screen, *agent),
+            Call::MoveWindow {
+                window,
+                rect,
+                agent,
+            } => self.move_window(window, *rect, *agent),
+            Call::Activate { window, agent } => {
+                self.placement.activate(self.now, window.as_deref(), *agent)
+            }
+            Call::Thermal { hot, agent } => self.placement.thermal(self.now, *hot, *agent),
+            Call::HideWindow {
+                window,
+                hidden,
+                agent,
+            } => self
+                .placement
+                .hide_window(self.now, window, *hidden, *agent),
+            Call::Windows => self.placement.windows_json(),
+            Call::Layout => self.placement.layout_json(),
+            Call::CardState => json!({"card": self.card_json().map(|c| c.to_json())}),
             Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
             Call::Ask {
@@ -874,6 +1062,8 @@ impl<'a> Hub<'a> {
             } => self.render_back(session, doc, *t, *rev, *size),
             Call::Manifest => self.manifest_reply(),
             Call::Catalog => self.catalog_reply(),
+            Call::Verdict(claim) => self.verdict_call(claim),
+            Call::Verdicts(claim) => self.verdicts_call(claim),
             Call::Golden { fixture, backend } => self.golden_reply(fixture, backend),
             Call::Record {
                 via,
@@ -947,7 +1137,8 @@ impl<'a> Hub<'a> {
             });
         }
         rows.sort_by(|a, b| a.band.cmp(&b.band).then_with(|| a.doc.cmp(&b.doc)));
-        if self.scenario.card.is_some() {
+        // A card the shell places counts as shown only once presented (#400).
+        if self.card_slot().is_some() {
             rows.push(BandRow {
                 doc: None,
                 band: Band::Card,
@@ -1011,21 +1202,32 @@ impl<'a> Hub<'a> {
             &title,
         );
         let mut notices = Vec::new();
+        // #403: in a claim that names the document, an item of a kind this build doesn't know
+        // blocks its checks, naming the kind, while the rest still draws.
+        let mut blocked: Vec<Value> = Vec::new();
+        // The items the check skipped as `unknown_kind`: kept as written, never drawn (#389).
+        let mut skipped: Vec<String> = Vec::new();
+        // The revision's expansions and its check's time (#306): the document's once it is current.
+        let mut fresh: Option<(Vec<Expansion>, f64)> = None;
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(doc) => {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
+                let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
                         let coefficients = Coefficients::reference()
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_in(&doc, &self.startup.sealed),
+                    _ => check_packed(&doc, &self.startup.sealed, &self.packs),
                 };
+                fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
                 notices = self.notices_reply(&result.notices);
+                skipped = crate::verdict::unknown_items(&result.notices);
+                blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = result.issues;
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
@@ -1086,11 +1288,21 @@ impl<'a> Hub<'a> {
         // too, naming the operator's module (#387). A read an operator didn't declare is the
         // module's fault, not the document's, so it fails the frame and refuses nothing.
         let visible = self.doc_visible(&show.doc);
+        // The form that draws: the document with each recipe instance's derived items in its
+        // place (#306), less the items skipped as `unknown_kind` (#403).
+        let drawn_form = stamped.as_ref().map(|doc| {
+            let expansions = fresh.as_ref().map(|(e, _)| e.as_slice());
+            crate::verdict::without(
+                &crate::packs::drawn(doc, expansions.unwrap_or(&[])),
+                &skipped,
+            )
+        });
         if let Some(doc) = stamped
             .as_ref()
             .filter(|_| !issues.iter().any(|i| i.severity == "error"))
         {
-            let (op_issues, drawing) = self.probe(doc, show.t, visible, None);
+            let (op_issues, drawing) =
+                self.probe(drawn_form.as_ref().unwrap_or(doc), show.t, visible, None);
             for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
                 issues.push(op_issue(i));
             }
@@ -1113,11 +1325,26 @@ impl<'a> Hub<'a> {
         if !notices.is_empty() {
             reply.insert("notices".into(), Value::Array(notices));
         }
+        if !blocked.is_empty() {
+            reply.insert("blocked".into(), Value::Array(blocked));
+        }
         // A payload refused before it could be stamped makes no revision.
         if stamped.is_some() {
             reply.insert("rev".into(), json!(rev));
+            let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
+            crate::packs::reply(
+                fresh.as_ref().map_or(&[][..], |(e, _)| e.as_slice()),
+                fresh.as_ref().map(|(_, ms)| *ms),
+                timing,
+                &mut reply,
+            );
         }
         let error = self.issue_reply(&issues, &mut reply);
+        if !error {
+            if let Some((expansions, _)) = fresh {
+                self.expansions.insert(show.doc.clone(), expansions);
+            }
+        }
         let rows = self.revisions.entry(show.doc.clone()).or_default();
         let state = if error { "refused" } else { "current" };
         if !error {
@@ -1138,9 +1365,10 @@ impl<'a> Hub<'a> {
         if error {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
-                // A check that needs a canvas module the build lacks is BLOCKED, never a FAIL
-                // (technical design: Canvas modules; #305).
-                let blocked = issues.iter().any(|i| i.code == "module_missing");
+                // A check that needs a canvas module or a pack version the build lacks, or that
+                // an unknown item kind blocks (#403), is BLOCKED, never a FAIL (technical
+                // design: Canvas modules; #305; #306).
+                let blocked = crate::packs::blocked(&issues) || reply.contains_key("blocked");
                 reply.insert(
                     "result".into(),
                     json!(if blocked { "BLOCKED" } else { "FAIL" }),
@@ -1160,7 +1388,7 @@ impl<'a> Hub<'a> {
             self.sessions.insert(show.doc.clone(), fresh);
         }
         if let Some(session) = self.sessions.get_mut(&show.doc) {
-            session.load(&mut self.sched, &doc);
+            session.load(&mut self.sched, drawn_form.as_ref().unwrap_or(&doc));
         }
         let wants_pixels = show.include.iter().any(|i| matches!(i, Include::Pixels));
         // A revision with 3D writer layers renders back on the GPU (#378).
@@ -1242,6 +1470,7 @@ impl<'a> Hub<'a> {
                     reply.insert("reason".into(), json!("timeout"));
                 }
                 Ok(()) => {
+                    let mut batches = Vec::new();
                     let pixels = match drawn3d {
                         Some(drawn3d) => drawn3d.ok(),
                         None => {
@@ -1254,7 +1483,15 @@ impl<'a> Hub<'a> {
                                 ]
                             });
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            let rgba = self.renderer.raster(drawn, size, Some(ground));
+                            let instanced = crate::packs::instanced(
+                                self.expansions
+                                    .get(&show.doc)
+                                    .map_or(&[][..], Vec::as_slice),
+                            );
+                            let (rgba, drew) =
+                                self.renderer
+                                    .raster_batched(drawn, size, Some(ground), &instanced);
+                            batches = drew;
                             Some((rgba, size, Vec::new()))
                         }
                     };
@@ -1284,6 +1521,9 @@ impl<'a> Hub<'a> {
                             };
                             reply.insert("snapshots".into(), json!([entry]));
                             reply.insert("visible".into(), rows);
+                            // The instanced batches the 2D draw made: none for a 3D frame, which
+                            // scene3d draws and reports on its own (#378).
+                            reply.insert("batches".into(), crate::packs::batches(&batches));
                             snapshot_taken = true;
                             reply.insert("outcome".into(), json!("presented"));
                         }
@@ -1306,6 +1546,8 @@ impl<'a> Hub<'a> {
                 .and_then(Value::as_array)
                 .is_some_and(|l| l.iter().any(|i| i["severity"] == "error"));
             let verdict = match self.verdict(show, snapshot_taken) {
+                // A check an unknown kind kept from running decides nothing (#403).
+                "PASS" if reply.contains_key("blocked") => "BLOCKED",
                 "PASS" if errors => "FAIL",
                 v => v,
             };

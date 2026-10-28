@@ -1,0 +1,426 @@
+Base commit: a8e5480 (Merge pull request #767 from windoliver/feat/63-read-by-reference)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/306 --no-file-parallelism --reporter=verbose
+Run in the worktree at the base commit holding only these test files (untracked) and the repo's node_modules from npm ci.
+Date: 2026-10-27T14:13:05 local  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Builds: `r1` and `full` both build at the base (no test canvas module is needed: every pack is a fixture folder).
+Exit code: 1   Tests: 20 failed, 0 passed (20)
+
+Why each fails at the base (no pack, recipe, expansion or break-out exists there):
+- Any scenario with a `packs` or `install_pack` call, or one of this suite's planted values
+  (`seeds_by_expansion_order`, `reexpansion_overwrites_broken_out`, `pack_check_skips_requires_modules`,
+  `packs_keyed_by_name`), is refused whole as `{"ok": false, "code": "bad_input"}` (an unknown call name or
+  planted value): AC2 (both), AC5 planted, AC4 planted, AC6 (all three), AC7 planted, AC8 "checks once".
+- A board naming a pack with an instance of a recipe kind (`chart.bars@1`, `foley.tap@1`) is refused with
+  `module_missing` at `items/<id>/kind: chart.bars@1` ("marks2d.frame can't evaluate this"): the kind is
+  unknown, nothing reads the envelope's `packs`, and no `pack_missing`, `out_of_range` or both-IDs error is
+  raised: AC3 (both), AC4 (presented, out_of_range, seeds), AC7 (naming both), AC8 (the timed check).
+- `read` of the stored chart board carries no `expansions` (the field doesn't exist): AC1 (first), AC5
+  (break-out and undo).
+- A patch aimed at `c1.bars.1` is refused with `ref_unresolved` ("no such item"), not `derived_item`,
+  since nothing expands c1: AC1 (second).
+
+Passing at the base: none.
+
+The scenario's `packs` field is ignored by the base (unknown scenario keys are), so the `r1`/`full` builds
+start and the boards above reach the document check; `include: ["timing"]` is parsed and answered with no
+`timing` field.
+
+----- vitest output -----
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a941a951b42e216ed/tests/acceptance/306
+
+ × break-out.test.ts > AC5 a break-out makes one derived item the writer's own, joins the key, survives re-expansion, and undoes > AC5 break_out of c1.bars.2 makes it your item with the values it was expanded with; broken_out lists it and joins c1's key; n = 6 re-expands the others and keeps it 2953ms
+   → revision 0: expansions is an array, got undefined: expected false to be true // Object.is equality
+ × break-out.test.ts > AC5 a break-out makes one derived item the writer's own, joins the key, survives re-expansion, and undoes > AC5 undoing the break-out hands c1.bars.2 back as expanded, with the same values, under c2's key 32ms
+   → revision 0: expansions is an array, got undefined: expected false to be true // Object.is equality
+ × break-out.test.ts > AC5 a break-out makes one derived item the writer's own, joins the key, survives re-expansion, and undoes > AC5 a planted re-expansion that overwrites the broken-out item fails this check, naming it 24ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 c1 {n: 5} expands into c1.bars.0 … c1.bars.4, the same bytes in two processes, and c2 shares its key and its instanced batch 2204ms
+   → the pair is presented in the build without scene3d: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 'refused' to be 'presented' // Object.is equality
+ × expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 an n outside the input's range is refused with out_of_range naming n 31ms
+   → an out_of_range error: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ × expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 seeds come from (instance, step, index): c2's seeds are the same alone and beside c1 34ms
+   → c2 alone is presented: expected 'refused' to be 'presented' // Object.is equality
+ × expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 a planted expander that seeds by expansion order gives c2's rects other seeds and fails this check, naming the item 29ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × budgets.test.ts > AC8 budgets on the reference Mac: a 10,000-item document with 1,000 derived items checks in under 50 ms; a pack checks once, never on open; nothing per frame > AC8 the full check of 10,000 items, 1,000 derived, takes under 50 ms (five fresh processes after a warm-up) 11765ms
+   → the 10,000-item board is presented: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c-000/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 'refused' to be 'presented' // Object.is equality
+ × budgets.test.ts > AC8 budgets on the reference Mac: a 10,000-item document with 1,000 derived items checks in under 50 ms; a pack checks once, never on open; nothing per frame > AC8 a pack version's check runs once, never on open: after three boards naming it open and six frames draw, test/chart@1.0.0 has been checked once 150ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × derived.test.ts > AC1 rebuilding a recipe with the same inputs keeps its derived IDs, and a patch aimed at a derived item is refused as derived > AC1 after a patch elsewhere and after n goes to 6 and back to 5, c1 expands into the same derived IDs under the same key 5189ms
+   → revision 0: expansions is an array, got undefined: expected false to be true // Object.is equality
+ × derived.test.ts > AC1 rebuilding a recipe with the same inputs keeps its derived IDs, and a patch aimed at a derived item is refused as derived > AC1 a set on c1.bars.1 and a delete of c1.bars.3 are each refused with derived_item naming the item, and revision 0 stays current 65ms
+   → the refusal of the patch aimed at c1.bars.1 carries a derived_item error: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["c1.bars.1"],"path":"items/c1.bars.1","actual":"c1.bars.1","what":"no such item","fix":"Name an ID the document holds, or remove the reference."}]: expected 0 to be greater than 0
+ × version.test.ts > AC2 a document names pack@version and keeps that version byte for byte; a published version never changes > AC2 after test/chart@1.1.0 is installed the board naming 1.0.0 expands to the same bytes, and a board naming 1.1.0 expands differently 5027ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × version.test.ts > AC2 a document names pack@version and keeps that version byte for byte; a published version never changes > AC2 publishing test/chart@1.0.0 again with other contents is refused, naming the pack and the version, and the first contents stay 50ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × missing.test.ts > AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED > AC3 with 1.0.0 installed, a board naming test/chart@2.0.0 is refused naming the pack and 2.0.0, never drawn with 1.0.0, no revision current, its check BLOCKED 2566ms
+   → the board naming test/chart@2.0.0 has a pack_missing error: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ × missing.test.ts > AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED > AC3 with no pack installed, a board naming test/chart@1.0.0 is refused naming the pack and 1.0.0, and its check is BLOCKED 61ms
+   → the board naming test/chart@1.0.0 in a store without it has a pack_missing error: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ × modules.test.ts > AC6 a pack whose requires.modules names scene3d is refused without scene3d, and checks clean with it > AC6 in the build without scene3d the pack is refused with module_missing naming scene3d, and so is a document naming it, its check BLOCKED 2947ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × modules.test.ts > AC6 a pack whose requires.modules names scene3d is refused without scene3d, and checks clean with it > AC6 in the build with scene3d the same pack checks clean 2632ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × modules.test.ts > AC6 a pack whose requires.modules names scene3d is refused without scene3d, and checks clean with it > AC6 a planted pack check that skips requires.modules admits the pack without scene3d and fails this check, naming the pack 34ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × owners.test.ts > AC7 a document names at most one pack of a name, and an entry resolves through that pack > AC7 naming alice/foley@1.0.0 and bob/foley@1.0.0 is refused naming both IDs; naming only bob's, foley.tap resolves through bob's pack 2570ms
+   → an error names both alice/foley@1.0.0 and bob/foley@1.0.0: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/t1/kind: foley.tap@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ × owners.test.ts > AC7 a document names at most one pack of a name, and an entry resolves through that pack > AC7 a planted check that keys packs by name alone resolves foley.tap through the first pack listed and fails this check, naming the entry 60ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+ Test Files  8 failed (8)
+      Tests  20 failed (20)
+   Start at  14:13:05
+   Duration  221.80s (tests 98%, import 2%, transform 1%)
+
+JSON report written to ~/private/deepbuild-core/.claude/worktrees/agent-a941a951b42e216ed/tests/acceptance/306/.vitest/json/output.json
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 20 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  break-out.test.ts > AC5 a break-out makes one derived item the writer's own, joins the key, survives re-expansion, and undoes > AC5 break_out of c1.bars.2 makes it your item with the values it was expanded with; broken_out lists it and joins c1's key; n = 6 re-expands the others and keeps it
+AssertionError: revision 0: expansions is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:40:100
+     38| }
+     39| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     40|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     41|   return value as JsonValue[];
+     42| }
+ ❯ expansions helpers.ts:291:10
+ ❯ expansionOf helpers.ts:305:16
+ ❯ break-out.test.ts:47:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/20]⎯
+
+ FAIL  break-out.test.ts > AC5 a break-out makes one derived item the writer's own, joins the key, survives re-expansion, and undoes > AC5 undoing the break-out hands c1.bars.2 back as expanded, with the same values, under c2's key
+AssertionError: revision 0: expansions is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:40:100
+     38| }
+     39| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     40|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     41|   return value as JsonValue[];
+     42| }
+ ❯ expansions helpers.ts:291:10
+ ❯ expansionOf helpers.ts:305:16
+ ❯ break-out.test.ts:70:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/20]⎯
+
+ FAIL  break-out.test.ts > AC5 a break-out makes one derived item the writer's own, joins the key, survives re-expansion, and undoes > AC5 a planted re-expansion that overwrites the broken-out item fails this check, naming it
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ breakThenSix break-out.test.ts:35:10
+ ❯ break-out.test.ts:84:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/20]⎯
+
+ FAIL  budgets.test.ts > AC8 budgets on the reference Mac: a 10,000-item document with 1,000 derived items checks in under 50 ms; a pack checks once, never on open; nothing per frame > AC8 the full check of 10,000 items, 1,000 derived, takes under 50 ms (five fresh processes after a warm-up)
+AssertionError: the 10,000-item board is presented: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c-000/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ timedCheck budgets.test.ts:39:116
+     37| function timedCheck(bin: string, document: JsonObject): { ms: number; …
+     38|   const [reply] = run(bin, scenario(evidence(), { [DOC.a]: 'main' }, […
+     39|   expect(outcome(reply!), `the 10,000-item board is presented: ${JSON.…
+       |                                                                                                                    ^
+     40|   expect(reply!['result'], 'and its check passes').toBe('PASS');
+     41|   expect(expansions(reply!).length, `the timed check expanded all ${IN…
+ ❯ budgets.test.ts:51:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/20]⎯
+
+ FAIL  budgets.test.ts > AC8 budgets on the reference Mac: a 10,000-item document with 1,000 derived items checks in under 50 ms; a pack checks once, never on open; nothing per frame > AC8 a pack version's check runs once, never on open: after three boards naming it open and six frames draw, test/chart@1.0.0 has been checked once
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ budgets.test.ts:60:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/20]⎯
+
+ FAIL  derived.test.ts > AC1 rebuilding a recipe with the same inputs keeps its derived IDs, and a patch aimed at a derived item is refused as derived > AC1 after a patch elsewhere and after n goes to 6 and back to 5, c1 expands into the same derived IDs under the same key
+AssertionError: revision 0: expansions is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:40:100
+     38| }
+     39| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     40|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     41|   return value as JsonValue[];
+     42| }
+ ❯ expansions helpers.ts:291:10
+ ❯ expansionOf helpers.ts:305:16
+ ❯ derived.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/20]⎯
+
+ FAIL  derived.test.ts > AC1 rebuilding a recipe with the same inputs keeps its derived IDs, and a patch aimed at a derived item is refused as derived > AC1 a set on c1.bars.1 and a delete of c1.bars.3 are each refused with derived_item naming the item, and revision 0 stays current
+AssertionError: the refusal of the patch aimed at c1.bars.1 carries a derived_item error: [{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["c1.bars.1"],"path":"items/c1.bars.1","actual":"c1.bars.1","what":"no such item","fix":"Name an ID the document holds, or remove the reference."}]: expected 0 to be greater than 0
+ ❯ derived.test.ts:59:152
+     57|       expect(outcome(reply), `the patch aimed at ${id} is refused`).to…
+     58|       const derived = errors(issues(reply)).filter((i) => i.code === '…
+     59|       expect(derived.length, `the refusal of the patch aimed at ${id} …
+       |                                                                                                                                                        ^
+     60|       expect(derived.some((i) => i.ids.includes(id)), `a derived_item …
+     61|     }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/20]⎯
+
+ FAIL  expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 c1 {n: 5} expands into c1.bars.0 … c1.bars.4, the same bytes in two processes, and c2 shares its key and its instanced batch
+AssertionError: the pair is presented in the build without scene3d: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ expand.test.ts:42:132
+     40|     const play = (): JsonObject => run(builds.bin(R1), scenario(eviden…
+     41|     const first = play();
+     42|     expect(outcome(first), `the pair is presented in the build without…
+       |                                                                                                                                    ^
+     43|     expect(snapshots(first).length, 'and drawn').toBe(1);
+     44|     const e1 = expansionOf(first, 'c1');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/20]⎯
+
+ FAIL  expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 an n outside the input's range is refused with out_of_range naming n
+AssertionError: an out_of_range error: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ ❯ expand.test.ts:64:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/20]⎯
+
+ FAIL  expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 seeds come from (instance, step, index): c2's seeds are the same alone and beside c1
+AssertionError: c2 alone is presented: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ expand.test.ts:70:49
+     68|   it('AC4 seeds come from (instance, step, index): c2\'s seeds are the…
+     69|     const { alone: a, together: t } = seedsAloneAndTogether();
+     70|     expect(outcome(a), 'c2 alone is presented').toBe('presented');
+       |                                                 ^
+     71|     expect(outcome(t), 'the pair is presented').toBe('presented');
+     72|     none(seedFailures(expansionOf(a, 'c2', 'alone'), expansionOf(t, 'c…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/20]⎯
+
+ FAIL  expand.test.ts > AC4 the 2D chart pack checks and draws without scene3d: expansion at check, shared keys, instanced draws, out_of_range, seeds > AC4 a planted expander that seeds by expansion order gives c2's rects other seeds and fails this check, naming the item
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ seedsAloneAndTogether expand.test.ts:31:18
+ ❯ expand.test.ts:76:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/20]⎯
+
+ FAIL  missing.test.ts > AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED > AC3 with 1.0.0 installed, a board naming test/chart@2.0.0 is refused naming the pack and 2.0.0, never drawn with 1.0.0, no revision current, its check BLOCKED
+AssertionError: the board naming test/chart@2.0.0 has a pack_missing error: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ ❯ refusedMissing missing.test.ts:28:112
+
+ ❯ missing.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/20]⎯
+
+ FAIL  missing.test.ts > AC3 a document naming a pack version this build lacks is refused whole with pack_missing, and its check is BLOCKED > AC3 with no pack installed, a board naming test/chart@1.0.0 is refused naming the pack and 1.0.0, and its check is BLOCKED
+AssertionError: the board naming test/chart@1.0.0 in a store without it has a pack_missing error: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/c1/kind: chart.bars@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ ❯ refusedMissing missing.test.ts:28:112
+
+ ❯ missing.test.ts:51:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/20]⎯
+
+ FAIL  modules.test.ts > AC6 a pack whose requires.modules names scene3d is refused without scene3d, and checks clean with it > AC6 in the build without scene3d the pack is refused with module_missing naming scene3d, and so is a document naming it, its check BLOCKED
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ modules.test.ts:25:37
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/20]⎯
+
+ FAIL  modules.test.ts > AC6 a pack whose requires.modules names scene3d is refused without scene3d, and checks clean with it > AC6 in the build with scene3d the same pack checks clean
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ modules.test.ts:39:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/20]⎯
+
+ FAIL  modules.test.ts > AC6 a pack whose requires.modules names scene3d is refused without scene3d, and checks clean with it > AC6 a planted pack check that skips requires.modules admits the pack without scene3d and fails this check, naming the pack
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ modules.test.ts:46:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/20]⎯
+
+ FAIL  owners.test.ts > AC7 a document names at most one pack of a name, and an entry resolves through that pack > AC7 naming alice/foley@1.0.0 and bob/foley@1.0.0 is refused naming both IDs; naming only bob's, foley.tap resolves through bob's pack
+AssertionError: an error names both alice/foley@1.0.0 and bob/foley@1.0.0: [{"check":"document.validate","code":"module_missing","severity":"error","ids":[],"path":"items/t1/kind: foley.tap@1","actual":null,"what":"marks2d.frame can't evaluate this","fix":"Open the document in a build with the module, or remove the field."}]: expected 0 to be greater than 0
+ ❯ owners.test.ts:38:147
+     36|     expect(snapshots(two!).length, 'and not drawn').toBe(0);
+     37|     const naming = errors(issues(two!)).filter((i) => names(i, packAt(…
+     38|     expect(naming.length, `an error names both ${packAt(ALICE_FOLEY)} …
+       |                                                                                                                                                   ^
+     39|     expect(checked!['result'], 'its check does not pass').not.toBe('PA…
+     40|     expect(outcome(one!), `the board naming only bob's pack is present…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/20]⎯
+
+ FAIL  owners.test.ts > AC7 a document names at most one pack of a name, and an entry resolves through that pack > AC7 a planted check that keys packs by name alone resolves foley.tap through the first pack listed and fails this check, naming the entry
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play owners.test.ts:25:10
+ ❯ owners.test.ts:46:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/20]⎯
+
+ FAIL  version.test.ts > AC2 a document names pack@version and keeps that version byte for byte; a published version never changes > AC2 after test/chart@1.1.0 is installed the board naming 1.0.0 expands to the same bytes, and a board naming 1.1.0 expands differently
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ version.test.ts:30:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/20]⎯
+
+ FAIL  version.test.ts > AC2 a document names pack@version and keeps that version byte for byte; a published version never changes > AC2 publishing test/chart@1.0.0 again with other contents is refused, naming the pack and the version, and the first contents stay
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:142:101
+    140|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    141|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    142|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    143|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    144|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ version.test.ts:46:42
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/20]⎯
+

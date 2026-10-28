@@ -771,6 +771,13 @@ impl Scope {
         self.spec.pose(&self.rig, &self.offsets)
     }
 
+    /// The panel moved to `panel` (window px) on a display of `display` px: a view popped out
+    /// into its own window (#400). The camera, selection and levels stay.
+    pub fn placed(&mut self, panel: [f64; 4], display: [f64; 2]) {
+        self.panel = panel;
+        self.display = display;
+    }
+
     /// The canvas's rect in window px: its panel's, or the display's in full screen.
     pub fn rect(&self) -> [f64; 4] {
         if self.full_screen {

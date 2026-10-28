@@ -1,0 +1,9 @@
+#!/bin/sh
+# Planted twin of the app's Set up click (README: Wrong programs). It adds the hooks as `deep setup` does, then unloads
+# the hub's login service again, so no hub runs after the click. It says one line, as if the hub had started.
+[ "$1" = --set-up ] || { echo "usage: $0 --set-up" >&2; exit 2; }
+out=$(deep setup 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }
+for plist in "$HOME"/Library/LaunchAgents/*.plist; do
+  [ -e "$plist" ] && launchctl bootout "gui/$(id -u)" "$plist" >/dev/null 2>&1
+done
+echo "DeepBuild added its hooks in watch-only mode and started the hub; deep setup --undo removes it."
