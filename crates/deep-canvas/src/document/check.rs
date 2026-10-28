@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
+use super::packs::{self, Expansion, Packs, Resolved};
 use super::{
     kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_VECTORS,
     ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
@@ -16,7 +17,7 @@ use crate::grammar::{
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
-use crate::registry::{self, core_name, Range, Sealed};
+use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -44,6 +45,9 @@ pub struct CheckResult {
     pub core: String,
     /// The module-set digest of that build.
     pub set_digest: String,
+    /// Each recipe instance's expansion (Recipe): its key and its derived items, which
+    /// `lowered` holds after the instance.
+    pub expansions: Vec<Expansion>,
 }
 
 impl CheckResult {
@@ -56,6 +60,7 @@ impl CheckResult {
             "notices": self.notices.iter().map(Notice::to_json).collect::<Vec<_>>(),
             "draws": self.draws,
             "lowered": self.lowered,
+            "expansions": self.expansions.iter().map(Expansion::to_json).collect::<Vec<_>>(),
         })
     }
 }
@@ -69,19 +74,31 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), None)
+    check_by(doc, sealed, &sealed.kinds(), None, &Packs::default())
+}
+
+/// [`check_in`] in a build that admitted `packs` (Pack): a document's `packs` resolve through
+/// them, and each recipe instance expands at check into its derived items.
+pub fn check_packed(doc: &Value, sealed: &Sealed, packs: &Packs) -> CheckResult {
+    check_by(doc, sealed, &sealed.kinds(), None, packs)
 }
 
 /// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
 /// Mac's (`deep-show`'s planted check that estimates on its own machine).
 pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -> CheckResult {
-    check_by(doc, sealed, &sealed.kinds(), Some(coefficients))
+    check_by(
+        doc,
+        sealed,
+        &sealed.kinds(),
+        Some(coefficients),
+        &Packs::default(),
+    )
 }
 
 /// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
 /// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
 pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
-    check_by(doc, &registry::core(), kinds, None)
+    check_by(doc, &registry::core(), kinds, None, &Packs::default())
 }
 
 /// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
@@ -91,46 +108,82 @@ fn check_by(
     sealed: &Sealed,
     kinds: &Registry,
     coefficients: Option<&Coefficients>,
+    packs: &Packs,
 ) -> CheckResult {
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
-    let mut lowered = doc.clone();
+    let mut lowered = copy_of(doc);
 
     check_envelope(doc, &mut issues);
     check_transport(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
+    let resolved = packs::resolve(doc, packs, Some(sealed), &mut issues);
+    let mut expansions = Vec::new();
     // The canvas modules the document declares, which every module kind it uses must be among.
     let declared: BTreeSet<String> = member(doc, "requires")
         .and_then(|r| member(r, "modules"))
         .and_then(Value::as_object)
         .map(|m| m.keys().cloned().collect())
         .unwrap_or_default();
+    // A pack declares the modules its recipes' kinds need, for the items they derive (#306).
+    let pack_declared: BTreeSet<String> = resolved.modules().cloned().collect();
     let layer_ids = check_layers(doc, &mut issues);
-    let item_ids: BTreeSet<String> = member(doc, "items")
-        .and_then(Value::as_object)
-        .map(|items| items.keys().cloned().collect())
-        .unwrap_or_default();
-    // The parents as written, for the cycle walk.
-    let parents: BTreeMap<String, String> = member(doc, "items")
-        .and_then(Value::as_object)
-        .map(|items| {
-            items
+
+    match lowered.get_mut("items") {
+        None => {}
+        Some(Value::Object(items)) => {
+            // Whether a kind text migrates is looked up once per text, not once per item.
+            let mut migrates: BTreeMap<String, bool> = BTreeMap::new();
+            for (key, item) in items.iter_mut() {
+                let Some(text) = kind_text(item) else {
+                    continue;
+                };
+                let needed = match migrates.get(text) {
+                    Some(needed) => *needed,
+                    None => {
+                        let needed = matches!(lookup(kinds, text), Lookup::Known { entry, saved }
+                            if entry.steps_from(saved).is_some_and(|s| !s.is_empty()));
+                        migrates.insert(text.to_string(), needed);
+                        needed
+                    }
+                };
+                if needed {
+                    migrate_item(key, item, &mut notices, kinds);
+                }
+            }
+            // Expansion at check, never per frame (Recipe): the derived items join the lowered
+            // items before any item is checked, so they meet the item contract, the module
+            // checks and the budget as any item does.
+            expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
+            let derived: BTreeSet<&str> = expansions
+                .iter()
+                .flat_map(|e| e.derived.keys().map(String::as_str))
+                .collect();
+            // The lowered items' IDs: the document's, and those expansion wrote.
+            let item_ids: BTreeSet<&str> = member(doc, "items")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|m| m.keys().map(String::as_str))
+                .chain(derived.iter().copied())
+                .collect();
+            // The parents as written, for the cycle walk.
+            let parents: BTreeMap<String, String> = items
                 .iter()
                 .filter_map(|(k, v)| {
                     member(v, "parent")
                         .and_then(Value::as_str)
                         .map(|p| (k.clone(), p.to_string()))
                 })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    match lowered.get_mut("items") {
-        None => {}
-        Some(Value::Object(items)) => {
-            for (key, item) in items.iter_mut() {
-                migrate_item(key, item, &mut notices, kinds);
+                .collect();
+            let mut facts: BTreeMap<String, KindFacts<'_>> = BTreeMap::new();
+            for item in items.values() {
+                if let Some(text) = kind_text(item) {
+                    if !facts.contains_key(text) {
+                        let f = KindFacts::of(text, sealed, kinds, &resolved);
+                        facts.insert(text.to_string(), f);
+                    }
+                }
             }
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
@@ -138,13 +191,27 @@ fn check_by(
                 parents: &parents,
                 required: &required,
                 declared: &declared,
+                pack_declared: &pack_declared,
+                derived: &derived,
                 sealed,
-                kinds,
+                facts: &facts,
             };
-            for (key, item) in items.iter_mut() {
-                if check_item(key, item, &ctx, &mut issues, &mut notices) {
-                    draws.push(key.clone());
+            // Each item checks on its own, so a big document's items check in chunks across the
+            // cores, and the chunks' findings join in item order, as one pass would list them.
+            let mut entries: Vec<(&String, &mut Value)> = items.iter_mut().collect();
+            let checked = in_chunks(&mut entries, |chunk| {
+                let (mut issues, mut notices, mut draws) = (Vec::new(), Vec::new(), Vec::new());
+                for (key, item) in chunk.iter_mut() {
+                    if check_item(key, item, &ctx, &mut issues, &mut notices) {
+                        draws.push((*key).clone());
+                    }
                 }
+                (issues, notices, draws)
+            });
+            for (i, n, d) in checked {
+                issues.extend(i);
+                notices.extend(n);
+                draws.extend(d);
             }
         }
         Some(other) => issues.push(Issue::envelope(
@@ -175,7 +242,68 @@ fn check_by(
         lowered,
         core: core_name(),
         set_digest: sealed.set_digest.clone(),
+        expansions,
     }
+}
+
+/// The items a document holds before its per-item work splits across threads (AC8 of #306: a
+/// 10,000-item document checks in under 50 ms); below it, threads cost more than they save.
+const SPLIT_FROM: usize = 2048;
+
+/// Runs `work` over `entries` in one chunk per core, on scoped threads once there are
+/// [`SPLIT_FROM`] or more, and returns each chunk's result in order.
+fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R + Sync) -> Vec<R> {
+    let threads = if entries.len() < SPLIT_FROM {
+        1
+    } else {
+        std::thread::available_parallelism().map_or(1, |n| n.get().min(8))
+    };
+    if threads <= 1 {
+        return vec![work(entries)];
+    }
+    let size = entries.len().div_ceil(threads);
+    let work = &work;
+    std::thread::scope(|s| {
+        let handles: Vec<_> = entries
+            .chunks_mut(size)
+            .map(|chunk| s.spawn(move || work(chunk)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    })
+}
+
+/// A copy of `doc` to lower: its items copied in chunks across the cores, in their order.
+fn copy_of(doc: &Value) -> Value {
+    let Some(Value::Object(items)) = member(doc, "items") else {
+        return doc.clone();
+    };
+    let Some(fields) = doc.as_object() else {
+        return doc.clone();
+    };
+    let mut entries: Vec<(&String, &Value)> = items.iter().collect();
+    let parts = in_chunks(&mut entries, |chunk| {
+        chunk
+            .iter()
+            .map(|(k, v)| ((*k).clone(), (*v).clone()))
+            .collect::<Vec<_>>()
+    });
+    let mut copied = Map::with_capacity(items.len());
+    for part in parts {
+        copied.extend(part);
+    }
+    let mut out = Map::with_capacity(fields.len());
+    for (k, v) in fields {
+        let v = if k == "items" {
+            Value::Object(std::mem::take(&mut copied))
+        } else {
+            v.clone()
+        };
+        out.insert(k.clone(), v);
+    }
+    Value::Object(out)
 }
 
 /// The frame CPU the budget estimate allows a document, in ms (`document.budget`).
@@ -195,11 +323,21 @@ fn module_checks(
     };
     let mut cost = 0.0;
     let mut costly = Vec::new();
+    // A document holds few kinds and many items: each kind text's rules and costs are looked up once.
+    type Registered<'s> = Option<(Vec<(&'s SealedModule, Rule)>, Vec<Cost>)>;
+    let mut by_kind: BTreeMap<&str, Registered<'_>> = BTreeMap::new();
     for (id, item) in items {
-        let Some((full, _)) = kind_text(item).and_then(crate::kinds::parse_kind) else {
+        let Some(text) = kind_text(item) else {
             continue;
         };
-        for (module, rule) in sealed.rules_for(&full) {
+        let registered = by_kind.entry(text).or_insert_with(|| {
+            crate::kinds::parse_kind(text)
+                .map(|(full, _)| (sealed.rules_for(&full), sealed.costs_for(&full)))
+        });
+        let Some((rules, costs)) = registered else {
+            continue;
+        };
+        for &(module, rule) in rules.iter() {
             for r in rule(lowered, id, item) {
                 // The value refused at the issue's path, as the document holds it.
                 let actual = lowered
@@ -237,7 +375,7 @@ fn module_checks(
                 issues.push(issue);
             }
         }
-        for c in sealed.costs_for(&full) {
+        for c in costs.iter() {
             let ms = c(item);
             if ms > 0.0 {
                 cost += ms;
@@ -358,8 +496,12 @@ fn recheck_by(
             .and_then(Value::as_object)
             .is_none_or(Map::is_empty)
     });
-    // The budget estimate sums the whole document, so a build whose modules cost needs it whole.
-    if !maps_empty || sealed.has_costs() {
+    // The budget estimate sums the whole document, so a build whose modules cost needs it whole;
+    // a document that names packs expands at check, so a patch to it re-expands whole.
+    let packed = member(doc, "packs")
+        .and_then(Value::as_array)
+        .is_some_and(|p| !p.is_empty());
+    if !maps_empty || sealed.has_costs() || packed {
         return None;
     }
     let items = member(doc, "items")?.as_object()?;
@@ -806,15 +948,13 @@ pub(super) fn migrate_item(
     notices: &mut Vec<Notice>,
     registry: &Registry,
 ) {
-    let Some(text) = kind_text(item).map(str::to_string) else {
+    let Some(Lookup::Known { entry, saved }) = kind_text(item).map(|t| lookup(registry, t)) else {
         return;
     };
-    let Lookup::Known { entry, saved } = lookup(registry, &text) else {
+    let Some(steps) = entry.steps_from(saved).filter(|s| !s.is_empty()) else {
         return;
     };
-    let Some(steps) = entry.steps_from(saved) else {
-        return;
-    };
+    let text = kind_text(item).unwrap_or_default().to_string();
     let Some(fields) = item.as_object_mut() else {
         return;
     };
@@ -845,12 +985,49 @@ pub(super) fn migrate_item(
 
 struct ItemContext<'a> {
     layer_ids: &'a BTreeSet<String>,
-    item_ids: &'a BTreeSet<String>,
+    item_ids: &'a BTreeSet<&'a str>,
     parents: &'a BTreeMap<String, String>,
     required: &'a BTreeMap<String, u32>,
     declared: &'a BTreeSet<String>,
+    /// The modules the document's packs declare, which cover the items they derive.
+    pack_declared: &'a BTreeSet<String>,
+    /// The IDs expansion wrote.
+    derived: &'a BTreeSet<&'a str>,
     sealed: &'a Sealed,
-    kinds: &'a crate::kinds::Registry,
+    /// What the build says about each kind text the lowered items write.
+    facts: &'a BTreeMap<String, KindFacts<'a>>,
+}
+
+/// What the build says about one kind text, worked out once per check: a document holds few
+/// kinds and many items.
+struct KindFacts<'a> {
+    /// A recipe instance's kind (Recipe): expansion checked it, and it draws nothing itself.
+    instance: bool,
+    /// The canvas module this build lacks that evaluates the kind, outside instances.
+    missing: Option<String>,
+    /// The sealed module that registered the kind, outside instances.
+    module: Option<&'a str>,
+    lookup: Lookup<'a>,
+    /// `(deprecated_since, replaced_by)` when a module deprecated the kind.
+    deprecation: Option<&'a (String, String)>,
+}
+
+impl<'a> KindFacts<'a> {
+    fn of(text: &str, sealed: &'a Sealed, kinds: &'a Registry, resolved: &Resolved<'_>) -> Self {
+        let instance = resolved.recipe(text).is_some();
+        let name = parse_kind(text).filter(|_| !instance).map(|(name, _)| name);
+        let lookup = lookup(kinds, text);
+        KindFacts {
+            instance,
+            missing: name.as_deref().and_then(|n| sealed.missing_for_kind(n)),
+            module: name.as_deref().and_then(|n| sealed.module_of_kind(n)),
+            lookup,
+            deprecation: match lookup {
+                Lookup::Known { entry, .. } => sealed.deprecation_of(&entry.full_name()),
+                _ => None,
+            },
+        }
+    }
 }
 
 /// Checks one lowered item in place; true when it draws.
@@ -872,16 +1049,16 @@ fn check_item(
         ));
         return false;
     };
-    if let Err(r) = Id::parse(key) {
+    if let Some(why) = crate::grammar::id_fault(key) {
         issues.push(Issue::error(
             "bad_id",
             key,
             format!("items/{key}"),
             json!(key),
-            &r.what,
+            &format!("`{key}`: {why}"),
         ));
     }
-    let Some(text) = kind_text(item).map(str::to_string) else {
+    let Some(text) = kind_text(item) else {
         issues.push(Issue::error(
             "out_of_range",
             key,
@@ -891,43 +1068,56 @@ fn check_item(
         ));
         return false;
     };
+    // A recipe instance (Recipe): expansion checked its params against the recipe's inputs and
+    // wrote its derived items, which draw in its place; the instance itself draws nothing.
+    let Some(facts) = ctx.facts.get(text) else {
+        return false;
+    };
+    let instance = facts.instance;
+    if let Some(value) = fields.get("broken_out").filter(|_| !instance) {
+        issues.push(Issue::error(
+            "unknown_field",
+            key,
+            at("broken_out"),
+            value.clone(),
+            "only a recipe instance lists the derived items a patch broke out",
+        ));
+    }
     // A kind of a canvas module this build lacks is refused, naming the module, and nothing of
     // the item is read past its kind: a logic program's bytes, for one, are never opened. Text
     // outside the kind grammar is no module's kind; the lookup below refuses it.
-    if let Some((name, _)) = parse_kind(&text) {
-        if let Some(module) = ctx.sealed.missing_for_kind(&name) {
+    if let Some(module) = &facts.missing {
+        issues.push(Issue::error(
+            "module_missing",
+            key,
+            at("kind"),
+            json!(text),
+            &format!("kind `{text}` is evaluated by the {module} module, which this build lacks"),
+        ));
+        return false;
+    }
+    // A document declares the canvas modules its kinds need (Document envelope), so a
+    // build without the module has the name to refuse with.
+    if let Some(module) = facts.module {
+        let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
+        if !ctx.declared.contains(module) && !by_pack {
             issues.push(Issue::error(
-                "module_missing",
+                "out_of_range",
                 key,
                 at("kind"),
                 json!(text),
                 &format!(
-                    "kind `{text}` is evaluated by the {module} module, which this build lacks"
+                    "kind `{text}` is the `{module}` module's, and `requires.modules` does not name it"
                 ),
             ));
             return false;
-        }
-        // A document declares the canvas modules its kinds need (Document envelope), so a
-        // build without the module has the name to refuse with.
-        if let Some(module) = ctx.sealed.module_of_kind(&name) {
-            if !ctx.declared.contains(module) {
-                issues.push(Issue::error(
-                    "out_of_range",
-                    key,
-                    at("kind"),
-                    json!(text),
-                    &format!(
-                        "kind `{text}` is the `{module}` module's, and `requires.modules` does not name it"
-                    ),
-                ));
-                return false;
-            }
         }
     }
     // The kind decides the params alone: an item of a kind this build does not know, or knows
     // only at a lower major, still meets the item contract core defines (its keys, its id, its
     // layer and parent, its common fields), and is kept byte for byte, its params unread.
-    let known = match lookup(ctx.kinds, &text) {
+    let known = match facts.lookup {
+        Lookup::UnknownKind if instance => None,
         Lookup::UnknownKind => {
             notices.push(Notice {
                 code: "unknown_kind",
@@ -967,8 +1157,8 @@ fn check_item(
         Lookup::Known { entry, saved } => Some((entry, saved)),
     };
     // A deprecated kind still loads, and says so, naming what replaces it.
-    if let Some((entry, _)) = known {
-        if let Some((since, replaced_by)) = ctx.sealed.deprecation_of(&entry.full_name()) {
+    if known.is_some() {
+        if let Some((since, replaced_by)) = facts.deprecation {
             notices.push(Notice {
                 code: "deprecated",
                 ids: vec![key.to_string()],
@@ -1013,7 +1203,7 @@ fn check_item(
     }
     match fields.get("parent") {
         None | Some(Value::Null) => {}
-        Some(Value::String(parent)) if ctx.item_ids.contains(parent) => {
+        Some(Value::String(parent)) if ctx.item_ids.contains(parent.as_str()) => {
             if has_cycle(key, ctx.parents) {
                 issues.push(Issue::error(
                     "cycle",
@@ -1093,10 +1283,13 @@ fn check_item(
 
     // Params: the schema decides each one; the lowered form gets converted literals and loses
     // the fields a required newer minor skips.
-    let required_minor = ctx
-        .required
-        .get(&format!("{}@{}", entry.full_name(), version.major))
-        .copied();
+    let required_minor = if ctx.required.is_empty() {
+        None
+    } else {
+        ctx.required
+            .get(&format!("{}@{}", entry.full_name(), version.major))
+            .copied()
+    };
     let Some(fields) = item.as_object_mut() else {
         return false;
     };
@@ -1248,13 +1441,13 @@ fn check_params(
     let mut dropped = Vec::new();
     let mut converted = Vec::new();
     for (name, value) in params.iter() {
-        let path = format!("items/{key}/params/{name}");
+        let path = || format!("items/{key}/params/{name}");
         let Some(param) = version.param(name) else {
             if required_minor.is_some_and(|m| m > version.minor) {
                 notices.push(Notice {
                     code: "unknown_field",
                     ids: vec![key.to_string()],
-                    path,
+                    path: path(),
                     actual: value.clone(),
                     what: format!(
                         "{}@{}.{} does not define `{name}`; the document requires a newer minor, so it is skipped",
@@ -1270,7 +1463,7 @@ fn check_params(
                 issues.push(Issue::error(
                     "unknown_field",
                     key,
-                    path,
+                    path(),
                     value.clone(),
                     &format!(
                         "{}@{}.{} does not define `{name}`",
@@ -1287,7 +1480,7 @@ fn check_params(
                 issues.push(Issue::error(
                     "module_missing",
                     key,
-                    path,
+                    path(),
                     value.clone(),
                     &lacks(name, param.module, &missing),
                 ));
@@ -1304,7 +1497,7 @@ fn check_params(
                     issues.push(Issue::error(
                         "out_of_range",
                         key,
-                        path,
+                        path(),
                         value.clone(),
                         "not a string",
                     ));
@@ -1321,13 +1514,7 @@ fn check_params(
                         Err(r) => {
                             issues.push(Issue {
                                 forms: literal_forms(param.unit),
-                                ..Issue::error(
-                                    "bad_unit",
-                                    key,
-                                    path.clone(),
-                                    value.clone(),
-                                    &r.what,
-                                )
+                                ..Issue::error("bad_unit", key, path(), value.clone(), &r.what)
                             });
                             None
                         }
@@ -1338,7 +1525,7 @@ fn check_params(
                             ..Issue::error(
                                 "bad_unit",
                                 key,
-                                path.clone(),
+                                path(),
                                 value.clone(),
                                 "neither a number nor a unit literal",
                             )
@@ -1353,7 +1540,7 @@ fn check_params(
                         issues.push(Issue::error(
                             "out_of_range",
                             key,
-                            path,
+                            path(),
                             json!(n),
                             &format!(
                                 "outside {} to {}",
