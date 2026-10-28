@@ -1,35 +1,108 @@
 // `deep status` (#19): every session from every agent and repo, grouped by repo, with what needs you, what's stuck and
-// what's flagged first and the quiet ones folded into one line a repo, and the hub it read. With the hub up it asks
-// the hub (`status.read`); with the hub down it opens the hub's database read-only and reads the same tables.
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+// what's flagged first and the quiet ones folded into one line a repo, and the hub it read. A session whose turn
+// finished lists that turn's tool calls and commits (#668). With the hub up it asks the hub (`status.read`); with the
+// hub down it opens the hub's database read-only and reads the same tables.
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import { call } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 
-type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'quiet';
-export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string }
-const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'quiet'];
+type State = 'needs you' | 'stuck' | 'flagged' | 'working' | 'finished' | 'quiet';
+/** A session's row; a finished one carries what its last turn did: each tool call, then each commit by SHA. */
+export interface StatusRow { id: string; repo: string; agent: string; state: State; why: string; calls?: string[]; commits?: string[] }
+const ORDER: readonly State[] = ['needs you', 'stuck', 'flagged', 'working', 'finished', 'quiet'];
 /** A session with no hook for this long, whatever its last state, reads quiet. */
 const QUIET_MS = 24 * 3_600_000;
+/** The most tool calls a finished turn lists; the rest are counted on one line. */
+const CALLS_SHOWN = 20;
 
 /** Each session's row, from the record's tables through `query` (the hub's record, or its database read-only). */
 export async function statusRows(query: (sql: string) => Promise<unknown[]>, now: number): Promise<StatusRow[]> {
-  const sessions = (await query('SELECT id, project_id, agent, status, last_seen FROM sessions')) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null }[];
+  const sessions = (await query('SELECT id, project_id, agent, status, last_seen, worktree FROM sessions')) as { id: string; project_id: string | null; agent: string | null; status: string; last_seen: number | null; worktree: string | null }[];
   const asks = new Map(((await query("SELECT session_id, COUNT(*) AS n, MIN(created) AS since FROM asks WHERE status IN ('open', 'later') AND session_id IS NOT NULL GROUP BY session_id")) as { session_id: string; n: number; since: number | null }[]).map((r) => [r.session_id, r]));
   const gone = new Set(((await query("SELECT DISTINCT session_id FROM events WHERE kind = 'session.gone' AND session_id IS NOT NULL")) as { session_id: string }[]).map((r) => r.session_id));
   const ago = (ms: number | null) => (ms === null ? 'a while' : minutes(now - ms));
-  return sessions.map((s) => {
+  const rows = sessions.map((s): StatusRow => {
     const open = asks.get(s.id);
     const [state, why]: [State, string] = open ? ['needs you', `${open.n === 1 ? 'an ask' : `${open.n} asks`} open for ${ago(open.since)}`]
       : s.status === 'waiting' ? ['needs you', 'a permission prompt waits on you']
       : s.status === 'stuck' ? ['stuck', 'blocked on something only you or a service can clear']
       : s.status === 'failed' ? ['flagged', 'its turn ended failed, with no claim']
       : gone.has(s.id) && s.status !== 'finished' ? ['flagged', 'its process is gone mid-turn']
-      : s.status === 'unknown' || s.status === 'finished' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
+      : s.status === 'unknown' || now - (s.last_seen ?? 0) > QUIET_MS ? ['quiet', `last seen ${ago(s.last_seen)} ago`]
+      : s.status === 'finished' ? ['finished', `its turn stopped ${ago(s.last_seen)} ago`]
       : ['working', `last seen ${ago(s.last_seen)} ago`];
-    return { id: s.id, repo: s.project_id ?? 'no repo', agent: s.agent ?? 'agent', state, why };
+    return { id: s.id, repo: s.project_id ?? repoOf(s.worktree) ?? 'no repo', agent: s.agent ?? 'agent', state, why };
   });
+  const finished = rows.filter((r) => r.state === 'finished');
+  if (finished.length) await lastTurns(query, finished, new Map(sessions.map((s) => [s.id, s.worktree])));
+  return rows;
+}
+
+/**
+ * Each finished session's last turn, from the record's events: its tool calls in order, each ok or failed with its exit
+ * code and error signature, and the commits the hub recorded under it.
+ */
+async function lastTurns(query: (sql: string) => Promise<unknown[]>, rows: StatusRow[], worktrees: Map<string, string | null>): Promise<void> {
+  const ids = rows.map((r) => `'${r.id.replace(/'/g, "''")}'`).join(', ');
+  const events = (await query(`SELECT session_id, kind, data FROM events WHERE session_id IN (${ids}) AND kind IN ('user.ask', 'tool.before', 'tool.after', 'commit.made') ORDER BY log_pos`)) as { session_id: string; kind: string; data: string | Obj }[];
+  for (const row of rows) {
+    const calls = new Map<string, { before?: Obj; after?: Obj }>();
+    const commits: string[] = [];
+    let n = 0;
+    for (const e of events) {
+      if (e.session_id !== row.id) continue;
+      if (e.kind === 'user.ask') {
+        calls.clear();
+        commits.length = 0;
+        continue;
+      }
+      const data = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data) as Obj;
+      if (e.kind === 'commit.made') {
+        if (typeof data.sha === 'string' && !commits.includes(data.sha)) commits.push(data.sha);
+        continue;
+      }
+      const key = typeof data.call === 'string' ? data.call : `#${n++}`;
+      const call = calls.get(key) ?? {};
+      if (e.kind === 'tool.before') call.before = data;
+      else call.after = data;
+      calls.set(key, call);
+    }
+    const shown = [...calls.values()].map(({ before, after }) => callLine(before ?? after!, after, worktrees.get(row.id) ?? ''));
+    row.calls = shown.length > CALLS_SHOWN ? [...shown.slice(0, CALLS_SHOWN), `and ${shown.length - CALLS_SHOWN} more tool calls`] : shown;
+    row.commits = commits;
+  }
+}
+type Obj = Record<string, unknown>;
+/** One tool call: its kind, its command or the files it touched, and how it ended. */
+function callLine(call: Obj, after: Obj | undefined, worktree: string): string {
+  const paths = Array.isArray(call.paths) ? call.paths.filter((p): p is string => typeof p === 'string') : [];
+  const what = typeof call.command === 'string' ? call.command.replace(/\s+/g, ' ').trim()
+    : paths.length ? paths.map((p) => (worktree && isAbsolute(p) && p.startsWith(`${worktree}/`) ? relative(worktree, p) : p)).join(', ')
+    : typeof call.tool === 'string' ? call.tool : '';
+  const shortened = what.length > 72 ? `${what.slice(0, 71)}…` : what;
+  const ended = !after ? 'no result' : after.outcome !== 'failed' ? 'ok'
+    : ['failed', ...(typeof after.exit_code === 'number' ? [`exit ${after.exit_code}`] : []), ...(typeof after.signature === 'string' ? [after.signature] : [])].join(', ');
+  return `${String(call.kind ?? 'call')} ${shortened}  ${ended}`;
+}
+
+/**
+ * The repo a session works in, by its working folder: the folder holding its `.git`, and for a linked worktree the
+ * repo the worktree belongs to, so every worktree of one repo groups under it.
+ */
+function repoOf(worktree: string | null): string | undefined {
+  if (!worktree || !isAbsolute(worktree)) return undefined;
+  for (let dir = worktree; ; dir = dirname(dir)) {
+    const git = join(dir, '.git');
+    try {
+      if (statSync(git).isDirectory()) return basename(dir);
+      const linked = /^gitdir:\s*(.+?)\/\.git\/worktrees\//m.exec(readFileSync(git, 'utf8'));
+      return basename(linked ? linked[1]! : dir);
+    } catch {
+      if (dirname(dir) === dir) return undefined;
+    }
+  }
 }
 const minutes = (ms: number): string => {
   for (const [unit, size] of [['d', 86_400_000], ['h', 3_600_000], ['m', 60_000]] as const) if (ms >= size) return `${Math.floor(ms / size)}${unit}`;
@@ -49,14 +122,20 @@ export function render(rows: readonly StatusRow[], from: string): string {
       Math.min(...shown.filter((r) => r.repo === a).map(rank)) - Math.min(...shown.filter((r) => r.repo === b).map(rank)) || a.localeCompare(b));
     for (const repo of repos) {
       out.push(repo);
-      for (const r of shown.filter((m) => m.repo === repo).sort((a, b) => rank(a) - rank(b))) out.push(`  ${r.id.slice(0, 8)}  ${r.state.padEnd(9)}  ${r.agent.padEnd(11)}  ${r.why}`);
+      for (const r of shown.filter((m) => m.repo === repo).sort((a, b) => rank(a) - rank(b))) {
+        out.push(`  ${r.id.slice(0, 8)}  ${r.state.padEnd(9)}  ${r.agent.padEnd(11)}  ${r.why}`);
+        for (const call of r.calls ?? []) out.push(`      ${call}`);
+        // The planted wrong program lists the turn's tool calls and leaves its commits out.
+        if (activePlant() !== 'status-omits-commit') for (const sha of r.commits ?? []) out.push(`      commit ${sha.slice(0, 12)}`);
+      }
     }
   };
-  grouped(rows.filter((r) => r.state !== 'working' && r.state !== 'quiet'));
-  const working = rows.filter((r) => r.state === 'working');
-  if (working.length) {
-    out.push('Working:');
-    grouped(working);
+  grouped(rows.filter((r) => r.state !== 'working' && r.state !== 'finished' && r.state !== 'quiet'));
+  for (const [state, title] of [['working', 'Working:'], ['finished', 'Finished, with what its last turn did:']] as const) {
+    const these = rows.filter((r) => r.state === state);
+    if (!these.length) continue;
+    out.push(title);
+    grouped(these);
   }
   const quiet = rows.filter((r) => r.state === 'quiet');
   const byRepo = [...new Set(quiet.map((r) => r.repo))].sort().map((repo) => `${repo} ${quiet.filter((r) => r.repo === repo).length}`);
