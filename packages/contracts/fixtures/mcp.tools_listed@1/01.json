@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "mcp.tools_listed",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "server": "forge",
+    "scope": "user",
+    "version": "1.1.0",
+    "tools": [
+      {
+        "name": "delete_repo",
+        "digest": "5c3bd4f0a8d0e6a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6071829",
+        "hints": {}
+      }
+    ],
+    "held": {
+      "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T6X",
+      "tools": [
+        "delete_repo"
+      ]
+    }
+  },
+  "subject": "session:01K74FKZVK8Q2X5R7M3N9P4T6W"
+}

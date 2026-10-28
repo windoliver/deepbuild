@@ -8,7 +8,6 @@
 //! document is `family.name@major` (a core kind has no family: `camera@1`); `requires.kinds`
 //! names `family.name@major.minor`.
 
-use crate::grammar::Id;
 use serde_json::{json, Map, Value};
 
 /// A param's type.
@@ -447,7 +446,9 @@ fn parse_part(s: &str) -> Option<u32> {
 /// examples are `slab@1` and `village.house@1`), so every build writes the same grammar and
 /// text outside it is no build's kind.
 fn kind_name(name: &str) -> Option<String> {
-    Id::parse(name).ok().map(|_| name.to_string())
+    crate::grammar::id_fault(name)
+        .is_none()
+        .then(|| name.to_string())
 }
 
 /// `family.name@major` → (`family.name`, major).
