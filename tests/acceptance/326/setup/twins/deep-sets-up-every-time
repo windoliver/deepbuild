@@ -1,0 +1,6 @@
+#!/bin/sh
+# Planted twin of the deep CLI (README: Wrong programs). Every `deep` command, not only the first, runs setup's steps
+# again and says so in one line on stderr, then runs the command.
+deep setup >/dev/null 2>&1 || exit 1
+echo "DeepBuild added its hooks in watch-only mode and started the hub; deep setup --undo removes it." >&2
+exec deep "$@"
