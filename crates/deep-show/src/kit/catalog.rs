@@ -416,6 +416,7 @@ fn apply_as(hub: &Hub<'_>, doc: &mut Value, writer: &str, patch: &Value) -> Resu
         you: writer.starts_with("you:"),
         base: None,
         knows: &knows,
+        packs: None,
     };
     let id = doc["id"].as_str().unwrap_or_default().to_string();
     apply_ops(doc, patch, "patch", &id, &writing)

@@ -1,0 +1,15 @@
+{
+  "name": "foley",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "alice's foley pack: one tap mark per instance.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "foley.tap@1": "foley.tap@1.json"
+  }
+}
