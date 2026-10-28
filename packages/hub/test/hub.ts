@@ -28,6 +28,21 @@ export function send(socket: string, line: string): Promise<string> {
   });
 }
 
+/** Sends one hook request and returns the hub's reply, the line after its acknowledgement. */
+export function reply(socket: string, line: string): Promise<{ exit: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(socket);
+    let got = '';
+    sock.on('data', (d) => {
+      got += d;
+      const lines = got.split('\n');
+      if (lines.length === 2) sock.write(line);
+      if (lines.length > 3) { sock.destroy(); resolve(JSON.parse(lines[2]!) as { exit: number; stdout: string; stderr: string }); }
+    });
+    sock.on('error', reject);
+  });
+}
+
 /** A hub `withHub` started: it can be restarted (with its own environment), and waited on when it kills itself. */
 /** `between` runs with the hub stopped, before it starts again. */
 export interface Hub { restart: (env?: Record<string, string>, between?: () => void) => Promise<void>; exited: (within?: number) => Promise<void> }

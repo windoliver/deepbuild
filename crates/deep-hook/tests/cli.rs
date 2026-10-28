@@ -518,3 +518,61 @@ fn a_hold_past_the_contract_is_the_hub_away() {
         "the call is spooled: {spooled:?}"
     );
 }
+
+/// The shipped entry `name` in default-rules.json, as its JSON text (its fields hold no nested object).
+fn shipped_entry(name: &str) -> Option<String> {
+    let rules = include_str!("../default-rules.json");
+    let at = rules.find(&format!("\"{name}\": {{"))?;
+    let start = at + rules[at..].find('{')?;
+    let end = start + rules[start..].find('}')?;
+    Some(rules[start..=end].to_string())
+}
+
+#[test]
+fn the_shipped_rules_carry_a_workflow_dispatch_to_the_authority_gate() {
+    // No "proceed" covers a dispatch (#321): the hub holds a call by the effect class its watch entry reads, so a
+    // dispatch reaches it as one whatever you made of the no-workflow-dispatch block.
+    let entry = shipped_entry("authority-dispatch")
+        .expect("default-rules.json ships no authority-dispatch entry");
+    assert!(
+        entry.contains(r#""mode": "watch""#),
+        "authority-dispatch must only carry the call to the gate, in watch mode: {entry}"
+    );
+    let matched = |command: &str| {
+        use std::io::Write;
+        let mut child = Command::new(env!("CARGO_BIN_EXE_deep-hook"))
+            .arg("check")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let input = format!(
+            r#"{{"entry":{entry},"call":{{"tool_name":"Bash","tool_input":{{"command":"{command}"}}}},"classes":{{}}}}"#
+        );
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        let said = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            output.status.success(),
+            "deep-hook check refused `{command}`: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        said.contains("\"matched\":true")
+    };
+    for dispatch in [
+        "gh workflow run deploy.yml --ref main",
+        "gh api repos/acme/shop/actions/workflows/deploy.yml/dispatches -f ref=main",
+        "curl -X POST https://api.github.com/repos/acme/shop/dispatches",
+    ] {
+        assert!(matched(dispatch), "`{dispatch}` dispatches a workflow");
+    }
+    for other in ["gh run rerun 12", "gh workflow list"] {
+        assert!(!matched(other), "`{other}` dispatches nothing");
+    }
+}
