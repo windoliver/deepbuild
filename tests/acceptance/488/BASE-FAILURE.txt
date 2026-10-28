@@ -9,7 +9,7 @@ Date: 2026-10-27  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
 Exit code: 1
 
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a0a70551f01d24191/tests/acceptance/488
+ RUN  v5.0.5 <checkout>/tests/acceptance/488
 
  × document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 a document at 85/1 or 11/1 fps is refused with bad_rate at transport/frame_rate, naming the rate; one at 30000/1001 or 8/1 is presented and exports at its own rate 3840ms
    → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
