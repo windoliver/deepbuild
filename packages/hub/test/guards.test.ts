@@ -1,25 +1,9 @@
 // The hub decides what each guard entry deep-hook matched does (#316): a block entry denies the call with its
 // reason, its next step and deep-hook's note on the call; an entry in another mode leaves the call allowed.
 import { writeFileSync } from 'node:fs';
-import net from 'node:net';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { hookLine, withHub } from './hub.js';
-
-/** Sends one hook request and returns the hub's reply line, the one after its acknowledgement. */
-function reply(socket: string, line: string): Promise<{ exit: number; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(socket);
-    let got = '';
-    sock.on('data', (d) => {
-      got += d;
-      const lines = got.split('\n');
-      if (lines.length === 2) sock.write(line);
-      if (lines.length > 3) { sock.destroy(); resolve(JSON.parse(lines[2]!) as { exit: number; stderr: string }); }
-    });
-    sock.on('error', reject);
-  });
-}
+import { hookLine, reply, withHub } from './hub.js';
 
 const entry = (mode: string) => ({ match: 'kill:by-name', scope: 'all_repos', mode, reason: 'REASON-316.', next_step: 'NEXT-316.', fail_closed: false });
 const call = { session_id: 's', cwd: '/tmp', hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'pkill -f node' }, tool_use_id: 't' };
