@@ -92,8 +92,11 @@ describe('R1 #44.2d670703 deep.lease(resource, mode): the host leases with holde
     await expect(alphaHoldsRig('skips-kind-declare')).rejects.toThrow(/device\.rig.* for ext:test\/alpha (rejected|returns a grant)/);
   }, 120_000);
 
-  it('R1 (wrong program) a host that leases every call exclusive fails the shared pair, naming ext:test/beta', async () => {
-    await expect(bothShared('drops-mode')).rejects.toThrow(/shared\) for ext:test\/beta returns a grant/);
+  // A host that leases every call exclusive grants alpha's first shared call (nothing else holds rig-s), but the
+  // table's lease carries the mode the host passed, exclusive: grantedTo's first failing assertion is alpha's mode,
+  // before beta is ever asked.
+  it('R1 (wrong program) a host that leases every call exclusive fails the shared pair, naming ext:test/alpha\'s mode', async () => {
+    await expect(bothShared('drops-mode')).rejects.toThrow(/\{kind: device\.rig, key: rig-s\}, shared\) for ext:test\/alpha: its mode as asked: expected 'exclusive' to be 'shared'/);
   }, 120_000);
 
   it('R1 (wrong program) a host that takes the holder from the call\'s arguments fails, naming ext:test/alpha', async () => {
