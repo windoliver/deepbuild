@@ -14,6 +14,7 @@ use deep_canvas_motion::program::Program;
 use serde_json::{json, Value};
 
 use crate::hub::{Hub, Planted};
+use crate::placement::Grid;
 use crate::shared::FLICKS;
 
 /// What a frame draws besides the revision: the camera, and the view controls that choose the
@@ -161,11 +162,18 @@ impl Hub<'_> {
             let (doc, _) = self
                 .panel_document(panel)
                 .ok_or_else(|| refused("not_presented"))?;
-            let display = self
-                .scenario
-                .display
-                .or(self.scenario.window)
-                .unwrap_or([rect[0] + rect[2], rect[1] + rect[3]]);
+            // A view popped out fills its own window, in that window's px (#400).
+            let (rect, display) = match self.placed(panel) {
+                Some(p) => p,
+                None => (
+                    rect,
+                    self.scenario
+                        .display
+                        .or(self.main_display_size())
+                        .or(self.scenario.window)
+                        .unwrap_or([rect[0] + rect[2], rect[1] + rect[3]]),
+                ),
+            };
             let p = self.scenario.planted;
             let planted = scope::Planted {
                 line_scroll_pans: p == Some(Planted::LineScrollPans),
@@ -191,6 +199,82 @@ impl Hub<'_> {
         Ok(self.scopes.get_mut(panel).expect("inserted above"))
     }
 
+    /// The main window's display's size, with `displays` (#400).
+    fn main_display_size(&self) -> Option<[f64; 2]> {
+        let w = self.placement.main_window()?;
+        let d = self.placement.display(&w.display)?;
+        Some([d.bounds[2], d.bounds[3]])
+    }
+
+    /// A popped-out panel's rect in its own window's px, and that window's display size.
+    fn placed(&self, panel: &str) -> Option<([f64; 4], [f64; 2])> {
+        let w = self.placement.window_of(panel)?;
+        if w.view.as_deref() != Some(panel) {
+            return None;
+        }
+        let d = self.placement.display(&w.display)?;
+        Some(([0.0, 0.0, w.rect[2], w.rect[3]], [d.bounds[2], d.bounds[3]]))
+    }
+
+    /// `move_window`: your drag of a window, as the window server reports it (#400). A popped
+    /// view's scope follows its window's display.
+    pub fn move_window(&mut self, window: &str, rect: [f64; 4], agent: bool) -> Value {
+        let moved = match self.placement.move_window(self.now, window, rect, agent) {
+            Ok(w) => w,
+            Err(e) => return e,
+        };
+        let reply = json!({"window": moved.to_json()});
+        // The scopes the move carried to another display: the popped view's, or every unpopped
+        // panel's when the main window moved.
+        let panels: Vec<String> = match &moved.view {
+            Some(p) => vec![p.clone()],
+            None => self
+                .scenario
+                .panels
+                .keys()
+                .filter(|p| self.placed(p).is_none())
+                .cloned()
+                .collect(),
+        };
+        let main = self.main_display_size();
+        for panel in panels {
+            let at = self
+                .placed(&panel)
+                .or_else(|| Some((self.scenario.panels.get(&panel)?.rect, main?)));
+            if let (Some((rect, display)), Some(s)) = (at, self.scopes.get_mut(&panel)) {
+                s.scope.placed(rect, display);
+            }
+        }
+        reply
+    }
+
+    /// `pop_out`: your pop-out of a panel's view into a window of its own on a display (#400).
+    /// Its scope moves with it.
+    pub fn pop_out(
+        &mut self,
+        panel: &str,
+        display: &str,
+        serial: Option<u64>,
+        full_screen: bool,
+        agent: bool,
+    ) -> Value {
+        // An agent never holds a serial.
+        if agent {
+            return refused("agent_cannot_pop_out");
+        }
+        let Some(spec) = self.scenario.panels.get(panel) else {
+            return refused("unknown_panel");
+        };
+        let size = [spec.rect[2], spec.rect[3]];
+        let reply = self
+            .placement
+            .pop_out(self.now, panel, display, serial, full_screen, size);
+        if let (Some((rect, display)), Some(s)) = (self.placed(panel), self.scopes.get_mut(panel)) {
+            s.scope.placed(rect, display);
+        }
+        reply
+    }
+
     /// `input`: one hardware input to a panel's canvas.
     pub fn input(&mut self, panel: &str, event: &Event) -> Value {
         if let Err(e) = self.panel_scope(panel) {
@@ -201,6 +285,8 @@ impl Hub<'_> {
         };
         self.serial += 1;
         let (serial, now) = (self.serial, self.now);
+        // Your latest input, for the card's display, and the serial a pop-out needs (#400).
+        self.placement.input(now, panel, serial);
         let late = self.scenario.planted == Some(Planted::DragShowsOnRelease)
             && matches!(event, Event::Move(_));
         let done = match self.scopes.get_mut(panel) {
@@ -321,19 +407,67 @@ impl Hub<'_> {
         let Some(clock) = self.scenario.clock else {
             return refused("no_clock");
         };
-        let Some(doc) = self.panel_doc(panel) else {
-            return refused("unknown_panel");
+        // With displays, the window's own display paces the panel (#400): its vsync grid, and
+        // the window's frame sequence over every panel it holds.
+        let paced = self
+            .placement
+            .pacing(panel)
+            .map(|(w, d)| (w.id.clone(), d.uuid.clone(), d.grid()));
+        let grid = match (&paced, clock.refresh_hz) {
+            (Some((_, _, g)), _) => *g,
+            (None, Some(hz)) => Grid {
+                next_vsync: FLICKS / hz,
+                period: FLICKS / hz,
+            },
+            (None, None) => return refused("no_display"),
         };
-        let currents = self.currents(&doc);
-        let now = self.now;
-        let seen = match self.panel_scope(panel) {
-            Ok(s) => s.seen.clone(),
+        let mut frames = match self.panel_frames(panel, grid, clock.lead) {
+            Ok(f) => f,
             Err(e) => return e,
         };
-        let period = FLICKS / clock.refresh_hz;
+        if let Some((window, display, _)) = paced {
+            // The window's other panels' frames count in its sequence; reading them makes their
+            // scopes as a `scope` call would.
+            let siblings: Vec<String> = self
+                .scenario
+                .panels
+                .keys()
+                .filter(|p| p.as_str() != panel)
+                .filter(|p| self.placement.window_of(p).is_some_and(|w| w.id == window))
+                .cloned()
+                .collect();
+            let mut vsyncs: Vec<i64> = frames.iter().filter_map(|f| f["vsync"].as_i64()).collect();
+            for p in siblings {
+                if let Ok(f) = self.panel_frames(&p, grid, clock.lead) {
+                    vsyncs.extend(f.iter().filter_map(|f| f["vsync"].as_i64()));
+                }
+            }
+            vsyncs.sort_unstable();
+            vsyncs.dedup();
+            for f in &mut frames {
+                let seq = f["vsync"]
+                    .as_i64()
+                    .and_then(|v| vsyncs.binary_search(&v).ok())
+                    .map_or(0, |i| i + 1);
+                f["window"] = json!(window);
+                f["display"] = json!(display);
+                f["frame_seq"] = json!(seq);
+            }
+        }
+        json!({"frames": frames})
+    }
+
+    /// The frames a panel presented up to now on `grid`, each latched `lead` before its vsync.
+    fn panel_frames(&mut self, panel: &str, grid: Grid, lead: i64) -> Result<Vec<Value>, Value> {
+        let doc = self
+            .panel_doc(panel)
+            .ok_or_else(|| refused("unknown_panel"))?;
+        let currents = self.currents(&doc);
+        let now = self.now;
+        let seen = self.panel_scope(panel)?.seen.clone();
         // The planted twin draws a revision current at a latch one frame later than it may.
         let late = if self.scenario.planted == Some(Planted::PatchShowsAFrameLate) {
-            period
+            grid.period
         } else {
             0
         };
@@ -341,11 +475,8 @@ impl Hub<'_> {
         let mut last: Option<(u64, &Seen)> = None;
         let mut until: Option<i64> = None;
         let mut motion: BTreeMap<u64, Option<Program>> = BTreeMap::new();
-        let mut k = 1;
-        while k * period <= now {
-            let vsync = k * period;
-            let latch = vsync - clock.lead;
-            k += 1;
+        for vsync in grid.vsyncs_through(now) {
+            let latch = vsync - lead;
             let Some((_, view)) = seen.iter().rev().find(|(at, _)| *at <= latch) else {
                 continue;
             };
@@ -380,6 +511,6 @@ impl Hub<'_> {
             }
             frames.push(frame);
         }
-        json!({"frames": frames})
+        Ok(frames)
     }
 }
