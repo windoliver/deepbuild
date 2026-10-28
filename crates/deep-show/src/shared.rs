@@ -76,15 +76,20 @@ pub enum CommitFault {
 /// and `check` flicks of the checker per patch it takes.
 #[derive(Clone, Copy, Debug)]
 pub struct Clock {
-    pub refresh_hz: i64,
+    /// `None` with `displays` (#400): each display has its own refresh, so a revision is
+    /// current from its check and each window's latches read it.
+    pub refresh_hz: Option<i64>,
     pub lead: i64,
     pub check: i64,
 }
 
 impl Clock {
-    /// The first latch at or after `t`.
+    /// The first latch at or after `t`; `t` itself when every display has its own grid.
     pub fn latch_from(&self, t: i64) -> i64 {
-        let period = FLICKS / self.refresh_hz;
+        let Some(refresh_hz) = self.refresh_hz else {
+            return t;
+        };
+        let period = FLICKS / refresh_hz;
         let k = (t + self.lead + period - 1).div_euclid(period).max(1);
         k * period - self.lead
     }

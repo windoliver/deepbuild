@@ -40,6 +40,15 @@ use crate::registry::{Per, Sealed, TableValue};
 
 pub use view::View;
 
+/// What a node's operator call left: its writes, its error, what a step noted and the tails it
+/// wrote.
+type Called = (
+    Vec<Val>,
+    Option<OpError>,
+    Option<(i64, i64)>,
+    Vec<(String, Val)>,
+);
+
 /// The six view inputs an operator may read (Operator and read set: `view(…)`), in the order a
 /// session holds them.
 pub const VIEW_INPUTS: [&str; 6] = [
@@ -1624,12 +1633,7 @@ impl Session {
         n: usize,
         step: Option<view::StepCtx<'_>>,
         report: &mut Report,
-    ) -> (
-        Vec<Val>,
-        Option<OpError>,
-        Option<(i64, i64)>,
-        Vec<(String, Val)>,
-    ) {
+    ) -> Called {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
