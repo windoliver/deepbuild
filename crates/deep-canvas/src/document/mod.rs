@@ -477,6 +477,52 @@ pub(crate) fn kind_text(item: &Value) -> Option<&str> {
 mod tests {
     use super::*;
 
+    /// A document big enough that its items check in chunks across threads (#306) checks as one
+    /// pass would: each bad item's issue, whichever chunk it falls in, every item drawn, and the
+    /// lowered items in the document's order.
+    #[test]
+    fn a_big_document_checks_in_chunks_as_one_pass_would() {
+        let mut doc = base();
+        for i in 0..3000 {
+            let id = format!("s{i:04}");
+            doc["items"][&id] = json!({"id": id, "kind": "test.slab@3", "layer": "main",
+                "name": id, "order": "a0", "params": {"width": 2}});
+        }
+        doc["items"]["s0007"]["layer"] = json!("nowhere");
+        doc["items"]["s1500"]["colour"] = json!("red");
+        doc["items"]["s2999"]["params"]["width"] = json!(-5);
+        let result = check(&doc);
+        let mut found: Vec<(String, String)> = result
+            .issues
+            .iter()
+            .map(|i| (i.code.to_string(), i.path.clone()))
+            .collect();
+        found.sort();
+        assert_eq!(
+            found,
+            vec![
+                ("out_of_range".into(), "items/s2999/params/width".into()),
+                ("ref_unresolved".into(), "items/s0007/layer".into()),
+                ("unknown_field".into(), "items/s1500/colour".into()),
+            ],
+            "each bad item's issue, from the first chunk, a middle one and the last"
+        );
+        let slabs = (0..3000).map(|i| format!("s{i:04}"));
+        assert!(
+            slabs.clone().all(|id| result.draws.contains(&id)),
+            "every slab draws"
+        );
+        let keys = |v: &Value| -> Vec<String> {
+            v["items"].as_object().unwrap().keys().cloned().collect()
+        };
+        assert_eq!(
+            keys(&result.lowered),
+            keys(&doc),
+            "the lowered items keep the document's order"
+        );
+        assert_eq!(result.lowered["items"], doc["items"], "and its values");
+    }
+
     /// The patch fuzzer's fifth law: after each seeded patch (a create, a set of a param in and out
     /// of range, a move under another item or under itself, a delete that leaves children
     /// behind), the incremental re-check gives the full check's issues, by code, IDs and path.

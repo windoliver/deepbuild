@@ -113,7 +113,7 @@ fn check_by(
     let mut issues = Vec::new();
     let mut notices = Vec::new();
     let mut draws = Vec::new();
-    let mut lowered = doc.clone();
+    let mut lowered = copy_of(doc);
 
     check_envelope(doc, &mut issues);
     check_transport(doc, &mut issues);
@@ -196,10 +196,22 @@ fn check_by(
                 sealed,
                 facts: &facts,
             };
-            for (key, item) in items.iter_mut() {
-                if check_item(key, item, &ctx, &mut issues, &mut notices) {
-                    draws.push(key.clone());
+            // Each item checks on its own, so a big document's items check in chunks across the
+            // cores, and the chunks' findings join in item order, as one pass would list them.
+            let mut entries: Vec<(&String, &mut Value)> = items.iter_mut().collect();
+            let checked = in_chunks(&mut entries, |chunk| {
+                let (mut issues, mut notices, mut draws) = (Vec::new(), Vec::new(), Vec::new());
+                for (key, item) in chunk.iter_mut() {
+                    if check_item(key, item, &ctx, &mut issues, &mut notices) {
+                        draws.push((*key).clone());
+                    }
                 }
+                (issues, notices, draws)
+            });
+            for (i, n, d) in checked {
+                issues.extend(i);
+                notices.extend(n);
+                draws.extend(d);
             }
         }
         Some(other) => issues.push(Issue::envelope(
@@ -232,6 +244,66 @@ fn check_by(
         set_digest: sealed.set_digest.clone(),
         expansions,
     }
+}
+
+/// The items a document holds before its per-item work splits across threads (AC8 of #306: a
+/// 10,000-item document checks in under 50 ms); below it, threads cost more than they save.
+const SPLIT_FROM: usize = 2048;
+
+/// Runs `work` over `entries` in one chunk per core, on scoped threads once there are
+/// [`SPLIT_FROM`] or more, and returns each chunk's result in order.
+fn in_chunks<T: Send, R: Send>(entries: &mut [T], work: impl Fn(&mut [T]) -> R + Sync) -> Vec<R> {
+    let threads = if entries.len() < SPLIT_FROM {
+        1
+    } else {
+        std::thread::available_parallelism().map_or(1, |n| n.get().min(8))
+    };
+    if threads <= 1 {
+        return vec![work(entries)];
+    }
+    let size = entries.len().div_ceil(threads);
+    let work = &work;
+    std::thread::scope(|s| {
+        let handles: Vec<_> = entries
+            .chunks_mut(size)
+            .map(|chunk| s.spawn(move || work(chunk)))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    })
+}
+
+/// A copy of `doc` to lower: its items copied in chunks across the cores, in their order.
+fn copy_of(doc: &Value) -> Value {
+    let Some(Value::Object(items)) = member(doc, "items") else {
+        return doc.clone();
+    };
+    let Some(fields) = doc.as_object() else {
+        return doc.clone();
+    };
+    let mut entries: Vec<(&String, &Value)> = items.iter().collect();
+    let parts = in_chunks(&mut entries, |chunk| {
+        chunk
+            .iter()
+            .map(|(k, v)| ((*k).clone(), (*v).clone()))
+            .collect::<Vec<_>>()
+    });
+    let mut copied = Map::with_capacity(items.len());
+    for part in parts {
+        copied.extend(part);
+    }
+    let mut out = Map::with_capacity(fields.len());
+    for (k, v) in fields {
+        let v = if k == "items" {
+            Value::Object(std::mem::take(&mut copied))
+        } else {
+            v.clone()
+        };
+        out.insert(k.clone(), v);
+    }
+    Value::Object(out)
 }
 
 /// The frame CPU the budget estimate allows a document, in ms (`document.budget`).
@@ -986,7 +1058,7 @@ fn check_item(
             &format!("`{key}`: {why}"),
         ));
     }
-    let Some(text) = kind_text(item).map(str::to_string) else {
+    let Some(text) = kind_text(item) else {
         issues.push(Issue::error(
             "out_of_range",
             key,
@@ -998,7 +1070,7 @@ fn check_item(
     };
     // A recipe instance (Recipe): expansion checked its params against the recipe's inputs and
     // wrote its derived items, which draw in its place; the instance itself draws nothing.
-    let Some(facts) = ctx.facts.get(&text) else {
+    let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
     let instance = facts.instance;
