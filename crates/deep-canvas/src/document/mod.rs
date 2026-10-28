@@ -336,6 +336,10 @@ pub const CORE_CODES: &[(&str, &str)] = &[
         "A time that isn't a span the time grammar reads.",
     ),
     (
+        "bad_rate",
+        "A transport frame or sample rate that isn't a rate, or whose frame or sample isn't a whole number of flicks.",
+    ),
+    (
         "bound_typed_over",
         "A bound value's text typed over, where its reading shows.",
     ),

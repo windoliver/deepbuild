@@ -301,6 +301,12 @@ pub struct Hashed {
 /// Look tokens: each role's value.
 pub type Tokens = BTreeMap<String, Value>;
 
+/// What a step noted for the log: its count and the other count it read.
+type Noted = Option<(i64, i64)>;
+
+/// The tails an operator wrote in a frame, by key.
+type Tails = Vec<(String, Val)>;
+
 /// A source column from outside the document, hashed once when it arrived.
 #[derive(Clone, Debug)]
 pub struct Column {
@@ -1611,7 +1617,7 @@ impl Session {
         s: &mut Scheduler<'_>,
         n: usize,
         report: &mut Report,
-    ) -> (Vec<Val>, Option<OpError>, Vec<(String, Val)>) {
+    ) -> (Vec<Val>, Option<OpError>, Tails) {
         let (out, err, _, tails) = self.call(s, n, None, report);
         (out, err, tails)
     }
@@ -1624,12 +1630,7 @@ impl Session {
         n: usize,
         step: Option<view::StepCtx<'_>>,
         report: &mut Report,
-    ) -> (
-        Vec<Val>,
-        Option<OpError>,
-        Option<(i64, i64)>,
-        Vec<(String, Val)>,
-    ) {
+    ) -> (Vec<Val>, Option<OpError>, Noted, Tails) {
         let sealed: &Sealed = s.sealed;
         let l = self.loaded.as_ref().expect("loaded");
         let node = &l.nodes[n];
