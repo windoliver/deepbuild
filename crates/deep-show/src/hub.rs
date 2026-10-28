@@ -32,6 +32,7 @@ use serde_json::{json, Map, Value};
 
 use crate::evidence;
 use crate::frames::{op_issue, overflows, unfit_issue};
+use crate::placement::{self, Placement};
 use crate::shared::{self, Clock, CommitFault, Quota, Shared};
 use crate::snapshot::{self, Drawn, Renderer, Unfit};
 
@@ -236,7 +237,18 @@ pub struct Requirement {
 pub struct Card {
     pub question: String,
     pub options: Vec<String>,
-    pub rect: [f64; 4],
+    pub slot: Slot,
+}
+
+/// Where the card draws: the slot its view reserved (#393), or, with `displays`, where the
+/// shell places the card of `ask`, measured `size` points, created at `at` (#400).
+pub enum Slot {
+    Reserved([f64; 4]),
+    Placed {
+        ask: String,
+        size: [f64; 2],
+        at: i64,
+    },
 }
 
 /// Who a call came from: an MCP call and the session it bound to, or a `deep` command and its
@@ -359,6 +371,43 @@ pub enum Call {
     Scope(String),
     /// The frames a panel presented up to now (#383).
     Presented(String),
+    /// Your pop-out of a panel's view onto a display, with your input's serial (#400).
+    PopOut {
+        panel: String,
+        display: String,
+        serial: Option<u64>,
+        full_screen: bool,
+        /// The call carries a session: an agent asking.
+        agent: bool,
+    },
+    /// The window server's report of your drag of a window (#400).
+    MoveWindow {
+        window: String,
+        rect: [f64; 4],
+        agent: bool,
+    },
+    /// The window server's report of the key window, `None` for another app's (#400).
+    Activate {
+        window: Option<String>,
+        agent: bool,
+    },
+    /// The OS's report of the thermal state: whether the Mac is hot (#400).
+    Thermal {
+        hot: bool,
+        agent: bool,
+    },
+    /// The window server's report that you hid a window or showed it again (#400).
+    HideWindow {
+        window: String,
+        hidden: bool,
+        agent: bool,
+    },
+    /// Every open window (#400).
+    Windows,
+    /// The layout as the app would save it now (#400).
+    Layout,
+    /// The question card as it stands now (#400).
+    CardState,
     /// A panel's view drawn: its revision with the view's filters, isolation and lens (#383).
     View(String),
     /// Your words from a panel's ask box to a session, about what you point at (#384).
@@ -456,6 +505,12 @@ pub struct Scenario {
     /// record states it read (#383: what a change to a selected value would make stale).
     pub verdicts: Map<String, Value>,
     pub card: Option<Card>,
+    /// The displays connected, the first the main display (#400); empty without them.
+    pub displays: Vec<placement::Display>,
+    /// A layout an earlier run saved, which the app reopens from (#400).
+    pub layout: Option<placement::Layout>,
+    /// #400's wrong programs.
+    pub placement_planted: placement::Planted,
     pub fault: Option<Fault>,
     pub planted: Option<Planted>,
     pub calls: Vec<Call>,
@@ -529,6 +584,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
     pub verdicts_made: BTreeMap<String, Vec<Value>>,
+    /// The displays, the windows on them and the card's placement (#400).
+    pub placement: Placement,
 }
 
 /// A snapshot's straight RGBA, its size and each item's box in its pixels.
@@ -615,6 +672,38 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
+            placement: Placement::open(
+                scenario.displays.clone(),
+                scenario.window,
+                scenario.layout.as_ref(),
+                scenario.placement_planted,
+            ),
+        }
+    }
+
+    /// The card's slot to draw: the one its view reserved, or where the shell placed it (#400),
+    /// once presented.
+    pub fn card_slot(&self) -> Option<(String, Vec<String>, [f64; 4])> {
+        let c = self.scenario.card.as_ref()?;
+        let rect = match &c.slot {
+            Slot::Reserved(r) => *r,
+            // Placed in global points; the headless window draws the main window alone, in its
+            // px, so a card in a popped window draws off its picture.
+            Slot::Placed { .. } => {
+                let card = self.card_json().filter(|c| !c.states.is_empty())?;
+                let main = self.placement.main_window()?.rect;
+                let r = card.rect;
+                [r[0] - main[0], r[1] - main[1], r[2], r[3]]
+            }
+        };
+        Some((c.question.clone(), c.options.clone(), rect))
+    }
+
+    /// `card`: the question card as it stands now, or `None` before its ask (#400).
+    pub fn card_json(&self) -> Option<placement::CardState> {
+        match &self.scenario.card.as_ref()?.slot {
+            Slot::Reserved(_) => None,
+            Slot::Placed { ask, size, at } => self.placement.card(ask, *at, *size, self.now),
         }
     }
 
@@ -877,6 +966,32 @@ impl<'a> Hub<'a> {
             Call::Input { panel, event } => self.input(panel, event),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::PopOut {
+                panel,
+                display,
+                serial,
+                full_screen,
+                agent,
+            } => self.pop_out(panel, display, *serial, *full_screen, *agent),
+            Call::MoveWindow {
+                window,
+                rect,
+                agent,
+            } => self.move_window(window, *rect, *agent),
+            Call::Activate { window, agent } => {
+                self.placement.activate(self.now, window.as_deref(), *agent)
+            }
+            Call::Thermal { hot, agent } => self.placement.thermal(self.now, *hot, *agent),
+            Call::HideWindow {
+                window,
+                hidden,
+                agent,
+            } => self
+                .placement
+                .hide_window(self.now, window, *hidden, *agent),
+            Call::Windows => self.placement.windows_json(),
+            Call::Layout => self.placement.layout_json(),
+            Call::CardState => json!({"card": self.card_json().map(|c| c.to_json())}),
             Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
             Call::Ask {
@@ -970,7 +1085,8 @@ impl<'a> Hub<'a> {
             });
         }
         rows.sort_by(|a, b| a.band.cmp(&b.band).then_with(|| a.doc.cmp(&b.doc)));
-        if self.scenario.card.is_some() {
+        // A card the shell places counts as shown only once presented (#400).
+        if self.card_slot().is_some() {
             rows.push(BandRow {
                 doc: None,
                 band: Band::Card,
