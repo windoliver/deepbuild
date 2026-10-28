@@ -87,11 +87,15 @@ export interface HookMeta {
   version?: string;
   /** Set for a session on a version its facts don't cover: recorded unverified, its holds and blocks watch-only. */
   watchOnly?: boolean;
-  /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent. */
-  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string };
+  /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
+  fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }
+/** The effect classes no "proceed" covers (#321). */
+export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
+/** What the event loop hands the core of a PreToolUse it holds for the gate: the call as a person reads it, its effect classes and MCP tool. */
+export interface Gated { label: string; classes: string[]; mcp?: { server: string; tool: string } }
 /** A parser's answer for one line. */
 export type Parsed =
   | { kind: 'control'; value: Record<string, unknown> }
@@ -146,4 +150,6 @@ export interface CoreOptions {
   index?: string;
   /** The forge's REST API the archive copies CI runs from, from DEEP_HUB_TEST_FORGE; only tests set it. */
   forge?: string;
+  /** The planted sorter's file, from DEEP_HUB_TEST_SORTER: the questions it answers "proceed" and its rule; only tests set it. */
+  sorter?: string;
 }

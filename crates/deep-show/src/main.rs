@@ -15,6 +15,7 @@ mod frames;
 mod hub;
 mod input;
 mod kit;
+mod placement;
 #[cfg(feature = "test-accent")]
 mod planted;
 mod scene3d;
@@ -82,7 +83,7 @@ use serde_json::{json, Map, Value};
 
 use hub::{
     flicks, Body, Call, Card, Claim, Eval, Fault as HoldFault, Hold, Include, Panel, PatchCall,
-    Planted, Process, RecordObject, Scenario, Session, Show, Startup, Via,
+    Planted, Process, RecordObject, Scenario, Session, Show, Slot, Startup, Via,
 };
 use shared::{Clock, CommitFault, Quota};
 
@@ -265,6 +266,57 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
         "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
+        "pop_out" => {
+            return Some(Call::PopOut {
+                panel: c.get("panel")?.as_str()?.to_string(),
+                display: c.get("display")?.as_str()?.to_string(),
+                serial: match c.get("serial") {
+                    None => None,
+                    Some(s) => Some(s.as_u64()?),
+                },
+                full_screen: match c.get("full_screen") {
+                    None => false,
+                    Some(f) => f.as_bool()?,
+                },
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "move_window" => {
+            return Some(Call::MoveWindow {
+                window: c.get("window")?.as_str()?.to_string(),
+                rect: rect(c.get("rect"))?,
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "activate" => {
+            return Some(Call::Activate {
+                window: match c.get("window")? {
+                    Value::Null => None,
+                    w => Some(w.as_str()?.to_string()),
+                },
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "thermal" => {
+            return Some(Call::Thermal {
+                hot: match c.get("state")?.as_str()? {
+                    "nominal" | "fair" => false,
+                    "serious" | "critical" => true,
+                    _ => return None,
+                },
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "hide_window" => {
+            return Some(Call::HideWindow {
+                window: c.get("window")?.as_str()?.to_string(),
+                hidden: c.get("hidden")?.as_bool()?,
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "windows" => return Some(Call::Windows),
+        "layout" => return Some(Call::Layout),
+        "card" => return Some(Call::CardState),
         "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
@@ -592,11 +644,53 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             docs: cap("docs")?,
         })
     })?;
+    // #400: the displays connected, the first the main one; with them the clock carries no
+    // refresh of its own, and the #383 `display` is theirs.
+    let displays = match input.get("displays") {
+        None => Vec::new(),
+        Some(d) => {
+            let list = d
+                .as_array()?
+                .iter()
+                .map(|d| {
+                    d.get("scale")?.as_f64().filter(|s| *s > 0.0)?;
+                    d.get("color_space")?.as_str()?;
+                    Some(placement::Display {
+                        uuid: d.get("uuid")?.as_str()?.to_string(),
+                        bounds: rect(d.get("bounds"))?,
+                        // At least one flick per frame.
+                        refresh_hz: d
+                            .get("refresh_hz")?
+                            .as_i64()
+                            .filter(|n| (1..=shared::FLICKS).contains(n))?,
+                        next_vsync: d.get("next_vsync")?.as_i64().filter(|n| *n >= 0)?,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?;
+            let mut uuids = std::collections::BTreeSet::new();
+            if list.is_empty()
+                || input.get("display").is_some()
+                || !list.iter().all(|d| uuids.insert(d.uuid.as_str()))
+            {
+                return None;
+            }
+            list
+        }
+    };
+    let layout = match input.get("layout") {
+        None => None,
+        Some(_) if displays.is_empty() => return None,
+        Some(l) => Some(placement::Layout::parse(l)?),
+    };
     let clock = match input.get("clock") {
         None => None,
         Some(c) => {
             let n = |k: &str| c.get(k)?.as_i64().filter(|n| *n >= 0);
-            let refresh_hz = n("refresh_hz").filter(|n| *n > 0)?;
+            let refresh_hz = match (c.get("refresh_hz"), displays.is_empty()) {
+                (None, false) => None,
+                (Some(_), true) => Some(n("refresh_hz").filter(|n| *n > 0)?),
+                _ => return None,
+            };
             Some(Clock {
                 refresh_hz,
                 lead: n("lead")?,
@@ -646,16 +740,33 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     };
     let card = match input.get("card") {
         None => None,
-        Some(c) => Some(Card {
-            question: c.get("question")?.as_str()?.to_string(),
-            options: c
-                .get("options")?
-                .as_array()?
-                .iter()
-                .map(|o| o.get("label")?.as_str().map(str::to_string))
-                .collect::<Option<_>>()?,
-            rect: rect(c.get("rect"))?,
-        }),
+        Some(c) => {
+            // #393's reserved slot, or #400's ask, measured size and ask time, which the shell
+            // places.
+            let slot = match (c.get("rect"), c.get("size"), c.get("at")) {
+                (Some(r), None, None) => Slot::Reserved(rect(Some(r))?),
+                (None, Some(s), Some(at)) if !displays.is_empty() => {
+                    let s = s.as_array().filter(|s| s.len() == 2)?;
+                    let r = rect(Some(&json!([0, 0, s[0], s[1]])))?;
+                    Slot::Placed {
+                        ask: c.get("ask")?.as_str()?.to_string(),
+                        size: [r[2], r[3]],
+                        at: at.as_i64().filter(|t| *t >= 0)?,
+                    }
+                }
+                _ => return None,
+            };
+            Some(Card {
+                question: c.get("question")?.as_str()?.to_string(),
+                options: c
+                    .get("options")?
+                    .as_array()?
+                    .iter()
+                    .map(|o| o.get("label")?.as_str().map(str::to_string))
+                    .collect::<Option<_>>()?,
+                slot,
+            })
+        }
     };
     let commit_fault = match input.get("fault") {
         Some(f) if f.get("kill_after_layer_file").is_some() => Some(
@@ -679,9 +790,44 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             ms: f.get("ms")?.as_u64()?,
         }),
     };
-    let planted = match input.get("planted") {
+    let mut placement_planted = placement::Planted::default();
+    let planted = match input.get("planted").map(Value::as_str) {
         None => None,
-        Some(p) => Some(match p.as_str()? {
+        Some(None) => return None,
+        // #400's wrong programs live in the placement.
+        Some(Some("restores_to_main")) => {
+            placement_planted.restores_to_main = true;
+            None
+        }
+        Some(Some("card_on_main_display")) => {
+            placement_planted.card_on_main_display = true;
+            None
+        }
+        Some(Some("one_clock_for_all")) => {
+            placement_planted.one_clock_for_all = true;
+            None
+        }
+        Some(Some("arms_under_own_window")) => {
+            placement_planted.arms_under_own_window = true;
+            None
+        }
+        Some(Some("ignores_inactive_cap")) => {
+            placement_planted.ignores_inactive_cap = true;
+            None
+        }
+        Some(Some("ignores_thermal_cap")) => {
+            placement_planted.ignores_thermal_cap = true;
+            None
+        }
+        Some(Some("presents_hidden")) => {
+            placement_planted.presents_hidden = true;
+            None
+        }
+        Some(Some("evaluates_hidden")) => {
+            placement_planted.evaluates_hidden = true;
+            None
+        }
+        Some(Some(p)) => Some(match p {
             "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
             "diffs_items_only" => Planted::DiffsItemsOnly,
             "inlines_every_issue" => Planted::InlinesEveryIssue,
@@ -787,6 +933,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             Some(v) => v.as_object()?.clone(),
         },
         card,
+        displays,
+        layout,
+        placement_planted,
         fault,
         planted,
         calls,

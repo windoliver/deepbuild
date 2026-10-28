@@ -9,9 +9,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::{
-    Access, Bound, Loaded, Node, Noted, OpError, Outside, Session, Tails, Tokens, Val, VIEW_INPUTS,
-};
+use super::{Access, Bound, Loaded, Node, OpError, Outside, Session, Tokens, Val, VIEW_INPUTS};
 use crate::registry::{Sealed, SealedOp, TableValue};
 
 /// What a step reads beside the view: its time, the stepping arrays as they stand, and as
@@ -33,9 +31,20 @@ pub struct View<'a> {
     access: Vec<Access>,
     out: Vec<Val>,
     step: Option<StepCtx<'a>>,
-    noted: Noted,
-    tails: Tails,
+    /// What a step noted for the log: its count and the other count it read.
+    noted: Option<(i64, i64)>,
+    /// The tails the operator wrote this frame, by key.
+    tails: Vec<(String, Val)>,
 }
+
+/// What an operator left when its view finished: its writes, its reads, what a step noted and
+/// the tails it wrote.
+pub(super) type Finished = (
+    Vec<Val>,
+    Vec<Access>,
+    Option<(i64, i64)>,
+    Vec<(String, Val)>,
+);
 
 impl<'a> View<'a> {
     #[allow(clippy::too_many_arguments)]
@@ -67,7 +76,7 @@ impl<'a> View<'a> {
 
     /// What the operator wrote, in its writes' order, every read it made, what a step noted,
     /// and the tails it wrote.
-    pub(super) fn finish(self) -> (Vec<Val>, Vec<Access>, Noted, Tails) {
+    pub(super) fn finish(self) -> Finished {
         (self.out, self.access, self.noted, self.tails)
     }
 

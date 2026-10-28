@@ -1,0 +1,138 @@
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-ae69fe03aad5bf26e/tests/acceptance/400
+
+ ❯ windows.test.ts (3 tests | 3 failed) 7507ms
+   ❯ AC1 a view popped out to a second display reopens there (1)
+     × AC1 a view popped out onto B, and one full screen there, are in the layout on B and reopen on B by its UUID after a restart 2540ms
+   ❯ the window rules AC1 and AC2 lean on: a pop-out needs your serial, and nothing opens or moves a window by itself (2)
+     × a pop-out without a serial, with another panel's serial, or asked by an agent is refused and opens nothing; with y's own serial it opens 37ms
+     × an agent's patches, an ask and its card, and an agent's move_window never open, move or resize a window 43ms
+ ❯ card.test.ts (2 tests | 2 failed) 7682ms
+   ❯ AC2 with views on two displays, the question card opens on the display you're using (1)
+     × AC2 x on A, y popped out onto B: the card opens on B after your last input in y, and on A after your last input in x 2237ms
+   ❯ AC4 a popped-out window dragged over part of the presented card keeps it unarmed while they overlap; it arms 500 ms after the window moves off (1)
+     × AC4 the card stays unarmed through 1.6 s of overlap and arms 500 ms after the window leaves; one that arms under the app's own window fails, naming the window 33ms
+ ❯ frames.test.ts (1 test | 1 failed) 5463ms
+   ❯ AC3 windows on 60 Hz and 120 Hz displays present at their own rates, and each frame shows every writer's newest revision at the latch (1)
+     × AC3 x on A presents at 120 Hz and y on B at 60 Hz, each at its own display's vsyncs, each frame with alpha's and bravo's newest revisions at its latch 2133ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  card.test.ts > AC2 with views on two displays, the question card opens on the display you're using > AC2 x on A, y popped out onto B: the card opens on B after your last input in y, and on A after your last input in x
+AssertionError: last input on B: the scope of y: deep-show run answers the scenario ok (its `displays`, `layout` and `card` fields, and the `pop_out`, `move_window`, `windows`, `layout` and `card` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:187:343
+
+ ❯ Driver.step helpers.ts:209:21
+ ❯ Driver.one helpers.ts:214:65
+ ❯ clickPanel helpers.ts:241:26
+ ❯ cardAfter card.test.ts:28:14
+ ❯ card.test.ts:97:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  card.test.ts > AC4 a popped-out window dragged over part of the presented card keeps it unarmed while they overlap; it arms 500 ms after the window moves off > AC4 the card stays unarmed through 1.6 s of overlap and arms 500 ms after the window leaves; one that arms under the app's own window fails, naming the window
+AssertionError: the drag over the card: the scope of y: deep-show run answers the scenario ok (its `displays`, `layout` and `card` fields, and the `pop_out`, `move_window`, `windows`, `layout` and `card` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:187:343
+
+ ❯ Driver.step helpers.ts:209:21
+ ❯ Driver.one helpers.ts:214:65
+ ❯ clickPanel helpers.ts:241:26
+ ❯ dragRun card.test.ts:56:14
+ ❯ card.test.ts:109:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  frames.test.ts > AC3 windows on 60 Hz and 120 Hz displays present at their own rates, and each frame shows every writer's newest revision at the latch > AC3 x on A presents at 120 Hz and y on B at 60 Hz, each at its own display's vsyncs, each frame with alpha's and bravo's newest revisions at its latch
+AssertionError: two agents writing on two displays: the scope of y: deep-show run answers the scenario ok (its `displays`, `layout` and `card` fields, and the `pop_out`, `move_window`, `windows`, `layout` and `card` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:187:343
+
+ ❯ Driver.step helpers.ts:209:21
+ ❯ Driver.one helpers.ts:214:65
+ ❯ clickPanel helpers.ts:241:26
+ ❯ run frames.test.ts:35:14
+ ❯ frames.test.ts:100:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  windows.test.ts > AC1 a view popped out to a second display reopens there > AC1 a view popped out onto B, and one full screen there, are in the layout on B and reopen on B by its UUID after a restart
+AssertionError: run 1: the scope of y: deep-show run answers the scenario ok (its `displays`, `layout` and `card` fields, and the `pop_out`, `move_window`, `windows`, `layout` and `card` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:187:343
+
+ ❯ Driver.step helpers.ts:209:21
+ ❯ Driver.one helpers.ts:214:65
+ ❯ clickPanel helpers.ts:241:26
+ ❯ firstRun windows.test.ts:26:14
+ ❯ windows.test.ts:77:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  windows.test.ts > the window rules AC1 and AC2 lean on: a pop-out needs your serial, and nothing opens or moves a window by itself > a pop-out without a serial, with another panel's serial, or asked by an agent is refused and opens nothing; with y's own serial it opens
+AssertionError: refusals: the scope of x: deep-show run answers the scenario ok (its `displays`, `layout` and `card` fields, and the `pop_out`, `move_window`, `windows`, `layout` and `card` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:187:343
+
+ ❯ Driver.step helpers.ts:209:21
+ ❯ Driver.one helpers.ts:214:65
+ ❯ clickPanel helpers.ts:241:26
+ ❯ windows.test.ts:107:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  windows.test.ts > the window rules AC1 and AC2 lean on: a pop-out needs your serial, and nothing opens or moves a window by itself > an agent's patches, an ask and its card, and an agent's move_window never open, move or resize a window
+AssertionError: still: the scope of y: deep-show run answers the scenario ok (its `displays`, `layout` and `card` fields, and the `pop_out`, `move_window`, `windows`, `layout` and `card` calls, README: The surface under test); got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:187:343
+
+ ❯ Driver.step helpers.ts:209:21
+ ❯ Driver.one helpers.ts:214:65
+ ❯ clickPanel helpers.ts:241:26
+ ❯ windows.test.ts:128:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  6 failed (6)
+   Start at  14:13:28
+   Duration  21.77s (tests 98%, import 1%, transform 1%)
+
