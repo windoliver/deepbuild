@@ -90,6 +90,19 @@ checkfile.test.ts (AC12 #303.323ca6a1)
   x AC12 (wrong program) ... (DEEP_HUB_PLANT=hash-check-paths) ...
     Error: BLOCKED: ... DEEP_HUB_PLANT=hash-check-paths names no planted program
 
+Redraft, AC12 only (2026-10-28 20:17 UTC, base c92864d1, 1-minute load 18-25 on 12 cores):
+Run: npx vitest run --root tests/acceptance/303 --no-file-parallelism checkfile
+Result: Tests 3 failed (3); 32 s.
+  x AC12 ... and the claim's run of R1's check records the approved check's outcome
+    Error: AC12 #303.323ca6a1 the prompt "make the auth middleware reject expired tokens" must open one task under the
+    session's thread (...): a task.created with task_ref session:0c2688fbdf804be5944b20fc402f1fd6#0; the thread holds
+    no task.created
+    -> the scenario stops at the task before any claim; the base records no claim, run.started or run.finished at a stop.
+  x AC12 (wrong program) ... (DEEP_HUB_PLANT=hash-check-paths) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=hash-check-paths names no planted program
+  x AC12 (wrong program) a claim whose checks run the file on disk (DEEP_HUB_PLANT=runs-disk-bytes) ...
+    Error: BLOCKED: ... DEEP_HUB_PLANT=runs-disk-bytes names no planted program
+
 Also checked on the base during drafting: deep-hook's PreToolUse allows AC12's
 `python3 -c "open('.deepbuild/checks/expired-token.sh', ...).write(...)"` (the guard reads no write in its text), and
 events.read returns each event with v, writer, actor, scope, ts and data, so AC9 validates recorded events as they are.
