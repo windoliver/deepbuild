@@ -1,6 +1,7 @@
 // `deep setup` (#18's part of it): Claude Code's hook entries merged into your user settings beside yours, and your
-// ask settings drafted; `deep doctor`'s timing-relation items; and `deep waiter`, the background entry that wakes an
-// idle session with an answer. The rest of setup (the login service, the wiki, undo) is #19's and #41's.
+// ask settings drafted; and `deep doctor`'s timing-relation items. The background entry that wakes an idle session
+// with an answer is deep-hook's waiter (#25), small enough to wait the longest ask deadline; `deep waiter` is only the
+// planted Node waiter that polls. The rest of setup (the login service, the wiki, undo) is #19's and #41's.
 import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,8 +26,9 @@ export async function setupCommand(cli: string): Promise<number> {
     await draftAskSettings(root);
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
-    const waiter = `'${process.execPath}' '${cli}' waiter`;
-    install(root, ourGroups(deepHook(), waiter, Math.max(600, Math.ceil(longest / 1000))));
+    const hook = deepHook();
+    const waiter = process.env.DEEP_HUB_PLANT === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `'${hook.replaceAll("'", `'\\''`)}' claude-code waiter`;
+    install(root, ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000))));
   } catch (error) {
     process.stderr.write(`deep setup: ${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
@@ -49,25 +51,24 @@ export function relationItems(): { item: string; agent: string; code: string; le
 }
 
 /**
- * `deep waiter`, run by Claude Code's background Stop entry: waits for an answer for its session and wakes the session
- * with it (exit 2, the answer on stderr). It ends quietly when Claude Code goes, or the hub does.
+ * `deep waiter`, the planted wrong program waiter-polls (#25): a waiter in Node, as #18's was, that asks the hub for
+ * its session's answer every 50 ms instead of being told, and wakes the session with it (exit 2, the answer on stderr).
  */
 export async function waiterCommand(): Promise<number> {
   let session = '';
   try { session = String((JSON.parse(readFileSync(0, 'utf8')) as { session_id?: unknown }).session_id ?? ''); } catch { /* no payload */ }
   if (!session) return 0;
   const parent = process.ppid;
-  const watch = setInterval(() => { try { process.kill(parent, 0); } catch { process.exit(0); } }, 2000);
-  watch.unref();
-  try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    const reply = await call(hubAddress().path, token, 'session.wait', { session });
-    if (!('result' in reply) || typeof reply.result.text !== 'string') return 0;
-    process.stderr.write(`${reply.result.text}\n`);
-    return 2;
-  } catch {
-    return 0;
-  } finally {
-    clearInterval(watch);
+  for (;;) {
+    try { process.kill(parent, 0); } catch { return 0; }
+    try {
+      const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+      const reply = await call(hubAddress().path, token, 'session.wait', { session, poll: true });
+      if ('result' in reply && typeof reply.result.text === 'string') {
+        process.stderr.write(`${reply.result.text}\n`);
+        return 2;
+      }
+    } catch { /* the hub is away: ask again */ }
+    await new Promise((done) => setTimeout(done, 50));
   }
 }

@@ -38,8 +38,10 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['job.submit', ['app', 'cli']], ['job.status', ['app', 'cli']], ['job.list', ['app', 'cli']], ['job.output', ['app', 'cli']],
   // A window reading comes from the app, the CLI, or deep-hook's status line forwarder, which connects as a hook does.
   ['windows.report', ['app', 'cli', 'hook']],
-  // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18).
+  // Our waiter, run by Claude Code's Stop entry as you, holds until an answer for its session is ready (#18, #25).
   ['session.wait', ['cli']],
+  // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
+  ['test.send_back', ['cli']],
 ]);
 
 /** How long before an acknowledged hold the extensions' reply must be on the socket, so it reaches deep-hook in time. */
@@ -69,7 +71,7 @@ const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 
 interface CoreLink {
-  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' }): void;
+  post(message: CoreMessage & { op: 'hook' | 'unsubscribe' | 'waiter-gone' }): void;
   request(request: CoreRequest): Promise<unknown>;
   /** Resolves once the record is open, the spool replayed, in-flight runs recovered and the extensions started, with the hook kinds they handle. */
   started: Promise<{ hooks: string[] }>;
@@ -115,7 +117,7 @@ async function coreInline(options: CoreOptions, onFrame: OnFrame, onFatal: (why:
   started.catch((error: unknown) => onFatal(error instanceof Error ? error.stack ?? error.message : String(error)));
   return {
     started,
-    post: (message) => (message.op === 'hook' ? void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined) : core.unsubscribe(message.sub)),
+    post: (message) => (message.op === 'hook' ? void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined) : message.op === 'waiter-gone' ? core.waiterGone(message.key) : core.unsubscribe(message.sub)),
     request: (request) => answer(core, request).catch((error: unknown) => { throw new Refused(asRefusal(error)); }),
     close: async () => undefined,
   };
@@ -174,6 +176,8 @@ class Conn {
   peer: { pid: number; start: string } | undefined;
   first = true;
   done = false;
+  /** A waiter's connection: its close tells the core the waiter is gone. */
+  waiter = false;
   queue: Promise<void> = Promise.resolve();
   pending: Buffer[] = [];
   size = 0;
@@ -275,6 +279,7 @@ class Hub {
       conn.done = true;
       this.conns.delete(conn);
       for (const sub of conn.subs) this.unsubscribe(conn, sub);
+      if (conn.waiter) this.core.post({ op: 'waiter-gone', key: conn.id });
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
     sock.write(this.helloLine);
@@ -528,7 +533,7 @@ class Hub {
     const method = value.method;
     if (typeof method !== 'string') return conn.write({ id, error: refusal('type', '/method', 'Name the method as a string.', method) });
     const allowed = ALLOWED.get(method);
-    if (!allowed || (method === 'test.load' && !this.vfs)) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
+    if (!allowed || (method === 'test.load' && !this.vfs) || (method === 'test.send_back' && process.env.DEEP_HUB_TEST_SEND_BACK !== '1')) return conn.write({ id, error: refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method) });
     if (!allowed.includes(conn.role!)) {
       return conn.write({ id, error: refusal('role', '/method', `A ${conn.name} connection can't call ${method}: its credential allows ${allowed.join(' or ')} connections only.`, method) });
     }
@@ -551,6 +556,9 @@ class Hub {
         // The reply is the stream's first frame: it carries the start ID, so a consumer that sees a new one redoes its reads.
         return void reply(this.core.request({ op: 'subscribe', sub, after }).then(() => ({ subscribed: true, after, start: this.start })));
       }
+      case 'session.wait':
+        conn.waiter = true;
+        return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name, waiter: conn.id } }));
       default:
         if (method === 'events.read') {
           // The page's events come as one JSON array's text, written as it is, with the start ID beside its log_pos.
