@@ -54,6 +54,7 @@ fn defaults() -> Defaults {
             "span": 0,
             "loop": "none",
             "reduced_motion": "hold",
+            "sample_rate": 48_000,
         }),
     }
 }

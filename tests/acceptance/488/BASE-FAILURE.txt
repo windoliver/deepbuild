@@ -1,0 +1,568 @@
+Base commit: a8e5480 (the worktree's checkout is 6a1966d, the merge of #768 on top of it; no canvas time surface in between)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/488 --no-file-parallelism --reporter=verbose
+Run in the worktree at the base holding only these test files (untracked) and the repo's node_modules (symlinked from a sibling checkout's npm ci).
+Every test fails for the expected reason: deep-show run answers {"ok":false,"code":"bad_input"} to a scenario holding a call
+the base lacks (rate, time, play, determinism, export), an eval whose t is a flick count, or a planted value it doesn't know;
+and neither test-tick nor test-frame-cache exists, so cargo refuses those builds ("none of the selected packages contains this
+feature"). The fast-check property fails on its first case for the same reason. The full build was made once before the run.
+Date: 2026-10-27  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.95.0
+Exit code: 1
+
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/agent-a0a70551f01d24191/tests/acceptance/488
+
+ × document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 a document at 85/1 or 11/1 fps is refused with bad_rate at transport/frame_rate, naming the rate; one at 30000/1001 or 8/1 is presented and exports at its own rate 3840ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 an export at 85/1 fps of a 30 fps document is refused naming the rate; an export at 24000/1001 is planned 281ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 at 30 fps, 195f resolves to 4,586,400,000 flicks and @m+1.25s to 2,293,200,000, exactly, through the document's rate and markers 186ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 a placement at 195f starts at flick 4,586,400,000: the frame there differs from the one a flick before, which is the frame at 0; eval's literal 195f lands on the same flick 63ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × still.test.ts > #488.ee0f61fe a still timeline draws no new frames > #488.ee0f61fe a board with nothing that moves, played for 3 s on a 144 Hz display, draws its first frame and no other 6514ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × still.test.ts > #488.ee0f61fe a still timeline draws no new frames > #488.ee0f61fe a board whose rect slides for 2 s draws every display frame while it moves, the frame it rests on at 2 s, and nothing in the still second after 69ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f the default set holds the start, the keys and the flick before each, every checkpoint, the flick before it and the midpoint to the next, the span's last flick and 100 seeded times, the same on every call 179ms
+   → the binary builds: deep-show with features full,test-tick: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+ × seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f on the ticking board (steps, checkpoints and a slide), at every time of the default set the cold seek's canonical render and node results equal the warm play's 30ms
+   → the binary builds: deep-show with features full,test-tick: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+ × seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f on a plain sliding board in the full build (no test module), seek equals play at every time of the default set 4808ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f a planted seek that restores the checkpoint nearest in distance (checkpoint_nearest_in_distance) fails one flick before the second checkpoint, 352,799,999, naming that flick 4ms
+   → the binary builds: deep-show with features full,test-tick: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+ × sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 8, 11.025, 16, 22.05, 24, 32, 44.1, 48, 88.2, 96, 176.4, 192 and 352.8 kHz are valid, each with its whole-flick sample 3434ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 128 kHz, 384 kHz and 44,056 Hz are not valid: refused as a rate, naming it, and resampled as a source 127ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 a document at 128 kHz is refused with bad_rate at transport/sample_rate naming the rate; one at 44.1 kHz is presented and its export defaults to it; the default is 48 kHz 96ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 a planted check that accepts every rate from 8 to 192 kHz (accepts_every_sample_rate_8_to_192k) passes 128 kHz and fails this test, naming the rate 153ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × edges.test.ts > #488.75ff3f37 at 240000/1001 fps, t = 2^62 gives frame ⌊2^62 ÷ 2,942,940⌋ and t = −1 gives frame −1; a planted i64 product and a planted truncating division each fail > #488.75ff3f37 the frame at 240000/1001 fps is 2,942,940 flicks; t = 2^62 gives frame 1,567,033,652,887; t = −1 gives frame −1; −Δ gives −1 and −Δ − 1 gives −2 3405ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × edges.test.ts > #488.75ff3f37 at 240000/1001 fps, t = 2^62 gives frame ⌊2^62 ÷ 2,942,940⌋ and t = −1 gives frame −1; a planted i64 product and a planted truncating division each fail > #488.75ff3f37 a planted i64 product (frame_index_i64_product) overflows at t = 2^62 and fails, naming the time 104ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × edges.test.ts > #488.75ff3f37 at 240000/1001 fps, t = 2^62 gives frame ⌊2^62 ÷ 2,942,940⌋ and t = −1 gives frame −1; a planted i64 product and a planted truncating division each fail > #488.75ff3f37 a planted truncating division (frame_index_truncating_division) gives frame 0 at t = −1 and fails, naming the time 46ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × rates.test.ts > #488.12324609 8, 12 and 16 fps and their ×1000/1001 forms have whole-flick frames and round-trip frame to flicks to frame exactly > #488.12324609 the six rates are valid with frames of 88,200,000, 58,800,000, 44,100,000, 88,288,200, 58,858,800 and 44,144,100 flicks 2790ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × rates.test.ts > #488.12324609 8, 12 and 16 fps and their ×1000/1001 forms have whole-flick frames and round-trip frame to flicks to frame exactly > #488.12324609 frames 0, 1, 195, 2^20 and −7 round-trip exactly at every rate: frame(k·Δ) = k, frame(k·Δ − 1) = k − 1, frame(k·Δ + 1) = k 80ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × rates.test.ts > #488.12324609 8, 12 and 16 fps and their ×1000/1001 forms have whole-flick frames and round-trip frame to flicks to frame exactly > #488.12324609 generated frames k in [−2^26, 2^26] at the six rates round-trip exactly (fast-check seed 4880001, 8 runs of up to 40 cases) 73ms
+   → Property failed after 1 tests
+{ seed: 4880001, path: "0", endOnFailure: true }
+Counterexample: [[{"rate":{"rate":[16000,1001],"frame":44144100},"k":23},{__proto__:null,"rate":{"rate":[16000,1001],"frame":44144100},"k":2},{__proto__:null,"rate":{"rate":[16,1],"frame":44100000},"k":-35170062}]]
+Shrunk 0 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ × frame-cache.test.ts > #488.e8e56351 a test canvas module cached by frame number passes cold-against-cold and fails warm play at 144 Hz against a cold seek, naming the module and the first frame that differs > #488.e8e56351 cold against cold (play: "cold", the INVALID comparison) finds no difference on the frame-cached board 22ms
+   → the binary builds: deep-show with features full,test-frame-cache: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+ × frame-cache.test.ts > #488.e8e56351 a test canvas module cached by frame number passes cold-against-cold and fails warm play at 144 Hz against a cold seek, naming the module and the first frame that differs > #488.e8e56351 warm play at 144 Hz against a cold seek from later fails on the frame-cached board, naming test.cache and the first frame that differs 2ms
+   → the binary builds: deep-show with features full,test-frame-cache: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+ × frame-cache.test.ts > #488.e8e56351 a test canvas module cached by frame number passes cold-against-cold and fails warm play at 144 Hz against a cold seek, naming the module and the first frame that differs > #488.e8e56351 at the display frames 4,900,000 and 9,800,000 (document frame 0, after its first display frame) the sides differ; at 0, 11,760,000 and 14,700,000 (the first display frame of a document frame) they agree 6ms
+   → the binary builds: deep-show with features full,test-frame-cache: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 23 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 a document at 85/1 or 11/1 fps is refused with bad_rate at transport/frame_rate, naming the rate; one at 30000/1001 or 8/1 is presented and exports at its own rate
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ document-rates.test.ts:34:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/23]⎯
+
+ FAIL  document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 an export at 85/1 fps of a 30 fps document is refused naming the rate; an export at 24000/1001 is planned
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ document-rates.test.ts:51:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/23]⎯
+
+ FAIL  document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 at 30 fps, 195f resolves to 4,586,400,000 flicks and @m+1.25s to 2,293,200,000, exactly, through the document's rate and markers
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ document-rates.test.ts:62:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/23]⎯
+
+ FAIL  document-rates.test.ts > #488.5827cbd0 a document or export rate whose frame isn't a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks > #488.5827cbd0 a placement at 195f starts at flick 4,586,400,000: the frame there differs from the one a flick before, which is the frame at 0; eval's literal 195f lands on the same flick
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ document-rates.test.ts:78:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/23]⎯
+
+ FAIL  edges.test.ts > #488.75ff3f37 at 240000/1001 fps, t = 2^62 gives frame ⌊2^62 ÷ 2,942,940⌋ and t = −1 gives frame −1; a planted i64 product and a planted truncating division each fail > #488.75ff3f37 the frame at 240000/1001 fps is 2,942,940 flicks; t = 2^62 gives frame 1,567,033,652,887; t = −1 gives frame −1; −Δ gives −1 and −Δ − 1 gives −2
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ edges.test.ts:38:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/23]⎯
+
+ FAIL  edges.test.ts > #488.75ff3f37 at 240000/1001 fps, t = 2^62 gives frame ⌊2^62 ÷ 2,942,940⌋ and t = −1 gives frame −1; a planted i64 product and a planted truncating division each fail > #488.75ff3f37 a planted i64 product (frame_index_i64_product) overflows at t = 2^62 and fails, naming the time
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ edges.test.ts:47:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/23]⎯
+
+ FAIL  edges.test.ts > #488.75ff3f37 at 240000/1001 fps, t = 2^62 gives frame ⌊2^62 ÷ 2,942,940⌋ and t = −1 gives frame −1; a planted i64 product and a planted truncating division each fail > #488.75ff3f37 a planted truncating division (frame_index_truncating_division) gives frame 0 at t = −1 and fails, naming the time
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ edges.test.ts:54:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/23]⎯
+
+ FAIL  frame-cache.test.ts > #488.e8e56351 a test canvas module cached by frame number passes cold-against-cold and fails warm play at 144 Hz against a cold seek, naming the module and the first frame that differs > #488.e8e56351 cold against cold (play: "cold", the INVALID comparison) finds no difference on the frame-cached board
+AssertionError: the binary builds: deep-show with features full,test-frame-cache: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-frame-cache failed:
++ error: none of the selected packages contains this feature: test-frame-cache
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:107:107
+    105|       const entry = made.get(buildName(build));
+    106|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    107|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    108|       return entry.bin;
+    109|     },
+ ❯ frame-cache.test.ts:36:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/23]⎯
+
+ FAIL  frame-cache.test.ts > #488.e8e56351 a test canvas module cached by frame number passes cold-against-cold and fails warm play at 144 Hz against a cold seek, naming the module and the first frame that differs > #488.e8e56351 warm play at 144 Hz against a cold seek from later fails on the frame-cached board, naming test.cache and the first frame that differs
+AssertionError: the binary builds: deep-show with features full,test-frame-cache: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-frame-cache failed:
++ error: none of the selected packages contains this feature: test-frame-cache
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:107:107
+    105|       const entry = made.get(buildName(build));
+    106|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    107|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    108|       return entry.bin;
+    109|     },
+ ❯ frame-cache.test.ts:44:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/23]⎯
+
+ FAIL  frame-cache.test.ts > #488.e8e56351 a test canvas module cached by frame number passes cold-against-cold and fails warm play at 144 Hz against a cold seek, naming the module and the first frame that differs > #488.e8e56351 at the display frames 4,900,000 and 9,800,000 (document frame 0, after its first display frame) the sides differ; at 0, 11,760,000 and 14,700,000 (the first display frame of a document frame) they agree
+AssertionError: the binary builds: deep-show with features full,test-frame-cache: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-frame-cache failed:
++ error: none of the selected packages contains this feature: test-frame-cache
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:107:107
+    105|       const entry = made.get(buildName(build));
+    106|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    107|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    108|       return entry.bin;
+    109|     },
+ ❯ frame-cache.test.ts:61:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/23]⎯
+
+ FAIL  rates.test.ts > #488.12324609 8, 12 and 16 fps and their ×1000/1001 forms have whole-flick frames and round-trip frame to flicks to frame exactly > #488.12324609 the six rates are valid with frames of 88,200,000, 58,800,000, 44,100,000, 88,288,200, 58,858,800 and 44,144,100 flicks
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ rates.test.ts:47:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/23]⎯
+
+ FAIL  rates.test.ts > #488.12324609 8, 12 and 16 fps and their ×1000/1001 forms have whole-flick frames and round-trip frame to flicks to frame exactly > #488.12324609 frames 0, 1, 195, 2^20 and −7 round-trip exactly at every rate: frame(k·Δ) = k, frame(k·Δ − 1) = k − 1, frame(k·Δ + 1) = k
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ rates.test.ts:60:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/23]⎯
+
+ FAIL  rates.test.ts > #488.12324609 8, 12 and 16 fps and their ×1000/1001 forms have whole-flick frames and round-trip frame to flicks to frame exactly > #488.12324609 generated frames k in [−2^26, 2^26] at the six rates round-trip exactly (fast-check seed 4880001, 8 runs of up to 40 cases)
+Error: Property failed after 1 tests
+{ seed: 4880001, path: "0", endOnFailure: true }
+Counterexample: [[{"rate":{"rate":[16000,1001],"frame":44144100},"k":23},{__proto__:null,"rate":{"rate":[16000,1001],"frame":44144100},"k":2},{__proto__:null,"rate":{"rate":[16,1],"frame":44100000},"k":-35170062}]]
+Shrunk 0 time(s)
+
+Hint: Enable verbose mode in order to have the list of all failing values encountered during the run
+ ❯ buildError ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2469:16
+ ❯ throwIfFailed ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2476:8
+ ❯ reportRunDetails ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2492:14
+ ❯ Module.assert ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2662:7
+ ❯ rates.test.ts:73:8
+     71|     const bin = builds.bin(FULL);
+     72|     const cases = fc.array(fc.record({ rate: fc.constantFrom(...RATES)…
+     73|     fc.assert(
+       |        ^
+     74|       fc.property(cases, (list) => {
+     75|         const calls: JsonObject[] = [];
+
+Caused by: AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+ ❯ rates.test.ts:77:25
+ ❯ Property.predicate ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:1355:99
+ ❯ Property.run ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:1324:24
+ ❯ propertyExecution ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2549:23
+ ❯ run ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2639:91
+ ❯ runIt ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2542:15
+ ❯ check ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2655:14
+ ❯ Module.assert ../../../../issue-488-implementation-de6827/node_modules/fast-check/lib/fast-check.js:2660:14
+ ❯ rates.test.ts:73:8
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/23]⎯
+
+ FAIL  sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 8, 11.025, 16, 22.05, 24, 32, 44.1, 48, 88.2, 96, 176.4, 192 and 352.8 kHz are valid, each with its whole-flick sample
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ sample-rates.test.ts:43:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/23]⎯
+
+ FAIL  sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 128 kHz, 384 kHz and 44,056 Hz are not valid: refused as a rate, naming it, and resampled as a source
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ sample-rates.test.ts:51:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/23]⎯
+
+ FAIL  sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 a document at 128 kHz is refused with bad_rate at transport/sample_rate naming the rate; one at 44.1 kHz is presented and its export defaults to it; the default is 48 kHz
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ sample-rates.test.ts:64:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/23]⎯
+
+ FAIL  sample-rates.test.ts > #488.3783b684 a sample rate is valid only when its sample is a whole number of flicks; invalid sources are resampled and an invalid export refused, naming the rate; a planted accept-all check passes 128 kHz and fails > #488.3783b684 a planted check that accepts every rate from 8 to 192 kHz (accepts_every_sample_rate_8_to_192k) passes 128 kHz and fails this test, naming the rate
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ sample-rates.test.ts:82:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/23]⎯
+
+ FAIL  seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f the default set holds the start, the keys and the flick before each, every checkpoint, the flick before it and the midpoint to the next, the span's last flick and 100 seeded times, the same on every call
+AssertionError: the binary builds: deep-show with features full,test-tick: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-tick failed:
++ error: none of the selected packages contains this feature: test-tick
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-kit, test-peek
++
+
+ ❯ Object.bin helpers.ts:107:107
+    105|       const entry = made.get(buildName(build));
+    106|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    107|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    108|       return entry.bin;
+    109|     },
+ ❯ seek-play.test.ts:53:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/23]⎯
+
+ FAIL  seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f on the ticking board (steps, checkpoints and a slide), at every time of the default set the cold seek's canonical render and node results equal the warm play's
+AssertionError: the binary builds: deep-show with features full,test-tick: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-tick failed:
++ error: none of the selected packages contains this feature: test-tick
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-kit, test-peek
++
+
+ ❯ Object.bin helpers.ts:107:107
+    105|       const entry = made.get(buildName(build));
+    106|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    107|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    108|       return entry.bin;
+    109|     },
+ ❯ seek-play.test.ts:67:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/23]⎯
+
+ FAIL  seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f on a plain sliding board in the full build (no test module), seek equals play at every time of the default set
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ seek-play.test.ts:78:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/23]⎯
+
+ FAIL  seek-play.test.ts > #488.304e296f seeking to each time of Determinism's default set gives the frame playing to it gives, on canonical renders; a planted nearest-in-distance checkpoint restore fails one flick before the second checkpoint, naming that flick > #488.304e296f a planted seek that restores the checkpoint nearest in distance (checkpoint_nearest_in_distance) fails one flick before the second checkpoint, 352,799,999, naming that flick
+AssertionError: the binary builds: deep-show with features full,test-tick: expected 'cargo build --bin deep-show --no-defa…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --bin deep-show --no-default-features --features full,test-tick failed:
++ error: none of the selected packages contains this feature: test-tick
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there are similarly named features: test-kit, test-peek
++
+
+ ❯ Object.bin helpers.ts:107:107
+    105|       const entry = made.get(buildName(build));
+    106|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    107|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    108|       return entry.bin;
+    109|     },
+ ❯ seek-play.test.ts:91:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/23]⎯
+
+ FAIL  still.test.ts > #488.ee0f61fe a still timeline draws no new frames > #488.ee0f61fe a board with nothing that moves, played for 3 s on a 144 Hz display, draws its first frame and no other
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ still.test.ts:27:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/23]⎯
+
+ FAIL  still.test.ts > #488.ee0f61fe a still timeline draws no new frames > #488.ee0f61fe a board whose rect slides for 2 s draws every display frame while it moves, the frame it rests on at 2 s, and nothing in the still second after
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:143:101
+    141|   expect(s.lines.length, `${SHOW_NAME} run: one output line per input …
+    142|   const out = obj(s.lines[0], `${SHOW_NAME} run: the answer`);
+    143|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    144|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    145|   const calls = raw ? (sc as RawScenario).calls : arr((sc as JsonObjec…
+ ❯ still.test.ts:36:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/23]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  23 failed (23)
+   Start at  15:10:03
+   Duration  147.47s (tests 98%, import 1%, transform 1%)
+
