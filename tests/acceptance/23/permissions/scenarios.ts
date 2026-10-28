@@ -9,8 +9,8 @@ import type { HookRequestLine, PermissionAnswer } from '../../../../packages/ada
 import {
   ACCOUNT_A, ACCOUNT_B, agentReads, allEvents, alwaysAllow, answer, applyLikeClaude, bash, CANCEL, changedSince, CLOUD, closingOf, DAY,
   decisionsSince, DEPENDENCY, handleOf, HUB_DOWN, Inconclusive, kms, lastPos, LOCKOUT_FLAG, LOCKOUT_GUARD, makeWorld, MODE_GUARD, must,
-  newSession, PERMISSION_TIMEOUT_MS, permissionOf, permissionRequest, preTool, preToolUse, lateHook, sessionStart, shown, sleep,
-  snapshot, startHub, stopHub, T0, typed, TYPED, waitAsk, WEEK,
+  inboxList, newSession, PERMISSION_TIMEOUT_MS, permissionOf, permissionRequest, postToolUse, preTool, preToolUse, lateHook, saveOffer, sessionStart,
+  shown, sleep, snapshot, startHub, stopHub, T0, typed, TYPED, WEEK,
   type Call, type Ev, type Hub, type Mode, type Pending, type PermissionReply, type Session, type World,
 } from './helpers.ts';
 
@@ -47,22 +47,63 @@ async function yourAnswer(w: World, hub: Hub, ask: Ev, decision: 'allow' | 'deny
 }
 
 /**
- * The first prompt for `call` in session `s`: its PreToolUse passes it on (nothing covers it yet), and its
- * PermissionRequest raises an authority ask whose question names the command.
+ * A prompt no decision covers, answered by the person in the terminal (README, surface 1; design: Threats, "Agents
+ * driving other agents' terminals", and How we know version 0 works, "Living next to other tools"; #18 AC19): the
+ * call's PreToolUse passes it on; DeepBuild's PermissionRequest entry ends exit 0 within Claude Code's hook timeout
+ * with no decision, never a deny or an allow, so Claude Code draws its own prompt; the person types yes there and the
+ * call runs (its PostToolUse). No ask is opened for it.
  */
-async function firstPrompt(hub: Hub, s: Session, call: Call, who: string): Promise<{ ask: Ev; p: Pending; since: number }> {
+async function answeredInTerminal(hub: Hub, s: Session, call: Call, who: string): Promise<{ since: number; late: boolean }> {
   const since = await lastPos(hub);
   const pre = await preToolUse(s, call);
   must(preTool(pre.r) === 'pass', `BLOCKED: ${who} \`${label(call)}\` must reach its permission prompt, its PreToolUse passing it on: ${shown(pre.r)}`);
-  const p = permissionRequest(s, call);
-  const ask = await waitAsk(hub, since, [label(call)], 60_000, p);
-  if (!ask) {
-    if (p.result && await lateHook(hub, s.id, 'PermissionRequest', p.result)) throw new Inconclusive(`${who} deep-hook spooled the PermissionRequest for \`${label(call)}\` late, so the hub never had it`);
-    const how = p.result ? `the hook ended: ${shown(p.result)}` : 'the hook still waits';
-    throw Error(`${who} the permission prompt for \`${label(call)}\` must raise an authority ask whose question names it: none by 10 s after the hook ended (60 s at most); ${how}`);
+  const r = await permissionRequest(s, call).done;
+  must(!r.timedOut && r.ms <= PERMISSION_TIMEOUT_MS, `${who} DeepBuild's PermissionRequest entry for \`${label(call)}\` still ran ${(r.ms / 1000).toFixed(0)} s: Claude Code ends it at ${PERMISSION_TIMEOUT_MS / 1000} s (the facts' hookTimeouts)`);
+  const reply = permissionOf(r);
+  must(r.code === 0 && reply.behavior === 'none', `${who} a permission prompt no decision covers must reach the person in the agent's own prompt: DeepBuild's entry must exit 0 with no decision, never a deny or an allow; it answered ${reply.behavior} (${shown(r)})`);
+  // The person reads Claude Code's prompt and types yes: the call runs.
+  const post = await postToolUse(s, call, pre.id);
+  const late = await lateHook(hub, s.id, 'PermissionRequest', r) || await lateHook(hub, s.id, 'PostToolUse', post);
+  await sleep(3000);
+  const asks = (await allEvents(hub)).filter((e) => e.log_pos > since && e.kind.startsWith('ask.'));
+  must(!asks.length, `${who} a permission prompt answered by typing in the terminal must open no ask: ${asks.map((e) => `${e.kind} ${JSON.stringify(e.data).slice(0, 160)}`).join('; ')}`);
+  return { since, late };
+}
+/**
+ * "Offered back in the CLI as a decision with its kind and scope" (README, surface 2): within 30 s `deep inbox` lists
+ * a line naming the command and the scope it would be saved at (`repo:…`); its first word is the offer's handle, never
+ * an ask's. Returns the handle.
+ */
+async function offered(w: World, call: Call, who: string, late: boolean): Promise<string> {
+  const deadline = Date.now() + 30_000;
+  let listed = '';
+  for (;;) {
+    const r = await inboxList(w);
+    listed = r.stdout;
+    const line = r.stdout.split('\n').find((l) => l.includes(label(call)) && /\brepo:[0-9A-Za-z]+/.test(l));
+    if (line) {
+      const handle = line.trim().split(/\s+/)[0]!;
+      must(!handle.startsWith('ask:'), `${who} the typed answer to \`${label(call)}\` must be offered back as a decision, not as an ask: \`deep inbox\` lists ${JSON.stringify(line)}`);
+      return handle;
+    }
+    if (Date.now() > deadline) break;
+    await sleep(1000);
   }
-  must(ask.data.kind === 'authority', `${who} the permission prompt for \`${label(call)}\` must raise an authority ask: ${handleOf(ask)} is ${String(ask.data.kind)}`);
-  return { ask, p, since };
+  if (late) throw new Inconclusive(`${who} deep-hook spooled the PermissionRequest for \`${label(call)}\` late, or its PostToolUse, so the hub may never have had the prompt or its answer to offer back`);
+  throw Error(`${who} the permission you typed yes to for \`${label(call)}\` must be offered back in the CLI as a decision with its kind and scope: 30 s after the call ran, \`deep inbox\` lists no line naming it and repo:…; it lists ${JSON.stringify(listed.slice(0, 600))}`);
+}
+/** The one click: `deep inbox save <offer>`, exit 0, and exactly one decision saved after `since`. Returns its handle. */
+async function saved(w: World, hub: Hub, offer: string, since: number, call: Call, who: string): Promise<string> {
+  const r = await saveOffer(w, offer);
+  must(r.code === 0, `${who} your click on the offered decision ${offer} (deep inbox save) must count, exit 0: ${shown(r)}`);
+  const deadline = Date.now() + 30_000;
+  let made: Ev[] = [];
+  while (!(made = await decisionsSince(hub, since)).length && Date.now() < deadline) await sleep(250);
+  await sleep(2000);
+  made = await decisionsSince(hub, since);
+  must(made.length === 1, `${who} one click must save exactly one decision for \`${label(call)}\`: ${made.length} saved (${made.map((e) => `decision:${e.id} ${JSON.stringify(e.data)}`).join(', ')})`);
+  must(/^repo:/.test(String(made[0]!.data?.scope)), `${who} the decision for \`${label(call)}\` must be saved for its repo: decision:${made[0]!.id} is saved at ${String(made[0]!.data?.scope)}`);
+  return `decision:${made[0]!.id}`;
 }
 
 /**
@@ -118,16 +159,11 @@ export async function weekOfAnswers(o: Run = {}): Promise<void> {
   const call = bash('npm run build');
   let hub = await startHub(w, { plant: o.plant, clock: T0 });
   try {
+    // Day one: you type yes on the agent's own prompt, and save it with one click.
     const s = newSession(w);
     await sessionStart(s);
-    const { ask, p } = await firstPrompt(hub, s, call, WEEK);
-    await yourAnswer(w, hub, ask, 'allow', WEEK, p);
-    const first = permissionOf(await p.done);
-    answeredForCallOrSession(WEEK, call, first);
-    applyLikeClaude(w, first);
-    const saved = await savedFrom(hub, ask, 30_000);
-    must(saved !== undefined, `${WEEK} your answer to ${handleOf(ask)} must be saved as a decision (decision.created naming it)`);
-    const handle = `decision:${saved.id}`;
+    const { since, late } = await answeredInTerminal(hub, s, call, WEEK);
+    const handle = await saved(w, hub, await offered(w, call, WEEK, late), since, call, WEEK);
     // A week: a new session each day, the hub restarted each morning on the test clock, the same prompt answered for you.
     for (let day = 0; day < 7; day++) {
       if (day > 0) {
@@ -145,34 +181,6 @@ export async function weekOfAnswers(o: Run = {}): Promise<void> {
   must(!changed.length, `${WEEK} after a week of answers the agent's settings files must be byte-identical; changed: ${changed.join(', ')}`);
 }
 
-// ---- #23.02482c32: a prompt whose ask was cancelled gets cancel, never deny.
-export async function cancelledPrompt(o: Run = {}): Promise<void> {
-  const w = makeWorld();
-  const call = bash('make release-notes');
-  const hub = await startHub(w, { plant: o.plant, clock: T0 });
-  try {
-    const s = newSession(w);
-    await sessionStart(s);
-    const { ask, p } = await firstPrompt(hub, s, call, CANCEL);
-    // Nobody answers: the prompt stops waiting when its hold ends, within Claude Code's hook timeout.
-    const r = await p.done;
-    must(!r.timedOut && r.ms <= PERMISSION_TIMEOUT_MS, `${CANCEL} the PermissionRequest hook for \`${label(call)}\` still waited ${(r.ms / 1000).toFixed(0)} s: Claude Code ends it at ${PERMISSION_TIMEOUT_MS / 1000} s (the facts' hookTimeouts), so its hold must end before`);
-    const reply = permissionOf(r);
-    must(reply.behavior !== 'deny', `${CANCEL} the prompt for \`${label(call)}\`, whose ask ${handleOf(ask)} nobody answered, gets deny; a cancelled ask gets cancel, never deny (${shown(r)})`);
-    must(reply.behavior !== 'allow', `${CANCEL} the prompt for \`${label(call)}\`, whose ask ${handleOf(ask)} nobody answered, was allowed (${shown(r)})`);
-    const deadline = Date.now() + 20_000;
-    let closing: Ev | undefined;
-    for (;;) {
-      closing = closingOf(await allEvents(hub), handleOf(ask));
-      if (closing || Date.now() > deadline) break;
-      await sleep(500);
-    }
-    must(closing?.kind === 'ask.cancelled', `${CANCEL} ${handleOf(ask)}, the ask of a prompt that stopped waiting, must be cancelled (ask.cancelled); it is ${closing ? closing.kind : 'still open'} 20 s after the hook ended`);
-  } finally {
-    await stopHub(hub);
-  }
-}
-
 // ---- #23.3b29ddde: an approval typed in the chat becomes a saved decision only after one click.
 export async function typedApproval(o: Run = {}): Promise<void> {
   const w = makeWorld();
@@ -181,31 +189,21 @@ export async function typedApproval(o: Run = {}): Promise<void> {
   try {
     const s = newSession(w);
     await sessionStart(s);
-    const start = await lastPos(hub);
-    const { ask, p } = await firstPrompt(hub, s, call, TYPED);
+    // You type yes on the agent's own prompt, and then in the chat that it may always do this here.
+    const { since, late } = await answeredInTerminal(hub, s, call, TYPED);
     await typed(s, 'Yes, allow npm run build. Always allow it in this repo from now on.');
     await sleep(5000);
-    const early = await decisionsSince(hub, start);
+    const early = await decisionsSince(hub, since);
     must(!early.length, `${TYPED} an approval typed in the session must not become a saved decision before your click: ${early.map((e) => `decision:${e.id}`).join(', ')} saved from it`);
-    if (p.result) must(permissionOf(p.result).behavior !== 'allow', `${TYPED} the prompt for \`${label(call)}\` was allowed on words typed in the session, before your click (${shown(p.result)})`);
-    const closing = closingOf(await allEvents(hub), handleOf(ask));
-    must(closing === undefined || closing.kind === 'ask.cancelled', `${TYPED} ${handleOf(ask)}, an authority ask, must not be answered by typed words: it closed as ${closing?.kind} before your click`);
-    await yourAnswer(w, hub, ask, 'allow', TYPED, p);
-    await p.done;
-    const deadline = Date.now() + 30_000;
-    let saved: Ev[] = [];
-    for (;;) {
-      saved = await decisionsSince(hub, start);
-      if (saved.length || Date.now() > deadline) break;
-      await sleep(250);
-    }
-    await sleep(2000);
-    saved = await decisionsSince(hub, start);
-    must(saved.length === 1 && saved[0]!.data?.ask === handleOf(ask), `${TYPED} one click must save exactly one decision, from ${handleOf(ask)}: ${saved.length} saved (${saved.map((e) => `decision:${e.id} from ${String(e.data?.ask)}`).join(', ')})`);
+    // Not a decision yet: the next prompt still reaches you.
+    const between = newSession(w);
+    await sessionStart(between);
+    await answeredInTerminal(hub, between, call, `${TYPED} before your click:`);
+    const rule = await saved(w, hub, await offered(w, call, TYPED, late), since, call, TYPED);
     // It is a saved decision in force: the same prompt in a new session is answered from it.
     const next = newSession(w);
     await sessionStart(next);
-    await promptAnswered(w, hub, next, call, `decision:${saved[0]!.id}`, `${TYPED} the next prompt:`);
+    await promptAnswered(w, hub, next, call, rule, `${TYPED} the next prompt:`);
   } finally {
     await stopHub(hub);
   }
