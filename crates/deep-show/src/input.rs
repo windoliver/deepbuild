@@ -6,9 +6,10 @@
 //! shows the revision it compares against as before. A revision whose parts move presents a
 //! frame at each vsync until they settle; a still one presents none after its first.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use deep_canvas::scope::{self, Event, Phase, Scope};
+use deep_canvas::show::{Writer, WriterKind};
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
 use serde_json::{json, Value};
@@ -421,7 +422,12 @@ impl Hub<'_> {
             },
             (None, None) => return refused("no_display"),
         };
-        let mut frames = match self.panel_frames(panel, grid, clock.lead) {
+        // A window's caps leave it only some of its display's vsyncs; a hidden one, none.
+        let (slots, unseen) = match &paced {
+            Some((window, _, g)) => self.placement.slots(window, *g, clock.lead, self.now),
+            None => (grid.vsyncs_through(self.now).collect(), Vec::new()),
+        };
+        let mut frames = match self.panel_frames(panel, grid, &slots, clock.lead) {
             Ok(f) => f,
             Err(e) => return e,
         };
@@ -438,7 +444,7 @@ impl Hub<'_> {
                 .collect();
             let mut vsyncs: Vec<i64> = frames.iter().filter_map(|f| f["vsync"].as_i64()).collect();
             for p in siblings {
-                if let Ok(f) = self.panel_frames(&p, grid, clock.lead) {
+                if let Ok(f) = self.panel_frames(&p, grid, &slots, clock.lead) {
                     vsyncs.extend(f.iter().filter_map(|f| f["vsync"].as_i64()));
                 }
             }
@@ -453,12 +459,86 @@ impl Hub<'_> {
                 f["display"] = json!(display);
                 f["frame_seq"] = json!(seq);
             }
+            let evaluations = self.evaluations(panel, &window, &frames, &unseen, clock.lead);
+            return json!({"frames": frames, "evaluations": evaluations});
         }
         json!({"frames": frames})
     }
 
-    /// The frames a panel presented up to now on `grid`, each latched `lead` before its vsync.
-    fn panel_frames(&mut self, panel: &str, grid: Grid, lead: i64) -> Result<Vec<Value>, Value> {
+    /// Every evaluation of the sessions drawn in `panel`, in order: one for each frame at its
+    /// vsync, the predicted presentation time, and one at each vsync in `unseen` that presented
+    /// nothing. An agent's session is drawn when a revision it wrote is current.
+    fn evaluations(
+        &self,
+        panel: &str,
+        window: &str,
+        frames: &[Value],
+        unseen: &[i64],
+        lead: i64,
+    ) -> Vec<Value> {
+        let Some(doc) = self.panel_doc(panel) else {
+            return Vec::new();
+        };
+        let currents = self.currents(&doc);
+        let latest = |latch: i64| {
+            currents
+                .iter()
+                .filter(|(at, _)| *at <= latch)
+                .map(|(_, r)| *r)
+                .max()
+        };
+        let mut at: Vec<(i64, u64)> = frames
+            .iter()
+            .filter_map(|f| Some((f["vsync"].as_i64()?, f["rev"].as_u64()?)))
+            .chain(unseen.iter().filter_map(|v| Some((*v, latest(v - lead)?))))
+            .collect();
+        at.sort_unstable();
+        let writer = |rev: u64| -> Option<&Writer> {
+            match self.shared.get(&doc) {
+                Some(s) => s.revs.iter().find(|r| r.rev == rev)?.writer.as_ref(),
+                None => Some(
+                    &self
+                        .revisions
+                        .get(&doc)?
+                        .iter()
+                        .find(|r| r.rev == rev)?
+                        .writer,
+                ),
+            }
+        };
+        let mut out = Vec::new();
+        for (vsync, rev) in at {
+            // The agents' sessions whose revisions, current by then, the frame draws; an agent
+            // writes as its session's thread.
+            let sessions: BTreeSet<&str> = currents
+                .iter()
+                .filter(|(_, r)| *r <= rev)
+                .filter_map(|(_, r)| writer(*r))
+                .filter(|w| w.kind == WriterKind::Agent)
+                .filter_map(|w| {
+                    self.scenario
+                        .sessions
+                        .iter()
+                        .find(|(_, s)| s.thread == w.id)
+                })
+                .map(|(id, _)| id.as_str())
+                .collect();
+            for session in sessions {
+                out.push(json!({"at": vsync, "session": session, "window": window}));
+            }
+        }
+        out
+    }
+
+    /// The frames a panel presented on `grid` up to now, at those of its vsyncs in `slots`
+    /// (the ones its window's caps leave it), each latched `lead` before its vsync.
+    fn panel_frames(
+        &mut self,
+        panel: &str,
+        grid: Grid,
+        slots: &[i64],
+        lead: i64,
+    ) -> Result<Vec<Value>, Value> {
         let doc = self
             .panel_doc(panel)
             .ok_or_else(|| refused("unknown_panel"))?;
@@ -471,7 +551,6 @@ impl Hub<'_> {
         if currents.is_empty() {
             return Ok(Vec::new());
         }
-        let now = self.now;
         let seen = self.panel_scope(panel)?.seen.clone();
         // The planted twin draws a revision current at a latch one frame later than it may.
         let late = if self.scenario.planted == Some(Planted::PatchShowsAFrameLate) {
@@ -483,7 +562,7 @@ impl Hub<'_> {
         let mut last: Option<(u64, &Seen)> = None;
         let mut until: Option<i64> = None;
         let mut motion: BTreeMap<u64, Option<Program>> = BTreeMap::new();
-        for vsync in grid.vsyncs_through(now) {
+        for &vsync in slots {
             let latch = vsync - lead;
             let Some((_, view)) = seen.iter().rev().find(|(at, _)| *at <= latch) else {
                 continue;

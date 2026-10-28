@@ -372,6 +372,22 @@ pub enum Call {
         rect: [f64; 4],
         agent: bool,
     },
+    /// The window server's report of the key window, `None` for another app's (#400).
+    Activate {
+        window: Option<String>,
+        agent: bool,
+    },
+    /// The OS's report of the thermal state: whether the Mac is hot (#400).
+    Thermal {
+        hot: bool,
+        agent: bool,
+    },
+    /// The window server's report that you hid a window or showed it again (#400).
+    HideWindow {
+        window: String,
+        hidden: bool,
+        agent: bool,
+    },
     /// Every open window (#400).
     Windows,
     /// The layout as the app would save it now (#400).
@@ -941,6 +957,17 @@ impl<'a> Hub<'a> {
                 rect,
                 agent,
             } => self.move_window(window, *rect, *agent),
+            Call::Activate { window, agent } => {
+                self.placement.activate(self.now, window.as_deref(), *agent)
+            }
+            Call::Thermal { hot, agent } => self.placement.thermal(self.now, *hot, *agent),
+            Call::HideWindow {
+                window,
+                hidden,
+                agent,
+            } => self
+                .placement
+                .hide_window(self.now, window, *hidden, *agent),
             Call::Windows => self.placement.windows_json(),
             Call::Layout => self.placement.layout_json(),
             Call::CardState => json!({"card": self.card_json().map(|c| c.to_json())}),

@@ -288,6 +288,32 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 agent: acting(c)?.is_some(),
             })
         }
+        "activate" => {
+            return Some(Call::Activate {
+                window: match c.get("window")? {
+                    Value::Null => None,
+                    w => Some(w.as_str()?.to_string()),
+                },
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "thermal" => {
+            return Some(Call::Thermal {
+                hot: match c.get("state")?.as_str()? {
+                    "nominal" | "fair" => false,
+                    "serious" | "critical" => true,
+                    _ => return None,
+                },
+                agent: acting(c)?.is_some(),
+            })
+        }
+        "hide_window" => {
+            return Some(Call::HideWindow {
+                window: c.get("window")?.as_str()?.to_string(),
+                hidden: c.get("hidden")?.as_bool()?,
+                agent: acting(c)?.is_some(),
+            })
+        }
         "windows" => return Some(Call::Windows),
         "layout" => return Some(Call::Layout),
         "card" => return Some(Call::CardState),
@@ -783,6 +809,22 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         }
         Some(Some("arms_under_own_window")) => {
             placement_planted.arms_under_own_window = true;
+            None
+        }
+        Some(Some("ignores_inactive_cap")) => {
+            placement_planted.ignores_inactive_cap = true;
+            None
+        }
+        Some(Some("ignores_thermal_cap")) => {
+            placement_planted.ignores_thermal_cap = true;
+            None
+        }
+        Some(Some("presents_hidden")) => {
+            placement_planted.presents_hidden = true;
+            None
+        }
+        Some(Some("evaluates_hidden")) => {
+            placement_planted.evaluates_hidden = true;
             None
         }
         Some(Some(p)) => Some(match p {
