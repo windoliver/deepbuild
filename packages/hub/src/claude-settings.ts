@@ -201,7 +201,7 @@ export function relations(root: string, settings: Obj | undefined = readJson(cla
     ? { name: 'deep_ask', holds: true, timeoutS: toolMs / 1000, text: `deep_ask holds: it says still waiting after ${ASK_WAIT_MS / 1000} s, at least 5 s before Claude Code's MCP tool timeout, ${from}` }
     : { name: 'deep_ask', holds: false, timeoutS: toolMs / 1000, text: `deep_ask broken: Claude Code's MCP tool timeout is ${from}, and deep_ask's ${ASK_WAIT_MS / 1000} s wait must end at least 5 s before it, so deep_ask returns at once with the ask's ID, deadline and default and the agent waits with deep_wait; set MCP_TOOL_TIMEOUT to at least ${(ASK_WAIT_MS + HOLD_MARGIN_MS) / 1000}000` });
   // Enforced by the hub: a held stop's send-back past the cap goes by the next prompt instead.
-  out.push({ name: 'stop continuations', holds: true, timeoutS: 0, text: `stop continuations hold: DeepBuild sends back at most ${CONTINUATION_CAP - 1} answers through held stops in one Claude Code turn, under its cap of ${CONTINUATION_CAP} consecutive stop-hook continuations; another waits for the next prompt` });
+  out.push({ name: 'stop continuations', holds: true, timeoutS: 0, text: `stop continuations hold: DeepBuild sends back at most ${CONTINUATION_CAP} answers and send-backs through held stops in one Claude Code turn with no tool call between, its cap of ${CONTINUATION_CAP} consecutive stop-hook continuations; another waits for the next prompt` });
   // Enforced by the asks core: an ask whose deadline comes before its next batch shows at once.
   const config = readJson(join(root, 'config.json'));
   const every = config && isObj(config.asks) && isObj(config.asks.batch) ? String(config.asks.batch.every) : undefined;

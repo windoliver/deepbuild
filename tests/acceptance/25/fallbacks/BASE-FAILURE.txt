@@ -1,0 +1,49 @@
+Base commit 0350cf0 (clean), Oct 27 2026, Node 24.22.0, macOS on the shared Mac (load 178 at start, 47 at end).
+npx vitest run --root tests/acceptance/25/fallbacks --no-file-parallelism  ->  4 failed, 1 passed (5), exit 1.
+node node_modules/typescript/bin/tsc -p tests/acceptance/25/fallbacks/tsconfig.json  ->  clean.
+
+Why each test fails, or passes, on the base:
+
+- AC10 cap.test.ts: FAILS at its assertion on continuation 1 of turn 1. The base starts a waiter at every Stop
+  and lets it race the stop hold for the answer: the waiter took it (exit 2) and DeepBuild's Stop reply didn't
+  block. Had the hold won that race, the test would stop at the first planted send-back instead: the base serves
+  no test.send_back (README: Additions, 1), which throws, not an assertion. It keeps no per-turn count either.
+- AC9 desktop.test.ts: FAILS at its assertion on the view. The waiter took your answer and exited 2 (precondition
+  met); the base records it delivered at the waiter's exit and shows nothing saying the session wasn't woken, so
+  in 60 s no new text names a missed wake and the next prompt. (Its next prompt would also come empty: the base
+  already counted the answer delivered.)
+- AC7 ended.test.ts, threads: FAILS at its assertion on C2's /clear SessionStart: the base's SessionStart reply is
+  only its briefing, so no thread reads an ended session's answer there. The new session in the same worktree got
+  nothing (that check passed on the base).
+- AC7 ended.test.ts, task: FAILS at its assertion: the session that claims the task never reads the answer. The
+  session on other work got nothing and nothing delivered it before (both checks passed on the base).
+- AC5 flags.test.ts: PASSES on the base. The base has no route flags and tries every route every time, so an idle
+  answer for a session with no waiter reaches its next prompt, and a new session's waiter wakes it. Its proof is
+  the planted programs routes-from-settings and routes-kept-across-sessions (README: Additions, 2; Disputes, 1).
+  Two earlier runs of it failed for the machine, not the base: once deep-hook missed the hub's 50 ms
+  acknowledgement of a UserPromptSubmit ("could not spool ... within the hook's 50 ms"), once of the Stop, and the
+  hub, still holding that stop, took the answer given during its hold (delivery.outcome via stop_hold). The test
+  now answers only once 61 s have passed since the stop's hook started (helpers.ts pastHold).
+
+Output of the run (failure messages cut to their first lines):
+
+ ❯ desktop.test.ts (1 test | 1 failed) 164116ms
+     × AC9 #25.14a7bfb8 the waiter exits 2 with your answer, the desktop app starts no turn; the view says so and your next prompt carries the answer, once 163847ms
+ ❯ cap.test.ts (1 test | 1 failed) 103825ms
+     × AC10 #25.3d50cff2 eight continuations go back through the Stop hook and the ninth by the next prompt, the row saying why; with a tool call after the fourth, all nine go through the Stop hook 103717ms
+ ❯ ended.test.ts (2 tests | 2 failed) 92467ms
+     × AC7 #25.3010b97e answers to ended sessions reach the resumed session and the threads joined across /clear and /compact at their SessionStart, each only its own; a new session in the same worktree gets none 46677ms
+     × AC7 #25.3010b97e an answer to an ended session waits on its task: a new session on other work in the same worktree gets nothing, and the next session that works the task reads it, once 45637ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC10 turn 1 (prompt_id d2486084-af0e-4918-9b4e-1bf348902150) of session d4d1df77-6bf8-4299-8e49-479eccf55785: continuation 1, the answer to ask:01M5ZEWR13A37JPS4FXX0QBM9N (Use one b9bdf38e), must go back through the Stop hook, DeepBuild's Stop reply blocking with it and Claude Code continuing the turn: {"stop":{"blocked":false,"reasons":[],"continued":false,"overridden":false,"count":0},"runs":[{"command":"hub-issue-25-fe86d8/target/debug/deep-hook' claude-code Stop","async":false,"code":0,"signal":null,"timedOut":false,"stdout":"","stderr":""},{"command":"ght/github-issue-25-fe86d8/packages/cli/dist/main.js' waiter","async":true,"code":2,"signal":null,"timedOut":false,"stdout":"","stderr":"DeepBuild delivers your answers:\nYour answer to ask:01M5ZEWR13A37JPS4FXX0QBM9N (\"Which way for one b9bdf38e?\"): Use one b9bdf38e (oneb9bdf38e).\n"}]}: expected false to be true // Object.is equality
+ ❯ continued cap.test.ts:57:243
+ ❯ cap.test.ts:67:46
+AssertionError: AC9 the desktop app didn't wake, so the view must say so for session 368bba53-a578-4865-9c0f-9141b43b6965 or ask:01M5ZEQQ42648R2RV0B5XNPFBD (that it wasn't woken, and that the answer goes at the next prompt) within 60 s of the waiter's exit; what it shows since your answer: {"ask":"ask:01M5ZEQQ42648R2RV0B5XNPFBD","kind":"choice","session":"368bba53-a578-4865-9c0f-9141b43b6965","status":"closed","outcome":"answered","owner":"you","age":162257,"request":null,"question":"Which way for bars c4ac581d?","options":["notc4ac581d","barsc4ac581d"]}
+ ❯ desktop.test.ts:50:297
+AssertionError: AC7 session 01503faa-bc61-456c-ad09-11ef7f3d3bdb joins 0cd36fed-cfda-4d13-9034-cbef62c0f1ff's thread across /clear: at its SessionStart it reads the answer to ask:01M5ZEZXSQMY20HSCES027JS6N (Use clear 38054f4c), and only that one: {"runs":[{"command":"e-25-fe86d8/target/debug/deep-hook' claude-code SessionStart","async":false,"code":0,"signal":null,"timedOut":false,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"DeepBuild is watching this session. No checks are active in this repo yet. When you finish a piece of work, declare it with the deep_claim tool (say what you claim is done); the checks' results decide its verdict, never your own words about it.\"}}","stderr":""}]}: expected [] to deeply equal [ 'ask:01M5ZEZXSQMY20HSCES027JS6N' ]
+ ❯ ended.test.ts:89:222
+AssertionError: AC7 session e1c4baf5-86c7-4323-8b6b-3da6c32b87aa is the next session that works task:T31e02ac82337: once it works it (deep_claim), it reads your answer to ask:01M5ZF1A8WYR0ENDC7QM8FAWCD (Use tables 93c30298) through DeepBuild; it saw: deep_claim: {"jsonrpc":"2.0","id":"tools/call#2","result":{"content":[{"type":"text","text":"{\"session\":\"e1c4baf5-86c7-4323-8b6b-3da6c32b87aa\",\"claim\":\"claim:01M5ZF2NPMGWGFEMPJ8CT1KNC6\",\"event\":\"01M5ZF2NPMGWGFEMPJ8CT1KNC6\"}"}],"isError":false,"structuredContent":{"session":"e1c4baf5-86c7-4323-8b6b-3da6c32b87aa","claim":"claim:01M5ZF2NPMGWGFEMPJ8CT1KNC6","event":"01M5ZF2NPMGWGFEMPJ8CT1KNC6"}}}
+ ❯ ended.test.ts:162:239
+ Test Files  3 failed | 1 passed (4)
+      Tests  4 failed | 1 passed (5)
+   Duration  570.50s (tests 100%)
