@@ -399,8 +399,10 @@ class Hub {
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
     const ruled = this.reply(meta);
-    // A call that may need your authority, and no guard entry blocks, is held for the core's gate first (#321).
-    const gated = ruled === EMPTY_REPLY ? this.gated(meta, parsed.drafts) : undefined;
+    // A call that may need your authority, and no guard entry blocks, is held for the core's gate first (#321); a
+    // warn entry's words go out with the gate's reply.
+    const blocked = ruled !== EMPTY_REPLY && (JSON.parse(ruled) as { exit: number }).exit !== 0;
+    const gated = blocked ? undefined : this.gated(meta, parsed.drafts);
     const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const held = !before && !gated && parsed.drafts.length ? this.holdFor(meta) : null;
     const hold = gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
@@ -410,7 +412,7 @@ class Hub {
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
-    if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data);
+    if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
     else if (before) void this.extensionReply(conn, meta, before.data, hold!);
     else if (held !== null) void this.coreReply(conn, meta, held);
   }
@@ -433,18 +435,21 @@ class Hub {
     const label = mcp ? `${mcp.server} ${mcp.tool}` : typeof data.command === 'string' ? data.command : String(data.kind);
     return { label, classes: authority, ...(mcp ? { mcp } : {}) };
   }
-  /** The gate's reply, written by its hold: a held call is denied with its ask; one the gate didn't decide in time too. */
-  private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown): Promise<void> {
+  /**
+   * The gate's reply, written by its hold: a held call is denied with its ask; one the gate didn't decide in time too.
+   * A call it lets go gets `ruled`, the guard entries' reply.
+   */
+  private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown, ruled: string): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
     const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; failed?: string }>;
-    const ruled = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    const gate = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
-    const why = 'late' in ruled ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
-      : ruled.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${ruled.failed}). Run it again.` : ruled.held;
+    const why = 'late' in gate ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
+      : gate.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${gate.failed}). Run it again.` : gate.held;
     if (why) return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
     if (before !== undefined) return this.extensionReply(conn, meta, before, hold);
-    conn.sock.end(EMPTY_REPLY);
+    conn.sock.end(ruled);
   }
 
   /**
