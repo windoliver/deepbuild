@@ -620,6 +620,172 @@ export interface AgentStopV3 {
   evidence?: Array<string>;
 }
 
+export type AgentStopV4Turn = number;
+
+export type AgentStopV4Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV4Count;
+  cached: AgentStopV4Count;
+  output: AgentStopV4Count;
+  context_fill: number | null;
+  cost: AgentStopV4Cost;
+} | null;
+
+export type AgentStopV4Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV4Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+export type AgentStopV4Loop = {
+  state: "looping";
+  due: number | null;
+} | {
+  state: "none_left";
+};
+
+/** agent.stop@4 */
+export interface AgentStopV4 {
+  v: 4;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "refusal";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "max_turns";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "timed_out";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "unknown";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  };
+  evidence?: Array<string>;
+}
+
 /** answer.refused@1 */
 export interface AnswerRefused {
   v: 1;
@@ -1407,6 +1573,33 @@ export interface ClaimMadeV2 {
   evidence?: Array<string>;
 }
 
+/** claim.made@3 */
+export interface ClaimMadeV3 {
+  v: 3;
+  id: string;
+  kind: "claim.made";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    attempt: number;
+    commit: string;
+    scope: "session" | "child" | "task";
+    predictions: Array<{
+      check: string;
+      expects: "passed" | "failed";
+      at: number;
+    }>;
+    hash: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.sent_back@1 */
 export interface ClaimSentBack {
   v: 1;
@@ -1616,6 +1809,50 @@ export interface DefinitionLocked {
       depth: string;
     }>;
     hash: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@2 */
+export interface DefinitionLockedV2 {
+  v: 2;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
     base_commit: string;
     budget: {
       runs: number;
