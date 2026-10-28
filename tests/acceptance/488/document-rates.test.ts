@@ -26,7 +26,7 @@ const MARKER_PLUS = sec(2) + sec(1.25);
 
 /** A 30 fps board, 10 s long, with a marker `m` at 2 s and a rect that slides from x 0 to 200 over 2 s, placed at frame 195. */
 const PLACED: JsonObject = board('Placed at frame 195', [
-  BACK, rect('mover', [0, 0, 40, 30], 'a1', 'ink', { at: { pos: [100, 40, 0] } }), label('l1', '195f', [16, 150], 'a2'),
+  BACK, rect('mover', [0, 0, 40, 30], 'a1', 'ink', { at: { pos: [100, 40, 0] } }), label('l1', 'Placed at frame', [16, 150], 'a2'),
 ], { transport: { frame_rate: [30, 1], span: '10s' }, markers: { m: { t: '2s', kind: 'cue', name: 'Marker m' } }, ...slide('mover', 0, 200, '2s', '195f') });
 
 describe('#488.5827cbd0 a document or export rate whose frame isn\'t a whole number of flicks is refused naming the rate, and times written as 195f or @marker+1.25s store exact flicks', () => {
