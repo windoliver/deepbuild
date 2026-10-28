@@ -514,6 +514,11 @@ export async function preToolUse(s: Session, call: Call, id = callId()): Promise
   appendTranscript(s, assistant([{ type: 'tool_use', id, name: call.tool_name, input: call.tool_input }], 'tool_use'));
   return { id, r: await fire(payload(s, 'PreToolUse', { ...call, tool_use_id: id })) };
 }
+/** The call ran (a Bash call, after the person typed yes on Claude Code's own prompt): its result and its PostToolUse. */
+export async function postToolUse(s: Session, call: Call, id: string): Promise<Ran> {
+  appendTranscript(s, { type: 'user', promptId: s.prompt, message: { role: 'user', content: [{ tool_use_id: id, type: 'tool_result', content: 'ok', is_error: false }] } });
+  return fire(payload(s, 'PostToolUse', { ...call, tool_use_id: id, tool_response: { stdout: 'ok', stderr: '', interrupted: false, isImage: false } }));
+}
 /** A permission prompt pending in Claude Code: its PermissionRequest hook running through deep-hook. */
 export interface Pending { call: Call; started: number; done: Promise<Ran>; result?: Ran }
 /** Claude Code asks permission for `call` (its PreToolUse passed it on): the PermissionRequest hook, offering "always allow". */
@@ -559,4 +564,12 @@ export async function answer(w: World, ask: Ev, decision: 'allow' | 'deny'): Pro
   const option = options.find((o) => o.decision === decision);
   must(option !== undefined, `${handleOf(ask)} must have an option that says ${decision}: its options are ${JSON.stringify(options)}`);
   return run(NODE, [CLI, 'inbox', 'answer', handleOf(ask), String(option.id)], { env: childEnv(w.home), cwd: w.tmp, timeoutMs: 120_000 });
+}
+/** `deep inbox` in your own terminal: what it lists (README, surface 2: your asks, and the decisions offered back to you). */
+export function inboxList(w: World): Promise<Ran> {
+  return run(NODE, [CLI, 'inbox'], { env: childEnv(w.home), cwd: w.tmp, timeoutMs: 120_000 });
+}
+/** `deep inbox save <offer>`: the one click that saves a decision offered back to you, the OS confirming you (the stub). */
+export function saveOffer(w: World, offer: string): Promise<Ran> {
+  return run(NODE, [CLI, 'inbox', 'save', offer], { env: childEnv(w.home), cwd: w.tmp, timeoutMs: 120_000 });
 }

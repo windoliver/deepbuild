@@ -4,35 +4,36 @@ Node 24.22.0, Vitest 5.0.5, after npm ci, npm run build --workspaces and cargo b
 
   npx vitest run tests/acceptance/23/permissions --no-file-parallelism --reporter=verbose
 
-Trimmed to each failure's reason. ask:… and decision:… stand for ULID handles.
+Trimmed to each failure's reason. ask:…, decision:… and offer handles stand for ULID handles. These are the runs of the
+redraft that followed the #18 AC19 dispute (README, Disputes); the first draft's runs are summarized at the end.
 
-== The base (12:22, load 44 then 19)
+== The base (14:50, load 47 then 38)
 
-  Tests  16 failed | 1 passed (17), 143 s; none INCONCLUSIVE
+  Tests  14 failed | 1 passed (15), 185 s; none INCONCLUSIVE
 
+  #23.7232c832 week        the permission you typed yes to for `npm run build` must be offered back in the CLI as a
+                           decision with its kind and scope: 30 s after the call ran, `deep inbox` lists no line naming
+                           it and repo:…; it lists "No open asks.\n"
+                           (the prompt itself passes at the base: no decision, no ask, as #18 AC19 wants)
+  #23.3b29ddde typed       the same
   #23.02482c32 adapter     a cancelled ask's prompt gets cancel, never deny: the reply is {"behavior":"deny"}
-  #23.02482c32 cancel      the permission prompt for `make release-notes` must raise an authority ask whose question
-                           names it: none by 10 s after the hook ended; the hook ended: exit 0 after 6 ms, stdout ""
-  #23.7232c832 week        the same, for `npm run build`
-  #23.3b29ddde typed       the same, for `npm run build`
   #23.56633035 dependency  `npm install left-pad`, which nothing you decided covers, must be asked: its PreToolUse let
-                           it through (pass) with no answer of yours (exit 0 after 15 ms)
+                           it through (pass) with no answer of yours (exit 0 after 9 ms)
   #23.e3e9bdfd cloud       `aws kms create-key --profile shop-prod --description shop-orders` must be asked: it was
                            denied (exit 2, "DeepBuild blocked this: Creating a cloud resource the plan doesn't name …
                            (guard no-unnamed-cloud-resource)"), but no ask names 111122223333 or shop-prod
   #23.15c1cac3 mode-guard  the same: the rule it needs can't be made
   #23.1e4ae1da hub-down    the same: the rule it needs can't be made
-  plants, 8 hub tests      BLOCKED: the hub with the plant DEEP_HUB_PLANT=<name> did not start: names no planted
-                           program (each of the seven plant names)
+  plants, 7 hub tests      BLOCKED: the hub with the plant DEEP_HUB_PLANT=<name> did not start: names no planted
+                           program (each of the six plant names)
   plants, adapter plant    passes: the planted adapter (cancel mapped to deny) fails the scenario, as the base's own
                            adapter does
 
-  npx tsc -p tests/acceptance/23: no error in permissions/ on the base (the cancel answer is built with a cast, since
-  PermissionAnswer has no cancel or `for` at the base); the 16 errors are match/'s missing surface.
+  npx tsc -p tests/acceptance/23 (with the shared tsconfig): no error in permissions/, on the base and with the sample.
 
 == A program that does nothing
 
-  At the hub, the base is the do-nothing program: it raises no ask for a permission prompt, answers none, and keeps
+  At the hub, the base is the do-nothing program: it offers nothing back, answers no prompt from a decision, and keeps
   no standing rule (above). For the adapter, PermissionAnswer took cancel and `for` and the Claude Code adapter's
   permissionReply returned {} (copied in from outside the checkout, removed afterwards):
 
@@ -40,20 +41,19 @@ Trimmed to each failure's reason. ask:… and decision:… stand for ULID handle
 
 == The sample fix (kept outside this checkout; overlaid, built, and taken out again)
 
-  12:12, load 21 to 26 during the run:  Tests 14 passed | 3 skipped (17), 202 s
-  12:16, load 55 to 118:                Tests 13 passed | 4 skipped (17), 216 s. The 4 skipped are INCONCLUSIVE,
-                                        each a hook deep-hook let through or spooled because the hub acknowledged
-                                        it late: week (day 7 of 7, load 79.2), plants decision-over-mode (86.2),
-                                        decision-before-guard (98.8), copies-no-standing-rules (117.6)
-  12:21, load 35 to 45, those 4 again:  4 passed
-  So every one of the 17 tests passed on the sample fix: 9 criterion tests, and each of the 9 plants failed its
+  14:43, load 107 to 153:  1 failed | 7 passed | 7 INCONCLUSIVE. The failure was the week test: no offer listed,
+                           because the call's PostToolUse reached the hub late and the test didn't yet treat that
+                           as late; the test now does (README, Late hooks).
+  14:46, load 116 then 50: Tests 12 passed | 3 INCONCLUSIVE (15), 136 s. INCONCLUSIVE: dependency, mode-guard and
+                           plant decision-before-guard, each a hook acknowledged late.
+  14:49, those 3 again:    dependency and decision-before-guard passed; mode-guard INCONCLUSIVE again (late);
+                           alone at 14:50 (load 62): passed.
+  So every one of the 15 tests passed on the sample fix: 8 criterion tests, and each of the 7 plants failed its
   scenario naming what plants.ts names:
 
   permission-always-allow    #23.7232c832 … answer for that call or that session only; it picks the agent's option
                              that writes a lasting rule into its own settings: updatedPermissions addRules for
                              localSettings
-  cancel-as-deny             #23.02482c32 the prompt for `make release-notes`, whose ask ask:… nobody answered, gets
-                             deny; a cancelled ask gets cancel, never deny
   typed-saves-decision       #23.3b29ddde an approval typed in the session must not become a saved decision before
                              your click: decision:… saved from it
   decision-over-mode         #23.15c1cac3 your saved decision decision:… allowed `aws kms create-key --profile
@@ -67,7 +67,13 @@ Trimmed to each failure's reason. ask:… and decision:… stand for ULID handle
                              111122223333, which your standing rule covers, must be allowed; it was denied
   adapter (cancel as deny)   a cancelled ask's prompt gets cancel, never deny
 
-  npx tsc -p tests/acceptance/23 with the sample applied: no error in permissions/.
+  The same sample passes #18 AC19: npx vitest run tests/acceptance/18/install/coexist.test.ts, 1 passed (14:50).
+
+== The first draft (before the dispute), for the record
+
+  Its week, typed and hub-level cancel tests required an ask for every uncovered prompt, held until answered and
+  cancelled at the hold's end. Base: 16 failed | 1 passed (17). Its sample passed 17/17 over runs at load 21 to 118.
+  That sample opened an ask for a prompt the person answers in the terminal, which #18 AC19 forbids.
 
 == Not run
 

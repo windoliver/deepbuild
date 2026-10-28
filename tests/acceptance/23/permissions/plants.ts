@@ -5,7 +5,7 @@
 
 import { shipped } from '../../../../packages/adapters/src/index.ts';
 import { CANCEL, CLOUD, DEPENDENCY, HUB_DOWN, MODE_GUARD, TYPED, WEEK } from './helpers.ts';
-import { cancelledPrompt, cloudResource, hubStopped, modeAndGuard, newDependency, typedApproval, weekOfAnswers, type Reply, type Run } from './scenarios.ts';
+import { cloudResource, hubStopped, modeAndGuard, newDependency, typedApproval, weekOfAnswers, type Reply, type Run } from './scenarios.ts';
 
 /** The real Claude Code adapter's permission reply, from the shipped registry. */
 export function claudeReply(): Reply {
@@ -28,14 +28,9 @@ export const HUB_PLANTS: HubPlant[] = [
     named: /answer for that call or that session only; it picks the agent's option that writes a lasting rule into its own settings: updatedPermissions addRules for localSettings/,
   },
   {
-    plant: 'cancel-as-deny', criterion: CANCEL, scenario: cancelledPrompt,
-    does: 'answers the prompt of a cancelled ask deny',
-    named: /gets deny; a cancelled ask gets cancel, never deny/,
-  },
-  {
     plant: 'typed-saves-decision', criterion: TYPED, scenario: typedApproval,
-    does: 'saves an approval typed in the session as a decision for the open ask it approves, with no click',
-    named: /must not become a saved decision before your click: decision:[0-9A-Za-z]+ saved from it|one click must save exactly one decision, from ask:[0-9A-Za-z]+: 2 saved/,
+    does: 'saves a permission you typed yes to in the terminal as a decision for its repo, with no click',
+    named: /must not become a saved decision before your click: decision:[0-9A-Za-z]+ saved from it|one click must save exactly one decision for `npm run build`: 2 saved/,
   },
   {
     plant: 'decision-over-mode', criterion: MODE_GUARD, scenario: modeAndGuard,
