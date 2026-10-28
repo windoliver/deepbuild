@@ -13,8 +13,8 @@
 //   macOS build recorded. Anywhere else the result is a reading and the test is skipped as INCONCLUSIVE, never
 //   passed.
 // Before any number counts, the measured text is shown to be scrubbed by the field rules: every field value is
-// gone, every field name kept, and the twins stored unchanged. A store without the field rules never times
-// "redaction with the field rules", so it fails here on any machine.
+// gone, every field line still starts with its own field name, and the twins stored unchanged. A store without
+// the field rules never times "redaction with the field rules", so it fails here on any machine.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,27 +42,28 @@ const benchmark = () => import(join(REPO, 'scripts/benchmark.mjs')) as Promise<B
 const VALUE = /v7_[A-Za-z0-9]{16}/g;
 const value = (rng: Rng) => `v7_${word(rng, 16)}`;
 
-/** The issue's nine shapes, each with fresh values, and the field names a reader must still see. */
-const FIELDS: { names: string[]; line: (v: () => string) => string }[] = [
-  { names: ['Authorization:'], line: (v) => `Authorization: Bearer ${v()}` },
-  { names: ['Proxy-Authorization:'], line: (v) => `Proxy-Authorization: Basic ${v()}` },
-  { names: ['Cookie:'], line: (v) => `Cookie: sid=${v()}; theme=${v()}` },
-  { names: ['Set-Cookie:'], line: (v) => `Set-Cookie: sid=${v()}; Path=/${v()}` },
-  { names: ['access_token='], line: (v) => `access_token=Bearer ${v()}` },
-  { names: ['token='], line: (v) => `token=Bot ${v()}.sig_part-2` },
-  { names: ['password:'], line: (v) => `password: "${v()} two words"` },
-  { names: ['"password"'], line: (v) => `{"password":"${v()}"}` },
-  { names: ['\\"client_secret\\"'], line: (v) => `{\\"client_secret\\":\\"${v()}\\"}` },
+/** The issue's nine shapes, each with fresh values, and the field name and separator each stored line starts with. */
+const FIELDS: { name: string; line: (v: () => string) => string }[] = [
+  { name: 'Authorization:', line: (v) => `Authorization: Bearer ${v()}` },
+  { name: 'Proxy-Authorization:', line: (v) => `Proxy-Authorization: Basic ${v()}` },
+  { name: 'Cookie:', line: (v) => `Cookie: sid=${v()}; theme=${v()}` },
+  { name: 'Set-Cookie:', line: (v) => `Set-Cookie: sid=${v()}; Path=/${v()}` },
+  { name: 'access_token=', line: (v) => `access_token=Bearer ${v()}` },
+  { name: 'token=', line: (v) => `token=Bot ${v()}.sig_part-2` },
+  { name: 'password:', line: (v) => `password: "${v()} two words"` },
+  { name: '{"password":', line: (v) => `{"password":"${v()}"}` },
+  { name: '{\\"client_secret\\":', line: (v) => `{\\"client_secret\\":\\"${v()}\\"}` },
 ];
 /** The four twins: names with no secret word as a part, and prose. Stored unchanged. */
 const TWINS = ['"input_tokens": 1234', '"max_tokens": 4096', 'tokenizer=cl100k', 'Authorization required for this route'];
 
-interface Output { bytes: Uint8Array; values: number; names: Map<string, number> }
+/** `fields` holds, for each field line, its line number and the shape it came from. */
+interface Output { bytes: Uint8Array; values: number; fields: { at: number; shape: number }[] }
 
 /** About 8 MB of build output: #15's filler and held-value lines, a field line every 50 lines, a twin every 50. */
 function output(rng: Rng, k: number, held: string[]): Output {
   const lines: string[] = [];
-  const names = new Map<string, number>();
+  const fields: Output['fields'] = [];
   let values = 0;
   const v = () => { values++; return value(rng); };
   let size = 0;
@@ -70,19 +71,18 @@ function output(rng: Rng, k: number, held: string[]): Output {
     let line: string;
     if (i % 500 === 0) line = `run ${k} step ${i}: token ${held[i % held.length]}`;
     else if (i % 50 === 10) {
-      const f = FIELDS[(i / 50 | 0) % FIELDS.length]!;
-      line = f.line(v);
-      for (const n of f.names) names.set(n, (names.get(n) ?? 0) + 1);
+      const shape = (i / 50 | 0) % FIELDS.length;
+      line = FIELDS[shape]!.line(v);
+      fields.push({ at: i, shape });
     } else if (i % 50 === 35) { line = TWINS[(i / 50 | 0) % TWINS.length]!; }
     else line = `run ${k} step ${i}: compiled module ${word(rng, 8)} in ${i % 97} ms`;
     lines.push(`${line}\n`);
     size += line.length + 1;
   }
-  return { bytes: utf8(lines.join('')), values, names };
+  return { bytes: utf8(lines.join('')), values, fields };
 }
 
 const chunks = (bytes: Uint8Array) => Array.from({ length: Math.ceil(bytes.length / CHUNK) }, (_, c) => bytes.subarray(c * CHUNK, (c + 1) * CHUNK));
-const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 const lineCount = (haystack: string, line: string) => haystack.split('\n').filter((l) => l === line).length;
 
 function workload() {
@@ -129,7 +129,14 @@ describe('AC3 #761.51e647b5 budgets on the reference Mac in the local preflight,
     const leaked = kept.match(VALUE) ?? [];
     const leakedLine = leaked.length ? kept.split('\n').find((l) => l.includes(leaked[0]!)) : undefined;
     expect(leaked.length, `field values kept in the stored text: ${leaked.length} of ${first.values}, first in the line ${JSON.stringify(leakedLine)}; the field rules didn't run, so the time measured isn't redaction with the field rules`).toBe(0);
-    for (const [name, n] of first.names) expect(count(kept, name), `the field name ${name} is kept on each of its ${n} lines`).toBeGreaterThanOrEqual(n);
+    // Each field name is checked on the lines of its own shape only, so `token=` on an `access_token=` line or
+    // `Cookie:` on a `Set-Cookie:` line never stands in for it.
+    const printedLines = printed.split('\n');
+    const keptLines = kept.split('\n');
+    expect(keptLines.length, 'the stored text has one line per printed line: no rule ran past a newline').toBe(printedLines.length);
+    const lost = first.fields.filter(({ at, shape }) => !keptLines[at]!.startsWith(FIELDS[shape]!.name));
+    const lostShown = lost.length ? `${lost.length} of ${first.fields.length}, first ${JSON.stringify(printedLines[lost[0]!.at])} stored as ${JSON.stringify(keptLines[lost[0]!.at])}` : '';
+    expect(lost.length, `field lines whose stored line doesn't start with its field name: ${lostShown}`).toBe(0);
     for (const twin of TWINS) expect(lineCount(kept, twin), `the twin ${JSON.stringify(twin)} is stored unchanged`).toBe(lineCount(printed, twin));
 
     // The machine gate: a result off the reference Macs is a reading.
