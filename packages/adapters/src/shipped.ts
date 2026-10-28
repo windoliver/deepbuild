@@ -109,10 +109,16 @@ export const claudeParts: AdapterParts = {
   doctor: () => notChecked('claude'),
   readUsage: readClaudeUsage,
   // The PermissionRequest hook's output: allow only when the answer's decision is allow; deny or none denies, with
-  // your words as the message. An option's label and the words never allow.
-  permissionReply: (answer) => ({
-    hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: answer.decision === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', ...(answer.words ? { message: answer.words } : {}) } },
-  }),
+  // your words as the message; cancel gives no decision, so Claude Code's own dialog asks. An option's label and the
+  // words never allow. An allow for the session takes the agent's own suggestions for the session alone; none ever
+  // writes a lasting rule into the agent's settings (#23).
+  permissionReply: (answer, request) => {
+    if (answer.decision === 'cancel') return { hookSpecificOutput: { hookEventName: 'PermissionRequest' } };
+    if (answer.decision !== 'allow') return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', ...(answer.words ? { message: answer.words } : {}) } } };
+    const suggested = isObject(request.payload) && Array.isArray(request.payload.permission_suggestions) ? request.payload.permission_suggestions.filter(isObject) : [];
+    const forSession = answer.for === 'session' ? suggested.filter((s) => s.type === 'addRules').map((s) => ({ ...s, destination: 'session' })) : [];
+    return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow', ...(forSession.length ? { updatedPermissions: forSession } : {}) } } };
+  },
 };
 
 export const codexParts: AdapterParts = {

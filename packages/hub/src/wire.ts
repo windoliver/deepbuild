@@ -89,13 +89,22 @@ export interface HookMeta {
   watchOnly?: boolean;
   /** What the core joins to the transcript or reads loop facts from: the payload's prompt ID, prompt, error and subagent, and a stop's last message. */
   fields?: { prompt_id?: string; prompt?: string; error?: string; agent_id?: string; source?: string; last_assistant_message?: string };
+  /**
+   * A tool call's own fields, for a PreToolUse or a PermissionRequest (#23): the session's permission mode, the tool,
+   * its input, and the options the agent offers in its own permission dialog.
+   */
+  call?: { mode: string; tool: string; input: Record<string, unknown>; suggestions: unknown[] };
   /** A loop fact the call carries (#29): a wake-up or cron job scheduled, one cancelled, or a background subagent started. */
   loop?: { scheduled: number | null } | { cron: string; due: number | null; recurring: boolean } | { cancelled: string } | { background: true };
 }
 /** The effect classes no "proceed" covers (#321). */
 export const AUTHORITY = new Set(['push', 'merge', 'dispatch', 'send', 'delete']);
 /** What the event loop hands the core of a PreToolUse it holds for the gate: the call as a person reads it, its effect classes and MCP tool. */
-export interface Gated { label: string; classes: string[]; mcp?: { server: string; tool: string } }
+/**
+ * A PreToolUse held for the core: its label, the effect classes that need your authority, an MCP tool, and the
+ * classes a standing rule decides (#23) with the shell command they're read from.
+ */
+export interface Gated { label: string; classes: string[]; mcp?: { server: string; tool: string }; decided?: string[]; command?: string }
 /** A parser's answer for one line. */
 export type Parsed =
   | { kind: 'control'; value: Record<string, unknown> }

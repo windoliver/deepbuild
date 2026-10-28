@@ -22,7 +22,11 @@ export type Plant =
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
   | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
   // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
-  | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice';
+  | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice'
+  // #23's: the agent's "always allow" picked, a cancelled ask's prompt denied, typed words saved as a decision, a
+  // decision over the permission mode or before the guards, a rule's answer without its reason, and no rule copied.
+  | 'permission-always-allow' | 'cancel-as-deny' | 'typed-saves-decision' | 'decision-over-mode' | 'decision-before-guard'
+  | 'rule-without-reason' | 'copies-no-standing-rules';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -42,6 +46,8 @@ const PLANTS: readonly string[] = [
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
   'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
+  'permission-always-allow', 'cancel-as-deny', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
+  'rule-without-reason', 'copies-no-standing-rules',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

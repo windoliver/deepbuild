@@ -855,5 +855,77 @@
         "decision": "none"
       }
     }
+  },
+  {
+    "source": "effect.dependency",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Add the dependency left-pad (npm install left-pad)? No plan names it.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Add it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't add it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "b0f3a9c1d2e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f60718293a4b5c6d7e8",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "effect.cloud_resource",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Create a cloud resource in AWS account 111122223333 (aws kms create-key --profile shop-prod)? No plan names it.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Create it",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Don't create it",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "c1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f80",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
   }
 ]

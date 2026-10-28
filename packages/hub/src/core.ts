@@ -17,7 +17,7 @@ import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } fr
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
-import { resolverDecisions } from '@deepbuild/resolver-decisions';
+import { evidence, judge, resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openLeases } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -28,11 +28,12 @@ import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, rel
 import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
-import { addGuards } from './guards.js';
+import { addGuards, writeStanding } from './guards.js';
 import { Holds } from './holds.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
-import { deepHook, rootOf, type Root } from './paths.js';
+import { deepHook, repoOf, rootOf, type Root } from './paths.js';
+import { aboutCall, aboutPermission, standingRules } from './standing.js';
 import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
@@ -279,6 +280,10 @@ export class Core {
   private readonly routes = new Map<string, Routes>();
   /** Answers handed to a waiter that no turn has shown yet, by ask ID. */
   private readonly handed = new Map<string, { session: string; at: number; timer: NodeJS.Timeout }>();
+  /** The repo each session works in, from its hooks' folder: what its events carry as their project (#23). */
+  private readonly projects = new Map<string, string>();
+  /** The permission prompts held for their asks, by ask handle: their answer goes back through the prompt (#23). */
+  private readonly prompts = new Set<string>();
 
   /**
    * `asking` hears the sessions with an ask still to deliver whenever that set changes, so the event loop holds a stop
@@ -370,6 +375,8 @@ export class Core {
     // resolver-decisions ships on by default (#23): your saved decisions, and the budgets you approved, answer the
     // asks they cover, each answer gated by the core.
     asks.registerResolver('resolver-decisions', resolverDecisions({ record: this.record, ledger }));
+    await this.syncStanding().catch(() => undefined);
+    this.timers.push(setInterval(() => void this.judgeRules().catch(() => undefined), HOUR));
     // The runner reaps or reports what a crash cut, and ticks itself.
     this.runner = await openRunner({
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
@@ -425,15 +432,27 @@ export class Core {
   }
 
   /** What setup wrote to <root>/config.json for the runner: the login shell's PATH and the plan's reserve. */
-  private config(): { loginPath: string; reservePct: number } {
+  private config(): { loginPath: string; reservePct: number; rules: { margin: number; windowMs: number } } {
     let c: Obj = {};
     try { c = JSON.parse(readFileSync(join(this.root.dir, 'config.json'), 'utf8')) as Obj; } catch { /* none yet: no binary resolves, so every job is refused saying so */ }
     const runner = isObj(c.runner) ? c.runner : {};
     const plan = isObj(c.plan) ? c.plan : {};
+    // Standing rules are judged at this margin over this window (#23): the design's 1.5 and 30 days unless you set them.
+    const rules = isObj(c.rules) ? c.rules : {};
     return {
       loginPath: typeof runner.login_path === 'string' ? runner.login_path : '',
       reservePct: typeof plan.reserve_pct === 'number' ? plan.reserve_pct : 10,
+      rules: { margin: typeof rules.margin === 'number' ? rules.margin : 1.5, windowMs: (typeof rules.window_days === 'number' ? rules.window_days : 30) * DAY },
     };
+  }
+
+  /** One round of judging your standing rules by what later broke, at the margin and over the window in your settings (#23). */
+  private async judgeRules(): Promise<void> {
+    const { margin, windowMs } = this.config().rules;
+    for (const e of await evidence({ record: this.record, now: this.now(), window: windowMs })) {
+      await this.asks.judged(this.connection('core'), e.decision, { rule: e.rule, yours: e.yours, margin, judgment: judge(e.rule, e.yours, margin) });
+    }
+    await this.syncStanding();
   }
 
   private writeState(state: 'running' | 'stopped'): void {
@@ -444,7 +463,8 @@ export class Core {
   // ---- Appends.
 
   private connection(writer: string, extra: Partial<Connection> = {}): Connection {
-    return { writer, ...YOU, ...extra };
+    const project = extra.project ?? (extra.session ? this.projects.get(extra.session) : undefined);
+    return { writer, ...YOU, ...(project ? { project } : {}), ...extra };
   }
   /** Appends one event; a storage failure turns every gate watch-only, BLOCKED, until a write succeeds again. */
   private async append(connection: Connection, input: EventInput, backfill = false): Promise<void> {
@@ -600,6 +620,9 @@ export class Core {
         count.worked = false;
       }
       if (draft.kind === 'tool.after') count.worked = true;
+      // A session's events carry the repo it works in, so your answer there is saved for the repo (#23).
+      const project = repoOf(meta.cwd);
+      if (project && meta.session) this.projects.set(meta.session, project);
       const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified });
       return this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
@@ -1002,7 +1025,7 @@ export class Core {
     const mine = scope ?? `COALESCE((SELECT thread_id FROM sessions WHERE id = a.session_id), a.session_id) = ${thread}`;
     const rows = (await this.record.raw(`SELECT a.id, a.session_id AS session, a.question, a.options, a.answer FROM asks a WHERE a.status = 'answered' AND ${mine}
       AND NOT EXISTS (SELECT 1 FROM deliveries d WHERE d.delivery = a.id AND d.outcome = 'delivered') ORDER BY a.answered`)) as Answer[];
-    return rows.filter((row) => !this.handed.has(row.id));
+    return rows.filter((row) => !this.handed.has(row.id) && !this.prompts.has(`ask:${row.id}`));
   }
   /** The answers as the agent reads them, each naming its ask. */
   private answerText(rows: Answer[]): string {
@@ -1026,6 +1049,8 @@ export class Core {
 
   /** An answer the asks core recorded: a stop of its session held now takes it, else its waiter if the session is idle. */
   private answered(delivery: Delivery): void {
+    // A permission prompt's answer goes back through the prompt it holds (#23).
+    if (this.prompts.has(delivery.ask)) return;
     if (this.routes.get(delivery.session)?.holding) for (const wake of this.waiting.get(delivery.session) ?? []) wake();
     else this.offer(delivery.session);
   }
@@ -1045,7 +1070,8 @@ export class Core {
     });
   }
   private async askingNow(): Promise<void> {
-    const rows = (await this.record.raw(`SELECT DISTINCT session_id FROM asks WHERE session_id IS NOT NULL AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')`)) as { session_id: string }[];
+    const rows = ((await this.record.raw(`SELECT id, session_id FROM asks WHERE session_id IS NOT NULL AND status IN ('open', 'later', 'answered') AND id NOT IN (SELECT delivery FROM deliveries WHERE outcome = 'delivered')`)) as { id: string; session_id: string }[])
+      .filter((r) => !this.prompts.has(`ask:${r.id}`));
     // A session with a send-back planted for its next stop has that stop held too (#25).
     const planted = [...this.routes].filter(([, r]) => r.sendBacks.length).map(([id]) => id);
     const sessions = [...new Set([...rows.map((r) => r.session_id), ...planted])].sort();
@@ -1144,11 +1170,64 @@ export class Core {
    * and is sent back with it while the turn is under Claude Code's cap on continuations.
    */
   /** A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321). */
-  async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string }> {
+  async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
     await this.ready;
-    if (FOREIGN.has(meta.agent) || !meta.session) return {};
+    // A cloud resource nobody can be asked about from here stays denied, as with the hub down.
+    if (FOREIGN.has(meta.agent) || !meta.session) return call.decided?.includes('cloud-resource') ? { deny: 'DeepBuild blocked this: creating a cloud resource the plan doesn\'t name needs your standing rule or your answer, and this session can\'t be asked.' } : {};
     const held = await this.holds.gate(meta, call);
-    return held ? { held } : {};
+    if (held) return { held };
+    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
+    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
+    return about ? this.holds.decide(meta, about) : {};
+  }
+
+  /**
+   * A permission prompt held for its ask (#23): answered at once by a saved decision that covers it, else by your
+   * answer before `until`; with none by then the ask is cancelled, and the prompt goes to the agent's own dialog.
+   * Its answer goes back through the prompt, never as a message.
+   */
+  async permission(meta: HookMeta, until: number): Promise<{ decision: 'allow' | 'deny' | 'cancel'; because?: string }> {
+    await this.ready;
+    if (FOREIGN.has(meta.agent) || !meta.session || !meta.call) return { decision: 'cancel' };
+    const asked = await this.holds.asked(meta, aboutPermission(meta.call.tool, meta.call.input));
+    this.prompts.add(asked.ask);
+    if (asked.decision) return { decision: asked.option === 'approve' ? 'allow' : 'deny', because: asked.decision };
+    const id = sql(asked.ask.slice(4));
+    while (!this.stopping) {
+      const [row] = (await this.record.raw(`SELECT status, decision FROM asks WHERE id = '${id}'`)) as { status: string; decision: string | null }[];
+      if (row?.status === 'decided') {
+        const applied = await this.holds.applied(asked.ask);
+        return { decision: applied.option === 'approve' ? 'allow' : 'deny', ...(applied.decision ? { because: applied.decision } : {}) };
+      }
+      if (row && row.status !== 'open' && row.status !== 'later') return { decision: row.decision === 'allow' ? 'allow' : row.status === 'cancelled' ? 'cancel' : 'deny' };
+      // The planted wrong program saves words you type in the session as the decision for the ask they approve.
+      if (this.options.plant === 'typed-saves-decision') await this.typedSaves(meta.session, asked.ask);
+      if (Date.now() >= until) break;
+      await new Promise((done) => setTimeout(done, Math.min(250, Math.max(0, until - Date.now()))));
+    }
+    const ts = this.now();
+    await this.append(this.connection('core', { session: meta.session, agent: meta.agent }), { v: 1, id: ulid(ts), kind: 'ask.cancelled', subject: asked.ask, ts, data: { answer: 'decline', plan_hash: null, decision: 'none' } });
+    return { decision: 'cancel' };
+  }
+  /** The typed-saves-decision plant: words typed after the ask was raised saved as your yes to it, with no click. */
+  private async typedSaves(session: string, ask: string): Promise<void> {
+    const [typed] = (await this.record.raw(`SELECT 1 FROM events WHERE session_id = '${sql(session)}' AND kind = 'user.ask' AND log_pos > (SELECT log_pos FROM events WHERE id = '${sql(ask.slice(4))}') LIMIT 1`)) as unknown[];
+    const [saved] = (await this.record.raw(`SELECT 1 FROM events WHERE kind = 'decision.created' AND subject = '${sql(ask)}' LIMIT 1`)) as unknown[];
+    const [row] = (await this.record.raw(`SELECT key FROM asks WHERE id = '${sql(ask.slice(4))}'`)) as { key: string }[];
+    if (!typed || saved || !row) return;
+    const project = this.projects.get(session);
+    await this.appendCore('decision.created', { key: row.key, scope: project ? `repo:${project}` : `session:${letters(session)}`, answer: 'approve', ask }, { subject: ask });
+  }
+
+  /** Copies your standing rules for cloud resources into rules.json, so deep-hook honours them with the hub down (#23). */
+  private async syncStanding(): Promise<void> {
+    if (this.options.plant === 'copies-no-standing-rules') return;
+    const rows = (await this.record.raw(`SELECT d.id AS id, d.answer AS answer, d.state AS state, e.data AS data FROM decisions d JOIN events e ON e.id = d.ask_id AND e.kind = 'ask.created'`)) as { id: string; answer: string; state: string; data: string }[];
+    const decided = rows.map((r) => {
+      const data = JSON.parse(r.data) as Obj;
+      return { id: r.id, answer: (JSON.parse(r.answer) as unknown) as string, state: r.state, subject: isObj(data.subject) ? data.subject : null };
+    });
+    writeStanding(this.root.dir, standingRules(decided));
   }
   async hookReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
@@ -1737,6 +1816,7 @@ export class Core {
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
     const answer = chosen?.id ?? String(input.words);
+    await this.syncStanding().catch(() => undefined);
     return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
@@ -1760,6 +1840,7 @@ export class Core {
     if (row.state === 'revoked') return { overruled: id };
     await this.trusted(params, context, `overrule the saved decision ${row.answer}`, id);
     await this.appendCore('decision.overruled', { decision: id }, { subject: id });
+    await this.syncStanding().catch(() => undefined);
     return { overruled: id };
   }
   /** Pairs a device's key, once the OS confirms you, so the control token alone can't pair one. */
