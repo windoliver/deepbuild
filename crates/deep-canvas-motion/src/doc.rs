@@ -105,6 +105,9 @@ pub struct Transport {
     pub start: i64,
     pub span: Option<i64>,
     pub wrap: bool,
+    /// Under reduced motion the timeline holds at its start: `reduced_motion: hold`, in any
+    /// profile but a film, which still plays its timeline (Transport).
+    pub holds: bool,
 }
 
 /// Everything motion reads, with each map in ID order.
@@ -305,24 +308,13 @@ fn extend_of(value: Option<&Value>, path: &str) -> Result<Extend, Refused> {
 /// The frame rate the time literals resolve against: `transport.frame_rate` as `p/q` text or a
 /// `[p, q]` pair, 60/1 when absent.
 fn frame_rate_of(transport: Option<&Map<String, Value>>) -> Result<(u32, u32), Refused> {
-    let Some(rate) = transport.and_then(|t| t.get("frame_rate")) else {
+    let Some(t) = transport.filter(|t| t.contains_key("frame_rate")) else {
         return Ok((60, 1));
     };
-    let pair = match rate {
-        Value::Array(pq) if pq.len() == 2 => (pq[0].as_u64(), pq[1].as_u64()),
-        Value::String(s) => {
-            let mut parts = s.splitn(2, '/');
-            let p = parts.next().and_then(|p| p.trim().parse().ok());
-            let q = parts.next().map_or(Some(1), |q| q.trim().parse().ok());
-            (p, q)
-        }
-        _ => (None, None),
-    };
-    match pair {
-        (Some(p), Some(q)) if p > 0 && q > 0 => Ok((
-            u32::try_from(p).or_else(|_| refuse("bad_rate", "transport/frame_rate"))?,
-            u32::try_from(q).or_else(|_| refuse("bad_rate", "transport/frame_rate"))?,
-        )),
+    // The core's reading of the field (`[p, q]` or `"p/q"`); the whole-flick rule is the
+    // core's check, so here only a non-rate is refused.
+    match deep_canvas::document::frame_rate_of(&Value::Object(t.clone())) {
+        Some((p, q)) if p > 0 && q > 0 => Ok((p, q)),
         _ => refuse("bad_rate", "transport/frame_rate"),
     }
 }
@@ -343,11 +335,17 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             .map(|m| (m.id.clone(), (m.start, m.end)))
             .collect(),
     };
+    let holds = doc.get("profile").and_then(Value::as_str) != Some("film")
+        && transport_map
+            .and_then(|t| t.get("reduced_motion"))
+            .and_then(Value::as_str)
+            != Some("slow");
     let transport = match transport_map {
         None => Transport {
             start: 0,
             span: None,
             wrap: false,
+            holds,
         },
         Some(t) => {
             let start = match t.get("start") {
@@ -367,7 +365,12 @@ pub fn read(doc: &Map<String, Value>) -> Result<Motion, Refused> {
             if wrap && span.is_none_or(|s| s <= 0) {
                 return refuse("bad_time", "transport/span");
             }
-            Transport { start, span, wrap }
+            Transport {
+                start,
+                span,
+                wrap,
+                holds,
+            }
         }
     };
     let mut channels = Vec::new();

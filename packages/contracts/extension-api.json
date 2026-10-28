@@ -139,6 +139,26 @@
     }
   },
   {
+    "method": "deep.readNow",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:3fbb3cce956746cd044a47e7f8dbd5c1d3c5f1f65911b2911e2e688e90492fc8",
+    "params": {
+      "type": "object",
+      "properties": {
+        "view": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        }
+      },
+      "required": [
+        "view"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerAdapter",
     "variants": null,
     "since": "R1",
@@ -359,6 +379,174 @@
       },
       "required": [
         "notice"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.store",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:1982b1979f80ec15fa337a0efc5a66ae0ab5f636ac7a5a7479e6a4abe151f7b4",
+    "params": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "kind",
+        "schema"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.schedule",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:c6c3eac01e6be5e714c8a1229d7c058e4f6679bc39bfde1f3e6b3e3aeef99245",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "cadence": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "cadence"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.secret",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:9d5f56c1393c2dc10d5439a7b123f1c677a1dce2c5b57c3efc307d4689a1ce43",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.send",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:36e4ba36532096240f95b0f05c921cf33d8dde11b955effc2e48195f3e225d76",
+    "params": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.provide",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:719a6a9525f4aaa667255c3f19a97aa71016639751d1cc9c4d8d732a5e897c40",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "reading",
+            "action",
+            "notice",
+            "view",
+            "check"
+          ]
+        },
+        "schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "schema"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "method": "deep.use",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:9ea66487ceafb0da1ba53b24cc8b234c31cb0e05bf1baca30e6a665c9d8d3d1e",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*@[1-9][0-9]*$"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$"
+            },
+            "optional": {
+              "type": "boolean"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name"
       ],
       "additionalProperties": false
     }

@@ -68,6 +68,11 @@ export function fileStorage(): Backend {
   };
 }
 
+/** A read-only connection to a record file that exists: it reads the WAL a writer keeps, and writes nothing. */
+export function openReadOnly(path: string): Db {
+  return new Database(path, { readonly: true, fileMustExist: true });
+}
+
 /**
  * The test VFS. The live database is in memory, through the same settings and commit path as a file; a
  * FULL commit copies it to the durable image, and a power cut throws the live one away, so a NORMAL

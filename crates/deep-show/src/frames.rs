@@ -209,6 +209,10 @@ impl<'a> Hub<'a> {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
         }
         let rev = self.current(&e.doc).map(|r| r.rev);
+        let t = match self.resolve_time(&e.doc, &e.t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code, "issues": []}),
+        };
         let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
             return json!({"outcome": "refused", "code": "no_revision", "issues": []});
         };
@@ -221,10 +225,10 @@ impl<'a> Hub<'a> {
         let targets = session.targets(&self.sched);
         let scratch;
         let evaluated: &DocSession = if e.clean {
-            scratch = session.clean(&mut self.sched, e.t, &view, perturb.flatten());
+            scratch = session.clean(&mut self.sched, t, &view, perturb.flatten());
             &scratch
         } else {
-            session.frame(&mut self.sched, e.t, &view);
+            session.frame(&mut self.sched, t, &view);
             session
         };
         let nodes: Vec<Value> = evaluated
@@ -239,7 +243,7 @@ impl<'a> Hub<'a> {
         let mut reply = json!({
             "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
             "rev": rev,
-            "t": e.t,
+            "t": t,
             "epoch": evaluated.epoch(),
             "nodes": nodes,
             "targets": targets.iter().map(|t| json!({"target": t.name(), "term": t.term()})).collect::<Vec<_>>(),
@@ -265,24 +269,9 @@ impl<'a> Hub<'a> {
             .map(|h| json!({"of": h.of, "bytes": h.bytes}))
             .collect::<Vec<_>>());
         if let Some(drawing) = drawing {
-            match self
-                .renderer
-                .prepare_drawing(&drawing, &self.scenario.evidence)
-            {
-                Ok(drawn) => {
-                    let size = e.size.unwrap_or_else(|| {
-                        let [w, h] = drawn.frame.size;
-                        [
-                            w.round().clamp(1.0, 8192.0) as u16,
-                            h.round().clamp(1.0, 8192.0) as u16,
-                        ]
-                    });
-                    let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                    let rgba = self.renderer.raster(&drawn, size, Some(ground));
-                    let png = snapshot::png(rgba, size);
-                    if let Ok(sha) = evidence::put(&self.scenario.evidence, &png) {
-                        reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
-                    }
+            match self.canonical_png(&drawing, e.size) {
+                Ok((sha, drawn, size)) => {
+                    reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
                 }
                 Err(Unfit { code, path }) => {
                     reply["issues"]
@@ -293,6 +282,35 @@ impl<'a> Hub<'a> {
             }
         }
         reply
+    }
+
+    /// A frame's drawing as its canonical render: prepared, rastered at `size` (the drawing's
+    /// own frame when none is given) over the look's ground, and stored as a PNG in the evidence
+    /// store. Its SHA-256, the drawn frame and the size; or why it can't be drawn, an evidence
+    /// store that takes no write counted as such (nothing missing passes).
+    pub(crate) fn canonical_png(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+    ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = size.unwrap_or_else(|| {
+            let [w, h] = drawn.frame.size;
+            [
+                w.round().clamp(1.0, 8192.0) as u16,
+                h.round().clamp(1.0, 8192.0) as u16,
+            ]
+        });
+        let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
+        let rgba = self.renderer.raster(&drawn, size, Some(ground));
+        let png = snapshot::png(rgba, size);
+        let sha = evidence::put(&self.scenario.evidence, &png).map_err(|_| Unfit {
+            code: "evidence_unwritable",
+            path: "snapshots".into(),
+        })?;
+        Ok((sha, drawn, size))
     }
 
     /// `count` frames of a session, `step` apart from `from`: how many nodes ran in each, the

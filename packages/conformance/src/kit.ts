@@ -1,8 +1,8 @@
 // The adapter kit, adapter@1 (#313): its cases, the broken fakes that prove them (one per adapter rule and one
 // per item a case declares), its planted entries (one per code of every code family) and its clean fill.
-import { ContractError } from '@deepbuild/contracts';
+import { canonicalize, ContractError, sha256Hex } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
-import type { AdapterEvent, HookRequestLine } from '@deepbuild/adapters';
+import type { AdapterEvent, HookRequestLine, PermissionAnswer } from '@deepbuild/adapters';
 import { AGENT, fakeFill, SURFACE } from './fake-agent.js';
 import type { Faults } from './fake-agent.js';
 import { codeFamilies } from './families.js';
@@ -89,6 +89,16 @@ const RULE_MESSAGES: Record<keyof typeof R, string> = {
 
 const kase = (id: string, declares: Partial<Case['declares']>, run: (h: Harness) => void): Case => ({ id, revision: REVISION, declares: { flags: [], operations: [], kinds: [], ...declares }, run });
 
+const PUSH = 'git push origin main';
+/** The PermissionRequest the permission cases answer: a Bash call of `git push origin main`, with a recorded request's fields. */
+const pushRequest = line({ hook_event_name: 'PermissionRequest', session_id: SESSION, prompt_id: 't5', tool_name: 'Bash', tool_input: { command: PUSH } }, 9);
+const answered = (fields: Partial<PermissionAnswer>): PermissionAnswer => ({ ask: 'ask_01', session: SESSION, option: null, label: null, decision: 'none', words: null, provisional: false, undoes: null, ...fields });
+/** Allow comes from decision alone: the reply to `answer` differs from the reply to the same answer with decision allow. */
+function notAllowed(h: Harness, answer: PermissionAnswer, what: string): void {
+  const digest = (a: PermissionAnswer): string => sha256Hex(canonicalize(h.reply(a, pushRequest)));
+  if (digest(answer) === digest({ ...answer, decision: 'allow' })) h.fail(`${RULE_MESSAGES.decision}: \`${PUSH}\` answered ${what} got the reply for allow`, [R.decision.code]);
+}
+
 const cases: Case[] = [
   kase('hooks/who-is-calling', { kinds: ['permission.request', 'agent.stop'] }, (h) => {
     const permission = only(h, hook(h, 1, 'PermissionRequest', { prompt_id: 't1', tool_name: 'Bash', tool_input: { command: 'ls' }, agent_id: 'sub_01' }), 'permission.request');
@@ -104,8 +114,26 @@ const cases: Case[] = [
     only(h, hook(h, 4, 'Stop', { prompt_id: 't2' }), 'agent.stop');
     const late = hook(h, 5, 'PostToolUse', { prompt_id: 't2', tool_name: 'Read', tool_input: { file_path: 'a.txt' }, tool_response: 'ok', tool_use_id: 'call_late' });
     only(h, late, 'tool.after');
-    if (late.some((event) => event.kind === 'user.ask' || event.kind === 'session.start' || event.kind === 'agent.stop' || event.data.turn !== 't2')) h.fail(RULE_MESSAGES.late, [R.late.code]);
+    // An adapter that names no turn leaves the event where it arrived; one that names a turn names the stopped one.
+    if (late.some((event) => event.kind === 'user.ask' || event.kind === 'session.start' || event.kind === 'agent.stop' || (event.data.turn !== undefined && event.data.turn !== 't2'))) {
+      h.fail(`${RULE_MESSAGES.late}: a PostToolUse after turn t2 stopped reopened it`, [R.late.code]);
+    }
   }),
+  kase('hooks/one-id-per-event', { kinds: ['tool.before', 'tool.after'] }, (h) => {
+    // An event's ID is the one the adapter names, else its hook line's, which the hub stamps on the event.
+    const ids: string[] = [];
+    for (const [n, hook_event_name, kind] of [[7, 'PreToolUse', 'tool.before'], [8, 'PostToolUse', 'tool.after']] as const) {
+      const request = line({ hook_event_name, session_id: SESSION, prompt_id: 't4', tool_name: 'Read', tool_input: { file_path: 'b.txt' }, tool_use_id: 'call_one', ...(n === 8 ? { tool_response: 'ok' } : {}) }, n);
+      const events = h.hook(request).events;
+      only(h, events, kind);
+      if (events.some((event) => event.data.id === undefined)) ids.push(request.id);
+      ids.push(...events.flatMap((event) => (event.data.id === undefined ? [] : [String(event.data.id)])));
+    }
+    const twice = ids.find((id, i) => ids.indexOf(id) !== i);
+    if (twice) h.fail(`${RULE_MESSAGES.order}: ${twice} names two events of call call_one`, [R.order.code]);
+  }),
+  kase('permission/not-from-label', {}, (h) => notAllowed(h, answered({ option: 'allow', label: 'Allow', decision: 'deny' }), 'with the option labelled "Allow" that declares deny')),
+  kase('permission/not-from-words', {}, (h) => notAllowed(h, answered({ words: 'yes but not on main' }), 'with the words "yes but not on main" and decision none')),
   kase('hooks/unparsed-stop-reads-unknown', { kinds: ['agent.stop'] }, (h) => {
     const stop = only(h, hook(h, 6, 'Stop', { prompt_id: 't3', error: 'garbled: not a cause the facts list' }), 'agent.stop');
     if (stop.data.cause !== 'unknown') h.fail(RULE_MESSAGES.unparsed, [R.unparsed.code]);

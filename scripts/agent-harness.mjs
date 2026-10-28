@@ -59,7 +59,7 @@ class Processes {
   }
 }
 
-const valued = { '--scenario': 'scenario', '--agent': 'agent', '--claude': 'claude', '--codex': 'codex', '--cost-cap-usd': 'costCapUsd', '--token-cap': 'tokenCap', '--timeout-ms': 'timeoutMs', '--out': 'out', '--base': 'base', '--budgets': 'budgets', '--workdir': 'workdir', '--hooks': 'hooks' };
+const valued = { '--route': 'route', '--mcp-config': 'mcpConfig', '--go': 'go', '--rounds': 'rounds', '--scenario': 'scenario', '--agent': 'agent', '--claude': 'claude', '--codex': 'codex', '--cost-cap-usd': 'costCapUsd', '--token-cap': 'tokenCap', '--timeout-ms': 'timeoutMs', '--out': 'out', '--base': 'base', '--budgets': 'budgets', '--workdir': 'workdir', '--hooks': 'hooks', '--script': 'script' };
 const repeated = { '--changed': 'changed', '--pass-env': 'passEnv' };
 function parseArgs(argv) {
   const [command, ...rest] = argv;
@@ -71,8 +71,10 @@ function parseArgs(argv) {
     else options[valued[flag]] = ['costCapUsd', 'tokenCap', 'timeoutMs'].includes(valued[flag]) ? Number(value) : value;
   }
   if (!['run', 'all', 'budgets'].includes(command)) throw Error('expected run, all or budgets');
-  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line'].includes(options.scenario)) throw Error('run needs a known --scenario');
+  if (command === 'run' && !['held-stop', 'idle-wake', 'read-only-job', 'add-readme-line', 'settings-tamper', 'deep-answer'].includes(options.scenario)) throw Error('run needs a known --scenario');
+  if (options.scenario === 'deep-answer' && (options.agent !== 'claude' || !options.workdir || !options.mcpConfig || !['stop-hold', 'idle-wake', 'next-prompt', 'resume'].includes(options.route))) throw Error('deep-answer runs claude and needs --workdir, --mcp-config and a --route of stop-hold, idle-wake, next-prompt or resume');
   if (options.scenario === 'add-readme-line' && (options.agent !== 'claude' || !options.workdir || !options.hooks)) throw Error('add-readme-line runs claude and needs --workdir and --hooks');
+  if (options.scenario === 'settings-tamper' && (options.agent !== 'claude' || !options.workdir || !options.script)) throw Error('settings-tamper runs claude and needs --workdir and --script');
   if (!['claude', 'codex'].includes(options.agent)) throw Error('--agent is claude or codex');
   return options;
 }
@@ -305,6 +307,223 @@ async function run(options, scenario, agent = options.agent) {
   });
 }
 
+// settings-tamper (#18): two interactive sessions in one folder, A and B, each loading your user settings, where
+// DeepBuild's entries are. A runs the --script with Bash, then `ls -a`; once A's turn stops, B runs `ls -a`. The
+// harness's own hooks record each session's events from its --settings file, never from your settings file.
+async function tamperRun(options) {
+  const token = `run_${randomBytes(6).toString('hex')}`;
+  const started = performance.now();
+  const facts = JSON.parse(readFileSync(factsFile.claude, 'utf8'));
+  const line = { run: token, scenario: 'settings-tamper', agent: 'claude', verdict: 'BLOCKED', stop: 'blocked', reason: '', elapsedMs: 0 };
+  const finish = (fields) => { Object.assign(line, fields, { elapsedMs: Math.round(performance.now() - started) }); console.log(JSON.stringify(line)); return line; };
+  const bin = binary('claude', options.claude);
+  const dir = join(options.out, token);
+  const work = resolve(options.workdir);
+  mkdirSync(dir, { recursive: true });
+  if (!existsSync(work)) return finish({ reason: `BLOCKED: the workdir ${work} does not exist` });
+  const env = { ...Object.fromEntries([...allowed, ...options.passEnv].filter((name) => name in process.env).map((name) => [name, process.env[name]])), DEEP_RUN_TOKEN: token };
+  const blocked = blockedBy('claude', bin, facts, env);
+  if (blocked) return finish({ reason: `BLOCKED: ${blocked}` });
+  const tag = randomBytes(3).toString('hex');
+  const prompts = {
+    A: `Use the Bash tool to run exactly: node ${quote(resolve(options.script))} ${tag}\nThen use the Bash tool to run exactly: ls -a\nThen reply with only the word DONE.`,
+    B: 'Use the Bash tool to run exactly: ls -a\nThen reply with only the word DONE.',
+  };
+  const sessions = ['A', 'B'].map((name) => {
+    const own = join(dir, name);
+    mkdirSync(own);
+    const settings = join(own, 'settings.json');
+    const command = [process.execPath, hook, 'event', own].map(quote).join(' ');
+    writeFileSync(settings, JSON.stringify({ hooks: Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'StopFailure'].map((e) => [e, [{ hooks: [{ type: 'command', command }] }]])) }, null, 2));
+    // Your user settings load beside the harness's, so DeepBuild's entries run; only Bash runs, with no prompt to answer.
+    const args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : all[at - 1] === '--setting-sources' ? 'user' : arg));
+    args.push('--tools', 'Bash', '--allowedTools', 'Bash', '--append-system-prompt', SCRIPTED);
+    const [shell, shellArgs] = inTerminal([bin, ...args]);
+    const child = spawn(shell, shellArgs, { cwd: work, env: { ...env, TERM: 'xterm-256color' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const session = { name, own, child, processes: new Processes(child.pid), output: '', exited: false, trusted: false, typedAt: 0, exiting: 0 };
+    child.stdout.setEncoding('utf8').on('data', (chunk) => { session.output += chunk; });
+    child.stderr.setEncoding('utf8').on('data', (chunk) => { session.output += chunk; });
+    child.on('error', () => {}).on('exit', () => { session.exited = true; });
+    child.stdin.on('error', () => {});
+    return session;
+  });
+  const events = (s) => lines(join(s.own, 'events.jsonl'));
+  const stopped = (s) => events(s).some((e) => ['Stop', 'StopFailure'].includes(e.hook_event_name));
+  const type = async (s, text) => { s.child.stdin.write(text); await sleep(300); s.child.stdin.write('\r'); };
+  const deadline = Date.now() + options.timeoutMs;
+  let stop, verdict, reason;
+  while (!stop) {
+    await sleep(100);
+    for (const s of sessions) {
+      await s.processes.poll();
+      const screen = plain(s.output).replace(/\s+/g, '');
+      if (!s.trusted && /trustthisfolder/.test(screen) && /Entertoconfirm/.test(screen)) {
+        s.trusted = true;
+        await sleep(300);
+        if (/❯No,exit/.test(screen.slice(screen.lastIndexOf('trustthisfolder') - 200))) { s.child.stdin.write('\x1b[B'); await sleep(200); }
+        s.child.stdin.write('\r');
+      }
+    }
+    const [a, b] = sessions;
+    const began = (s) => events(s).find((e) => e.hook_event_name === 'SessionStart');
+    // B is asked only once A's turn stopped, so B's next call comes after A's script removed the entry.
+    if (began(a) && began(b) && !a.typedAt && Date.now() - began(a).at > 1500) { a.typedAt = Date.now(); await type(a, prompts.A); }
+    if (stopped(a) && !b.typedAt) { b.typedAt = Date.now(); await type(b, prompts.B); }
+    for (const s of sessions) if (stopped(s) && !s.exiting && (s === b || b.typedAt)) { s.exiting = Date.now(); await type(s, '/exit'); }
+    if (sessions.every((s) => s.exiting && (s.exited || Date.now() - s.exiting > 10_000))) {
+      const failed = sessions.filter((s) => events(s).filter((e) => ['Stop', 'StopFailure'].includes(e.hook_event_name)).at(-1)?.hook_event_name !== 'Stop');
+      [stop, verdict, reason] = failed.length ? ['done', 'FAIL', `${failed.map((s) => s.name).join(' and ')} ended with StopFailure, not Stop`] : ['done', 'PASS', ''];
+    } else if (interrupted) [stop, verdict, reason] = ['interrupted', 'INCONCLUSIVE', 'the harness was stopped by a signal'];
+    else if (sessions.some((s) => s.exited && !s.exiting)) [stop, verdict, reason] = ['done', 'FAIL', 'a session exited before the scenario finished'];
+    else if (Date.now() > deadline) [stop, verdict, reason] = ['timeout', 'FAIL', `the scenario did not finish within ${options.timeoutMs} ms`];
+  }
+  await sleep(1000); // the transcript lags the live turn
+  const kept = [];
+  for (const s of sessions) {
+    const { living } = await s.processes.stop();
+    for (const stream of [s.child.stdin, s.child.stdout, s.child.stderr]) stream.destroy();
+    if (living.length) [verdict, reason] = ['FAIL', `processes ${living.join(', ')} survived SIGKILL`];
+    writeFileSync(join(s.own, 'screen.log'), s.output);
+    const start = events(s).find((e) => e.hook_event_name === 'SessionStart');
+    const transcript = join(s.own, 'transcript.jsonl');
+    if (start?.transcript_path && existsSync(start.transcript_path)) copyFileSync(start.transcript_path, transcript);
+    kept.push({ name: s.name, sessionId: start?.session_id ?? null, transcript: existsSync(transcript) ? transcript : null });
+  }
+  return finish({ verdict, stop, reason, workdir: realpathSync(work), evidence: { sessions: kept, tag } });
+}
+
+// The deep-answer scenario (#25): your answer back into interactive Claude Code sessions through DeepBuild's own
+// entries, as `deep setup` wrote them into your user settings, with the session's own `deep mcp` from --mcp-config.
+// Each session asks through deep_ask; the caller answers at the route's moment and writes the --go file when the
+// harness may type on. The harness's own hooks only record each session's payloads, from its --settings file.
+async function answerRun(options) {
+  const token = `run_${randomBytes(6).toString('hex')}`;
+  const started = performance.now();
+  const facts = JSON.parse(readFileSync(factsFile.claude, 'utf8'));
+  const route = options.route;
+  const line = { run: token, scenario: 'deep-answer', agent: 'claude', verdict: 'BLOCKED', stop: 'blocked', reason: '', elapsedMs: 0 };
+  const finish = (fields) => { Object.assign(line, fields, { elapsedMs: Math.round(performance.now() - started) }); console.log(JSON.stringify(line)); return line; };
+  const bin = binary('claude', options.claude);
+  const dir = join(options.out, token);
+  const work = resolve(options.workdir);
+  mkdirSync(dir, { recursive: true });
+  if (!existsSync(work)) return finish({ reason: `BLOCKED: the workdir ${work} does not exist` });
+  const env = { ...Object.fromEntries([...allowed, ...options.passEnv].filter((name) => name in process.env).map((name) => [name, process.env[name]])), DEEP_RUN_TOKEN: token };
+  const blocked = blockedBy('claude', bin, facts, env);
+  if (blocked) return finish({ reason: `BLOCKED: ${blocked}` });
+  const sessions = [];
+  const begin = (name, extra = []) => {
+    const own = join(dir, name);
+    mkdirSync(own);
+    const settings = join(own, 'settings.json');
+    const command = [process.execPath, hook, 'event', own].map(quote).join(' ');
+    writeFileSync(settings, JSON.stringify({ hooks: Object.fromEntries(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'StopFailure', 'SessionEnd'].map((e) => [e, [{ hooks: [{ type: 'command', command }] }]])) }, null, 2));
+    const args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : all[at - 1] === '--setting-sources' ? 'user' : arg));
+    args.push('--mcp-config', resolve(options.mcpConfig), '--allowedTools', 'mcp__deep__deep_ask', ...extra);
+    const [shell, shellArgs] = inTerminal([bin, ...args]);
+    const child = spawn(shell, shellArgs, { cwd: work, env: { ...env, TERM: 'xterm-256color' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const session = { name, own, child, processes: new Processes(child.pid), output: '', exited: false, trusted: false, exiting: 0, typed: [] };
+    child.stdout.setEncoding('utf8').on('data', (chunk) => { session.output += chunk; });
+    child.stderr.setEncoding('utf8').on('data', (chunk) => { session.output += chunk; });
+    child.on('error', () => {}).on('exit', () => { session.exited = true; });
+    child.stdin.on('error', () => {});
+    sessions.push(session);
+    return session;
+  };
+  const events = (s) => lines(join(s.own, 'events.jsonl'));
+  const stops = (s) => events(s).filter((e) => e.hook_event_name === 'Stop');
+  const startOf = (s) => events(s).find((e) => e.hook_event_name === 'SessionStart');
+  const turnOver = (s, at) => lines(startOf(s)?.transcript_path).some((e) => e.type === 'system' && e.subtype === 'turn_duration' && Date.parse(e.timestamp) >= at - 1000);
+  const type = async (s, text) => { s.typed.push({ at: Date.now(), text }); s.child.stdin.write(text); await sleep(300); s.child.stdin.write('\r'); };
+  const deadline = Date.now() + options.timeoutMs;
+  class Ended extends Error { constructor(stop, verdict, reason) { super(reason); Object.assign(this, { stop, verdict }); } }
+  const until = async (probe, what) => {
+    for (;;) {
+      await sleep(100);
+      for (const s of sessions) {
+        await s.processes.poll();
+        const screen = plain(s.output).replace(/\s+/g, '');
+        if (!s.trusted && /trustthisfolder/.test(screen) && /Entertoconfirm/.test(screen)) {
+          s.trusted = true;
+          await sleep(300);
+          if (/❯No,exit/.test(screen.slice(screen.lastIndexOf('trustthisfolder') - 200))) { s.child.stdin.write('\x1b[B'); await sleep(200); }
+          s.child.stdin.write('\r');
+        }
+      }
+      const value = probe();
+      if (value) return value;
+      if (interrupted) throw new Ended('interrupted', 'INCONCLUSIVE', 'the harness was stopped by a signal');
+      if (sessions.some((s) => s.exited && !s.exiting)) throw new Ended('done', 'FAIL', `${sessions.filter((s) => s.exited && !s.exiting).map((s) => s.name).join(' and ')} exited before the scenario finished`);
+      if (Date.now() > deadline) throw new Ended('timeout', 'FAIL', `the scenario did not finish within ${options.timeoutMs} ms, waiting for ${what}`);
+    }
+  };
+  const ready = (s) => until(() => startOf(s) && Date.now() - startOf(s).at > 1500, `${s.name}'s SessionStart`);
+  const exit = async (s) => { s.exiting = Date.now(); await type(s, '/exit'); await until(() => s.exited || Date.now() - s.exiting > 10_000, `${s.name} to exit`); };
+  const FOLLOW = 'Reply with only the word READY, unless an answer to a question you asked has reached you; then reply with only the label of the option chosen.';
+  // One round: the session asks with deep_ask, two fresh code words as the options' labels; its first stop follows.
+  const ask = async (s, round) => {
+    const words = [`Lantern${randomBytes(2).toString('hex')}`, `Harbor${randomBytes(2).toString('hex')}`];
+    const from = stops(s).length;
+    await type(s, `Call the mcp__deep__deep_ask tool once with kind "choice", the question "Which option for round ${round}?" exactly as written, options [{"id":"a","label":"${words[0]}"},{"id":"b","label":"${words[1]}"}] and recommended "a". Whatever it returns, call no other tool and end your turn in one sentence without either label. My answer will reach you later through DeepBuild, as hook feedback or a task notification: when it does, reply with only the label of the option I chose.`);
+    const first = await until(() => stops(s)[from], `round ${round}'s first Stop of ${s.name}`);
+    // The answered stop: a later one whose reply names an option's label, whatever brought the answer.
+    return { first, after: () => stops(s).slice(from + 1).find((x) => words.some((w) => String(x.last_assistant_message ?? '').includes(w))) };
+  };
+  let stop = 'done', verdict = 'PASS', reason = '';
+  try {
+    const a = begin('A');
+    await ready(a);
+    if (route === 'stop-hold') {
+      const r = await ask(a, 1);
+      await until(() => r.after(), 'a Stop of A carrying an option\'s label');
+    } else if (route === 'idle-wake') {
+      for (let round = 1; round <= Number(options.rounds ?? 1); round++) {
+        const r = await ask(a, round);
+        await until(() => { const st = r.after(); return st && turnOver(a, st.at); }, `round ${round}'s answered Stop of A and its turn's end`);
+      }
+    } else if (route === 'next-prompt') {
+      const r = await ask(a, 1);
+      await until(() => turnOver(a, r.first.at), 'A\'s turn to end');
+      await until(() => existsSync(options.go), 'the --go file');
+      const n = stops(a).length;
+      await type(a, FOLLOW);
+      await until(() => stops(a)[n], 'the Stop after the follow-up prompt');
+    } else {
+      const r = await ask(a, 1);
+      await until(() => turnOver(a, r.first.at), 'A\'s turn to end');
+      await exit(a);
+      await until(() => existsSync(options.go), 'the --go file');
+      const b = begin('B');
+      await ready(b);
+      await type(b, FOLLOW);
+      await until(() => stops(b)[0], 'B\'s Stop');
+      await exit(b);
+      const a2 = begin('A2', ['--resume', startOf(a).session_id]);
+      await ready(a2);
+      await type(a2, FOLLOW);
+      await until(() => stops(a2)[0], 'A2\'s Stop');
+    }
+    for (const s of sessions) if (!s.exiting) await exit(s);
+  } catch (error) {
+    if (!(error instanceof Ended)) throw error;
+    ({ stop, verdict } = error);
+    reason = error.message;
+  }
+  await sleep(1000); // the transcript lags the live turn
+  const kept = [];
+  for (const s of sessions) {
+    const { living } = await s.processes.stop();
+    for (const stream of [s.child.stdin, s.child.stdout, s.child.stderr]) stream.destroy();
+    if (living.length) [verdict, reason] = ['FAIL', `processes ${living.join(', ')} survived SIGKILL`];
+    writeFileSync(join(s.own, 'screen.log'), s.output);
+    const start = startOf(s);
+    const transcript = join(s.own, 'transcript.jsonl');
+    if (start?.transcript_path && existsSync(start.transcript_path)) copyFileSync(start.transcript_path, transcript);
+    kept.push({ name: s.name, sessionId: start?.session_id ?? null, transcript: existsSync(transcript) ? transcript : null, hooks: join(s.own, 'events.jsonl'), typed: s.typed });
+  }
+  return finish({ verdict, stop, reason, workdir: realpathSync(work), evidence: { route, sessions: kept } });
+}
+
 async function all(options) {
   const started = performance.now();
   const results = [];
@@ -399,7 +618,7 @@ for (const name of signals) process.on(name, () => { interrupted = true; });
 
 let options;
 try { options = parseArgs(process.argv.slice(2)); } catch (error) {
-  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line> [--workdir <dir> --hooks <settings.json> [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
+  console.error(`${error.message}\nUsage: node scripts/agent-harness.mjs run --scenario <held-stop|idle-wake|read-only-job|add-readme-line|settings-tamper|deep-answer> [--workdir <dir> [--hooks <settings.json> | --script <file> | --mcp-config <file> --route <stop-hold|idle-wake|next-prompt|resume> [--go <file>] [--rounds <n>]] [--pass-env <NAME>]...] [--agent claude|codex] [--claude <path>] [--codex <path>] [--cost-cap-usd <n>] [--token-cap <n>] [--timeout-ms <n>] [--out <dir>]\n       node scripts/agent-harness.mjs all [--claude <path>] [--codex <path>] [--out <dir>]\n       node scripts/agent-harness.mjs budgets [--base <commit>] [--changed <path>]... [--budgets <file>] [--claude <path>] [--codex <path>] [--out <dir>]`);
   process.exit(2);
 }
 options.out = resolve(options.out ?? mkdtempSync(join(tmpdir(), 'deep-harness-')));
@@ -407,7 +626,8 @@ mkdirSync(options.out, { recursive: true });
 let code;
 if (options.command === 'budgets') code = await budgets(options);
 else {
-  const { results, wholeMs } = options.command === 'all' ? await all(options) : { results: [await run(options, options.scenario)] };
+  const { results, wholeMs } = options.command === 'all' ? await all(options)
+    : { results: [options.scenario === 'settings-tamper' ? await tamperRun(options) : options.scenario === 'deep-answer' ? await answerRun(options) : await run(options, options.scenario)] };
   const pass = results.length > 0 && results.every(({ verdict }) => verdict === 'PASS');
   if (options.command === 'all') console.log(JSON.stringify({ summary: true, verdict: pass ? 'PASS' : 'FAIL', runs: results.length, elapsedMs: wholeMs }));
   code = pass ? 0 : 1;

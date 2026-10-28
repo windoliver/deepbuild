@@ -33,8 +33,8 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_with, duration, recheck, recheck_skipping_referrers,
-    CheckResult,
+    check, check_costed, check_in, check_with, duration, frame_rate_of, recheck,
+    recheck_skipping_referrers, CheckResult,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
@@ -161,6 +161,9 @@ pub struct Issue {
     pub forms: Vec<String>,
     /// The fix as patch ops, where the code's fix is ops (the check catalog).
     pub fix_ops: Option<Vec<Value>>,
+    /// The last good revision, checked by the same rules, had it too: show-time admission
+    /// returns it marked carried and never refuses for it (Revision).
+    pub carried: bool,
 }
 
 impl Issue {
@@ -176,6 +179,7 @@ impl Issue {
             fix: fix_for(code),
             forms: Vec::new(),
             fix_ops: None,
+            carried: false,
         }
     }
 
@@ -194,7 +198,7 @@ impl Issue {
         out.insert("severity".into(), json!(self.severity));
         out.insert("ids".into(), json!(self.ids));
         out.insert("path".into(), json!(self.path));
-        out.insert("actual".into(), self.actual.clone());
+        out.insert("actual".into(), cut(&self.actual));
         out.insert("what".into(), json!(self.what));
         out.insert("fix".into(), json!(self.fix));
         if self.code == "bad_unit" {
@@ -203,7 +207,29 @@ impl Issue {
         if let Some(ops) = &self.fix_ops {
             out.insert("fix_ops".into(), json!(ops));
         }
+        if self.carried {
+            out.insert("carried".into(), json!(true));
+        }
         Value::Object(out)
+    }
+}
+
+/// An issue's `actual` as it is written out: the value refused at its path, cut at the read cap
+/// (What holds a document to its rules). A longer string keeps its first 8,192 characters; any
+/// other value whose JSON text is longer is written as that text, cut the same way.
+pub fn cut(actual: &Value) -> Value {
+    let first = |text: &str| -> String { text.chars().take(crate::show::READ_CAP).collect() };
+    match actual {
+        Value::String(text) if text.chars().count() > crate::show::READ_CAP => json!(first(text)),
+        Value::Array(_) | Value::Object(_) => {
+            let text = actual.to_string();
+            if text.chars().count() > crate::show::READ_CAP {
+                json!(first(&text))
+            } else {
+                actual.clone()
+            }
+        }
+        _ => actual.clone(),
     }
 }
 
@@ -217,6 +243,9 @@ pub struct Notice {
     pub what: String,
     /// On `migrated`: the kind (`family.name`) and the step's majors.
     pub migration: Option<(String, u32, u32)>,
+    /// On `deprecated`: the kind that replaces it (`family.name@major`) and the release since
+    /// which it is deprecated.
+    pub replaced_by: Option<(String, String)>,
 }
 
 impl Notice {
@@ -226,12 +255,16 @@ impl Notice {
         out.insert("severity".into(), json!("notice"));
         out.insert("ids".into(), json!(self.ids));
         out.insert("path".into(), json!(self.path));
-        out.insert("actual".into(), self.actual.clone());
+        out.insert("actual".into(), cut(&self.actual));
         out.insert("what".into(), json!(self.what));
         if let Some((kind, from, to)) = &self.migration {
             out.insert("kind".into(), json!(kind));
             out.insert("from".into(), json!(from));
             out.insert("to".into(), json!(to));
+        }
+        if let Some((replaced_by, since)) = &self.replaced_by {
+            out.insert("replaced_by".into(), json!(replaced_by));
+            out.insert("deprecated_since".into(), json!(since));
         }
         Value::Object(out)
     }
@@ -347,6 +380,7 @@ pub fn fix_for(code: &str) -> String {
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
         "bad_id" => "Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.",
         "bad_time" => "Write the time as a span such as 2s or 120f.",
+        "bad_rate" => "Use a rate whose frame or sample is a whole number of flicks: 60/1, 30000/1001 or 8/1 fps, 48000 or 44100 Hz.",
         "bound_typed_over" => "Leave a bound value's text empty; its reading shows there.",
         "number_unsourced" => {
             "Bind the number to a reading with a bound value, or compute it in the document."
@@ -360,6 +394,7 @@ pub fn fix_for(code: &str) -> String {
         "migrated" => {
             "Nothing to do: the item's writer stores the migrated form on its next patch."
         }
+        "deprecated" => "Move the item to the kind its notice names in replaced_by.",
         _ => "See the issue.",
     }
     .to_string()
@@ -779,6 +814,33 @@ mod tests {
             &[patch(json!([{"op": "create", "item": item}]))],
         );
         assert_eq!(out.outcome, "applied", "{:?}", out.issues);
+    }
+
+    #[test]
+    fn a_control_without_a_role_is_refused_naming_the_control_and_the_field() {
+        // Accessible: every control carries a role (#376); absent, empty or not a string is out
+        // of range at the field, naming the control.
+        for role in [None, Some(json!("")), Some(json!(5))] {
+            let mut doc = base();
+            let mut control = json!({"kind": "slider", "class": "view", "label": "Week"});
+            if let Some(role) = &role {
+                control["role"] = role.clone();
+            }
+            doc["controls"] = json!({"c-week": control});
+            let result = check(&doc);
+            let issue = result
+                .issues
+                .iter()
+                .find(|i| i.path == "controls/c-week/role")
+                .unwrap_or_else(|| panic!("no issue for role {role:?}: {:?}", result.issues));
+            assert_eq!(issue.code, "out_of_range");
+            assert_eq!(issue.ids, ["c-week"]);
+            assert_eq!(issue.actual, role.unwrap_or(Value::Null));
+            assert!(!result.ok);
+        }
+        let mut doc = base();
+        doc["controls"] = json!({"c-week": {"kind": "slider", "class": "view", "label": "Week", "role": "slider"}});
+        assert!(check(&doc).ok, "{:?}", check(&doc).issues);
     }
 
     #[test]
@@ -1312,7 +1374,7 @@ mod tests {
         // No kind in this build gives `controls` a schema, so a field step there must reach a
         // value in the document itself: a key of an object or an index of a list.
         let mut doc = base();
-        doc["controls"] = json!({"slider": {"value": 1, "range": [0, 10]}});
+        doc["controls"] = json!({"slider": {"role": "slider", "value": 1, "range": [0, 10]}});
         let refused = |target: &str| {
             let mut doc = doc.clone();
             doc["channels"] = json!({"c": {"target": target}});
@@ -1386,6 +1448,7 @@ mod tests {
             actual: Value::Null,
             what: String::new(),
             migration: None,
+            replaced_by: None,
         };
         let mut forward = vec![notice("items/x/a"), notice("items/x/b")];
         let mut backward = vec![notice("items/x/b"), notice("items/x/a")];

@@ -10,10 +10,12 @@ export type CoreRequest =
   | { op: 'mcp-hello'; parent: { pid: number; start: string } }
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
+  | { op: 'hook-reply'; meta: HookMeta; until: number }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
   | { op: 'hook'; drafts: Draft[]; meta: HookMeta; writer: string }
+  | { op: 'waiter-gone'; key: number }
   | { op: 'unsubscribe'; sub: string }
   | (CoreRequest & { n: number });
 
@@ -24,6 +26,7 @@ export async function answer(core: Core, request: CoreRequest): Promise<unknown>
     case 'mcp-hello': return core.mcpHello(request.parent);
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
+    case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'stop': return core.stop(request.reason);
   }
@@ -32,13 +35,14 @@ export const asRefusal = (error: unknown) => (error instanceof Refused ? error.r
 
 if (parentPort && workerData?.core) {
   const port = parentPort;
-  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }));
+  const core = new Core(workerData.core as CoreOptions, (sub, event) => port.postMessage({ op: 'frame', sub, event }), (sessions) => port.postMessage({ op: 'asking', sessions }));
   core.started().then(
     () => { shedStartup(); port.postMessage({ op: 'started', hooks: core.hooks() }); },
     (error: unknown) => port.postMessage({ op: 'fatal', message: error instanceof Error ? error.stack ?? error.message : String(error) }),
   );
   port.on('message', (message: CoreMessage) => {
     if (message.op === 'hook') return void core.hook(message.drafts, message.meta, message.writer).catch(() => undefined);
+    if (message.op === 'waiter-gone') return core.waiterGone(message.key);
     if (message.op === 'unsubscribe') return core.unsubscribe(message.sub);
     const { n } = message;
     answer(core, message).then((result) => port.postMessage({ n, result }), (error: unknown) => port.postMessage({ n, error: asRefusal(error) }));

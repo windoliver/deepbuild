@@ -1,0 +1,76 @@
+Base commit: 14561af (origin/main, no implementation of #18)
+Command: NO_COLOR=1 npx vitest run --root tests/acceptance/18/mapping --no-file-parallelism --reporter=verbose
+  (Node v24.22.0 first on PATH; the build shared with the sibling jobs, not rebuilt here; deep-hook built by
+  `cargo build --locked -q -p deep-hook`, which the helpers run once per file)
+Date: 2026-10-26  vitest 5.0.5  darwin-arm64 (Mac15,7), heavily loaded by other sessions. Duration 266 s.
+Result: 8 files, 19 tests: 18 failed, 1 passed, 0 skipped. Exit code 1.
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/18/mapping/tsconfig.json: no errors.
+
+Why each test fails, by criterion (the record read through events.read / sessions.read at the base):
+- AC1 record.test.ts: the Write call's tool.before carries no `call` (the base hub drops the tool_use_id), so no
+  tool event names the call; the base records no commit event either.
+- AC1 record.live.test.ts: not run at the base. It needs DEEP_HARNESS_LIVE=1 and a real Claude Code session on the
+  plan, which a blind job doesn't start; without the opt-in it fails "BLOCKED: this test starts a real Claude Code
+  session on your plan". It must fail at the base for the reason the fast AC1 test does: no tool event names its
+  call, and no commit is recorded.
+- AC2 failed command: no tool.after names the call (no `call`; the base tool.after holds only kind, paths and
+  command, so no outcome, signature, cause or owner).
+- AC2 sign-in block: the StopFailure's agent.stop is {"turn":1,"did_work":false}: no cause, signature or owner.
+- AC7: the stop's agent.stop has no cause at all (the base hub keeps only turn and did_work).
+- AC11 npm test: no tool.after names the call, so neither outcome failed nor exit_code 1 is there.
+- AC11 rate limit: the StopFailure's agent.stop has no outcome and no cause.
+- AC12: the official server's get_pull_request call's tool.before names no call and no count class.
+- AC13: the commit is not in the record (no commit.* event). Its message, trailers and the git settings already
+  pass at the base: the base changes nothing in a commit; the record half is what fails.
+- AC6: no tool.before names the merge call (no `call`), and none carries `counts` or `effect`.
+- AC21 Cursor/Grok: all five of the Cursor session's events are recorded with agent claude-code.
+- AC21 quiet turns: the model-picker turn's session reads "running" for all 120 s, never unknown.
+- AC23: the typed prompt reads from "unknown" with tasks [] (the base hub maps prompts with no transcript).
+- AC24: every prompt reads from "unknown" (not person, scheduled, scheduled, person, subagent), and no stop has a
+  `loop` reading.
+- Every wrong-program test (AC4 adapter-decides, AC6 unknown-tool-read, AC23 unplaced-is-person, AC24
+  loop-from-origins) fails at its first assertion because `deep hub run` exits on "DEEP_HUB_PLANT=… names no planted
+  program" (packages/hub/dist/wire.js): the plant doesn't exist yet.
+
+The one test that passes at the base: AC4's watch-only test (replies.test.ts). The base hub already answers every
+hook with an empty reply and records each one, so it holds there; it is kept as the criterion's proof and as
+regression protection, and its wrong program is the planted `adapter-decides` (README, Disputes).
+
+Failure lines, as vitest printed them (session event lists shortened to …):
+ × failures.test.ts > AC2 … a failed command's tool.after says failed, … 8885ms
+   → one tool.after names call toolu_42ee2cfc041a779350cca783 (data.call); …: expected +0 to be 1
+ × failures.test.ts > AC2 … a turn that ends on a sign-in error … 5397ms
+   → agent.stop {"turn":1,"did_work":false}: expected undefined to be 'sign_in_required'
+ × failures.test.ts > AC7 … reads cause unknown, never plan_window_spent 5388ms
+   → the stop names a cause from the closed set: agent.stop {"turn":1,"did_work":false}: expected [ 'sign_in_required', …(10) ] to include undefined
+ × failures.test.ts > AC11 … npm test that exits 1 … 17346ms
+   → one tool.after names call toolu_4e436f63c26a2a9a8fe9f774 (data.call); …: expected +0 to be 1
+ × failures.test.ts > AC11 … rate limit fires StopFailure … 5402ms
+   → agent.stop {"turn":1,"did_work":false}: expected undefined to be 'failed'
+ × callers.test.ts > AC21 … Cursor CLI session and a Grok session … 4289ms
+   → no event of the Cursor session is recorded as Claude Code's: expected [ …(5) ] to deeply equal []
+ × callers.test.ts > AC21 … model picker … trust prompt … 120653ms
+   → the turn left waiting on a model picker reads attention unknown (readings: ["running"]): expected [ 'running', 'running', …(59) ] to include 'unknown'
+ × record.test.ts > AC1 … Write and Bash calls, and the commit … 38598ms
+   → Write call toolu_1d435daee5fc44e694f69ec9: one tool.before naming the call (data.call) with kind write; …: expected [] to deeply equal [ 'write' ]
+ × record.test.ts > AC13 … 7797ms
+   → the commit edd1a2f2f81ae601dabab6ea9cb317bf6870b69c is recorded under the session from its hooks; …: expected +0 to be 1
+ × mcp.test.ts > AC6 … merge call … 18688ms
+   → mcp__github__merge_pull_request is recorded as the mcp kind naming its server and tool: no event: expected false to be true
+ × mcp.test.ts > AC6 (wrong program) unknown-tool-read … 103ms
+   → the hub didn't start with DEEP_HUB_PLANT=unknown-tool-read (the planted wrong program this test runs against): …/packages/hub/dist/wire.js:74
+ × mcp.test.ts > AC12 … 6078ms
+   → no event: expected false to be true
+ × loops.test.ts > AC24 … 9892ms
+   → the prompts' origins, turn by turn: user.ask {"msg":0,"text":"/loop check the build","tasks":[],"from":"unknown"}; …
+ × loops.test.ts > AC24 (wrong program) loop-from-origins … 80ms
+   → the hub didn't start with DEEP_HUB_PLANT=loop-from-origins …
+ × record.live.test.ts > AC1 … live … 3ms
+   → BLOCKED: this test starts a real Claude Code session on your plan; run it by hand with DEEP_HARNESS_LIVE=1
+ ✓ replies.test.ts > AC4 … each of the nine hooks gets a reply with no decision field, and each is recorded 4237ms
+ × replies.test.ts > AC4 (wrong program) adapter-decides … 68ms
+   → the hub didn't start with DEEP_HUB_PLANT=adapter-decides …
+ × prompts.test.ts > AC23 … 7304ms
+   → the prompt "Add a dark mode toggle to the settings page." was typed, matched to its transcript entry: user.ask {…"from":"unknown"}: expected 'unknown' to be 'person'
+ × prompts.test.ts > AC23 (wrong program) unplaced-is-person … 72ms
+   → the hub didn't start with DEEP_HUB_PLANT=unplaced-is-person …

@@ -1,0 +1,81 @@
+#304 acceptance suite on the base commit 0350cf0 (origin/main), October 27, 2026, before any #304 code.
+Run: npx vitest run --root tests/acceptance/304 --no-file-parallelism   (Node 24.22.0; 1-minute load about 125 on 12 cores)
+Result: Test Files 8 failed (8); Tests 16 failed (16). Every test fails at a named assertion or a documented missing
+surface; none crashes the runner. AC1 was re-run alone after its redraft (the shipped no-unnamed-cloud-resource
+default already denies terraform apply, so the first draft's "allowed before the entry is added" was wrong); its
+lines below are from that re-run. Trimmed to each test's failing assertion and its reason.
+
+added.test.ts (AC1 #304.eb6ac0ef)
+  x AC1 no terraform apply in the shop repo: added through the hub, copied into rules.json, denies terraform apply with the hub stopped and allows terraform plan
+    Error: no-terraform-apply-shop: `deep guard add` must install the entry, exit 0: exit 2 after 96.8 ms, stdout "",
+    stderr "Unsupported command. Run deep --help for available commands.\n"
+    -> the base has no `deep guard add`: nothing installs an entry you wrote or rewrites rules.json.
+  x AC1 (wrong program) a rule compiled into deep-hook (plant-compiled-rule) fails this test
+    Error: BLOCKED: the deep-hook build with the plant plant-compiled-rule did not build: cargo build --locked -q -p deep-hook
+    --features plant-compiled-rule ... exited 101: error: the package 'deep-hook' does not contain this feature: plant-compiled-rule
+    -> the plant is the implementer's to write.
+
+defaults.test.ts (AC2 #304.0ec8d962)
+  x AC2 each default fail_closed entry ships a planted call and a twin; with the hub up and with it stopped the planted call is denied and the twin allowed
+    Error: every default fail_closed entry ships a planted call and a twin in default-rules.json's proofs; these don't:
+    no-kill-by-name, no-workflow-dispatch, no-bare-stash, no-git-other-checkout, no-agent-config-write,
+    no-deepbuild-spec-write, no-deep-off, no-deep-on, no-deep-hub-stop, no-deep-hub-use, no-deep-setup-undo,
+    no-deep-restore, no-hub-service-stop, no-hub-service-write, no-hub-kill, no-deepbuild-home-write,
+    no-control-token-read, no-unnamed-cloud-resource, no-unknown-reach-delete
+    -> the base's default-rules.json has no `proofs`.
+
+hubside.test.ts (AC3 #304.c5114696)
+  x AC3 t-block is written into rules.json with its mode, denies gh pr merge 12 and allows its twin with the hub up, allows both with it stopped; t-closed denies its planted call either way
+    Error: `deep guard add` must install t-block and t-closed, exit 0: exit 2 after 42.5 ms, stdout "",
+    stderr "Unsupported command. Run deep --help for available commands.\n"
+  x AC3 (wrong program) ... (DEEP_HUB_PLANT=matches-text) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=matches-text did not start: ... packages/hub/dist/wire.js:75
+    Error: DEEP_HUB_PLANT=matches-text names no planted program
+  x AC3 (wrong program) ... (DEEP_HUB_PLANT=fail-closed-only-rules) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=fail-closed-only-rules did not start: ...
+    Error: DEEP_HUB_PLANT=fail-closed-only-rules names no planted program
+
+install.test.ts (AC4 #304.be770632)
+  x AC4 t-leaky and t-greedy are each refused, naming the entry and the call, and neither reaches rules.json; t-good installs
+    Error: t-good (the control): an entry whose planted call is denied and twin allowed must install, exit 0: exit 2 after 41.9 ms,
+    stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+  x AC4 (wrong program) a hub that installs entries without running them (DEEP_HUB_PLANT=installs-unchecked) fails this test
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=installs-unchecked did not start: ...
+    Error: DEEP_HUB_PLANT=installs-unchecked names no planted program
+
+kinds.test.ts (AC5 #304.1dc6d830)
+  x AC5 t-change (counts:change, block) denies the FrobnicateWidgets call recorded as kind unknown and allows the Read call recorded as kind read
+    Error: t-change: `deep guard add` must install the entry whose match is any change, exit 0: exit 2 after 41.2 ms,
+    stdout "", stderr "Unsupported command. Run deep --help for available commands.\n"
+  x AC5 (wrong program) an engine that matches only the listed kinds (plant-listed-kinds-only) ...
+    Error: BLOCKED: the deep-hook build with the plant plant-listed-kinds-only did not build: ... exited 101: error: the
+    package 'deep-hook' does not contain this feature: plant-listed-kinds-only
+
+classes.test.ts (AC6 #304.6f492bf5)
+  x AC6 list_messages counts as change; a facts-read tool marked destructiveHint and delete_branch marked readOnlyHint count as destructive; only a facts entry or a saved decision counts a tool as read
+    Error: mcp__github__get_me must count as destructive (the facts file lists it as read, but its server marks it
+    destructiveHint: true, which raises it), not read: {"kind":"mcp","paths":[],"command":null,"call":"toolu_…_2",
+    "server":"github","tool":"get_me","counts":"read"}
+    -> the base hub counts from the facts file only; no hint raises a class (list_messages passed: base counts an
+       unlisted tool as change).
+  x AC6 (wrong program) a classifier that trusts a readOnlyHint or a read-like name (DEEP_HUB_PLANT=trusts-hints) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=trusts-hints did not start: ...
+    Error: DEEP_HUB_PLANT=trusts-hints names no planted program
+
+modes.test.ts (AC7 #304.dfd8896b)
+  x AC7 t-mode in watch, warn and block mode in turn, with the hub up: ...
+    Error: t-mode in watch mode: `deep guard add` must install it, exit 0: exit 2 after 40.9 ms, stdout "",
+    stderr "Unsupported command. Run deep --help for available commands.\n"
+  x AC7 (wrong program) a hub that treats warn as block (DEEP_HUB_PLANT=warn-as-block) ...
+    Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=warn-as-block did not start: ...
+    Error: DEEP_HUB_PLANT=warn-as-block names no planted program
+
+budgets.test.ts (AC8 #304.cabba859)
+  x AC8 the perf lane has a task naming #304, valid against the merge base's budgets, and it runs
+    Error: benchmarks/budgets.json must have a task whose reason names issue #304, timing the hook path with every
+    installed entry and the check mode
+  x AC8 matching every installed entry adds under 2 ms at p95 to the hook path, inside 10 ms over process start; check mode ...
+    Error: `deep guard add` must install the 20 entries the hook path is timed with: exit 2 after 42.9 ms, stdout "",
+    stderr "Unsupported command. Run deep --help for available commands.\n"
+    -> fails before any number is read (the release build and the no-op floor built; nothing was timed). On this
+       machine a timing would be INCONCLUSIVE anyway: load ~125 on 12 cores.

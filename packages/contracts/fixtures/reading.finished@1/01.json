@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "reading.finished",
+  "writer": "core",
+  "actor": "deepbuild",
+  "scope": "you",
+  "ts": 1760099851123,
+  "data": {
+    "reading": "reading:01K74FKZVK8Q2X5R7M3N9P4T6V",
+    "kind": "install",
+    "runs": [
+      "run:01K74FKZVK8Q2X5R7M3N9P4T6T"
+    ],
+    "state": "finished",
+    "findings": 212,
+    "dropped": 1,
+    "undelivered": 0,
+    "plan": {
+      "five_hour_pct": 3.4
+    },
+    "models": {
+      "final": "claude-opus-5-5",
+      "subreads": [
+        "claude-haiku-5-5"
+      ]
+    },
+    "written": 4
+  }
+}

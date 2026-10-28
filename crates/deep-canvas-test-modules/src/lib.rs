@@ -7,9 +7,12 @@
 use std::collections::BTreeMap;
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
+use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registrar, Semver};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
+
+mod time;
+pub use time::{cache, tick};
 
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
     let one = Semver {
@@ -665,5 +668,58 @@ pub fn test_gpu() -> Module {
     Module {
         manifest: manifest("test.gpu", &[]),
         register: register_test_gpu,
+    }
+}
+
+// Issue #371: the test canvas modules of the #371 acceptance README (Test builds).
+
+/// The most characters `test.titlecap` lets a title have.
+const TITLE_CAP: usize = 20;
+
+fn title_rule(_doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let text = item["params"]["text"].as_str().unwrap_or_default();
+    if text.chars().count() <= TITLE_CAP {
+        return Vec::new();
+    }
+    vec![Raised {
+        code: "title_too_long",
+        severity: "error",
+        path: format!("items/{id}/params/text"),
+        what: format!("a title of over {TITLE_CAP} characters"),
+        fix_ops: None,
+    }]
+}
+
+fn register_title_cap(r: &mut Registrar) {
+    r.rule("text", title_rule);
+    r.code(
+        "title_too_long",
+        "A text item over 20 characters, which this release's stricter rule refuses.",
+        "Shorten the text to 20 characters or fewer.",
+        false,
+    );
+}
+
+/// `test.titlecap`: a new release's stricter rule, an error on every `text@1` over 20
+/// characters.
+pub fn title_cap() -> Module {
+    Module {
+        manifest: manifest("test.titlecap", &[]),
+        register: register_title_cap,
+    }
+}
+
+fn register_deprecated(r: &mut Registrar) {
+    r.kind(kind("test", "old", vec![box_param()]), &[], "rect@1")
+        .deprecated("1.1.0", "test.new@1");
+    r.kind(kind("test", "new", vec![box_param()]), &[], "rect@1");
+}
+
+/// `test.deprecated`: `test.old@1`, deprecated since 1.1.0 for `test.new@1`; each draws its `box`
+/// as a `rect@1`.
+pub fn deprecated() -> Module {
+    Module {
+        manifest: manifest("test.deprecated", &[]),
+        register: register_deprecated,
     }
 }

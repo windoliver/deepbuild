@@ -1,4 +1,5 @@
-//! `deep-show <run | screen>`: JSON lines in, one JSON line out per input line, in order, exit 0;
+//! `deep-show <run | screen | live>`: JSON lines in, one JSON line out per input line, in order, exit 0
+//! (`live` answers its first line, holds its window, then exits);
 //! a line that can't be read, lacks a required field or names an unknown `planted` value answers
 //! `{"ok":false,"code":"bad_input"}`, before anything platform-specific. The surface is the #393
 //! acceptance README's: `run` plays a scenario of deep_show and `deep show` calls against the
@@ -6,6 +7,7 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod access;
 mod ask;
 mod costs;
 mod evidence;
@@ -18,6 +20,7 @@ mod planted;
 mod scene3d;
 mod shared;
 mod snapshot;
+mod time;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
 /// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
@@ -262,6 +265,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
         "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
+        "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
             let pointer = match c.get("pointer") {
@@ -308,6 +312,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "costs" => return Some(Call::Costs),
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
+        "rate" | "time" | "export" | "play" | "determinism" => {
+            return crate::time::parse_call(name, c)
+        }
         "eval" => {
             let view = match c.get("view") {
                 None => Map::new(),
@@ -333,7 +340,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             };
             return Some(Call::Eval(Box::new(Eval {
                 doc: doc()?,
-                t: time("t", 0)?,
+                t: crate::time::eval_time(c.get("t"))?,
                 view,
                 clean: flag("clean")?,
                 perturb: match c.get("perturb") {
@@ -715,12 +722,21 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "patch_shows_a_frame_late" => Planted::PatchShowsAFrameLate,
             "full_screen_only_3d" => Planted::FullScreenOnly3d,
             "esc_to_root" => Planted::EscToRoot,
+            "counts_every_issue" => Planted::CountsEveryIssue,
+            "matches_carried_by_code" => Planted::MatchesCarriedByCode,
+            "issues_without_actual" => Planted::IssuesWithoutActual,
+            "loads_deprecated_silently" => Planted::LoadsDeprecatedSilently,
+            "announces_every_frame" => Planted::AnnouncesEveryFrame,
             "box_folds_quote" => Planted::BoxFoldsQuote,
             "box_drops_t" => Planted::BoxDropsT,
             "box_drops_doc_rev" => Planted::BoxDropsDocRev,
             "box_sends_every_id" => Planted::BoxSendsEveryId,
             "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
             "resolver_closes_task" => Planted::ResolverClosesTask,
+            "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
+            "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
+            "frame_index_i64_product" => Planted::FrameIndexI64Product,
+            "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
             _ => return None,
         }),
     };
@@ -826,6 +842,7 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             };
             screen(&scenario, startup, out)
         }
+        "live" => live(&scenario, startup),
         _ => bad_input(),
     }
 }
@@ -839,6 +856,19 @@ fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
 
 #[cfg(not(target_os = "macos"))]
 fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
+    json!({"ok": false, "code": "unsupported_platform"})
+}
+
+/// `live` (#376): the screen-reader smoke run's window, on macOS.
+#[cfg(target_os = "macos")]
+fn live(scenario: &Scenario, startup: &Startup) -> Value {
+    let mut hub = hub::Hub::new(scenario, startup);
+    hub.run_calls();
+    live::show(&mut hub)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn live(_: &Scenario, _: &Startup) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -887,6 +917,8 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-renamed",
     feature = "test-step-cycle",
     feature = "test-scatter",
+    feature = "test-tick",
+    feature = "test-frame-cache",
     feature = "test-kit",
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
@@ -939,6 +971,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.extend(deep_canvas_test_modules::steps_cycle());
     #[cfg(feature = "test-scatter")]
     out.push(deep_canvas_test_modules::scatter());
+    #[cfg(feature = "test-tick")]
+    out.push(deep_canvas_test_modules::tick());
+    #[cfg(feature = "test-frame-cache")]
+    out.push(deep_canvas_test_modules::cache());
     #[cfg(feature = "test-a")]
     out.push(deep_canvas_test_modules::a());
     #[cfg(feature = "test-b")]
@@ -953,6 +989,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.extend(deep_canvas_test_modules::cycle());
     #[cfg(feature = "test-missing-dep")]
     out.push(deep_canvas_test_modules::missing_dep());
+    #[cfg(feature = "test-title-cap")]
+    out.push(deep_canvas_test_modules::title_cap());
+    #[cfg(feature = "test-deprecated")]
+    out.push(deep_canvas_test_modules::deprecated());
     out.extend(kit::modules::built());
     out
 }
@@ -1348,8 +1388,13 @@ fn main() {
         let reply = answer(&command, &startup, &line);
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
+        if command == "live" {
+            break;
+        }
     }
 }
 
+#[cfg(target_os = "macos")]
+mod live;
 #[cfg(target_os = "macos")]
 mod window;

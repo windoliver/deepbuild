@@ -1,0 +1,40 @@
+{
+  "check": "ext.paths.relative",
+  "runs": [
+    {
+      "spec": {
+        "kind": "ext.paths.relative",
+        "runner": "paths",
+        "inputs": [
+          "src/cart.mjs",
+          "spec/cart.test.mjs"
+        ],
+        "depth": "unit",
+        "oracle": "code",
+        "contract": null
+      },
+      "expect": {
+        "outcome": "passed",
+        "testsRun": 2
+      }
+    },
+    {
+      "spec": {
+        "kind": "ext.paths.relative",
+        "runner": "paths",
+        "inputs": [
+          "src/cart.mjs",
+          "../secrets.env",
+          "/etc/hosts"
+        ],
+        "depth": "unit",
+        "oracle": "code",
+        "contract": null
+      },
+      "expect": {
+        "outcome": "failed",
+        "testsRun": 3
+      }
+    }
+  ]
+}

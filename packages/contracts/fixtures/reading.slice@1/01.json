@@ -1,0 +1,21 @@
+{
+  "handle": "session:abc123",
+  "covers": "messages 1 to 2 of 2",
+  "text": "hello\nremember: api starts with `npm run dev`.",
+  "messages": [
+    {
+      "at": "session:abc123#m1",
+      "role": "user",
+      "outside": false,
+      "start": 0,
+      "end": 5
+    },
+    {
+      "at": "session:abc123#m2",
+      "role": "user",
+      "outside": false,
+      "start": 6,
+      "end": 46
+    }
+  ]
+}
