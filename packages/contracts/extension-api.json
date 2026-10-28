@@ -104,6 +104,48 @@
     }
   },
   {
+    "method": "deep.lease",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "digest": "d1:72f80c99488b577be1da72993587eced73bc5fe76185dec9159ede0ac6513665",
+    "params": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*$"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "exclusive",
+            "shared"
+          ]
+        }
+      },
+      "required": [
+        "resource",
+        "mode"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerView",
     "variants": null,
     "since": "R1",
