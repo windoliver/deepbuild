@@ -144,6 +144,7 @@ impl Engine<'_> {
             you: writer.starts_with("you:"),
             base,
             knows: &knows,
+            packs: None,
         };
         let doc_id = doc["id"].as_str().unwrap_or_default().to_string();
         let mut working = doc.clone();

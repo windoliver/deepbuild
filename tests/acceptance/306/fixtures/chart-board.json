@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Bars",
+  "description": "Your board of two bar charts from the test pack test/chart@1.0.0, as the hub stored it: c1 and c2 each n = 5, and one plain rect.",
+  "size": [640, 360],
+  "packs": ["test/chart@1.0.0"],
+  "layers": {
+    "you-main": {
+      "writer": "you:you",
+      "title": "You",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "c1": {
+      "id": "c1",
+      "kind": "chart.bars@1",
+      "name": "Chart one",
+      "order": "a0",
+      "layer": "you-main",
+      "params": { "n": 5 },
+      "at": { "pos": [40, 40, 0] }
+    },
+    "c2": {
+      "id": "c2",
+      "kind": "chart.bars@1",
+      "name": "Chart two",
+      "order": "a1",
+      "layer": "you-main",
+      "params": { "n": 5 },
+      "at": { "pos": [40, 200, 0] }
+    },
+    "frame": {
+      "id": "frame",
+      "kind": "rect@1",
+      "name": "Frame",
+      "order": "a2",
+      "layer": "you-main",
+      "params": { "box": [16, 16, 608, 328], "paint": { "fill": { "role": "muted" } } }
+    }
+  }
+}
