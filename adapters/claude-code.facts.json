@@ -1,6 +1,6 @@
 {
   "schema": "adapter.facts@1",
-  "versions": ["2.1.299", "2.1.304"],
+  "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
     "readBy": "a hold waits no longer than the agent lets a hook run",
@@ -455,6 +455,223 @@
             "effort": "object",
             "background_tasks": "array",
             "session_crons": "array"
+          }
+        },
+        "TaskCompleted": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "task_id": "string",
+            "task_subject": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "task_description": "string",
+            "teammate_name": "string",
+            "team_name": "string",
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        }
+      },
+      "2.1.308": {
+        "SessionStart": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "source": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "model": "string",
+            "session_title": "string",
+            "seconds_since_last_response": "number",
+            "context_tokens": "number",
+            "prompt_cache_likely_expired": "boolean",
+            "estimated_cache_write_usd": "number"
+          }
+        },
+        "UserPromptSubmit": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "prompt": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "session_title": "string"
+          }
+        },
+        "PreToolUse": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_use_id": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "Read": { "tool_input.file_path": "string" },
+            "Edit": { "tool_input.file_path": "string" },
+            "MultiEdit": { "tool_input.file_path": "string" },
+            "Write": { "tool_input.file_path": "string" },
+            "NotebookEdit": { "tool_input.notebook_path": "string" }
+          }
+        },
+        "PermissionRequest": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "permission_suggestions": "array",
+            "mcp_server": "object"
+          },
+          "tools": {
+            "Bash": { "tool_input.command": "string" },
+            "Read": { "tool_input.file_path": "string" },
+            "Edit": { "tool_input.file_path": "string" },
+            "MultiEdit": { "tool_input.file_path": "string" },
+            "Write": { "tool_input.file_path": "string" },
+            "NotebookEdit": { "tool_input.notebook_path": "string" }
+          }
+        },
+        "PostToolUse": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_response": "any",
+            "tool_use_id": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "duration_ms": "number",
+            "mcp_server": "object"
+          }
+        },
+        "PostToolUseFailure": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "tool_name": "string",
+            "tool_input": "object",
+            "tool_use_id": "string",
+            "error": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "is_interrupt": "boolean",
+            "duration_ms": "number",
+            "mcp_server": "object"
+          }
+        },
+        "Stop": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "stop_hook_active": "boolean",
+            "last_assistant_message": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "background_tasks": "array",
+            "session_crons": "array"
+          }
+        },
+        "StopFailure": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "error": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string",
+            "error_details": "any",
+            "last_assistant_message": "string"
+          }
+        },
+        "SessionEnd": {
+          "required": { "session_id": "string", "transcript_path": "string", "cwd": "string", "hook_event_name": "string", "reason": "string" },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "agent_id": "string",
+            "agent_type": "string"
+          }
+        },
+        "SubagentStop": {
+          "required": {
+            "session_id": "string",
+            "transcript_path": "string",
+            "cwd": "string",
+            "hook_event_name": "string",
+            "stop_hook_active": "boolean",
+            "agent_id": "string",
+            "agent_type": "string",
+            "agent_transcript_path": "string"
+          },
+          "optional": {
+            "prompt_id": "string",
+            "scratchpad_dir": "string",
+            "permission_mode": "string",
+            "effort": "object",
+            "background_tasks": "array",
+            "session_crons": "array",
+            "last_assistant_message": "string"
           }
         },
         "TaskCompleted": {
