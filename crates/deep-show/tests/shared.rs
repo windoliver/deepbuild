@@ -1,7 +1,8 @@
 //! Shared documents' behavior past #96's acceptance tests (the issue's Patch and Writer connection
 //! fields): an undo puts back only the paths its patch wrote, the marks module checks a patch as
 //! it checks a whole revision, a result's issues stop at the read cap, a coalesce key keeps only
-//! the latest patch, the writer's other quotas, and a view of the record is never patched.
+//! the latest patch, the writer's other quotas, a view of the record is never patched, and a
+//! check's verdict counts an error admission carried (#371).
 //! Each drives `deep-show run` as the acceptance tests do.
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -367,4 +368,33 @@ fn a_shared_revisions_hash_reads_the_sealed_sets_kinds() {
         hash_with(json!({"box": [0, 0, 20, 20], "value": 0})),
         hash_with(json!({"box": [0, 0, 20, 20]}))
     );
+}
+
+#[test]
+fn a_checks_verdict_counts_a_carried_error_that_admission_lets_through() {
+    // Your stored board holds a circle whose radius the check refuses: the last good revision
+    // has that error, so alpha's revision is admitted with it carried, and its check still FAILs.
+    let mut stored = board();
+    stored["items"]["you.dot"] = json!({"id": "you.dot", "kind": "circle@1", "layer": "you-main",
+        "name": "Dot", "order": "a1", "params": {"center": [300, 200], "r": -2, "paint": {"fill": {"role": "ink"}}}});
+    let show = json!({"call": "deep_show", "session": "sess-alpha", "doc": DOC, "check": true,
+        "include": ["issues", "pixels"],
+        "document": {"items": {"a.box": {"id": "a.box", "kind": "rect@1", "name": "Box", "order": "a0",
+            "params": {"box": [0, 0, 60, 30], "paint": {"fill": {"role": "muted"}}}, "at": {"pos": [400, 40, 0]}}}}});
+    let r = run_on(stored.clone(), vec![show.clone()], json!({}));
+    assert_eq!(r[0]["outcome"], json!("presented"), "{}", r[0]);
+    let carried: Vec<&Value> = r[0]["issues"]
+        .as_array()
+        .expect("issues")
+        .iter()
+        .filter(|i| i["carried"] == json!(true))
+        .collect();
+    assert_eq!(carried.len(), 1, "{}", r[0]);
+    assert_eq!(carried[0]["code"], json!("out_of_range"));
+    assert_eq!(carried[0]["ids"], json!(["you.dot"]));
+    assert_eq!(r[0]["result"], json!("FAIL"), "{}", r[0]);
+    // Without the carried error the same revision passes its check.
+    stored["items"]["you.dot"]["params"]["r"] = json!(2);
+    let r = run_on(stored, vec![show], json!({}));
+    assert_eq!(r[0]["result"], json!("PASS"), "{}", r[0]);
 }

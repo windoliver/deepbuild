@@ -18,7 +18,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type Event, type EventInput } from '@deepbuild/record';
 import type { Grant } from '@deepbuild/supervisor';
 import { openForwarder, type Forwarder } from './egress.js';
-import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, WindowReport } from './types.js';
+import type { Agent, Blocked, JobRecord, JobSpec, McpServer, Runner, RunnerOptions, StopCause, Subagent, WindowReport } from './types.js';
 
 const CORE: Connection = { writer: 'core', actor: 'you', scope: 'you' };
 const MINUTE = 60_000;
@@ -54,8 +54,11 @@ const compare = (a: string, b: string): number => {
 /** What isn't data in an agent's facts: the flags that confine its job, and where it records its account. */
 interface AgentParts {
   facts: URL;
-  /** Added to the facts' read-only launch: the job's own MCP servers and nothing else, and read tools only. */
-  confine(mcp: Record<string, McpServer>): string[];
+  /**
+   * Added to the facts' read-only launch: the job's own MCP servers and nothing else, their tools allowed, read tools
+   * only, and the sub-agents it may hand work to.
+   */
+  confine(mcp: Record<string, McpServer>, subagents: Record<string, Subagent>): string[];
   /** The account the agent records beside your sign-in, or null. */
   account(home: string): string | null;
   /** Your sign-in files the agent reads in place, never copied into a job's folder. */
@@ -68,11 +71,18 @@ interface AgentParts {
   reach(o: { temp: string; proxy: string; token?: string }): Record<string, string>;
   /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
   token(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<string | undefined>;
+  /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
+  expires(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<number | undefined>;
 }
 const AGENTS: Partial<Record<Agent, AgentParts>> = {
   'claude-code': {
     facts: new URL('../../../adapters/claude-code.facts.json', import.meta.url),
-    confine: (mcp) => ['--mcp-config', JSON.stringify({ mcpServers: mcp }), '--tools', 'Read,Grep,Glob'],
+    confine: (mcp, subagents) => [
+      '--mcp-config', JSON.stringify({ mcpServers: mcp }),
+      ...(Object.keys(mcp).length ? ['--allowedTools', Object.keys(mcp).map((name) => `mcp__${name}`).join(',')] : []),
+      '--tools', Object.keys(subagents).length ? 'Read,Grep,Glob,Task' : 'Read,Grep,Glob',
+      ...(Object.keys(subagents).length ? ['--agents', JSON.stringify(subagents)] : []),
+    ],
     account: (home) => {
       const v = readJson(join(home, '.claude.json'));
       const id = isObj(v) && isObj(v.oauthAccount) ? v.oauthAccount.accountUuid : undefined;
@@ -100,6 +110,13 @@ const AGENTS: Partial<Record<Agent, AgentParts>> = {
       try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
       const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
       return o && typeof o.accessToken === 'string' && o.accessToken && !(typeof o.expiresAt === 'number' && o.expiresAt <= Date.now()) ? o.accessToken : undefined;
+    },
+    expires: async (home, keychain) => {
+      if (existsSync(join(home, '.claude', '.credentials.json'))) return undefined;
+      let v: unknown;
+      try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
+      const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
+      return o && typeof o.expiresAt === 'number' ? o.expiresAt : undefined;
     },
   },
 };
@@ -151,7 +168,7 @@ interface Job {
   /** Its own temp folder, removed when it ends. */
   temp?: string;
 }
-interface Account { windows: Map<string, { used: number; resets: number | null }> }
+interface Account { windows: Map<string, { used: number; resets: number | null; at: number }> }
 interface Asked { handle: string; answer?: string }
 
 class LocalRunner implements Runner {
@@ -427,7 +444,20 @@ class LocalRunner implements Runner {
     if (window) return window;
     const budget = await this.budget(job, facts);
     if (budget) return budget;
+    const token = await this.outlives(job);
+    if (token) return token;
     return { binary };
+  }
+
+  /** A run with a planned end never starts on a sign-in token that expires before it: it would stop halfway. */
+  private async outlives(job: Job): Promise<{ refused: string } | undefined> {
+    const parts = AGENTS[job.spec.agent];
+    const home = this.o.env.HOME ?? '';
+    if (!job.spec.deadline_ms || !parts || !home || !this.o.keychain) return undefined;
+    const expires = await parts.expires(home, this.o.keychain).catch(() => undefined);
+    const ends = this.o.now() + job.spec.deadline_ms;
+    if (expires === undefined || expires >= ends) return undefined;
+    return { refused: `your ${job.spec.agent} sign-in token expires at ${new Date(expires).toISOString()}, before the run's planned end at ${new Date(ends).toISOString()}, so it would stop halfway; sign in again, then run it again` };
   }
 
   private readonly factsCache = new Map<Agent, Facts>();
@@ -709,8 +739,11 @@ class LocalRunner implements Runner {
     const billsKey = facts.billing.apiKeyVariables.some((name) => typeof this.o.env[name] === 'string' && this.o.env[name]);
     const token = billsKey || !home || !this.o.keychain ? undefined : await parts.token(home, this.o.keychain).catch(() => undefined);
     const env = { ...this.env(), ...parts.reach({ temp, proxy: `http://127.0.0.1:${port}`, ...(token ? { token } : {}) }) };
-    const grant: Grant = { read: [...this.programs(binary.real), ...(home ? parts.signIn(home) : [])], write: [temp], hosts: [`127.0.0.1:${port}`] };
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {})];
+    const grant: Grant = {
+      read: [...this.programs(binary.real), ...(home ? parts.signIn(home) : []), ...(job.spec.grant?.read ?? [])], write: [temp], hosts: [`127.0.0.1:${port}`],
+      ...(job.spec.grant?.sockets?.length ? { sockets: job.spec.grant.sockets } : {}),
+    };
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {})];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);
@@ -915,12 +948,21 @@ class LocalRunner implements Runner {
       // A window's reading replaces only an older window's, and within one window its use only grows.
       const was = merged.get(name);
       if (was && !((w.resets ?? -Infinity) > (was.resets ?? -Infinity) || (w.resets === was.resets && w.used >= was.used))) continue;
-      merged.set(name, w);
+      merged.set(name, { ...w, at: this.o.now() });
     }
     // A reading that names no window is no reading.
     if (!merged.size) return;
     this.accounts.set(reading.account, { windows: merged });
     await this.pump();
+  }
+
+  planWindows(): Map<string, { used: number; resets: number | null; at: number }> {
+    const out = new Map<string, { used: number; resets: number | null; at: number }>();
+    for (const [account, { windows }] of this.accounts) {
+      const w = windows.get('five_hour');
+      if (w) out.set(account, { ...w });
+    }
+    return out;
   }
 
   async tick(): Promise<void> {

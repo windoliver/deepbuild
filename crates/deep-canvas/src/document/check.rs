@@ -98,6 +98,7 @@ fn check_by(
     let mut lowered = doc.clone();
 
     check_envelope(doc, &mut issues);
+    check_transport(doc, &mut issues);
     let required = required_minors(doc, sealed, &mut issues);
     // The canvas modules the document declares, which every module kind it uses must be among.
     let declared: BTreeSet<String> = member(doc, "requires")
@@ -157,6 +158,7 @@ fn check_by(
     module_checks(&lowered, sealed, &mut issues, &mut notices);
     budget_check(&lowered, sealed, coefficients, &mut issues);
     check_id_maps(&lowered, &mut issues);
+    check_controls(&lowered, &mut issues);
     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
     super::rules::check(&lowered, &mut issues);
@@ -199,14 +201,20 @@ fn module_checks(
         };
         for (module, rule) in sealed.rules_for(&full) {
             for r in rule(lowered, id, item) {
+                // The value refused at the issue's path, as the document holds it.
+                let actual = lowered
+                    .pointer(&format!("/{}", r.path))
+                    .cloned()
+                    .unwrap_or(Value::Null);
                 if r.severity == "notice" {
                     notices.push(Notice {
                         code: r.code,
                         ids: vec![id.clone()],
                         path: r.path,
-                        actual: Value::Null,
+                        actual,
                         what: r.what,
                         migration: None,
+                        replaced_by: None,
                     });
                     continue;
                 }
@@ -216,7 +224,7 @@ fn module_checks(
                     .iter()
                     .find(|c| c.code == r.code)
                     .map(|c| c.fix.clone());
-                let mut issue = Issue::error(r.code, id, r.path, Value::Null, &r.what);
+                let mut issue = Issue::error(r.code, id, r.path, actual, &r.what);
                 issue.severity = if r.severity == "warning" {
                     "warning"
                 } else {
@@ -830,6 +838,7 @@ pub(super) fn migrate_item(
                 step.to
             ),
             migration: Some((entry.full_name(), step.from, step.to)),
+            replaced_by: None,
         });
     }
 }
@@ -927,6 +936,7 @@ fn check_item(
                 actual: json!(text),
                 what: format!("kind `{text}` is not registered in this build; the item is skipped"),
                 migration: None,
+                replaced_by: None,
             });
             None
         }
@@ -956,6 +966,20 @@ fn check_item(
         }
         Lookup::Known { entry, saved } => Some((entry, saved)),
     };
+    // A deprecated kind still loads, and says so, naming what replaces it.
+    if let Some((entry, _)) = known {
+        if let Some((since, replaced_by)) = ctx.sealed.deprecation_of(&entry.full_name()) {
+            notices.push(Notice {
+                code: "deprecated",
+                ids: vec![key.to_string()],
+                path: at("kind"),
+                actual: json!(text),
+                what: format!("kind `{text}` is deprecated since {since}; use {replaced_by}"),
+                migration: None,
+                replaced_by: Some((replaced_by.clone(), since.clone())),
+            });
+        }
+    }
 
     for (field, value) in fields {
         if !ITEM_KEYS.contains(&field.as_str()) {
@@ -1239,6 +1263,7 @@ fn check_params(
                         version.minor
                     ),
                     migration: None,
+                    replaced_by: None,
                 });
                 dropped.push(name.clone());
             } else {
@@ -1401,6 +1426,33 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
+/// Every control carries a role, so a screen reader can say what it is (Rules every primitive
+/// follows: Accessible; Control: `role`, an ARIA role). A control without one is refused, naming
+/// the control and the field; the section and its keys are [`check_id_maps`]'s.
+fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "controls").and_then(Value::as_object) else {
+        return;
+    };
+    for (key, entry) in entries {
+        let Some(fields) = entry.as_object() else {
+            continue;
+        };
+        let what = match fields.get("role") {
+            None => "required, and absent",
+            Some(Value::String(role)) if !role.is_empty() => continue,
+            Some(Value::String(_)) => "required, and empty",
+            Some(_) => "not a string",
+        };
+        issues.push(Issue::error(
+            "out_of_range",
+            key,
+            format!("controls/{key}/role"),
+            fields.get("role").cloned().unwrap_or(Value::Null),
+            what,
+        ));
+    }
+}
+
 /// The entries of `channels` or `bound_values`; the section and its keys are [`check_id_maps`]'s.
 fn check_targets(
     doc: &Value,
@@ -1554,19 +1606,69 @@ const BOUND_VALUE_FIELDS: &[&str] = &[
     "missing",
 ];
 
+/// The transport's `frame_rate` as `[p, q]`, or as `p/q` text, when it is one.
+pub fn frame_rate_of(transport: &Value) -> Option<(u32, u32)> {
+    let whole = |v: &Value| u32::try_from(v.as_u64()?).ok();
+    match member(transport, "frame_rate")? {
+        Value::Array(pq) if pq.len() == 2 => Some((whole(&pq[0])?, whole(&pq[1])?)),
+        Value::String(s) => {
+            let (p, q) = s.split_once('/').unwrap_or((s, "1"));
+            Some((p.trim().parse().ok()?, q.trim().parse().ok()?))
+        }
+        _ => None,
+    }
+}
+
+/// The transport's rates (issue #488; Time and the flick: the valid-rates rule): a frame rate
+/// whose frame, or a sample rate whose sample, isn't a whole number of flicks is refused with
+/// `bad_rate` naming the rate. A rate that isn't a rate at all is refused the same way.
+fn check_transport(doc: &Value, issues: &mut Vec<Issue>) {
+    let Some(transport) = member(doc, "transport").filter(|t| t.is_object()) else {
+        return;
+    };
+    if let Some(rate) = member(transport, "frame_rate") {
+        let parsed = frame_rate_of(transport);
+        let outcome = match parsed {
+            Some((p, q)) => crate::time::frame_length(p, q).map(|_| ()),
+            None => Err(format!(
+                "frame rate {rate} is not two whole numbers above zero"
+            )),
+        };
+        if let Err(why) = outcome {
+            let named = parsed
+                .map(|(p, q)| crate::time::Rate::Frame { p, q }.text())
+                .unwrap_or_else(|| rate.to_string());
+            issues.push(Issue::envelope(
+                "bad_rate",
+                "transport/frame_rate".into(),
+                json!(named),
+                &why,
+            ));
+        }
+    }
+    if let Some(rate) = member(transport, "sample_rate") {
+        let outcome = match rate.as_u64().and_then(|hz| u32::try_from(hz).ok()) {
+            Some(hz) => crate::time::sample_length(hz).map(|_| ()),
+            None => Err(format!("sample rate {rate} is not a whole number of hertz")),
+        };
+        if let Err(why) = outcome {
+            issues.push(Issue::envelope(
+                "bad_rate",
+                "transport/sample_rate".into(),
+                rate.clone(),
+                &why,
+            ));
+        }
+    }
+}
+
 /// A duration field's flicks: a time span (`"2s"`, `"120f"` at the transport's rate), above 0.
 pub fn duration(doc: &Value, value: &Value) -> Result<i64, String> {
     let Value::String(text) = value else {
         return Err("not a time literal".into());
     };
     let rate = member(doc, "transport")
-        .and_then(|t| member(t, "frame_rate"))
-        .and_then(Value::as_array)
-        .and_then(|pq| {
-            let p = u32::try_from(pq.first()?.as_u64()?).ok()?;
-            let q = u32::try_from(pq.get(1)?.as_u64()?).ok()?;
-            Some((p, q))
-        })
+        .and_then(frame_rate_of)
         .unwrap_or((60, 1));
     let ctx = TimeContext {
         frame_rate: rate,

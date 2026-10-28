@@ -110,6 +110,10 @@ export function fakeFill(revision: number, faults: Faults = {}): Fill {
     caps: { holdStop: true, wakeIdle: true, steer: true, followUp: true, answerPermission: true, nativeTools: true, mcp: false, rewrite: false, editInput: false, errorTurnHook: false, startTurn: true },
     unsupported: { [SURFACE]: [], cli: [] },
     doctor,
+    // Allow only from decision; the suggestion fault also takes it from beside it, the option's label or your words.
+    permissionReply: (answer) => (answer.decision === 'allow' || (faults.allowFromSuggestion && /\b(allow|yes)\b/i.test(`${answer.label ?? ''} ${answer.words ?? ''}`))
+      ? { behavior: 'allow' }
+      : { behavior: 'deny', ...(answer.words ? { message: answer.words } : {}) }),
   });
   const adapter = {
     ...base,

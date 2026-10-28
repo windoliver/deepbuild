@@ -1,0 +1,28 @@
+{
+  "#351.1d3d1e53": [
+    "examples-answer-passed",
+    "guide-names-nothing",
+    "guide-without-examples"
+  ],
+  "#351.83b84661": [
+    "admits-everything"
+  ],
+  "#351.542cefd7": [
+    "admits-everything"
+  ],
+  "#351.f151ca10": [
+    "admits-everything",
+    "plants-ignored"
+  ],
+  "#351.86308453": [
+    "admits-everything",
+    "plants-ignored"
+  ],
+  "#351.838460c6": [
+    "admits-everything"
+  ],
+  "#351.c5e40eeb": [
+    "admits-everything",
+    "replaced-kind-kept"
+  ]
+}

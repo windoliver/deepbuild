@@ -143,6 +143,14 @@ function runCase(c: Case, fill: Fill, headless: boolean): Ran {
       }
       return delivery as { session: string; sign: string | null };
     },
+    reply(answer, request) {
+      const reply = fill.adapter.permissionReply;
+      if (typeof reply !== 'function') {
+        probes.push('reply');
+        throw new Stop('BLOCKED', `the adapter has no permissionReply, so the harness can't read its reply on ${fill.surface}`, []);
+      }
+      try { return reply.call(fill.adapter, answer, request); } catch (error) { throw new Stop('FAIL', `permissionReply threw: ${String(error)}`, ['type']); }
+    },
     bounds(panel): Rect {
       probes.push('bounds');
       // No harness here renders a panel, so none has geometry to measure; the probe is never faked.
@@ -227,8 +235,9 @@ function prove(kit: Kit, fake: Fake): { proof: FakeProof; saysMessage: boolean }
   const named = new Set(fake.codes);
   const extra = raised.filter((code) => !named.has(code));
   const missing = [...named].filter((code) => !raised.includes(code)).sort();
-  // A case's own finding leads its message, before any '; '-joined notes; the fake's message must be that finding.
-  const saysMessage = fake.message.length > 0 && failing.some((c) => c.message === fake.message || c.message.startsWith(`${fake.message}; `));
+  // A case's own finding leads its message, before any '; '-joined notes; the fake's message must be that finding,
+  // or lead it before the ': ' that names what it found (the ID, the turn).
+  const saysMessage = fake.message.length > 0 && failing.some((c) => c.message === fake.message || c.message.startsWith(`${fake.message}; `) || c.message.startsWith(`${fake.message}: `));
   return { proof: { raised, extra, missing, killed: extra.length === 0 && missing.length === 0 }, saysMessage };
 }
 

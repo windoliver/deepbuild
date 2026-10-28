@@ -22,13 +22,27 @@
         "version": "1.0.0",
         "reads": [
           "motion.program",
-          "t"
+          "t",
+          "view(reduced_motion)"
         ],
         "writes": [
           "motion.at",
           "motion.fields"
         ],
         "per": "item"
+      },
+      {
+        "operator": "motion.clock",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t"
+        ],
+        "writes": [
+          "motion.next"
+        ],
+        "per": "document"
       }
     ]
   },

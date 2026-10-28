@@ -565,27 +565,27 @@ mod tests {
         };
         for (to, path) in [
             (
-                json!({"class": "document", "kind": "point"}),
+                json!({"class": "document", "role": "button", "kind": "point"}),
                 "controls/jump/goto/to",
             ),
             (
-                json!({"class": "view", "kind": "point"}),
+                json!({"class": "view", "role": "button", "kind": "point"}),
                 "controls/jump/goto/to",
             ),
             (
-                json!({"class": "viewer", "kind": "slider"}),
+                json!({"class": "viewer", "role": "slider", "kind": "slider"}),
                 "controls/jump/goto/to",
             ),
         ] {
             let err = scene(&with_controls(json!({
                 "spot": to,
-                "jump": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot"}}
+                "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot"}}
             })))
             .unwrap_err();
             assert_eq!((err.code, err.path.as_str()), ("out_of_range", path));
         }
         let err = scene(&with_controls(json!({
-            "jump": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "items/piece/aim"}}
+            "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "items/piece/aim"}}
         })))
         .unwrap_err();
         assert_eq!(err.code, "module_missing");
@@ -716,10 +716,11 @@ mod tests {
             json!({"orbit": {"distance": 5}, "user": {"pivot": "eye"}}),
             json!({}),
         );
-        d["controls"] = json!({"keys": {"class": "viewer", "verb": "camera.pan", "increment": 1}});
+        d["controls"] = json!({"keys": {"class": "viewer", "role": "button", "verb": "camera.pan", "increment": 1}});
         assert_eq!(scene(&d).unwrap_err().path, "controls/keys/verb");
         let mut d = doc(json!({"orbit": {"distance": 5}}), json!({}));
-        d["controls"] = json!({"keys": {"class": "viewer", "verb": "camera.turn"}});
+        d["controls"] =
+            json!({"keys": {"class": "viewer", "role": "button", "verb": "camera.turn"}});
         assert_eq!(scene(&d).unwrap_err().path, "controls/keys/verb");
     }
 

@@ -4,6 +4,9 @@
 //   overhead   hyperfine times 1,000 forwarded PreToolUse calls beside a native no-op binary, the floor:
 //              the p95 of deep-hook minus the p95 of the floor
 //   fail-open  50 PreToolUse calls against the hub stopped with SIGSTOP, each from spawn to exit: the p95
+//   guards     (issue #304) 200 forwarded PreToolUse calls with rules.json holding every shipped default entry, and
+//              200 with it empty, interleaved, each from spawn to exit: the p95 matching every entry adds; then
+//              `deep-hook check` on one default's planted call and on its twin, 200 each: their p95s
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -77,6 +80,39 @@ const modes = {
         if (r.status !== 0) throw Error(`deep-hook didn't allow ls with the hub stopped: exit ${r.status}`);
       }
       return { failOpenP95Ms: p95(samples) };
+    } finally {
+      await stop(hub);
+    }
+  },
+
+  async guards(home) {
+    const { hub, cwd, call } = await setUp(home);
+    const defaults = JSON.parse(readFileSync(join(REPO, 'crates/deep-hook/default-rules.json'), 'utf8'));
+    const bare = join(home, 'bare');
+    mkdirSync(join(bare, '.deepbuild'), { recursive: true });
+    writeFileSync(join(bare, '.deepbuild', 'rules.json'), '{"v":1,"entries":{}}');
+    writeFileSync(join(bare, '.deepbuild', 'config.json'), JSON.stringify({ hub: { address: `unix:${join(home, '.deepbuild', 'hub.sock')}` } }));
+    writeFileSync(join(home, '.deepbuild', 'rules.json'), JSON.stringify(defaults));
+    const timed = (args, env, input) => {
+      const t0 = performance.now();
+      const r = spawnSync(HOOK, args, { cwd, env: { ...process.env, ...env }, input });
+      if (r.status !== 0) throw Error(`deep-hook ${args.join(' ')} exited ${r.status}: ${r.stderr}`);
+      return performance.now() - t0;
+    };
+    const proof = defaults.proofs['no-kill-by-name'];
+    const check = (c) => JSON.stringify({ entry: defaults.entries['no-kill-by-name'], call: c });
+    try {
+      const all = [];
+      const none = [];
+      const planted = [];
+      const twin = [];
+      for (let i = 0; i < 200; i++) {
+        all.push(timed(['claude-code', 'PreToolUse'], { HOME: home }, call));
+        none.push(timed(['claude-code', 'PreToolUse'], { HOME: bare }, call));
+        planted.push(timed(['check'], { HOME: home }, check(proof.planted)));
+        twin.push(timed(['check'], { HOME: home }, check(proof.twin)));
+      }
+      return { matchP95Ms: p95(all) - p95(none), checkPlantedP95Ms: p95(planted), checkTwinP95Ms: p95(twin) };
     } finally {
       await stop(hub);
     }

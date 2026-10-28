@@ -16,7 +16,7 @@ use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use deep_canvas::cost::Coefficients;
-use deep_canvas::document::{canonical_in, check_costed, check_in, Issue};
+use deep_canvas::document::{canonical_in, check_costed, check_in, Issue, Notice};
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
 use deep_canvas::schedule::{
@@ -118,6 +118,16 @@ pub enum Planted {
     FullScreenOnly3d,
     /// #383: Esc leaves full screen and goes back to the top at once.
     EscToRoot,
+    /// #371: show-time admission refuses a revision for any error it has, carried or not.
+    CountsEveryIssue,
+    /// #371: an issue counts as carried when the last good revision had one with its code.
+    MatchesCarriedByCode,
+    /// #371: the check returns its issues without `actual`.
+    IssuesWithoutActual,
+    /// #371: a kind with `deprecated_since` loads with no `deprecated` notice.
+    LoadsDeprecatedSilently,
+    /// #376: the accessibility tree announces every readout on every frame, changed or not.
+    AnnouncesEveryFrame,
     /// #384: the ask box puts the quote into your words.
     BoxFoldsQuote,
     /// #384: the ask box sends no `t`.
@@ -130,6 +140,14 @@ pub enum Planted {
     ResolverOnlyRefUnresolved,
     /// #384: the resolver closes the ask-task of a message whose item is gone.
     ResolverClosesTask,
+    /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
+    CheckpointNearestInDistance,
+    /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
+    AcceptsEverySampleRate8To192k,
+    /// #488: `rate`'s index forms t × p in i64.
+    FrameIndexI64Product,
+    /// #488: `rate`'s index divides truncating toward 0.
+    FrameIndexTruncatingDivision,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -269,6 +287,23 @@ pub enum Call {
     Fixtures,
     /// One frame of a document's session (#387).
     Eval(Box<Eval>),
+    /// The valid-rates rule for one rate, with no document (#488).
+    Rate(crate::time::RateCall),
+    /// A time literal resolved against a document's current revision (#488).
+    Time {
+        doc: String,
+        text: String,
+    },
+    /// An export of a document's current revision planned at its rates (#488).
+    Export(crate::time::Export),
+    /// A document's session played on a virtual display to `to` (#488).
+    Play {
+        doc: String,
+        display_hz: u32,
+        to: i64,
+    },
+    /// Seeking against playing, on canonical renders (#488).
+    Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
     Frames {
         doc: String,
@@ -276,6 +311,8 @@ pub enum Call {
         from: i64,
         step: i64,
     },
+    /// The replica's `see`: a panel's accessibility tree as data and every announcement it made (#376).
+    See(String),
     /// Shows or hides a panel from this call on.
     Panel {
         panel: String,
@@ -366,10 +403,18 @@ pub enum Call {
     },
 }
 
+/// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
+/// rate and markers, never a fixed 60/1.
+#[derive(Clone, Debug)]
+pub enum EvalTime {
+    Flicks(i64),
+    Literal(String),
+}
+
 /// One `eval` call (#387).
 pub struct Eval {
     pub doc: String,
-    pub t: i64,
+    pub t: EvalTime,
     /// `locale` and `reduced_motion`, over the document's defaults.
     pub view: Map<String, Value>,
     pub clean: bool,
@@ -466,8 +511,8 @@ pub struct Hub<'a> {
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
 }
 
-/// A snapshot's straight RGBA and its size.
-pub type Raster = (Vec<u8>, [u16; 2]);
+/// A snapshot's straight RGBA, its size and each item's box in its pixels.
+pub type Raster = (Vec<u8>, [u16; 2], Vec<(String, [f64; 4])>);
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
 /// Mac's on a reference Mac, and scaled by its own speed anywhere else.
@@ -503,26 +548,29 @@ pub fn flicks(text: &str) -> Option<i64> {
     Time::parse(text).ok()?.resolve(&ctx).ok()
 }
 
+/// The scheduler's options for a scenario: its planted twins and its shuffle.
+fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
+    let planted = SchedulePlanted {
+        key_without_locale: scenario.planted == Some(Planted::KeyWithoutLocale),
+        key_without_reduced_motion: scenario.planted == Some(Planted::KeyWithoutReducedMotion),
+        key_hashes: (scenario.planted == Some(Planted::KeyHashesPositions))
+            .then(|| "test.scatter.positions".to_string()),
+        steps_by_name: startup.steps_by_name,
+        key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
+        checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+    };
+    Options {
+        access_log: startup.test_build,
+        shuffle: scenario.shuffle,
+        planted,
+        timing: None,
+    }
+}
+
 impl<'a> Hub<'a> {
     pub fn new(scenario: &'a Scenario, startup: &'a Startup) -> Self {
-        let planted = SchedulePlanted {
-            key_without_locale: scenario.planted == Some(Planted::KeyWithoutLocale),
-            key_without_reduced_motion: scenario.planted == Some(Planted::KeyWithoutReducedMotion),
-            key_hashes: (scenario.planted == Some(Planted::KeyHashesPositions))
-                .then(|| "test.scatter.positions".to_string()),
-            steps_by_name: startup.steps_by_name,
-            key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
-        };
         #[allow(unused_mut)]
-        let mut sched = Scheduler::new(
-            &startup.sealed,
-            Options {
-                access_log: startup.test_build,
-                shuffle: scenario.shuffle,
-                planted,
-                timing: None,
-            },
-        );
+        let mut sched = Scheduler::new(&startup.sealed, schedule_options(scenario, startup));
         #[cfg(feature = "test-accent")]
         {
             sched.look_hook = Some(crate::planted::look_hook);
@@ -547,6 +595,12 @@ impl<'a> Hub<'a> {
             shown_at: BTreeMap::new(),
             asks: BTreeMap::new(),
         }
+    }
+
+    /// A fresh scheduler's options: the hub's own (#488's comparisons run each side on its own
+    /// scheduler, so no content key crosses sides).
+    pub(crate) fn options(&self) -> Options {
+        schedule_options(self.scenario, self.startup)
     }
 
     /// The GPU 3D revisions draw on, opened on first use.
@@ -576,7 +630,7 @@ impl<'a> Hub<'a> {
         let palette = self.look.light.clone();
         let gpu = self.gpu3().ok_or(())?;
         gpu.draw(doc, t, &palette, size)
-            .map(|(rgba, _)| (rgba, size))
+            .map(|(rgba, scene)| (rgba, size, scene.boxes()))
             .map_err(|_| ())
     }
 
@@ -748,6 +802,15 @@ impl<'a> Hub<'a> {
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
+            Call::Rate(r) => self.rate_reply(r),
+            Call::Time { doc, text } => self.time_reply(doc, text),
+            Call::Export(e) => self.export_reply(e),
+            Call::Play {
+                doc,
+                display_hz,
+                to,
+            } => self.play(doc, *display_hz, *to),
+            Call::Determinism(d) => self.determinism(d),
             Call::Frames {
                 doc,
                 count,
@@ -793,6 +856,7 @@ impl<'a> Hub<'a> {
             Call::Input { panel, event } => self.input(panel, event),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
             Call::Ask {
                 panel,
@@ -946,20 +1010,39 @@ impl<'a> Hub<'a> {
             &writer,
             &title,
         );
+        let mut notices = Vec::new();
         let (stamped, mut issues, diff) = match stamped {
             Err(issues) => (None, issues, None),
             Ok(doc) => {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
-                let mut issues = match self.scenario.planted {
+                let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
                         let coefficients = Coefficients::reference()
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
-                        check_costed(&doc, &self.startup.sealed, &coefficients).issues
+                        check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_in(&doc, &self.startup.sealed).issues,
+                    _ => check_in(&doc, &self.startup.sealed),
                 };
+                notices = self.notices_reply(&result.notices);
+                let mut issues = result.issues;
+                // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
+                // the rest.
+                if self.scenario.planted == Some(Planted::AcceptsEverySampleRate8To192k) {
+                    issues.retain(|i| !(i.code == "bad_rate" && i.path == "transport/sample_rate"));
+                    let hz = doc
+                        .pointer("/transport/sample_rate")
+                        .and_then(Value::as_u64);
+                    if let Some(hz) = hz.filter(|hz| !(8_000..=192_000).contains(hz)) {
+                        issues.push(Issue::envelope(
+                            "bad_rate",
+                            "transport/sample_rate".into(),
+                            json!(hz),
+                            "outside 8 to 192 kHz",
+                        ));
+                    }
+                }
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,
@@ -1027,6 +1110,9 @@ impl<'a> Hub<'a> {
             .unwrap_or_default();
 
         let mut reply = Map::new();
+        if !notices.is_empty() {
+            reply.insert("notices".into(), Value::Array(notices));
+        }
         // A payload refused before it could be stamped makes no revision.
         if stamped.is_some() {
             reply.insert("rev".into(), json!(rev));
@@ -1090,10 +1176,28 @@ impl<'a> Hub<'a> {
         self.present(show, visible, drawn.as_ref(), reply)
     }
 
+    /// The check's notices as a reply carries them. The planted check that loads a deprecated
+    /// kind silently leaves its `deprecated` notices out.
+    pub fn notices_reply(&self, notices: &[Notice]) -> Vec<Value> {
+        notices
+            .iter()
+            .filter(|n| {
+                !(n.code == "deprecated"
+                    && self.scenario.planted == Some(Planted::LoadsDeprecatedSilently))
+            })
+            .map(Notice::to_json)
+            .collect()
+    }
+
     /// Every issue the checks raised, kept as evidence; the reply inlines them up to the read
-    /// cap, with an empty list of snapshots. True when one is an error.
+    /// cap, with an empty list of snapshots. True when one is an error not carried.
     pub fn issue_reply(&self, issues: &[Issue], reply: &mut Map<String, Value>) -> bool {
         let mut list: Vec<Value> = issues.iter().map(Issue::to_json).collect();
+        if self.scenario.planted == Some(Planted::IssuesWithoutActual) {
+            for i in list.iter_mut().filter_map(Value::as_object_mut) {
+                i.remove("actual");
+            }
+        }
         order_issues(&mut list);
         let full = serde_json::to_vec(&list).expect("issues serialize");
         let issues_evidence = evidence::put(&self.scenario.evidence, &full).ok();
@@ -1109,7 +1213,9 @@ impl<'a> Hub<'a> {
             reply.insert("issues_evidence".into(), json!(sha));
         }
         reply.insert("snapshots".into(), json!([]));
-        list.iter().any(|i| i["severity"] == "error")
+        // A carried error never refuses: the last good revision had it too.
+        list.iter()
+            .any(|i| i["severity"] == "error" && i.get("carried").is_none())
     }
 
     /// A revision that passed its checks, presented: a hidden session is neither evaluated nor
@@ -1148,10 +1254,11 @@ impl<'a> Hub<'a> {
                                 ]
                             });
                             let ground = self.look.light.get("ground").copied().unwrap_or([255; 3]);
-                            Some((self.renderer.raster(drawn, size, Some(ground)), size))
+                            let rgba = self.renderer.raster(drawn, size, Some(ground));
+                            Some((rgba, size, Vec::new()))
                         }
                     };
-                    let Some((mut rgba, size)) = pixels else {
+                    let Some((mut rgba, size, boxes3d)) = pixels else {
                         reply.insert("outcome".into(), json!("not_presented"));
                         reply.insert("reason".into(), json!("timeout"));
                         if show.check {
@@ -1171,7 +1278,12 @@ impl<'a> Hub<'a> {
                                 Some(d) => snapshot::entry(&sha, d, size),
                                 None => json!({"sha256": sha, "w": size[0], "h": size[1]}),
                             };
+                            let rows = match drawn.filter(|_| !three) {
+                                Some(d) => snapshot::visible(d.boxes(), d.scale(size), size),
+                                None => snapshot::visible(boxes3d, 1.0, size),
+                            };
                             reply.insert("snapshots".into(), json!([entry]));
+                            reply.insert("visible".into(), rows);
                             snapshot_taken = true;
                             reply.insert("outcome".into(), json!("presented"));
                         }
@@ -1186,7 +1298,18 @@ impl<'a> Hub<'a> {
             reply.insert("outcome".into(), json!("presented"));
         }
         if show.check {
-            reply.insert("result".into(), json!(self.verdict(show, snapshot_taken)));
+            // A check that decides a verdict counts every issue, carried ones too: a stricter
+            // rule never blocks an unrelated fix, and never passes the work either (Revision).
+            // Errors come first in the list, so an inline one is there whenever any is.
+            let errors = reply
+                .get("issues")
+                .and_then(Value::as_array)
+                .is_some_and(|l| l.iter().any(|i| i["severity"] == "error"));
+            let verdict = match self.verdict(show, snapshot_taken) {
+                "PASS" if errors => "FAIL",
+                v => v,
+            };
+            reply.insert("result".into(), json!(verdict));
         }
         Value::Object(reply)
     }

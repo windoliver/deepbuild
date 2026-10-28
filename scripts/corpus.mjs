@@ -251,6 +251,8 @@ const CLAUDE_SCENARIOS = [
     { stops: 1 }] },
   { name: 'loop', steps: [{ type: '/loop 1m Reply with only the word tick. Do not use tools.' }, { stops: 1, ms: 150_000 }, { type: '/loop stop' }] },
   { name: 'compact', steps: [{ type: 'Use the Bash tool to run: echo before-compact' }, { type: '/compact', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'compact' }, { type: 'Reply with only the word after.' }] },
+  // `/clear` rotates the session ID in the same process; the second session is then forked by a new one.
+  { name: 'clear', steps: [{ type: 'Use the Bash tool to run: echo before-clear' }, { type: '/clear', until: (payload) => payload.hook_event_name === 'SessionStart' && payload.source === 'clear' }, { type: 'Reply with only the word after.' }] },
   { name: 'stop-failure', model: 'claude-nonexistent-model', steps: [{ type: 'Reply with only the word hi.' }] },
   { name: 'crash', steps: [{ prompt: 'Run this exact command with the Bash tool in the foreground and wait for it to finish: node -e "setTimeout(() => console.log(1), 30000)"', killOn: (payload) => payload.hook_event_name === 'PreToolUse' }] },
 ];
@@ -273,6 +275,15 @@ async function recordClaude(out, bin, facts) {
         const resumed = await session({ argv: [bin, ...args, '--resume', id], cwd: realpathSync(work), dir, terminal: true, steps: [{ type: 'Reply with only the word resumed.' }], startAfter: (_, payloads) => payloads.filter(({ hook_event_name: hook }) => hook === 'SessionStart').length > 1 });
         results.at(-1).blocked ??= resumed.blocked;
         results.at(-1).payloads = resumed.payloads;
+      }
+    }
+    // A fork of the session `/clear` started: a new process, a new session ID, SessionStart from "resume".
+    if (scenario.name === 'clear') {
+      const id = results.at(-1).payloads.findLast(({ hook_event_name: hook }) => hook === 'SessionStart')?.session_id;
+      if (id) {
+        const forked = await session({ argv: [bin, ...args, '--resume', id, '--fork-session'], cwd: realpathSync(work), dir, terminal: true, steps: [{ type: 'Reply with only the word forked.' }], startAfter: (_, payloads) => payloads.filter(({ hook_event_name: hook }) => hook === 'SessionStart').length > 2 });
+        results.at(-1).blocked ??= forked.blocked;
+        results.at(-1).payloads = forked.payloads;
       }
     }
   }
@@ -352,8 +363,9 @@ async function recordCommand(options) {
     if (!payloads.length) { say({ type: 'session', scenario, blocked: blocked ?? 'no payload was recorded' }); continue; }
     const target = join(out, agent, version, scenario);
     mkdirSync(target, { recursive: true });
-    const path = payloads.find((payload) => payload.transcript_path)?.transcript_path;
-    const transcript = path && existsSync(path) ? lines(path).filter((entry) => keepEntry(agent, entry)).map((entry) => redact(strip(entry))) : [];
+    // Each session's transcript in the order its hooks came, since `/clear` and a fork start new ones.
+    const paths = [...new Set(payloads.map((payload) => payload.transcript_path).filter((path) => path && existsSync(path)))];
+    const transcript = paths.flatMap((path) => lines(path)).filter((entry) => keepEntry(agent, entry)).map((entry) => redact(strip(entry)));
     writeFileSync(join(target, 'transcript.jsonl'), transcript.map((entry) => JSON.stringify(entry)).join('\n') + (transcript.length ? '\n' : ''));
     writeFileSync(join(target, 'events.jsonl'), payloads.map((payload) => JSON.stringify({ payload: redact(payload) })).join('\n') + '\n');
     writeFileSync(join(target, 'session.json'), `${JSON.stringify({ schema: 'corpus.session@1', agent, version, surface: 'terminal', recorded: new Date().toISOString().slice(0, 10), scenario }, null, 2)}\n`);

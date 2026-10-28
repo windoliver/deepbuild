@@ -36,6 +36,9 @@ test-two-writers = ["dep:deep-canvas-test-modules"]
 test-later-phase = ["dep:deep-canvas-test-modules"]
 test-cycle = ["dep:deep-canvas-test-modules"]
 test-missing-dep = ["dep:deep-canvas-test-modules"]
+# Issue #371: a new release's stricter title rule, and a deprecated kind with its replacement.
+test-title-cap = ["dep:deep-canvas-test-modules"]
+test-deprecated = ["dep:deep-canvas-test-modules"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -48,6 +51,10 @@ test-step = ["dep:deep-canvas-test-modules"]
 test-step-renamed = ["dep:deep-canvas-test-modules"]
 test-step-cycle = ["dep:deep-canvas-test-modules"]
 test-scatter = ["dep:deep-canvas-test-modules"]
+# Issue #488: a stepping module with checkpoints, and a module whose cache is keyed by frame
+# number (the #488 acceptance README: The test canvas modules).
+test-tick = ["dep:deep-canvas-test-modules"]
+test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #388: test builds that leave look, or text, out of the build set's list; the seal
 # refuses each at startup, naming the module.
 test-leave-out-look = []

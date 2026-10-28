@@ -1083,6 +1083,30 @@
           "why": "Issue #355: the wiki's claims are learned changes in the record, whose quotes, scope and rollback the core checks; sources are read through record.resolve and kept with record.keep."
         }
       }
+    },
+    "packages/reading/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #63: a reading job's answer is checked against reading.answer@1 before any finding is read."
+        },
+        "@deepbuild/evidence": {
+          "spec": "0.0.0",
+          "why": "Issue #63: a session handle's transcript and an ev: handle are read from the evidence store, opened read-only."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #63: handles resolve through the record (a session through its transcript.archived link), and readings append reading.finished and reading.dropped."
+        },
+        "@deepbuild/runner": {
+          "spec": "0.0.0",
+          "why": "Issue #63: a reading job runs as the runner's headless job, in its sandbox, with its plan window readings."
+        },
+        "@deepbuild/wiki": {
+          "spec": "0.0.0",
+          "why": "Issue #63: an install writes its findings as wiki claims, and a cite's known-from is the wiki's knownOf."
+        }
+      }
     }
   },
   "allowedFindings": [

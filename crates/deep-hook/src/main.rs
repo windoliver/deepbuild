@@ -5,7 +5,9 @@
 //! acknowledge it in time, or doesn't reply by the hold it acknowledged, it denies a call a fail_closed
 //! entry matches, allows every other call, and spools the request byte for byte for the hub to replay.
 //! As `deep-hook statusline`, Claude Code's status line command, it sends the hub the plan windows the
-//! status line reads (#159), then runs your own status line command and prints what it prints.
+//! status line reads (#159), then runs your own status line command and prints what it prints. As
+//! `deep-hook <agent> waiter`, Claude Code's background Stop entry, it waits for an answer to its session and
+//! wakes the session with it (#25).
 
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
@@ -37,6 +39,25 @@ const BILLING_KEYS: &[&str] = &[
     "OPENAI_API_KEY",
 ];
 
+/// Who is calling: Cursor's CLI and Grok run the hooks in Claude Code's settings file, so a hook installed for Claude
+/// Code may come from either. Each sets variables of its own in its hooks' environment, and Claude Code sets
+/// CLAUDECODE; a hook that has another tool's and not Claude Code's is sent under that tool's name.
+const CALLERS: &[(&str, &[&str])] = &[
+    ("grok", &["GROK_HOOK_EVENT", "GROK_SESSION_ID"]),
+    ("cursor", &["CURSOR_VERSION", "CURSOR_PROJECT_DIR"]),
+];
+
+/// The agent a hook comes from: the one its command names, unless another tool's variables say it runs it.
+fn caller(agent: &str) -> &str {
+    if agent != "claude-code" || env::var_os("CLAUDECODE").is_some() {
+        return agent;
+    }
+    CALLERS
+        .iter()
+        .find(|(_, vars)| vars.iter().any(|v| env::var_os(v).is_some()))
+        .map_or(agent, |(name, _)| name)
+}
+
 /// The features this build supports; the request carries only those the hub lists too.
 const FEATURES: &[&str] = if cfg!(feature = "plant-f-test") {
     &["f_test"]
@@ -54,8 +75,27 @@ fn setting(section: &str, key: &str) -> Option<Value> {
     member(member(&config, section)?, key).cloned()
 }
 
+/// The hook's working folder, once its payload is read: a worktree `deep hub use --root` sent to a dev hub.
+static CWD: OnceLock<PathBuf> = OnceLock::new();
+
 /// The one address setting: `hub.address` in ~/.deepbuild/config.json, `unix:<path>`; absent, ~/.deepbuild/hub.sock.
+/// A worktree named in `hub.use`, `{<worktree>: "unix:<path>"}`, which `deep hub use --root` writes once the OS
+/// confirms you, sends its sessions to that dev hub instead; the longest worktree that holds the folder wins.
 fn address() -> PathBuf {
+    if let (Some(cwd), Some(Value::Object(uses))) = (CWD.get(), setting("hub", "use")) {
+        let real = fs::canonicalize(cwd).unwrap_or_else(|_| cwd.clone());
+        let chosen = uses
+            .iter()
+            .filter_map(|(worktree, value)| match value {
+                Value::String(a) if a.starts_with("unix:") => Some((Path::new(worktree), &a[5..])),
+                _ => None,
+            })
+            .filter(|(worktree, _)| real.starts_with(worktree) || cwd.starts_with(worktree))
+            .max_by_key(|(worktree, _)| worktree.as_os_str().len());
+        if let Some((_, path)) = chosen {
+            return PathBuf::from(path);
+        }
+    }
     match setting("hub", "address") {
         Some(Value::String(address)) if address.starts_with("unix:") => {
             PathBuf::from(&address[5..])
@@ -121,23 +161,60 @@ struct Guard {
     next_step: String,
 }
 
-/// The entries of ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}}`; none when it is missing,
-/// and why not when it can't be read or isn't that shape.
-fn guards() -> Result<Vec<Guard>, String> {
+/// What deep-hook reads of rules.json: its entries, and what each tool the hub counted counts as.
+#[derive(Default)]
+struct Rules {
+    guards: Vec<Guard>,
+    classes: Vec<(String, String)>,
+}
+
+/// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
+/// is missing, and why not when it can't be read or isn't that shape. Other members, such as each entry's planted
+/// call and twin, are the hub's.
+fn rules() -> Result<Rules, String> {
+    // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
+    if cfg!(feature = "plant-compiled-rule") {
+        return Ok(Rules::default());
+    }
     let text = match fs::read_to_string(home().join("rules.json")) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Rules::default()),
         Err(error) => return Err(format!("can't be read: {error}")),
     };
     let rules = parse(&text).map_err(|_| "isn't JSON".to_string())?;
     let Some(Value::Object(entries)) = member(&rules, "entries") else {
         return Err("has no entries object".to_string());
     };
-    entries
+    let guards = entries
         .iter()
         .map(|(name, entry)| {
             guard(name, entry)
                 .ok_or_else(|| format!("has an entry {name} that isn't a guard@1 entry"))
+        })
+        .collect::<Result<Vec<Guard>, String>>()?;
+    Ok(Rules {
+        guards,
+        classes: classes(member(&rules, "classes"))?,
+    })
+}
+
+/// A `classes` member, `{<tool>: read | change | send | destructive}`; none when it is absent.
+fn classes(value: Option<&Value>) -> Result<Vec<(String, String)>, String> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let Value::Object(fields) = value else {
+        return Err("has a classes member that isn't an object".to_string());
+    };
+    fields
+        .iter()
+        .map(|(tool, class)| match class {
+            Value::String(c) if matcher::CLASSES.contains(&c.as_str()) => {
+                Ok((tool.clone(), c.clone()))
+            }
+            _ => Err(format!(
+                "has a class for {tool} that isn't read, change, send or destructive"
+            )),
         })
         .collect()
 }
@@ -182,10 +259,23 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
     })
 }
 
+/// The tools whose calls deep-hook reads itself; the planted wrong program for #304's AC5 counts only these.
+const READ_TOOLS: &[&str] = &[
+    "Bash",
+    "Edit",
+    "MultiEdit",
+    "Write",
+    "NotebookEdit",
+    "apply_patch",
+    "Read",
+    "Grep",
+];
+
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
-/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch);
-/// None for any other tool.
-fn call(payload: &Value) -> Option<matcher::Call> {
+/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch), and
+/// for every tool, what it counts as: the class `classes` gives it, else change, and destructive for a tool whose
+/// name starts with `delete_`, whatever it is given. None for a payload that names no tool.
+fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> {
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
     };
@@ -205,21 +295,68 @@ fn call(payload: &Value) -> Option<matcher::Call> {
             field("path").map(str::to_string).into_iter().collect(),
             true,
         ),
-        _ => return None,
+        _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
         Some(Value::String(cwd)) if Path::new(cwd).is_absolute() => Some(PathBuf::from(cwd)),
         _ => None,
     };
     let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    Some(matcher::Call::new(
+    let mut call = matcher::Call::new(
         tool,
         command,
         (&paths, read),
         cwd.as_deref(),
         &home,
         &address(),
-    ))
+    );
+    let named = tool.rsplit("__").next().unwrap_or(tool);
+    call.counts =
+        if cfg!(feature = "plant-listed-kinds-only") && !READ_TOOLS.contains(&tool.as_str()) {
+            None
+        } else if named.starts_with("delete_") {
+            Some("destructive".to_string())
+        } else {
+            Some(
+                classes
+                    .iter()
+                    .find(|(t, _)| t == tool)
+                    .map_or("change", |(_, c)| c.as_str())
+                    .to_string(),
+            )
+        };
+    Some(call)
+}
+
+/// `deep-hook check`: whether a guard@1 entry matches a call, read on stdin as `{"entry": guard@1, "call":
+/// {"tool_name", "tool_input", "cwd"?}, "classes"?: {<tool>: <class>}}`; prints `{"matched":true}` or
+/// `{"matched":false}`. The hub runs it over each entry's planted call and twin at install, so an entry is matched
+/// there by the same matcher as on every hook.
+fn check() -> ExitCode {
+    let mut input = String::new();
+    let _ = io::stdin().read_to_string(&mut input);
+    let refuse = |why: &str| {
+        eprintln!("deep-hook check: {why}");
+        ExitCode::from(2)
+    };
+    let Ok(value) = parse(&input) else {
+        return refuse("stdin isn't JSON");
+    };
+    let Some(entry) = member(&value, "entry").and_then(|e| guard("entry", e)) else {
+        return refuse("entry isn't a guard@1 entry whose match deep-hook reads");
+    };
+    let classes = match classes(member(&value, "classes")) {
+        Ok(classes) => classes,
+        Err(why) => return refuse(&format!("the input {why}")),
+    };
+    let Some(called) = member(&value, "call").and_then(|c| call(c, &classes)) else {
+        return refuse("call names no tool_name");
+    };
+    println!(
+        "{{\"matched\":{}}}",
+        called.matches(&entry.pattern).is_some()
+    );
+    ExitCode::SUCCESS
 }
 
 // ---- The exchange with the hub.
@@ -661,6 +798,7 @@ fn sleep_until(start: Instant, after: Duration) {
 
 fn forward(agent: &str, event: &str) -> ExitCode {
     let start = Instant::now();
+    let agent = caller(agent);
     // Guards hold a tool's call before it runs, so only a PreToolUse reads rules.json: no other hook waits on it.
     // It is marked before the watchdog starts and before rules.json is read, then the call: until the call is read
     // and matched, the watchdog doesn't let it through while a fail_closed entry is installed.
@@ -670,15 +808,22 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
     let id = ulid(now / 1_000_000);
-    let guards = if ruling { guards() } else { Ok(Vec::new()) };
+    let rules = if ruling {
+        rules()
+    } else {
+        Ok(Rules::default())
+    };
     // Guards that can't be read may hold a call: with the hub away it is denied, never let through unguarded.
-    match &guards {
+    match &rules {
         Err(why) => {
             let _ = DENIAL.set(format!(
                 "DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry."
             ));
         }
-        Ok(guards) if !guards.iter().any(|g| g.fail_closed) => {
+        Ok(rules)
+            if !rules.guards.iter().any(|g| g.fail_closed)
+                && !cfg!(feature = "plant-compiled-rule") =>
+        {
             RULING.store(false, Ordering::SeqCst)
         }
         Ok(_) => {}
@@ -687,32 +832,57 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let mut input = String::new();
     let _ = io::stdin().read_to_string(&mut input);
     let parsed = parse(&input).ok();
+    if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
+        let _ = CWD.set(PathBuf::from(cwd));
+    }
     // The agent's hook JSON goes as it came: a raw newline in valid JSON is only whitespace, so it becomes a space.
     let payload = if parsed.is_some() {
         input.trim().replace(['\n', '\r'], " ")
     } else {
         quoted(&input)
     };
-    let called = parsed.as_ref().filter(|_| ruling).and_then(call);
-    let guards = guards.unwrap_or_default();
+    let rules = rules.unwrap_or_default();
+    let called = parsed
+        .as_ref()
+        .filter(|_| ruling)
+        .and_then(|p| call(p, &rules.classes));
     let matched: Vec<(&Guard, matcher::Hit)> = match &called {
-        Some(call) => guards
+        Some(call) => rules
+            .guards
             .iter()
             .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
             .collect(),
         None => Vec::new(),
     };
-    // With the hub away, a fail_closed entry the call matched still denies it.
-    if let Some((guard, hit)) = matched.iter().find(|(g, _)| g.fail_closed) {
-        let detail = hit
-            .detail
-            .as_deref()
-            .map(|d| format!(" {d}"))
-            .unwrap_or_default();
-        let _ = DENIAL.set(format!(
-            "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
-            guard.reason, guard.next_step, guard.name
-        ));
+    // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
+    let denials: Vec<String> = matched
+        .iter()
+        .filter(|(g, _)| g.fail_closed)
+        .map(|(guard, hit)| {
+            let detail = hit
+                .detail
+                .as_deref()
+                .map(|d| format!(" {d}"))
+                .unwrap_or_default();
+            format!(
+                "DeepBuild blocked this: {} {}{detail} (guard {}, which holds while the hub doesn't answer)",
+                guard.reason, guard.next_step, guard.name
+            )
+        })
+        .collect();
+    if !denials.is_empty() {
+        let _ = DENIAL.set(denials.join("\n"));
+    }
+    // The planted wrong program for #304's AC1: a rule compiled in, with words of its own.
+    if cfg!(feature = "plant-compiled-rule")
+        && called
+            .as_ref()
+            .is_some_and(|c| c.matches("run:terraform apply").is_some())
+    {
+        let _ = DENIAL.set(
+            "DeepBuild blocked this: terraform apply is compiled out of reach. Ask the person."
+                .to_string(),
+        );
     }
     RULED.store(true, Ordering::SeqCst);
     let names = matched
@@ -984,14 +1154,127 @@ fn send(line: &str) {
     }
 }
 
+// ---- The waiter (#25).
+
+/// How often a waiter looks whether its session's agent still runs, and how long it waits to ask a hub that is away.
+const WAITER_LOOK: Duration = Duration::from_millis(500);
+
+extern "C" {
+    fn kill(pid: i32, sig: i32) -> i32;
+}
+
+/// Whether a process still runs: signal 0 reaches it, or would but for permission.
+fn alive(pid: u32) -> bool {
+    // SAFETY: kill with signal 0 sends nothing; it only checks that the process exists.
+    let sent = unsafe { kill(pid as i32, 0) };
+    sent == 0 || io::Error::last_os_error().raw_os_error() == Some(1)
+}
+
+enum Waited {
+    /// The hub handed over an answer for the session: exit 2 with it, which wakes the session.
+    Answer(String),
+    /// The hub said this waiter is done: a newer one replaced it, the stop hold took the answer, or the session ended.
+    Done,
+    /// The hub is away, or went: ask again once it is back.
+    Away,
+}
+
+/// One wait on the hub's socket as the cli role: the call is answered when the session has an answer for it.
+fn wait_once(request: &str, gone: &dyn Fn() -> bool) -> Waited {
+    let Ok(token) = fs::read_to_string(home().join("control.token")) else {
+        return Waited::Away;
+    };
+    let Ok(stream) = UnixStream::connect(address()) else {
+        return Waited::Away;
+    };
+    let mut reader = BufReader::new(stream);
+    let soon = || Some(Instant::now() + SEND_BUDGET);
+    if !matches!(read_line(&mut reader, soon()), Got::Line(_)) {
+        return Waited::Away;
+    }
+    let hello = format!(
+        "{{\"v\":1,\"hello\":\"cli\",\"token\":{}}}\n",
+        quoted(token.trim())
+    );
+    if reader.get_mut().write_all(hello.as_bytes()).is_err()
+        || !matches!(read_line(&mut reader, soon()), Got::Line(_))
+        || reader.get_mut().write_all(request.as_bytes()).is_err()
+    {
+        return Waited::Away;
+    }
+    loop {
+        match read_line(&mut reader, Some(Instant::now() + WAITER_LOOK)) {
+            Got::Timeout if gone() => return Waited::Done,
+            Got::Timeout => {}
+            Got::Closed => return Waited::Away,
+            Got::Line(text) => {
+                let Ok(reply) = parse(text.trim_end()) else {
+                    return Waited::Away;
+                };
+                return match member(&reply, "result") {
+                    Some(result) => match member(result, "text") {
+                        Some(Value::String(answer)) => Waited::Answer(answer.clone()),
+                        _ => Waited::Done,
+                    },
+                    None => Waited::Away,
+                };
+            }
+        }
+    }
+}
+
+/// `deep-hook <agent> waiter`: waits, as long as Claude Code lets the entry run, for an answer to the session the
+/// payload names, and exits 2 with it on stderr. Its life is its session's: it exits when the agent that started it
+/// does, and waits across the hub's restarts. It uses no CPU while it waits but a look at its agent twice a second.
+fn waiter() -> ExitCode {
+    let since = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let mut input = String::new();
+    let _ = io::stdin().read_to_string(&mut input);
+    let payload = parse(&input).ok();
+    let field = |key: &str| match payload.as_ref().and_then(|p| member(p, key)) {
+        Some(Value::String(text)) => text.clone(),
+        _ => String::new(),
+    };
+    let session = field("session_id");
+    if session.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+    let request = format!(
+        "{{\"v\":1,\"id\":1,\"method\":\"session.wait\",\"params\":{{\"session\":{},\"cwd\":{},\"since\":{since}}}}}\n",
+        quoted(&session),
+        quoted(&field("cwd"))
+    );
+    let agent = std::os::unix::process::parent_id();
+    // Only the planted wrong program waiter-outlives-session doesn't watch its session's agent.
+    let watched = env::var("DEEP_HUB_PLANT").as_deref() != Ok("waiter-outlives-session");
+    let gone = || watched && (std::os::unix::process::parent_id() != agent || !alive(agent));
+    loop {
+        if gone() {
+            return ExitCode::SUCCESS;
+        }
+        match wait_once(&request, &gone) {
+            Waited::Answer(text) => {
+                eprintln!("{text}");
+                return ExitCode::from(2);
+            }
+            Waited::Done => return ExitCode::SUCCESS,
+            Waited::Away => std::thread::sleep(WAITER_LOOK),
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches"
         ),
         [arg] if arg == "statusline" => return statusline(),
+        [arg] if arg == "check" => return check(),
         [arg, line] if arg == "statusline-send" => {
             send(line);
             return ExitCode::SUCCESS;
@@ -1002,6 +1285,7 @@ fn main() -> ExitCode {
                 Err(_) => ExitCode::from(1),
             };
         }
+        [agent, event] if !agent.starts_with('-') && event == "waiter" => return waiter(),
         [agent, event] if !agent.starts_with('-') => return forward(agent, event),
         _ => {
             eprintln!("Usage: deep-hook <agent> <event>, with the hook's JSON on stdin. Run deep-hook --help.");
