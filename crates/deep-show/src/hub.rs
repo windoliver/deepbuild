@@ -150,6 +150,14 @@ pub enum Planted {
     PackCheckSkipsRequiresModules,
     /// #306: the store and a document's `packs` are keyed by the name half alone.
     PacksKeyedByName,
+    /// #488: a seek restores the checkpoint nearest to t by distance, not the last at or before.
+    CheckpointNearestInDistance,
+    /// #488: the sample-rate rule accepts every rate from 8 to 192 kHz.
+    AcceptsEverySampleRate8To192k,
+    /// #488: `rate`'s index forms t × p in i64.
+    FrameIndexI64Product,
+    /// #488: `rate`'s index divides truncating toward 0.
+    FrameIndexTruncatingDivision,
 }
 
 /// The build's sealed canvas-module set, registered and sealed once at startup (#305: Registry
@@ -296,6 +304,23 @@ pub enum Call {
     Fixtures,
     /// One frame of a document's session (#387).
     Eval(Box<Eval>),
+    /// The valid-rates rule for one rate, with no document (#488).
+    Rate(crate::time::RateCall),
+    /// A time literal resolved against a document's current revision (#488).
+    Time {
+        doc: String,
+        text: String,
+    },
+    /// An export of a document's current revision planned at its rates (#488).
+    Export(crate::time::Export),
+    /// A document's session played on a virtual display to `to` (#488).
+    Play {
+        doc: String,
+        display_hz: u32,
+        to: i64,
+    },
+    /// Seeking against playing, on canonical renders (#488).
+    Determinism(crate::time::Determinism),
     /// `count` frames of a session from `from`, `step` apart, with the scheduler's own costs.
     Frames {
         doc: String,
@@ -395,10 +420,18 @@ pub enum Call {
     },
 }
 
+/// `eval`'s `t` (#488): a flick count, or a time literal resolved against the document's frame
+/// rate and markers, never a fixed 60/1.
+#[derive(Clone, Debug)]
+pub enum EvalTime {
+    Flicks(i64),
+    Literal(String),
+}
+
 /// One `eval` call (#387).
 pub struct Eval {
     pub doc: String,
-    pub t: i64,
+    pub t: EvalTime,
     /// `locale` and `reduced_motion`, over the document's defaults.
     pub view: Map<String, Value>,
     pub clean: bool,
@@ -539,26 +572,29 @@ pub fn flicks(text: &str) -> Option<i64> {
     Time::parse(text).ok()?.resolve(&ctx).ok()
 }
 
+/// The scheduler's options for a scenario: its planted twins and its shuffle.
+fn schedule_options(scenario: &Scenario, startup: &Startup) -> Options {
+    let planted = SchedulePlanted {
+        key_without_locale: scenario.planted == Some(Planted::KeyWithoutLocale),
+        key_without_reduced_motion: scenario.planted == Some(Planted::KeyWithoutReducedMotion),
+        key_hashes: (scenario.planted == Some(Planted::KeyHashesPositions))
+            .then(|| "test.scatter.positions".to_string()),
+        steps_by_name: startup.steps_by_name,
+        key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
+        checkpoint_nearest: scenario.planted == Some(Planted::CheckpointNearestInDistance),
+    };
+    Options {
+        access_log: startup.test_build,
+        shuffle: scenario.shuffle,
+        planted,
+        timing: None,
+    }
+}
+
 impl<'a> Hub<'a> {
     pub fn new(scenario: &'a Scenario, startup: &'a Startup) -> Self {
-        let planted = SchedulePlanted {
-            key_without_locale: scenario.planted == Some(Planted::KeyWithoutLocale),
-            key_without_reduced_motion: scenario.planted == Some(Planted::KeyWithoutReducedMotion),
-            key_hashes: (scenario.planted == Some(Planted::KeyHashesPositions))
-                .then(|| "test.scatter.positions".to_string()),
-            steps_by_name: startup.steps_by_name,
-            key_without_params: scenario.planted == Some(Planted::KeyWithoutParams),
-        };
         #[allow(unused_mut)]
-        let mut sched = Scheduler::new(
-            &startup.sealed,
-            Options {
-                access_log: startup.test_build,
-                shuffle: scenario.shuffle,
-                planted,
-                timing: None,
-            },
-        );
+        let mut sched = Scheduler::new(&startup.sealed, schedule_options(scenario, startup));
         #[cfg(feature = "test-accent")]
         {
             sched.look_hook = Some(crate::planted::look_hook);
@@ -609,6 +645,12 @@ impl<'a> Hub<'a> {
             id,
             dir,
         )
+    }
+
+    /// A fresh scheduler's options: the hub's own (#488's comparisons run each side on its own
+    /// scheduler, so no content key crosses sides).
+    pub(crate) fn options(&self) -> Options {
+        schedule_options(self.scenario, self.startup)
     }
 
     /// The GPU 3D revisions draw on, opened on first use.
@@ -812,6 +854,15 @@ impl<'a> Hub<'a> {
             Call::Fixtures => self.fixtures_reply(),
             Call::Schedule => self.startup.sealed.schedule(),
             Call::Eval(e) => self.eval(e),
+            Call::Rate(r) => self.rate_reply(r),
+            Call::Time { doc, text } => self.time_reply(doc, text),
+            Call::Export(e) => self.export_reply(e),
+            Call::Play {
+                doc,
+                display_hz,
+                to,
+            } => self.play(doc, *display_hz, *to),
+            Call::Determinism(d) => self.determinism(d),
             Call::Frames {
                 doc,
                 count,
@@ -1032,6 +1083,22 @@ impl<'a> Hub<'a> {
                 fresh = Some((result.expansions, started.elapsed().as_secs_f64() * 1000.0));
                 notices = self.notices_reply(&result.notices);
                 let mut issues = result.issues;
+                // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
+                // the rest.
+                if self.scenario.planted == Some(Planted::AcceptsEverySampleRate8To192k) {
+                    issues.retain(|i| !(i.code == "bad_rate" && i.path == "transport/sample_rate"));
+                    let hz = doc
+                        .pointer("/transport/sample_rate")
+                        .and_then(Value::as_u64);
+                    if let Some(hz) = hz.filter(|hz| !(8_000..=192_000).contains(hz)) {
+                        issues.push(Issue::envelope(
+                            "bad_rate",
+                            "transport/sample_rate".into(),
+                            json!(hz),
+                            "outside 8 to 192 kHz",
+                        ));
+                    }
+                }
                 issues.extend(unreadable_handles(&doc, |h| self.can_read(&writer, h)));
                 let scope = match self.scenario.planted {
                     Some(Planted::DiffsItemsOnly) => Scope::ItemsOnly,

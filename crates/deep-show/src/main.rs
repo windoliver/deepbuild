@@ -21,6 +21,7 @@ mod planted;
 mod scene3d;
 mod shared;
 mod snapshot;
+mod time;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
 /// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
@@ -319,6 +320,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "costs" => return Some(Call::Costs),
         "fixtures" => return Some(Call::Fixtures),
         "schedule" => return Some(Call::Schedule),
+        "rate" | "time" | "export" | "play" | "determinism" => {
+            return crate::time::parse_call(name, c)
+        }
         "eval" => {
             let view = match c.get("view") {
                 None => Map::new(),
@@ -344,7 +348,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
             };
             return Some(Call::Eval(Box::new(Eval {
                 doc: doc()?,
-                t: time("t", 0)?,
+                t: crate::time::eval_time(c.get("t"))?,
                 view,
                 clean: flag("clean")?,
                 perturb: match c.get("perturb") {
@@ -741,6 +745,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "reexpansion_overwrites_broken_out" => Planted::ReexpansionOverwritesBrokenOut,
             "pack_check_skips_requires_modules" => Planted::PackCheckSkipsRequiresModules,
             "packs_keyed_by_name" => Planted::PacksKeyedByName,
+            "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
+            "accepts_every_sample_rate_8_to_192k" => Planted::AcceptsEverySampleRate8To192k,
+            "frame_index_i64_product" => Planted::FrameIndexI64Product,
+            "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
             _ => return None,
         }),
     };
@@ -936,6 +944,8 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-step-renamed",
     feature = "test-step-cycle",
     feature = "test-scatter",
+    feature = "test-tick",
+    feature = "test-frame-cache",
     feature = "test-kit",
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
@@ -988,6 +998,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.extend(deep_canvas_test_modules::steps_cycle());
     #[cfg(feature = "test-scatter")]
     out.push(deep_canvas_test_modules::scatter());
+    #[cfg(feature = "test-tick")]
+    out.push(deep_canvas_test_modules::tick());
+    #[cfg(feature = "test-frame-cache")]
+    out.push(deep_canvas_test_modules::cache());
     #[cfg(feature = "test-a")]
     out.push(deep_canvas_test_modules::a());
     #[cfg(feature = "test-b")]
