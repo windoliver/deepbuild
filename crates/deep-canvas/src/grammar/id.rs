@@ -28,20 +28,20 @@ pub(crate) fn segment_fault(seg: &str) -> Option<String> {
     None
 }
 
-fn id_fault(text: &str) -> Option<String> {
+/// Why `text` is not an ID, or `None` when it is; it allocates only to say why.
+pub(crate) fn id_fault(text: &str) -> Option<String> {
     for forbidden in ['/', '#', ':', '@', '~', ' '] {
         if text.contains(forbidden) {
             return Some(format!("an ID never contains `{forbidden}`"));
         }
     }
-    let segments: Vec<&str> = text.split('.').collect();
-    if segments.len() > MAX_SEGMENTS {
+    let segments = text.split('.').count();
+    if segments > MAX_SEGMENTS {
         return Some(format!(
-            "{} segments; an ID has at most {MAX_SEGMENTS}",
-            segments.len()
+            "{segments} segments; an ID has at most {MAX_SEGMENTS}"
         ));
     }
-    segments.iter().find_map(|seg| segment_fault(seg))
+    text.split('.').find_map(segment_fault)
 }
 
 /// An ID: 1 to 8 segments joined by `.`, each `[a-z0-9][a-z0-9_-]{0,47}`.

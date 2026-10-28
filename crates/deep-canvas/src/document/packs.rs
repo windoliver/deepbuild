@@ -20,7 +20,6 @@ use std::collections::BTreeMap;
 use serde_json::{json, Map, Value};
 
 use super::{member, Issue};
-use crate::grammar::Id;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
@@ -1230,10 +1229,13 @@ fn expand_one(
     }
     let mut derived = Vec::new();
     let mut derived_items = Map::new();
+    // One scope for every derived item: the inputs and lets, then each item's own names.
+    let base = env.len();
+    let mut scope = env;
     for step in &recipe.steps {
         let count: Option<u64> = match &step.repeat {
             None => None,
-            Some((count, _)) => match count.eval(&env) {
+            Some((count, _)) => match count.eval(&scope[..base]) {
                 Ok(v) => match v.as_f64() {
                     Some(n) if n.fract() == 0.0 && (0.0..=MAX_REPEAT as f64).contains(&n) => {
                         Some(n as u64)
@@ -1267,13 +1269,13 @@ fn expand_one(
                 None => format!("{id}.{}", step.id),
                 Some(_) => format!("{id}.{}.{index}", step.id),
             };
-            if let Err(r) = Id::parse(&derived_id) {
+            if let Some(why) = crate::grammar::id_fault(&derived_id) {
                 issues.push(Issue::error(
                     "bad_id",
                     id,
                     format!("items/{derived_id}"),
                     json!(derived_id),
-                    &r.what,
+                    &format!("`{derived_id}`: {why}"),
                 ));
                 return None;
             }
@@ -1290,7 +1292,7 @@ fn expand_one(
             if broken_out.contains(&derived_id) && !planted.overwrite_broken_out {
                 continue;
             }
-            let mut scope = env.clone();
+            scope.truncate(base);
             if let Some((_, as_)) = &step.repeat {
                 scope.push((as_.clone(), json!(index)));
             }
