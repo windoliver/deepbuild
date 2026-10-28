@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "8de4fe3c4e23a22e7d10ece734b44375f934307520bac3186e31b816173aafd5",
+  "set_digest": "0e5c05e60016233827951098f0f87785407dbdc5ff28985e89933157f9356d0a",
   "phases": {
     "validate": [
       {
@@ -133,6 +133,19 @@
           "graph.layout"
         ],
         "per": "item"
+      },
+      {
+        "operator": "motion.clock",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t"
+        ],
+        "writes": [
+          "motion.next"
+        ],
+        "per": "document"
       },
       {
         "operator": "record.salience",

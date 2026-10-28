@@ -33,8 +33,8 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_with, duration, recheck, recheck_skipping_referrers,
-    CheckResult,
+    check, check_costed, check_in, check_with, duration, frame_rate_of, recheck,
+    recheck_skipping_referrers, CheckResult,
 };
 pub use merge::{merge, Merged};
 pub use order::key_between;
@@ -380,6 +380,7 @@ pub fn fix_for(code: &str) -> String {
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
         "bad_id" => "Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.",
         "bad_time" => "Write the time as a span such as 2s or 120f.",
+        "bad_rate" => "Use a rate whose frame or sample is a whole number of flicks: 60/1, 30000/1001 or 8/1 fps, 48000 or 44100 Hz.",
         "bound_typed_over" => "Leave a bound value's text empty; its reading shows there.",
         "number_unsourced" => {
             "Bind the number to a reading with a bound value, or compute it in the document."

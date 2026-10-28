@@ -11,6 +11,9 @@ use deep_canvas::registry::{Dependency, Manifest, Module, Raised, Range, Registr
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
+mod time;
+pub use time::{cache, tick};
+
 fn manifest(name: &str, deps: &[(&str, bool)]) -> Manifest {
     let one = Semver {
         major: 1,
