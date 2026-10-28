@@ -26,6 +26,8 @@
 //!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
 //!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
 //!   the line can't know, so what it deletes can't be worked out before it runs).
+//! - `counts:<class>`: the tool counts as `read`, `change`, `send` or `destructive`, by the classes rules.json
+//!   holds; a tool they don't list counts as change, and one whose name starts with `delete_` as destructive.
 //!
 //! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
 //! deep-hook never fails open.
@@ -48,6 +50,8 @@ pub struct Call {
     pub home: PathBuf,
     /// The hub's socket, whose peer is the hub's process.
     pub hub: PathBuf,
+    /// What the tool counts as; None when no class is read for it.
+    pub counts: Option<String>,
 }
 
 /// The run a path comes from, by its index, and whether by a redirection.
@@ -57,6 +61,9 @@ type From = Option<(usize, bool)>;
 pub struct Hit {
     pub detail: Option<String>,
 }
+
+/// What a tool counts as, from least to most it can do.
+pub const CLASSES: &[&str] = &["read", "change", "send", "destructive"];
 
 const EFFECTS: &[&str] = &[
     "cloud-resource",
@@ -82,6 +89,7 @@ pub fn known(pattern: &str) -> bool {
         "read" => !rest.is_empty(),
         "hub" => rest == "stop" || rest == "service",
         "effect" => EFFECTS.contains(&rest),
+        "counts" => CLASSES.contains(&rest),
         _ => false,
     }
 }
@@ -153,6 +161,7 @@ impl Call {
             cwd: cwd.map(Path::to_path_buf),
             home: home.to_path_buf(),
             hub: hub.to_path_buf(),
+            counts: None,
         }
     }
 
@@ -205,6 +214,11 @@ impl Call {
             "hub" if rest == "service" => self.runs.iter().find(|r| stops_service(r)).map(runs_it),
             "kill" if rest == "hub" => self.kills_hub(),
             "effect" => self.effect(rest),
+            "counts" => self
+                .counts
+                .as_deref()
+                .filter(|c| *c == rest)
+                .and_then(|c| hit(Some(format!("It counts as {c}.")))),
             "kill" if rest == "by-name" => self
                 .runs
                 .iter()

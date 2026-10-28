@@ -1,4 +1,5 @@
-//! `deep-show <run | screen>`: JSON lines in, one JSON line out per input line, in order, exit 0;
+//! `deep-show <run | screen | live>`: JSON lines in, one JSON line out per input line, in order, exit 0
+//! (`live` answers its first line, holds its window, then exits);
 //! a line that can't be read, lacks a required field or names an unknown `planted` value answers
 //! `{"ok":false,"code":"bad_input"}`, before anything platform-specific. The surface is the #393
 //! acceptance README's: `run` plays a scenario of deep_show and `deep show` calls against the
@@ -6,6 +7,7 @@
 //! band with the question card last, through GPUI's offscreen Metal renderer (macOS only; off
 //! macOS it answers `{"ok":false,"code":"unsupported_platform"}`).
 
+mod access;
 mod ask;
 mod costs;
 mod evidence;
@@ -263,6 +265,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         }
         "scope" => return Some(Call::Scope(c.get("panel")?.as_str()?.to_string())),
         "presented" => return Some(Call::Presented(c.get("panel")?.as_str()?.to_string())),
+        "see" => return Some(Call::See(c.get("panel")?.as_str()?.to_string())),
         "view" => return Some(Call::View(c.get("panel")?.as_str()?.to_string())),
         "ask" => {
             let pointer = match c.get("pointer") {
@@ -727,6 +730,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "matches_carried_by_code" => Planted::MatchesCarriedByCode,
             "issues_without_actual" => Planted::IssuesWithoutActual,
             "loads_deprecated_silently" => Planted::LoadsDeprecatedSilently,
+            "announces_every_frame" => Planted::AnnouncesEveryFrame,
             "box_folds_quote" => Planted::BoxFoldsQuote,
             "box_drops_t" => Planted::BoxDropsT,
             "box_drops_doc_rev" => Planted::BoxDropsDocRev,
@@ -857,6 +861,7 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             };
             screen(&scenario, startup, out)
         }
+        "live" => live(&scenario, startup),
         _ => bad_input(),
     }
 }
@@ -870,6 +875,19 @@ fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
 
 #[cfg(not(target_os = "macos"))]
 fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
+    json!({"ok": false, "code": "unsupported_platform"})
+}
+
+/// `live` (#376): the screen-reader smoke run's window, on macOS.
+#[cfg(target_os = "macos")]
+fn live(scenario: &Scenario, startup: &Startup) -> Value {
+    let mut hub = hub::Hub::new(scenario, startup);
+    hub.run_calls();
+    live::show(&mut hub)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn live(_: &Scenario, _: &Startup) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -1383,8 +1401,13 @@ fn main() {
         let reply = answer(&command, &startup, &line);
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
+        if command == "live" {
+            break;
+        }
     }
 }
 
+#[cfg(target_os = "macos")]
+mod live;
 #[cfg(target_os = "macos")]
 mod window;

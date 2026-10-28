@@ -1,0 +1,69 @@
+{
+  "#19.2c46147f": [
+    "always-answer-inside-session",
+    "plants-ignored"
+  ],
+  "#19.1a7ba6d9": [
+    "always-answer-on-peer-check",
+    "plants-ignored"
+  ],
+  "#19.5800e7ab": [
+    "always-hooks-disable-user-only",
+    "plants-ignored"
+  ],
+  "#19.26a372c6": [
+    "always-not-checked-exits-0",
+    "always-doctor-not-checked-first",
+    "always-doctor-takes-any-flag",
+    "plants-ignored"
+  ],
+  "#19.dfcae9ef": [
+    "always-skipped-reads-ok",
+    "plants-ignored"
+  ],
+  "#19.b903fde1": [
+    "always-hooks-order-ours-first",
+    "plants-ignored"
+  ],
+  "#19.3f3246ed": [
+    "plants-ignored"
+  ],
+  "#19.fbe84694": [
+    "always-stop-hold-entry-only",
+    "always-stop-hold-wide-margin",
+    "plants-ignored"
+  ],
+  "#19.04d6e57d": [
+    "always-doctor-hides-token"
+  ],
+  "#19.87dafab9": [
+    "always-setup-last-duplicate-wins",
+    "plants-ignored"
+  ],
+  "#19.b955aed6": [
+    "always-setup-renames-over-link",
+    "plants-ignored"
+  ],
+  "#19.ff6a4c13": [
+    "always-undo-reserializes",
+    "plants-ignored"
+  ],
+  "#19.abfcb227": [
+    "always-undo-keeps-login-service",
+    "plants-ignored"
+  ],
+  "#19.fddcc673": [
+    "always-setup-writes-project-settings",
+    "plants-ignored"
+  ],
+  "#19.3cfcabc5": [
+    "always-gates-before-approval",
+    "plants-ignored"
+  ],
+  "#19.a34ae696": [
+    "always-bundle-raw-logs"
+  ],
+  "#19.18335781": [
+    "plants-ignored"
+  ]
+}

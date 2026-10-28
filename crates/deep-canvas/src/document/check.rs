@@ -182,6 +182,7 @@ fn check_by(
     module_checks(&lowered, sealed, &mut issues, &mut notices);
     budget_check(&lowered, sealed, coefficients, &mut issues);
     check_id_maps(&lowered, &mut issues);
+    check_controls(&lowered, &mut issues);
     check_targets(&lowered, "channels", false, kinds, sealed, &mut issues);
     check_targets(&lowered, "bound_values", true, kinds, sealed, &mut issues);
     super::rules::check(&lowered, &mut issues);
@@ -1471,6 +1472,33 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
         for key in entries.keys() {
             check_key(section, key, issues);
         }
+    }
+}
+
+/// Every control carries a role, so a screen reader can say what it is (Rules every primitive
+/// follows: Accessible; Control: `role`, an ARIA role). A control without one is refused, naming
+/// the control and the field; the section and its keys are [`check_id_maps`]'s.
+fn check_controls(doc: &Value, issues: &mut Vec<Issue>) {
+    let Some(entries) = member(doc, "controls").and_then(Value::as_object) else {
+        return;
+    };
+    for (key, entry) in entries {
+        let Some(fields) = entry.as_object() else {
+            continue;
+        };
+        let what = match fields.get("role") {
+            None => "required, and absent",
+            Some(Value::String(role)) if !role.is_empty() => continue,
+            Some(Value::String(_)) => "required, and empty",
+            Some(_) => "not a string",
+        };
+        issues.push(Issue::error(
+            "out_of_range",
+            key,
+            format!("controls/{key}/role"),
+            fields.get("role").cloned().unwrap_or(Value::Null),
+            what,
+        ));
     }
 }
 

@@ -858,6 +858,33 @@ mod tests {
     }
 
     #[test]
+    fn a_control_without_a_role_is_refused_naming_the_control_and_the_field() {
+        // Accessible: every control carries a role (#376); absent, empty or not a string is out
+        // of range at the field, naming the control.
+        for role in [None, Some(json!("")), Some(json!(5))] {
+            let mut doc = base();
+            let mut control = json!({"kind": "slider", "class": "view", "label": "Week"});
+            if let Some(role) = &role {
+                control["role"] = role.clone();
+            }
+            doc["controls"] = json!({"c-week": control});
+            let result = check(&doc);
+            let issue = result
+                .issues
+                .iter()
+                .find(|i| i.path == "controls/c-week/role")
+                .unwrap_or_else(|| panic!("no issue for role {role:?}: {:?}", result.issues));
+            assert_eq!(issue.code, "out_of_range");
+            assert_eq!(issue.ids, ["c-week"]);
+            assert_eq!(issue.actual, role.unwrap_or(Value::Null));
+            assert!(!result.ok);
+        }
+        let mut doc = base();
+        doc["controls"] = json!({"c-week": {"kind": "slider", "class": "view", "label": "Week", "role": "slider"}});
+        assert!(check(&doc).ok, "{:?}", check(&doc).issues);
+    }
+
+    #[test]
     fn a_key_outside_the_id_grammar_is_bad_id_in_every_map_keyed_by_id() {
         let mut doc = base();
         doc["layers"]["bad/layer"] = json!({"writer": "agent-b", "title": "B", "order": "a1"});
@@ -1388,7 +1415,7 @@ mod tests {
         // No kind in this build gives `controls` a schema, so a field step there must reach a
         // value in the document itself: a key of an object or an index of a list.
         let mut doc = base();
-        doc["controls"] = json!({"slider": {"value": 1, "range": [0, 10]}});
+        doc["controls"] = json!({"slider": {"role": "slider", "value": 1, "range": [0, 10]}});
         let refused = |target: &str| {
             let mut doc = doc.clone();
             doc["channels"] = json!({"c": {"target": target}});

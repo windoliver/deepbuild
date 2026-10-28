@@ -50,6 +50,13 @@ const DOCTOR_FIXES: Record<string, string> = {
   timing_relation_broken: 'Change the setting the relation names so both values hold.',
   telemetry_unreadable: "Change the agent's telemetry setting the item names to a protocol and address the OTLP receiver reads.",
   not_checked: 'Run deep doctor, which runs the check; an item nobody ran is never OK.',
+  hub_unreachable: 'Start the hub with deep hub start; deep setup installs it as a login service.',
+  disk_low: 'Free space on the disk the record and evidence live on.',
+  ports_taken: 'Stop the services you started on the ports a stack leases, by PID.',
+  billing_api_key: 'Unset the billing variable where you start sessions, if you mean to use your plan.',
+  binary_differs: "Keep one install, or put it first on your login shell's PATH, then run deep setup again.",
+  token_expiring: 'Sign in to the agent again before a run planned past the token\'s expiry.',
+  prompt_failed: 'Run the agent with the test prompt yourself and read what it says.',
   unknown: "Update deep: this doctor code was added after the reader's minor.",
 };
 const EXIT_FIXES: Record<string, string> = {

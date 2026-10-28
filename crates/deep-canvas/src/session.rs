@@ -1018,7 +1018,7 @@ mod tests {
         let d = flat(
             json!({"r": rect("r", 0.0, 0.0, 100.0, 100.0)}),
             json!({}),
-            json!({"keys": {"class": "viewer", "verb": "camera.pan", "increment": 5}}),
+            json!({"keys": {"class": "viewer", "role": "button", "verb": "camera.pan", "increment": 5}}),
         );
         let out = run(
             &d,
@@ -1042,8 +1042,8 @@ mod tests {
     fn a_goto_eases_the_target_to_the_point_controls_entry_and_cuts_with_reduced_motion() {
         let controls = |map: Value| {
             json!({
-                "spot": {"class": "viewer", "kind": "point"},
-                "jump": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot", "map": map, "ease": 0.4}}
+                "spot": {"class": "viewer", "role": "button", "kind": "point"},
+                "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "map": map, "ease": 0.4}}
             })
         };
         let d = flat(
@@ -1121,8 +1121,8 @@ mod tests {
             json!({"r": rect("r", 0.0, 0.0, 100.0, 100.0)}),
             json!({}),
             json!({
-                "spot": {"class": "viewer", "kind": "point"},
-                "jump": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0}}
+                "spot": {"class": "viewer", "role": "button", "kind": "point"},
+                "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0}}
             }),
         );
         let out = run(
@@ -1161,7 +1161,8 @@ mod tests {
             json!({"orbit": {"azimuth": 30, "elevation": 20, "distance": 8}, "user": {"turn": 1}, "yield": {"ease_back": 2}}),
             json!({}),
         );
-        d["controls"] = json!({"home": {"class": "viewer", "verb": "camera.reset"}});
+        d["controls"] =
+            json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
         let out = run(
             &d,
             [100.0, 100.0],
@@ -1183,7 +1184,7 @@ mod tests {
         let d = flat(
             json!({"r": rect("r", 0.0, 0.0, 100.0, 100.0)}),
             json!({}),
-            json!({"home": {"class": "viewer", "verb": "camera.reset"}}),
+            json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}}),
         );
         let mut d = d;
         d["items"]["cam"]["params"]["yield"] = json!({"ease_back": 1});
@@ -1214,7 +1215,8 @@ mod tests {
             json!({"orbit": {"azimuth": 30, "elevation": 20, "distance": 8}, "user": {"turn": 1, "zoom": [0.5, 4], "pan": {"bounds": "none", "edge": {"margin": 8, "rate": 0.5}}}, "yield": {"ease_back": 1}}),
             json!({}),
         );
-        d["controls"] = json!({"home": {"class": "viewer", "verb": "camera.reset"}});
+        d["controls"] =
+            json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
         let out = run(
             &d,
             [100.0, 100.0],
@@ -1269,7 +1271,8 @@ mod tests {
             json!({"orbit": {"azimuth": 30, "elevation": 20, "distance": 8}, "user": {"turn": 1}, "yield": {"ease_back": 0}}),
             json!({}),
         );
-        d["controls"] = json!({"home": {"class": "viewer", "verb": "camera.reset"}});
+        d["controls"] =
+            json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
         let out = run(
             &d,
             [100.0, 100.0],
@@ -1285,9 +1288,9 @@ mod tests {
             json!({"r": rect("r", 0.0, 0.0, 100.0, 100.0)}),
             json!({}),
             json!({
-                "spot": {"class": "viewer", "kind": "point"},
-                "a": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0, "map": {"origin": [0, 0], "cell": 10}}},
-                "b": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0, "map": {"origin": [50, 50], "cell": 2}}}
+                "spot": {"class": "viewer", "role": "button", "kind": "point"},
+                "a": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0, "map": {"origin": [0, 0], "cell": 10}}},
+                "b": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 0, "map": {"origin": [50, 50], "cell": 2}}}
             }),
         );
         let out = run(
@@ -1311,8 +1314,8 @@ mod tests {
             json!({"r": rect("r", -500.0, -500.0, 1000.0, 1000.0)}),
             json!({"pan": {"edge": {"margin": 8, "rate": 0.5}}}),
             json!({
-                "spot": {"class": "viewer", "kind": "point"},
-                "jump": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot", "ease": 1}}
+                "spot": {"class": "viewer", "role": "button", "kind": "point"},
+                "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 1}}
             }),
         );
         let out = run(
@@ -1388,7 +1391,8 @@ mod tests {
             json!({"orbit": {"azimuth": 30, "elevation": 20, "distance": 8}, "user": {"turn": 1, "zoom": [0.5, 4]}, "yield": {"ease_back": 2}}),
             json!({}),
         );
-        d["controls"] = json!({"home": {"class": "viewer", "verb": "camera.reset"}});
+        d["controls"] =
+            json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
         let out = run(
             &d,
             [100.0, 100.0],
@@ -1533,7 +1537,8 @@ mod tests {
             json!({"projection": "orthographic", "target": [1000, 50, 0], "view_width": 100, "yield": {"ease_back": 1}}),
             json!({"r": rect("r", 0.0, 0.0, 100.0, 100.0)}),
         );
-        d["controls"] = json!({"home": {"class": "viewer", "verb": "camera.reset"}});
+        d["controls"] =
+            json!({"home": {"class": "viewer", "role": "button", "verb": "camera.reset"}});
         for reduced in [false, true] {
             let out = run(
                 &d,
@@ -1564,9 +1569,9 @@ mod tests {
             }),
             json!({"pan": {"margin": 0}}),
             json!({
-                "show": {"class": "view", "binds": ["items/big/visible"], "default": true},
-                "spot": {"class": "viewer", "kind": "point"},
-                "jump": {"class": "viewer", "verb": "camera.goto", "goto": {"to": "spot", "ease": 1}}
+                "show": {"class": "view", "role": "switch", "binds": ["items/big/visible"], "default": true},
+                "spot": {"class": "viewer", "role": "button", "kind": "point"},
+                "jump": {"class": "viewer", "role": "button", "verb": "camera.goto", "goto": {"to": "spot", "ease": 1}}
             }),
         );
         let out = run(
@@ -1607,7 +1612,7 @@ mod tests {
         let mut d = flat(
             json!({"r": rect("r", -500.0, -500.0, 1000.0, 1000.0)}),
             json!({"pan": {"edge": {"margin": 8, "rate": 0.5}}}),
-            json!({"keys": {"class": "viewer", "verb": "camera.pan", "increment": 5}}),
+            json!({"keys": {"class": "viewer", "role": "button", "verb": "camera.pan", "increment": 5}}),
         );
         d["items"]["cam"]["params"]["roll"] = json!(90);
         let out = run(
