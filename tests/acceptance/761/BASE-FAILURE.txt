@@ -1,0 +1,263 @@
+# #761 acceptance suite on the base commit b7bccf9 (origin/main), 2026-10-26, Node 24.22.0, Mac15,12.
+# Part 1: the suite on the base. AC1 fails naming the first line kept (all nine are kept, as the issue says).
+# AC2 passes on the base, which has no field rules; its wrong program is the planted twin in part 2.
+# AC3 is skipped INCONCLUSIVE: this is not the reference Mac.
+# Paths under the scratch folder are this job's temporary copies, since removed.
+
+== base b7bccf9, v24.22.0, Mac15,12
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/761 --reporter=verbose
+
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/agent-a02a6b7eebc3e6833
+
+ ↓ tests/acceptance/761/budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac > AC3 with the field rules, redaction still adds under 10 ms per MB of text 1ms [INCONCLUSIVE: not the reference Mac (model Mac15,12)]
+stdout | tests/acceptance/761/redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root
+printed: Authorization: Bearer q7Zp2LmX9vR4tY8w
+stored:  Authorization: Bearer q7Zp2LmX9vR4tY8w
+printed: Proxy-Authorization: Basic dXNlcjpodW50ZXIy
+stored:  Proxy-Authorization: Basic dXNlcjpodW50ZXIy
+printed: Cookie: sid=q7Zp2LmX9vR4tY8w; theme=dark
+stored:  Cookie: sid=q7Zp2LmX9vR4tY8w; theme=dark
+printed: Set-Cookie: sid=q7Zp2LmX9vR4tY8w; Path=/
+stored:  Set-Cookie: sid=q7Zp2LmX9vR4tY8w; Path=/
+printed: access_token=Bearer q7Zp2LmX9vR4tY8w
+stored:  access_token=Bearer q7Zp2LmX9vR4tY8w
+printed: token=Bot q7Zp2LmX9vR4tY8w.sig_part-2
+stored:  token=Bot q7Zp2LmX9vR4tY8w.sig_part-2
+printed: password: "hunter two words"
+stored:  password: "hunter two words"
+printed: {"password":"hunter2"}
+stored:  {"password":"hunter2"}
+printed: {\"client_secret\":\"q7Zp2LmX9vR4tY8w\"}
+stored:  {\"client_secret\":\"q7Zp2LmX9vR4tY8w\"}
+
+stdout | tests/acceptance/761/redaction.test.ts > AC2 #761.542dabc6 names whose parts hold no secret word, and prose naming a header, are stored unchanged > AC2 "input_tokens": 1234, "max_tokens": 4096, tokenizer=cl100k and the prose line are stored byte for byte
+printed: "input_tokens": 1234
+stored:  "input_tokens": 1234
+printed: "max_tokens": 4096
+stored:  "max_tokens": 4096
+printed: tokenizer=cl100k
+stored:  tokenizer=cl100k
+printed: Authorization required for this route
+stored:  Authorization required for this route
+
+stdout | tests/acceptance/761/redaction.test.ts > AC1 #761.609597be AC2 #761.542dabc6 the nine lines and their four twins printed together in one log > AC1 AC2 in one log, each of the nine is scrubbed to the end of its own line only and each of the four stays byte for byte
+printed: Authorization: Bearer q7Zp2LmX9vR4tY8w
+stored:  Authorization: Bearer q7Zp2LmX9vR4tY8w
+printed: Proxy-Authorization: Basic dXNlcjpodW50ZXIy
+stored:  Proxy-Authorization: Basic dXNlcjpodW50ZXIy
+printed: Cookie: sid=q7Zp2LmX9vR4tY8w; theme=dark
+stored:  Cookie: sid=q7Zp2LmX9vR4tY8w; theme=dark
+printed: Set-Cookie: sid=q7Zp2LmX9vR4tY8w; Path=/
+stored:  Set-Cookie: sid=q7Zp2LmX9vR4tY8w; Path=/
+printed: access_token=Bearer q7Zp2LmX9vR4tY8w
+stored:  access_token=Bearer q7Zp2LmX9vR4tY8w
+printed: token=Bot q7Zp2LmX9vR4tY8w.sig_part-2
+stored:  token=Bot q7Zp2LmX9vR4tY8w.sig_part-2
+printed: password: "hunter two words"
+stored:  password: "hunter two words"
+printed: {"password":"hunter2"}
+stored:  {"password":"hunter2"}
+printed: {\"client_secret\":\"q7Zp2LmX9vR4tY8w\"}
+stored:  {\"client_secret\":\"q7Zp2LmX9vR4tY8w\"}
+printed: "input_tokens": 1234
+stored:  "input_tokens": 1234
+printed: "max_tokens": 4096
+stored:  "max_tokens": 4096
+printed: tokenizer=cl100k
+stored:  tokenizer=cl100k
+printed: Authorization required for this route
+stored:  Authorization required for this route
+
+ × tests/acceptance/761/redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root 16ms
+   → the first line that kept its value: Authorization: Bearer q7Zp2LmX9vR4tY8w was stored as "Authorization: Bearer q7Zp2LmX9vR4tY8w\n": kept "Bearer", "q7Zp2LmX9vR4tY8w" of its value (9 of 9 failed): expected 'Authorization: Bearer q7Zp2LmX9vR4tY8…' to be undefined
+ ✓ tests/acceptance/761/redaction.test.ts > AC2 #761.542dabc6 names whose parts hold no secret word, and prose naming a header, are stored unchanged > AC2 "input_tokens": 1234, "max_tokens": 4096, tokenizer=cl100k and the prose line are stored byte for byte 4ms
+ × tests/acceptance/761/redaction.test.ts > AC1 #761.609597be AC2 #761.542dabc6 the nine lines and their four twins printed together in one log > AC1 AC2 in one log, each of the nine is scrubbed to the end of its own line only and each of the four stays byte for byte 2ms
+   → the first line that failed: Authorization: Bearer q7Zp2LmX9vR4tY8w was stored as "Authorization: Bearer q7Zp2LmX9vR4tY8w": kept "Bearer", "q7Zp2LmX9vR4tY8w" of its value (16 problems in all): expected 'Authorization: Bearer q7Zp2LmX9vR4tY8…' to be undefined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/761/redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root
+AssertionError: the first line that kept its value: Authorization: Bearer q7Zp2LmX9vR4tY8w was stored as "Authorization: Bearer q7Zp2LmX9vR4tY8w\n": kept "Bearer", "q7Zp2LmX9vR4tY8w" of its value (9 of 9 failed): expected 'Authorization: Bearer q7Zp2LmX9vR4tY8…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"Authorization: Bearer q7Zp2LmX9vR4tY8w was stored as \"Authorization: Bearer q7Zp2LmX9vR4tY8w\\n\": kept \"Bearer\", \"q7Zp2LmX9vR4tY8w\" of its value"
+
+ ❯ tests/acceptance/761/redaction.test.ts:75:112
+     73|     }
+     74|     show(pairs);
+     75|     expect(failures[0], `the first line that kept its value: ${failure…
+       |                                                                                                                ^
+     76|   });
+     77| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/761/redaction.test.ts > AC1 #761.609597be AC2 #761.542dabc6 the nine lines and their four twins printed together in one log > AC1 AC2 in one log, each of the nine is scrubbed to the end of its own line only and each of the four stays byte for byte
+AssertionError: the first line that failed: Authorization: Bearer q7Zp2LmX9vR4tY8w was stored as "Authorization: Bearer q7Zp2LmX9vR4tY8w": kept "Bearer", "q7Zp2LmX9vR4tY8w" of its value (16 problems in all): expected 'Authorization: Bearer q7Zp2LmX9vR4tY8…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"Authorization: Bearer q7Zp2LmX9vR4tY8w was stored as \"Authorization: Bearer q7Zp2LmX9vR4tY8w\": kept \"Bearer\", \"q7Zp2LmX9vR4tY8w\" of its value"
+
+ ❯ tests/acceptance/761/redaction.test.ts:108:108
+    106|     // The files under the root hold all thirteen lines, so they are s…
+    107|     for (const part of new Set(nine.flatMap((secret) => secret.onDisk)…
+    108|     expect(failures[0], `the first line that failed: ${failures[0]} ($…
+       |                                                                                                            ^
+    109|   });
+    110| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 1 passed | 1 skipped (4)
+   Start at  22:19:46
+   Duration  106ms (import 45%, tests 33%, transform 16%, worker 6%)
+
+exit 1
+
+# Part 2: the base with twins/secret-words-inside-names laid over packages/evidence/src/scrub.ts
+# (in a scratch copy of packages/evidence, tests/acceptance/15 and 761, with this checkout's node_modules).
+# The twin passes AC1 and fails AC2, naming the first line it redacted.
+
+== the base with twin secret-words-inside-names laid over packages/evidence/src/scrub.ts
+$ node node_modules/vitest/vitest.mjs run --root tests/acceptance/761 redaction.test.ts --reporter=verbose
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/twin-copy/tests/acceptance/761
+
+stdout | redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root
+printed: Authorization: Bearer q7Zp2LmX9vR4tY8w
+stored:  Authorization: [REDACTED]
+printed: Proxy-Authorization: Basic dXNlcjpodW50ZXIy
+stored:  Proxy-Authorization: [REDACTED]
+printed: Cookie: sid=q7Zp2LmX9vR4tY8w; theme=dark
+stored:  Cookie: [REDACTED]
+printed: Set-Cookie: sid=q7Zp2LmX9vR4tY8w; Path=/
+stored:  Set-Cookie: [REDACTED]
+printed: access_token=Bearer q7Zp2LmX9vR4tY8w
+stored:  access_token=[REDACTED]
+printed: token=Bot q7Zp2LmX9vR4tY8w.sig_part-2
+stored:  token=[REDACTED]
+printed: password: "hunter two words"
+stored:  password: [REDACTED]
+printed: {"password":"hunter2"}
+stored:  {"password":[REDACTED]}
+printed: {\"client_secret\":\"q7Zp2LmX9vR4tY8w\"}
+stored:  {\"client_secret\":[REDACTED]}
+
+stdout | redaction.test.ts > AC2 #761.542dabc6 names whose parts hold no secret word, and prose naming a header, are stored unchanged > AC2 "input_tokens": 1234, "max_tokens": 4096, tokenizer=cl100k and the prose line are stored byte for byte
+printed: "input_tokens": 1234
+stored:  "input_tokens": [REDACTED]
+printed: "max_tokens": 4096
+stored:  "max_tokens": [REDACTED]
+printed: tokenizer=cl100k
+stored:  tokenizer=[REDACTED]
+printed: Authorization required for this route
+stored:  Authorization [REDACTED]
+
+stdout | redaction.test.ts > AC1 #761.609597be AC2 #761.542dabc6 the nine lines and their four twins printed together in one log > AC1 AC2 in one log, each of the nine is scrubbed to the end of its own line only and each of the four stays byte for byte
+printed: Authorization: Bearer q7Zp2LmX9vR4tY8w
+stored:  Authorization: [REDACTED]
+printed: Proxy-Authorization: Basic dXNlcjpodW50ZXIy
+stored:  Proxy-Authorization: [REDACTED]
+printed: Cookie: sid=q7Zp2LmX9vR4tY8w; theme=dark
+stored:  Cookie: [REDACTED]
+printed: Set-Cookie: sid=q7Zp2LmX9vR4tY8w; Path=/
+stored:  Set-Cookie: [REDACTED]
+printed: access_token=Bearer q7Zp2LmX9vR4tY8w
+stored:  access_token=[REDACTED]
+printed: token=Bot q7Zp2LmX9vR4tY8w.sig_part-2
+stored:  token=[REDACTED]
+printed: password: "hunter two words"
+stored:  password: [REDACTED]
+printed: {"password":"hunter2"}
+stored:  {"password":[REDACTED]}
+printed: {\"client_secret\":\"q7Zp2LmX9vR4tY8w\"}
+stored:  {\"client_secret\":[REDACTED]}
+printed: "input_tokens": 1234
+stored:  "input_tokens": [REDACTED]
+printed: "max_tokens": 4096
+stored:  "max_tokens": [REDACTED]
+printed: tokenizer=cl100k
+stored:  tokenizer=[REDACTED]
+printed: Authorization required for this route
+stored:  Authorization [REDACTED]
+
+ ✓ redaction.test.ts > AC1 #761.609597be each of the nine lines, with values the hub never injected, is stored with every value replaced and every field name kept > AC1 each line stored alone loses its whole value and keeps its field name, in the stored bytes and in every file under the root 14ms
+ × redaction.test.ts > AC2 #761.542dabc6 names whose parts hold no secret word, and prose naming a header, are stored unchanged > AC2 "input_tokens": 1234, "max_tokens": 4096, tokenizer=cl100k and the prose line are stored byte for byte 6ms
+   → the first line not stored unchanged: "input_tokens": 1234 was stored as "\"input_tokens\": [REDACTED]\n" (4 of 4 changed): expected '"input_tokens": 1234 was stored as "\…' to be undefined
+ × redaction.test.ts > AC1 #761.609597be AC2 #761.542dabc6 the nine lines and their four twins printed together in one log > AC1 AC2 in one log, each of the nine is scrubbed to the end of its own line only and each of the four stays byte for byte 2ms
+   → the first line that failed: "input_tokens": 1234 was stored as "\"input_tokens\": [REDACTED]": changed (4 problems in all): expected '"input_tokens": 1234 was stored as "\…' to be undefined
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  redaction.test.ts > AC2 #761.542dabc6 names whose parts hold no secret word, and prose naming a header, are stored unchanged > AC2 "input_tokens": 1234, "max_tokens": 4096, tokenizer=cl100k and the prose line are stored byte for byte
+AssertionError: the first line not stored unchanged: "input_tokens": 1234 was stored as "\"input_tokens\": [REDACTED]\n" (4 of 4 changed): expected '"input_tokens": 1234 was stored as "\…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"\"input_tokens\": 1234 was stored as \"\\\"input_tokens\\\": [REDACTED]\\n\""
+
+ ❯ redaction.test.ts:89:111
+     87|     }
+     88|     show(pairs);
+     89|     expect(changed[0], `the first line not stored unchanged: ${changed…
+       |                                                                                                               ^
+     90|   });
+     91| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  redaction.test.ts > AC1 #761.609597be AC2 #761.542dabc6 the nine lines and their four twins printed together in one log > AC1 AC2 in one log, each of the nine is scrubbed to the end of its own line only and each of the four stays byte for byte
+AssertionError: the first line that failed: "input_tokens": 1234 was stored as "\"input_tokens\": [REDACTED]": changed (4 problems in all): expected '"input_tokens": 1234 was stored as "\…' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"\"input_tokens\": 1234 was stored as \"\\\"input_tokens\\\": [REDACTED]\": changed"
+
+ ❯ redaction.test.ts:108:108
+    106|     // The files under the root hold all thirteen lines, so they are s…
+    107|     for (const part of new Set(nine.flatMap((secret) => secret.onDisk)…
+    108|     expect(failures[0], `the first line that failed: ${failures[0]} ($…
+       |                                                                                                            ^
+    109|   });
+    110| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  22:19:47
+   Duration  116ms (tests 46%, import 34%, transform 15%, worker 5%)
+
+exit 1
+
+# Part 3: a reading, not a result. AC3's body on the base, in a scratch copy with the reference-Mac gate removed,
+# to show the test runs; the base has no field rules, so this is the gitleaks and by-value scrub alone.
+
+load { 4.56 7.51 7.56 }; Now drawing from 'AC Power'
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-USER-private-deepbuild-core--claude-worktrees-issue-137-implementation-1d9a30/c52644e8-b8f9-45d6-9744-8f41b26f0220/scratchpad/reading-copy/tests/acceptance/761
+
+stdout | budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac > AC3 with the field rules, redaction still adds under 10 ms per MB of text
+AC3 redaction with field rules (ms per MB): 6.29, 5.72, 5.66, 6.88, 6.19 against 10 (margin 22%)
+
+ ✓ budgets.test.ts > AC3 #761.51e647b5 budgets on the reference Mac > AC3 with the field rules, redaction still adds under 10 ms per MB of text 768ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  22:19:07
+   Duration  880ms (tests 93%, transform 5%, import 2%)
+
+exit 0
