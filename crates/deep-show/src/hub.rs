@@ -126,6 +126,8 @@ pub enum Planted {
     IssuesWithoutActual,
     /// #371: a kind with `deprecated_since` loads with no `deprecated` notice.
     LoadsDeprecatedSilently,
+    /// #376: the accessibility tree announces every readout on every frame, changed or not.
+    AnnouncesEveryFrame,
     /// #384: the ask box puts the quote into your words.
     BoxFoldsQuote,
     /// #384: the ask box sends no `t`.
@@ -284,6 +286,8 @@ pub enum Call {
         from: i64,
         step: i64,
     },
+    /// The replica's `see`: a panel's accessibility tree as data and every announcement it made (#376).
+    See(String),
     /// Shows or hides a panel from this call on.
     Panel {
         panel: String,
@@ -801,6 +805,7 @@ impl<'a> Hub<'a> {
             Call::Input { panel, event } => self.input(panel, event),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
+            Call::See(panel) => self.see(panel),
             Call::View(panel) => self.view(panel),
             Call::Ask {
                 panel,

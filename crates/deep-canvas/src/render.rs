@@ -548,7 +548,7 @@ mod tests {
                 "cam": {"id": "cam", "kind": "camera@1", "layer": "main", "name": "C", "order": "a0", "params": {"projection": "orthographic", "view_width": 10}},
                 "r": {"id": "r", "kind": "test.rect@1", "layer": "main", "name": "R", "order": "a1", "params": {"w": 4, "h": 2, "fill": [255, 0, 0]}, "at": {"pos": [1, 1, 0]}}
             },
-            "controls": {"show": {"class": "view", "binds": ["items/r/visible"], "default": false}}
+            "controls": {"show": {"class": "view", "role": "switch", "binds": ["items/r/visible"], "default": false}}
         })
     }
 

@@ -1,0 +1,180 @@
+# The #376 suite at the base, a8e5480 ("Merge pull request #767 … feat/63-read-by-reference")
+
+Run from a detached checkout of a8e5480 holding only this suite's files, with `deep-show` built there
+(`cargo build --locked --bin deep-show --no-default-features --features full`), on Oct 27, 2026:
+
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/376 --no-file-parallelism --reporter=verbose
+
+Every test fails. Why each fails there:
+
+- replica.test.ts (3): the base's `deep-show run` has no `see` call, so the scenario is refused as `bad_input`.
+- refusal.test.ts, "without a description" and "with an unnamed part": the base already refuses those two
+  (the envelope's `description` and an item's `name` are required fields of its document check), but
+  `presented` on a panel whose every revision was refused answers `not_presented` instead of an empty
+  frame list, so "refused before showing" can't be read.
+- refusal.test.ts, "with a control without a role": the base presents the figure; nothing checks a
+  control's `role`.
+
+The run's output follows.
+
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-issue-376-implementation-22897e/48eddeb3-874b-4f3d-9dd6-cccd678b5697/scratchpad/base/tests/acceptance/376
+
+ × replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 the tree has one node per part and control, with its name and role 2946ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 changing the readout from 3 to 4 emits exactly one announcement with '4', and redrawing it unchanged emits none 34ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 a planted tree that announces every frame fails this check, naming the readout 40ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × refusal.test.ts > AC1 a figure without a description, a name for a part or a role for a control is refused before showing, naming the item and the field > AC1 a figure without a description is refused before showing, naming the document and description, and its fixed twin shows 2351ms
+   → presented after the figure without description: frames is an array, got undefined: expected false to be true // Object.is equality
+ × refusal.test.ts > AC1 a figure without a description, a name for a part or a role for a control is refused before showing, naming the item and the field > AC1 a figure with an unnamed part is refused before showing, naming lens and items/lens/name, and its fixed twin shows 51ms
+   → presented after the figure whose lens lacks items/lens/name: frames is an array, got undefined: expected false to be true // Object.is equality
+ × refusal.test.ts > AC1 a figure without a description, a name for a part or a role for a control is refused before showing, naming the item and the field > AC1 a figure with a control without a role is refused before showing, naming c-rays and controls/c-rays/role, and its fixed twin shows 63ms
+   → a figure with a control without a role is refused before showing:
+  the figure whose c-rays lacks controls/c-rays/role was presented, not refused
+  no error issue of the figure whose c-rays lacks controls/c-rays/role names item c-rays and field controls/c-rays/role: []
+  the figure whose c-rays lacks controls/c-rays/role was shown: the panel presented 1 frame(s) of it: expected [ …(3) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  refusal.test.ts > AC1 a figure without a description, a name for a part or a role for a control is refused before showing, naming the item and the field > AC1 a figure without a description is refused before showing, naming the document and description, and its fixed twin shows
+AssertionError: presented after the figure without description: frames is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:37:100
+     35| }
+     36| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     37|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     38|   return value as JsonValue[];
+     39| }
+ ❯ frames helpers.ts:195:10
+ ❯ refusalFailures helpers.ts:234:17
+ ❯ refusal.test.ts:45:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  refusal.test.ts > AC1 a figure without a description, a name for a part or a role for a control is refused before showing, naming the item and the field > AC1 a figure with an unnamed part is refused before showing, naming lens and items/lens/name, and its fixed twin shows
+AssertionError: presented after the figure whose lens lacks items/lens/name: frames is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr helpers.ts:37:100
+     35| }
+     36| export function arr(value: JsonValue | undefined, what: string): JsonV…
+     37|   expect(Array.isArray(value), `${what} is an array, got ${JSON.string…
+       |                                                                                                    ^
+     38|   return value as JsonValue[];
+     39| }
+ ❯ frames helpers.ts:195:10
+ ❯ refusalFailures helpers.ts:234:17
+ ❯ refusal.test.ts:45:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  refusal.test.ts > AC1 a figure without a description, a name for a part or a role for a control is refused before showing, naming the item and the field > AC1 a figure with a control without a role is refused before showing, naming c-rays and controls/c-rays/role, and its fixed twin shows
+AssertionError: a figure with a control without a role is refused before showing:
+  the figure whose c-rays lacks controls/c-rays/role was presented, not refused
+  no error issue of the figure whose c-rays lacks controls/c-rays/role names item c-rays and field controls/c-rays/role: []
+  the figure whose c-rays lacks controls/c-rays/role was shown: the panel presented 1 frame(s) of it: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the figure whose c-rays lacks controls/c-rays/role was presented, not refused",
++   "no error issue of the figure whose c-rays lacks controls/c-rays/role names item c-rays and field controls/c-rays/role: []",
++   "the figure whose c-rays lacks controls/c-rays/role was shown: the panel presented 1 frame(s) of it",
++ ]
+
+ ❯ none helpers.ts:57:60
+     55| /** No failures; the message lists them, each naming what failed. */
+     56| export function none(failures: readonly string[], what: string): void {
+     57|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     58| }
+     59|
+ ❯ refusal.test.ts:45:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 the tree has one node per part and control, with its name and role
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:102:101
+    100|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    101|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    102|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    103|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    104|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play replica.test.ts:28:19
+ ❯ replica.test.ts:43:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 changing the readout from 3 to 4 emits exactly one announcement with '4', and redrawing it unchanged emits none
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:102:101
+    100|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    101|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    102|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    103|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    104|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play replica.test.ts:28:19
+ ❯ replica.test.ts:48:45
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  replica.test.ts > AC1 in a replica the figure's accessibility tree and its announcements are data > AC1 a planted tree that announces every frame fails this check, naming the readout
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:102:101
+    100|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    101|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    102|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${JSON.str…
+       |                                                                                                     ^
+    103|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    104|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play replica.test.ts:28:19
+ ❯ replica.test.ts:55:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed (6)
+   Start at  14:30:14
+   Duration  1020.03s (tests 100%)
+
