@@ -58,7 +58,7 @@ export function ulidTime(id: string): number {
 }
 
 /** An event a hook request maps to, its data held to its kind's catalogue fields; the core fills the counters. */
-export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads' }
+export interface Draft { kind: string; v: number; id: string; ts: number; seq?: string; subject?: string; data: Record<string, unknown>; fill?: 'msg' | 'turn' | 'loads'; queued?: boolean }
 /** What the parser read of a hook request that the core needs to check and bind it. */
 export interface HookMeta {
   id: string;
@@ -152,4 +152,8 @@ export interface CoreOptions {
   forge?: string;
   /** The planted sorter's file, from DEEP_HUB_TEST_SORTER: the questions it answers "proceed" and its rule; only tests set it. */
   sorter?: string;
+  /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */
+  drafts?: string;
+  /** The test work source's work.item@1 readings, from DEEP_HUB_TEST_WORK; only tests set it. */
+  work?: string;
 }
