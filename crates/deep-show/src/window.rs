@@ -331,11 +331,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str) -> Value {
         ink: role("ink"),
         muted: role("muted"),
         entries: keyed.into_iter().map(|(_, e)| e).collect(),
-        card: hub
-            .scenario
-            .card
-            .as_ref()
-            .map(|c| (c.question.clone(), c.options.clone(), c.rect)),
+        card: hub.card_slot(),
     });
     let mut cx = deep_replica::headless_context();
     let view = View {

@@ -135,6 +135,85 @@ fn rect_path(b: [f64; 4], radius: f64) -> BezPath {
     RoundedRect::new(b[0], b[1], b[0] + b[2], b[1] + b[3], r).to_path(0.01)
 }
 
+/// One instanced batch a 2D draw made (#306): the expansion key its items share, and every item
+/// it drew, sorted.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Batch {
+    pub key: String,
+    pub items: Vec<String>,
+}
+
+/// The item a mark draws for: its ID, without a part after `#`.
+fn item_of(mark: &Mark) -> &str {
+    mark.item().split('#').next().unwrap_or_default()
+}
+
+/// Where a mark sits, for the marks a batch can move: a rect's corner, a circle's center, a
+/// path's offset. Text, images and outlines keep state by item (a shaped run, an animation, a
+/// crop, verbs in place), so they draw on their own, and so does a rect whose ramp spans another
+/// item's box, which stays where that box is when the rect moves.
+fn anchor(mark: &Mark) -> Option<[f64; 2]> {
+    match mark {
+        Mark::Rect {
+            fill: Fill::Ramp(_),
+            ..
+        } => None,
+        Mark::Rect { bounds, .. } => Some([bounds[0], bounds[1]]),
+        Mark::Circle { center, .. } => Some(*center),
+        Mark::Path { offset, .. } => Some(*offset),
+        Mark::Shape { .. } | Mark::Text { .. } | Mark::Image { .. } => None,
+    }
+}
+
+/// `mark` moved by `d` and drawn for `item`.
+fn shifted(mark: &Mark, d: [f64; 2], item: &str) -> Mark {
+    let mut m = mark.clone();
+    match &mut m {
+        Mark::Rect {
+            item: i, bounds, ..
+        } => {
+            bounds[0] += d[0];
+            bounds[1] += d[1];
+            *i = item.to_string();
+        }
+        Mark::Circle {
+            item: i, center, ..
+        } => {
+            center[0] += d[0];
+            center[1] += d[1];
+            *i = item.to_string();
+        }
+        Mark::Path {
+            item: i, offset, ..
+        } => {
+            offset[0] += d[0];
+            offset[1] += d[1];
+            *i = item.to_string();
+        }
+        Mark::Shape { .. } | Mark::Text { .. } | Mark::Image { .. } => {}
+    }
+    m
+}
+
+/// The offset that moves `template` onto `group`, when each of `group`'s marks is the template's
+/// mark at that offset, for its own item, inside the same scopes.
+fn offset_of(template: &[&scene::Drawn], group: &[&scene::Drawn]) -> Option<[f64; 2]> {
+    if template.len() != group.len() {
+        return None;
+    }
+    let (a, b) = (anchor(&template[0].mark)?, anchor(&group[0].mark)?);
+    let d = [b[0] - a[0], b[1] - a[1]];
+    template
+        .iter()
+        .zip(group)
+        .all(|(t, g)| {
+            anchor(&t.mark).is_some()
+                && t.scopes == g.scopes
+                && shifted(&t.mark, d, g.mark.item()) == g.mark
+        })
+        .then_some(d)
+}
+
 /// An asset read from the evidence store by its sha256 and decoded, premultiplied.
 fn decode(evidence: &Path, asset: &str, item: &str) -> Result<Arc<Pixmap>, Unfit> {
     let path = format!("items/{item}/params/asset");
@@ -255,6 +334,21 @@ impl Renderer {
     /// The draw list at `size` px, the frame scaled to fit from the top left: an opaque PNG over
     /// `ground`, or with `ground` `None` straight RGBA over nothing, for a layer's picture.
     pub fn raster(&mut self, drawn: &Drawn, size: [u16; 2], ground: Option<Rgb>) -> Vec<u8> {
+        self.raster_batched(drawn, size, ground, &BTreeMap::new()).0
+    }
+
+    /// [`Renderer::raster`], drawing equal expansions instanced (#306): `instanced` gives each
+    /// derived item its expansion key and instance. A run of marks next to each other in
+    /// stacking order whose items share a key draws as one batch: the first instance's marks are
+    /// the template, and each instance whose marks are that template moved by one offset draws
+    /// the template again at its offset. The batches it drew come back with the pixels.
+    pub fn raster_batched(
+        &mut self,
+        drawn: &Drawn,
+        size: [u16; 2],
+        ground: Option<Rgb>,
+        instanced: &BTreeMap<String, (String, String)>,
+    ) -> (Vec<u8>, Vec<Batch>) {
         let settings = RenderSettings {
             level: Level::fallback(),
             num_threads: 0,
@@ -267,10 +361,37 @@ impl Renderer {
         let at = Affine::scale(drawn.scale(size));
         // The scopes each mark draws inside (#373): scissors, soft masks and group opacity.
         let mut scopes = Scopes::new(false);
-        for d in drawn.frame.layers.iter().flat_map(|l| &l.marks) {
+        let marks: Vec<&scene::Drawn> = drawn.frame.layers.iter().flat_map(|l| &l.marks).collect();
+        let key_of =
+            |d: &scene::Drawn| instanced.get(item_of(&d.mark)).filter(|_| d.clip.is_none());
+        let mut batches = Vec::new();
+        let mut i = 0;
+        while i < marks.len() {
+            let d = marks[i];
+            let Some((key, _)) = key_of(d) else {
+                ctx.set_transform(at);
+                scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
+                self.mark(&mut ctx, &d.mark, drawn, at);
+                i += 1;
+                continue;
+            };
+            let mut end = i + 1;
+            while end < marks.len()
+                && key_of(marks[end]).is_some_and(|(k, _)| k == key)
+                && marks[end].scopes == d.scopes
+            {
+                end += 1;
+            }
             ctx.set_transform(at);
             scopes.enter(&mut ctx, &mut self.resources, &d.scopes);
-            self.mark(&mut ctx, &d.mark, drawn, at);
+            let items = self.batch(&mut ctx, &marks[i..end], instanced, drawn, at);
+            if !items.is_empty() {
+                batches.push(Batch {
+                    key: key.clone(),
+                    items,
+                });
+            }
+            i = end;
         }
         ctx.set_transform(at);
         scopes.enter(&mut ctx, &mut self.resources, &[]);
@@ -301,7 +422,58 @@ impl Renderer {
         ctx.flush();
         let mut pixmap = Pixmap::new(size[0], size[1]);
         ctx.render(&mut pixmap, &mut self.resources);
-        pixmap.take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha)
+        (
+            pixmap.take_rgba8(vello_cpu::peniko::ImageAlphaType::Alpha),
+            batches,
+        )
+    }
+
+    /// One run of marks whose items share an expansion key, drawn in stacking order: each
+    /// instance's marks are either the first instance's moved by one offset, drawn as that
+    /// template at the offset, or drawn as they are and left out of the batch. The run's scopes
+    /// are entered already. Returns the batch's items, sorted.
+    fn batch(
+        &mut self,
+        ctx: &mut RenderContext,
+        run: &[&scene::Drawn],
+        instanced: &BTreeMap<String, (String, String)>,
+        drawn: &Drawn,
+        at: Affine,
+    ) -> Vec<String> {
+        let instance_of = |d: &scene::Drawn| instanced.get(item_of(&d.mark)).map(|(_, i)| i);
+        // Each instance's marks, in the order they draw.
+        let mut groups: Vec<&[&scene::Drawn]> = Vec::new();
+        let mut start = 0;
+        for k in 1..=run.len() {
+            if k == run.len() || instance_of(run[k]) != instance_of(run[start]) {
+                groups.push(&run[start..k]);
+                start = k;
+            }
+        }
+        let template = groups[0];
+        let mut items: Vec<String> = Vec::new();
+        for group in groups {
+            match offset_of(template, group) {
+                Some(d) => {
+                    let moved = at * Affine::translate((d[0], d[1]));
+                    ctx.set_transform(moved);
+                    for t in template {
+                        self.mark(ctx, &t.mark, drawn, moved);
+                    }
+                    items.extend(group.iter().map(|g| item_of(&g.mark).to_string()));
+                }
+                None => {
+                    ctx.set_transform(at);
+                    for g in group {
+                        self.mark(ctx, &g.mark, drawn, at);
+                    }
+                }
+            }
+        }
+        ctx.set_transform(at);
+        items.sort_unstable();
+        items.dedup();
+        items
     }
 
     fn mark(&mut self, ctx: &mut RenderContext, mark: &Mark, drawn: &Drawn, at: Affine) {
@@ -689,5 +861,89 @@ mod tests {
             "half ink over white, got {alone}"
         );
         assert_eq!(overlap, alone, "the overlap draws as either rect alone");
+    }
+
+    /// Equal expansions next to each other in stacking order draw as one instanced batch (#306),
+    /// pixel for pixel as drawn mark by mark; an instance whose marks differ draws on its own
+    /// outside the batch, one past another item starts a batch of its own, and bars whose ramp
+    /// spans another item's box draw on their own, since that ramp stays put when a bar moves.
+    #[test]
+    fn equal_expansions_draw_in_one_batch() {
+        let mut items = serde_json::Map::new();
+        let mut instanced = BTreeMap::new();
+        let ink = json!({"role": "ink"});
+        let ramp = json!({"gradient": {"span": "panel",
+            "stops": [{"at": 0, "role": "ink"}, {"at": 1, "role": "ground"}]}});
+        let mut bars = |instance: &str,
+                        key: &str,
+                        order: &str,
+                        at: [f64; 2],
+                        rise: f64,
+                        fill: &Value| {
+            for i in 0..3 {
+                let id = format!("{instance}.bars.{i}");
+                let h = 40.0 + rise * f64::from(i);
+                items.insert(id.clone(), json!({"id": id, "kind": "rect@1", "layer": "main",
+                    "name": id, "order": order,
+                    "params": {"box": [at[0] + 24.0 * f64::from(i), at[1], 16, h], "paint": {"fill": fill}}}));
+                instanced.insert(id, (key.to_string(), instance.to_string()));
+            }
+        };
+        bars("c1", "k", "a0", [10.0, 10.0], 8.0, &ink);
+        bars("c2", "k", "a1", [10.0, 80.0], 8.0, &ink);
+        bars("c3", "k", "a2", [110.0, 10.0], 12.0, &ink);
+        bars("c4", "k", "a4", [110.0, 80.0], 8.0, &ink);
+        bars("c5", "g", "a5", [210.0, 10.0], 8.0, &ramp);
+        bars("c6", "g", "a6", [300.0, 10.0], 8.0, &ramp);
+        items.insert("gap".into(), json!({"id": "gap", "kind": "rect@1", "layer": "main",
+            "name": "Gap", "order": "a3", "params": {"box": [190, 0, 10, 10], "paint": {"fill": {"role": "ink"}}}}));
+        items.insert("panel".into(), json!({"id": "panel", "kind": "rect@1", "layer": "main",
+            "name": "Panel", "order": "a", "params": {"box": [200, 0, 200, 150], "paint": {"fill": {"role": "ground"}}}}));
+        let doc = json!({"format": 1, "id": "bars", "size": [400, 150],
+            "layers": {"main": {"writer": "agent-a", "order": "a0"}}, "items": items});
+        let palette: Palette = [
+            ("ground".to_string(), [255, 255, 255]),
+            ("ink".to_string(), [0, 0, 0]),
+        ]
+        .into();
+        let mut r = Renderer::new();
+        let drawn = r
+            .prepare(
+                doc.as_object().unwrap(),
+                0,
+                &palette,
+                None,
+                &Record::default(),
+                Path::new("."),
+            )
+            .expect("the bars draw");
+        let white = Some([255, 255, 255]);
+        let (batched, drew) = r.raster_batched(&drawn, [400, 150], white, &instanced);
+        assert!(
+            batched == r.raster(&drawn, [400, 150], white),
+            "the batched draw's pixels are the mark-by-mark draw's"
+        );
+        let ids = |list: &[&str]| -> Vec<String> {
+            let mut out: Vec<String> = list
+                .iter()
+                .flat_map(|c| (0..3).map(move |i| format!("{c}.bars.{i}")))
+                .collect();
+            out.sort();
+            out
+        };
+        assert_eq!(
+            drew,
+            vec![
+                Batch {
+                    key: "k".into(),
+                    items: ids(&["c1", "c2"])
+                },
+                Batch {
+                    key: "k".into(),
+                    items: ids(&["c4"])
+                },
+            ],
+            "c1 and c2 draw as one batch; c3's taller bars draw alone; c4, past `gap`, starts another; c5 and c6's ramps keep them out"
+        );
     }
 }

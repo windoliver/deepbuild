@@ -3,7 +3,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Core, type CallContext } from './core.js';
 import { shedStartup } from './settle.js';
-import { Refused, refusal, type CoreOptions, type Draft, type HookMeta } from './wire.js';
+import { Refused, refusal, type CoreOptions, type Draft, type Gated, type HookMeta } from './wire.js';
 
 export type CoreRequest =
   | { op: 'call'; method: string; params: unknown; context: CallContext }
@@ -11,6 +11,7 @@ export type CoreRequest =
   | { op: 'health' }
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
+  | { op: 'tool-gate'; meta: HookMeta; call: Gated }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
@@ -27,6 +28,7 @@ export async function answer(core: Core, request: CoreRequest): Promise<unknown>
     case 'health': return core.health();
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
+    case 'tool-gate': return core.toolGate(request.meta, request.call);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'stop': return core.stop(request.reason);
   }
