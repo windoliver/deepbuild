@@ -18,6 +18,9 @@ use crate::shared::FLICKS;
 const ARM_AFTER: i64 = FLICKS / 2;
 /// A windowed pop-out opens this far inside its display's bottom-right corner, in points.
 const MARGIN: f64 = 20.0;
+/// Frame clock and scheduler: a window's `caps: {inactive: 30 Hz, thermal: 60 Hz, hidden: 0}`.
+const INACTIVE_HZ: i64 = 30;
+const THERMAL_HZ: i64 = 60;
 
 /// One display the scenario connects (Frame clock: per display `{uuid, refresh_ns, next_vsync,
 /// latch_lead_ns}`), its bounds in global points. Its scale and color space are checked at the
@@ -223,6 +226,14 @@ pub struct Planted {
     pub one_clock_for_all: bool,
     /// The card ignores the app's own windows when it judges whether it is obscured.
     pub arms_under_own_window: bool,
+    /// A window you switched away from keeps its display's rate.
+    pub ignores_inactive_cap: bool,
+    /// The thermal state caps no window.
+    pub ignores_thermal_cap: bool,
+    /// A hidden window keeps presenting, and evaluating its sessions.
+    pub presents_hidden: bool,
+    /// A hidden window presents nothing but still evaluates its sessions at its latches.
+    pub evaluates_hidden: bool,
 }
 
 /// What happened to a window: it opened or was dragged to a rect, or came to the top of the
@@ -252,6 +263,18 @@ impl Stack {
     }
 }
 
+/// What the window server and the OS reported that caps a window's frames, each with its time,
+/// in time order.
+#[derive(Default)]
+struct Reports {
+    /// The window that became key, or `None` when you switched to another app.
+    key: Vec<(i64, Option<String>)>,
+    /// Whether the Mac is hot: its thermal state `serious` or `critical`.
+    hot: Vec<(i64, bool)>,
+    /// A window you hid (`true`) or showed again.
+    hidden: Vec<(i64, String, bool)>,
+}
+
 /// The app's windows on the scenario's displays, and what the card's placement reads: your
 /// inputs and every window's rects and stacking over time.
 pub struct Placement {
@@ -263,6 +286,7 @@ pub struct Placement {
     inputs: Vec<(i64, String)>,
     /// The input router's serials, each the panel it was delivered to.
     serials: BTreeMap<u64, String>,
+    reports: Reports,
     next_id: u32,
     planted: Planted,
 }
@@ -288,6 +312,7 @@ impl Placement {
             events: Vec::new(),
             inputs: Vec::new(),
             serials: BTreeMap::new(),
+            reports: Reports::default(),
             next_id: 1,
             planted,
         };
@@ -406,6 +431,107 @@ impl Placement {
             &w.display
         };
         Some((w, self.display(paced_by)?))
+    }
+
+    /// `activate`: the window server's report that `window` became the key window, or with
+    /// `None` that you switched to another app.
+    pub fn activate(&mut self, at: i64, window: Option<&str>, agent: bool) -> Value {
+        if let Err(e) = self.report(window, agent) {
+            return e;
+        }
+        self.reports.key.push((at, window.map(str::to_string)));
+        json!({})
+    }
+
+    /// `thermal`: the OS's report of the Mac's thermal state, `hot` at `serious` or `critical`.
+    pub fn thermal(&mut self, at: i64, hot: bool, agent: bool) -> Value {
+        if let Err(e) = self.report(None, agent) {
+            return e;
+        }
+        self.reports.hot.push((at, hot));
+        json!({})
+    }
+
+    /// `hide_window`: the window server's report that you hid `window` or showed it again.
+    pub fn hide_window(&mut self, at: i64, window: &str, hidden: bool, agent: bool) -> Value {
+        if let Err(e) = self.report(Some(window), agent) {
+            return e;
+        }
+        self.reports.hidden.push((at, window.to_string(), hidden));
+        json!({})
+    }
+
+    /// Whether a report may be taken: only the window server and the OS make one, about a
+    /// window the app has.
+    fn report(&self, window: Option<&str>, agent: bool) -> Result<(), Value> {
+        if agent {
+            return Err(refused("agent_cannot_report"));
+        }
+        match window {
+            Some(id) if !self.windows.iter().any(|w| w.id == id) => Err(refused("unknown_window")),
+            _ => Ok(()),
+        }
+    }
+
+    /// The lowest cap on `window`'s frames at `t`, in Hz (0: hidden), or `None` when uncapped.
+    /// A window you switched away from was key and another window, or another app, became key
+    /// after it.
+    fn cap(&self, window: &str, t: i64) -> Option<i64> {
+        let r = &self.reports;
+        let hidden = r
+            .hidden
+            .iter()
+            .rev()
+            .find(|(at, w, _)| *at <= t && w == window)
+            .is_some_and(|(_, _, h)| *h);
+        if hidden && !self.planted.presents_hidden {
+            return Some(0);
+        }
+        let key = |k: &Option<String>| k.as_deref() == Some(window);
+        let was_key = r.key.iter().any(|(at, k)| *at <= t && key(k));
+        let is_key = r
+            .key
+            .iter()
+            .rev()
+            .find(|(at, _)| *at <= t)
+            .is_some_and(|(_, k)| key(k));
+        let hot = r
+            .hot
+            .iter()
+            .rev()
+            .find(|(at, _)| *at <= t)
+            .is_some_and(|(_, h)| *h);
+        if was_key && !is_key && !self.planted.ignores_inactive_cap {
+            Some(INACTIVE_HZ)
+        } else if hot && !self.planted.ignores_thermal_cap {
+            Some(THERMAL_HZ)
+        } else {
+            None
+        }
+    }
+
+    /// The vsyncs of `grid` through `now` at which `window` may present, each judged at its
+    /// latch, `lead` before it, against the window's caps; and the vsyncs at whose latches a hidden
+    /// window still evaluates its sessions, which only the planted twin has.
+    pub fn slots(&self, window: &str, grid: Grid, lead: i64, now: i64) -> (Vec<i64>, Vec<i64>) {
+        let mut open = Vec::new();
+        let mut unseen = Vec::new();
+        let mut last: Option<i64> = None;
+        for vsync in grid.vsyncs_through(now) {
+            match self.cap(window, vsync - lead) {
+                Some(0) => {
+                    if self.planted.evaluates_hidden {
+                        unseen.push(vsync);
+                    }
+                }
+                Some(hz) if last.is_some_and(|l| vsync - l < FLICKS / hz) => {}
+                _ => {
+                    last = Some(vsync);
+                    open.push(vsync);
+                }
+            }
+        }
+        (open, unseen)
     }
 
     /// Your input to a panel at `at`, with the serial the router gave it: its window comes to
