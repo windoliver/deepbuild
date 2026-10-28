@@ -20,6 +20,7 @@ mod planted;
 mod scene3d;
 mod shared;
 mod snapshot;
+mod verdict;
 
 /// Every heap allocation the process makes while [`count_allocations`] runs, counted so the
 /// `frames` call can read how many the scheduler made in a frame (#387: "the scheduler
@@ -81,7 +82,7 @@ use serde_json::{json, Map, Value};
 
 use hub::{
     flicks, Body, Call, Card, Claim, Eval, Fault as HoldFault, Hold, Include, Panel, PatchCall,
-    Planted, Process, RecordObject, Scenario, Session, Show, Startup, Via,
+    Planted, Process, RecordObject, Requirement, Scenario, Session, Show, Startup, Via,
 };
 use shared::{Clock, CommitFault, Quota};
 
@@ -396,6 +397,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "kit" => return Some(Call::Kit(Box::new(kit::KitCall::parse(c)?))),
         "manifest" => return Some(Call::Manifest),
         "catalog" => return Some(Call::Catalog),
+        "verdict" => return Some(Call::Verdict(c.get("claim")?.as_str()?.to_string())),
+        "verdicts" => return Some(Call::Verdicts(c.get("claim")?.as_str()?.to_string())),
         "golden" => {
             return Some(Call::Golden {
                 fixture: c.get("fixture")?.as_str()?.to_string(),
@@ -622,8 +625,24 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     })?;
     let claims = entries(input, "claims", |c| {
         c.get("session")?.as_str()?;
+        let requirements = match c.get("requirements") {
+            None => Vec::new(),
+            Some(list) => list
+                .as_array()?
+                .iter()
+                .map(|r| {
+                    let check = r.get("check")?;
+                    check.as_object()?.get("kind")?.as_str()?;
+                    Some(Requirement {
+                        id: r.get("id")?.as_str()?.to_string(),
+                        check: check.clone(),
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?,
+        };
         Some(Claim {
             deliverables: strings(c.get("deliverables"))?,
+            requirements,
         })
     })?;
     let window = match input.get("window") {
@@ -729,6 +748,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             "box_sends_every_id" => Planted::BoxSendsEveryId,
             "resolver_only_ref_unresolved" => Planted::ResolverOnlyRefUnresolved,
             "resolver_closes_task" => Planted::ResolverClosesTask,
+            "verdict_keyed_by_doc" => Planted::VerdictKeyedByDoc,
+            "checks_skip_unknown_kind" => Planted::ChecksSkipUnknownKind,
+            "missing_kind_inconclusive" => Planted::MissingKindInconclusive,
             _ => return None,
         }),
     };
@@ -912,6 +934,8 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-kit",
     feature = "test-leave-out-look",
     feature = "test-leave-out-text",
+    feature = "test-check-kind",
+    feature = "test-leave-out-logic",
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
@@ -979,7 +1003,12 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::title_cap());
     #[cfg(feature = "test-deprecated")]
     out.push(deep_canvas_test_modules::deprecated());
+    #[cfg(feature = "test-check-kind")]
+    out.push(deep_canvas_test_modules::checks());
     out.extend(kit::modules::built());
+    // #403: `full` holds no logic module yet; once one lands, this build leaves it out.
+    #[cfg(feature = "test-leave-out-logic")]
+    out.retain(|m| m.manifest.name != "logic");
     out
 }
 
