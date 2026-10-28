@@ -1,0 +1,15 @@
+{
+  "name": "solid",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack whose one recipe makes a 3D box, so it needs the scene3d canvas module.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "scene3d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "solid.block@1": "solid.block@1.json"
+  }
+}

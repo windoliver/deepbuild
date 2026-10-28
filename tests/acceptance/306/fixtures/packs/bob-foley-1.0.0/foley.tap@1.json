@@ -1,0 +1,41 @@
+{
+  "id": "foley.tap",
+  "version": "1.0",
+  "title": "Tap (bob)",
+  "license": "MIT",
+  "author": "bob",
+  "description": "bob's tap: two rects of the given side, 20 apart.",
+  "inputs": {
+    "size": {
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "about": "each tap's side"
+    }
+  },
+  "steps": {
+    "tap": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": 2,
+        "as": "i"
+      },
+      "params": {
+        "box": [0, 0, "size", "size"],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": ["20 * i", 0, 0]
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["tap"]
+  }
+}

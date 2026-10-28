@@ -60,6 +60,10 @@ pub fn core_fixtures() -> Vec<Entry> {
 pub struct Row {
     pub code: String,
     pub module: String,
+    /// The document check kind that emits it (#403): the module check that names it among its
+    /// codes, else `document.validate`, which runs every module's rules before a show and
+    /// carries the frame's issues too.
+    pub check: String,
     pub meaning: String,
     pub fix: String,
     pub fix_ops: bool,
@@ -89,6 +93,7 @@ pub fn rows(hub: &Hub<'_>, fixtures: &[Entry]) -> Vec<Row> {
         out.push(Row {
             code: code.to_string(),
             module: "core".into(),
+            check: deep_canvas::document::CHECK.into(),
             meaning: meaning.to_string(),
             fix: deep_canvas::document::fix_for(code),
             fix_ops: false,
@@ -100,9 +105,17 @@ pub fn rows(hub: &Hub<'_>, fixtures: &[Entry]) -> Vec<Row> {
             if out.iter().any(|r| r.code == c.code) {
                 continue;
             }
+            let check = m
+                .shapes
+                .checks
+                .iter()
+                .find(|k| k.codes.contains(&c.code))
+                .map_or(deep_canvas::document::CHECK, |k| k.kind.as_str())
+                .to_string();
             out.push(Row {
                 code: c.code.to_string(),
                 module: m.name.clone(),
+                check,
                 meaning: c.meaning.clone(),
                 fix: c.fix.clone(),
                 fix_ops: c.fix_ops,
@@ -130,7 +143,7 @@ impl<'a> Hub<'a> {
         let codes: Vec<Value> = rows(self, &manifest.fixtures)
             .into_iter()
             .map(|r| {
-                json!({"code": r.code, "module": r.module, "meaning": r.meaning, "fix": r.fix,
+                json!({"code": r.code, "module": r.module, "check": r.check, "meaning": r.meaning, "fix": r.fix,
                        "fix_ops": r.fix_ops, "fixture": r.fixture})
             })
             .collect();
@@ -170,19 +183,40 @@ pub fn accepted(sealed: &deep_canvas::registry::Sealed, f: &Entry) -> bool {
 /// past f64's range, and, when the check found no error, what its operators can't evaluate and
 /// what the renderer can't draw.
 pub fn raised(hub: &mut Hub<'_>, doc: &Value) -> Vec<Value> {
-    raised_with(hub, doc, None)
+    raised_with(hub, doc, None, &[])
 }
 
-/// What a document raises read against `readings`, a fixture's own record, when it has one.
+/// What a document raises read against `readings`, a fixture's own record, when it has one,
+/// with the sidecar's `checks` run where a module registers their kind.
 fn raised_with(
     hub: &mut Hub<'_>,
     doc: &Value,
     readings: Option<&std::collections::BTreeMap<String, Value>>,
+    checks: &[&serde_json::Map<String, Value>],
 ) -> Vec<Value> {
     let result = check_in(doc, &hub.startup.sealed);
     let mut issues: Vec<Value> = result.issues.iter().map(|i| i.to_json()).collect();
     issues.extend(result.notices.iter().map(|n| n.to_json()));
     issues.extend(overflows(doc).iter().map(|i| i.to_json()));
+    // A check kind a module registers runs only when a check input names it (#403): each of
+    // the sidecar's that does runs here, so a fixture raises what its codes name.
+    for input in checks {
+        let kind = input
+            .get("kind")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if let Some((m, check)) = hub.startup.sealed.check_kind(kind) {
+            let input = Value::Object((*input).clone());
+            issues.extend(crate::verdict::run_check(
+                hub,
+                check,
+                kind,
+                &m.name,
+                &result.lowered,
+                &input,
+            ));
+        }
+    }
     if !issues.iter().any(|i| i["severity"] == "error") {
         let (op_issues, drawing) = hub.probe(doc, 0, true, readings);
         for i in op_issues.iter().filter(|i| i.code != "undeclared_read") {
@@ -225,7 +259,7 @@ pub fn fixture_issues(hub: &mut Hub<'_>, f: &Entry) -> Vec<Value> {
         .record
         .as_ref()
         .map(|r| super::instance::readings(Some(r)));
-    raised_with(hub, &doc, readings.as_ref())
+    raised_with(hub, &doc, readings.as_ref(), &f.checks())
 }
 
 /// Compares the codes raised with those named: the case passes only on exactly them; under the
@@ -416,6 +450,7 @@ fn apply_as(hub: &Hub<'_>, doc: &mut Value, writer: &str, patch: &Value) -> Resu
         you: writer.starts_with("you:"),
         base: None,
         knows: &knows,
+        packs: None,
     };
     let id = doc["id"].as_str().unwrap_or_default().to_string();
     apply_ops(doc, patch, "patch", &id, &writing)
