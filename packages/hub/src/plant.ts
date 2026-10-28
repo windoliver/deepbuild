@@ -20,7 +20,9 @@ export type Plant =
   | 'answer-skips-held-stop' | 'stop-hold-releases-without-answer' | 'both-routes' | 'stop-hold-polls' | 'no-stop-count' | 'stop-count-never-resets'
   | 'waiter-never-wakes' | 'waiter-outlives-session' | 'waiter-gives-up-at-600s' | 'waiter-per-stop' | 'waiter-polls' | 'waiter-checks-every-5s'
   | 'delivered-on-waiter-exit' | 'wake-assumed' | 'delivered-to-dead-waiter' | 'routes-from-settings' | 'routes-kept-across-sessions'
-  | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt';
+  | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
+  // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
+  | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice';
 const PLANTS: readonly string[] = [
   'writer-from-payload', 'unlink-before-lock', 'accept-stops-at-emfile', 'ends-binding', 'git-in-hook-handler', 'commit-on-event-loop',
   'parse-on-event-loop', 'origin-from-payload', 'no-run-values', 'empty-cited', 'ignores-unknown-field', 'run-spawns-itself',
@@ -39,6 +41,7 @@ const PLANTS: readonly string[] = [
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
+  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
