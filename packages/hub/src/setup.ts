@@ -3,7 +3,8 @@
 // settings, and the hub started through its login service; `deep setup --undo` takes all of it out again, once the OS
 // confirms you. Each agent file is planned first, parsed strictly, and written through its link (agent-files.ts);
 // its bytes before the first write are kept, so undo puts back exactly what you had. `deep doctor`'s timing-relation
-// items and `deep waiter`, the background entry that wakes an idle session with an answer, live here too.
+// items live here too. The background entry that wakes an idle session with an answer is deep-hook's waiter (#25),
+// small enough to wait the longest ask deadline; `deep waiter` is only the planted Node waiter that polls.
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, userInfo } from 'node:os';
@@ -71,7 +72,7 @@ async function install(cli: string): Promise<number> {
     const hook = builtHook();
     // The waiter waits as long as your longest ask deadline, so an answer in time can still wake the session.
     const longest = longestDeadline(root) ?? 0;
-    const waiter = `'${process.execPath}' '${cli}' waiter`;
+    const waiter = plant() === 'waiter-polls' ? `'${process.execPath}' '${cli}' waiter` : `${q(hook)} claude-code waiter`;
     const groups = ourGroups(hook, waiter, Math.max(600, Math.ceil(longest / 1000)));
     for (const file of [settingsFile, userFile]) keepOriginal(root, record, file);
     saveRecord(root, record);
@@ -225,25 +226,24 @@ export function relationItems(): { item: string; agent: string; code: string; le
 }
 
 /**
- * `deep waiter`, run by Claude Code's background Stop entry: waits for an answer for its session and wakes the session
- * with it (exit 2, the answer on stderr). It ends quietly when Claude Code goes, or the hub does.
+ * `deep waiter`, the planted wrong program waiter-polls (#25): a waiter in Node, as #18's was, that asks the hub for
+ * its session's answer every 50 ms instead of being told, and wakes the session with it (exit 2, the answer on stderr).
  */
 export async function waiterCommand(): Promise<number> {
   let session = '';
   try { session = String((JSON.parse(readFileSync(0, 'utf8')) as { session_id?: unknown }).session_id ?? ''); } catch { /* no payload */ }
   if (!session) return 0;
   const parent = process.ppid;
-  const watch = setInterval(() => { try { process.kill(parent, 0); } catch { process.exit(0); } }, 2000);
-  watch.unref();
-  try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    const reply = await call(hubAddress().path, token, 'session.wait', { session });
-    if (!('result' in reply) || typeof reply.result.text !== 'string') return 0;
-    process.stderr.write(`${reply.result.text}\n`);
-    return 2;
-  } catch {
-    return 0;
-  } finally {
-    clearInterval(watch);
+  for (;;) {
+    try { process.kill(parent, 0); } catch { return 0; }
+    try {
+      const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
+      const reply = await call(hubAddress().path, token, 'session.wait', { session, poll: true });
+      if ('result' in reply && typeof reply.result.text === 'string') {
+        process.stderr.write(`${reply.result.text}\n`);
+        return 2;
+      }
+    } catch { /* the hub is away: ask again */ }
+    await new Promise((done) => setTimeout(done, 50));
   }
 }
