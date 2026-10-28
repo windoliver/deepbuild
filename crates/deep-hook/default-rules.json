@@ -176,6 +176,38 @@
       "reason": "A top-level folder the plan doesn't name is a decision: recorded, and answered by your standing rule or asked.",
       "next_step": "Name the folder in the plan, or say why it is needed.",
       "fail_closed": false
+    },
+    "authority-push": {
+      "match": "effect:push",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "This call pushes, which needs your authority: no \"proceed\" covers it, so in the turn a proceed starts it is held with an authority ask.",
+      "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
+    "authority-merge": {
+      "match": "effect:merge",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "This call merges a pull request, which needs your authority: no \"proceed\" covers it, so in the turn a proceed starts it is held with an authority ask.",
+      "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
+    "authority-send": {
+      "match": "effect:send",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "This call sends a message for you, which needs your authority: no \"proceed\" covers it, so in the turn a proceed starts it is held with an authority ask.",
+      "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
+      "fail_closed": false
+    },
+    "authority-delete": {
+      "match": "effect:delete",
+      "scope": "all_repos",
+      "mode": "watch",
+      "reason": "This call deletes on a remote service, which needs your authority: no \"proceed\" covers it, so in the turn a proceed starts it is held with an authority ask.",
+      "next_step": "Wait for the answer to the authority ask that names it; once you say yes, the same call runs.",
+      "fail_closed": false
     }
   },
   "proofs": {
