@@ -9,8 +9,9 @@
     "perHook": { "Stop": 600000, "UserPromptSubmit": 30000 }
   },
   "continuation": {
-    "readBy": "a stop hold continues a turn only while the payload says no stop hook already did; the cap is the design's",
+    "readBy": "a stop hold continues a turn at most cap times in a row, counted per turn and from its last tool call; past it, what would continue the turn goes by the next prompt",
     "conformance": "claude/continuation/stop-hook-active",
+    "cap": 8,
     "field": "stop_hook_active"
   },
   "signIn": {

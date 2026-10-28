@@ -1,0 +1,32 @@
+Base commit: 0350cf0 (HEAD, clean; merge base with origin/main is HEAD itself, so the merge-base side is this
+checkout's own build), workspaces built, target/debug/deep-hook built, Node 24.22.0 (fnm), Mac15,7 (a reference
+Mac) loaded far past its 12 cores by other sessions: 1-minute load 46 to 290 during these runs.
+
+Commands:
+  npx vitest run --root tests/acceptance/25/live --no-file-parallelism
+  node node_modules/typescript/bin/tsc -p tests/acceptance/25/live/tsconfig.json      (no errors)
+
+Result:
+  Test Files  2 failed (2)
+       Tests  13 failed | 1 skipped (14)      about 2.5 minutes
+
+Why each test fails at the base:
+
+AC8 budgets.test.ts (lane)         FAIL: no check lane in scripts/lanes.mjs runs tests/acceptance/25/live/budgets.test.ts.
+AC8 budgets.test.ts (budgets)      SKIPPED as INCONCLUSIVE (heavy contention, load 72 to 165 on 12 cores), never PASS.
+                                   The warm-up measurement ran and named a route failure for all 10 held sessions:
+                                   "<session>'s held stop didn't continue with your answer to ask:<id>": DeepBuild's
+                                   Stop entry exited 0 with no output. Checked by hand on one session: while the stop
+                                   is held, the base's waiter (started at the same Stop) takes the answer and exits 2
+                                   ("DeepBuild delivers your answers: ...", delivery.outcome via next_prompt), and the
+                                   held stop is let through about 1 s later with nothing. On a machine not loaded past
+                                   its cores this is a FAIL naming each session. Other readings of the base: wake
+                                   17 to 69 ms; waiter resident memory 61 to 71 MB (a Node process; the limit is 5 MB);
+                                   waiter CPU 0 to 10 ms over 30 s.
+AC8 (wrong program) x3             FAIL, BLOCKED: the hub refuses DEEP_HUB_PLANT=stop-hold-polls, waiter-polls and
+                                   waiter-checks-every-5s ("names no planted program").
+AC1, AC2, AC9, AC7 routes.live     FAIL, BLOCKED: no DEEP_HARNESS_LIVE=1 (9 tests). The live file was not run with the
+                                   opt-in: it spends plan usage, and it can't pass at the base, whose harness has no
+                                   deep-answer scenario (unknown --scenario: no run line, BLOCKED) and whose hub has
+                                   none of the five live plants. AC1's live test would also meet the base's held stop
+                                   above, which its waiter answers first.
