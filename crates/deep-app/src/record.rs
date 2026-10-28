@@ -5,6 +5,7 @@
 //! since frames it got before a power cut may be gone. A consumer cut off with `fell_behind` resumes from its
 //! last `log_pos`.
 
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -35,6 +36,30 @@ pub struct View {
     pub inbox: Vec<Value>,
     /// Each event applied since the reads, in `log_pos` order, each once.
     pub events: Vec<Value>,
+}
+
+impl View {
+    /// Applies one event the view doesn't have yet.
+    pub fn apply(&mut self, event: Value) {
+        self.log_pos = event["log_pos"].as_u64().unwrap_or(self.log_pos);
+        let kind = event["kind"].as_str().unwrap_or_default();
+        if kind == "ask.created" {
+            let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
+            if !self.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
+                self.inbox.push(json!({
+                    "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
+                    "status": "shown", "outcome": "unanswered", "owner": event["data"]["owner"],
+                }));
+            }
+        } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
+            let ask = event["subject"].as_str().unwrap_or_default();
+            for row in self.inbox.iter_mut().filter(|row| row["ask"] == ask) {
+                row["status"] = json!("closed");
+                row["outcome"] = json!(outcome);
+            }
+        }
+        self.events.push(event);
+    }
 }
 
 pub struct RecordReader {
@@ -140,7 +165,7 @@ impl RecordReader {
                 return Ok(());
             }
         }
-        self.apply(event.clone());
+        self.view.apply(event.clone());
         Ok(())
     }
 
@@ -163,7 +188,7 @@ impl RecordReader {
             let full = events.len() == PAGE;
             for event in events {
                 if event["log_pos"].as_u64().unwrap_or(0) > self.view.log_pos {
-                    self.apply(event);
+                    self.view.apply(event);
                 }
             }
             self.view.log_pos = self.view.log_pos.max(page["log_pos"].as_u64().unwrap_or(0));
@@ -172,25 +197,57 @@ impl RecordReader {
             }
         }
     }
+}
 
-    fn apply(&mut self, event: Value) {
-        self.view.log_pos = event["log_pos"].as_u64().unwrap_or(self.view.log_pos);
-        let kind = event["kind"].as_str().unwrap_or_default();
-        if kind == "ask.created" {
-            let ask = format!("ask:{}", event["id"].as_str().unwrap_or_default());
-            if !self.view.inbox.iter().any(|row| row["ask"] == ask.as_str()) {
-                self.view.inbox.push(json!({
-                    "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
-                    "status": "shown", "outcome": "unanswered", "owner": event["data"]["owner"],
-                }));
-            }
-        } else if let Some((_, outcome)) = CLOSING.iter().find(|(k, _)| *k == kind) {
-            let ask = event["subject"].as_str().unwrap_or_default();
-            for row in self.view.inbox.iter_mut().filter(|row| row["ask"] == ask) {
-                row["status"] = json!("closed");
-                row["outcome"] = json!(outcome);
+/// Where the one reader reads: the hub's socket in the app, or a record the replica feeds event by event.
+enum Source {
+    Hub(Box<RecordReader>),
+    Local(View),
+}
+
+thread_local! {
+    static READER: RefCell<Option<Source>> = const { RefCell::new(None) };
+}
+
+/// Makes `reader` the app's one record reader: every view reads what it holds.
+pub fn install(reader: RecordReader) {
+    READER.with(|cell| *cell.borrow_mut() = Some(Source::Hub(Box::new(reader))));
+}
+
+/// Makes a record held in memory the one reader's, its events applied in order: the replica's record.
+pub fn install_local(events: impl IntoIterator<Item = Value>) {
+    let mut view = View::default();
+    for event in events {
+        view.apply(event);
+    }
+    READER.with(|cell| *cell.borrow_mut() = Some(Source::Local(view)));
+}
+
+/// Delivers one event to a record held in memory, as the hub's stream would.
+pub fn feed(event: Value) {
+    READER.with(|cell| {
+        if let Some(Source::Local(view)) = cell.borrow_mut().as_mut() {
+            if event["log_pos"].as_u64().unwrap_or(0) > view.log_pos {
+                view.apply(event);
             }
         }
-        self.view.events.push(event);
-    }
+    });
+}
+
+/// Handles what the hub sends within `timeout`; a record held in memory has nothing to wait for.
+pub fn poll(timeout: Duration) -> Result<(), HubError> {
+    READER.with(|cell| match cell.borrow_mut().as_mut() {
+        Some(Source::Hub(reader)) => reader.poll(timeout),
+        _ => Ok(()),
+    })
+}
+
+/// Reads the one reader's view; `None` before one is installed.
+pub fn with_view<R>(read: impl FnOnce(&View) -> R) -> Option<R> {
+    READER.with(|cell| {
+        cell.borrow().as_ref().map(|source| match source {
+            Source::Hub(reader) => read(&reader.view),
+            Source::Local(view) => read(view),
+        })
+    })
 }
