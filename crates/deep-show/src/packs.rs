@@ -163,24 +163,27 @@ pub fn drawn(doc: &Value, expansions: &[Expansion]) -> Value {
     out
 }
 
-/// `batches` on a snapshot reply: the derived items grouped by expansion key, so equal
-/// expansions share one batch, each batch's items sorted.
-pub fn batches(expansions: &[Expansion]) -> Value {
-    let mut by_key: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for e in expansions {
-        by_key
-            .entry(e.key.as_str())
-            .or_default()
-            .extend(e.derived.keys().map(String::as_str));
-    }
-    let rows: Vec<Value> = by_key
-        .into_iter()
-        .map(|(key, mut items)| {
-            items.sort_unstable();
-            json!({"batch": key, "items": items})
+/// Each derived item the expansions wrote, with its expansion key and instance: what the 2D draw
+/// batches equal expansions by.
+pub fn instanced(expansions: &[Expansion]) -> BTreeMap<String, (String, String)> {
+    expansions
+        .iter()
+        .flat_map(|e| {
+            e.derived
+                .keys()
+                .map(|id| (id.clone(), (e.key.clone(), e.instance.clone())))
         })
-        .collect();
-    Value::Array(rows)
+        .collect()
+}
+
+/// `batches` on a snapshot reply: the instanced batches the draw made, each with every item it
+/// drew.
+pub fn batches(drew: &[crate::snapshot::Batch]) -> Value {
+    Value::Array(
+        drew.iter()
+            .map(|b| json!({"batch": b.key, "items": b.items}))
+            .collect(),
+    )
 }
 
 /// True when any issue needs a pack or a module this build lacks: the check is BLOCKED.
