@@ -34,6 +34,7 @@ mod time;
 mod unit;
 
 pub use handle::{gen_handle, gen_handle_mutant, Handle, HandleId, Scheme};
+pub(crate) use id::id_fault;
 pub use id::{gen_id, gen_id_mutant, Id, PatchId, SubAddress};
 pub use number::{Decimal, Number};
 pub use path::{gen_path, gen_path_mutant, Path, Section};

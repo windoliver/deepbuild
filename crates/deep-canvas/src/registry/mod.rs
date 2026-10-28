@@ -941,7 +941,13 @@ impl Sealed {
         if !self.has(module) {
             return Some(module.to_string());
         }
-        self.left_out.get(&format!("{module}.{operator}")).cloned()
+        // Read per param of every item, so it finds `module.operator` without building the text.
+        self.left_out
+            .iter()
+            .find(|(k, _)| {
+                k.strip_prefix(module).and_then(|r| r.strip_prefix('.')) == Some(operator)
+            })
+            .map(|(_, cause)| cause.clone())
     }
 
     /// The core kind the core draws `kind_text`'s items as, when a sealed module registered it
