@@ -97,12 +97,6 @@ fn register(r: &mut Registrar) {
         false,
     );
     r.code(
-        "bad_rate",
-        "A transport frame rate that isn't two whole numbers above zero.",
-        "Write the frame rate as [p, q] or \"p/q\", both above zero.",
-        false,
-    );
-    r.code(
         "bad_marker_kind",
         "A marker of a kind motion doesn't land.",
         "Use the marker kind cue, shot, section or record.",

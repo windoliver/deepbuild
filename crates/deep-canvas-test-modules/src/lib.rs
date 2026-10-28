@@ -723,3 +723,82 @@ pub fn deprecated() -> Module {
         register: register_deprecated,
     }
 }
+
+// Issue #403: the test canvas module of the #403 acceptance README (Test builds).
+
+/// `test.checks.named`: every item's `name` read on request, never before a show.
+fn named_check(doc: &Value, _input: &Value) -> Vec<(String, Raised)> {
+    let mut out = Vec::new();
+    for (id, item) in doc["items"].as_object().into_iter().flatten() {
+        let name = item["name"].as_str().unwrap_or_default();
+        if name == "TODO" {
+            out.push((
+                id.clone(),
+                Raised {
+                    code: "test.checks.todo",
+                    severity: "error",
+                    path: format!("items/{id}/name"),
+                    what: "an item still named TODO".into(),
+                    fix_ops: None,
+                },
+            ));
+        } else if name.len() >= 8 && name.bytes().all(|b| b.is_ascii_uppercase()) {
+            out.push((
+                id.clone(),
+                Raised {
+                    code: "test.checks.shout",
+                    severity: "warning",
+                    path: format!("items/{id}/name"),
+                    what: "a name of eight or more upper-case letters".into(),
+                    fix_ops: None,
+                },
+            ));
+        }
+    }
+    out
+}
+
+fn register_checks(r: &mut Registrar) {
+    r.check(
+        "test.checks.named",
+        "any",
+        &["test.checks.todo", "test.checks.shout"],
+        named_check,
+    );
+    r.code(
+        "test.checks.todo",
+        "An item whose name is still TODO, which the test check refuses.",
+        "Give the item its name.",
+        false,
+    );
+    r.code(
+        "test.checks.shout",
+        "An item whose name is eight or more upper-case letters.",
+        "Write the name in sentence case.",
+        false,
+    );
+    r.fixture(
+        "todo",
+        json!({"format": 1, "profile": "board", "title": "Todo", "description": "An item still named TODO.", "size": [320, 200],
+               "items": {"t": {"id": "t", "kind": "rect@1", "name": "TODO", "order": "a0",
+                               "params": {"box": [10, 10, 50, 50], "paint": {"fill": {"role": "muted"}}}}}}),
+        None,
+    )
+    .sidecar(json!({"checks": [{"kind": "test.checks.named"}], "oracles": ["analytic"], "codes": ["test.checks.todo", "unknown_kind"]}));
+    r.fixture(
+        "shout",
+        json!({"format": 1, "profile": "board", "title": "Shout", "description": "An item named in upper case.", "size": [320, 200],
+               "items": {"s": {"id": "s", "kind": "rect@1", "name": "LOUDNAME", "order": "a0",
+                               "params": {"box": [10, 10, 50, 50], "paint": {"fill": {"role": "muted"}}}}}}),
+        None,
+    )
+    .sidecar(json!({"checks": [{"kind": "test.checks.named"}], "oracles": ["analytic"], "codes": ["test.checks.shout", "unknown_kind"]}));
+}
+
+/// `test.checks`: registers the document check kind `test.checks.named` and no item kind.
+pub fn checks() -> Module {
+    Module {
+        manifest: manifest("test.checks", &[]),
+        register: register_checks,
+    }
+}

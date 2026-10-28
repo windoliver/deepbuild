@@ -1,0 +1,341 @@
+Base commit: a8e5480 (Merge pull request #767 from windoliver/feat/63-read-by-reference)
+Command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/403 --no-file-parallelism --reporter=verbose
+Run in a detached worktree at the base commit holding only these test files (untracked) and the repo's node_modules (symlinked).
+Date: 2026-10-27T22:15:00Z  Node v24.22.0  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1   Tests: 13 failed (13)
+
+Why each fails at the base:
+- AC1 (stale.test.ts, 5): the scenario's `claims` take no `requirements`, and `verdict` / `verdicts` are no
+  calls, so `deep-show run` refuses every scenario with `bad_input`.
+- AC2 (unknown-kind.test.ts, 4): the same `bad_input` (requirements and the `verdict` call); at the base a
+  whole revision holding `test.cube@1` is also refused with `module_missing` from marks2d.frame.
+- AC3 (check-kinds.test.ts, 4): no `test-leave-out-logic` or `test-check-kind` feature, so those builds
+  fail (cargo: "none of the selected packages contains these features"); the two tests on `full` alone
+  fail on `bad_input` as AC1's do, and the catalog has no `check` column and no `test.checks` codes.
+
+Output (ANSI colors stripped):
+
+
+ RUN  v5.0.5 /private/tmp/claude-501/-Users-sophiawj-private-deepbuild-core--claude-worktrees-github-issue-331-51c758/5ae409bb-f2be-4541-b815-f796c7e8221b/scratchpad/base403/tests/acceptance/403
+
+ × check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 in a build without the logic module, a requirement whose check input names logic.determinism is BLOCKED with module_missing naming the kind and logic, never PASS or INCONCLUSIVE 42ms
+   → the binary builds: deep-show with features full,test-leave-out-logic: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 a planted judge that leaves a check kind no module registers INCONCLUSIVE fails this check, naming logic.determinism 3ms
+   → the binary builds: deep-show with features full,test-leave-out-logic: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 the test canvas module test.checks adds test.checks.named to the check input's kinds and to the catalog with its codes; the full build has neither 2ms
+   → the binary builds: deep-show with features full,test-check-kind: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 a requirement whose check input names test.checks.named runs in the build with the module: PASS on the clean board, FAIL naming the TODO item; in full it is BLOCKED with module_missing naming the kind 1ms
+   → the binary builds: deep-show with features full,test-check-kind: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 deep show --check --snap of the deliverable with a test.cube@1 item: presented and drawn as the board without it, the check BLOCKED naming test.cube@1, never PASS 2726ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 the claim's document.validate requirement on that deliverable is BLOCKED naming test.cube@1, and the claim is not PASS 98ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 control: the same deliverable without the unknown item passes its check and its requirement in the claim 36ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 planted checks that skip the unknown item and judge the rest fail this check, naming test.cube@1 40ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 your patch makes a new revision of the deliverable: the PASS keyed by revision 0's hash goes stale, and a new verdict names the new revision's hash 2553ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 alpha's patch, the claim's own agent's, makes a new revision: the PASS keyed by revision 0's hash goes stale, and a new verdict names the new revision's hash 36ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 bravo's patch, another agent's, makes a new revision: the PASS keyed by revision 0's hash goes stale, and a new verdict names the new revision's hash 43ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 without a patch the PASS stays fresh: made on revision 0 and listed after a read, it is keyed by revision 0's hash and not stale 34ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 a planted verdict keyed by the document alone, not its revision, stays fresh after a patch and fails this check, naming the patch 62ms
+   → deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 in a build without the logic module, a requirement whose check input names logic.determinism is BLOCKED with module_missing naming the kind and logic, never PASS or INCONCLUSIVE
+AssertionError: the binary builds: deep-show with features full,test-leave-out-logic: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic failed:
++ error: none of the selected packages contains this feature: test-leave-out-logic
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there is a similarly named feature: test-leave-out-look
++
+
+ ❯ Object.bin helpers.ts:116:107
+    114|       const entry = made.get(nameOf(build));
+    115|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    116|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    117|       return entry.bin;
+    118|     },
+ ❯ judge check-kinds.test.ts:42:21
+ ❯ check-kinds.test.ts:58:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 a planted judge that leaves a check kind no module registers INCONCLUSIVE fails this check, naming logic.determinism
+AssertionError: the binary builds: deep-show with features full,test-leave-out-logic: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-leave-out-logic failed:
++ error: none of the selected packages contains this feature: test-leave-out-logic
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++ help: there is a similarly named feature: test-leave-out-look
++
+
+ ❯ Object.bin helpers.ts:116:107
+    114|       const entry = made.get(nameOf(build));
+    115|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    116|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    117|       return entry.bin;
+    118|     },
+ ❯ judge check-kinds.test.ts:42:21
+ ❯ check-kinds.test.ts:66:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 the test canvas module test.checks adds test.checks.named to the check input's kinds and to the catalog with its codes; the full build has neither
+AssertionError: the binary builds: deep-show with features full,test-check-kind: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-check-kind failed:
++ error: none of the selected packages contains this feature: test-check-kind
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:116:107
+    114|       const entry = made.get(nameOf(build));
+    115|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    116|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    117|       return entry.bin;
+    118|     },
+ ❯ lists check-kinds.test.ts:49:42
+ ❯ check-kinds.test.ts:71:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 a requirement whose check input names test.checks.named runs in the build with the module: PASS on the clean board, FAIL naming the TODO item; in full it is BLOCKED with module_missing naming the kind
+AssertionError: the binary builds: deep-show with features full,test-check-kind: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-check-kind failed:
++ error: none of the selected packages contains this feature: test-check-kind
++ selected packages: deep-contracts, deep-hook, deep-app, deep-gpu, deep-canvas, deep-marks-gpui, deep-canvas-marks, deep-text, deep-text-gpui, deep-gpu-layer, deep-canvas-effects, deep-canvas-graph, deep-canvas-motion, deep-canvas-record, deep-canvas-scene3d, deep-canvas-sheet, deep-canvas-test-modules, deep-effects-render, deep-scene3d-render, deep-replica, deep-marks-render, deep-marks-vello, deep-show, deep-text-render
++
+
+ ❯ Object.bin helpers.ts:116:107
+    114|       const entry = made.get(nameOf(build));
+    115|       if (!entry) throw Error(`the file didn't list the build ${nameOf…
+    116|       expect(entry.error, `the binary builds: ${SHOW_NAME} with featur…
+       |                                                                                                           ^
+    117|       return entry.bin;
+    118|     },
+ ❯ judge check-kinds.test.ts:42:21
+ ❯ check-kinds.test.ts:88:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 your patch makes a new revision of the deliverable: the PASS keyed by revision 0's hash goes stale, and a new verdict names the new revision's hash
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play stale.test.ts:46:19
+ ❯ patched stale.test.ts:66:35
+ ❯ stale.test.ts:70:181
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 alpha's patch, the claim's own agent's, makes a new revision: the PASS keyed by revision 0's hash goes stale, and a new verdict names the new revision's hash
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play stale.test.ts:46:19
+ ❯ patched stale.test.ts:66:35
+ ❯ stale.test.ts:71:191
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 bravo's patch, another agent's, makes a new revision: the PASS keyed by revision 0's hash goes stale, and a new verdict names the new revision's hash
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play stale.test.ts:46:19
+ ❯ patched stale.test.ts:66:35
+ ❯ stale.test.ts:72:183
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 without a patch the PASS stays fresh: made on revision 0 and listed after a read, it is keyed by revision 0's hash and not stale
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ stale.test.ts:75:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  stale.test.ts > AC1 a PASS on a document that is the work is keyed by its revision hash and goes stale when any writer patches it > #403.b719566f AC1 a planted verdict keyed by the document alone, not its revision, stays fresh after a patch and fails this check, naming the patch
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play stale.test.ts:46:19
+ ❯ stale.test.ts:91:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 deep show --check --snap of the deliverable with a test.cube@1 item: presented and drawn as the board without it, the check BLOCKED naming test.cube@1, never PASS
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play unknown-kind.test.ts:49:10
+ ❯ unknown-kind.test.ts:54:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 the claim's document.validate requirement on that deliverable is BLOCKED naming test.cube@1, and the claim is not PASS
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play unknown-kind.test.ts:49:10
+ ❯ unknown-kind.test.ts:67:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 control: the same deliverable without the unknown item passes its check and its requirement in the claim
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play unknown-kind.test.ts:49:10
+ ❯ unknown-kind.test.ts:76:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  unknown-kind.test.ts > AC2 a deliverable with an item of a kind the build doesn't know makes its checks in the claim BLOCKED naming the kind, while the rest draws > #403.a04e255b AC2 planted checks that skip the unknown item and judge the rest fail this check, naming test.cube@1
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:133:83
+    131|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    132|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    133|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${brief(ou…
+       |                                                                                   ^
+    134|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    135|   expect(replies.length, 'run: one reply per call').toBe(arr(scenario[…
+ ❯ play unknown-kind.test.ts:49:10
+ ❯ unknown-kind.test.ts:85:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  13 failed (13)
+   Start at  14:53:37
+   Duration  1713.05s (tests 100%)
+
+vitest exit=1
