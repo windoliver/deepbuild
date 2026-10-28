@@ -21,3 +21,7 @@ plant-fixed-deadline = []
 plant-paths-as-written = []
 # The planted wrong program for #316's AC9: a shell reader that knows only the issue's own spellings.
 plant-issue-spellings = []
+# The planted wrong programs for #304: a rule compiled in that reads no rules.json entry (AC1), and a `counts:` class
+# read only for the tools deep-hook reads itself (AC5).
+plant-compiled-rule = []
+plant-listed-kinds-only = []

@@ -1,0 +1,72 @@
+Base commit 0350cf0 (this worktree, unmodified), October 27, 2026, on this Mac with Node 24.22.0, after
+`npm run build --workspaces` and `cargo build --locked -q -p deep-hook`:
+
+  npx vitest run --root tests/acceptance/19/doctor --no-file-parallelism
+  Test Files  10 failed (10)
+       Tests  23 failed | 5 passed (28)
+    Duration  292.67s
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/19/doctor/tsconfig.json   -> no errors
+
+Why each test fails at the base (the first failing assertion's message, shortened):
+
+AC3 hooks.test.ts
+  x  "AC3 deep doctor must show the missing hook installation as a hooks_missing item": the base doctor has only the
+     telemetry and timing items; with DeepBuild's PreToolUse and Stop entries gone it exits 0.
+
+AC4 token.test.ts
+  x  The twin (token good for 3 hours) started its job, so the stand-in world can start one; then "AC4 job run:… started
+     (state running, pid …) with a sign-in token that expires at …, 20 minutes from now, before its one-hour run would
+     end": the base runner never reads the token's lifetime (and has no Keychain seam), so it starts the job.
+
+AC9 notchecked.test.ts
+  x  "AC9 deep doctor must list Claude Code's test prompt as an item even when it doesn't run it": no prompt item.
+  x  "AC9 an item must fail naming the uncovered version 2.0.1": no binary-version item; the base doctor exits 0.
+  x  (plant skipped-reads-ok) "BLOCKED: the hub didn't start with DEEP_HUB_PLANT=skipped-reads-ok … names no planted
+     program": the plant doesn't exist yet, so the expected failure message never comes.
+
+AC10 prompt.test.ts
+  x  No prompt call without --prompt (holds at the base), then "AC10 deep doctor --prompt must send Claude Code a test
+     prompt …; the stand-ins saw []: exit 2 … Unsupported command": the base has no --prompt.
+  x  (plant prompt-without-flag) BLOCKED: unknown plant.
+
+AC11 billing.test.ts
+  x  "AC11 deep doctor must warn (level warn) that with ANTHROPIC_API_KEY set your sessions bill an API account":
+     no billing item; exit 0.
+  x  "AC11 an item must name both installs, <tmp>/bin/claude (your sessions) and <tmp>/jobbin/claude (jobs)": no
+     binary item.
+
+AC12 disabled.test.ts
+  x  repo disableAllHooks: "AC12 deep doctor must show that hooks won't run in <tmp>/w …: exit 2 … Unsupported
+     command" (no --prompt; the base doctor reads no repo settings either).
+  x  managed allowManagedHooksOnly: the same, naming allowManagedHooksOnly.
+  x  (plant hooks-disable-user-only) BLOCKED: unknown plant.
+
+AC15 stophold.test.ts
+  v  60 s, 64 s and 65 s pass at the base: #18's relation already keeps the 5 s margin, in the doctor and at hub start.
+  x  (plant stop-hold-no-margin) BLOCKED: unknown plant.
+  x  (plant stop-hold-entry-only) BLOCKED: unknown plant.
+
+AC16 exits.test.ts
+  x  every item ok: "AC16 deep doctor --json lists its items: exit 2 … Unsupported command" (no --prompt).
+  x  one failed item: the same (no --prompt). Without --prompt the base does exit 1 on the broken relation.
+  x  only not checked: "AC16 deep doctor exited 0 with an item not checked: otlp.telemetry (not_checked); it must exit
+     3": the base doctor exits 1 or 0 only. This is the wrong program the criterion names, naming the command and item.
+  v  both: exit 1 (the base exits 1 on any failed item).
+  v  unknown flag: exit 2, no item, no stand-in called, nothing written.
+  x  deep status: "exit 3: exit 2 … Unsupported command": the base has no deep status.
+  x  (plant not-checked-exits-0) BLOCKED: unknown plant.
+
+AC16 contract.test.ts
+  x  "AC16 each of these commands has an outcome the one exit-code enum doesn't map:
+       deep inbox undo --dh19-no-such-flag must be a usage error, exit 2, not exit 3 … BLOCKED: ENOENT … control.token;
+       --dh19-no-such-flag keeps its default"
+     The merged `deep inbox undo` takes an unknown flag for an ask and tries the hub, exiting 3 instead of the usage
+     error's 2. Every other listed command and the issue's (status, off, on, hub use: "Unsupported command", 2) keeps
+     the table at the base.
+  x  (plant status-exit-unmapped) the failures name `deep inbox undo` only, never `deep status` (no such command or
+     plant at the base).
+
+No test failed for a broken test: every failure is a missing item, flag, command, runner check or plant, or the
+base's exit for an item not checked, and the twins and passing cases show the stand-in worlds work (the job starts,
+setup and the hub run, the relation reads broken at 60 and 64 s and ok at 65 s).
