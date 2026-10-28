@@ -1,5 +1,7 @@
 //! `deep-app [--panel DIR] [MODE]`: the spike's window, with the count in the menu bar.
 //!
+//! `deep-app --set-up` runs the first launch's Set up click with no window and prints its one line (#326).
+//!
 //! With `DEEP_APP_EXIT_AFTER_FIRST_FRAME` set it prints `first-frame-ms N` once the window
 //! has drawn and quits, which is how the spike measures cold start.
 //!
@@ -41,6 +43,7 @@ enum Mode {
     PostForged {
         chords: u64,
     },
+    SetUp,
 }
 
 fn main() {
@@ -48,6 +51,16 @@ fn main() {
     let (panel_dir, mode) = args();
     if let Mode::PostForged { chords } = mode {
         trusted::post_forged(chords);
+        return;
+    }
+    if mode == Mode::SetUp {
+        match deep_app::setup::set_up() {
+            Ok(line) => println!("{line}"),
+            Err(error) => {
+                eprintln!("deep-app: {error}");
+                std::process::exit(1);
+            }
+        }
         return;
     }
     application().run(move |cx| {
@@ -113,6 +126,7 @@ fn args() -> (Option<PathBuf>, Mode) {
                     frame: None,
                 }
             }
+            "--set-up" => mode = Mode::SetUp,
             "--frame" => frame = Some(PathBuf::from(args.next().expect("--frame takes a path"))),
             "--post-forged" => {
                 mode = Mode::PostForged {
@@ -317,7 +331,9 @@ mod trusted {
                             poster_started && tick > 10 + presses + 120
                         }
                     }
-                    Mode::PostForged { .. } => unreachable!("the poster has no window"),
+                    Mode::PostForged { .. } | Mode::SetUp => {
+                        unreachable!("these modes have no window")
+                    }
                     Mode::ProbeHeld { seconds, frame } => {
                         let captured = gate.borrow().counts.frames > 0;
                         if captured {
