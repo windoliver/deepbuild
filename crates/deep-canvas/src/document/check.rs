@@ -17,7 +17,7 @@ use crate::grammar::{
 use crate::kinds::{
     lookup, parse_kind, parse_required, Entry, Lookup, ParamType, Registry, Version,
 };
-use crate::registry::{self, core_name, Range, Sealed};
+use crate::registry::{self, core_name, Cost, Range, Rule, Sealed, SealedModule};
 
 /// The closed list of item roles.
 const ROLES: &[&str] = &["part", "control", "label", "data", "decoration"];
@@ -132,18 +132,40 @@ fn check_by(
     match lowered.get_mut("items") {
         None => {}
         Some(Value::Object(items)) => {
+            // Whether a kind text migrates is looked up once per text, not once per item.
+            let mut migrates: BTreeMap<String, bool> = BTreeMap::new();
             for (key, item) in items.iter_mut() {
-                migrate_item(key, item, &mut notices, kinds);
+                let Some(text) = kind_text(item) else {
+                    continue;
+                };
+                let needed = match migrates.get(text) {
+                    Some(needed) => *needed,
+                    None => {
+                        let needed = matches!(lookup(kinds, text), Lookup::Known { entry, saved }
+                            if entry.steps_from(saved).is_some_and(|s| !s.is_empty()));
+                        migrates.insert(text.to_string(), needed);
+                        needed
+                    }
+                };
+                if needed {
+                    migrate_item(key, item, &mut notices, kinds);
+                }
             }
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
             expansions = packs::expand(items, &resolved, packs.planted, &mut issues);
-            let derived: BTreeSet<String> = expansions
+            let derived: BTreeSet<&str> = expansions
                 .iter()
-                .flat_map(|e| e.derived.keys().cloned())
+                .flat_map(|e| e.derived.keys().map(String::as_str))
                 .collect();
-            let item_ids: BTreeSet<String> = items.keys().cloned().collect();
+            // The lowered items' IDs: the document's, and those expansion wrote.
+            let item_ids: BTreeSet<&str> = member(doc, "items")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|m| m.keys().map(String::as_str))
+                .chain(derived.iter().copied())
+                .collect();
             // The parents as written, for the cycle walk.
             let parents: BTreeMap<String, String> = items
                 .iter()
@@ -153,6 +175,15 @@ fn check_by(
                         .map(|p| (k.clone(), p.to_string()))
                 })
                 .collect();
+            let mut facts: BTreeMap<String, KindFacts<'_>> = BTreeMap::new();
+            for item in items.values() {
+                if let Some(text) = kind_text(item) {
+                    if !facts.contains_key(text) {
+                        let f = KindFacts::of(text, sealed, kinds, &resolved);
+                        facts.insert(text.to_string(), f);
+                    }
+                }
+            }
             let ctx = ItemContext {
                 layer_ids: &layer_ids,
                 item_ids: &item_ids,
@@ -162,8 +193,7 @@ fn check_by(
                 pack_declared: &pack_declared,
                 derived: &derived,
                 sealed,
-                kinds,
-                resolved: &resolved,
+                facts: &facts,
             };
             for (key, item) in items.iter_mut() {
                 if check_item(key, item, &ctx, &mut issues, &mut notices) {
@@ -220,11 +250,21 @@ fn module_checks(
     };
     let mut cost = 0.0;
     let mut costly = Vec::new();
+    // A document holds few kinds and many items: each kind text's rules and costs are looked up once.
+    type Registered<'s> = Option<(Vec<(&'s SealedModule, Rule)>, Vec<Cost>)>;
+    let mut by_kind: BTreeMap<&str, Registered<'_>> = BTreeMap::new();
     for (id, item) in items {
-        let Some((full, _)) = kind_text(item).and_then(crate::kinds::parse_kind) else {
+        let Some(text) = kind_text(item) else {
             continue;
         };
-        for (module, rule) in sealed.rules_for(&full) {
+        let registered = by_kind.entry(text).or_insert_with(|| {
+            crate::kinds::parse_kind(text)
+                .map(|(full, _)| (sealed.rules_for(&full), sealed.costs_for(&full)))
+        });
+        let Some((rules, costs)) = registered else {
+            continue;
+        };
+        for &(module, rule) in rules.iter() {
             for r in rule(lowered, id, item) {
                 // The value refused at the issue's path, as the document holds it.
                 let actual = lowered
@@ -262,7 +302,7 @@ fn module_checks(
                 issues.push(issue);
             }
         }
-        for c in sealed.costs_for(&full) {
+        for c in costs.iter() {
             let ms = c(item);
             if ms > 0.0 {
                 cost += ms;
@@ -835,15 +875,13 @@ pub(super) fn migrate_item(
     notices: &mut Vec<Notice>,
     registry: &Registry,
 ) {
-    let Some(text) = kind_text(item).map(str::to_string) else {
+    let Some(Lookup::Known { entry, saved }) = kind_text(item).map(|t| lookup(registry, t)) else {
         return;
     };
-    let Lookup::Known { entry, saved } = lookup(registry, &text) else {
+    let Some(steps) = entry.steps_from(saved).filter(|s| !s.is_empty()) else {
         return;
     };
-    let Some(steps) = entry.steps_from(saved) else {
-        return;
-    };
+    let text = kind_text(item).unwrap_or_default().to_string();
     let Some(fields) = item.as_object_mut() else {
         return;
     };
@@ -874,18 +912,49 @@ pub(super) fn migrate_item(
 
 struct ItemContext<'a> {
     layer_ids: &'a BTreeSet<String>,
-    item_ids: &'a BTreeSet<String>,
+    item_ids: &'a BTreeSet<&'a str>,
     parents: &'a BTreeMap<String, String>,
     required: &'a BTreeMap<String, u32>,
     declared: &'a BTreeSet<String>,
     /// The modules the document's packs declare, which cover the items they derive.
     pack_declared: &'a BTreeSet<String>,
     /// The IDs expansion wrote.
-    derived: &'a BTreeSet<String>,
+    derived: &'a BTreeSet<&'a str>,
     sealed: &'a Sealed,
-    kinds: &'a crate::kinds::Registry,
-    /// The packs the document resolved: an item of a pack kind is a recipe instance.
-    resolved: &'a Resolved<'a>,
+    /// What the build says about each kind text the lowered items write.
+    facts: &'a BTreeMap<String, KindFacts<'a>>,
+}
+
+/// What the build says about one kind text, worked out once per check: a document holds few
+/// kinds and many items.
+struct KindFacts<'a> {
+    /// A recipe instance's kind (Recipe): expansion checked it, and it draws nothing itself.
+    instance: bool,
+    /// The canvas module this build lacks that evaluates the kind, outside instances.
+    missing: Option<String>,
+    /// The sealed module that registered the kind, outside instances.
+    module: Option<&'a str>,
+    lookup: Lookup<'a>,
+    /// `(deprecated_since, replaced_by)` when a module deprecated the kind.
+    deprecation: Option<&'a (String, String)>,
+}
+
+impl<'a> KindFacts<'a> {
+    fn of(text: &str, sealed: &'a Sealed, kinds: &'a Registry, resolved: &Resolved<'_>) -> Self {
+        let instance = resolved.recipe(text).is_some();
+        let name = parse_kind(text).filter(|_| !instance).map(|(name, _)| name);
+        let lookup = lookup(kinds, text);
+        KindFacts {
+            instance,
+            missing: name.as_deref().and_then(|n| sealed.missing_for_kind(n)),
+            module: name.as_deref().and_then(|n| sealed.module_of_kind(n)),
+            lookup,
+            deprecation: match lookup {
+                Lookup::Known { entry, .. } => sealed.deprecation_of(&entry.full_name()),
+                _ => None,
+            },
+        }
+    }
 }
 
 /// Checks one lowered item in place; true when it draws.
@@ -907,13 +976,13 @@ fn check_item(
         ));
         return false;
     };
-    if let Err(r) = Id::parse(key) {
+    if let Some(why) = crate::grammar::id_fault(key) {
         issues.push(Issue::error(
             "bad_id",
             key,
             format!("items/{key}"),
             json!(key),
-            &r.what,
+            &format!("`{key}`: {why}"),
         ));
     }
     let Some(text) = kind_text(item).map(str::to_string) else {
@@ -928,7 +997,10 @@ fn check_item(
     };
     // A recipe instance (Recipe): expansion checked its params against the recipe's inputs and
     // wrote its derived items, which draw in its place; the instance itself draws nothing.
-    let instance = ctx.resolved.recipe(&text).is_some();
+    let Some(facts) = ctx.facts.get(&text) else {
+        return false;
+    };
+    let instance = facts.instance;
     if let Some(value) = fields.get("broken_out").filter(|_| !instance) {
         issues.push(Issue::error(
             "unknown_field",
@@ -941,41 +1013,37 @@ fn check_item(
     // A kind of a canvas module this build lacks is refused, naming the module, and nothing of
     // the item is read past its kind: a logic program's bytes, for one, are never opened. Text
     // outside the kind grammar is no module's kind; the lookup below refuses it.
-    if let Some((name, _)) = parse_kind(&text).filter(|_| !instance) {
-        if let Some(module) = ctx.sealed.missing_for_kind(&name) {
+    if let Some(module) = &facts.missing {
+        issues.push(Issue::error(
+            "module_missing",
+            key,
+            at("kind"),
+            json!(text),
+            &format!("kind `{text}` is evaluated by the {module} module, which this build lacks"),
+        ));
+        return false;
+    }
+    // A document declares the canvas modules its kinds need (Document envelope), so a
+    // build without the module has the name to refuse with.
+    if let Some(module) = facts.module {
+        let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
+        if !ctx.declared.contains(module) && !by_pack {
             issues.push(Issue::error(
-                "module_missing",
+                "out_of_range",
                 key,
                 at("kind"),
                 json!(text),
                 &format!(
-                    "kind `{text}` is evaluated by the {module} module, which this build lacks"
+                    "kind `{text}` is the `{module}` module's, and `requires.modules` does not name it"
                 ),
             ));
             return false;
-        }
-        // A document declares the canvas modules its kinds need (Document envelope), so a
-        // build without the module has the name to refuse with.
-        if let Some(module) = ctx.sealed.module_of_kind(&name) {
-            let by_pack = ctx.derived.contains(key) && ctx.pack_declared.contains(module);
-            if !ctx.declared.contains(module) && !by_pack {
-                issues.push(Issue::error(
-                    "out_of_range",
-                    key,
-                    at("kind"),
-                    json!(text),
-                    &format!(
-                        "kind `{text}` is the `{module}` module's, and `requires.modules` does not name it"
-                    ),
-                ));
-                return false;
-            }
         }
     }
     // The kind decides the params alone: an item of a kind this build does not know, or knows
     // only at a lower major, still meets the item contract core defines (its keys, its id, its
     // layer and parent, its common fields), and is kept byte for byte, its params unread.
-    let known = match lookup(ctx.kinds, &text) {
+    let known = match facts.lookup {
         Lookup::UnknownKind if instance => None,
         Lookup::UnknownKind => {
             notices.push(Notice {
@@ -1016,8 +1084,8 @@ fn check_item(
         Lookup::Known { entry, saved } => Some((entry, saved)),
     };
     // A deprecated kind still loads, and says so, naming what replaces it.
-    if let Some((entry, _)) = known {
-        if let Some((since, replaced_by)) = ctx.sealed.deprecation_of(&entry.full_name()) {
+    if known.is_some() {
+        if let Some((since, replaced_by)) = facts.deprecation {
             notices.push(Notice {
                 code: "deprecated",
                 ids: vec![key.to_string()],
@@ -1062,7 +1130,7 @@ fn check_item(
     }
     match fields.get("parent") {
         None | Some(Value::Null) => {}
-        Some(Value::String(parent)) if ctx.item_ids.contains(parent) => {
+        Some(Value::String(parent)) if ctx.item_ids.contains(parent.as_str()) => {
             if has_cycle(key, ctx.parents) {
                 issues.push(Issue::error(
                     "cycle",
@@ -1142,10 +1210,13 @@ fn check_item(
 
     // Params: the schema decides each one; the lowered form gets converted literals and loses
     // the fields a required newer minor skips.
-    let required_minor = ctx
-        .required
-        .get(&format!("{}@{}", entry.full_name(), version.major))
-        .copied();
+    let required_minor = if ctx.required.is_empty() {
+        None
+    } else {
+        ctx.required
+            .get(&format!("{}@{}", entry.full_name(), version.major))
+            .copied()
+    };
     let Some(fields) = item.as_object_mut() else {
         return false;
     };
@@ -1297,13 +1368,13 @@ fn check_params(
     let mut dropped = Vec::new();
     let mut converted = Vec::new();
     for (name, value) in params.iter() {
-        let path = format!("items/{key}/params/{name}");
+        let path = || format!("items/{key}/params/{name}");
         let Some(param) = version.param(name) else {
             if required_minor.is_some_and(|m| m > version.minor) {
                 notices.push(Notice {
                     code: "unknown_field",
                     ids: vec![key.to_string()],
-                    path,
+                    path: path(),
                     actual: value.clone(),
                     what: format!(
                         "{}@{}.{} does not define `{name}`; the document requires a newer minor, so it is skipped",
@@ -1319,7 +1390,7 @@ fn check_params(
                 issues.push(Issue::error(
                     "unknown_field",
                     key,
-                    path,
+                    path(),
                     value.clone(),
                     &format!(
                         "{}@{}.{} does not define `{name}`",
@@ -1336,7 +1407,7 @@ fn check_params(
                 issues.push(Issue::error(
                     "module_missing",
                     key,
-                    path,
+                    path(),
                     value.clone(),
                     &lacks(name, param.module, &missing),
                 ));
@@ -1353,7 +1424,7 @@ fn check_params(
                     issues.push(Issue::error(
                         "out_of_range",
                         key,
-                        path,
+                        path(),
                         value.clone(),
                         "not a string",
                     ));
@@ -1370,13 +1441,7 @@ fn check_params(
                         Err(r) => {
                             issues.push(Issue {
                                 forms: literal_forms(param.unit),
-                                ..Issue::error(
-                                    "bad_unit",
-                                    key,
-                                    path.clone(),
-                                    value.clone(),
-                                    &r.what,
-                                )
+                                ..Issue::error("bad_unit", key, path(), value.clone(), &r.what)
                             });
                             None
                         }
@@ -1387,7 +1452,7 @@ fn check_params(
                             ..Issue::error(
                                 "bad_unit",
                                 key,
-                                path.clone(),
+                                path(),
                                 value.clone(),
                                 "neither a number nor a unit literal",
                             )
@@ -1402,7 +1467,7 @@ fn check_params(
                         issues.push(Issue::error(
                             "out_of_range",
                             key,
-                            path,
+                            path(),
                             json!(n),
                             &format!(
                                 "outside {} to {}",
