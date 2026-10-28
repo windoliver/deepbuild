@@ -1,0 +1,176 @@
+{
+  "title": "mcp.tools_listed@1",
+  "description": "The tool list an MCP server a session loads gave at the session's start, synced by DeepBuild or added by you: each tool with its input schema's digest and the hints the server gives, which are its own claims. A new or changed tool that can change or destroy, against the server's first list and what you approved, is held at PreToolUse by the one authority ask this event names.",
+  "x-feeds": [
+    "sessions"
+  ],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "mcp.tools_listed"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "server": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The server, by the name the agent loads it under."
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "user",
+            "local",
+            "project"
+          ],
+          "description": "The config the agent loads it from.",
+          "x-closure": {
+            "closed": "the three configs Claude Code loads a server from",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The version the server's initialize names, or null."
+        },
+        "tools": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "The tool's name."
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "The SHA-256 of the tool's input schema, canonical JSON (RFC 8785).",
+                "maxLength": 8192
+              },
+              "hints": {
+                "x-opaque": "the server's annotations, its own claims, shown as such and never lowering a class",
+                "description": "The tool's annotations, as the server gives them."
+              }
+            },
+            "required": [
+              "name",
+              "digest",
+              "hints"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "held": {
+          "type": "object",
+          "description": "The new or changed tools this list holds until you answer, and the one ask for this update.",
+          "properties": {
+            "ask": {
+              "type": "string",
+              "pattern": "^ask:[0-9A-Za-z]+$",
+              "maxLength": 8192,
+              "description": "An ask: handle."
+            },
+            "tools": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8192,
+                "description": "A held tool, by name."
+              }
+            }
+          },
+          "required": [
+            "ask",
+            "tools"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "server",
+        "scope",
+        "version",
+        "tools"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}
