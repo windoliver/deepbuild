@@ -1340,10 +1340,23 @@ impl Hub<'_> {
         if !notices.is_empty() {
             reply.insert("notices".into(), Value::Array(notices));
         }
+        // #403: in a claim that names the document, an item of a kind this build doesn't know
+        // blocks its checks, naming the kind, as on a sole writer's revision.
+        let blocked = self.blocked_in_claim(show, &result.notices);
+        if !blocked.is_empty() {
+            reply.insert("blocked".into(), Value::Array(blocked));
+        }
         if self.issue_reply(&issues, &mut reply) {
             reply.insert("outcome".into(), json!("refused"));
             if show.check {
-                reply.insert("result".into(), json!("FAIL"));
+                // A check that needs a canvas module the build lacks is BLOCKED, never a FAIL
+                // (technical design: Canvas modules; #305).
+                let blocked = issues.iter().any(|i| i.code == "module_missing")
+                    || reply.contains_key("blocked");
+                reply.insert(
+                    "result".into(),
+                    json!(if blocked { "BLOCKED" } else { "FAIL" }),
+                );
             }
             return Value::Object(reply);
         }

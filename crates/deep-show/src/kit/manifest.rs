@@ -46,21 +46,6 @@ pub const ORACLES: [&str; 9] = [
     "decision_log",
 ];
 
-/// The core's own check kinds (canvas primitives: Check input).
-pub const CORE_CHECK_KINDS: [&str; 11] = [
-    "document.validate",
-    "document.budget",
-    "document.frame_time",
-    "document.layout",
-    "document.determinism",
-    "geometry.audit",
-    "film.audit",
-    "film.flicker",
-    "film.layout",
-    "honest_numbers",
-    "kind_rules",
-];
-
 /// A sidecar's keys, and a sidecar check's.
 pub const SIDECAR_KEYS: [&str; 9] = [
     "checks",
@@ -159,14 +144,12 @@ pub struct Manifest {
 impl Manifest {
     pub fn of(hub: &Hub<'_>) -> Manifest {
         let sealed = &hub.startup.sealed;
-        let mut check_kinds: Vec<String> = CORE_CHECK_KINDS.iter().map(|s| s.to_string()).collect();
-        for m in &sealed.modules {
-            for c in &m.shapes.checks {
-                if !check_kinds.contains(&c.kind) {
-                    check_kinds.push(c.kind.clone());
-                }
-            }
-        }
+        // The document check registry's kinds (#403): the core's own and each module's.
+        let check_kinds: Vec<String> = sealed
+            .check_kinds()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
         let kinds = Manifest::kinds_of(sealed);
         let mut fixtures = Vec::new();
         for (module, f) in &sealed.fixtures {

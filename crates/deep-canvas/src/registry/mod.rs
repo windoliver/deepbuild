@@ -410,13 +410,56 @@ pub struct Pass {
     pub shader: &'static str,
 }
 
-/// A check kind the module registers.
+/// A document check kind a canvas module registers, which joins the core's in the document
+/// check registry `check.kind.doc@1`: its run over a whole document, on request, and the codes
+/// it can emit, each in the module's catalog.
 #[derive(Clone, Debug)]
 pub struct Check {
     pub kind: String,
     /// `any | same`.
     pub machines: String,
+    pub codes: Vec<&'static str>,
+    pub run: CheckRun,
 }
+
+/// A registered check kind's run over a document, given the check input that named it: each
+/// raised issue with the item it names.
+pub type CheckRun = fn(&Value, &Value) -> Vec<(String, Raised)>;
+
+/// The core's own document check kinds (canvas primitives: Check input). Each reads only the
+/// core's arrays, which canvas modules fill through `contributes_to`, and names no module's kind.
+pub const CORE_CHECK_KINDS: [&str; 11] = [
+    "document.validate",
+    "document.budget",
+    "document.frame_time",
+    "document.layout",
+    "document.determinism",
+    "geometry.audit",
+    "film.audit",
+    "film.flicker",
+    "film.layout",
+    "honest_numbers",
+    "kind_rules",
+];
+
+/// The check kinds the design names for a canvas module, with that module, so a check input
+/// naming one in a build without it is `module_missing` naming the module (canvas primitives:
+/// Check input).
+const MODULE_CHECK_KINDS: &[(&str, &str)] = &[
+    ("record_replay", "record"),
+    ("input.replay", "input"),
+    ("export", "export"),
+    ("physics.determinism", "physics"),
+    ("physics.audit", "physics"),
+    ("physics.query", "physics"),
+    ("nav.reach", "physics"),
+    ("logic.determinism", "logic"),
+    ("logic.budget", "logic"),
+    ("logic.layout", "logic"),
+    ("net.rollback", "net"),
+    ("net.desync", "net"),
+    ("net.budget", "net"),
+];
 
 /// An entry in an existing agent tool.
 #[derive(Clone, Debug)]
@@ -683,10 +726,20 @@ impl Registrar {
         self
     }
 
-    pub fn check(&mut self, kind: &str, machines: &str) -> &mut Self {
+    /// A document check kind, run on request, which can emit `codes` (each also given to
+    /// [`Registrar::code`]).
+    pub fn check(
+        &mut self,
+        kind: &str,
+        machines: &str,
+        codes: &[&'static str],
+        run: CheckRun,
+    ) -> &mut Self {
         self.checks.push(Check {
             kind: kind.into(),
             machines: machines.into(),
+            codes: codes.to_vec(),
+            run,
         });
         self
     }
@@ -1004,6 +1057,43 @@ impl Sealed {
         }
         // A core kind (`text@1`, `rect@1`) has no family to name a module by.
         let (family, _) = full.split_once('.')?;
+        KNOWN_MODULES
+            .iter()
+            .find(|(name, _)| *name == family && !self.has(name))
+            .map(|(name, _)| name.to_string())
+    }
+
+    /// The document check registry's kinds: the core's own, then each module's, in module order.
+    pub fn check_kinds(&self) -> Vec<&str> {
+        let mut out: Vec<&str> = CORE_CHECK_KINDS.to_vec();
+        out.extend(
+            self.modules
+                .iter()
+                .flat_map(|m| &m.shapes.checks)
+                .map(|c| c.kind.as_str()),
+        );
+        out
+    }
+
+    /// The module check kind `kind` and the module that registered it, if one in the build did.
+    pub fn check_kind(&self, kind: &str) -> Option<(&SealedModule, &Check)> {
+        self.modules.iter().find_map(|m| {
+            m.shapes
+                .checks
+                .iter()
+                .find(|c| c.kind == kind)
+                .map(|c| (m, c))
+        })
+    }
+
+    /// The canvas module a check kind no module in this build registers belongs to: the one the
+    /// design names it for, else a design-named module this build lacks whose family it is;
+    /// `None` when nothing says (the check is still `module_missing`, never skipped).
+    pub fn module_of_check(&self, kind: &str) -> Option<String> {
+        if let Some((_, module)) = MODULE_CHECK_KINDS.iter().find(|(k, _)| *k == kind) {
+            return Some(module.to_string());
+        }
+        let family = kind.split_once('.').map_or(kind, |(f, _)| f);
         KNOWN_MODULES
             .iter()
             .find(|(name, _)| *name == family && !self.has(name))
@@ -1669,6 +1759,34 @@ impl Registry {
                 }
             }
             for c in &r.checks {
+                // One registry: a module's check kind is neither the core's nor another's.
+                let taken = CORE_CHECK_KINDS.contains(&c.kind.as_str())
+                    || shapes.iter().any(|(other, o)| {
+                        other != name && o.checks.iter().any(|x| x.kind == c.kind)
+                    });
+                if taken {
+                    return Err(SealError::new(
+                        "duplicate_check_kind",
+                        &[name],
+                        &[],
+                        format!(
+                            "check `{}` of `{name}` is already in the document check registry",
+                            c.kind
+                        ),
+                    ));
+                }
+                if let Some(code) = c
+                    .codes
+                    .iter()
+                    .find(|k| !r.catalog.iter().any(|e| e.code == **k))
+                {
+                    return Err(SealError::new(
+                        "uncatalogued",
+                        &[name],
+                        &[],
+                        format!("check `{}` of `{name}` can emit `{code}`, which its catalog doesn't list", c.kind),
+                    ));
+                }
                 if !MACHINES.contains(&c.machines.as_str()) {
                     return Err(SealError::new(
                         "illegal_machines",
@@ -2435,7 +2553,8 @@ fn module_digest(r: &Registrar) -> Result<String, CanonError> {
     let mut checks: Vec<Value> = r
         .checks
         .iter()
-        .map(|c| json!({"kind": c.kind, "machines": c.machines}))
+        // Its run is behaviour, not interface: the digest pins the kind and what it can emit.
+        .map(|c| json!({"codes": c.codes, "kind": c.kind, "machines": c.machines}))
         .collect();
     sort_values(&mut checks)?;
     let mut tools: Vec<Value> = r
@@ -2685,7 +2804,7 @@ mod tests {
             .with(Module {
                 manifest: manifest("c", &[]),
                 register: |r| {
-                    r.check("c.audit", "fast");
+                    r.check("c.audit", "fast", &[], |_, _| Vec::new());
                 },
             })
             .seal()
