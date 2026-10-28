@@ -1579,8 +1579,9 @@ const JOINED_KINDS = new Set(['taste', 'choice', 'definition']);
  * An ask's key, from its subject's structured fields alone, never its words: for an authority ask the effect class,
  * the target's kind, its owner (a PR the asking thread opened is its own, whatever its number) and the kind of
  * change; for a taste call the screen and the element; for a choice or a definition the point and its option IDs.
+ * The hub reads it too, to tell whether a saved decision covers a permission prompt before raising anything (#23).
  */
-function subjectKey(data: Obj, thread: string): string {
+export function subjectKey(data: Obj, thread: string): string {
   const s = data.subject as Obj;
   const target = isObj(s.target) ? s.target : {};
   const owner = String(target.owner);

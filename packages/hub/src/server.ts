@@ -33,6 +33,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The App API (#34): its reads, each with the log_pos it reflects and the hub's start ID, an overrule and pairing a device.
   ['inbox.read', ['app', 'cli']], ['sessions.read', ['app', 'cli']], ['changes.read', ['app', 'cli']], ['evidence.read', ['app', 'cli']],
   ['numbers.read', ['app', 'cli']], ['decision.overrule', ['app', 'cli']], ['ask.undo', ['app', 'cli']], ['device.pair', ['app', 'cli']],
+  // A permission you said yes to in the terminal, offered back, saved as a decision with one click (#23).
+  ['offer.save', ['app', 'cli']],
   ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['test.load', ['app', 'cli']],
   ['env.up', ['app', 'cli']], ['env.down', ['app', 'cli']], ['extension.install', ['cli']], ['guard.add', ['cli']],
   ['mcp.call', ['mcp']], ['evidence.paste', ['app']],
@@ -51,11 +53,6 @@ const HOLD_MARGIN = 100;
 const CONTEXT_HOLD_MS = 2000;
 /** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
 const GATE_HOLD_MS = 10_000;
-/**
- * How long a permission prompt is held for its ask (#23): Claude Code's 60 s hook timeout for it (the facts'
- * hookTimeouts) less a margin, so the hold ends, the ask cancelled, before Claude Code ends the hook itself.
- */
-const PERMISSION_HOLD_MS = 55_000;
 /** The guard entries a standing rule decides with the hub up (#23): dependencies and cloud resources the plan doesn't name. */
 const DECIDED_MATCH = /^effect:(dependency|cloud-resource)$/;
 /** The permission modes in which Claude Code denies what isn't allowed already: a standing rule never allows past them. */
@@ -413,11 +410,11 @@ class Hub {
     // A call that may need your authority, or that a standing rule decides, and no guard entry blocks, is held for
     // the core's gate first (#321, #23).
     const gated = ruled === EMPTY_REPLY ? this.gated(meta, parsed.drafts) : undefined;
-    // A permission prompt is held for its ask, which a saved decision or your answer settles (#23).
+    // A permission prompt is held while the core reads whether a saved decision covers it (#23).
     const prompted = ruled === EMPTY_REPLY && this.prompted(meta);
     const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
     const held = !before && !gated && !prompted && parsed.drafts.length ? this.holdFor(meta) : null;
-    const hold = prompted ? Date.now() + PERMISSION_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
+    const hold = prompted ? Date.now() + GATE_HOLD_MS : gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
@@ -453,15 +450,17 @@ class Hub {
   private prompted(meta: HookMeta): boolean {
     return meta.event === 'PermissionRequest' && (meta.agent === 'claude-code' || meta.agent === 'claude') && !meta.watchOnly && !this.off && meta.call !== undefined;
   }
-  /** The prompt's reply, written by its hold: the adapter's reply to the answer, or cancel once the hold ends with none. */
+  /**
+   * The prompt's reply, written by its hold: the adapter's reply to the answer a saved decision gave; with none, no
+   * decision at all, so the agent's own prompt asks you (#18).
+   */
   private async permissionReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
-    const late = new Promise<{ decision: 'cancel' }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'cancel' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'permission', meta, until: hold - HOLD_MARGIN * 10 }).catch(() => ({ decision: 'cancel' as const })) as Promise<{ decision: 'allow' | 'deny' | 'cancel' }>;
-    const answered = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    const late = new Promise<{ decision: 'none' }>((resolve) => { timer = setTimeout(() => resolve({ decision: 'none' }), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
+    const asked = this.core.request({ op: 'permission', meta }).catch(() => ({ decision: 'none' as const })) as Promise<{ decision: 'allow' | 'deny' | 'none' }>;
+    const { decision } = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     if (!conn.sock.writable) return;
-    // The planted wrong program answers a cancelled ask's prompt deny.
-    const decision = this.plant === 'cancel-as-deny' && answered.decision === 'cancel' ? 'deny' : answered.decision;
+    if (decision === 'none') return void conn.sock.end(EMPTY_REPLY);
     const request = { payload: { permission_suggestions: meta.call?.suggestions ?? [] } } as unknown as HookRequestLine;
     const reply = shipped().get('claude').permissionReply!({ ask: '', session: meta.session, option: null, label: null, decision, for: 'call', words: null, provisional: false, undoes: null }, request) as Obj;
     // The planted wrong program picks the agent's own "always allow", writing a lasting rule into its settings.

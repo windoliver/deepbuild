@@ -12,7 +12,7 @@ export type CoreRequest =
   | { op: 'extension-hook'; data: unknown }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
   | { op: 'tool-gate'; meta: HookMeta; call: Gated }
-  | { op: 'permission'; meta: HookMeta; until: number }
+  | { op: 'permission'; meta: HookMeta }
   | { op: 'subscribe'; sub: string; after: number }
   | { op: 'stop'; reason: string };
 export type CoreMessage =
@@ -30,7 +30,7 @@ export async function answer(core: Core, request: CoreRequest): Promise<unknown>
     case 'extension-hook': return core.extensionHook(request.data);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'tool-gate': return core.toolGate(request.meta, request.call);
-    case 'permission': return core.permission(request.meta, request.until);
+    case 'permission': return core.permission(request.meta);
     case 'subscribe': return core.subscribe(request.sub, request.after);
     case 'stop': return core.stop(request.reason);
   }
