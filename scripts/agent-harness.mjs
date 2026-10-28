@@ -194,7 +194,8 @@ async function run(options, scenario, agent = options.agent) {
     // fix-checkout-test loads your user settings only, never the checkout's, with the three tools its prompt needs, each allowed.
     args = facts.launch.session.args.map((arg, at, all) => (arg === '{settings}' ? settings : edit && all[at - 1] === '--setting-sources' ? (fix ? 'user' : '') : arg));
     // The prompt is the person's, word for word; that no one answers a question back is the harness's to say.
-    if (fix) args.push('--tools', 'Bash,Read,Edit', '--allowedTools', 'Bash,Read,Edit', '--append-system-prompt', SCRIPTED);
+    // A command run through a pipe exits as the pipe's last command, so a failing test run would read as passing.
+    if (fix) args.push('--tools', 'Bash,Read,Edit', '--allowedTools', 'Bash,Read,Edit', '--append-system-prompt', `${SCRIPTED} Run each command the prompt names exactly as written, with no pipe or redirection added.`);
     else if (edit) args.push('--tools', 'Read,Edit', '--permission-mode', 'acceptEdits', '--append-system-prompt', SCRIPTED);
   }
   const argv = [bin, ...args];
