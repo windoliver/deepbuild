@@ -2656,6 +2656,35 @@ export interface LeaseStale {
   evidence?: Array<string>;
 }
 
+/** mcp.tools_listed@1 */
+export interface McpToolsListed {
+  v: 1;
+  id: string;
+  kind: "mcp.tools_listed";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    server: string;
+    scope: "user" | "local" | "project";
+    version: string | null;
+    tools: Array<{
+      name: string;
+      digest: string;
+      hints: unknown;
+    }>;
+    held?: {
+      ask: string;
+      tools: Array<string>;
+    };
+  };
+  evidence?: Array<string>;
+}
+
 /** merge.dry_run@1 */
 export interface MergeDryRun {
   v: 1;
@@ -2947,6 +2976,25 @@ export interface ProcessTracked {
     pgid: number;
     cwd: string;
     token: string | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** question.proceeded@1 */
+export interface QuestionProceeded {
+  v: 1;
+  id: string;
+  kind: "question.proceeded";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    question: string;
+    rule: string;
   };
   evidence?: Array<string>;
 }

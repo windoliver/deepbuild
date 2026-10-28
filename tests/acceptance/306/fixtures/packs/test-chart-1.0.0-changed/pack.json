@@ -1,0 +1,15 @@
+{
+  "name": "chart",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "The same version 1.0.0 published again with other contents: its bars are 18 wide. A published version never changes, so this install is refused.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "chart.bars@1": "chart.bars@1.json"
+  }
+}

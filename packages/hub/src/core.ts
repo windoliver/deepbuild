@@ -29,6 +29,7 @@ import { confirmYou } from './confirm.js';
 import { keychain, ownHome } from './keychain.js';
 import { statusRows } from './status.js';
 import { addGuards } from './guards.js';
+import { Holds } from './holds.js';
 import { coveredBy, hubAdapters, parseLine, toolClasses, versionOf } from './hookmap.js';
 import { briefing, commitsBetween, headOf, loadsOf } from './session-facts.js';
 import { deepHook, rootOf, type Root } from './paths.js';
@@ -36,7 +37,7 @@ import { checkKey, Devices } from './trusted.js';
 import { openIndex, pageClaims, search, type IndexFill } from './search.js';
 import { checkArguments } from './tools.js';
 import { disk, syncPath, testVfs, writeSynced, type Durable } from './vfs.js';
-import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type HookMeta, type Refusal } from './wire.js';
+import { EXTENSION_HOOK_MS, refuse, Refused, refusal, signature, startOf, ulid, ulidTime, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Refusal } from './wire.js';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -200,6 +201,8 @@ export class Core {
   private readonly durable: Durable;
   private record!: RecordStore;
   private asks!: Asks;
+  /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
+  private readonly holds: Holds;
   private readonly devices: Devices;
   private store!: EvidenceStore;
   private supervisor!: Supervisor;
@@ -286,6 +289,11 @@ export class Core {
     this.now = () => options.clock.start + (Date.now() - options.clock.real);
     this.durable = options.vfs ? testVfs(options.vfs) : disk;
     this.devices = new Devices(this.root.devices);
+    this.holds = new Holds({
+      raw: (query) => this.record.raw(query), asks: () => this.asks, now: this.now, plant: options.plant, sorter: options.sorter,
+      append: (connection, input) => this.append(connection, input), connection: (session, agent) => this.connection('core', { session, agent }),
+      pin: (cwd, question) => this.pinOf(cwd, question),
+    });
     this.ready = this.init();
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
@@ -653,6 +661,8 @@ export class Core {
       const data = draft.data;
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd).catch(() => []);
+        // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
+        if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));
         if (!foreign) await this.recheck().catch(() => undefined);
         if (session) {
           data.thread = session.thread = await this.threadOf(session, meta.fields?.source);
@@ -1133,6 +1143,13 @@ export class Core {
    * prompt the answers waiting for it; a stop, while the agent left a question, waits until `until` for its answer,
    * and is sent back with it while the turn is under Claude Code's cap on continuations.
    */
+  /** A PreToolUse the hub held for the gate: why its call waits for you, or nothing when it runs (#321). */
+  async toolGate(meta: HookMeta, call: Gated): Promise<{ held?: string }> {
+    await this.ready;
+    if (FOREIGN.has(meta.agent) || !meta.session) return {};
+    const held = await this.holds.gate(meta, call);
+    return held ? { held } : {};
+  }
   async hookReply(meta: HookMeta, until: number): Promise<{ context?: string; block?: string }> {
     const own = !FOREIGN.has(meta.agent) && meta.session;
     if (meta.event === 'SessionStart') {
@@ -1166,7 +1183,12 @@ export class Core {
     r.holding++;
     let block: string | undefined;
     try {
-      block = await this.stopHold(meta, r, until);
+      // A stop the sorter answers "proceed" goes on at once: the proceed rides in its one reply with what else waits.
+      const proceed = await this.holds.proceed(meta, until);
+      if (proceed) {
+        const delivered = await this.queue(async () => this.deliver(await this.waitingFor(meta.session), 'stop_hold'));
+        block = [r.sendBacks.shift(), delivered, proceed].filter(Boolean).join('\n\n');
+      } else block = await this.stopHold(meta, r, until);
     } finally {
       r.holding--;
       if (block) {
@@ -1709,6 +1731,8 @@ export class Core {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
+    // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here.
+    if (context.role === 'cli' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];

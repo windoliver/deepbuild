@@ -13,7 +13,7 @@ import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { takeLock, type Lock } from './lock.js';
 import { installedRoot, rootOf, type Root } from './paths.js';
 import { shedStartup } from './settle.js';
-import { EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type ExtensionReply, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
+import { AUTHORITY, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refusal, Refused, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type VfsSettings } from './wire.js';
 
 /** A line longer than this goes to the parser kept for large lines, so it never queues ahead of small ones. */
 const BIG = 1 << 20;
@@ -48,6 +48,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
 const HOLD_MARGIN = 100;
 /** How long a session's start or a prompt is held for the core's context: the briefing, or answers waiting for it. */
 const CONTEXT_HOLD_MS = 2000;
+/** How long a call that may need your authority is held for the core's gate (#321); one not decided by then is denied. */
+const GATE_HOLD_MS = 10_000;
 /** The App API's reads beside events.read: each result carries the hub's start ID beside the log_pos it reflects. */
 const READS = new Set(['inbox.read', 'sessions.read', 'changes.read', 'evidence.read', 'numbers.read']);
 
@@ -231,7 +233,8 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
       ...(process.env.DEEP_HUB_TEST_CONFIRM ? { confirm: process.env.DEEP_HUB_TEST_CONFIRM } : {}),
       ...(process.env.DEEP_HUB_TEST_INDEX ? { index: process.env.DEEP_HUB_TEST_INDEX } : {}),
-      ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}) };
+      ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
+      ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}) };
     const frame = (sub: string, event: string) => {
       const s = this.subs.get(sub);
       if (!s || s.conn.done) return;
@@ -396,17 +399,52 @@ class Hub {
     // the acknowledgement and the reply in one write, which also ends the connection.
     const meta = parsed.meta;
     const ruled = this.reply(meta);
+    // A call that may need your authority, and no guard entry blocks, is held for the core's gate first (#321).
+    const gated = ruled === EMPTY_REPLY ? this.gated(meta, parsed.drafts) : undefined;
     const before = ruled === EMPTY_REPLY && !this.off && this.hooks.has('tool.before') ? parsed.drafts.find((d) => d.kind === 'tool.before') : undefined;
-    const held = !before && parsed.drafts.length ? this.holdFor(meta) : null;
-    const hold = before ? Date.now() + EXTENSION_HOLD_MS : held;
+    const held = !before && !gated && parsed.drafts.length ? this.holdFor(meta) : null;
+    const hold = gated ? Date.now() + GATE_HOLD_MS + (before ? EXTENSION_HOLD_MS : 0) : before ? Date.now() + EXTENSION_HOLD_MS : held;
     if (hold === null) conn.sock.end(line({ ack: meta.id, hold_until_ms: null }) + ruled);
     else conn.sock.write(line({ ack: meta.id, hold_until_ms: hold }));
     // The writer is the connection's, whatever the payload says. Posted in the same step as the reply, before any
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
-    if (before) void this.extensionReply(conn, meta, before.data, hold!);
+    if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data);
+    else if (before) void this.extensionReply(conn, meta, before.data, hold!);
     else if (held !== null) void this.coreReply(conn, meta, held);
+  }
+
+  /**
+   * What a PreToolUse's call does that may need your authority, by the guard engine's classes: the effect classes of
+   * the `effect:` entries deep-hook matched and of the facts' MCP tool, and the MCP tool itself, whose server may have
+   * changed it. Our own deep tools, watch-only sessions and `deep off` hold nothing.
+   */
+  private gated(meta: HookMeta, drafts: Draft[]): Gated | undefined {
+    if (meta.event !== 'PreToolUse' || meta.watchOnly || this.off || meta.stamp) return undefined;
+    const data = drafts.find((d) => d.kind === 'tool.before')?.data;
+    if (!data) return undefined;
+    const entries = this.rules();
+    const classes = meta.matched.flatMap((n) => /^effect:(\w+)$/.exec(String(entries[n]?.match ?? ''))?.slice(1) ?? []);
+    if (typeof data.effect === 'string') classes.push(data.effect);
+    const authority = [...new Set(classes.filter((c) => AUTHORITY.has(c)))];
+    const mcp = data.kind === 'mcp' && typeof data.server === 'string' && typeof data.tool === 'string' ? { server: data.server, tool: data.tool } : undefined;
+    if (!authority.length && !mcp) return undefined;
+    const label = mcp ? `${mcp.server} ${mcp.tool}` : typeof data.command === 'string' ? data.command : String(data.kind);
+    return { label, classes: authority, ...(mcp ? { mcp } : {}) };
+  }
+  /** The gate's reply, written by its hold: a held call is denied with its ask; one the gate didn't decide in time too. */
+  private async gateReply(conn: Conn, meta: HookMeta, call: Gated, hold: number, before: unknown): Promise<void> {
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<{ late: true }>((resolve) => { timer = setTimeout(() => resolve({ late: true }), Math.max(0, hold - Date.now() - HOLD_MARGIN - (before === undefined ? 0 : EXTENSION_HOLD_MS))); });
+    const asked = this.core.request({ op: 'tool-gate', meta, call }).catch((error: unknown) => ({ failed: error instanceof Error ? error.message : String(error) })) as Promise<{ held?: string; failed?: string }>;
+    const ruled = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
+    if (!conn.sock.writable) return;
+    const why = 'late' in ruled ? `DeepBuild held this: it couldn't check whether \`${call.label}\` needs your authority in time. Run it again.`
+      : ruled.failed !== undefined ? `DeepBuild held this: checking whether \`${call.label}\` needs your authority failed (${ruled.failed}). Run it again.` : ruled.held;
+    if (why) return void conn.sock.end(line({ exit: 2, stdout: '', stderr: `${why}\n` }));
+    if (before !== undefined) return this.extensionReply(conn, meta, before, hold);
+    conn.sock.end(EMPTY_REPLY);
   }
 
   /**
@@ -423,7 +461,8 @@ class Hub {
     if (meta.watchOnly || !relation.holds || this.off) return null;
     // Until you approve a repo's checks no verdict holds a stop: only an answer on its way back does (design: How it
     // installs). The planted wrong program holds every stop, as gates on unapproved checks would.
-    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session)) return null;
+    // A test's planted sorter (#321) may answer any stop "proceed".
+    if (this.plant !== 'gates-before-approval' && !this.asking.has(meta.session) && !process.env.DEEP_HUB_TEST_SORTER) return null;
     return now + Math.min(STOP_HOLD_MS, relation.timeoutS * 1000 - HOLD_MARGIN_MS);
   }
   private settingsSeen = { key: '', relation: { name: 'stop hold', holds: true, timeoutS: 600, text: '' } as Relation };
