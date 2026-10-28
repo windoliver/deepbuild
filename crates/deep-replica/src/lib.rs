@@ -4,8 +4,12 @@
 //! panel registry against the app's slots, and the snapshot against the live tree.
 
 pub mod kit;
+mod replica;
 pub mod shell;
 pub mod snapshot;
+
+pub use deep_app::notify::{Notifier, Sound, NOTIFY_AFTER};
+pub use replica::{Posted, Replica, Seen};
 
 use std::{
     path::{Path, PathBuf},
@@ -88,6 +92,8 @@ pub fn view_args(bin: &str, out: &str) -> Result<(String, PathBuf), i32> {
 pub fn load_state() -> AppState {
     let fixture = Fixture::load(&fixture_path()).expect("the fixture record parses");
     let log_pos = fixture.last_log_pos();
+    // Every view reads the record through the one reader; the replica's holds the fixture.
+    deep_app::record::install_local(fixture.events());
     AppState {
         inbox: inbox(&fixture, log_pos),
         now: NOW,
