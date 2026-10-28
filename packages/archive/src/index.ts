@@ -11,7 +11,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import type { Asks } from '@deepbuild/asks';
-import { scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
+import { patternMatches, scrubText, type EvidenceStore, type Writer } from '@deepbuild/evidence';
 import { ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
 
 export interface ArchiveOptions {
@@ -37,7 +37,6 @@ export interface Archive {
 const DAY = 86_400_000;
 const LICENSE = { name: 'session', allows: [] };
 const ROTATE_SOURCE = 'secret.pasted';
-const MASK = '[REDACTED]';
 
 const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex');
 /** A session ID as handles hold it: letters and digits only. */
@@ -103,18 +102,23 @@ async function sources(options: ArchiveOptions): Promise<Source[]> {
   return found;
 }
 
-/** The secrets the pattern scrub finds in a text: what each [REDACTED] in its scrubbed form stands for. */
+/**
+ * The keys the pattern scrub finds in a text. A field name's mask hides whatever sits under it, code and
+ * placeholders too, and some rules match what sits under a secret name; so a match a field mask covers is a key
+ * only when a rule finds all of it by itself, as one finds a pasted token but not a plain password. Two rules
+ * can match one key, one with the text around it, as `curl -u user:k` does; the key alone is the one asked for,
+ * unless what is around it reads as a secret too, as a password beside a key-shaped user does.
+ */
 function secretsIn(text: string): string[] {
-  const kept = scrubText(text).split(MASK);
-  if (kept.length < 2) return [];
-  const found: string[] = [];
-  let at = kept[0]!.length;
-  for (const part of kept.slice(1)) {
-    const end = part ? text.indexOf(part, at) : text.length;
-    if (end > at) found.push(text.slice(at, end));
-    at = end + part.length;
-  }
-  return found;
+  const keys = patternMatches(text).filter(({ match, field }) => !field || patternMatches(match).some((m) => m.match === match))
+    .map(({ match, at }) => ({ match, at, end: at + Buffer.byteLength(match) }))
+    .sort((a, b) => a.at - b.at || b.end - a.end);
+  // In start order, wider first: the keys a key holds start after it and before its end.
+  return keys.filter((key, n) => {
+    let around = key.match;
+    for (let next = n + 1; next < keys.length && keys[next]!.at < key.end; next++) if (keys[next]!.end <= key.end) around = around.replaceAll(keys[next]!.match, ' ');
+    return around === key.match || around.split(/[^\w+/=]+/).some((part) => part.length >= 8 && /\d/.test(part) && /[a-z]/i.test(part));
+  }).map(({ match }) => match);
 }
 /** Whether a transcript line is a user message, however its agent nests the role. */
 function fromUser(line: string): { uuid?: string } | undefined {
