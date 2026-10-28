@@ -36,6 +36,8 @@ const FILE_TYPES = new Set(['c', 'cc', 'cfg', 'cjs', 'conf', 'cpp', 'cs', 'css',
   'swift', 'tf', 'toml', 'ts', 'tsx', 'txt', 'vue', 'xml', 'yaml', 'yml', 'zig']);
 // A line and column after a file's name.
 const POSITION = /\d+(?::\d+)?(?![\w.])/y;
+// What starts an operator, a flag or a comment after a value's word, as `token: a < b` or `secret: x --force`.
+const OPERATOR = '#<>=!|&?-+*/%^~:';
 // Make's `::=` and `:::=` end with the `:=` read below.
 const COMPOUND = /(?:\?\?|\|\||[?+])(?==)|:{1,2}(?=:=)/y;
 const STRING_PREFIX = /[bfru]{1,2}(?=\\*["'])/iy;
@@ -47,6 +49,7 @@ export type Range = [from: number, to: number, replacement?: string | undefined]
 
 const NAME = Uint8Array.from({ length: 128 }, (_, c) => Number(/[A-Za-z0-9_.-]/.test(String.fromCharCode(c))));
 const isNameChar = (c: string | undefined) => c !== undefined && NAME[c.charCodeAt(0)] === 1;
+const WORD = /\w/;
 // The most backslashes a quote of a document escaped in strings carries: four layers deep.
 const MAX_ESCAPE = 15;
 /** Whether `n` backslashes are a quote's escape at some layer: 0, 1, 3, 7 or 15. */
@@ -126,6 +129,8 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
     // `==` and `===` compare; `:=` and `=>` assign, each one separator, and `=>` only a quoted value, as in a
     // hash, never an arrow function's body.
     if (separator === '=' && text[at + 1] === '=') continue;
+    // `name: ` with a blank after it, as YAML writes it, takes a bare value of several words.
+    const colon = separator === ':' && (text[at + 1] === ' ' || text[at + 1] === '\t');
     const arrow = separator === '=' && text[at + 1] === '>';
     if (arrow || (separator === ':' && text[at + 1] === '=')) at++;
     // `PASSWORD= USER=bob` has an empty value; `secret = x` and `password: x` don't.
@@ -156,6 +161,48 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
       if (type > 0) { push([at, type]); at = skipBlanks(text, skipBlanks(text, type) + 1); } else if (member) continue;
       if (at >= eol) continue;
     }
+    // Whether the value starts past a run of tags, so a group it starts with is read as a bare word.
+    let tagged = false;
+    // YAML tags and anchors, as `!!str` or `&pw`, stay before a quoted value, printed or escaped; they are read
+    // as far as an annotation is, so a line of them is read once.
+    if (colon) {
+      // A tag holds no quote: one that does, as `!pw'` in `'password: !pw' 'x'`, ends the string the field is in.
+      const limit = Math.min(eol, at + MAX_TYPE);
+      let v = at;
+      let tags = at;
+      let count = 0;
+      // A word holding a field, as `&\ttoken = x` with its tab escaped, is no tag: the field is read from its hit.
+      while (v < limit && (text[v] === '!' || text[v] === '&') && !holdsField(text, hits, v, eol)) {
+        while (v < limit && text[v] !== ' ' && text[v] !== '\t' && !isQuote(text[v])) v++;
+        if (isQuote(text[v])) { v = at; break; }
+        tags = v;
+        count++;
+        v = skipBlanks(text, v);
+      }
+      let q = v;
+      while (q - v < MAX_ESCAPE && text[q] === '\\') q++;
+      // The quote opens a value only if one starts after it and it closes on the line; otherwise it closes the
+      // string the field is in, as in `print("password: !pw ")`, and the tags are read as the bare value. The
+      // tags are masked either way: a quote that only seems to open a value, as in `"password: !pw "+x+"y"`,
+      // leaves the secret among them.
+      const opens = v > at && v < eol && isQuote(text[q]) && !' \t);,}]'.includes(text[q + 1] ?? ' ') && text[q + 1] !== text[q];
+      const quote = text.slice(v, q + 1);
+      const [close, closed] = opens ? closingQuote(text, q + 1, eol, quote) : [0, false];
+      if (closed) {
+        push([at, tags]);
+        // A quoted key after the tags, as `!x "token": v`, is a field of its own, read from its hit.
+        if (':='.includes(text[skipBlanks(text, close + quote.length)] ?? '.')) continue;
+        at = v;
+      } else if (count > 1 && v < eol && !isQuote(text[q])) {
+        // Before a word, tags in a run go and the value is read from it, so a second tag doesn't end it; one tag
+        // and its value are read as one bare value. A word holding a field is read as that field.
+        push([at, tags]);
+        if (holdsField(text, hits, v, eol)) continue;
+        [at, tagged] = [v, true];
+      } else if (v === at && text[at] === '&' && holdsField(text, hits, at, eol)) continue;
+      // A word led by `&` leaves the value to the field in it; any other first word holding a field is the bare
+      // value, as `!token==x`, which compares.
+    }
     // A string prefix, as in `b"..."` or `f"..."`, stays with the quote it opens.
     const prefix = sticky(STRING_PREFIX, text, at);
     if (prefix > 0) at = prefix;
@@ -185,7 +232,7 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
     const json = quotedKey && keyQuote.endsWith('"') ? `${keyQuote}${mask}${keyQuote}` : undefined;
     // Where the bare value below is read from: past a group in brackets it starts with.
     let scan = at;
-    if (text[at] === '{' || text[at] === '[') {
+    if (!tagged && (text[at] === '{' || text[at] === '[')) {
       // Under a JSON key the value may run past its line, as pretty-printed JSON's do; escaped in a string,
       // it ends with that string, which ends on its line. One that never closes is masked as far as it reads
       // as JSON.
@@ -215,18 +262,35 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
       }
       scan = end;
     }
+    // After `name: ` the value goes on through each next word, so an operator, a flag or a `#` comment after
+    // it stays, a closing bracket ends it, and a word where a hit starts the next secret field ends it, so that
+    // field is read as its own. A word led by an escape, as `\t` or `\"`, ends it: its backslashes are read as
+    // the string around them is, which a layer doubled them for, as a Python repr of JSON does, may not be.
+    const words = colon && !url;
+    const nextWord = (end: number) => {
+      const next = skipBlanks(text, end);
+      if (next >= eol || OPERATOR.includes(text[next]!) || ' \t\r\f\v;,"\'`)]}\\'.includes(text[next]!)) return -1;
+      return holdsField(text, hits, next, eol) ? -1 : next;
+    };
     const literal = json ? sticky(JSON_LITERAL, text, at) : -1;
-    if (literal > 0) { push([at, literal, json]); continue; }
+    const after = literal > 0 && words && (text[literal] === ' ' || text[literal] === '\t') ? nextWord(literal) : -1;
+    if (literal > 0 && after < 0) { push([at, literal, json]); continue; }
     // A bare value takes escapes whole and stops before an escaped quote, so a string around it still closes;
     // `&` or a fragment's `#` ends it in a URL's query, as `?a=1&token=x&b=2`, and `&` leaves a value it starts empty; a bracket it
     // didn't open ends it, as in `(password=x)`.
     // Go's JSON escapes a query's `&` as `&`.
     const query = text[start - 1] === '?' || text[start - 1] === '&' || (text.startsWith('u0026', start - 5) && text[start - 6] === '\\');
     // A URL user's password ends at `/`, `?` or `#` or a `<>` around the URL, and may hold `;` and `,`.
+    // A YAML anchor's `&` starts a value after `name: `.
     const stops = url ? ' \t\r\f\v"\'`<>' : ' \t\r\f\v;,"\'`';
     const open: string[] = [];
     let end = scan;
-    while (end < eol && !stops.includes(text[end]!) && !(text[end] === '&' && (query || end === at))) {
+    for (;;) {
+      if (words && (text[end] === ' ' || text[end] === '\t')) {
+        const next = nextWord(end);
+        if (next >= 0) end = next;
+      }
+      if (!(end < eol && !stops.includes(text[end]!) && !(text[end] === '&' && (query || (end === at && !words))))) break;
       const c = text[end]!;
       if ((url && '/?#'.includes(c)) || (query && c === '#')) break;
       if (c in CLOSERS && open.at(-1) !== CLOSERS[c]) {
@@ -241,12 +305,13 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
       else if (c === '(' || c === '[' || c === '{') open.push(c);
       if (c !== '\\') { end++; continue; }
       // A run of backslashes is read as the string the value sits in reads it: its escaped backslashes are the
-      // value's, and a quote after them ends it.
+      // value's, and a quote after them ends it. After `name: ` a run before a quote or the end stays, as above.
       let j = end;
       while (j < eol && text[j] === '\\') j++;
       const n = j - end;
       const p = line.escape;
       if ((query && text.startsWith('u0026', j)) || (url && text[j] === '/')) break;
+      if (words && (j >= eol || text[j] === '"')) break;
       if (j < eol && text[j] === '"') {
         const kind = layer(n, p);
         if (kind !== 'outer') end = j - (kind === 'quote' ? p : 2 * p + 1);
@@ -270,6 +335,43 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
     push([at, end]);
   }
   return ranges;
+}
+
+/** The index of the first hit at or after `at`; hits are in text order. */
+function firstHit(hits: readonly number[], at: number): number {
+  let [lo, hi] = [0, hits.length];
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (hits[mid]! < at) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+
+/** Whether the word at `from` holds a secret field: each name in it is read once, and only where a hit falls in it. */
+function holdsField(text: string, hits: readonly number[], from: number, eol: number): boolean {
+  let h = firstHit(hits, from);
+  for (let k = from; k < eol && text[k] !== ' ' && text[k] !== '\t' && h < hits.length;) {
+    if (!isNameChar(text[k])) { k++; continue; }
+    const name = k;
+    while (isNameChar(text[k])) k++;
+    let hit = false;
+    for (; h < hits.length && hits[h]! < k; h++) hit ||= hits[h]! >= name;
+    if (hit && fieldAt(text, name, k)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether the name from `start` to `end` starts a secret field, as the main loop reads one: past a JSON escape
+ * run into it, as `\tapi_key`, then blanks and a separator, a compound one or a member's `?:`/`!:`.
+ */
+function fieldAt(text: string, start: number, end: number): boolean {
+  const name = text.slice(start, end);
+  const skip = text[start - 1] === '\\' ? JSON_ESCAPE.exec(name)?.[0].length ?? 0 : 0;
+  if (!secretName(name) && !(skip && secretName(name.slice(skip)))) return false;
+  // A quoted key closes with its quote, printed or escaped, as `"token":` or `\"token\":`.
+  let close = end;
+  while (close - end < MAX_ESCAPE && text[close] === '\\') close++;
+  const at = skipBlanks(text, isQuote(text[close]) ? close + 1 : end);
+  const c = text[at];
+  return c === ':' || c === '=' || sticky(COMPOUND, text, at) > 0 || ((c === '?' || c === '!') && text[at + 1] === ':');
 }
 
 /** The quoted key with spaces around a name, as `"API Key": x`, or the name itself; quoted text with no separator after it is no key. */
@@ -516,6 +618,9 @@ function closingQuote(text: string, from: number, end: number, quote: string): [
   const q = quote[p]!;
   for (let i = from; i < end; i++) {
     if (text[i] !== '\\' && text[i] !== q) continue;
+    // A printed `'` doubled between two word characters is one inside the string, as YAML and SQL escape
+    // `it''s`; elsewhere it's an empty `''` after the string closed: `'password: ' + ''.join(x); token = 'y'`.
+    if (!p && q === "'" && text[i] === q && text[i + 1] === q && i > from && i + 2 < end && WORD.test(text[i - 1]!) && WORD.test(text[i + 2]!)) { i++; continue; }
     let j = i;
     while (j < end && text[j] === '\\') j++;
     if (j >= end || text[j] !== q) { i = j; continue; }

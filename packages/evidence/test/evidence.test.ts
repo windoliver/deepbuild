@@ -331,6 +331,137 @@ describe('the scrub by field name', () => {
     for (const [text, want] of cases) expect.soft(scrubText(text), text).toBe(want);
   });
 
+  it('masks a bare value after `name: ` to the end of its line or string, with a YAML tag or anchor, and a doubled quote', () => {
+    const cases: [string, string][] = [
+      ['password: correct horse battery staple', 'password: [REDACTED]'],
+      ['PASSWORD: hunter2 hunter3', 'PASSWORD: [REDACTED]'],
+      ['token: abc user: bob', 'token: [REDACTED]'],
+      ['password: hunter2 hunter3  ', 'password: [REDACTED]  '],
+      ['{"msg":"password: hunter2 hunter3","level":"info"}', '{"msg":"password: [REDACTED]","level":"info"}'],
+      ['{password: a b, user: bob}', '{password: [REDACTED], user: bob}'],
+      ['password: !!str q7Zp2LmX9vR4tY8w', 'password: [REDACTED]'],
+      ['password: !secret wifi_pw', 'password: [REDACTED]'],
+      ['password: &pw q7Zp2LmX9vR4tY8w', 'password: [REDACTED]'],
+      ["password: 'it''s q7Zp2LmX9vR4tY8w'", "password: '[REDACTED]'"],
+      ["password='it''s q7' ok", "password='[REDACTED]' ok"],
+      // An empty '' after a closed string, glued to code or not, is not a doubled quote, so the field after it is still read.
+      ["x = 'password: ' + y + ''; token = 'Hunter2'", "x = 'password: '[REDACTED]''; token = '[REDACTED]'"],
+      ["{\"code\":\"x = 'token: ' + y + '') client_secret = 'Hunter2'\",\"k\":1}", "{\"code\":\"x = 'token: '[REDACTED]'') client_secret = '[REDACTED]'\",\"k\":1}"],
+      ["print('password: ' + ''.join(chars)); token = 'Hunter2'", "print('password: '[REDACTED]''.join(chars)); token = '[REDACTED]'"],
+      ["x = 'password: '+''+pw; token = 'Hunter2'", "x = 'password: '[REDACTED]''+pw; token = '[REDACTED]'"],
+      ["print('password: ' + b''.join(c)); token = 'Hunter2'", "print('password: '[REDACTED]''.join(c)); token = '[REDACTED]'"],
+      ["{\"code\":\"print('password: ' + ''.join(c)); token = 'Hunter2'\",\"k\":1}", "{\"code\":\"print('password: '[REDACTED]''.join(c)); token = '[REDACTED]'\",\"k\":1}"],
+      // A word with a symbol in front is still the value's; an operator is not.
+      ['password: my $ecret pass', 'password: [REDACTED]'],
+      ['token: x !== y', 'token: [REDACTED] !== y'],
+      // The next secret field ends the value, and its own value is read.
+      ['password: x api_key: "hunter two"', 'password: [REDACTED] api_key: "[REDACTED]"'],
+      ['token: abc password: \'hunter two\'', 'token: [REDACTED] password: \'[REDACTED]\''],
+      ['{"msg":"password: x api_key: \\"q7Zp2LmX9vR4tY8w\\""}', '{"msg":"password: [REDACTED] api_key: \\"[REDACTED]\\""}'],
+      ['password: x {token: "q7Zp2LmX9"}', 'password: [REDACTED] {token: "[REDACTED]"}'],
+      ['password: x foo(api_key="q7Zp2 LmX9")', 'password: [REDACTED] foo(api_key="[REDACTED]")'],
+      ['{"msg":"password: x {token: \\"q7Zp2LmX9\\"}"}', '{"msg":"password: [REDACTED] {token: \\"[REDACTED]\\"}"}'],
+      ['password: a b c token ?= hunter2x', 'password: [REDACTED] token ?= [REDACTED]'],
+      ["password: a b c token += 'hunter two'", "password: [REDACTED] token += '[REDACTED]'"],
+      ["password: a b c token?: string = 'hunter two'", "password: [REDACTED] token?: [REDACTED] = '[REDACTED]'"],
+      ['password: x y\\ntoken: "hunter two"', 'password: [REDACTED] y\\ntoken: "[REDACTED]"'],
+      ['password: a b c d y&token="hunter two"', 'password: [REDACTED] y&token="[REDACTED]"'],
+      ['password: donkey kong', 'password: [REDACTED]'],
+      ['password: a \\tapi_key: "sekret1" b', 'password: [REDACTED] \\tapi_key: "[REDACTED]" b'],
+      ['password: a \\rprivate_key: "sekret4"', 'password: [REDACTED] \\rprivate_key: "[REDACTED]"'],
+      ['{"msg":"password: a \\tapi_key: \\"sekret1\\""}', '{"msg":"password: [REDACTED] \\tapi_key: \\"[REDACTED]\\""}'],
+      // A JSON literal before a blank and a closing bracket stays JSON.
+      ['{"password": 12 }', '{"password": "[REDACTED]" }'],
+      ['[{"password": null }]', '[{"password": "[REDACTED]" }]'],
+      // So does one before a printed escape, as in a repr of pretty JSON.
+      ["'{\\n  \"n\": 1,\\n  \"password\": 12\\n}'", "'{\\n  \"n\": 1,\\n  \"password\": \"[REDACTED]\"\\n}'"],
+      ['{"password": true\\t}', '{"password": "[REDACTED]"\\t}'],
+      // A word led by an escape, or a backslash run before a quote after several words, ends the value, so a
+      // string around it still closes, as in a Python repr of JSON whose backslashes are doubled.
+      ["'{\"m\":\"{\\\\\"m\\\\\":\\\\\"token: a b\\\\\"}\"}'", "'{\"m\":\"{\\\\\"m\\\\\":\\\\\"token: [REDACTED]\\\\\"}\"}'"],
+      ["'{\"m\":\"{\\\\\"m\\\\\":\\\\\"token: a b\\\\\\\\nuser: bob\\\\\"}\"}'", "'{\"m\":\"{\\\\\"m\\\\\":\\\\\"token: [REDACTED]\\\\\"}\"}'"],
+      ["'{\"m\":\"{\\\\\"m\\\\\":\\\\\"{\\\\\\\\\\\\\"m\\\\\\\\\\\\\":\\\\\\\\\\\\\"token: a b\\\\\\\\\\\\\"}\\\\\"}\"}'", "'{\"m\":\"{\\\\\"m\\\\\":\\\\\"{\\\\\\\\\\\\\"m\\\\\\\\\\\\\":\\\\\\\\\\\\\"token: [REDACTED]\\\\\\\\\\\\\"}\\\\\"}\"}'"],
+      ["'{\"m\":\"{\\\\\"m\\\\\":\\\\\"token: ab\\\\\"}\"}'", "'{\"m\":\"{\\\\\"m\\\\\":\\\\\"token: [REDACTED]\\\\\"}\"}'"],
+      ["'{\"m\":\"{\\\\\"m\\\\\":\\\\\"{\\\\\\\\\\\\\"m\\\\\\\\\\\\\":\\\\\\\\\\\\\"msg: token:  &a\\\\\\\\\\\\\"}\\\\\"}\"}'", "'{\"m\":\"{\\\\\"m\\\\\":\\\\\"{\\\\\\\\\\\\\"m\\\\\\\\\\\\\":\\\\\\\\\\\\\"msg: token:  [REDACTED]\\\\\\\\\\\\\"}\\\\\"}\"}'"],
+      ["'{\"m\":\"password: a \\\\\"b\\\\\" c\"}'", "'{\"m\":\"password: [REDACTED] \\\\\"b\\\\\" c\"}'"],
+      ["{\"m\":\"{\\\"token\\\": true \\t}\"}", "{\"m\":\"{\\\"token\\\": \\\"[REDACTED]\\\" \\t}\"}"],
+      ["'{\\n  \"password\": 12 \\n}'", "'{\\n  \"password\": \"[REDACTED]\" \\n}'"],
+      // A first word holding a field is the value, and the field after it is still read.
+      ["token: !token==token: token:  Qx9&pwd: ", "token: [REDACTED]: token:  [REDACTED]: "],
+      ["token: token: Qx9", "token: [REDACTED]"],
+      // A field whose value starts inside the word a value already masked isn't read again, so a group it opens
+      // there doesn't run past the string's quote.
+      ["{\"m\":\"{\\\"m\\\":\\\"api_key: >token-:[\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"api_key: [REDACTED]\\\"}\"}"],
+      ["{\"m\":\"{\\\"m\\\":\\\"secret: !!}pwd:{\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"secret: [REDACTED]\\\"}\"}"],
+      // A field in the first word is left to the value, as HEAD reads it, so the next field is still read.
+      ["password: (token = api_key: \"Qx9 Qx9\")", "password: [REDACTED] = api_key: \"[REDACTED]\")"],
+      ["{\"m\":\"password: (token = api_key: \\\"Qx9 Qx9\\\")\",\"k\":1}", "{\"m\":\"password: [REDACTED] = api_key: \\\"[REDACTED]\\\")\",\"k\":1}"],
+      // An escaped blank goes on through the word after it, as HEAD reads it, in strings escaped deep.
+      ["{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"token: x\\\\\\\\\\\\\\\\ Hunter2\\\\\\\"}\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"token: [REDACTED]\\\\\\\"}\\\"}\"}"],
+      ["{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"token: \\\\\\\\\\\\\\\\ Hunter2\\\\\\\"}\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"token: [REDACTED]\\\\\\\"}\\\"}\"}"],
+      ["{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"password: \\\\\\\\\\\\\\\\ Qx9,token: \\\\\\\"}\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"password: [REDACTED],token: \\\\\\\"}\\\"}\"}"],
+      ["{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"token: \\\\\\\\\\\\\\\\ token==Qx9 \\\\\\\"}\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"token: [REDACTED] \\\\\\\"}\\\"}\"}"],
+      ["{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"password: Qx9\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ \\\\\\\\\\\\\\\\Qx9!token== tail\\\\\\\"}\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"{\\\\\\\"m\\\\\\\":\\\\\\\"password: [REDACTED]\\\\\\\"}\\\"}\"}"],
+      // A quote before a closing brace or bracket closes the string the tags are in, as in a repr of JSON.
+      ["'{\"cmd\":{\"msg\":\"print(\\\\\"secret: !x \"},\"user\":\"bob\"}'", "'{\"cmd\":{\"msg\":\"print(\\\\\"secret: [REDACTED] \"},\"user\":\"bob\"}'"],
+      ["'[\"\\\\\"password: !x \"]'", "'[\"\\\\\"password: [REDACTED] \"]'"],
+      // A group after a run of tags is read as a bare word, so the escaped quote after it still closes the string.
+      ["{\"m\":\"{\\\"m\\\":\\\"token: !x !!y {Qx9\\\"}\"}", "{\"m\":\"{\\\"m\\\":\\\"token: [REDACTED] [REDACTED]\\\"}\"}"],
+      // A `!`-led word holding what reads as a field is the bare value, read as a field or not.
+      ["password: !token==Hunter2x", "password: [REDACTED]"],
+      ["pwd: !pwd?:Hunter2x", "pwd: [REDACTED]"],
+      ["password: !Token::Hunter2x", "password: [REDACTED]"],
+      ["{\"m\":\"password: !token=>Hunter2x\",\"k\":1}", "{\"m\":\"password: [REDACTED]\",\"k\":1}"],
+      ["password: !Hunter2,x!token==", "password: [REDACTED],x!token=="],
+      ["password: !Hunter2,token=x", "password: [REDACTED],token=[REDACTED]"],
+      ["{\"m\":\"password: !Hunter2;token=x\",\"k\":1}", "{\"m\":\"password: [REDACTED];token=[REDACTED]\",\"k\":1}"],
+      ["password: !Hunter2\"token\":abc", "password: [REDACTED]\"token\":[REDACTED]"],
+      ["password: !token==Hunter2\\Qx9", "password: [REDACTED]"],
+      ["password: !token=>\\nHunter2", "password: [REDACTED]"],
+      ["{\"m\":\"password: !token==\\tQx9true\",\"k\":1}", "{\"m\":\"password: [REDACTED]\",\"k\":1}"],
+      // A quoted value after a YAML tag or anchor; the tags go too, as what reads as one may be the secret.
+      ['password: &pw "hunter two"', 'password: [REDACTED] "[REDACTED]"'],
+      ["password: !!str 'hunter two'", "password: [REDACTED] '[REDACTED]'"],
+      ["password: &a !!str 'hunter two'", "password: [REDACTED] '[REDACTED]'"],
+      ['password: ! "hunter two"', 'password: [REDACTED] "[REDACTED]"'],
+      ['{"m":"password: &pw \\"hunter two\\"","k":1}', '{"m":"password: [REDACTED] \\"[REDACTED]\\"","k":1}'],
+      ['password: &a !!str hunter2', 'password: [REDACTED] [REDACTED]'],
+      ['password: !!str &a hunter2', 'password: [REDACTED] [REDACTED]'],
+      ['password: &a &b hunter2 more', 'password: [REDACTED] [REDACTED]'],
+      // A field after tags, or a quoted key after a tag, is read as its own.
+      ['password: !a !b api_key: "Hunter2"', 'password: [REDACTED] api_key: "[REDACTED]"'],
+      ['{"m":"password: !a !b api_key: \\"Hunter2 Qx9\\"","k":1}', '{"m":"password: [REDACTED] api_key: \\"[REDACTED]\\"","k":1}'],
+      ['password: !x "token": "Hunter2 Qx9"', 'password: [REDACTED] "token": "[REDACTED]"'],
+      ['password: &a !b "api_key": "Hunter2 Qx9"', 'password: [REDACTED] "api_key": "[REDACTED]"'],
+      ["password: &a&b  &\\ttoken = 'Hunter2 Qx9'", "password: [REDACTED]  &\\ttoken = '[REDACTED]'"],
+      ['password: &\\t!x!\\tsecret:`Hunter2 Qx9`', 'password: &\\t!x!\\tsecret:`[REDACTED]`'],
+      ['password: !a !b {"token": "Hunter2 Qx9"}', 'password: [REDACTED] {"token": "[REDACTED]"}'],
+      ['api_key: !!str !!str {\\"token\\": \\"Hunter2 Qx9\\"}', 'api_key: [REDACTED] {\\"token\\": \\"[REDACTED]\\"}'],
+      ['print("password: !Hunter2 "+name+"!")', 'print("password: [REDACTED] "[REDACTED]"!")'],
+      ['{"m":"password: !Hunter2 \\"\\" ok"}', '{"m":"password: [REDACTED] \\"\\" ok"}'],
+      ['{"m":"echo \\"password: !Hunter2 \\"+x+\\"y\\""}', '{"m":"echo \\"password: [REDACTED] \\"[REDACTED]\\"y\\""}'],
+      // A value led by `!` that ends a string isn't a tag before the string's own closing quote.
+      ['{"msg":"password: !Hunter2","level":"info"}', '{"msg":"password: [REDACTED]","level":"info"}'],
+      ['{"msg":"password: !Hunter2 ","k":1}', '{"msg":"password: [REDACTED] ","k":1}'],
+      ['{"m":"{\\"a\\":\\"password: !Hunter2\\"}"}', '{"m":"{\\"a\\":\\"password: [REDACTED]\\"}"}'],
+      ["echo 'password: !Hunter2' 'next'", "echo 'password: [REDACTED]' 'next'"],
+      ['print("password: !Hunter2 ")', 'print("password: [REDACTED] ")'],
+      ['logger.warn("secret: !Hunter2 ", e);', 'logger.warn("secret: [REDACTED] ", e);'],
+      ['msg="password: !Hunter2 " user=bob', 'msg="password: [REDACTED] " user=bob'],
+      ["echo 'password: !Hunter2 ' 'next'", "echo 'password: [REDACTED] ' 'next'"],
+      ['password: !Hunter2 ""', 'password: [REDACTED] ""'],
+      ["print('password: !Hunter2', 'x')", "print('password: [REDACTED]', 'x')"],
+      ['{"cmd":"echo \\"password: !pw1\\" \\"x\\""}', '{"cmd":"echo \\"password: [REDACTED]\\" \\"x\\""}'],
+      // A quoted key's value of several words is masked whole.
+      ['"password": 1234 5678', '"password": [REDACTED]'],
+      ['"password": true story', '"password": [REDACTED]'],
+      // `name=` still ends at a blank, as a shell's `PASSWORD=x make all` does, and so does `name:` with none after it.
+      ['PASSWORD=x make all', 'PASSWORD=[REDACTED] make all'],
+      ['token:abc def', 'token:[REDACTED] def'],
+    ];
+    for (const [text, want] of cases) expect.soft(scrubText(text), text).toBe(want);
+  });
+
   it('masks the value after a type annotation and a quoted value after a string prefix', () => {
     const cases: [string, string][] = [
       ['password: str = "Qw3rty!Pass"', 'password: [REDACTED] = "[REDACTED]"'],
@@ -485,6 +616,16 @@ describe('the scrub by field name', () => {
       const started = performance.now();
       scrubText(text);
       expect(performance.now() - started, `1 MB of ${JSON.stringify(unit)}`).toBeLessThan(2_000);
+    }
+  });
+
+  it('reads a megabyte-long word of names after `name: ` in linear time', () => {
+    const MB = 1_048_576;
+    for (const unit of ['pwd', 'x_pwd_', 'pwdx:', '!pwd: ', '&pwd: ']) {
+      const text = `pwd: a ${unit.repeat(Math.ceil(MB / unit.length))}`;
+      const started = performance.now();
+      scrubText(text);
+      expect(performance.now() - started, `pwd: a, then 1 MB of ${JSON.stringify(unit)}`).toBeLessThan(2_000);
     }
   });
 });
