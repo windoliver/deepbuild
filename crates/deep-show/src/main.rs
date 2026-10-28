@@ -1,4 +1,5 @@
-//! `deep-show <run | screen>`: JSON lines in, one JSON line out per input line, in order, exit 0;
+//! `deep-show <run | screen | live>`: JSON lines in, one JSON line out per input line, in order, exit 0
+//! (`live` answers its first line, holds its window, then exits);
 //! a line that can't be read, lacks a required field or names an unknown `planted` value answers
 //! `{"ok":false,"code":"bad_input"}`, before anything platform-specific. The surface is the #393
 //! acceptance README's: `run` plays a scenario of deep_show and `deep show` calls against the
@@ -833,6 +834,7 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
             };
             screen(&scenario, startup, out)
         }
+        "live" => live(&scenario, startup),
         _ => bad_input(),
     }
 }
@@ -846,6 +848,19 @@ fn screen(scenario: &Scenario, startup: &Startup, out: &str) -> Value {
 
 #[cfg(not(target_os = "macos"))]
 fn screen(_: &Scenario, _: &Startup, _: &str) -> Value {
+    json!({"ok": false, "code": "unsupported_platform"})
+}
+
+/// `live` (#376): the screen-reader smoke run's window, on macOS.
+#[cfg(target_os = "macos")]
+fn live(scenario: &Scenario, startup: &Startup) -> Value {
+    let mut hub = hub::Hub::new(scenario, startup);
+    hub.run_calls();
+    live::show(&mut hub)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn live(_: &Scenario, _: &Startup) -> Value {
     json!({"ok": false, "code": "unsupported_platform"})
 }
 
@@ -1359,8 +1374,13 @@ fn main() {
         let reply = answer(&command, &startup, &line);
         let _ = writeln!(out, "{reply}");
         let _ = out.flush();
+        if command == "live" {
+            break;
+        }
     }
 }
 
+#[cfg(target_os = "macos")]
+mod live;
 #[cfg(target_os = "macos")]
 mod window;
