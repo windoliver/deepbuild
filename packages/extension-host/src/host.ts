@@ -28,6 +28,7 @@ import { runKit, slotKits } from '@deepbuild/conformance';
 import type { CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, frozenDigests, hubSlots, registry, sha256Hex, validate, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Supervisor } from '@deepbuild/supervisor';
 import { API, extensionSide, peer } from '../runtime/deep.mjs';
 import { packageDigest } from './digest.js';
@@ -39,7 +40,8 @@ export interface ReleaseEntry { id: string; version: string; digest: string }
 /** The planted wrong programs the criteria name, selected per host; tests only. */
 export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | 'first-party-appends-every-kind'
   | 'context-as-text' | 'writer-from-arguments' | JoinPlant | 'stop-provider-first'
-  | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest';
+  | 'both-adapters-deliver' | 'first-to-bind-owns' | 'refuses-only-the-ring' | 'trusts-envelope-digest'
+  | 'skips-kind-declare' | 'drops-mode' | 'holder-from-arguments' | 'declares-kind-on-first-lease';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -82,6 +84,8 @@ export interface ExtensionHostOptions {
   safe?: boolean;
   /** The asks core resolvers are forwarded to; without one, a package can't register a resolver. */
   asks?: Asks;
+  /** The kernel's one lease table (#237): a manifest's lease kinds are declared in it, and `deep.lease` leases from it. */
+  leases?: LeaseTable;
   plant?: Plant;
 }
 export interface InstallFrom {
@@ -203,7 +207,7 @@ export interface IndexFill extends SlotFill {
 interface Manifest {
   id: string; version: string; digest?: string; access?: { words: string[] }; checks?: string[]; replaces?: string[]; notices?: string[]; actions?: string[]; environments?: string[];
   provides?: { interface: string; kind: string }[]; uses?: { interface: string }[]; templates?: Template[];
-  conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string;
+  conflicts?: string[]; kernel?: string[]; publisher_key?: string; signature?: string; leases?: LeaseKind[];
 }
 /** An install: also the check kinds it holds, its own until a package that replaces one installs. */
 interface Entry extends Installed { grant: { record: string[]; hosts?: HostGrant[] }; holds: string[] }
@@ -385,6 +389,8 @@ class Host implements ExtensionHost {
   private keys: Record<string, string>;
   private readonly exts = new Map<string, Ext>();
   private readonly loading = new Map<string, Promise<void>>();
+  /** The last package's lease kinds being declared (#44): each package's are read and declared after it. */
+  private declaring: Promise<void> = Promise.resolve();
   /** Packages' calls under way. */
   private readonly calls = new Set<Promise<void>>();
   /** Conformance runs under way. */
@@ -741,6 +747,12 @@ class Host implements ExtensionHost {
       return refuse(not);
     }
     const manifest = JSON.parse(readFileSync(join(folder, 'deepbuild.json'), 'utf8')) as Manifest;
+    try {
+      await this.declareKinds(entry.id, manifest.leases ?? []);
+    } catch (e) {
+      rmSync(folder, { recursive: true, force: true });
+      return refuse(message(e));
+    }
     const hub = this.hubBound(entry, folder, digest);
     const ext = this.ext(entry, folder, manifest, digest, hub ? 'hub' : 'sandbox', 'loaded');
     this.exts.set(entry.id, ext);
@@ -758,6 +770,50 @@ class Host implements ExtensionHost {
       }
     }
     return this.loadedOf(ext);
+  }
+  /**
+   * Declares a manifest's lease kinds in the kernel's table under the package's id (#44). The table has no undeclare,
+   * so every kind is held to lease.kind@1 and to the names others declared first, and only then is any declared. The
+   * table keeps a kind for the hub's life: one this package declared before is its own still, on the same terms.
+   * Packages declare one at a time across the host, so the names read are the names declared against.
+   */
+  private declareKinds(id: string, kinds: LeaseKind[]): Promise<void> {
+    const now = this.declaring.then(() => this.declareNow(id, kinds));
+    this.declaring = now.then(() => undefined, () => undefined);
+    return now;
+  }
+  private async declareNow(id: string, kinds: LeaseKind[]): Promise<void> {
+    if (!kinds.length || this.options.plant === 'skips-kind-declare') return;
+    const table = this.options.leases;
+    if (!table) throw Error(`${id} declares the lease kinds ${kinds.map((k) => String(k?.name)).join(', ')}, and this host has no lease table to declare them in`);
+    const declared = new Map((await table.kinds()).map((k) => [k.name, k]));
+    const fresh = new Map<string, LeaseKind>();
+    for (const kind of kinds) {
+      const held = validate('lease.kind@1', kind);
+      if (!held.ok) throw Error(`${id}'s lease kind ${String(kind?.name)} isn't lease.kind@1 data (match: one of exact, glob, prefix or pool(n)): ${held.issues.map((i) => `${i.path || '/'}: ${i.remediation}`).join('; ')}`);
+      if (fresh.has(kind.name)) throw Error(`${id} declares the lease kind ${kind.name} twice`);
+      const before = declared.get(kind.name);
+      if (!before) fresh.set(kind.name, kind);
+      else if (before.plugin !== id) throw Error(`${id}'s lease kind ${kind.name} is already declared by ${before.plugin}`);
+      else if (before.match !== kind.match || before.cap !== kind.cap || before.cooldown !== kind.cooldown || before.cost !== kind.cost) {
+        throw Error(`${id}'s lease kind ${kind.name} differs from the terms it declared it on; the table keeps those until the hub restarts`);
+      }
+    }
+    for (const kind of fresh.values()) await table.declare(id, kind);
+  }
+  /** `deep.lease(resource, mode)`: a lease held by the package itself, `ext:<id>`, on this host, whatever its arguments name. */
+  private async lease(id: string, resource: unknown, mode: unknown): Promise<LeaseResult> {
+    const table = this.options.leases;
+    if (!table) throw Error(`deep.lease: this host has no lease table`);
+    const { kind, key, holder } = (resource ?? {}) as { kind?: unknown; key?: unknown; holder?: unknown };
+    if (typeof kind !== 'string' || typeof key !== 'string') throw Error('deep.lease takes a resource { kind, key }, each a string');
+    if (mode !== 'exclusive' && mode !== 'shared') throw Error(`deep.lease takes the mode exclusive or shared, not ${JSON.stringify(mode)}`);
+    const plant = this.options.plant;
+    if (plant === 'declares-kind-on-first-lease' && !(await table.kinds()).some((k) => k.name === kind)) {
+      await table.declare(id, { name: kind, match: 'exact', cap: 100, cooldown: 0, cost: 0 });
+    }
+    const caller = { holder: plant === 'holder-from-arguments' && typeof holder === 'string' ? holder : `ext:${id}` };
+    return table.lease(caller, { host: 'local', kind, key }, plant === 'drops-mode' ? 'exclusive' : mode);
   }
   private loadedOf(ext: Ext): Loaded {
     return { status: 'loaded', id: ext.entry.id, version: ext.entry.version, place: ext.place, run: ext.run };
@@ -1069,6 +1125,9 @@ class Host implements ExtensionHost {
       case 'deep.record.query':
         quiet();
         return this.query(ext, args[0]);
+      case 'deep.lease':
+        quiet();
+        return this.lease(id, args[0], args[1]);
       case 'deep.notices.send': {
         quiet();
         const readings = (args[0] as { readings?: unknown } | undefined)?.readings;
