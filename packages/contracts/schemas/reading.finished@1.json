@@ -1,0 +1,209 @@
+{
+  "title": "reading.finished@1",
+  "description": "A reading job ended (#63): what it was, the runner jobs it ran, how many findings it kept, dropped and found undelivered, the plan usage it took and the models it answered on.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "reading.finished"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^(task|ask|claim|verdict|run|req|decision|plan|lease|reading|notice|doc|ev|session):[0-9A-Za-z]+(#[A-Za-z0-9][A-Za-z0-9._-]*)?$",
+      "description": "The record object this event is about."
+    },
+    "writer": {
+      "type": "string",
+      "pattern": "^(hook|app|cli|core|ext:[^\\s]+)$",
+      "description": "Who wrote it, from the connection; never an agent through MCP, since no deep_* tool produces this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "reading": {
+          "type": "string",
+          "pattern": "^reading:[0-9A-HJKMNP-TV-Z]{26}$",
+          "maxLength": 8192,
+          "description": "The reading job, `reading:<ULID>`."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "install",
+            "replay",
+            "premise",
+            "summary"
+          ],
+          "description": "What it read for.",
+          "x-closure": {
+            "closed": "each value is a reading DeepBuild runs and every reader acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          }
+        },
+        "runs": {
+          "type": "array",
+          "description": "Every runner job it started, `run:<ULID>`.",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "description": "A runner job.",
+            "maxLength": 8192,
+            "minLength": 1
+          }
+        },
+        "state": {
+          "type": "string",
+          "description": "The state its job ended in, as the runner's job.ended records it.",
+          "maxLength": 8192,
+          "minLength": 1
+        },
+        "findings": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The findings it kept: every quote at its handle, every handle delivered in this job."
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The citations it refused, each logged as reading.dropped."
+        },
+        "undelivered": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The findings it dropped for citing no handle delivered in this job."
+        },
+        "plan": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "The plan usage it took, as a share of the 5-hour window; null when no window reading spans the job.",
+          "properties": {
+            "five_hour_pct": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100,
+              "description": "Percentage points of the 5-hour window."
+            }
+          },
+          "required": [
+            "five_hour_pct"
+          ],
+          "additionalProperties": false
+        },
+        "models": {
+          "type": "object",
+          "description": "The models it answered on.",
+          "properties": {
+            "final": {
+              "type": "string",
+              "description": "The model of its final answer, or of its premise review.",
+              "maxLength": 8192,
+              "minLength": 1
+            },
+            "subreads": {
+              "type": "array",
+              "description": "The model of each sub-read, once each.",
+              "maxItems": 64,
+              "items": {
+                "type": "string",
+                "description": "A model a sub-read answered on.",
+                "maxLength": 8192,
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "final",
+            "subreads"
+          ],
+          "additionalProperties": false
+        },
+        "written": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "The wiki claims it wrote."
+        },
+        "invalid": {
+          "type": "string",
+          "description": "Why the job's answer was no reading.answer@1, when it wasn't: then it kept nothing.",
+          "maxLength": 8192,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "reading",
+        "kind",
+        "runs",
+        "state",
+        "findings",
+        "dropped",
+        "undelivered",
+        "plan",
+        "models",
+        "written"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

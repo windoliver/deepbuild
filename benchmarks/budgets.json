@@ -292,6 +292,17 @@
       "initialReason": "Issue #315 first measurement: the merge base's deep-hook has no fail-closed entries and no late mark. One process starts the hub on a temp home, stops it with SIGSTOP and times 50 PreToolUse calls from spawn to exit, so p50 includes Node's start; the issue's 50 ms to fail open stays in tests/acceptance/315/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "deep-hook-guards",
+      "command": [
+        "node",
+        "benchmarks/deep-hook.mjs",
+        "guards"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #304 first measurement: the merge base's deep-hook has no check mode and its rules.json no planted calls or tool classes. One process starts the hub on a temp home and times 200 forwarded PreToolUse calls with every shipped default entry in rules.json and 200 with none, interleaved, then deep-hook's check mode on one default's planted call and twin, 200 each, all from spawn to exit, so p50 includes Node's start and the release build; the issue's 2 ms added for matching and 10 ms over process start stay in tests/acceptance/304/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "canvas-patch-apply",
       "command": [
         "node",
@@ -575,6 +586,37 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #20 first measurement: the merge base has no transcript archive. One process archives a 100 MB backlog of twenty 5 MB transcripts in one pass, failing unless each copy reads back as its transcript, redacted. The issue's 1 GB in 5 minutes stays in tests/acceptance/20/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-status-30",
+      "command": [
+        "node",
+        "benchmarks/status.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #19 first measurement: the merge base has no deep status. One process seeds a heavy month (20 sessions a day, each with a prompt, a tool call and a finished stop) and 30 live sessions (three with an open ask, three stuck), starts the hub on it and times five deep status runs after a warm-up, failing unless each shows every session that needs you or is stuck within its first 20 lines; p50 includes the seeding and the hub's start. The issue's 200 ms and 100 MB stay in tests/acceptance/19/status/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "deep-doctor",
+      "command": [
+        "node",
+        "benchmarks/doctor.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #19 first measurement: the merge base has no doctor task. One process makes a home with stand-ins for claude and codex, starts the hub, runs deep setup and times five deep doctor --json runs after a warm-up; p50 includes the setup and the hub's start. The issue's 2 s and 100 MB stay in tests/acceptance/19/status/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "reading-slice",
+      "command": [
+        "node",
+        "benchmarks/reading.mjs",
+        "slice"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #63 first measurement: the merge base has no reading by reference. One process archives fifty 60-message sessions and one of 1,000 messages, then reads every slice of the long one, of its message 900 and of ten others as deep read does, failing unless each holds at most 8,192 characters and each cursor leads on to the end; p50 includes Node's start and the archive pass. The issue's 200 ms per deep read stays in tests/acceptance/63/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     }
   ]
 }

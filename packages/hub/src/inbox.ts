@@ -25,7 +25,8 @@ function age(ms: number): string {
 export async function inboxCommand(args: readonly string[]): Promise<number> {
   const answering = args[0] === 'answer';
   const undoing = args[0] === 'undo';
-  if (answering ? args.length !== 3 : undoing ? args.length !== 2 : args.length !== 0) {
+  // A flag where an ask or option goes is a usage error, never read as one (#19's exit table).
+  if ((answering ? args.length !== 3 : undoing ? args.length !== 2 : args.length !== 0) || args.slice(1).some((a) => a.startsWith('-'))) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }

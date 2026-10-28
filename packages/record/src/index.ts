@@ -8,13 +8,13 @@ import { canonicalize, listSchemas, registry, sha256Hex } from '@deepbuild/contr
 import type { JsonValue, Registry, SchemaEntry } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
 import type { EvidenceStore, Writer as EvidenceWriter } from '@deepbuild/evidence';
-import { CHECKED, loadLearned, parseClaimLine, readEvidence, resolveHandle, ROLLERS, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type SliceEntry, type Transcripts } from './learned.js';
+import { CHECKED, loadLearned, parseClaimLine, readEvidence, resolveHandle, ROLLERS, sessionTranscript, startSlice, toRollBack, dependsOn, type ClaimLine, type Entry as Resolved, type HeldAtLoad, type LearnedChange, type LearnedLoad, type Message, type SliceEntry, type Transcripts } from './learned.js';
 import { PROJECTIONS, Projector, tableDef, type Projected } from './projections.js';
 import type { Statement } from 'better-sqlite3';
-import { fileStorage, isBackend, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
+import { fileStorage, isBackend, openReadOnly, testStorage, type Backend, type Db, type Durability, type Storage, type SyncCall, type TestStorage } from './storage.js';
 
 export { parseClaimLine, PROJECTIONS, testStorage };
-export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
+export type { Backend, ClaimLine, HeldAtLoad, LearnedLoad, Message, Resolved, SliceEntry, Storage, SyncCall, TestStorage };
 
 /** What the hub's socket proved about a writer's connection (#16 proves it; the record only reads it). */
 export interface Connection {
@@ -792,6 +792,35 @@ function toEvent(row: StoredRow): Event {
   if (row.unverified) event.unverified = true;
   return event;
 }
+/**
+ * The record as a process other than the hub reads it (#63): one read-only connection, so it never writes the log,
+ * its projections or its state, and runs beside the hub.
+ */
+export interface RecordReader {
+  resolve(handle: string): Promise<Resolved | undefined>;
+  /** A session's archived transcript, through its newest transcript.archived link; undefined for a session none links. */
+  transcript(session: string): Promise<Message[] | undefined>;
+  /** The sessions a transcript.archived event links, by ID. */
+  archived(): Promise<string[]>;
+  /** Handles `deep find` searches besides transcripts: your decisions in force, and evidence that is neither media nor a transcript. */
+  findable(): Promise<string[]>;
+  close(): void;
+}
+export function openRecordReader(options: { path: string; evidence?: EvidenceStore }): RecordReader {
+  const db = openReadOnly(options.path);
+  const transcripts: Transcripts = new Map();
+  return {
+    resolve: (handle) => resolveHandle(db, options.evidence, transcripts, handle),
+    transcript: (session) => sessionTranscript(db, options.evidence, transcripts, session),
+    archived: async () => (db.prepare('SELECT id FROM sessions WHERE transcript IS NOT NULL ORDER BY id').all() as { id: string }[]).map((r) => r.id),
+    findable: async () => [
+      ...(db.prepare("SELECT id FROM decisions WHERE state = 'active' ORDER BY created, id").all() as { id: string }[]).map((r) => `decision:${r.id}`),
+      ...(db.prepare("SELECT hash FROM evidence WHERE type NOT IN ('png', 'jpeg', 'mp4') AND kind != 'transcript' ORDER BY hash").all() as { hash: string }[]).map((r) => `ev:${r.hash}`),
+    ],
+    close: () => db.close(),
+  };
+}
+
 export async function openRecord(options: RecordOptions): Promise<RecordStore> {
   const storage = options.storage ?? fileStorage();
   if (!isBackend(storage)) throw new RecordError('storage', `storage ${storage.name} is not one the record can write through`);

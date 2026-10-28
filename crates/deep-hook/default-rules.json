@@ -140,7 +140,7 @@
     "no-unnamed-cloud-resource": {
       "match": "effect:cloud-resource",
       "scope": "all_repos",
-      "mode": "watch",
+      "mode": "block",
       "reason": "Creating a cloud resource the plan doesn't name is a decision for you, and with the hub down nobody can be asked, so it is denied unless a standing rule covers it.",
       "next_step": "Ask the person to create it, or to add a standing rule that covers it, then retry once the hub is up.",
       "fail_closed": true
@@ -148,7 +148,7 @@
     "no-unknown-reach-delete": {
       "match": "effect:unknown-reach-delete",
       "scope": "all_repos",
-      "mode": "watch",
+      "mode": "block",
       "reason": "A delete whose reach can't be worked out before it runs, such as a script file's or one over a pattern, can remove files git can't restore, and with the hub down nothing can stage them first or ask you.",
       "next_step": "Delete the paths by name, or ask the person to run it, or retry once the hub is up.",
       "fail_closed": true
@@ -176,6 +176,284 @@
       "reason": "A top-level folder the plan doesn't name is a decision: recorded, and answered by your standing rule or asked.",
       "next_step": "Name the folder in the plan, or say why it is needed.",
       "fail_closed": false
+    }
+  },
+  "proofs": {
+    "no-kill-by-name": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "pkill -f node"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'pkill -f node'"
+        }
+      }
+    },
+    "no-workflow-dispatch": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh workflow run deploy.yml"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "gh run rerun 12345"
+        }
+      }
+    },
+    "no-bare-stash": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git stash"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git stash push -m wip-tag"
+        }
+      }
+    },
+    "no-git-other-checkout": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git -C {worktree} status"
+        },
+        "cwd": "{repo}"
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "git -C {repo} status"
+        },
+        "cwd": "{repo}"
+      }
+    },
+    "no-agent-config-write": {
+      "planted": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/.claude/settings.json",
+          "content": "x\n"
+        }
+      },
+      "twin": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{work}/claude-settings.json",
+          "content": "x\n"
+        }
+      }
+    },
+    "no-deepbuild-spec-write": {
+      "planted": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{repo}/.deepbuild/done.yaml",
+          "content": "x\n"
+        }
+      },
+      "twin": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{repo}/deepbuild/done.yaml",
+          "content": "x\n"
+        }
+      }
+    },
+    "no-deep-off": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep off"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep status"
+        }
+      }
+    },
+    "no-deep-on": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep on"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep doctor"
+        }
+      }
+    },
+    "no-deep-hub-stop": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep hub stop"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep hub stop --root {work}"
+        }
+      }
+    },
+    "no-deep-hub-use": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep hub use --root {work}"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep hub status"
+        }
+      }
+    },
+    "no-deep-setup-undo": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep setup --undo"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep setup"
+        }
+      }
+    },
+    "no-deep-restore": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "deep restore"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "echo 'deep restore'"
+        }
+      }
+    },
+    "no-hub-service-stop": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "launchctl bootout gui/501/com.deepbuild.hub"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "launchctl print gui/501/com.deepbuild.hub"
+        }
+      }
+    },
+    "no-hub-service-write": {
+      "planted": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/Library/LaunchAgents/com.deepbuild.hub.plist",
+          "content": "x\n"
+        }
+      },
+      "twin": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/Library/LaunchAgents/com.example.other.plist",
+          "content": "x\n"
+        }
+      }
+    },
+    "no-hub-kill": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "kill {hub_pid}"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "ps -p {hub_pid}"
+        }
+      }
+    },
+    "no-deepbuild-home-write": {
+      "planted": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/.deepbuild/config.json",
+          "content": "x\n"
+        }
+      },
+      "twin": {
+        "tool_name": "Write",
+        "tool_input": {
+          "file_path": "{home}/.deepbuild/workspaces/w1/notes.md",
+          "content": "x\n"
+        }
+      }
+    },
+    "no-control-token-read": {
+      "planted": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "{home}/.deepbuild/control.token"
+        }
+      },
+      "twin": {
+        "tool_name": "Read",
+        "tool_input": {
+          "file_path": "{home}/.deepbuild/config.json"
+        }
+      }
+    },
+    "no-unnamed-cloud-resource": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "terraform apply"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "terraform plan"
+        }
+      }
+    },
+    "no-unknown-reach-delete": {
+      "planted": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rm -rf build/*"
+        }
+      },
+      "twin": {
+        "tool_name": "Bash",
+        "tool_input": {
+          "command": "rm -rf build"
+        }
+      }
     }
   }
 }

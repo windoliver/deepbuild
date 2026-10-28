@@ -1,6 +1,6 @@
 // #355's scope beyond its acceptance tests: the default index's tables in the ledger, your edits kept as decisions,
 // and standing questions rewritten as the wiki learns. Real record, evidence store and pages in a temp folder.
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -109,4 +109,90 @@ test('a standing question is a page the wiki rewrites from the repo\'s claims as
   const second = readFileSync(question, 'utf8');
   expect(second, 'the question\'s page is rewritten to the claim that superseded the first').toContain('npm run serve');
   expect(second).not.toContain('npm run dev');
+});
+
+// Invariant 3: agents can't change your decisions. A claim you removed or corrected stays as you left it, however
+// many times it was learned before, and no learned claim brings it back, restates it or supersedes it.
+const removeLine = (folder: string, s: string): void => {
+  const file = join(folder, 'repos/api.md');
+  writeFileSync(file, readFileSync(file, 'utf8').split('\n').filter((l) => !l.includes(s)).join('\n'));
+};
+const L = 'The api queue runs on redis';
+/** The page as the wiki wrote it; a page with no claim left is gone. */
+const page = (folder: string): string => (existsSync(join(folder, 'repos/api.md')) ? readFileSync(join(folder, 'repos/api.md'), 'utf8') : '');
+
+test('a line you remove leaves the wiki, though a restatement held it over an earlier learning', async () => {
+  const w = await world([L]);
+  await w.wiki.learn([claim(w, 'queue', L, 0)]);
+  expect((await w.wiki.learn([{ ...claim(w, 'queue', L, 0), supersedes: 'wiki:repos/api#queue' }])).written).toEqual(['wiki:repos/api#queue']);
+  removeLine(w.folder, 'redis');
+  expect((await w.wiki.keepEdits(YOU)).length).toBe(1);
+  expect(await w.record.raw("SELECT handle FROM wiki_claims WHERE state = 'in force'")).toEqual([]);
+  expect(page(w.folder)).not.toContain('redis');
+});
+
+test('a claim you removed is not learned again', async () => {
+  const w = await world([L]);
+  await w.wiki.learn([claim(w, 'queue', L, 0)]);
+  removeLine(w.folder, 'redis');
+  await w.wiki.keepEdits(YOU);
+  const again = await w.wiki.learn([claim(w, 'queue', L, 0)]);
+  expect(again.written).toEqual([]);
+  expect(again.dropped[0]?.reason).toMatch(/is yours/);
+  expect(page(w.folder)).not.toContain('redis');
+});
+
+test('a claim you corrected and then removed is not learned again in its first words', async () => {
+  const w = await world([L]);
+  await w.wiki.learn([claim(w, 'queue', L, 0)]);
+  const file = join(w.folder, 'repos/api.md');
+  writeFileSync(file, readFileSync(file, 'utf8').replace('runs on redis', 'runs on sqs'));
+  await w.wiki.keepEdits(YOU);
+  removeLine(w.folder, 'sqs');
+  await w.wiki.keepEdits(YOU);
+  expect((await w.wiki.learn([claim(w, 'queue', L, 0)])).written).toEqual([]);
+  expect(page(w.folder)).not.toContain('redis');
+});
+
+test('a claim you removed is not learned again in other Unicode forms of its words', async () => {
+  const T = 'The api café queue runs on redis';
+  const w = await world([T.normalize('NFC')]);
+  await w.wiki.learn([claim(w, 'queue', T.normalize('NFC'), 0)]);
+  removeLine(w.folder, 'redis');
+  await w.wiki.keepEdits(YOU);
+  expect((await w.wiki.learn([claim(w, 'queue', T.normalize('NFD'), 0)])).written).toEqual([]);
+});
+
+test('once you revoke your removal, the claim may be learned again', async () => {
+  const w = await world([L]);
+  await w.wiki.learn([claim(w, 'queue', L, 0)]);
+  removeLine(w.folder, 'redis');
+  const [decision] = await w.wiki.keepEdits(YOU);
+  await w.record.append({ writer: 'core', actor: 'you', scope: 'you' }, { v: 1, id: ulid(tick()), kind: 'decision.revoked', ts: t, data: { decision: decision! } });
+  expect((await w.wiki.learn([claim(w, 'queue', L, 0)])).written).toEqual(['wiki:repos/api#queue']);
+});
+
+test('a restated claim you remove or correct leaves none of its wordings in the start slice', async () => {
+  for (const edit of [(f: string) => removeLine(f, 'redis'), (f: string) => writeFileSync(join(f, 'repos/api.md'), page(f).replace('runs on redis 7', 'runs on sqs'))]) {
+    const w = await world([L, `${L} 7`]);
+    await w.wiki.learn([claim(w, 'queue', L, 0)]);
+    await w.wiki.learn([{ ...claim(w, 'queue', `${L} 7`, 1), supersedes: 'wiki:repos/api#queue' }]);
+    edit(w.folder);
+    await w.wiki.keepEdits(YOU);
+    const slice = (await w.record.startSlice(w.session)).map((e) => e.text);
+    expect(slice.filter((text) => text === L || text === `${L} 7`)).toEqual([]);
+  }
+});
+
+test('no learned claim supersedes a claim you corrected', async () => {
+  const lines = [L, 'The api cache is warmed at boot'];
+  const w = await world(lines);
+  await w.wiki.learn([claim(w, 'queue', L, 0)]);
+  const file = join(w.folder, 'repos/api.md');
+  writeFileSync(file, readFileSync(file, 'utf8').replace('runs on redis', 'runs on sqs'));
+  await w.wiki.keepEdits(YOU);
+  const other = await w.wiki.learn([{ ...claim(w, 'cache', lines[1]!, 1), supersedes: 'wiki:repos/api#queue' }]);
+  expect(other.written).toEqual([]);
+  expect(other.dropped[0]?.reason).toMatch(/is yours/);
+  expect(await w.record.raw("SELECT handle FROM wiki_claims WHERE state = 'in force' ORDER BY handle")).toEqual([{ handle: 'wiki:repos/api#queue' }]);
 });
