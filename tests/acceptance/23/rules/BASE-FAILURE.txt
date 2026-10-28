@@ -1,0 +1,94 @@
+Acceptance tests for #23 (rules/) on the base debda22 (origin/main, no implementation), run on 2026-10-28 on an
+Apple silicon Mac (not a reference Mac, load average about 33 from other sessions), Node 24.22.0, Vitest 5.0.5,
+after npm ci and npm run build --workspaces:
+
+  npx vitest run tests/acceptance/23/rules
+
+Trimmed to each failure's reason. <repo> is the checkout; ask:… and decision:… stand for ULID handles.
+
+== The base
+
+ Test Files  3 failed (3)
+      Tests  no tests
+
+FAIL  margin, plants, states (.test.ts)
+      Error: Cannot find module '../../../../packages/resolver-decisions/src/index.ts' imported from
+      <repo>/tests/acceptance/23/rules/{margin.test.ts, plants.test.ts, scenarios.ts}
+  (Expected: the extension doesn't exist, so none of the 11 tests can load.)
+
+  npx tsc -p tests/acceptance/23: 12 errors in rules/, all the missing surface: resolver-decisions' module (4);
+  Judgment (2), Tally (2), RuleState (1) from @deepbuild/asks; Asks.judged (1); Asks.widen (2).
+  Against the surface in README.md (with the sample fix below): 0 errors.
+
+
+== The rules part doing nothing, over a sample of the rest of #23
+
+So that each test is seen failing at an assertion rather than at the import: the sample fix below with its rules
+part replaced by one that does nothing, everything match/ needs still working. Copied in from outside the checkout
+and removed afterwards.
+
+1. judge says nothing decides (undecided, every bound 0, more null), evidence finds no rule, judged records nothing
+   and returns active, widen does nothing.
+
+  Test Files 3 failed (3), Tests 11 failed (11)
+  margin  4 rule tests  decision:… (the rule with no breakage in 40 cases) is judged: resolver-decisions finds it among
+                        the standing rules: expected undefined to be defined
+                        (the same for 39 cases, 1 breakage in 40, 7 breakages in 40)
+          property      Property failed after 1 tests: the rule with 0 in 1, against your 0 in 1, at a margin of 2:
+                        your rate, taken at its upper bound: expected +0 to be close to 0.95
+  states  2 tests       decision:… (the rule with no breakage in 39 cases | 7 breakages in 40 cases) is judged: …
+                        expected undefined to be defined
+  plants  4 tests       the scenario fails, but not with the message the plant names (each fails at "is judged")
+
+2. evidence and judge as the sample has them, but judged records nothing (every rule stays active) and widen does
+   nothing, so each test reaches its own assertions about state.
+
+  Test Files 3 failed (3), Tests 9 failed | 2 passed (11)
+  margin  40/0          decision:… (the rule with no breakage in 40 cases) can widen: ask:… in repoB is answered once you
+                        confirm the wider match: expected 'unanswered' not to be 'unanswered'
+          39/0          decision:… (the rule with no breakage in 39 cases) can't decide and stays frozen: its state in the
+                        decisions table: expected 'active' to be 'frozen'
+          1 in 40       decision:… (the rule with 1 breakage in 40 cases) stays frozen: its state in the decisions table:
+                        expected 'active' to be 'frozen'
+          7 in 40       decision:… (the rule with 7 breakages in 40 cases) FAILs and is revoked: its state in the decisions
+                        table: expected 'active' to be 'revoked'
+          property      passes (the judge is the sample's)
+  states  frozen        decision:… (the rule with no breakage in 39 cases) can't decide and stays frozen: its state in the
+                        decisions table: expected 'active' to be 'frozen'
+          FAIL          decision:… (the rule with 7 breakages in 40 cases) FAILs and is revoked: its state in the decisions
+                        table: expected 'active' to be 'revoked'
+  plants  3 of 4 fail   their scenarios fail, but at a state this program never records rather than the plant's message;
+                        the point-rates plant test passes by coincidence (its scenario fails the same way)
+
+
+== The wrong programs (plants.ts), each run on the sample fix
+
+All 4 plant tests pass: each scenario fails, with these messages (first line):
+
+  zeroRate (1 in 40)       decision:… (the rule with 1 breakage in 40 cases) stays frozen: its state in the decisions
+                           table: expected 'revoked' to be 'frozen'
+  pointRates (39/0)        decision:… (the rule with no breakage in 39 cases) can't decide and stays frozen: its state in
+                           the decisions table: expected 'active' to be 'frozen'
+  twoSided (7 in 40)       decision:… (the rule with 7 breakages in 40 cases) FAILs and is revoked: its state in the
+                           decisions table: expected 'frozen' to be 'revoked'
+  frozenStopsDeciding      "Keep the store on SQLite or plain files?" in repoA, where decision:… (the rule with no
+  (39/0, states)           breakage in 39 cases) is frozen and keeps deciding: ask:… is decided for you, without reaching
+                           you (decided for you by []; refusals []; delivered []): expected 'unanswered' to be
+                           'decided_for_you'
+
+A mutant of the sample, not a plant (it can't be planted by wrapping the core): widen refuses only a revoked rule,
+so a frozen one widens.
+
+  npx vitest run tests/acceptance/23/rules/states.test.ts: Tests 1 failed | 1 passed (2)
+  states  frozen        decision:… (the rule with no breakage in 39 cases) is frozen and: your confirmation to widen it
+                        to ask:… in repoB is refused: expected null to be an instance of Error
+
+
+== A sample fix, kept outside this checkout
+
+The earlier match/ job's sample, extended with this README's surface, copied in and removed afterwards.
+
+  npx vitest run tests/acceptance/23/rules: Test Files 3 passed (3), Tests 11 passed (11), 15.6 s
+  npx tsc -p tests/acceptance/23: 0 errors
+  npx vitest run (match/ without budgets.test.ts): Test Files 7 passed (7), Tests 38 passed (38): the surface added
+  here leaves match/'s tests passing.

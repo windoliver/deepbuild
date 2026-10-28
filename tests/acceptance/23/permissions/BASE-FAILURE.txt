@@ -1,0 +1,75 @@
+Acceptance tests for #23 (permissions/) on the base dd3ff94c (origin/main, no implementation of #23), run on
+2026-10-28 on an Apple silicon Mac with 12 cores (not a reference Mac; load average 18 to 260 from other sessions),
+Node 24.22.0, Vitest 5.0.5, after npm ci, npm run build --workspaces and cargo build --locked -q -p deep-hook:
+
+  npx vitest run tests/acceptance/23/permissions --no-file-parallelism --reporter=verbose
+
+Trimmed to each failure's reason. ask:… and decision:… stand for ULID handles.
+
+== The base (12:22, load 44 then 19)
+
+  Tests  16 failed | 1 passed (17), 143 s; none INCONCLUSIVE
+
+  #23.02482c32 adapter     a cancelled ask's prompt gets cancel, never deny: the reply is {"behavior":"deny"}
+  #23.02482c32 cancel      the permission prompt for `make release-notes` must raise an authority ask whose question
+                           names it: none by 10 s after the hook ended; the hook ended: exit 0 after 6 ms, stdout ""
+  #23.7232c832 week        the same, for `npm run build`
+  #23.3b29ddde typed       the same, for `npm run build`
+  #23.56633035 dependency  `npm install left-pad`, which nothing you decided covers, must be asked: its PreToolUse let
+                           it through (pass) with no answer of yours (exit 0 after 15 ms)
+  #23.e3e9bdfd cloud       `aws kms create-key --profile shop-prod --description shop-orders` must be asked: it was
+                           denied (exit 2, "DeepBuild blocked this: Creating a cloud resource the plan doesn't name …
+                           (guard no-unnamed-cloud-resource)"), but no ask names 111122223333 or shop-prod
+  #23.15c1cac3 mode-guard  the same: the rule it needs can't be made
+  #23.1e4ae1da hub-down    the same: the rule it needs can't be made
+  plants, 8 hub tests      BLOCKED: the hub with the plant DEEP_HUB_PLANT=<name> did not start: names no planted
+                           program (each of the seven plant names)
+  plants, adapter plant    passes: the planted adapter (cancel mapped to deny) fails the scenario, as the base's own
+                           adapter does
+
+  npx tsc -p tests/acceptance/23: no error in permissions/ on the base (the cancel answer is built with a cast, since
+  PermissionAnswer has no cancel or `for` at the base); the 16 errors are match/'s missing surface.
+
+== A program that does nothing
+
+  At the hub, the base is the do-nothing program: it raises no ask for a permission prompt, answers none, and keeps
+  no standing rule (above). For the adapter, PermissionAnswer took cancel and `for` and the Claude Code adapter's
+  permissionReply returned {} (copied in from outside the checkout, removed afterwards):
+
+  #23.02482c32 adapter     fails: an allow must still be an allow, writing no lasting rule: undefined
+
+== The sample fix (kept outside this checkout; overlaid, built, and taken out again)
+
+  12:12, load 21 to 26 during the run:  Tests 14 passed | 3 skipped (17), 202 s
+  12:16, load 55 to 118:                Tests 13 passed | 4 skipped (17), 216 s. The 4 skipped are INCONCLUSIVE,
+                                        each a hook deep-hook let through or spooled because the hub acknowledged
+                                        it late: week (day 7 of 7, load 79.2), plants decision-over-mode (86.2),
+                                        decision-before-guard (98.8), copies-no-standing-rules (117.6)
+  12:21, load 35 to 45, those 4 again:  4 passed
+  So every one of the 17 tests passed on the sample fix: 9 criterion tests, and each of the 9 plants failed its
+  scenario naming what plants.ts names:
+
+  permission-always-allow    #23.7232c832 … answer for that call or that session only; it picks the agent's option
+                             that writes a lasting rule into its own settings: updatedPermissions addRules for
+                             localSettings
+  cancel-as-deny             #23.02482c32 the prompt for `make release-notes`, whose ask ask:… nobody answered, gets
+                             deny; a cancelled ask gets cancel, never deny
+  typed-saves-decision       #23.3b29ddde an approval typed in the session must not become a saved decision before
+                             your click: decision:… saved from it
+  decision-over-mode         #23.15c1cac3 your saved decision decision:… allowed `aws kms create-key --profile
+                             shop-prod …` in a session whose permission mode, dontAsk, denies it
+  decision-before-guard      #23.15c1cac3 … allowed `aws kms create-key … --bypass-policy-lockout-safety-check`,
+                             which your guard no-kms-lockout-bypass denies
+  rule-without-reason (x2)   #23.56633035 / #23.e3e9bdfd the agent must see the reason `npm install is-odd` / `aws kms
+                             create-key --profile shop-prod …` was answered: what it reads must cite your standing
+                             rule decision:…
+  copies-no-standing-rules   #23.1e4ae1da with the hub stopped, `aws kms create-key --profile shop-prod …` in account
+                             111122223333, which your standing rule covers, must be allowed; it was denied
+  adapter (cancel as deny)   a cancelled ask's prompt gets cancel, never deny
+
+  npx tsc -p tests/acceptance/23 with the sample applied: no error in permissions/.
+
+== Not run
+
+  No live agent, no reference Mac, no Codex. Hook timing on this machine is the shared Mac's: at load averages above
+  about 70, a quarter of the hub tests read INCONCLUSIVE (README, Late hooks).
