@@ -1,0 +1,49 @@
+Base commit: 0350cf0 (clean), workspaces built, target/debug/deep-hook built. Node v23.9.0 (/opt/homebrew/bin/node:
+the nvm v24.22.0 path given for this job doesn't exist on this Mac). Load averages 90 to 205 on 12 cores throughout.
+
+Command:
+  npx vitest run --root tests/acceptance/25/routes --no-file-parallelism
+
+Runs, Oct 27, 2026:
+  1. The whole suite (12:45-12:52): 13 failed, 1 passed (14). AC2 and AC6 failed there in the test's own setup:
+     twenty sessions starting their hooks at once at load 190 timed out waiting for their deep_ask's ask.created
+     (the harness, not the base). helpers.ts was changed so idle sessions are begun one at a time and finished
+     together, and the wake measurement stops at the first session that never wakes.
+  2. After that change: wake.test.ts (12:53), twenty-minutes.test.ts (13:06), and the other five files (13:09-13:14).
+     Results below are from these runs. (A first whole-suite run at 12:37 gave the same 13/1 summary; its log was
+     overwritten by another job writing the same scratch file name.)
+
+Result after the change: 13 failed, 1 passed (14). AC2's p95 test passes at the base.
+
+Why each test fails at the base:
+
+AC1  held.test.ts                  "AC1 the held stop didn't continue with the answer: Claude Code's Stop got no
+                                   decision: block for ask:…". The base wakes both the hold and the waiter on an
+                                   answer; the waiter took it (exit 2, "DeepBuild delivers your answers: …") and the
+                                   held Stop went through with no decision.
+AC1  held.test.ts (plant)          BLOCKED: the hub refuses DEEP_HUB_PLANT=answer-skips-held-stop (no such plant).
+AC2  wake.test.ts                  PASSES at the base: 20 idle sessions each woke with their answer, p95 within 2 s.
+                                   Its wrong program is the plant only.
+AC2  wake.test.ts (plant)          BLOCKED: the hub refuses DEEP_HUB_PLANT=waiter-never-wakes.
+AC3  session-end.test.ts           PASSES at the base (its waiter polls its parent every 2 s and Claude Code's /bin/sh
+                                   execs it, so it ends within 10 s). Its wrong program is the plant only.
+AC3  session-end.test.ts (plant)   BLOCKED: the hub refuses DEEP_HUB_PLANT=waiter-outlives-session.
+AC4  one-route.test.ts             "AC4 ask:… must go back through the Stop hold only; it went by the waiter (exit 2
+                                   with the answer)". Same race as AC1: the waiter, not the hold, took the answer.
+AC4  one-route.test.ts (plant)     BLOCKED: the hub refuses DEEP_HUB_PLANT=both-routes.
+AC6  twenty-minutes.test.ts        "AC6 idle session … (1 of 20 answered) never woke within 30 s of its answer to
+                                   ask:…". Setup's waiter timeout (≥ 1800 s) and Claude Code's run of it pass; after the
+                                   hub restarts 20 minutes on, no waiter wakes the session. Read from the base's code,
+                                   not observed directly: `deep waiter` exits 0 when the hub stops (session.wait
+                                   refused or its connection gone), so no waiter is left to deliver.
+AC6  twenty-minutes.test.ts (plant) BLOCKED: the hub refuses DEEP_HUB_PLANT=waiter-gives-up-at-600s.
+AC11 stalled.test.ts               "AC11 ask:… was recorded delivered and acknowledged from the waiter's exit alone,
+                                   with no turn in the session carrying it: [{… "via":"next_prompt","outcome":
+                                   "delivered"}]". The base records delivered when the waiter takes the answer.
+AC11 stalled.test.ts (plant)       BLOCKED: the hub refuses DEEP_HUB_PLANT=delivered-on-waiter-exit.
+AC12 thirty-stops.test.ts          "AC12 thirty Stops in one session must leave one waiter process for it; they left
+                                   30 (pids …)". The base never ends an earlier waiter. (Each is also a Node process,
+                                   far over 5 MB; the size check isn't reached.)
+AC12 thirty-stops.test.ts (plant)  BLOCKED: the hub refuses DEEP_HUB_PLANT=waiter-per-stop.
+
+tsc: node node_modules/typescript/bin/tsc -p tests/acceptance/25/routes/tsconfig.json exits 0.
