@@ -17,6 +17,7 @@ import { canonicalize, contextBoundFor, fixtures, sha256Hex, type JsonValue } fr
 import { openEvidenceStore, scrubText, type Evidence, type EvidenceStore, type Origin, type Peer, type PutResult } from '@deepbuild/evidence';
 import { openExtensionHost, openTrust, type ExtensionHost } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
+import { resolverDecisions } from '@deepbuild/resolver-decisions';
 import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack, type Stack, type Up } from '@deepbuild/env-local';
 import { openLeases } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
@@ -358,6 +359,9 @@ export class Core {
     this.timers.push(setInterval(() => void this.supervisor.tick().catch(() => undefined), 1000));
     const config = this.config();
     const ledger = await openLedger({ record: this.record, asks, now: this.now, price: async () => null });
+    // resolver-decisions ships on by default (#23): your saved decisions, and the budgets you approved, answer the
+    // asks they cover, each answer gated by the core.
+    asks.registerResolver('resolver-decisions', resolverDecisions({ record: this.record, ledger }));
     // The runner reaps or reports what a crash cut, and ticks itself.
     this.runner = await openRunner({
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
@@ -1706,13 +1710,10 @@ export class Core {
     }
     await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
     await answered();
-    // Saved for this repo, from the ask's own events, never wider than its card showed; with no repo, for its session.
-    const repo = (row.project ?? '').replace(/[^0-9A-Za-z]/g, '');
-    const session = (row.session ?? '').replace(/[^0-9A-Za-z]/g, '');
-    const scope = repo ? `repo:${repo}` : session ? `session:${session}` : null;
+    // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
+    const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
     const answer = chosen?.id ?? String(input.words);
-    if (scope) await this.appendCore('decision.created', { key: ask.key, scope, answer, ask: handle });
-    return { ask: handle, answer, scope };
+    return { ask: handle, answer, scope: saved ? String((JSON.parse(saved.data) as Obj).scope) : null };
   }
   /** asks/:id/undo, from the app or `deep inbox undo`: a defaulted ask opens again, once the trusted path allows it. */
   private async undo(params: Obj, context: CallContext): Promise<Obj> {
@@ -2035,7 +2036,12 @@ export class Core {
       raised = { kind, question, options, recommended: args.recommended };
     }
     const pinned = await this.pinOf(s.cwd, question);
-    const ask = { ...raised, fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned };
+    // A question that names what it is about is keyed by the asks core from that alone (#23); one that names
+    // nothing keeps a key of its own wording in its session, which no saved decision answers elsewhere.
+    const about = isObj(args.subject) ? args.subject : {};
+    const subject = kind === 'choice' && typeof about.point === 'string' ? { point: about.point }
+      : kind === 'taste' && typeof about.screen === 'string' && typeof about.element === 'string' ? { screen: about.screen, element: about.element } : undefined;
+    const ask = { ...raised, fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind, question, session } as JsonValue)), pinned_to: pinned, ...(subject ? { subject } : {}) };
     const handle = await this.asks.raise(this.agentConnection(session), `deep_ask.${kind}`, ask);
     // The event loop knows this session's stop may carry the answer back before the agent hears of its ask.
     await this.askingNow().catch(() => undefined);
