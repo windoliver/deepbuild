@@ -1,0 +1,38 @@
+{
+  "#303.1bdbea79": [
+    "every-prompt-opens"
+  ],
+  "#303.0ca34012": [
+    "every-prompt-opens"
+  ],
+  "#303.64edb131": [
+    "every-prompt-opens"
+  ],
+  "#303.f3b51cf5": [
+    "every-prompt-opens"
+  ],
+  "#303.c7678fa6": [
+    "no-task-opens"
+  ],
+  "#303.b4187956": [
+    "no-lock-event"
+  ],
+  "#303.01978d67": [
+    "no-lock-event"
+  ],
+  "#303.8c347a59": [
+    "hash-only-ids"
+  ],
+  "#303.c870ae54": [
+    "outside-ignored"
+  ],
+  "#303.fd687f1e": [
+    "every-work-stop-claims"
+  ],
+  "#303.447eb97a": [
+    "slow-prompt"
+  ],
+  "#303.323ca6a1": [
+    "hash-paths-not-bytes"
+  ]
+}

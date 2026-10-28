@@ -1593,6 +1593,47 @@ export interface DefinitionDrafted {
   evidence?: Array<string>;
 }
 
+/** definition.drafted@2 */
+export interface DefinitionDraftedV2 {
+  v: 2;
+  id: string;
+  kind: "definition.drafted";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      checks: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      oracle: "code" | "model" | "person";
+      depth: string;
+      author: {
+        handle: string;
+        role: "owner" | "collaborator" | "outside";
+      };
+    }>;
+    deliverables: Array<string>;
+    issue_rev: string;
+    hash: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** definition.locked@1 */
 export interface DefinitionLocked {
   v: 1;
@@ -1615,6 +1656,47 @@ export interface DefinitionLocked {
       oracle: "code" | "model" | "person";
       depth: string;
     }>;
+    hash: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@2 */
+export interface DefinitionLockedV2 {
+  v: 2;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      checks: Array<{
+        path: string;
+        sha256: string;
+      }>;
+      oracle: "code" | "model" | "person";
+      depth: string;
+      author: {
+        handle: string;
+        role: "owner" | "collaborator" | "outside";
+      };
+    }>;
+    deliverables: Array<string>;
+    issue_rev: string;
     hash: string;
     base_commit: string;
     budget: {

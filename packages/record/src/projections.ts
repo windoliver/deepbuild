@@ -349,9 +349,12 @@ export class Projector {
         // Overruled on the trusted path: it answers nothing from then on.
         this.stmt("UPDATE decisions SET state = 'revoked', overruled_by = ? WHERE id = ?").run(e.id, bare(d.decision));
         break;
-      case 'definition.drafted':
-        this.add('definitions', this.definition(d, 'drafted', null));
+      case 'definition.drafted': {
+        // A draft stands until it locks: a later draft for the task replaces one still drafted, never a lock.
+        const row = this.stmt('SELECT state FROM definitions WHERE task_ref = ?').get(str(d.task_ref)) as { state: string } | undefined;
+        if (!row || row.state === 'drafted') this.up('definitions', this.definition(d, 'drafted', null));
         break;
+      }
       case 'definition.locked': {
         // One per ask, shared by every attempt: the first lock stands, and a draft is what it locks.
         const row = this.stmt('SELECT state FROM definitions WHERE task_ref = ?').get(str(d.task_ref)) as { state: string } | undefined;
@@ -558,7 +561,7 @@ export class Projector {
   }
 
   private definition(d: Obj, state: string, lockedAt: number | null): Row {
-    return { task_ref: str(d.task_ref), id: bare(d.definition), base_commit: str(d.base_commit), requirements: json(d.requirements), budget: json(d.budget), hash: str(d.hash), state, locked_at: lockedAt };
+    return { task_ref: str(d.task_ref), id: bare(d.definition), issue_rev: str(d.issue_rev), base_commit: str(d.base_commit), requirements: json(d.requirements), budget: json(d.budget), hash: str(d.hash), state, locked_at: lockedAt };
   }
 
   // ---- Turns (design: Hooks are evidence, not a state machine: Order).

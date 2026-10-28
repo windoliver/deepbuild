@@ -171,6 +171,17 @@
       "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "tasks-prompt",
+      "command": [
+        "node",
+        "benchmarks/tasks.mjs",
+        "prompt"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #303 first measurement: the merge base has the record (#14) and the asks core (#318) but no ask-tasks kernel. One process opens a record and the kernel and runs 600 prompt hooks, each a message that opens a task, with a stop after each, so p50 includes Node's start and the per-prompt limit (under 5 ms added to the prompt hook) stays in tests/acceptance/303/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
       "id": "verdict-1000-runs",
       "command": [
         "node",

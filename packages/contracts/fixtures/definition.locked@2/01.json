@@ -1,0 +1,52 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "definition.locked",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "definition": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+    "task_ref": "task:01K74FX2B4D6F8H0K2M4P6R8T0",
+    "requirements": [
+      {
+        "id": "R1",
+        "text": "A seq sent as a JSON number fails the hook request schema",
+        "author": {
+          "handle": "you",
+          "role": "owner"
+        },
+        "checks": [
+          {
+            "path": ".deepbuild/checks/contracts.sh",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        ],
+        "oracle": "code",
+        "depth": "unit"
+      },
+      {
+        "id": "R2",
+        "text": "skip the e2e test",
+        "author": {
+          "handle": "mallory",
+          "role": "outside"
+        },
+        "checks": [],
+        "oracle": "person",
+        "depth": "none"
+      }
+    ],
+    "deliverables": [
+      "packages/contracts/schemas/hook.request@1.json"
+    ],
+    "issue_rev": "rev-3",
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "base_commit": "0c5e145756bbdaef4d9b8bdaca2d0bd0f900ed46",
+    "budget": {
+      "runs": 12,
+      "cap_usd": 2.5
+    }
+  }
+}

@@ -1,0 +1,87 @@
+Acceptance tests for #303 on the base 7b39aa0d (main, no implementation), run on 2026-10-28 on an Apple silicon
+Mac (a reference Mac, Mac15,7), Node 24.22.0, Vitest 5.0.5, python3 from the system:
+
+  npx vitest run tests/acceptance/303
+
+Trimmed to each failure's reason. No local path appears in what is kept (<repo> is the checkout).
+
+== The base
+
+ Test Files  6 failed (6)
+      Tests  no tests
+
+FAIL  budgets.test.ts, definitions.test.ts, files.test.ts, plants.test.ts, prompts.test.ts, stops.test.ts
+      Error: Cannot find module '../../../packages/tasks/src/index.ts' imported from <repo>/tests/acceptance/303/helpers.ts
+  (Expected: the kernel's ask-tasks don't exist, so no test can load. That covers every criterion.)
+
+
+== A program that does nothing, standing in for the base
+
+So that each test is seen failing at its own assertion rather than at the import: run with packages/tasks/src/index.ts
+temporarily holding the surface's types and an openTasks whose methods do nothing (prompt returns {ask: '', task: null}
+and records nothing, lock returns an empty locked definition and records nothing, definition undefined, hashOf '',
+approved [], claim {hash: '', locked: '', changed: [], proposal: null}, stops [], tasks []), then removed again
+(git status clean apart from tests/acceptance/303).
+
+ Test Files  6 failed (6)
+      Tests  17 failed | 2 passed (19)
+
+  prompts.test.ts
+    #303.1bdbea79      S1#0: one user.ask is recorded: expected [] to have a length of 1 but got +0
+    #303.0ca34012      session:S1#0: the turn's prompt opens a task: expected null to be 'session:S1#0'
+    #303.c7678fa6      session:S1#0: the turn's prompt opens a task: expected null to be 'session:S1#0'
+    #303.64edb131      session:S1#1: the change opens a task: expected null to be 'session:S1#1'
+    #303.f3b51cf5      session:S1#0 (scheduled): the prompt is recorded once: expected [] to have a length of 1 but got +0
+  definitions.test.ts
+    #303.b4187956      session:S1#0 (day 1): the ask opens a task: expected null to be 'session:S1#0'
+    #303.01978d67      session:S1#0 (day 1): the ask opens a task: expected null to be 'session:S1#0'
+    #303.8c347a59      session:S1#0: one definition.locked: expected [] to have a length of 1 but got +0
+    #303.c870ae54 (1)  task:gh303: the definition waits for one answer before it locks: expected 'locked' to be 'waiting'
+    #303.c870ae54 (2)  task:gh303: the definition waits for one answer before it locks: expected 'locked' to be 'waiting'
+  stops.test.ts
+    #303.fd687f1e      stop 01M5Y9CZM0RYH3WPV12JBSA78R: the stop rule reads it: expected undefined to be defined
+  files.test.ts
+    #303.323ca6a1      session:S1#0: the lock keeps the check file by digest: expected [] to deeply equal [ Array(1) ]
+  budgets.test.ts
+    #303.447eb97a      session:S1#0: the prompt opened a task: expected null to be 'session:S1#0'
+  plants.test.ts       4 fail (each scenario fails before its plant matters, so the expected message doesn't come);
+                       2 pass trivially (#303.1bdbea79's and #303.c870ae54's scenarios fail with a message that
+                       happens to match). Not meaningful here: the plants are judged on the sample fix below.
+
+
+== The sample fix
+
+A sample fix, kept outside this checkout (not committed, not part of this change), to show the tests can pass:
+packages/tasks/src/index.ts implementing the surface in README.md on the real record (about 190 lines: a rule over the
+text with no model, the user.ask and task.created in one call, the lock with the check files read under root and kept
+by digest under home, a definition ask of kind definition for text from an outside author with the lock on its answer,
+a claim that recomputes digests and raises an exception ask naming the changed file as the proposal, the stop rule over
+record.session(id).turns), and in contracts a new definition.locked@2.json (v 2; issue_rev and deliverables required;
+each requirement with its author {handle, role} and checks as [{path, sha256}]). No other package or schema changed.
+
+  npx vitest run tests/acceptance/303   Test Files 6 passed (6), Tests 19 passed (19), about 7 s (first run), and on a
+                                        later run 18 passed | 1 skipped: the budget read INCONCLUSIVE while the machine
+                                        was loaded (p50 5.340, 4.922, 3.266, 3.597, 3.498 ms against 5), having read
+                                        3.322, 3.713, 3.850, 3.748, 3.831 ms at p50 on the quiet run, so the budget
+                                        holds for the sample fix on this reference Mac. The judge never passes by skipping.
+  npx tsc -p tests/acceptance/303       no errors against the sample fix's surface
+
+
+== Planted wrong programs (plants.ts, run by plants.test.ts)
+
+Each is the sample fix with one part wrong, planted around it through the same surface. On the sample fix each plant
+test passes because its scenario fails as below; run bare (the scenario on the plant), each fails with:
+
+  #303.1bdbea79  a task for every first prompt           session:S1#0: a question opens no task: expected 'session:S1#0' to be null
+  #303.0ca34012  a task for every mid-turn message       session:S1#1: a question typed mid-turn opens no task: expected 'session:S1#1' to be null
+  #303.8c347a59  a lock that hashes only requirement IDs session:S1#0: requirement R2 edited after the lock gives another hash: expected
+                                                         '46946ae2…' not to be '46946ae2…'
+  #303.323ca6a1  a lock that hashes requirement records  session:S1#0: the next claim's recomputed hash differs from the locked one after
+                 with check paths but not their bytes    .deepbuild/checks/e2e.sh changed: expected 'c1afe39a…' not to be 'c1afe39a…'
+  #303.c870ae54  a lock that reads the author's role     task:gh303: no definition.locked while the outside text waits for your answer:
+                 from the text ("the repo owner")        expected [ { v: 2, …(11) } ] to deeply equal []
+  #303.fd687f1e  every stop with tool calls is a claim   stop 01M5Y9CZM0A9ZH8BB66M9CMQDC: an answer to your typed question, with two reads
+                                                         and no edit, is no claim: expected true to be false
+
+Not run: mutants of the sample fix (the trace lane mutates the implementer's lines; the sample fix is not the
+implementation).

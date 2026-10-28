@@ -364,6 +364,18 @@
         }
       }
     },
+    "packages/tasks/package.json": {
+      "dependencies": {
+        "@deepbuild/contracts": {
+          "spec": "0.0.0",
+          "why": "Issue #303: the canonical form and SHA-256 the definition's hash is computed over, the same at the lock and at every claim."
+        },
+        "@deepbuild/record": {
+          "spec": "0.0.0",
+          "why": "Issue #303: the record the ask-tasks read their state from and append each prompt, task, definition lock and open item to."
+        }
+      }
+    },
     "packages/asks/package.json": {
       "dependencies": {
         "@deepbuild/contracts": {

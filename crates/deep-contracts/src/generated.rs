@@ -12757,6 +12757,302 @@ impl Contract for DefinitionDrafted {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2V;
+
+impl Contract for DefinitionDraftedV2V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "2").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("2").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2Kind;
+
+impl Contract for DefinitionDraftedV2Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"definition.drafted\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"definition.drafted\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2DataRequirementsItemChecksItem {
+    pub path: String,
+    pub sha256: String,
+}
+
+impl Contract for DefinitionDraftedV2DataRequirementsItemChecksItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["path", "sha256"])?;
+        deep_contracts::check_member(members, at, "path", &RULE_9)?;
+        deep_contracts::check_member(members, at, "sha256", &RULE_62)?;
+        Ok(Self {
+            path: deep_contracts::required(members, at, "path")?,
+            sha256: deep_contracts::required(members, at, "sha256")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("path".to_string(), self.path.to_json()));
+        members.push(("sha256".to_string(), self.sha256.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefinitionDraftedV2DataRequirementsItemOracle {
+    Code,
+    Model,
+    Person,
+}
+
+impl Contract for DefinitionDraftedV2DataRequirementsItemOracle {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "code" => Ok(Self::Code),
+            "model" => Ok(Self::Model),
+            "person" => Ok(Self::Person),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Code => "code",
+            Self::Model => "model",
+            Self::Person => "person",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefinitionDraftedV2DataRequirementsItemAuthorRole {
+    Owner,
+    Collaborator,
+    Outside,
+}
+
+impl Contract for DefinitionDraftedV2DataRequirementsItemAuthorRole {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "owner" => Ok(Self::Owner),
+            "collaborator" => Ok(Self::Collaborator),
+            "outside" => Ok(Self::Outside),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Owner => "owner",
+            Self::Collaborator => "collaborator",
+            Self::Outside => "outside",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2DataRequirementsItemAuthor {
+    pub handle: String,
+    pub role: DefinitionDraftedV2DataRequirementsItemAuthorRole,
+}
+
+impl Contract for DefinitionDraftedV2DataRequirementsItemAuthor {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["handle", "role"])?;
+        deep_contracts::check_member(members, at, "handle", &RULE_9)?;
+        Ok(Self {
+            handle: deep_contracts::required(members, at, "handle")?,
+            role: deep_contracts::required(members, at, "role")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("handle".to_string(), self.handle.to_json()));
+        members.push(("role".to_string(), self.role.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2DataRequirementsItem {
+    pub id: String,
+    pub text: String,
+    pub checks: Vec<DefinitionDraftedV2DataRequirementsItemChecksItem>,
+    pub oracle: DefinitionDraftedV2DataRequirementsItemOracle,
+    pub depth: String,
+    pub author: DefinitionDraftedV2DataRequirementsItemAuthor,
+}
+
+impl Contract for DefinitionDraftedV2DataRequirementsItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["id", "text", "checks", "oracle", "depth", "author"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_98)?;
+        deep_contracts::check_member(members, at, "text", &RULE_9)?;
+        deep_contracts::check_member(members, at, "depth", &RULE_9)?;
+        Ok(Self {
+            id: deep_contracts::required(members, at, "id")?,
+            text: deep_contracts::required(members, at, "text")?,
+            checks: deep_contracts::required(members, at, "checks")?,
+            oracle: deep_contracts::required(members, at, "oracle")?,
+            depth: deep_contracts::required(members, at, "depth")?,
+            author: deep_contracts::required(members, at, "author")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("text".to_string(), self.text.to_json()));
+        members.push(("checks".to_string(), self.checks.to_json()));
+        members.push(("oracle".to_string(), self.oracle.to_json()));
+        members.push(("depth".to_string(), self.depth.to_json()));
+        members.push(("author".to_string(), self.author.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2DataBudget {
+    pub runs: i64,
+    pub cap_usd: f64,
+}
+
+impl Contract for DefinitionDraftedV2DataBudget {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["runs", "cap_usd"])?;
+        deep_contracts::check_member(members, at, "runs", &RULE_88)?;
+        deep_contracts::check_member(members, at, "cap_usd", &RULE_7)?;
+        Ok(Self {
+            runs: deep_contracts::required(members, at, "runs")?,
+            cap_usd: deep_contracts::required(members, at, "cap_usd")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("runs".to_string(), self.runs.to_json()));
+        members.push(("cap_usd".to_string(), self.cap_usd.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2Data {
+    pub definition: String,
+    pub task_ref: String,
+    pub requirements: Vec<DefinitionDraftedV2DataRequirementsItem>,
+    pub deliverables: Vec<String>,
+    pub issue_rev: String,
+    pub hash: String,
+    pub base_commit: String,
+    pub budget: Option<DefinitionDraftedV2DataBudget>,
+}
+
+impl Contract for DefinitionDraftedV2Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "issue_rev", "hash", "base_commit", "budget"])?;
+        deep_contracts::check_member(members, at, "definition", &RULE_62)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_87)?;
+        deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
+        deep_contracts::check_member(members, at, "issue_rev", &RULE_9)?;
+        deep_contracts::check_member(members, at, "hash", &RULE_62)?;
+        deep_contracts::check_member(members, at, "base_commit", &RULE_65)?;
+        Ok(Self {
+            definition: deep_contracts::required(members, at, "definition")?,
+            task_ref: deep_contracts::required(members, at, "task_ref")?,
+            requirements: deep_contracts::required(members, at, "requirements")?,
+            deliverables: deep_contracts::required(members, at, "deliverables")?,
+            issue_rev: deep_contracts::required(members, at, "issue_rev")?,
+            hash: deep_contracts::required(members, at, "hash")?,
+            base_commit: deep_contracts::required(members, at, "base_commit")?,
+            budget: deep_contracts::required(members, at, "budget")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("definition".to_string(), self.definition.to_json()));
+        members.push(("task_ref".to_string(), self.task_ref.to_json()));
+        members.push(("requirements".to_string(), self.requirements.to_json()));
+        members.push(("deliverables".to_string(), self.deliverables.to_json()));
+        members.push(("issue_rev".to_string(), self.issue_rev.to_json()));
+        members.push(("hash".to_string(), self.hash.to_json()));
+        members.push(("base_commit".to_string(), self.base_commit.to_json()));
+        members.push(("budget".to_string(), self.budget.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionDraftedV2 {
+    pub v: DefinitionDraftedV2V,
+    pub id: String,
+    pub kind: DefinitionDraftedV2Kind,
+    pub subject: Option<String>,
+    pub writer: String,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: DefinitionDraftedV2Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for DefinitionDraftedV2 {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_3)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_5)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_96)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_6)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_6)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_7)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_8)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_12)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct DefinitionLockedV;
 
 impl Contract for DefinitionLockedV {
@@ -12931,6 +13227,313 @@ pub struct DefinitionLocked {
 }
 
 impl Contract for DefinitionLocked {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_3)?;
+        deep_contracts::check_member(members, at, "subject", &RULE_5)?;
+        deep_contracts::check_member(members, at, "actor", &RULE_6)?;
+        deep_contracts::check_member(members, at, "scope", &RULE_6)?;
+        deep_contracts::check_member(members, at, "ts", &RULE_7)?;
+        deep_contracts::check_member(members, at, "log_pos", &RULE_8)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_12)?;
+        Ok(Self {
+            v: deep_contracts::required(members, at, "v")?,
+            id: deep_contracts::required(members, at, "id")?,
+            kind: deep_contracts::required(members, at, "kind")?,
+            subject: deep_contracts::optional(members, at, "subject")?,
+            writer: deep_contracts::required(members, at, "writer")?,
+            actor: deep_contracts::required(members, at, "actor")?,
+            scope: deep_contracts::required(members, at, "scope")?,
+            ts: deep_contracts::required(members, at, "ts")?,
+            seq: deep_contracts::optional(members, at, "seq")?,
+            log_pos: deep_contracts::optional(members, at, "log_pos")?,
+            data: deep_contracts::required(members, at, "data")?,
+            evidence: deep_contracts::optional(members, at, "evidence")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("v".to_string(), self.v.to_json()));
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("kind".to_string(), self.kind.to_json()));
+        if let Some(value) = &self.subject {
+            members.push(("subject".to_string(), value.to_json()));
+        }
+        members.push(("writer".to_string(), self.writer.to_json()));
+        members.push(("actor".to_string(), self.actor.to_json()));
+        members.push(("scope".to_string(), self.scope.to_json()));
+        members.push(("ts".to_string(), self.ts.to_json()));
+        if let Some(value) = &self.seq {
+            members.push(("seq".to_string(), value.to_json()));
+        }
+        if let Some(value) = &self.log_pos {
+            members.push(("log_pos".to_string(), value.to_json()));
+        }
+        members.push(("data".to_string(), self.data.to_json()));
+        if let Some(value) = &self.evidence {
+            members.push(("evidence".to_string(), value.to_json()));
+        }
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2V;
+
+impl Contract for DefinitionLockedV2V {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "2").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("2").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2Kind;
+
+impl Contract for DefinitionLockedV2Kind {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"definition.locked\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"definition.locked\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2Writer;
+
+impl Contract for DefinitionLockedV2Writer {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        deep_contracts::constant(value, at, "\"core\"").map(|()| Self)
+    }
+    fn to_json(&self) -> Value {
+        deep_contracts::parse("\"core\"").expect("a constant is JSON")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2DataRequirementsItemChecksItem {
+    pub path: String,
+    pub sha256: String,
+}
+
+impl Contract for DefinitionLockedV2DataRequirementsItemChecksItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["path", "sha256"])?;
+        deep_contracts::check_member(members, at, "path", &RULE_9)?;
+        deep_contracts::check_member(members, at, "sha256", &RULE_62)?;
+        Ok(Self {
+            path: deep_contracts::required(members, at, "path")?,
+            sha256: deep_contracts::required(members, at, "sha256")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("path".to_string(), self.path.to_json()));
+        members.push(("sha256".to_string(), self.sha256.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefinitionLockedV2DataRequirementsItemOracle {
+    Code,
+    Model,
+    Person,
+}
+
+impl Contract for DefinitionLockedV2DataRequirementsItemOracle {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "code" => Ok(Self::Code),
+            "model" => Ok(Self::Model),
+            "person" => Ok(Self::Person),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Code => "code",
+            Self::Model => "model",
+            Self::Person => "person",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefinitionLockedV2DataRequirementsItemAuthorRole {
+    Owner,
+    Collaborator,
+    Outside,
+}
+
+impl Contract for DefinitionLockedV2DataRequirementsItemAuthorRole {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        match deep_contracts::string(value, at)? {
+            "owner" => Ok(Self::Owner),
+            "collaborator" => Ok(Self::Collaborator),
+            "outside" => Ok(Self::Outside),
+            other => Err(format!("{at}: {other:?} is not one of the listed values")),
+        }
+    }
+    fn to_json(&self) -> Value {
+        Value::String(match self {
+            Self::Owner => "owner",
+            Self::Collaborator => "collaborator",
+            Self::Outside => "outside",
+        }.to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2DataRequirementsItemAuthor {
+    pub handle: String,
+    pub role: DefinitionLockedV2DataRequirementsItemAuthorRole,
+}
+
+impl Contract for DefinitionLockedV2DataRequirementsItemAuthor {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["handle", "role"])?;
+        deep_contracts::check_member(members, at, "handle", &RULE_9)?;
+        Ok(Self {
+            handle: deep_contracts::required(members, at, "handle")?,
+            role: deep_contracts::required(members, at, "role")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("handle".to_string(), self.handle.to_json()));
+        members.push(("role".to_string(), self.role.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2DataRequirementsItem {
+    pub id: String,
+    pub text: String,
+    pub checks: Vec<DefinitionLockedV2DataRequirementsItemChecksItem>,
+    pub oracle: DefinitionLockedV2DataRequirementsItemOracle,
+    pub depth: String,
+    pub author: DefinitionLockedV2DataRequirementsItemAuthor,
+}
+
+impl Contract for DefinitionLockedV2DataRequirementsItem {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["id", "text", "checks", "oracle", "depth", "author"])?;
+        deep_contracts::check_member(members, at, "id", &RULE_98)?;
+        deep_contracts::check_member(members, at, "text", &RULE_9)?;
+        deep_contracts::check_member(members, at, "depth", &RULE_9)?;
+        Ok(Self {
+            id: deep_contracts::required(members, at, "id")?,
+            text: deep_contracts::required(members, at, "text")?,
+            checks: deep_contracts::required(members, at, "checks")?,
+            oracle: deep_contracts::required(members, at, "oracle")?,
+            depth: deep_contracts::required(members, at, "depth")?,
+            author: deep_contracts::required(members, at, "author")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("id".to_string(), self.id.to_json()));
+        members.push(("text".to_string(), self.text.to_json()));
+        members.push(("checks".to_string(), self.checks.to_json()));
+        members.push(("oracle".to_string(), self.oracle.to_json()));
+        members.push(("depth".to_string(), self.depth.to_json()));
+        members.push(("author".to_string(), self.author.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2DataBudget {
+    pub runs: i64,
+    pub cap_usd: f64,
+}
+
+impl Contract for DefinitionLockedV2DataBudget {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["runs", "cap_usd"])?;
+        deep_contracts::check_member(members, at, "runs", &RULE_88)?;
+        deep_contracts::check_member(members, at, "cap_usd", &RULE_7)?;
+        Ok(Self {
+            runs: deep_contracts::required(members, at, "runs")?,
+            cap_usd: deep_contracts::required(members, at, "cap_usd")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("runs".to_string(), self.runs.to_json()));
+        members.push(("cap_usd".to_string(), self.cap_usd.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2Data {
+    pub definition: String,
+    pub task_ref: String,
+    pub requirements: Vec<DefinitionLockedV2DataRequirementsItem>,
+    pub deliverables: Vec<String>,
+    pub issue_rev: String,
+    pub hash: String,
+    pub base_commit: String,
+    pub budget: Option<DefinitionLockedV2DataBudget>,
+}
+
+impl Contract for DefinitionLockedV2Data {
+    fn from_json(value: &Value, at: &str) -> Result<Self, String> {
+        let members = deep_contracts::members(value, at, &["definition", "task_ref", "requirements", "deliverables", "issue_rev", "hash", "base_commit", "budget"])?;
+        deep_contracts::check_member(members, at, "definition", &RULE_62)?;
+        deep_contracts::check_member(members, at, "task_ref", &RULE_87)?;
+        deep_contracts::check_member(members, at, "deliverables", &RULE_13)?;
+        deep_contracts::check_member(members, at, "issue_rev", &RULE_9)?;
+        deep_contracts::check_member(members, at, "hash", &RULE_62)?;
+        deep_contracts::check_member(members, at, "base_commit", &RULE_65)?;
+        Ok(Self {
+            definition: deep_contracts::required(members, at, "definition")?,
+            task_ref: deep_contracts::required(members, at, "task_ref")?,
+            requirements: deep_contracts::required(members, at, "requirements")?,
+            deliverables: deep_contracts::required(members, at, "deliverables")?,
+            issue_rev: deep_contracts::required(members, at, "issue_rev")?,
+            hash: deep_contracts::required(members, at, "hash")?,
+            base_commit: deep_contracts::required(members, at, "base_commit")?,
+            budget: deep_contracts::required(members, at, "budget")?,
+        })
+    }
+    fn to_json(&self) -> Value {
+        let mut members = Vec::new();
+        members.push(("definition".to_string(), self.definition.to_json()));
+        members.push(("task_ref".to_string(), self.task_ref.to_json()));
+        members.push(("requirements".to_string(), self.requirements.to_json()));
+        members.push(("deliverables".to_string(), self.deliverables.to_json()));
+        members.push(("issue_rev".to_string(), self.issue_rev.to_json()));
+        members.push(("hash".to_string(), self.hash.to_json()));
+        members.push(("base_commit".to_string(), self.base_commit.to_json()));
+        members.push(("budget".to_string(), self.budget.to_json()));
+        Value::Object(members)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DefinitionLockedV2 {
+    pub v: DefinitionLockedV2V,
+    pub id: String,
+    pub kind: DefinitionLockedV2Kind,
+    pub subject: Option<String>,
+    pub writer: DefinitionLockedV2Writer,
+    pub actor: String,
+    pub scope: String,
+    pub ts: i64,
+    pub seq: Option<deep_contracts::Seq>,
+    pub log_pos: Option<i64>,
+    pub data: DefinitionLockedV2Data,
+    pub evidence: Option<Vec<String>>,
+}
+
+impl Contract for DefinitionLockedV2 {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_3)?;
@@ -34446,7 +35049,9 @@ pub fn roundtrip(schema: &str, json: &str) -> Result<String, String> {
         "decision.revoked@1" => <DecisionRevoked as Contract>::from_json(&value, "")?.to_json(),
         "default.undone@1" => <DefaultUndone as Contract>::from_json(&value, "")?.to_json(),
         "definition.drafted@1" => <DefinitionDrafted as Contract>::from_json(&value, "")?.to_json(),
+        "definition.drafted@2" => <DefinitionDraftedV2 as Contract>::from_json(&value, "")?.to_json(),
         "definition.locked@1" => <DefinitionLocked as Contract>::from_json(&value, "")?.to_json(),
+        "definition.locked@2" => <DefinitionLockedV2 as Contract>::from_json(&value, "")?.to_json(),
         "definition.revised@1" => <DefinitionRevised as Contract>::from_json(&value, "")?.to_json(),
         "delivery.outcome@1" => <DeliveryOutcome as Contract>::from_json(&value, "")?.to_json(),
         "doc.patched@1" => <DocPatched as Contract>::from_json(&value, "")?.to_json(),

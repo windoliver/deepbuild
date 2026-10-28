@@ -21,6 +21,7 @@ import { answers, composeKind, downStack, leaseKinds, newRun, portKind, upStack,
 import { openLeases } from '@deepbuild/leases';
 import { openRunner, type JobRecord, type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 import { openSupervisor, type Grant, type Host, type Started, type Supervisor } from '@deepbuild/supervisor';
+import { openTasks, type From, type Prompt, type Tasks } from '@deepbuild/tasks';
 import { predictionContradictions, type Prediction, type RunOutcome } from '@deepbuild/verdicts';
 import { parse as parseYaml } from 'yaml';
 import { ASK_WAIT_MS, claudeSettings, CONTINUATION_CAP, installed, readJson, relations, restore, tampered, words } from './claude-settings.js';
@@ -200,6 +201,8 @@ export class Core {
   private readonly durable: Durable;
   private record!: RecordStore;
   private asks!: Asks;
+  /** The kernel's ask-tasks (#303): each prompt with its origin, a task for each ask that changes behavior, the definition lock. */
+  private tasks!: Tasks;
   /** Authority at PreToolUse (#321): the planted sorter's proceeds, the servers' tool lists, and the calls held for you. */
   private readonly holds: Holds;
   private readonly devices: Devices;
@@ -327,11 +330,13 @@ export class Core {
     if (crashed) await this.appendCore('hub.stopped', { reason: 'crashed' });
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir });
+    this.tasks = await openTasks({ record: this.record, now: this.now, home: this.root.dir });
     this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
     const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
-    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick() : undefined)).catch(() => undefined), 1000));
+    // A default taken may close a definition ask (#303): the tasks kernel then locks the draft it held.
+    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick().then(() => this.tasks.tick()) : undefined)).catch(() => undefined), 1000));
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -447,6 +452,19 @@ export class Core {
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
     if (!backfill) this.inflight.add(appended);
+    try {
+      await appended;
+    } catch (error) {
+      if (error instanceof RecordError && error.code === 'storage') this.blocked = `BLOCKED: appends fail: ${error.message}`;
+      throw error;
+    } finally {
+      this.inflight.delete(appended);
+    }
+  }
+  /** A prompt through the kernel's ask-tasks: its user.ask and, when it opens one, its task, waited on like any append. */
+  private async prompted(connection: Connection, prompt: Prompt): Promise<void> {
+    const appended = this.tasks.prompt(connection, prompt);
+    this.inflight.add(appended);
     try {
       await appended;
     } catch (error) {
@@ -588,8 +606,6 @@ export class Core {
     const appends = drafts.map((draft) => {
       const data = { ...draft.data };
       if (draft.fill === 'msg') data.msg = count.msgs++;
-      // A prompt a person typed opens an ask: the task it names is the message that asked for it.
-      if (draft.kind === 'user.ask' && data.from === 'person') data.tasks = [`session:${letters(meta.session)}#${String(data.msg)}`];
       if (draft.fill === 'turn') {
         data.turn = ++count.turns;
         data.did_work = count.worked;
@@ -597,6 +613,8 @@ export class Core {
       }
       if (draft.kind === 'tool.after') count.worked = true;
       const connection = this.connection(writer, { ...(meta.session ? { session: meta.session } : {}), agent: meta.agent, verified });
+      // The kernel records a prompt (#303): only one a person typed that asks for new or changed behavior opens a task, keyed by its message handle.
+      if (draft.kind === 'user.ask') return this.prompted(connection, { msg: Number(data.msg), text: String(data.text), from: String(data.from) as From, id: draft.id, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}) });
       return this.append(connection, {
         v: draft.v, id: draft.id, kind: draft.kind, ts: draft.ts, ...(draft.seq !== undefined ? { seq: draft.seq } : {}), ...(draft.subject ? { subject: draft.subject } : {}), data: data as JsonValue,
       });
@@ -1730,6 +1748,8 @@ export class Core {
     // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here.
     if (context.role === 'cli' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
     await answered();
+    // A definition ask answered locks its definition (#303): the kernel reads the answer off the record.
+    await this.tasks.tick().catch((error: unknown) => process.stderr.write(`deep hub: definitions not locked after ${handle}: ${error instanceof Error ? error.message : String(error)}\n`));
     // Saved for this repo, from the ask's own events, never wider than its card showed; with no repo, for its session.
     const repo = (row.project ?? '').replace(/[^0-9A-Za-z]/g, '');
     const session = (row.session ?? '').replace(/[^0-9A-Za-z]/g, '');
@@ -1745,6 +1765,9 @@ export class Core {
     const [row] = (await this.record.raw(`SELECT question, status FROM asks WHERE id = '${handle.slice(4)}'`)) as { question: string; status: string }[];
     if (!row) throw new Refused(refusal('not_found', '/params/ask', `No ask ${handle}; undo the default of an ask the inbox holds.`, handle));
     if (row.status !== 'defaulted') throw new Refused(refusal('not_found', '/params/ask', `${handle} didn't take its default (it's ${row.status}), so there's nothing to undo.`, handle));
+    // A definition ask's default locked its draft (#303); a lock changes only through a dispute, so the default stands.
+    const [locked] = (await this.record.raw(`SELECT d.task_ref AS task FROM asks a JOIN definitions d ON d.hash = json_extract(a.pinned_to, '$.ref') WHERE a.id = '${handle.slice(4)}' AND a.kind = 'definition' AND d.state = 'locked'`)) as { task: string }[];
+    if (locked) throw new Refused(refusal('not_found', '/params/ask', `${handle} took its default and the definition of ${locked.task} locked on it; a change goes through a dispute, not an undo.`, handle));
     await this.trusted(params, context, `undo the default “${row.question.slice(0, 120)}” took`, handle);
     await this.asks.undo(this.connection(context.role === 'app' ? 'app' : 'cli'), handle).catch((error: unknown) => { throw asRefused(error); });
     const [open] = (await this.record.raw(`SELECT deadline FROM asks WHERE id = '${handle.slice(4)}'`)) as { deadline: number }[];
