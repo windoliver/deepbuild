@@ -72,6 +72,8 @@ A Codex turn that no prompt started, such as a goal's continuation, opens with a
 
 The subagent, resume, compact and crash sessions are also the usage-counting fixtures: their transcripts carry each turn's usage as the agent wrote it.
 
+Claude Code versions: 2.1.308 is the Claude Code the Claude desktop app bundles, recorded in the terminal from the app's copy (`~/Library/Application Support/Claude/claude-code/2.1.308`) first on PATH. Its SubagentStop also fires for Claude Code's internal agents (an empty `agent_type`), and a subagent that hands back through `SubagentHandback`, or an internal agent, may send no `last_assistant_message`, so for 2.1.308 that field is optional.
+
 Codex versions: 0.144.0 is the CLI on PATH, 0.160.0 the Codex in the ChatGPT desktop app (whose app-server ran the heartbeat), and 0.163.0-alpha.10.2 the Codex in Codex.app; each covered version has its own full set. Desktop sessions record the hooks of their folder's own config: `.claude/settings.json` in a scratch folder for Claude, and `.codex/hooks.json` in the trusted `/private/tmp` for Codex, trusted once in the app and removed after.
 
 ## Tags
