@@ -235,9 +235,10 @@ function mapRequest(value: JsonObject, held: readonly string[], plant?: Plant): 
     }
     case 'agent.stop':
       // The turn's cause is read from the payload here; the core reads the turn's transcript records, its usage and its loop.
-      data = { turn: 0, did_work: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
+      // Whether it is a claim is the core's stop rule's to read.
+      data = { turn: 0, did_work: false, claim: false, outcome: mapped.outcome === 'failed' ? 'failed' : 'finished', cause: STOP_CAUSES.includes(str(mapped.cause)) ? mapped.cause : 'unknown', usage: null };
       fill = 'turn';
-      v = 3;
+      v = 4;
       break;
     case 'permission.request':
       data = {

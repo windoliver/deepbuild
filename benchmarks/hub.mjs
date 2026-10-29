@@ -74,6 +74,14 @@ function hookRequest(home, i) {
   const payload = { session_id: session, transcript_path: join(home, '.claude', 'projects', 'work', `${session}.jsonl`), cwd, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: `ls src/${i}` }, tool_use_id: `call_${i}` };
   return { v: 1, agent: 'claude-code', event: 'PreToolUse', seq: `${1_760_013_451_000_000_000n + BigInt(i)}`, id: `01K74FKZVK8Q2X5R7M${String(i).padStart(8, '0')}`, pid: process.pid, ppid: process.ppid, matched: [], payload };
 }
+/** A UserPromptSubmit request as deep-hook sends it, for a prompt that asks for a change (#303). */
+function promptRequest(home, i) {
+  const session = '6f1c2b9e-1111-4222-8333-444455557777';
+  const cwd = join(home, 'work');
+  const prompt = `make the auth middleware reject expired tokens in the h${i} handler`;
+  const payload = { session_id: session, transcript_path: join(home, '.claude', 'projects', 'work', `${session}.jsonl`), cwd, hook_event_name: 'UserPromptSubmit', prompt };
+  return { v: 1, agent: 'claude-code', event: 'UserPromptSubmit', seq: `${1_760_013_452_000_000_000n + BigInt(i)}`, id: `01K74FKZVK8Q2X5R7P${String(i).padStart(8, '0')}`, pid: process.pid, ppid: process.ppid, matched: [], payload };
+}
 const percentiles = (samples) => {
   samples.sort((a, b) => a - b);
   return { p50Ms: samples[Math.floor(samples.length * 0.5)], p95Ms: samples[Math.floor(samples.length * 0.95)] };
@@ -125,6 +133,16 @@ const modes = {
     await stop(hub);
     samples.sort((a, b) => a - b);
     return { p50Ms: samples[499], p95Ms: samples[949] };
+  },
+  // 1,000 UserPromptSubmit requests for prompts that ask for a change, one connection each, after 20 to warm up (#303).
+  async prompt(home) {
+    const { hub, socket } = await start(home);
+    mkdirSync(join(home, 'work'));
+    for (let i = 0; i < 20; i++) await exchange(socket, promptRequest(home, 1000 + i));
+    const samples = [];
+    for (let i = 0; i < 1000; i++) samples.push(await exchange(socket, promptRequest(home, i)));
+    await stop(hub);
+    return percentiles(samples);
   },
   // 1,000 PreToolUse requests, each timed from its write to the app's stream frame for its event (#34).
   async stream(home) {
