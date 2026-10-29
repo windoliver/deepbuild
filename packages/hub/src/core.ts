@@ -1959,14 +1959,15 @@ export class Core {
       await answered();
       throw new Refused(refusal('not_found', '/params/ask', `${handle} is closed.`, handle));
     }
-    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string }[] };
+    const ask = JSON.parse(row.data) as { key: string; question: string; options: { id: string; label: string; decision?: string }[] };
     const chosen = ask.options.find((o) => o.id === input.option);
     if (input.option !== undefined && !chosen) {
       throw new Refused(refusal('enum', '/params/option', `${handle} has no option ${String(input.option)}; its options are ${ask.options.map((o) => o.id).join(', ')}.`, input.option));
     }
     await this.trusted(params, context, `answer “${ask.question.slice(0, 120)}” with ${chosen ? `“${chosen.label.slice(0, 80)}”` : 'your words'}`, handle);
-    // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here.
-    if (context.role === 'cli' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
+    // From the CLI, the OS prompt that just confirmed you is the click an approval binds (#321): its token is minted here,
+    // for an approval only, so any other answer is handed on as its twin from the app is (#34).
+    if (context.role === 'cli' && chosen?.decision === 'allow' && input.token === undefined) input.token = `os-confirm:${ulid(this.now())}`;
     await answered();
     // The asks core saved an option you chose for the ask's repo, or its session, never wider than its card showed.
     const [saved] = (await this.record.raw(`SELECT data FROM events WHERE kind = 'decision.created' AND subject = '${handle}' ORDER BY log_pos DESC LIMIT 1`)) as { data: string }[];
