@@ -694,7 +694,7 @@ export class Core {
     }
     if (session && verified && !replayed) {
       if (meta.agent === 'codex') await this.promptless(drafts, meta, session);
-      this.queuedAsks(drafts, session);
+      this.queuedAsks(drafts, session, meta.event);
       if (meta.event === 'UserPromptSubmit') this.appNotes(drafts, meta.session);
     }
     const count = this.counters.get(meta.session) ?? await this.counterOf(meta.session);
@@ -864,10 +864,13 @@ export class Core {
   }
 
   /**
-   * Messages typed while the agent works (#25), read from the transcript's queue at the session's next hook: each is
-   * recorded as a prompt you typed, once, whichever of the queue and its UserPromptSubmit shows it first.
+   * Messages typed while the agent works (#25), read from the transcript's queue at the end of the call they were
+   * typed during (#80: its PostToolUse): each is recorded as a prompt you typed, once, whichever of the queue and its
+   * UserPromptSubmit shows it first. Any other hook leaves the queue untaken: one that read the transcript between
+   * the desktop app's enqueue of its own prompt (a resume prompt, a scheduled tick) and its dequeue would take that
+   * prompt for yours, and drop its UserPromptSubmit, which carries its origin (#340).
    */
-  private queuedAsks(drafts: Draft[], session: Session): void {
+  private queuedAsks(drafts: Draft[], session: Session, event: string): void {
     const met = (list: string[], text: string) => { const at = list.indexOf(text); if (at >= 0) list.splice(at, 1); return at >= 0; };
     const fromQueue = session.fromQueue ??= [];
     const prompted = session.prompted ??= [];
@@ -897,7 +900,8 @@ export class Core {
         }
       }
     }
-    for (const queued of session.queued ?? []) {
+    const reads = every || event === 'PostToolUse' || event === 'PostToolUseFailure';
+    for (const queued of reads ? session.queued ?? [] : []) {
       if (queued.taken) continue;
       queued.taken = true;
       // What another session, a subagent or a task's notice queued is an automatic prompt, recorded at its dequeue.
