@@ -83,7 +83,7 @@ describe('a block task you answer', () => {
     expect(await continued(), 'once').toHaveLength(2);
   });
 
-  it('"Leave it blocked" resumes nothing, and the sessions keep their stop', async () => {
+  it('"Leave it blocked" resumes nothing', async () => {
     await stopped(S1);
     const [task] = await open();
     await asks.answer(card, task!.ask, { option: 'wait' });

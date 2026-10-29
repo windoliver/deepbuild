@@ -1686,10 +1686,10 @@ class AsksCore implements Asks {
       this.fresh.delete(session);
       const stop = this.newest(session);
       if (!stop || this.wasContinued(stop) || this.typedAfter(stop)) continue;
-      if (stop.owner === 'you' || (stop.cause === 'plan_window_spent' && stop.resets !== null)) {
+      if (stop.owner === 'you' || stop.cause === 'plan_window_spent') {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
-        else this.fresh.add(session); // BLOCKED on the settings: kept for the core's next tick, once they declare the deadline.
+        else this.fresh.add(session); // BLOCKED on the settings: kept for the next tick the hub owes (a stop or verdict landing, an open ask).
       } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
@@ -1719,9 +1719,9 @@ class AsksCore implements Asks {
    * The task for a stop's block, from ask.sources@1's stop.block row: keyed on the block's signature, pinned to it,
    * owned by the person it stopped, unblocking the session, proved by the block's check. With a task of the same block
    * open, the session's joins it (superseded by it as soon as it's recorded). The deadline comes from your settings, as
-   * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the hub's next tick) and the
-   * session stays stopped with its cause on its row. A spent window with no reset in its stop raises nothing: nothing
-   * could close its task.
+   * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the next tick the hub owes) and
+   * the session stays stopped with its cause on its row. A spent window's stop always carries its reset (agent.stop@4
+   * requires plan_resets on that cause), so its task always has the time that closes it.
    */
   private async raiseBlock(stop: Stop, now: number): Promise<boolean> {
     const template = askSources().find((r) => r.source === BLOCK_SOURCE)!.fixture.ask as Obj;

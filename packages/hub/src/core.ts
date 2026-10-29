@@ -2315,7 +2315,8 @@ export class Core {
 
   /**
    * asks/:id/answer, from the app or `deep inbox answer`: once the trusted path allows it, the asks core records it
-   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither saves none.
+   * and the core saves it as a decision for the ask's repo, or its session; an ask with neither, and a block's task
+   * (#85), saves none.
    */
   private async answer(params: Obj, context: CallContext): Promise<Obj> {
     const { ask: handle, device: _device, signature: _signature, ...input } = params;
