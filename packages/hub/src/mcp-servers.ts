@@ -10,6 +10,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { toolList } from './children.js';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -105,14 +106,15 @@ export async function toolLists(cwd: string): Promise<Listed[]> {
   const out = await Promise.all([...names].map(async (server) => {
     const source = sourceOf(server, cwd);
     if (!source || typeof source.config.command !== 'string' || (source.config.type !== undefined && source.config.type !== 'stdio')) return undefined;
-    const listed = await listOf(source.config, cwd).catch(() => undefined);
+    // Started from the children's thread: the core's would wait on each server's exec.
+    const listed = await toolList(source.config, cwd).catch(() => undefined);
     return listed && { server, scope: source.scope, ...listed };
   }));
   return out.filter((l): l is Listed => l !== undefined);
 }
 
 /** Starts one stdio server from its config and reads its version and tools; stops it, by its own PID, once read. */
-function listOf(config: Obj, cwd: string): Promise<Omit<Listed, 'server' | 'scope'>> {
+export function listOf(config: Obj, cwd: string): Promise<Omit<Listed, 'server' | 'scope'>> {
   return new Promise((done, fail) => {
     const env = { ...process.env, ...(isObj(config.env) ? Object.fromEntries(Object.entries(config.env).map(([k, v]) => [k, String(v)])) : {}) };
     const child = spawn(String(config.command), Array.isArray(config.args) ? config.args.map(String) : [], { cwd, env, stdio: ['pipe', 'pipe', 'ignore'] });
