@@ -25,10 +25,6 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     where: maybe(str('Where the person does the task, such as their own terminal.')),
     why: maybe(str('What the task unblocks.')),
     check: maybe(str('The check in the repo\'s spec that will prove the task done. A task without one is refused.')),
-    thread: maybe({
-      ...object({ link: str('The thread, as the read-only connector names it.'), expect: str('What a reply in the thread must contain.') }),
-      description: 'For a step the person takes in a chat app: the thread its check reads through the read-only connector, and the reply it expects; the task closes by itself on that reply. null for every other task.',
-    }),
     subject: maybe({
       ...object({
         point: maybe(str('A choice\'s requirement, by its handle (req:<id>).')),

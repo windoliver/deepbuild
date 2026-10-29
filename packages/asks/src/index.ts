@@ -164,7 +164,11 @@ export interface AsksOptions {
   /** Your ~/.deepbuild folder: its config.json holds your own settings. Left out, nothing is declared. */
   home?: string;
   plant?: AsksPlant;
-  /** The read-only connector to your chat app's threads: how a chat-app task's check reads the thread. Left out, no thread is read. */
+  /**
+   * The read-only connector to your chat app's threads: how a chat-app task's check reads the thread, once per tick
+   * while such a task is open. The link is the task's own words, so the connector holds it to the chat app it serves
+   * and fetches nothing else. Left out (as the hub leaves it until a channel exists), no thread is read.
+   */
   threads?: { read(link: string): Promise<ThreadMessage[]> };
 }
 /** An ask's place in its life (ask.machine@1's states), as the inbox shows it. */
@@ -1682,6 +1686,7 @@ class AsksCore implements Asks {
       if (stop.owner === 'you' || stop.cause === 'plan_window_spent') {
         if (this.covered.has(stop.id)) continue;
         if (await this.raiseBlock(stop, now)) acted = true;
+        else this.fresh.add(session); // BLOCKED on the settings: read again at the next tick, once they declare the deadline.
       } else if ((TRANSIENT.has(stop.cause) || stop.cause === 'context_overflow') && errorTurnHook(this.sessions.get(session)?.agent ?? '')
         && now - stop.ts < CONTINUE_WINDOW && !this.continuedSince(stop)) {
         await this.continueFrom(stop, stop.cause === 'context_overflow' ? 'context_overflow' : 'transient', null, now);
@@ -1711,7 +1716,8 @@ class AsksCore implements Asks {
    * The task for a stop's block, from ask.sources@1's stop.block row: keyed on the block's signature, pinned to it,
    * owned by the person it stopped, unblocking the session, proved by the block's check. With a task of the same block
    * open, the session's joins it (superseded by it as soon as it's recorded). The deadline comes from your settings, as
-   * for any unblock; with none declared the task is BLOCKED and the session stays stopped with its cause on its row.
+   * for any unblock; with none declared the task is BLOCKED (false, the stop kept for the next tick) and the session
+   * stays stopped with its cause on its row.
    */
   private async raiseBlock(stop: Stop, now: number): Promise<boolean> {
     const template = askSources().find((r) => r.source === BLOCK_SOURCE)!.fixture.ask as Obj;
