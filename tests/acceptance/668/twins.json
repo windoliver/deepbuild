@@ -1,0 +1,7 @@
+{
+  "#668.f5be25d4": ["setup-writes-project-settings"],
+  "#668.c478c854": ["status-omits-commit"],
+  "#668.3ee80c65": ["doctor-misses-hooks"],
+  "#668.e1e1081d": ["on-stays-off"],
+  "#668.882ded0d": ["undo-reserializes"]
+}

@@ -3,8 +3,10 @@
 // `deep inbox`, your asks and your answers through it (#24), `deep install`, a package installed through it (#351),
 // `deep guard add`, guard entries you wrote installed through it (#304),
 // and `deep setup`, `deep waiter` and the doctor's timing relations for Claude Code's hooks (#18); `deep setup --undo`,
-// `deep off`, `deep on`, `deep hub stop` and `deep hub use`, each once the OS confirms you, and `deep status` (#19).
+// `deep off`, `deep on`, `deep hub stop` and `deep hub use`, each once the OS confirms you, and `deep status` (#19);
+// `deep backup` and `deep restore`, the record copied through the hub and put back with it stopped (#572).
 import { confirmed, gatesCommand, useCommand } from './authority.js';
+import { backupCommand, restoreCommand } from './backup.js';
 import { envCommand } from './env.js';
 import { guardCommand } from './guards.js';
 import { inboxCommand } from './inbox.js';
@@ -14,9 +16,9 @@ import { resolve } from 'node:path';
 import { installedRoot } from './paths.js';
 import { runHub } from './server.js';
 import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
-import { relationItems, setupCommand, waiterCommand } from './setup.js';
+import { relationItems, setUpFirst, setupCommand, waiterCommand } from './setup.js';
 
-export { envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, relationItems, runMcp, setupCommand, waiterCommand };
+export { backupCommand, envCommand, gatesCommand, guardCommand, inboxCommand, installCommand, relationItems, restoreCommand, runMcp, setUpFirst, setupCommand, waiterCommand };
 export { statusCommand } from './status.js';
 export { doctorCommand, doctorItems } from './doctor.js';
 export { activePlant } from './plant.js';

@@ -620,6 +620,172 @@ export interface AgentStopV3 {
   evidence?: Array<string>;
 }
 
+export type AgentStopV4Turn = number;
+
+export type AgentStopV4Usage = {
+  covers: "turn" | "session";
+  model: string | null;
+  input: AgentStopV4Count;
+  cached: AgentStopV4Count;
+  output: AgentStopV4Count;
+  context_fill: number | null;
+  cost: AgentStopV4Cost;
+} | null;
+
+export type AgentStopV4Count = null | {
+  value: number;
+  exact: true;
+} | {
+  value: number;
+  exact: false;
+};
+
+export type AgentStopV4Cost = {
+  usd: number;
+  basis: "reported";
+} | {
+  usd: number;
+  basis: "estimated";
+  rate_card: string;
+} | {
+  usd: null;
+  basis: "unpriced";
+};
+
+export type AgentStopV4Loop = {
+  state: "looping";
+  due: number | null;
+} | {
+  state: "none_left";
+};
+
+/** agent.stop@4 */
+export interface AgentStopV4 {
+  v: 4;
+  id: string;
+  kind: "agent.stop";
+  subject: string;
+  writer: "hook";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "sign_in_required";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "token_refresh_failed";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "plan_window_spent";
+    plan_resets: number;
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "rate_limited";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "refusal";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "max_turns";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "context_overflow";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "tool_schema_rejected";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "agent_crashed";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "timed_out";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  } | {
+    turn: AgentStopV4Turn;
+    did_work: boolean;
+    claim: boolean;
+    cause: "unknown";
+    usage: AgentStopV4Usage;
+    outcome: "finished" | "failed";
+    signature?: string;
+    owner?: "agent" | "you" | "service";
+    loop?: AgentStopV4Loop;
+  };
+  evidence?: Array<string>;
+}
+
 /** answer.refused@1 */
 export interface AnswerRefused {
   v: 1;
@@ -1096,6 +1262,148 @@ export interface AskCreatedV3 {
   evidence?: Array<string>;
 }
 
+export type AskCreatedV4PinnedTo = {
+  kind: "commit";
+  ref: string;
+} | {
+  kind: "doc_revision";
+  ref: string;
+} | {
+  kind: "evidence";
+  ref: string;
+};
+
+export type AskCreatedV4Options = Array<{
+  id: string;
+  label: string;
+  decision: "allow" | "deny" | "none";
+}>;
+
+export type AskCreatedV4SubjectEffect = {
+  effect: string;
+  target: {
+    kind: string;
+    ref: string;
+    owner: string;
+  };
+  change: {
+    kind: string;
+    lines: number;
+    paths: Array<string>;
+  } | null;
+};
+
+export type AskCreatedV4SubjectTaste = {
+  screen: string;
+  element: string;
+};
+
+export type AskCreatedV4SubjectPoint = {
+  point: string;
+};
+
+/** ask.created@4 */
+export interface AskCreatedV4 {
+  v: 4;
+  id: string;
+  kind: "ask.created";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    kind: "authority";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    subject?: AskCreatedV4SubjectEffect;
+  } | {
+    kind: "unblock";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    steps: Array<string>;
+    where: string;
+    why: string;
+    unblocks: Array<string>;
+    proves: string;
+    cost_usd?: number;
+  } | {
+    kind: "taste";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    dropped?: Array<{
+      option: string;
+      same_as: string;
+    }>;
+    subject?: AskCreatedV4SubjectTaste;
+  } | {
+    kind: "exception";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+  } | {
+    kind: "choice";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    subject?: AskCreatedV4SubjectPoint;
+  } | {
+    kind: "definition";
+    question: string;
+    options: AskCreatedV4Options;
+    recommended: string | null;
+    deadline: number;
+    fallback: string;
+    default: string;
+    provisional: boolean;
+    owner: string;
+    key: string;
+    pinned_to: AskCreatedV4PinnedTo;
+    subject?: AskCreatedV4SubjectPoint;
+  };
+  evidence?: Array<string>;
+}
+
 /** ask.defaulted@1 */
 export interface AskDefaulted {
   v: 1;
@@ -1407,6 +1715,33 @@ export interface ClaimMadeV2 {
   evidence?: Array<string>;
 }
 
+/** claim.made@3 */
+export interface ClaimMadeV3 {
+  v: 3;
+  id: string;
+  kind: "claim.made";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    task_ref: string;
+    attempt: number;
+    commit: string;
+    scope: "session" | "child" | "task";
+    predictions: Array<{
+      check: string;
+      expects: "passed" | "failed";
+      at: number;
+    }>;
+    hash: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** claim.sent_back@1 */
 export interface ClaimSentBack {
   v: 1;
@@ -1507,6 +1842,40 @@ export interface DecisionCreated {
   evidence?: Array<string>;
 }
 
+/** decision.judged@1 */
+export interface DecisionJudged {
+  v: 1;
+  id: string;
+  kind: "decision.judged";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+    state: "active" | "frozen" | "revoked";
+    verdict: "widen" | "undecided" | "FAIL";
+    rule: {
+      cases: number;
+      broke: number;
+      lower: number;
+      upper: number;
+    };
+    yours: {
+      cases: number;
+      broke: number;
+      upper: number;
+    };
+    margin: number;
+    limit: number;
+    more: number | null;
+  };
+  evidence?: Array<string>;
+}
+
 /** decision.overruled@1 */
 export interface DecisionOverruled {
   v: 1;
@@ -1521,6 +1890,25 @@ export interface DecisionOverruled {
   log_pos?: number;
   data: {
     decision: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** decision.overruled@2 */
+export interface DecisionOverruledV2 {
+  v: 2;
+  id: string;
+  kind: "decision.overruled";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    decision: string;
+    at: string;
   };
   evidence?: Array<string>;
 }
@@ -1616,6 +2004,50 @@ export interface DefinitionLocked {
       depth: string;
     }>;
     hash: string;
+    base_commit: string;
+    budget: {
+      runs: number;
+      cap_usd: number;
+    } | null;
+  };
+  evidence?: Array<string>;
+}
+
+/** definition.locked@2 */
+export interface DefinitionLockedV2 {
+  v: 2;
+  id: string;
+  kind: "definition.locked";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    definition: string;
+    task_ref: string;
+    requirements: Array<{
+      id: string;
+      text: string;
+      source_line: string;
+      refuted_by: string;
+      check: string | null;
+      check_sha256: string | null;
+      on_base: "fails" | "fails_sometimes" | "passes";
+      asserts: Array<string>;
+      depth: string;
+      oracle: "code" | "model" | "person";
+      near_misses: Array<string>;
+      author: {
+        handle: string;
+        role: "you" | "owner" | "collaborator" | "outside";
+      };
+    }>;
+    deliverables: Array<string>;
+    hash: string;
+    issue_rev: string;
     base_commit: string;
     budget: {
       runs: number;
@@ -4171,6 +4603,25 @@ export type Verdict = {
   key: VerdictKey;
   checkout: string;
 };
+
+/** work.broke@1 */
+export interface WorkBroke {
+  v: 1;
+  id: string;
+  kind: "work.broke";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    ask: string;
+    cause: "revert" | "follow_up_fix" | "is_it_done" | "issue";
+  };
+  evidence?: Array<string>;
+}
 
 /** worktree.created@1 */
 export interface WorktreeCreated {

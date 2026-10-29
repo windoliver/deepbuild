@@ -25,6 +25,14 @@ export const SCHEMAS: Readonly<Record<string, Schema>> = {
     where: maybe(str('Where the person does the task, such as their own terminal.')),
     why: maybe(str('What the task unblocks.')),
     check: maybe(str('The check in the repo\'s spec that will prove the task done. A task without one is refused.')),
+    subject: maybe({
+      ...object({
+        point: maybe(str('A choice\'s requirement, by its handle (req:<id>).')),
+        screen: maybe(str('A taste call\'s screen or journey step.')),
+        element: maybe(str('A taste call\'s element, by its stable name.')),
+      }),
+      description: 'What the question is about, so your saved answer to it is reused whatever its wording; null when it is about none of these.',
+    }),
   }),
   deep_wait: object({ ask: str('The ask, as deep_ask returned it.', HANDLE('ask')) }),
   deep_open_item: object({ text: str('What is still open, in a sentence.') }),
