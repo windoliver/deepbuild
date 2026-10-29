@@ -234,6 +234,10 @@ pub struct Planted {
     pub presents_hidden: bool,
     /// A hidden window presents nothing but still evaluates its sessions at its latches.
     pub evaluates_hidden: bool,
+    /// The card times its arming from the ask's delivery, and judges a press by its delivery (#327).
+    pub arms_from_delivery: bool,
+    /// A `rearm_on` change leaves the card armed (#327).
+    pub never_rearms: bool,
 }
 
 /// What happened to a window: it opened or was dragged to a rect, or came to the top of the
@@ -677,13 +681,28 @@ impl Placement {
         !self.planted.arms_under_own_window && self.stack_at(t).covers(own, rect)
     }
 
+    pub fn planted(&self) -> Planted {
+        self.planted
+    }
+
     /// The question card for an ask created at `asked`, measured `size`, as it stands at `now`:
     /// on the display with your latest input, in the window that input went to (the main window
-    /// when there was none), presented at that display's
-    /// first vsync at or after the ask, where it stays; armed 500 ms after it was last presented,
-    /// last uncovered or its window last moved, at that display's next vsync. `None` before the
-    /// ask.
-    pub fn card(&self, ask: &str, asked: i64, size: [f64; 2], now: i64) -> Option<CardState> {
+    /// when there was none), presented at that display's first vsync at or after the ask, where it
+    /// stays; armed 500 ms after it was last presented, last uncovered or its window last moved, at
+    /// that display's next vsync; `None` before the ask. `rearms` are the card's other `rearm_on`
+    /// changes (#327: content, display, activation, each reported with its time) and `answer` what
+    /// answered it, if a press did: from the
+    /// answer on, the card is answered and arms no more. A reported change always returns the card
+    /// to presented at its time and restarts the interval, armed or not.
+    pub fn card_with(
+        &self,
+        ask: &str,
+        asked: i64,
+        size: [f64; 2],
+        rearms: &[i64],
+        answer: Option<(&str, i64)>,
+        now: i64,
+    ) -> Option<CardState> {
         if now < asked {
             return None;
         }
@@ -711,12 +730,22 @@ impl Placement {
         );
         let grid = display.grid();
         let presented = grid.vsync_from(asked);
+        // The planted program runs its interval from the ask's delivery, off the vsync grid.
+        let from_delivery = self.planted.arms_from_delivery;
+        let arms_from = |since: i64| {
+            if from_delivery {
+                since + ARM_AFTER
+            } else {
+                grid.vsync_from(since + ARM_AFTER)
+            }
+        };
         let mut card = CardState {
             ask: ask.to_string(),
             display: display.uuid.clone(),
             window: window.id.clone(),
             rect,
             states: Vec::new(),
+            answer: None,
         };
         // Hidden until its display's first vsync at or after the ask.
         if now < presented {
@@ -725,36 +754,49 @@ impl Placement {
         let states = &mut card.states;
         states.push(("presented", presented));
         let mut armed = false;
-        let mut since = presented;
+        let mut since = if from_delivery { asked } else { presented };
         let mut covered = self.occluded(&window.id, rect, presented);
         let changes = self
             .events
             .iter()
             .filter(|(at, _, _)| *at > presented && *at <= now)
             .map(|(at, id, e)| (*at, id == &window.id && matches!(e, Event::Placed(..))));
-        let mut times: Vec<(i64, bool)> = Vec::new();
+        // Each instant something changed: `(at, the window moved, a change was reported)`.
+        let mut times: Vec<(i64, bool, bool)> = Vec::new();
         for (at, moved) in changes {
             match times.last_mut() {
-                Some((t, m)) if *t == at => *m |= moved,
-                _ => times.push((at, moved)),
+                Some((t, m, _)) if *t == at => *m |= moved,
+                _ => times.push((at, moved, false)),
             }
+        }
+        // The answer ends the card's states; nothing after it counts.
+        let until = answer.map_or(now, |(_, at)| at.min(now));
+        if !self.planted.never_rearms {
+            for &at in rearms.iter().filter(|at| **at > presented && **at <= until) {
+                match times.iter_mut().find(|(t, _, _)| *t == at) {
+                    Some((_, _, reported)) => *reported = true,
+                    None => times.push((at, false, true)),
+                }
+            }
+            times.sort_by_key(|(at, _, _)| *at);
         }
         // At each instant something changed, the card arms first if its interval ran out by
         // then, and the change is read after; a change at `now` counts.
         let arms_by = |t: i64, armed: bool, covered: bool, since: i64| {
             (!armed && !covered)
-                .then(|| grid.vsync_from(since + ARM_AFTER))
+                .then(|| arms_from(since))
                 .filter(|a| *a <= t)
         };
-        for (t, moved) in times {
+        for (t, moved, reported) in times.into_iter().filter(|(t, _, _)| *t <= until) {
             if let Some(arms) = arms_by(t, armed, covered, since) {
                 states.push(("armed", arms));
                 armed = true;
             }
             let now_covered = self.occluded(&window.id, rect, t);
-            // Covered after arming, or moved: back to presented and the interval restarts.
-            if (now_covered && !covered) || moved {
-                if armed {
+            // Covered after arming, or moved: back to presented and the interval restarts. A
+            // reported change says so even before the card armed.
+            if (now_covered && !covered) || moved || reported {
+                if armed || reported {
                     states.push(("presented", t));
                     armed = false;
                 }
@@ -764,8 +806,12 @@ impl Placement {
             }
             covered = now_covered;
         }
-        if let Some(arms) = arms_by(now, armed, covered, since) {
+        if let Some(arms) = arms_by(until, armed, covered, since) {
             states.push(("armed", arms));
+        }
+        if let Some((option, at)) = answer.filter(|(_, at)| *at <= now) {
+            states.push(("answered", at));
+            card.answer = Some((option.to_string(), at));
         }
         Some(card)
     }
@@ -778,6 +824,8 @@ pub struct CardState {
     pub window: String,
     pub rect: [f64; 4],
     pub states: Vec<(&'static str, i64)>,
+    /// What answered the card, once a press did: the option and the release's platform stamp (#327).
+    pub answer: Option<(String, i64)>,
 }
 
 impl CardState {
@@ -789,6 +837,7 @@ impl CardState {
             "rect": self.rect,
             "state": self.states.last().map_or("hidden", |(s, _)| *s),
             "states": self.states.iter().map(|(s, at)| json!({"state": s, "at": at})).collect::<Vec<_>>(),
+            "answer": self.answer.as_ref().map(|(option, t)| json!({"option": option, "t": t})),
         })
     }
 }

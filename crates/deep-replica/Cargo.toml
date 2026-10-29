@@ -55,3 +55,17 @@ harness = false
 name = "acceptance_326_surfaces"
 path = "../../tests/acceptance/326/surfaces/surfaces.rs"
 harness = false
+
+# Issue #327, the question card in the replica: its kinds, arming, input provenance, OS confirmation,
+# notifications with the window hidden, usage rows and the answers it sends, written blind in
+# tests/acceptance/327. `acceptance_327_card` holds the criteria; `..._planted` runs the wrong
+# programs they name through the same judges. No harness, as above.
+[[test]]
+name = "acceptance_327_card"
+path = "../../tests/acceptance/327/card.rs"
+harness = false
+
+[[test]]
+name = "acceptance_327_planted"
+path = "../../tests/acceptance/327/planted.rs"
+harness = false
