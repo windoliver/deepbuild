@@ -14,6 +14,13 @@ export type {
   Skill, StopCause, StopReading, TurnUsage, Unsupported,
 } from './types.js';
 
+/**
+ * The agent names a hook request or a session.start may carry, to the adapter that maps them. Cursor's CLI and Grok
+ * run the hooks in Claude Code's settings file (deep-hook names them from their own variables), so Claude Code's facts
+ * read their payloads, but their events are recorded under their own agent, never as Claude Code's.
+ */
+export const ADAPTERS: Readonly<Record<string, string>> = { 'claude-code': 'claude', claude: 'claude', codex: 'codex', cursor: 'claude', grok: 'claude' };
+
 const NAME = /^[a-z][a-z0-9-]*$/;
 const OPERATIONS = ['readUsage', 'classifyStop', 'skills'] as const;
 const isObject = (v: unknown): v is JsonObject => typeof v === 'object' && v !== null && !Array.isArray(v);

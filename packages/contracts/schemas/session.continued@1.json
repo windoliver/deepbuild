@@ -1,0 +1,115 @@
+{
+  "title": "session.continued@1",
+  "description": "The core sent a stopped session's turn back by itself: once after a dropped connection or a rate limit, once after a context overflow (compacted first), or when the one task its stop raised closed. Only the core appends it; the hub routes the continue when it reads the event.",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "session.continued"
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^session:[0-9A-Za-z]+$",
+      "description": "The session that continues."
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "stop": {
+          "type": "string",
+          "format": "ulid",
+          "description": "The agent.stop event this continue answers: the session's newest stop when the core decided."
+        },
+        "because": {
+          "type": "string",
+          "enum": [
+            "transient",
+            "context_overflow",
+            "task_closed"
+          ],
+          "x-closure": {
+            "closed": "each value is a rule the core applies and the hub acts on, so a value outside the list has no meaning",
+            "reopens": "a new major of this schema",
+            "mark": "exhaustive"
+          },
+          "description": "Why it continues: a dropped connection or rate limit, once per turn you started; a context overflow, compacted once and re-sent; or the task its stop raised closed."
+        },
+        "task": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^ask:[0-9A-Za-z]+$",
+          "maxLength": 8192,
+          "description": "The task whose closing resumed the session, when because is task_closed; null otherwise."
+        }
+      },
+      "required": [
+        "stop",
+        "because",
+        "task"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "subject",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

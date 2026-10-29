@@ -309,6 +309,8 @@ export class Core {
   private readonly settingsReadings: string[] = [];
   /** Held stops, each woken when an answer for its session is ready to deliver. */
   private readonly waiting = new Map<string, Set<() => void>>();
+  /** The log position of the last session.continued the hub routed (#85). */
+  private continuedPos = 0;
   /** Each session's routes back into it, by session ID. */
   private readonly routes = new Map<string, Routes>();
   /** Answers handed to a waiter that no turn has shown yet, by ask ID. */
@@ -381,9 +383,18 @@ export class Core {
     const asks = this.asks = await openAsks({ record: this.record, now: this.now, deliver: (d) => this.answered(d), home: this.root.dir });
     this.askingSoon();
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
-    // hadn't shown), so no ask waits on a read. With none due it reads nothing, so a backfill never feeds it.
-    const due = async (): Promise<boolean> => (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND deadline <= ${this.now()} LIMIT 1`)).length > 0;
-    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick() : undefined)).catch(() => undefined), 1000));
+    // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
+    // it reads them for the task, the continue or the resume they call for (#85), and the hub takes each continue's
+    // route. With nothing due it reads nothing, so a backfill never feeds it.
+    const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
+    let ticked = await landed();
+    this.continuedPos = Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind = 'session.continued'`)) as { pos: number }[])[0]?.pos ?? 0);
+    const due = async (): Promise<boolean> => {
+      const pos = await landed();
+      if (pos > ticked) { ticked = pos; return true; }
+      return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ${this.now()} OR kind = 'unblock') LIMIT 1`)).length > 0;
+    };
+    if (this.options.plant !== 'skip-default-at-deadline') this.timers.push(setInterval(() => void due().then((now) => (now ? asks.tick().then(() => this.continues()) : undefined)).catch(() => undefined), 1000));
     this.index = openIndex(this.root.wiki, this.options.index);
     this.index.catch(() => undefined);
     // Compose's own folder sits in the hub's, which no run writes: the files a compose stack runs are the hub's.
@@ -1254,6 +1265,41 @@ export class Core {
       for (const row of rows) this.handed.set(row.id, { session, at, timer: setTimeout(() => void this.queue(() => this.unwoken(session, row.id)).catch(() => undefined), WAKE_GRACE) });
     }).catch(() => undefined);
   }
+  /** The continues the asks core recorded since the hub last read them (#85): each takes a route back into its session. */
+  private async continues(): Promise<void> {
+    const rows = (await this.record.raw(`SELECT log_pos, session_id, data FROM events WHERE kind = 'session.continued' AND log_pos > ${this.continuedPos} ORDER BY log_pos`)) as { log_pos: number; session_id: string | null; data: string | Obj }[];
+    for (const row of rows) {
+      this.continuedPos = row.log_pos;
+      if (!row.session_id) continue;
+      const d = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data) as Obj;
+      await this.continueSession(row.session_id, String(d.because), typeof d.task === 'string' ? d.task : null);
+    }
+  }
+  /**
+   * One automatic continue of a stopped session (#85), by #25's routes: a stop of the session held now is sent back
+   * with it; else its idle waiter wakes the session with it; else it goes with the session's next prompt, and the
+   * record says so. The core decided it from the stop's structure; the hub only carries it.
+   */
+  private async continueSession(session: string, because: string, task: string | null): Promise<void> {
+    const text = because === 'task_closed' ? `DeepBuild: the block that stopped this session is cleared: task ${task ?? ''} closed on its check. Continue where you left off.`
+      : because === 'context_overflow' ? 'DeepBuild: this turn overflowed the context. Compact, then continue where you left off; this is its one automatic re-send.'
+        : 'DeepBuild: this turn stopped on a dropped connection or an overloaded service. Continue where you left off; this is its one automatic continue.';
+    const r = this.routesOf(session);
+    if (r.holding) {
+      r.sendBacks.push(text);
+      for (const wake of this.waiting.get(session) ?? []) wake();
+      return;
+    }
+    const waiter = r.waiter;
+    if (waiter && r.covered && r.shown.has('waiter') && !r.capped && r.wakes !== false && r.busy < waiter.since) {
+      r.waiter = undefined;
+      waiter.give({ session, text });
+      return;
+    }
+    r.later.push(text);
+    const agent = this.live.get(session)?.agent ?? this.sessions.get(session)?.agent ?? 'claude-code';
+    await this.appendReading(session, agent, `DeepBuild continues this session (${because}${task ? `, task ${task}` : ''}), but no route into it is open now: the continue goes with its next prompt.`).catch(() => undefined);
+  }
   /**
    * A waiter's answer no turn has shown: the transcript is read for the wake, and with none it reads stalled, the
    * view says the app didn't wake the session, and the answer goes by its next prompt.
@@ -1342,7 +1388,7 @@ export class Core {
     const key = subjectKey({ kind: 'authority', subject: about.subject, options } as unknown as Parameters<typeof subjectKey>[0], '');
     const answer = await this.precheck({
       ask: 'ask:0', kind: 'authority', options, plan: null, words: [], changed: null, folded: [], undo: false, cost_usd: null, suggested: null, conflict: [],
-      needs_person: [], budget: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
+      needs_person: [], budget: null, missing: null, session, key, repo: this.projects.get(session) ?? null, subject: about.subject,
     });
     return answer !== undefined && !answer.also?.length;
   }
@@ -1515,6 +1561,11 @@ export class Core {
     }
     const polls = this.options.plant === 'stop-hold-polls';
     while (!this.stopping && Date.now() < until && await open()) {
+      // A continue the core recorded while the stop waited (#85): sent back with it.
+      if (r.sendBacks.length) {
+        this.askingSoon();
+        return r.sendBacks.shift();
+      }
       if (this.releases) {
         if ((await this.queue(() => this.waitingFor(session))).length) return undefined;
       } else {
@@ -2595,13 +2646,16 @@ export class Core {
     let raised: Obj;
     if (kind === 'unblock') {
       need('check', 'Name the check in the repo\'s spec that will prove the task done; a task without one is refused, since nobody could tell it was done.');
-      if (!this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
+      // A step you take in a chat app (#85) names the thread its check reads through the read-only connector and the
+      // reply it expects: that reading is its check, so the name needn't be in the repo's spec.
+      const thread = isObj(args.thread) && typeof args.thread.link === 'string' && typeof args.thread.expect === 'string' ? { link: args.thread.link, expect: args.thread.expect } : undefined;
+      if (!thread && !this.checksOf(s.cwd).has(String(args.check))) throw this.unknownCheck(s.cwd, args.check);
       need('steps', 'List the task\'s steps, in order.');
       need('where', 'Say where the person does the task.');
       need('why', 'Say what the task unblocks.');
       raised = {
         kind, question, options: [{ id: 'done', label: 'I did it', decision: 'none' }], recommended: 'done', default: 'done',
-        steps: args.steps, where: args.where, why: args.why, unblocks: [`session:${letters(session)}`], proves: args.check,
+        steps: args.steps, where: args.where, why: args.why, unblocks: [`session:${letters(session)}`], proves: args.check, ...(thread ? { thread } : {}),
       };
     } else {
       need('options', 'Give the question\'s options.');
