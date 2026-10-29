@@ -149,7 +149,7 @@ async function debugBundle(): Promise<number> {
 // The first `deep` command sets everything up, as the app's Set up click does (#326): in a home with nothing of
 // DeepBuild, the commands you run yourself first run setup's steps without asking. The hub's modules load only then,
 // so a set-up home starts as fast as before (#24's budget). deep env with --root names a dev hub and acts on it alone
-// (#331), so it sets nothing up in the home.
+// (#331), or is a usage error, so it sets nothing up in the home.
 const yours = ['status', 'inbox', 'off', 'on', 'env', 'install', 'guard'];
 const devHub = args[0] === 'env' && args.includes('--root');
 if (yours.includes(args[0] ?? '') && !devHub && !existsSync(join(homedir(), '.deepbuild'))) {

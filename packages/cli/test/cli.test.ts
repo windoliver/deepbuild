@@ -40,6 +40,7 @@ describe('deep checkout command', () => {
   it.each([
     ['up --root <dev hub> --json', (home: string) => ['up', '--root', join(home, 'dev-hub'), '--json'], 3, 'BLOCKED: the dev hub at --root is not running'],
     ['up --root, with no folder', () => ['up', '--root'], 2, 'a usage error'],
+    ['up --root --json, a flag where the folder goes', () => ['up', '--root', '--json'], 2, 'a usage error'],
   ] as const)('deep env %s in a fresh home sets nothing up there', (_, args, status, why) => {
     const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-home-')));
     try {
