@@ -2481,6 +2481,9 @@ export class Core {
     try {
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
+      // What deep-hook spooled ran before this call, as a hook's does: a replay running goes first, so a claim comes
+      // after the call it follows, not before the work it claims.
+      await (this.replaying ?? Promise.resolve());
       // A call bound to no session still reads what belongs to no session; every other tool needs its session.
       const session = await this.queue(async () => this.bind(tool, sent, context, tool !== 'deep_status' && tool !== 'deep_search'));
       switch (tool) {
