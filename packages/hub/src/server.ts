@@ -618,8 +618,10 @@ class Hub {
         const off = method === 'gates.off';
         // The core asks the OS to confirm you; only then do the gates change.
         return void reply(this.core.request({ op: 'call', method: 'you.confirm', params: { command: off ? 'deep off' : 'deep on' }, context: { role: conn.name, ...(conn.peer ? { peer: conn.peer } : {}) } }).then(() => {
-          this.off = off;
-          setGatesOff(this.root, off);
+          // The planted wrong program answers `deep on` as done and keeps every gate watch-only.
+          const stays = off || this.plant === 'on-stays-off';
+          this.off = stays;
+          setGatesOff(this.root, stays);
           return { off };
         }));
       }
